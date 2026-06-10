@@ -10,8 +10,8 @@
     <CodeIndexResult v-else-if="toolName === 'code_index'" :data="parsedData" />
     <CodeExploreResult v-else-if="toolName === 'code_explore'" :data="parsedData" :args="args" />
     <EsSearchResult v-else-if="toolName === 'es_search'" :data="parsedData" :args="args" />
-    <FileRemoveResult v-else-if="toolName === 'file_remove'" :data="parsedData" />
-    <FileDiffResult v-else-if="toolName === 'file_diff'" :data="parsedData" :args="args" />
+    <FileRemoveResult v-else-if="toolName === 'astrbot_file_remove'" :data="parsedData" />
+    <FileDiffResult v-else-if="toolName === 'astrbot_file_compare'" :data="parsedData" :args="args" />
     <TodoListResult v-else-if="toolName === 'todo_list'" :data="parsedData" :args="args" />
     <pre v-else class="result-raw">{{ formattedResult }}</pre>
 </template>
@@ -42,8 +42,8 @@ const KNOWN_KEYS = [
     "code_index",
     "code_explore",
     "es_search",
-    "file_remove",
-    "file_diff",
+    "astrbot_file_remove",
+    "astrbot_file_compare",
     "todo_list",
 ] as const;
 const matchedKey = computed(() => {
