@@ -274,79 +274,81 @@ function getSpecialSubtype(value) {
 
     <!-- Object Type Configuration with JSON Selector Support -->
     <div v-if="metadata[metadataKey]?.type === 'object'" class="object-config">
-      <div
-        v-for="([itemKey, itemMeta], index) in getVisibleItemEntries(false)"
-        :key="itemKey"
-        class="config-item"
-      >
-        <v-row v-if="!itemMeta?.invisible" class="config-row">
-          <v-col cols="12" sm="6" class="property-info">
-            <v-list-item density="compact">
-              <v-list-item-title class="property-name">
-                {{ getItemDescription(itemKey, itemMeta) }}
-                <span class="property-key">({{ itemKey }})</span>
-              </v-list-item-title>
-
-              <v-list-item-subtitle class="property-hint">
-                <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
-                <span v-html="renderHint(getItemHint(itemKey, itemMeta))"></span>
-              </v-list-item-subtitle>
-            </v-list-item>
-          </v-col>
-          <v-col cols="12" sm="6" class="config-input">
-            <TemplateListEditor
-              v-if="itemMeta?.type === 'template_list'"
-              v-model="createSelectorModel(itemKey).value"
-              :templates="itemMeta?.templates || {}"
-              :plugin-name="pluginName"
-              :plugin-i18n="pluginI18n"
-              :config-path="getItemPath(itemKey)"
-              class="config-field"
-            />
-            <ConfigItemRenderer
-              v-else
-              v-model="createSelectorModel(itemKey).value"
-              :item-meta="itemMeta || null"
-              :config-root="iterable"
-              :plugin-name="pluginName"
-              :plugin-i18n="pluginI18n"
-              :config-key="getItemPath(itemKey)"
-              :show-fullscreen-btn="!!itemMeta?.editor_mode"
-              @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
-            />
-          </v-col>
-        </v-row>
-
-        <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
-          class="plugin-set-display-row">
-          <v-col cols="12" class="plugin-set-display">
-            <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
-              class="selected-plugins-full-width">
-              <div class="plugins-header">
-                <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}</small>
-              </div>
-              <div class="d-flex flex-wrap ga-2 mt-2">
-                <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
-                  color="primary" variant="outlined">
-                  {{ plugin === '*' ? t('core.shared.pluginSetSelector.allPluginsLabel') : plugin }}
-                </v-chip>
-              </div>
-            </div>
-          </v-col>
-        </v-row>
-
-        <v-row
-          v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
-          class="persona-preview-row"
+      <TransitionGroup name="config-item-transition" tag="div" class="config-item-list">
+        <div
+          v-for="([itemKey, itemMeta], index) in getVisibleItemEntries(false)"
+          :key="itemKey"
+          class="config-item"
         >
-          <v-col cols="12" class="persona-preview-display">
-            <PersonaQuickPreview :model-value="createSelectorModel(itemKey).value" />
-          </v-col>
-        </v-row>
+          <v-row v-if="!itemMeta?.invisible" class="config-row">
+            <v-col cols="12" sm="6" class="property-info">
+              <v-list-item density="compact">
+                <v-list-item-title class="property-name">
+                  {{ getItemDescription(itemKey, itemMeta) }}
+                  <span class="property-key">({{ itemKey }})</span>
+                </v-list-item-title>
 
-        <v-divider class="config-divider"
-          v-if="hasVisibleEntriesAfter(getVisibleItemEntries(false), index)"></v-divider>
-      </div>
+                <v-list-item-subtitle class="property-hint">
+                  <span v-if="itemMeta?.obvious_hint && itemMeta?.hint" class="important-hint">‼️</span>
+                  <span v-html="renderHint(getItemHint(itemKey, itemMeta))"></span>
+                </v-list-item-subtitle>
+              </v-list-item>
+            </v-col>
+            <v-col cols="12" sm="6" class="config-input">
+              <TemplateListEditor
+                v-if="itemMeta?.type === 'template_list'"
+                v-model="createSelectorModel(itemKey).value"
+                :templates="itemMeta?.templates || {}"
+                :plugin-name="pluginName"
+                :plugin-i18n="pluginI18n"
+                :config-path="getItemPath(itemKey)"
+                class="config-field"
+              />
+              <ConfigItemRenderer
+                v-else
+                v-model="createSelectorModel(itemKey).value"
+                :item-meta="itemMeta || null"
+                :config-root="iterable"
+                :plugin-name="pluginName"
+                :plugin-i18n="pluginI18n"
+                :config-key="getItemPath(itemKey)"
+                :show-fullscreen-btn="!!itemMeta?.editor_mode"
+                @open-fullscreen="openEditorDialog(itemKey, iterable, itemMeta?.editor_theme, itemMeta?.editor_language)"
+              />
+            </v-col>
+          </v-row>
+
+          <v-row v-if="!itemMeta?.invisible && itemMeta?._special === 'select_plugin_set'"
+            class="plugin-set-display-row">
+            <v-col cols="12" class="plugin-set-display">
+              <div v-if="createSelectorModel(itemKey).value && createSelectorModel(itemKey).value.length > 0"
+                class="selected-plugins-full-width">
+                <div class="plugins-header">
+                  <small class="text-grey">{{ t('core.shared.pluginSetSelector.selectedPluginsLabel') }}</small>
+                </div>
+                <div class="d-flex flex-wrap ga-2 mt-2">
+                  <v-chip v-for="plugin in (createSelectorModel(itemKey).value || [])" :key="plugin" size="small" label
+                    color="primary" variant="outlined">
+                    {{ plugin === '*' ? t('core.shared.pluginSetSelector.allPluginsLabel') : plugin }}
+                  </v-chip>
+                </div>
+              </div>
+            </v-col>
+          </v-row>
+
+          <v-row
+            v-if="!itemMeta?.invisible && itemMeta?._special === 'select_persona' && itemKey === 'provider_settings.default_personality'"
+            class="persona-preview-row"
+          >
+            <v-col cols="12" class="persona-preview-display">
+              <PersonaQuickPreview :model-value="createSelectorModel(itemKey).value" />
+            </v-col>
+          </v-row>
+
+          <v-divider class="config-divider"
+            v-if="hasVisibleEntriesAfter(getVisibleItemEntries(false), index)"></v-divider>
+        </div>
+      </TransitionGroup>
 
       <div v-if="hasCollapsedItems()" class="collapsed-config-section">
         <div class="collapsed-config-toggle-row">
@@ -505,6 +507,37 @@ function getSpecialSubtype(value) {
   width: 100%;
 }
 
+.config-item-list {
+  position: relative;
+}
+
+.config-item {
+  overflow: hidden;
+}
+
+.config-item-transition-move,
+.config-item-transition-enter-active,
+.config-item-transition-leave-active {
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease,
+    max-height 320ms ease;
+}
+
+.config-item-transition-enter-from,
+.config-item-transition-leave-to {
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-6px);
+}
+
+.config-item-transition-enter-to,
+.config-item-transition-leave-from {
+  opacity: 1;
+  max-height: 180px;
+  transform: translateY(0);
+}
+
 .nested-object {
   padding-left: 16px;
 }
@@ -646,6 +679,14 @@ function getSpecialSubtype(value) {
 
   .config-divider {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .config-item-transition-move,
+  .config-item-transition-enter-active,
+  .config-item-transition-leave-active {
+    transition: none;
   }
 }
 </style>

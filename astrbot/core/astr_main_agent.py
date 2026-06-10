@@ -124,6 +124,10 @@ WEEKDAY_NAMES = (
     "Saturday",
     "Sunday",
 )
+METADATA_VALUE_MAX_LENGTH = 128
+METADATA_CONTROL_CHARS = dict.fromkeys(range(32), " ")
+METADATA_CONTROL_CHARS[127] = " "
+METADATA_ZERO_WIDTH_CHARS = "\u200b\u200c\u200d\ufeff"
 WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
     {
         "web_search_baidu",
@@ -138,6 +142,47 @@ WEB_SEARCH_CITATION_PROMPT = (
     "Use the exact citation format <ref>index</ref> (e.g. <ref>abcd.3</ref>) "
     "after the sentence that uses the information. Do not invent citations."
 )
+
+
+def _sanitize_metadata_value(value: object) -> str:
+    text = "" if value is None else str(value)
+    text = text.translate(METADATA_CONTROL_CHARS)
+    for char in METADATA_ZERO_WIDTH_CHARS:
+        text = text.replace(char, "")
+    text = text.replace("<", "＜").replace(">", "＞")
+    text = " ".join(text.split())
+    return text[:METADATA_VALUE_MAX_LENGTH]
+
+
+def _sanitize_optional_metadata_value(value: object) -> str | None:
+    sanitized = _sanitize_metadata_value(value)
+    return sanitized or None
+
+
+def _format_metadata(prefix: str, metadata: dict[str, object]) -> str:
+    sanitized = {
+        key: _sanitize_metadata_value(value)
+        for key, value in metadata.items()
+        if value is not None
+    }
+    metadata_json = json.dumps(sanitized, ensure_ascii=False, separators=(",", ":"))
+    return f"{prefix}: {metadata_json}"
+
+
+def _get_real_sender_nickname(event: AstrMessageEvent) -> str | None:
+    raw_message = getattr(event.message_obj, "raw_message", None)
+    sender = getattr(raw_message, "sender", None)
+    if sender is None and isinstance(raw_message, dict):
+        sender = raw_message.get("sender")
+    if isinstance(sender, dict):
+        nickname = sender.get("nickname")
+        if nickname:
+            return str(nickname)
+    else:
+        nickname = getattr(sender, "nickname", None)
+        if nickname:
+            return str(nickname)
+    return None
 
 
 @dataclass(slots=True)
@@ -869,7 +914,23 @@ def _append_system_reminders(
     if cfg.get("identifier"):
         user_id = event.message_obj.sender.user_id
         user_nickname = event.message_obj.sender.nickname
-        system_parts.append(f"User ID: {user_id}, Nickname: {user_nickname}")
+        real_nickname = (
+            _sanitize_optional_metadata_value(_get_real_sender_nickname(event))
+            if cfg.get("real_nickname_display")
+            else None
+        )
+        use_real_nickname = real_nickname is not None
+        if use_real_nickname and cfg.get("real_nickname_only"):
+            user_nickname = real_nickname
+        sanitized_user_nickname = _sanitize_metadata_value(user_nickname)
+        user_metadata = {"user_id": user_id, "nickname": sanitized_user_nickname}
+        if (
+            use_real_nickname
+            and not cfg.get("real_nickname_only")
+            and real_nickname != sanitized_user_nickname
+        ):
+            user_metadata["real_nickname"] = real_nickname
+        system_parts.append(_format_metadata("User metadata", user_metadata))
 
     if cfg.get("group_name_display") and event.message_obj.group_id:
         if not event.message_obj.group:
@@ -880,7 +941,9 @@ def _append_system_reminders(
         else:
             group_name = event.message_obj.group.group_name
             if group_name:
-                system_parts.append(f"Group name: {group_name}")
+                system_parts.append(
+                    _format_metadata("Group metadata", {"name": group_name})
+                )
 
     if cfg.get("datetime_system_prompt"):
         now = None

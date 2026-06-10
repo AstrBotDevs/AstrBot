@@ -299,6 +299,14 @@
           "description": "用户识别",
           "hint": "启用后,会在提示词前包含用户 ID 信息。"
         },
+        "real_nickname_display": {
+          "description": "追加用户真实昵称",
+          "hint": "启用后,会在支持的平台上向模型额外提供用户真实昵称。"
+        },
+        "real_nickname_only": {
+          "description": "仅使用真实昵称",
+          "hint": "启用后,模型将只看到用户真实昵称,不再看到群昵称。取不到真实昵称时会回退到原昵称。"
+        },
         "group_name_display": {
           "description": "显示群名称",
           "hint": "启用后,在支持的平台(OneBot v11)上会在提示词前包含群名称信息。"
