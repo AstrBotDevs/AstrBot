@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import random
+import time
 import uuid
 from collections import defaultdict, deque
 
@@ -10,6 +11,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
+from astrbot.core import db_helper
 from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
@@ -79,21 +81,64 @@ class GroupChatContext:
         image_url: str,
         image_caption_provider_id: str,
         image_caption_prompt: str,
+        event: AstrMessageEvent | None = None,
     ) -> str:
+        provider_id = image_caption_provider_id
         if not image_caption_provider_id:
             provider = self.context.get_using_provider()
+            provider_id = provider.meta().id if hasattr(provider, 'meta') else ""
         else:
             provider = self.context.get_provider_by_id(image_caption_provider_id)
             if not provider:
                 raise Exception(f"没有找到 ID 为 {image_caption_provider_id} 的提供商")
         if not isinstance(provider, Provider):
             raise Exception(f"提供商类型错误({type(provider)})，无法获取图片描述")
+
+        start_time = time.time()
         response = await provider.text_chat(
             prompt=image_caption_prompt,
             session_id=uuid.uuid4().hex,
             image_urls=[image_url],
             persist=False,
         )
+        end_time = time.time()
+
+        # 记录图片转述模型的调用统计
+        if event is not None:
+            try:
+                provider_model = (
+                    provider.get_model() if provider.get_model() else None
+                )
+                usage_dict: dict = {}
+                if response.usage:
+                    usage_dict = {
+                        "input_other": response.usage.input_other,
+                        "input_cached": response.usage.input_cached,
+                        "output": response.usage.output,
+                    }
+
+                await db_helper.insert_provider_stat(
+                    umo=event.unified_msg_origin,
+                    provider_id=provider_id,
+                    provider_model=provider_model,
+                    conversation_id=None,
+                    status="completed"
+                    if response.role != "err"
+                    else "error",
+                    stats={
+                        "token_usage": usage_dict,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "time_to_first_token": 0.0,
+                    },
+                    agent_type="internal",
+                )
+            except Exception:
+                logger.debug(
+                    "Failed to record group chat image caption provider stat",
+                    exc_info=True,
+                )
+
         return response.completion_text
 
     async def need_active_reply(self, event: AstrMessageEvent) -> bool:
@@ -200,6 +245,7 @@ class GroupChatContext:
                             url,
                             cfg["image_caption_provider_id"],
                             cfg["image_caption_prompt"],
+                            event=event,
                         )
                         parts.append(f" [Image: {caption}]")
                     except Exception as e:
