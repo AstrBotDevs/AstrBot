@@ -62,6 +62,50 @@ class AbstractProvider(abc.ABC):
         """
         ...
 
+    async def record_image_caption_stat(
+        self,
+        *,
+        umo: str,
+        provider_id: str,
+        conversation_id: str | None,
+        start_time: float,
+        end_time: float,
+        response: LLMResponse,
+    ) -> None:
+        """记录图片转述模型调用统计，由子类调用。"""
+        try:
+            from astrbot.core import db_helper, logger
+        except ImportError:
+            return
+
+        try:
+            model = self.get_model()
+            provider_model = model or None
+            usage_dict: dict = {}
+            if response.usage:
+                usage_dict = {
+                    "input_other": response.usage.input_other,
+                    "input_cached": response.usage.input_cached,
+                    "output": response.usage.output,
+                }
+
+            await db_helper.insert_provider_stat(
+                umo=umo,
+                provider_id=provider_id,
+                provider_model=provider_model,
+                conversation_id=conversation_id,
+                status="completed" if response.role != "err" else "error",
+                stats={
+                    "token_usage": usage_dict,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "time_to_first_token": 0.0,
+                },
+                agent_type="internal",
+            )
+        except Exception:
+            logger.debug("Failed to record image caption provider stat", exc_info=True)
+
 
 class Provider(AbstractProvider):
     """Chat Provider"""
