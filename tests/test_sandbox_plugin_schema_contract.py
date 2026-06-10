@@ -76,7 +76,9 @@ def test_dashboard_schema_exposes_sandbox_lease_timeout():
 
     lease_timeout = schema["provider_settings.sandbox.sandbox_lease_timeout"]
     assert lease_timeout["type"] == "int"
+    assert "每次 Agent 成功访问沙盒" in lease_timeout["hint"]
     assert "默认 600 秒" in lease_timeout["hint"]
+    assert "其他会话可接管" in lease_timeout["hint"]
 
 
 def test_cua_schema_defaults_match_documented_hints():

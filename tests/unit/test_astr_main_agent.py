@@ -2321,7 +2321,8 @@ class TestApplySandboxTools:
         )
         assert "send_to_user=true" in req.system_prompt
         assert "send_message_to_user separately" in req.system_prompt
-        assert "automatically refreshes this session's lease" in req.system_prompt
+        assert "automatically renews this session's lease" in req.system_prompt
+        assert "now plus the configured sandbox lease timeout" in req.system_prompt
         assert "lease_expires_in_seconds" in req.system_prompt
 
     def test_apply_sandbox_tools_does_not_scan_provider_tool_names(self, mock_context):

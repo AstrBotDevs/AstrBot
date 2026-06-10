@@ -20,7 +20,7 @@ SANDBOX_MODE_PROMPT = (
     " If access.status=occupied or access.can_switch=false, another active session controls that sandbox; do not switch to it unless the user explicitly asks to take it over."
     " If you need a different provider, use astrbot_sandbox_query with action=list_providers first and pass provider_id explicitly to astrbot_sandbox_lifecycle with action=create."
     " You can create a new sandbox only when the user explicitly asks for a fresh or separate environment, or when no existing sandbox can be reused safely."
-    " Each successful sandbox operation that accesses a sandbox automatically refreshes this session's lease using the configured sandbox lease timeout."
+    " Each successful sandbox operation that accesses a sandbox automatically renews this session's lease to now plus the configured sandbox lease timeout."
     " Sandbox-bound tool results include lease metadata such as lease_expires_at and lease_expires_in_seconds."
     " For long-running work, monitor lease metadata; if the remaining time is low before a long idle period or external wait, call astrbot_sandbox_lifecycle with action=renew_lease."
     # "Your have extended skills library, such as PDF processing, image generation, data analysis, etc. "
