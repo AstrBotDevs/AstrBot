@@ -7,7 +7,18 @@ from collections import defaultdict, deque
 from astrbot import logger
 from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import At, AtAll, Face, File, Forward, Image, Plain, Record, Reply, Video
+from astrbot.api.message_components import (
+    At,
+    AtAll,
+    Face,
+    File,
+    Forward,
+    Image,
+    Plain,
+    Record,
+    Reply,
+    Video,
+)
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
 from astrbot.core.agent.message import TextPart
@@ -221,9 +232,7 @@ class GroupChatContext:
                     )
                 elif comp.chain:
                     chain_desc = _describe_chain(comp.chain)
-                    parts.append(
-                        f" [Quote({comp.sender_nickname}: {chain_desc})]"
-                    )
+                    parts.append(f" [Quote({comp.sender_nickname}: {chain_desc})]")
                 else:
                     parts.append(" [Quote]")
 
@@ -234,7 +243,7 @@ _MAX_REPLY_TEXT_LENGTH = 200
 
 
 def _describe_chain(chain: list) -> str:
-    """简要描述消息链内容，用于引用消息的展示"""
+    """Summarize message chain content for quoted reply display."""
     desc = []
     for c in chain:
         if isinstance(c, Plain) and getattr(c, "text", None):
@@ -264,7 +273,7 @@ def _describe_chain(chain: list) -> str:
 
 
 def _truncate_reply_text(text: str) -> str:
-    """截断过长的引用文本"""
+    """Truncate overly long quoted reply text."""
     if len(text) <= _MAX_REPLY_TEXT_LENGTH:
         return text
     return text[:_MAX_REPLY_TEXT_LENGTH] + "..."
