@@ -11,7 +11,6 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.api.message_components import At, Image, Plain
 from astrbot.api.platform import MessageType
 from astrbot.api.provider import Provider, ProviderRequest
-from astrbot.core import db_helper
 from astrbot.core.agent.message import TextPart
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 
@@ -105,36 +104,14 @@ class GroupChatContext:
 
         # 记录图片转述模型的调用统计
         if event is not None:
-            try:
-                model = provider.get_model()
-                provider_model = model or None
-                usage_dict: dict = {}
-                if response.usage:
-                    usage_dict = {
-                        "input_other": response.usage.input_other,
-                        "input_cached": response.usage.input_cached,
-                        "output": response.usage.output,
-                    }
-
-                await db_helper.insert_provider_stat(
-                    umo=event.unified_msg_origin,
-                    provider_id=provider_id,
-                    provider_model=provider_model,
-                    conversation_id=None,
-                    status="completed" if response.role != "err" else "error",
-                    stats={
-                        "token_usage": usage_dict,
-                        "start_time": start_time,
-                        "end_time": end_time,
-                        "time_to_first_token": 0.0,
-                    },
-                    agent_type="internal",
-                )
-            except Exception:
-                logger.debug(
-                    "Failed to record group chat image caption provider stat",
-                    exc_info=True,
-                )
+            await provider.record_image_caption_stat(
+                umo=event.unified_msg_origin,
+                provider_id=provider_id,
+                conversation_id=None,
+                start_time=start_time,
+                end_time=end_time,
+                response=response,
+            )
 
         return response.completion_text
 
