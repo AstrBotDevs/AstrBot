@@ -1572,6 +1572,29 @@ async def test_manager_revives_persistent_sandbox_for_switch_access(tmp_path):
     assert manager.registry.get_sandbox("generic-1")["status"] == "running"
 
 
+def test_manager_current_sandbox_uses_current_provider_tool_names(tmp_path):
+    manager, provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        tool_names=["stale_provider_screenshot"],
+        capabilities=["stale"],
+    )
+    manager.registry.set_current_sandbox_id("session-a", "generic-1")
+
+    current = manager.get_current_sandbox("session-a")
+
+    assert current["sandbox"]["tool_names"] == sorted(provider.tool_names)
+    assert current["sandbox"]["capabilities"] == sorted(provider.capabilities)
+
+
 @pytest.mark.asyncio
 async def test_manager_does_not_revive_destroyed_persistent_sandbox(tmp_path):
     manager, provider = _manager(tmp_path)

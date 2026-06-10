@@ -1200,9 +1200,20 @@ class SandboxManager:
 
     def get_current_sandbox(self, session_id: str) -> dict:
         sandbox_id = self.registry.get_current_sandbox_id(session_id)
+        sandbox = self.registry.get_sandbox(sandbox_id) if sandbox_id else None
+        if sandbox:
+            provider = self.providers.get(sandbox.get("provider"))
+            if provider:
+                sandbox = dict(sandbox)
+                sandbox["capabilities"] = sorted(
+                    getattr(provider, "capabilities", sandbox.get("capabilities", []))
+                )
+                sandbox["tool_names"] = sorted(
+                    getattr(provider, "tool_names", sandbox.get("tool_names", []))
+                )
         return {
             "current_sandbox_id": sandbox_id,
-            "sandbox": self.registry.get_sandbox(sandbox_id) if sandbox_id else None,
+            "sandbox": sandbox,
         }
 
     def release_current_sandbox(
