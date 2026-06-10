@@ -357,6 +357,17 @@ class ProviderOpenAIOfficial(Provider):
 
     async def _audio_ref_to_local_path(self, audio_ref: str) -> tuple[str, list[Path]]:
         cleanup_paths: list[Path] = []
+        if audio_ref.startswith("data:"):
+            m = re.match(r"^data:audio/(\w+);base64,(.+)$", audio_ref)
+            if m:
+                suffix = f".{m.group(1)}"
+                audio_bytes = base64.b64decode(m.group(2))
+                temp_dir = Path(get_astrbot_temp_path())
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                target_path = temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
+                target_path.write_bytes(audio_bytes)
+                cleanup_paths.append(target_path)
+                return str(target_path), cleanup_paths
         if audio_ref.startswith("http"):
             suffix = Path(urlparse(audio_ref).path).suffix or ".wav"
             temp_dir = Path(get_astrbot_temp_path())
@@ -384,7 +395,8 @@ class ProviderOpenAIOfficial(Provider):
                 audio_format = "wav"
             audio_bytes = Path(audio_path).read_bytes()
         except Exception as exc:
-            logger.warning("音频 %s 预处理失败，将忽略。错误: %s", audio_ref, exc)
+            truncated = audio_ref[:256] if len(audio_ref) > 256 else audio_ref
+            logger.warning("音频 %s 预处理失败，将忽略。错误: %s", truncated, exc)
             return None
         finally:
             for cleanup_path in cleanup_paths:
