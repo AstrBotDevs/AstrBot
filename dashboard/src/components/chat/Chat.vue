@@ -1720,32 +1720,12 @@ function toggleTheme() {
   padding: 0 0 18px;
 }
 
-.composer-shell::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  left: 0;
-  right: 0;
-  top: -36px;
-  height: 36px;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(var(--v-theme-background), 0),
-    var(--chat-page-bg)
-  );
-}
-
 .composer-shell :deep(.input-area) {
   border-top: 0;
 }
 
 .empty-chat .composer-shell {
   padding-bottom: 0;
-}
-
-.empty-chat .composer-shell::before {
-  display: none;
 }
 
 kbd {
