@@ -661,9 +661,7 @@ async def _request_img_caption(
                 agent_type="internal",
             )
         except Exception:
-            logger.debug(
-                "Failed to record image caption provider stat", exc_info=True
-            )
+            logger.debug("Failed to record image caption provider stat", exc_info=True)
 
     return llm_resp.completion_text
 
