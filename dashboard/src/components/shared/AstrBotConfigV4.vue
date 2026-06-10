@@ -520,18 +520,21 @@ function getSpecialSubtype(value) {
 .config-item-transition-leave-active {
   transition:
     opacity 260ms ease,
-    transform 260ms ease;
+    transform 260ms ease,
+    max-height 320ms ease;
 }
 
 .config-item-transition-enter-from,
 .config-item-transition-leave-to {
   opacity: 0;
+  max-height: 0;
   transform: translateY(-6px);
 }
 
 .config-item-transition-enter-to,
 .config-item-transition-leave-from {
   opacity: 1;
+  max-height: 180px;
   transform: translateY(0);
 }
 
