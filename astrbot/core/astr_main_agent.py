@@ -11,7 +11,9 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from astrbot.core import logger
+import time
+
+from astrbot.core import db_helper, logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
@@ -606,6 +608,8 @@ async def _request_img_caption(
     cfg: dict,
     image_urls: list[str],
     plugin_context: Context,
+    event: AstrMessageEvent | None = None,
+    conversation_id: str | None = None,
 ) -> str:
     prov = plugin_context.get_provider_by_id(provider_id)
     if prov is None:
@@ -622,10 +626,45 @@ async def _request_img_caption(
         "Please describe the image.",
     )
     logger.debug("Processing image caption with provider: %s", provider_id)
+
+    start_time = time.time()
     llm_resp = await prov.text_chat(
         prompt=img_cap_prompt,
         image_urls=image_urls,
     )
+    end_time = time.time()
+
+    # 记录图片转述模型的调用统计
+    if event is not None:
+        try:
+            provider_model = prov.get_model() if prov.get_model() else None
+            usage_dict: dict = {}
+            if llm_resp.usage:
+                usage_dict = {
+                    "input_other": llm_resp.usage.input_other,
+                    "input_cached": llm_resp.usage.input_cached,
+                    "output": llm_resp.usage.output,
+                }
+
+            await db_helper.insert_provider_stat(
+                umo=event.unified_msg_origin,
+                provider_id=provider_id,
+                provider_model=provider_model,
+                conversation_id=conversation_id,
+                status="completed" if llm_resp.role != "err" else "error",
+                stats={
+                    "token_usage": usage_dict,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "time_to_first_token": 0.0,
+                },
+                agent_type="internal",
+            )
+        except Exception:
+            logger.debug(
+                "Failed to record image caption provider stat", exc_info=True
+            )
+
     return llm_resp.completion_text
 
 
@@ -648,6 +687,8 @@ async def _ensure_img_caption(
             cfg,
             compressed_urls,
             plugin_context,
+            event=event,
+            conversation_id=req.conversation.cid if req.conversation else None,
         )
         if caption:
             req.extra_user_content_parts.append(
