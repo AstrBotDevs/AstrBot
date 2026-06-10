@@ -660,7 +660,7 @@ async def test_sandbox_dashboard_blocks_mutations_in_demo_mode(
     )
     monkeypatch.setattr(computer_client, "sandbox_manager", manager)
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.sandbox.DEMO_MODE", True, raising=False
+        "astrbot.dashboard.routes.sandbox_helpers.DEMO_MODE", True, raising=False
     )
 
     test_client = app.test_client()

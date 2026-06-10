@@ -1,56 +1,20 @@
-import math
 import traceback
 
 from quart import jsonify, request
 
-from astrbot.core import DEMO_MODE, logger
+from astrbot.core import logger
 from astrbot.core.computer import computer_client
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 
 from .route import Response, Route, RouteContext
-
-
-def _is_sandbox_name_conflict(error: Exception) -> bool:
-    return isinstance(error, RuntimeError) and str(error).startswith("Sandbox name ")
-
-
-def _is_sandbox_limit_error(error: Exception) -> bool:
-    return isinstance(error, RuntimeError) and str(error).startswith(
-        "Sandbox limit reached"
-    )
-
-
-def _is_sandbox_user_error(error: Exception) -> bool:
-    if not isinstance(error, (RuntimeError, ValueError)):
-        return False
-    message = str(error)
-    return (
-        _is_sandbox_name_conflict(error)
-        or _is_sandbox_limit_error(error)
-        or "does not support persistent sandboxes" in message
-        or "retention_policy must be" in message
-        or "sandbox_name must be" in message
-    )
-
-
-def _sanitize_shell_timeout(value, default: float = 300) -> float:
-    if isinstance(value, bool):
-        return default
-    try:
-        timeout = float(value)
-    except (TypeError, ValueError):
-        return default
-    if not math.isfinite(timeout) or timeout <= 0:
-        return default
-    return timeout
-
-
-def _demo_mode_response():
-    return jsonify(
-        Response()
-        .error("You are not permitted to do this operation in demo mode")
-        .__dict__
-    )
+from .sandbox_helpers import (
+    demo_mode_response,
+    is_demo_mode,
+    is_sandbox_limit_error,
+    is_sandbox_name_conflict,
+    is_sandbox_user_error,
+    sanitize_shell_timeout,
+)
 
 
 class SandboxRoute(Route):
@@ -140,8 +104,8 @@ class SandboxRoute(Route):
             )
 
     async def create_sandbox(self):
-        if DEMO_MODE:
-            return _demo_mode_response()
+        if is_demo_mode():
+            return demo_mode_response()
         try:
             data = await request.get_json(silent=True) or {}
             provider_id = str(data.get("provider_id") or "").strip()
@@ -155,7 +119,7 @@ class SandboxRoute(Route):
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
         except RuntimeError as e:
-            if _is_sandbox_name_conflict(e) or _is_sandbox_limit_error(e):
+            if is_sandbox_name_conflict(e) or is_sandbox_limit_error(e):
                 logger.warning(str(e))
                 return jsonify(Response().error(str(e)).__dict__)
             logger.error(traceback.format_exc())
@@ -169,8 +133,8 @@ class SandboxRoute(Route):
             )
 
     async def switch_sandbox(self, sandbox_id: str):
-        if DEMO_MODE:
-            return _demo_mode_response()
+        if is_demo_mode():
+            return demo_mode_response()
         try:
             sandbox = (
                 await computer_client.sandbox_manager.switch_current_sandbox_checked(
@@ -187,8 +151,8 @@ class SandboxRoute(Route):
             )
 
     async def release_current_sandbox(self):
-        if DEMO_MODE:
-            return _demo_mode_response()
+        if is_demo_mode():
+            return demo_mode_response()
         try:
             sandbox_id = request.args.get("sandbox_id")
             if sandbox_id:
@@ -207,8 +171,8 @@ class SandboxRoute(Route):
             )
 
     async def takeover_sandbox(self, sandbox_id: str):
-        if DEMO_MODE:
-            return _demo_mode_response()
+        if is_demo_mode():
+            return demo_mode_response()
         try:
             sandbox = await computer_client.sandbox_manager.takeover_sandbox(
                 self._session_id(), sandbox_id, context=self.core_lifecycle.star_context
@@ -221,8 +185,8 @@ class SandboxRoute(Route):
             )
 
     async def set_default_sandbox(self, sandbox_id: str):
-        if DEMO_MODE:
-            return _demo_mode_response()
+        if is_demo_mode():
+            return demo_mode_response()
         try:
             sandbox = computer_client.sandbox_manager.set_default_sandbox(sandbox_id)
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
@@ -233,8 +197,8 @@ class SandboxRoute(Route):
             )
 
     async def run_shell(self, sandbox_id: str):
-        if DEMO_MODE:
-            return _demo_mode_response()
+        if is_demo_mode():
+            return demo_mode_response()
         try:
             data = await request.get_json(silent=True) or {}
             command = str(data.get("command") or "").strip()
@@ -257,7 +221,7 @@ class SandboxRoute(Route):
                 command,
                 cwd=data.get("cwd"),
                 env=data.get("env"),
-                timeout=_sanitize_shell_timeout(data.get("timeout", 300)),
+                timeout=sanitize_shell_timeout(data.get("timeout", 300)),
                 shell=data.get("shell", True),
             )
             return jsonify(Response().ok(data={"result": result}).__dict__)
@@ -294,8 +258,8 @@ class SandboxRoute(Route):
             )
 
     async def update_sandbox(self, sandbox_id: str):
-        if DEMO_MODE:
-            return _demo_mode_response()
+        if is_demo_mode():
+            return demo_mode_response()
         try:
             data = await request.get_json(silent=True) or {}
             current_sandbox = computer_client.sandbox_manager.registry.get_sandbox(
@@ -324,7 +288,7 @@ class SandboxRoute(Route):
             )
             return jsonify(Response().ok(data={"sandbox": sandbox}).__dict__)
         except Exception as e:
-            if _is_sandbox_user_error(e):
+            if is_sandbox_user_error(e):
                 logger.info("Failed to update sandbox: %s", e)
             else:
                 logger.error(traceback.format_exc())
@@ -333,8 +297,8 @@ class SandboxRoute(Route):
             )
 
     async def destroy_sandbox(self, sandbox_id: str):
-        if DEMO_MODE:
-            return _demo_mode_response()
+        if is_demo_mode():
+            return demo_mode_response()
         try:
             sandbox = await computer_client.sandbox_manager.destroy_sandbox_deferred(
                 self._session_id(), sandbox_id

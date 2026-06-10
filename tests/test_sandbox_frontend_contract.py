@@ -55,10 +55,7 @@ def test_sandbox_management_page_replaces_console_history_after_command_updates(
         encoding="utf-8"
     )
 
-    assert (
-        "consoleHistory.value = [...consoleHistory.value]" in content
-        or "await nextTick()" in content
-    )
+    assert "consoleHistory.value = [...consoleHistory.value]" in content
 
 
 def test_sandbox_management_page_release_is_not_limited_to_dashboard_controller():
@@ -218,14 +215,19 @@ def test_sandbox_management_page_shows_controller_session_in_status_tooltip():
 
 
 def test_sandbox_management_page_confirms_dangerous_console_commands():
-    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+    page = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+    console_utils = (ROOT / "dashboard/src/views/sandbox/consoleUtils.ts").read_text(
         encoding="utf-8"
     )
 
-    assert "function isDangerousConsoleCommand" in content
-    assert "window.confirm(tm('console.dangerConfirm'" in content
-    assert "rm\\s+(?:-" in content
-    assert "(?:--\\s+)?" in content
+    assert "import { isDangerousConsoleCommand } from './sandbox/consoleUtils'" in page
+    assert "isDangerousConsoleCommand(command) && !window.confirm" in page
+    assert "window.confirm(tm('console.dangerConfirm'" in page
+    assert "function isDangerousConsoleCommand" in console_utils
+    assert "rm\\s+(?:-" in console_utils
+    assert "(?:--\\s+)?" in console_utils
 
 
 def test_sandbox_management_page_displays_console_cwd_relative_to_sandbox_home():
