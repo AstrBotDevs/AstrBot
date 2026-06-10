@@ -2219,7 +2219,10 @@ async def test_manager_idle_cleanup_stops_retrying_after_max_attempts(tmp_path):
     manager.release_current_sandbox("session-a", sandbox["sandbox_id"])
 
     await asyncio.wait_for(provider.destroy_started.wait(), timeout=1)
-    await asyncio.sleep(0.12)
+    await wait_until(
+        lambda: sandbox["sandbox_id"] not in manager.idle_state,
+        timeout=1,
+    )
 
     assert provider.destroy_calls == sandbox_manager_module.MAX_IDLE_DESTROY_ATTEMPTS
     record = manager.registry.get_sandbox(sandbox["sandbox_id"])

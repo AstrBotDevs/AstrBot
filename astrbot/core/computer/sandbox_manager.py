@@ -1908,6 +1908,7 @@ class SandboxManager:
                             self.registry.update_sandbox_status(
                                 sandbox_id, SandboxStatus.ERROR
                             )
+                            self.idle_state.pop(sandbox_id, None)
                             await self.save_registry_async()
                             return
                         self.clear_runtime_state(sandbox_id)
