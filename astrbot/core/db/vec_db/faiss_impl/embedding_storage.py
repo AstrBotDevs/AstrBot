@@ -111,7 +111,13 @@ class EmbeddingStorage:
         """
         assert self.index is not None, "FAISS index is not initialized."
         id_array = np.array(ids, dtype=np.int64)
-        self.index.remove_ids(id_array)
+        try:
+            self.index.remove_ids(id_array)
+        except TypeError as exc:
+            if "IDSelector" not in str(exc):
+                raise
+            selector = faiss.IDSelectorBatch(id_array.size, faiss.swig_ptr(id_array))
+            self.index.remove_ids(selector)
         await self.save_index()
 
     async def save_index(self) -> None:
