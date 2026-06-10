@@ -106,7 +106,8 @@ class GroupChatContext:
         # 记录图片转述模型的调用统计
         if event is not None:
             try:
-                provider_model = provider.get_model() if provider.get_model() else None
+                model = provider.get_model()
+                provider_model = model or None
                 usage_dict: dict = {}
                 if response.usage:
                     usage_dict = {
