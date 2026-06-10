@@ -596,6 +596,7 @@ class SandboxManager:
             target_sandbox_id,
             session_id=session_id,
             idle_timeout=idle_timeout,
+            remove_record_on_failure=created_target_record,
         )
         await self._invoke_sandbox_created_hook(provider, target_sandbox_id)
         return self.session_booter[target_sandbox_id]
@@ -607,6 +608,7 @@ class SandboxManager:
         *,
         session_id: str | None = None,
         idle_timeout: float,
+        remove_record_on_failure: bool = False,
     ) -> None:
         """Common post-creation steps: persist, idle cleanup, skill sync, hooks."""
         booter = self.session_booter.get(sandbox_id)
@@ -639,6 +641,11 @@ class SandboxManager:
                         destroy_err,
                     )
             self.clear_runtime_state(sandbox_id)
+            if remove_record_on_failure:
+                self.registry.delete_sandbox(sandbox_id)
+            else:
+                self.registry.release_lease(sandbox_id)
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.UNKNOWN)
             if session_id is not None:
                 self.registry.set_current_sandbox_id(session_id, None)
             raise
@@ -760,7 +767,11 @@ class SandboxManager:
             setattr(client, "provider_id", provider_id)
             self.session_booter[sandbox_id] = client
             await self._finalize_created_booter(
-                provider, sandbox_id, session_id=None, idle_timeout=idle_timeout
+                provider,
+                sandbox_id,
+                session_id=None,
+                idle_timeout=idle_timeout,
+                remove_record_on_failure=True,
             )
             return self.registry.get_sandbox(sandbox_id) or record
 
@@ -860,7 +871,11 @@ class SandboxManager:
                 setattr(client, "provider_id", provider.provider_id)
                 self.session_booter[sandbox_id] = client
                 await self._finalize_created_booter(
-                    provider, sandbox_id, session_id=None, idle_timeout=idle_timeout
+                    provider,
+                    sandbox_id,
+                    session_id=None,
+                    idle_timeout=idle_timeout,
+                    remove_record_on_failure=True,
                 )
         finally:
             self.pending_boot_tasks.pop(sandbox_id, None)

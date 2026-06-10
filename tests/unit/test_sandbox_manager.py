@@ -1002,6 +1002,8 @@ async def test_get_or_create_booter_rolls_back_on_registry_save_failure(tmp_path
 
     assert manager.session_booter == {}
     assert provider.destroyed
+    assert manager.list_sandboxes() == []
+    assert manager.get_current_sandbox("session-a")["current_sandbox_id"] is None
 
 
 @pytest.mark.asyncio

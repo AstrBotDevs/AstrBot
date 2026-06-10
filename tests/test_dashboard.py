@@ -9,6 +9,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import pyotp
@@ -625,6 +626,75 @@ async def test_sandbox_dashboard_create_does_not_auto_occupy_sandbox(
     assert data["data"]["sandbox"]["status"] == "creating"
     assert data["data"]["sandbox"]["controller_session_id"] is None
     assert manager.get_current_sandbox("dashboard")["current_sandbox_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_blocks_mutations_in_demo_mode(
+    app: Quart,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    shell = SimpleNamespace(exec=AsyncMock(return_value={"stdout": "ran"}))
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="dashboard",
+        owner_session_id="dashboard",
+        connect_info={"name": "Sandbox 1"},
+        status="running",
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        shell=shell,
+        available=lambda: True,
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.sandbox.DEMO_MODE", True, raising=False
+    )
+
+    test_client = app.test_client()
+    create_response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Blocked"},
+        headers=authenticated_header,
+    )
+    shell_response = await test_client.post(
+        "/api/sandbox/sandbox-1/shell?session_id=dashboard",
+        json={"command": "echo blocked"},
+        headers=authenticated_header,
+    )
+
+    for task in list(manager.pending_boot_tasks.values()):
+        task.cancel()
+    if manager.pending_boot_tasks:
+        await asyncio.gather(
+            *manager.pending_boot_tasks.values(), return_exceptions=True
+        )
+
+    create_data = await create_response.get_json()
+    shell_data = await shell_response.get_json()
+
+    assert create_response.status_code == 200
+    assert shell_response.status_code == 200
+    assert create_data["status"] == "error"
+    assert shell_data["status"] == "error"
+    assert "demo mode" in create_data["message"]
+    assert "demo mode" in shell_data["message"]
+    assert [sandbox["sandbox_id"] for sandbox in manager.list_sandboxes()] == [
+        "sandbox-1"
+    ]
+    shell.exec.assert_not_awaited()
 
 
 @pytest.mark.asyncio
