@@ -636,7 +636,8 @@ async def _request_img_caption(
     # 记录图片转述模型的调用统计
     if event is not None:
         try:
-            provider_model = prov.get_model() if prov.get_model() else None
+            model = prov.get_model()
+            provider_model = model or None
             usage_dict: dict = {}
             if llm_resp.usage:
                 usage_dict = {
