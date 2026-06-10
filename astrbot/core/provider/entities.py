@@ -452,18 +452,33 @@ class LLMResponse:
         """Convert to OpenAI tool calls format. Deprecated, use to_openai_to_calls_model instead."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
+            if idx >= len(self.tools_call_name):
+                logger.warning(
+                    "Skipping tool call argument without matching tool name at index %s.",
+                    idx,
+                )
+                break
+            tool_name = self.tools_call_name[idx]
+            if not isinstance(tool_name, str) or not tool_name.strip():
+                logger.warning("Skipping malformed tool call with empty tool name.")
+                continue
+            tool_call_id = (
+                self.tools_call_ids[idx]
+                if idx < len(self.tools_call_ids)
+                and isinstance(self.tools_call_ids[idx], str)
+                and self.tools_call_ids[idx].strip()
+                else f"call_{uuid.uuid4().hex}"
+            )
             payload = {
-                "id": self.tools_call_ids[idx],
+                "id": tool_call_id,
                 "function": {
-                    "name": self.tools_call_name[idx],
+                    "name": tool_name.strip(),
                     "arguments": json.dumps(tool_call_arg),
                 },
                 "type": "function",
             }
-            if self.tools_call_extra_content.get(self.tools_call_ids[idx]):
-                payload["extra_content"] = self.tools_call_extra_content[
-                    self.tools_call_ids[idx]
-                ]
+            if self.tools_call_extra_content.get(tool_call_id):
+                payload["extra_content"] = self.tools_call_extra_content[tool_call_id]
             ret.append(payload)
         return ret
 
@@ -471,17 +486,32 @@ class LLMResponse:
         """The same as to_openai_tool_calls but return pydantic model."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
+            if idx >= len(self.tools_call_name):
+                logger.warning(
+                    "Skipping tool call argument without matching tool name at index %s.",
+                    idx,
+                )
+                break
+            tool_name = self.tools_call_name[idx]
+            if not isinstance(tool_name, str) or not tool_name.strip():
+                logger.warning("Skipping malformed tool call with empty tool name.")
+                continue
+            tool_call_id = (
+                self.tools_call_ids[idx]
+                if idx < len(self.tools_call_ids)
+                and isinstance(self.tools_call_ids[idx], str)
+                and self.tools_call_ids[idx].strip()
+                else f"call_{uuid.uuid4().hex}"
+            )
             ret.append(
                 ToolCall(
-                    id=self.tools_call_ids[idx],
+                    id=tool_call_id,
                     function=ToolCall.FunctionBody(
-                        name=self.tools_call_name[idx],
+                        name=tool_name.strip(),
                         arguments=json.dumps(tool_call_arg),
                     ),
                     # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
-                    extra_content=self.tools_call_extra_content.get(
-                        self.tools_call_ids[idx]
-                    ),
+                    extra_content=self.tools_call_extra_content.get(tool_call_id),
                 ),
             )
         return ret

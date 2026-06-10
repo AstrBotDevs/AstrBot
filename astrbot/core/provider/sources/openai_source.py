@@ -642,6 +642,19 @@ class ProviderOpenAIOfficial(Provider):
             extra_body=extra_body,
         )
 
+        if isinstance(completion, str):
+            text = self._normalize_content(completion)
+            if text:
+                logger.warning(
+                    "OpenAI-compatible provider returned raw string completion; normalized it."
+                )
+                return LLMResponse("assistant", completion_text=text)
+            raise EmptyModelOutputError(
+                "OpenAI-compatible provider returned an empty string completion."
+            )
+        if isinstance(completion, dict):
+            completion = ChatCompletion.model_validate(completion)
+
         if not isinstance(completion, ChatCompletion):
             raise Exception(
                 f"API 返回的 completion 类型错误：{type(completion)}: {completion}。",
@@ -721,7 +734,10 @@ class ProviderOpenAIOfficial(Provider):
                 try:
                     state.handle_chunk(chunk)
                 except Exception as e:
-                    logger.error("Saving chunk state error: " + str(e))
+                    logger.warning(
+                        f"Saving chunk state skipped for chunk {chunk!r}: {e}",
+                        exc_info=True,
+                    )
             # logger.debug(f"chunk delta: {delta}")
             # handle the content delta
             reasoning = self._extract_reasoning_content(chunk)
@@ -944,27 +960,78 @@ class ProviderOpenAIOfficial(Provider):
                     # Should be unreachable
                     raise Exception("工具集未提供")
 
-                if tool_call.type == "function":
+                is_dict_tool_call = isinstance(tool_call, dict)
+                tool_call_type = (
+                    tool_call.get("type")
+                    if is_dict_tool_call
+                    else getattr(tool_call, "type", None)
+                )
+                if tool_call_type == "function":
+                    tool_call_function = (
+                        tool_call.get("function")
+                        if is_dict_tool_call
+                        else getattr(tool_call, "function", None)
+                    )
+                    func_name = (
+                        tool_call_function.get("name")
+                        if isinstance(tool_call_function, dict)
+                        else getattr(tool_call_function, "name", None)
+                    )
+                    if not isinstance(func_name, str) or not func_name.strip():
+                        logger.warning(
+                            "Skipping malformed tool call with empty function name: %s",
+                            tool_call,
+                        )
+                        continue
+                    func_name = func_name.strip()
+                    tool_call_id = (
+                        tool_call.get("id")
+                        if is_dict_tool_call
+                        else getattr(tool_call, "id", None)
+                    )
+                    if not isinstance(tool_call_id, str) or not tool_call_id.strip():
+                        tool_call_id = f"call_{uuid.uuid4().hex}"
+                        logger.warning(
+                            "Generated missing tool_call id for %s: %s",
+                            func_name,
+                            tool_call_id,
+                        )
                     # workaround for #1454
-                    if isinstance(tool_call.function.arguments, str):
+                    tool_call_arguments = (
+                        tool_call_function.get("arguments")
+                        if isinstance(tool_call_function, dict)
+                        else getattr(tool_call_function, "arguments", None)
+                    )
+                    if isinstance(tool_call_arguments, str):
                         try:
-                            args = json.loads(tool_call.function.arguments)
+                            args = json.loads(tool_call_arguments)
                         except json.JSONDecodeError as e:
-                            logger.error(f"解析参数失败: {e}")
+                            logger.warning(f"解析参数失败: {e}")
                             args = {}
                     else:
-                        args = tool_call.function.arguments
+                        args = tool_call_arguments
                     # Some API may return None for tools with no parameters
                     if args is None:
                         args = {}
+                    if not isinstance(args, dict):
+                        logger.warning(
+                            "Tool call arguments for %s are not an object: %s",
+                            func_name,
+                            type(args).__name__,
+                        )
+                        args = {}
                     args_ls.append(args)
-                    func_name_ls.append(tool_call.function.name)
-                    tool_call_ids.append(tool_call.id)
+                    func_name_ls.append(func_name)
+                    tool_call_ids.append(tool_call_id)
 
                     # gemini-2.5 / gemini-3 series extra_content handling
-                    extra_content = getattr(tool_call, "extra_content", None)
+                    extra_content = (
+                        tool_call.get("extra_content")
+                        if is_dict_tool_call
+                        else getattr(tool_call, "extra_content", None)
+                    )
                     if extra_content is not None:
-                        tool_call_extra_content_dict[tool_call.id] = extra_content
+                        tool_call_extra_content_dict[tool_call_id] = extra_content
 
             llm_response.role = "tool"
             llm_response.tools_call_args = args_ls

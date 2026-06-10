@@ -325,9 +325,8 @@ def get_requirement_check_paths() -> list[str]:
 
 
 def _canonical_distribution_identity(distribution) -> tuple[str | None, str | None]:
-    distribution_name = (
-        distribution.metadata["Name"] if "Name" in distribution.metadata else None
-    )
+    metadata = distribution.metadata
+    distribution_name = metadata.get("Name") if metadata else None
     if not distribution_name:
         return None, None
     return canonicalize_distribution_name(distribution_name), distribution.version
@@ -337,7 +336,13 @@ def collect_installed_distribution_versions(paths: list[str]) -> dict[str, str] 
     installed: dict[str, str] = {}
     try:
         for distribution in importlib_metadata.distributions(path=paths):
-            distribution_name, version = _canonical_distribution_identity(distribution)
+            try:
+                distribution_name, version = _canonical_distribution_identity(
+                    distribution
+                )
+            except Exception as exc:
+                logger.debug("Skipping unreadable distribution metadata: %s", exc)
+                continue
             if not distribution_name or not version:
                 continue
             installed.setdefault(distribution_name, version)
