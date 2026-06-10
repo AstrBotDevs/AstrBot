@@ -12,7 +12,7 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from astrbot.core import db_helper, logger
+from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
@@ -633,35 +633,15 @@ async def _request_img_caption(
     )
     end_time = time.time()
 
-    # 记录图片转述模型的调用统计
     if event is not None:
-        try:
-            model = prov.get_model()
-            provider_model = model or None
-            usage_dict: dict = {}
-            if llm_resp.usage:
-                usage_dict = {
-                    "input_other": llm_resp.usage.input_other,
-                    "input_cached": llm_resp.usage.input_cached,
-                    "output": llm_resp.usage.output,
-                }
-
-            await db_helper.insert_provider_stat(
-                umo=event.unified_msg_origin,
-                provider_id=provider_id,
-                provider_model=provider_model,
-                conversation_id=conversation_id,
-                status="completed" if llm_resp.role != "err" else "error",
-                stats={
-                    "token_usage": usage_dict,
-                    "start_time": start_time,
-                    "end_time": end_time,
-                    "time_to_first_token": 0.0,
-                },
-                agent_type="internal",
-            )
-        except Exception:
-            logger.debug("Failed to record image caption provider stat", exc_info=True)
+        await prov.record_image_caption_stat(
+            umo=event.unified_msg_origin,
+            provider_id=provider_id,
+            conversation_id=conversation_id,
+            start_time=start_time,
+            end_time=end_time,
+            response=llm_resp,
+        )
 
     return llm_resp.completion_text
 
