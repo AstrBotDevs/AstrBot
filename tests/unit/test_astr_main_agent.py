@@ -1242,7 +1242,7 @@ class TestPluginToolFix:
     ):
         module = ama
         provider_tool = FunctionTool(
-            name="astrbot_cua_screenshot",
+            name="astrbot_cua_mouse_click",
             description="provider-specific",
             parameters={"type": "object", "properties": {}},
             handler_module_path=None,
@@ -1278,14 +1278,14 @@ class TestPluginToolFix:
             )
 
         assert "astrbot_sandbox_query" in req.func_tool.names()
-        assert "astrbot_cua_screenshot" in req.func_tool.names()
+        assert "astrbot_cua_mouse_click" in req.func_tool.names()
 
     def test_plugin_tool_fix_hides_provider_specific_tools_outside_sandbox_runtime(
         self, mock_event
     ):
         module = ama
         cua_tool = FunctionTool(
-            name="astrbot_cua_screenshot",
+            name="astrbot_cua_keyboard_type",
             description="cua",
             parameters={"type": "object", "properties": {}},
             handler_module_path=None,
@@ -1317,7 +1317,7 @@ class TestPluginToolFix:
                 {"computer_use_runtime": "local"},
             )
 
-        assert "astrbot_cua_screenshot" not in req.func_tool.names()
+        assert "astrbot_cua_keyboard_type" not in req.func_tool.names()
         assert "astrbot_execute_browser" not in req.func_tool.names()
 
 

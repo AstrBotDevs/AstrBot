@@ -207,6 +207,10 @@ def test_cua_adapter_uses_core_screenshot_operation():
 
     assert "screenshot" in provider.capabilities
     assert "astrbot_cua_screenshot" not in provider.tool_names
+    assert provider.tool_names == {
+        "astrbot_cua_keyboard_type",
+        "astrbot_cua_mouse_click",
+    }
     assert not hasattr(cua_tools, "CuaScreenshotTool")
 
 
