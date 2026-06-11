@@ -277,6 +277,7 @@ function getSpecialSubtype(value) {
       <div
         v-for="([itemKey, itemMeta], index) in getVisibleItemEntries(false)"
         :key="itemKey"
+        class="config-item"
       >
         <v-row v-if="!itemMeta?.invisible" class="config-row">
           <v-col cols="12" sm="6" class="property-info">
@@ -647,5 +648,4 @@ function getSpecialSubtype(value) {
     display: none;
   }
 }
-
 </style>
