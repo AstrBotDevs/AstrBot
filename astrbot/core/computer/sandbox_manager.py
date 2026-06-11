@@ -409,6 +409,7 @@ class SandboxManager:
 
         current_sandbox_id = self.registry.get_current_sandbox_id(session_id)
         current_record = self.registry.get_sandbox(current_sandbox_id)
+        excluded_stale_current_ids: set[str] = set()
         if current_sandbox_id and (
             current_record is None or current_record.get("provider") != provider_id
         ):
@@ -421,6 +422,26 @@ class SandboxManager:
             await self.save_registry_async()
             current_sandbox_id = None
             current_record = None
+        if current_sandbox_id and current_record:
+            status = current_record.get("status")
+            current_controller_session_id = current_record.get("controller_session_id")
+            if (
+                status == SandboxStatus.RUNNING
+                and (
+                    current_controller_session_id != session_id
+                    or not lease_is_active(
+                        current_controller_session_id,
+                        current_record.get("lease_expires_at"),
+                    )
+                )
+            ):
+                self._release_expired_lease(current_record)
+                self.registry.set_current_sandbox_id(session_id, None)
+                await self.save_registry_async()
+                excluded_stale_current_ids.add(current_sandbox_id)
+                current_sandbox_id = None
+                current_record = None
+                status = None
         if current_sandbox_id and current_record:
             status = current_record.get("status")
             if status == SandboxStatus.CREATING:
@@ -477,6 +498,8 @@ class SandboxManager:
 
         created_target_record = False
         target_sandbox_id = self.get_default_sandbox_id(provider_id)
+        if target_sandbox_id in excluded_stale_current_ids:
+            target_sandbox_id = None
         target_record = self.registry.get_sandbox(target_sandbox_id)
         if (
             target_sandbox_id
@@ -1202,6 +1225,19 @@ class SandboxManager:
         sandbox_id = self.registry.get_current_sandbox_id(session_id)
         sandbox = self.registry.get_sandbox(sandbox_id) if sandbox_id else None
         if sandbox:
+            controller_session_id = sandbox.get("controller_session_id")
+            if (
+                controller_session_id != session_id
+                or not lease_is_active(
+                    controller_session_id, sandbox.get("lease_expires_at")
+                )
+            ):
+                self._release_expired_lease(sandbox)
+                self.registry.set_current_sandbox_id(session_id, None)
+                self.save_registry()
+                sandbox_id = None
+                sandbox = None
+        if sandbox:
             provider = self.providers.get(sandbox.get("provider"))
             if provider:
                 sandbox = dict(sandbox)
@@ -1263,7 +1299,8 @@ class SandboxManager:
         ttl_seconds: int | float | None = None,
         context: Context | None = None,
     ) -> dict:
-        sandbox_id = self.registry.get_current_sandbox_id(session_id)
+        current = self.get_current_sandbox(session_id)
+        sandbox_id = current.get("current_sandbox_id")
         if sandbox_id is None:
             raise RuntimeError("No current sandbox")
         record = self.registry.get_sandbox(sandbox_id)

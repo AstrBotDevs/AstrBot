@@ -698,15 +698,14 @@ async def test_manager_waits_for_current_creating_sandbox_instead_of_creating_an
         manager.get_or_create_booter(None, "session-a", "generic")
     )
     with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(get_booter_task, timeout=0.1)
+        await asyncio.wait_for(asyncio.shield(get_booter_task), timeout=0.1)
 
     assert len(manager.registry.list_sandboxes()) == 1
     assert provider.create_calls == 1
     assert created["sandbox_id"] in manager.pending_boot_tasks
 
     provider.allow_boot.set()
-    await wait_until(lambda: created["sandbox_id"] in manager.session_booter)
-    booter = await manager.get_or_create_booter(None, "session-a", "generic")
+    booter = await get_booter_task
 
     assert booter is manager.session_booter[created["sandbox_id"]]
     assert len(provider.created) == 1
@@ -1086,6 +1085,60 @@ def test_manager_list_sandboxes_releases_expired_lease(tmp_path):
     assert manager.registry.get_current_sandbox_id("session-a") is None
 
 
+def test_manager_get_current_clears_expired_current_binding(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Expired",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Expired"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() - 1,
+    )
+    manager.registry.set_current_sandbox_id("session-a", "generic-1")
+
+    current = manager.get_current_sandbox("session-a")
+    record = manager.registry.get_sandbox("generic-1")
+
+    assert current == {"current_sandbox_id": None, "sandbox": None}
+    assert record["controller_session_id"] is None
+    assert record["controller_user_id"] is None
+    assert record["lease_expires_at"] is None
+    assert manager.registry.get_current_sandbox_id("session-a") is None
+
+
+def test_manager_get_current_clears_binding_taken_by_other_session(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Taken",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Taken"},
+        status="running",
+        controller_user_id="session-b",
+        controller_session_id="session-b",
+        lease_expires_at=time.time() + 60,
+    )
+    manager.registry.set_current_sandbox_id("session-a", "generic-1")
+
+    current = manager.get_current_sandbox("session-a")
+    record = manager.registry.get_sandbox("generic-1")
+
+    assert current == {"current_sandbox_id": None, "sandbox": None}
+    assert record["controller_session_id"] == "session-b"
+    assert manager.registry.get_current_sandbox_id("session-a") is None
+
+
 @pytest.mark.asyncio
 async def test_manager_creates_new_sandbox_when_current_binding_is_busy(tmp_path):
     manager, provider = _manager(tmp_path)
@@ -1104,6 +1157,36 @@ async def test_manager_creates_new_sandbox_when_current_binding_is_busy(tmp_path
     first_record = manager.registry.get_sandbox(first_sandbox_id)
     assert first_record["controller_session_id"] == "session-a"
     assert first_record["lease_expires_at"] > time.time()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_booter_does_not_reacquire_expired_current_binding(
+    tmp_path,
+):
+    manager, provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Expired")
+    expired_id = created["sandbox_id"]
+    manager.registry.upsert_sandbox(
+        sandbox_id=expired_id,
+        sandbox_name=created["sandbox_name"],
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info=created["connect_info"],
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() - 1,
+    )
+
+    booter = await manager.get_or_create_booter(None, "session-a", "generic")
+    current_id = manager.get_current_sandbox("session-a")["current_sandbox_id"]
+
+    assert current_id != expired_id
+    assert booter is manager.session_booter[current_id]
+    assert manager.registry.get_sandbox(expired_id)["controller_session_id"] is None
+    assert len(provider.created) == 2
 
 
 @pytest.mark.asyncio
@@ -1376,6 +1459,30 @@ async def test_manager_renew_current_sandbox_rejects_missing_current(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_manager_renew_current_sandbox_rejects_expired_current(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    manager.registry.upsert_sandbox(
+        sandbox_id=created["sandbox_id"],
+        sandbox_name=created["sandbox_name"],
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info=created["connect_info"],
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() - 1,
+    )
+
+    with pytest.raises(RuntimeError, match="No current sandbox"):
+        await manager.renew_current_sandbox_lease("session-a")
+
+    assert manager.registry.get_current_sandbox_id("session-a") is None
+
+
+@pytest.mark.asyncio
 async def test_manager_renew_current_sandbox_allows_zero_ttl_for_permanent_lease(
     tmp_path,
 ):
@@ -1584,6 +1691,9 @@ def test_manager_current_sandbox_uses_current_provider_tool_names(tmp_path):
         owner_session_id="session-a",
         connect_info={"name": "Persistent"},
         status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() + 60,
         tool_names=["stale_provider_screenshot"],
         capabilities=["stale"],
     )

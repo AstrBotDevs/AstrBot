@@ -77,7 +77,7 @@ After sandbox mode is enabled, the WebUI sandbox page shows the sandboxes manage
 - **Managed sandbox**: a sandbox recorded and managed by AstrBot. It may come from `Shipyard Neo`, `BoxLite`, `CUA`, or legacy `Shipyard`.
 - **Default sandbox**: the sandbox AstrBot tries to reuse first for a driver.
 - **Occupied**: a session is currently controlling the sandbox. Other sessions cannot use it directly unless takeover is allowed.
-- **Lease**: how long the current session keeps control. The default is 600 seconds. Agents can renew the lease, and later normal tool calls will not shorten a longer active lease.
+- **Lease**: how long the current session keeps control. The default is 600 seconds. Agents can renew an active lease, and later normal tool calls will not shorten a longer active lease. When the lease expires, the session is no longer bound to that sandbox; the agent must list sandboxes and switch, take over, or create one before continuing sandbox work.
 - **Temporary sandbox**: can be cleaned up after it is released and stays idle or reaches its expiry time.
 - **Persistent sandbox**: keeps its environment for reuse. It can still be occupied or released, but release alone does not delete it.
 
