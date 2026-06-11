@@ -192,10 +192,12 @@ function handleReadmeImageSourceChanged() {
 }
 
 onMounted(() => {
-  window.addEventListener(
-    PLUGIN_README_IMAGE_SOURCE_CHANGED_EVENT,
-    handleReadmeImageSourceChanged,
-  );
+  if (typeof window !== "undefined") {
+    window.addEventListener(
+      PLUGIN_README_IMAGE_SOURCE_CHANGED_EVENT,
+      handleReadmeImageSourceChanged,
+    );
+  }
 });
 
 function isRemoteImageSrc(src) {

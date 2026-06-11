@@ -225,7 +225,7 @@ class PluginRoute(Route):
         parsed = urlsplit(normalized_repo_url)
         if parsed.scheme not in ("http", "https"):
             return None
-        if parsed.netloc.lower() != "github.com":
+        if parsed.netloc.lower() not in {"github.com", "www.github.com"}:
             return None
 
         parts = [part for part in parsed.path.strip("/").split("/") if part]

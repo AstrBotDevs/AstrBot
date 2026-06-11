@@ -1801,6 +1801,15 @@ def test_plugin_readme_github_raw_base_rejects_invalid_repo_url(repo_url):
     assert route._build_github_raw_base(repo_url) is None
 
 
+def test_plugin_readme_github_raw_base_accepts_www_github_repo_url():
+    route = PluginRoute.__new__(PluginRoute)
+
+    assert (
+        route._build_github_raw_base("https://www.github.com/AstrBotDevs/AstrBot.git")
+        == "https://github.com/AstrBotDevs/AstrBot/raw/HEAD"
+    )
+
+
 @pytest.mark.asyncio
 async def test_plugin_readme_asset_serves_image_from_plugin_root(
     app: Quart,
