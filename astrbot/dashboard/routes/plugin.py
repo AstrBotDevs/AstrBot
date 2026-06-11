@@ -215,10 +215,14 @@ class PluginRoute(Route):
         return None
 
     def _parse_github_repo_url(self, repo_url: str | None) -> tuple[str, str] | None:
-        if not repo_url:
+        if not isinstance(repo_url, str):
             return None
 
-        parsed = urlsplit(repo_url.strip())
+        normalized_repo_url = repo_url.strip()
+        if not normalized_repo_url:
+            return None
+
+        parsed = urlsplit(normalized_repo_url)
         if parsed.scheme not in ("http", "https"):
             return None
         if parsed.netloc.lower() != "github.com":
@@ -231,6 +235,8 @@ class PluginRoute(Route):
         owner = parts[0]
         repo = parts[1].removesuffix(".git")
         if not owner or not repo:
+            return None
+        if owner in {".", ".."} or repo in {".", ".."}:
             return None
         if not GITHUB_REPO_PART_PATTERN.fullmatch(owner):
             return None
@@ -409,7 +415,10 @@ class PluginRoute(Route):
         if not mimetype or not mimetype.startswith(PLUGIN_ASSET_MIME_PREFIX):
             return await self._plugin_page_error_response(404, "Plugin asset not found")
 
-        return await self._serve_plugin_page_static_asset(file_path)
+        response = await self._serve_plugin_page_static_asset(file_path)
+        if mimetype == "image/svg+xml":
+            response.headers["Content-Security-Policy"] = "default-src 'none'"
+        return response
 
     async def _resolve_plugin_pages_root(
         self,

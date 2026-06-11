@@ -1128,6 +1128,24 @@ async def test_plugin_readme_returns_default_branch_github_raw_base(
     )
 
 
+@pytest.mark.parametrize(
+    "repo_url",
+    [
+        None,
+        123,
+        "",
+        "https://github.com/./AstrBot",
+        "https://github.com/../AstrBot",
+        "https://github.com/AstrBotDevs/.",
+        "https://github.com/AstrBotDevs/..",
+    ],
+)
+def test_plugin_readme_github_raw_base_rejects_invalid_repo_url(repo_url):
+    route = PluginRoute.__new__(PluginRoute)
+
+    assert route._build_github_raw_base(repo_url) is None
+
+
 @pytest.mark.asyncio
 async def test_plugin_readme_asset_serves_image_from_plugin_root(
     app: Quart,
@@ -1143,7 +1161,28 @@ async def test_plugin_readme_asset_serves_image_from_plugin_root(
 
     assert response.status_code == 200
     assert response.headers["Content-Type"].startswith("image/svg+xml")
+    assert response.headers["Content-Security-Policy"] == "default-src 'none'"
     assert "<svg" in content
+
+
+@pytest.mark.asyncio
+async def test_plugin_readme_asset_rejects_dashboard_token_query(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    token = authenticated_header["Authorization"].removeprefix("Bearer ")
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/plugin/asset",
+        query_string={
+            "name": PLUGIN_PAGE_DEMO_NAME,
+            "path": f"pages/{PLUGIN_PAGE_DEMO_PAGE_NAME}/images/logo.svg",
+            "token": token,
+        },
+    )
+
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio

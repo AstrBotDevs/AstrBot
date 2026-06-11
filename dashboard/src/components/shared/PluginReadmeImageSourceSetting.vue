@@ -5,7 +5,7 @@
             class="readme-image-source-switch"
             color="primary"
             density="compact"
-            hide-details="true"
+            hide-details
             :label="tm('network.proxySelector.readmeImages.useGitHub')">
         </v-switch>
         <div class="text-caption text-medium-emphasis mt-1">
@@ -14,7 +14,8 @@
     </div>
 </template>
 
-<script>
+<script setup>
+import { computed, ref, watch } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import {
     PLUGIN_README_IMAGE_SOURCE,
@@ -22,42 +23,24 @@ import {
     setPluginReadmeImageSource
 } from '@/utils/githubProxy';
 
-export default {
-    setup() {
-        const { tm } = useModuleI18n('features/settings');
-        return { tm };
+const { tm } = useModuleI18n('features/settings');
+
+const readmeImageSource = ref(getPluginReadmeImageSource());
+
+const readmeImageUseGitHub = computed({
+    get() {
+        return readmeImageSource.value === PLUGIN_README_IMAGE_SOURCE.GITHUB;
     },
-    data() {
-        return {
-            readmeImageSource: PLUGIN_README_IMAGE_SOURCE.LOCAL,
-            initializing: true,
-        }
-    },
-    computed: {
-        readmeImageUseGitHub: {
-            get() {
-                return this.readmeImageSource === PLUGIN_README_IMAGE_SOURCE.GITHUB;
-            },
-            set(value) {
-                this.readmeImageSource = value
-                    ? PLUGIN_README_IMAGE_SOURCE.GITHUB
-                    : PLUGIN_README_IMAGE_SOURCE.LOCAL;
-            }
-        }
-    },
-    mounted() {
-        this.readmeImageSource = getPluginReadmeImageSource();
-        this.initializing = false;
-    },
-    watch: {
-        readmeImageSource: function (newVal) {
-            if (this.initializing) {
-                return;
-            }
-            setPluginReadmeImageSource(newVal);
-        }
+    set(value) {
+        readmeImageSource.value = value
+            ? PLUGIN_README_IMAGE_SOURCE.GITHUB
+            : PLUGIN_README_IMAGE_SOURCE.LOCAL;
     }
-}
+});
+
+watch(readmeImageSource, (newVal) => {
+    setPluginReadmeImageSource(newVal);
+});
 </script>
 
 <style scoped>

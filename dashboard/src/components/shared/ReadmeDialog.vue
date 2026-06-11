@@ -256,8 +256,6 @@ function getPluginAssetSrc(src) {
     name: props.pluginName,
     path: decodedPath,
   });
-  const token = localStorage.getItem("token");
-  if (token) params.set("token", token);
   return `/api/plugin/asset?${params.toString()}`;
 }
 

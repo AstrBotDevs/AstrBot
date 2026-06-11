@@ -264,8 +264,6 @@ class AstrBotDashboard:
             return None
         is_plugin_page_path = PluginPageAuth.is_protected_path(request.path)
         token = self._extract_dashboard_jwt()
-        if not token and request.path == "/api/plugin/asset":
-            token = request.args.get("token", "").strip()
         if not token and is_plugin_page_path:
             token = PluginPageAuth.extract_asset_token()
         if not token:
