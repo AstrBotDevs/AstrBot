@@ -358,16 +358,21 @@ class ProviderOpenAIOfficial(Provider):
     async def _audio_ref_to_local_path(self, audio_ref: str) -> tuple[str, list[Path]]:
         cleanup_paths: list[Path] = []
         if audio_ref.startswith("data:"):
-            m = re.match(r"^data:audio/(\w+);base64,(.+)$", audio_ref)
-            if m:
+            try:
+                header, base64_data = audio_ref.split(",", 1)
+                m = re.match(r"^data:audio/(\w+);base64$", header)
+                if not m:
+                    raise ValueError("Invalid audio data URI header format")
                 suffix = f".{m.group(1)}"
-                audio_bytes = base64.b64decode(m.group(2))
+                audio_bytes = base64.b64decode(base64_data)
                 temp_dir = Path(get_astrbot_temp_path())
                 temp_dir.mkdir(parents=True, exist_ok=True)
                 target_path = temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
                 target_path.write_bytes(audio_bytes)
                 cleanup_paths.append(target_path)
                 return str(target_path), cleanup_paths
+            except Exception as e:
+                raise ValueError(f"Failed to decode audio data URI: {e}") from e
         if audio_ref.startswith("http"):
             suffix = Path(urlparse(audio_ref).path).suffix or ".wav"
             temp_dir = Path(get_astrbot_temp_path())
