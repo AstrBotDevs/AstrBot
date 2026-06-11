@@ -183,6 +183,7 @@ def build_plug_list(plugins_dir: Path) -> list:
 
     return result
 
+
 def manage_plugin(
     plugin: dict,
     plugins_dir: Path,
