@@ -2324,7 +2324,7 @@ class TestApplySandboxTools:
         assert "automatically renews this session's lease" in req.system_prompt
         assert "now plus the configured sandbox lease timeout" in req.system_prompt
         assert "lease_expires_in_seconds" in req.system_prompt
-        assert "current sandbox binding is cleared" in req.system_prompt
+        assert "no longer has a current sandbox" in req.system_prompt
 
     def test_apply_sandbox_tools_does_not_scan_provider_tool_names(self, mock_context):
         module = ama

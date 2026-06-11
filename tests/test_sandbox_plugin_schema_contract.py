@@ -78,6 +78,7 @@ def test_dashboard_schema_exposes_sandbox_lease_timeout():
     assert lease_timeout["type"] == "int"
     assert "每次 Agent 成功访问沙盒" in lease_timeout["hint"]
     assert "默认 600 秒" in lease_timeout["hint"]
+    assert "当前会话不再绑定该沙盒" in lease_timeout["hint"]
     assert "其他会话可接管" in lease_timeout["hint"]
 
 

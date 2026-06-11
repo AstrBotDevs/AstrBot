@@ -22,7 +22,7 @@ SANDBOX_MODE_PROMPT = (
     " You can create a new sandbox only when the user explicitly asks for a fresh or separate environment, or when no existing sandbox can be reused safely."
     " Each successful sandbox operation that accesses a sandbox automatically renews this session's lease to now plus the configured sandbox lease timeout."
     " Sandbox-bound tool results include lease metadata such as lease_expires_at and lease_expires_in_seconds."
-    " When this session's lease expires, the current sandbox binding is cleared; use list_sandboxes and then switch, takeover, or create before continuing sandbox work."
+    " When this session's lease expires, this session no longer has a current sandbox; use list_sandboxes and then switch, takeover, or create before continuing sandbox work."
     " For long-running work, monitor lease metadata; if the remaining time is low before a long idle period or external wait, call astrbot_sandbox_lifecycle with action=renew_lease."
     # "Your have extended skills library, such as PDF processing, image generation, data analysis, etc. "
     # "Before handling complex tasks, please retrieve and review the documentation in the in /app/skills/ directory. "
