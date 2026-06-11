@@ -114,6 +114,9 @@
   },
   "reasoning": {
     "thinking": "Рассуждение",
+    "summarySeparator": ", ",
+    "thinkSummary": "Размышлений: {count}",
+    "toolSummary": "использований инструментов: {count}",
     "think": "Размышление",
     "toolUsed": "Использование инструмента"
   },
