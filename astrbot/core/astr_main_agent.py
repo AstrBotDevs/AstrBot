@@ -913,22 +913,25 @@ def _append_system_reminders(
     system_parts: list[str] = []
     if cfg.get("identifier"):
         user_id = event.message_obj.sender.user_id
-        user_nickname = event.message_obj.sender.nickname
+        display_nickname = event.message_obj.sender.nickname
+        real_nickname_display_enabled = bool(cfg.get("real_nickname_display"))
+        real_nickname_only_enabled = bool(cfg.get("real_nickname_only"))
         real_nickname = (
             _sanitize_optional_metadata_value(_get_real_sender_nickname(event))
-            if cfg.get("real_nickname_display")
+            if real_nickname_display_enabled
             else None
         )
-        use_real_nickname = real_nickname is not None
-        if use_real_nickname and cfg.get("real_nickname_only"):
-            user_nickname = real_nickname
-        sanitized_user_nickname = _sanitize_metadata_value(user_nickname)
+        resolved_nickname = display_nickname
+        if real_nickname_only_enabled and real_nickname is not None:
+            resolved_nickname = real_nickname
+        sanitized_user_nickname = _sanitize_metadata_value(resolved_nickname)
         user_metadata = {"user_id": user_id, "nickname": sanitized_user_nickname}
-        if (
-            use_real_nickname
-            and not cfg.get("real_nickname_only")
+        should_append_real_nickname = (
+            real_nickname is not None
+            and not real_nickname_only_enabled
             and real_nickname != sanitized_user_nickname
-        ):
+        )
+        if should_append_real_nickname:
             user_metadata["real_nickname"] = real_nickname
         system_parts.append(_format_metadata("User metadata", user_metadata))
 
