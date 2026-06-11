@@ -299,6 +299,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         *,
         image_urls_prepared: bool = False,
+        use_subagent_runner: bool = True,
         **tool_args: T.Any,
     ):
         tool_args = dict(tool_args)
@@ -351,18 +352,39 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
-        llm_resp = await ctx.tool_loop_agent(
-            event=event,
-            chat_provider_id=prov_id,
-            prompt=input_,
-            image_urls=image_urls,
-            system_prompt=tool.agent.instructions,
-            tools=toolset,
-            contexts=contexts,
-            max_steps=agent_max_step,
-            tool_call_timeout=run_context.tool_call_timeout,
-            stream=stream,
-        )
+        subagent_runner = None
+        if use_subagent_runner:
+            orchestrator = getattr(ctx, "subagent_orchestrator", None)
+            subagent_runner = getattr(orchestrator, "runner", None)
+        if subagent_runner is not None:
+            llm_resp = await subagent_runner.run(
+                tool=tool,
+                run_context=run_context,
+                event=event,
+                ctx=ctx,
+                provider_id=prov_id,
+                input_=input_,
+                image_urls=image_urls,
+                system_prompt=tool.agent.instructions,
+                tools=toolset,
+                begin_contexts=contexts,
+                max_steps=agent_max_step,
+                tool_call_timeout=run_context.tool_call_timeout,
+                stream=stream,
+            )
+        else:
+            llm_resp = await ctx.tool_loop_agent(
+                event=event,
+                chat_provider_id=prov_id,
+                prompt=input_,
+                image_urls=image_urls,
+                system_prompt=tool.agent.instructions,
+                tools=toolset,
+                contexts=contexts,
+                max_steps=agent_max_step,
+                tool_call_timeout=run_context.tool_call_timeout,
+                stream=stream,
+            )
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
         )
@@ -430,6 +452,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 tool,
                 run_context,
                 image_urls_prepared=True,
+                use_subagent_runner=False,
                 **tool_args,
             ):
                 if isinstance(r, mcp.types.CallToolResult):

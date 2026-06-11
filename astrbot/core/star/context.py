@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 from asyncio import Queue
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
 from deprecated import deprecated
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import Message
+from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
@@ -51,6 +53,12 @@ if TYPE_CHECKING:
 
 WebApiHandler = Callable[..., Awaitable[Any]]
 RegisteredWebApi = tuple[str, WebApiHandler, list[str], str]
+
+
+@dataclass
+class _ToolLoopAgentRunResult:
+    llm_response: LLMResponse
+    run_context: ContextWrapper[Any]
 
 
 class PlatformManagerProtocol(Protocol):
@@ -192,6 +200,36 @@ class Context:
             ChatProviderNotFoundError: If the specified chat provider ID is not found
             Exception: For other errors during LLM generation
         """
+        result = await self._run_tool_loop_agent_internal(
+            event=event,
+            chat_provider_id=chat_provider_id,
+            prompt=prompt,
+            image_urls=image_urls,
+            audio_urls=audio_urls,
+            tools=tools,
+            system_prompt=system_prompt,
+            contexts=contexts,
+            max_steps=max_steps,
+            tool_call_timeout=tool_call_timeout,
+            **kwargs,
+        )
+        return result.llm_response
+
+    async def _run_tool_loop_agent_internal(
+        self,
+        *,
+        event: AstrMessageEvent,
+        chat_provider_id: str,
+        prompt: str | None = None,
+        image_urls: list[str] | None = None,
+        audio_urls: list[str] | None = None,
+        tools: ToolSet | None = None,
+        system_prompt: str | None = None,
+        contexts: list[Message] | None = None,
+        max_steps: int = 30,
+        tool_call_timeout: int = 120,
+        **kwargs: Any,
+    ) -> _ToolLoopAgentRunResult:
         # Import here to avoid circular imports
         from astrbot.core.astr_agent_context import (
             AgentContextWrapper,
@@ -261,7 +299,10 @@ class Context:
         llm_resp = agent_runner.get_final_llm_resp()
         if not llm_resp:
             raise Exception("Agent did not produce a final LLM response")
-        return llm_resp
+        return _ToolLoopAgentRunResult(
+            llm_response=llm_resp,
+            run_context=agent_runner.run_context,
+        )
 
     async def get_current_chat_provider_id(self, umo: str) -> str:
         """获取当前使用的聊天模型 Provider ID。

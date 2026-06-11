@@ -1,16 +1,25 @@
+import asyncio
 from types import SimpleNamespace
 
 import mcp
 import pytest
 
+from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
+from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 
 
 class _DummyEvent:
-    def __init__(self, message_components: list[object] | None = None) -> None:
-        self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
+    def __init__(
+        self,
+        message_components: list[object] | None = None,
+        unified_msg_origin: str = "webchat:FriendMessage:webchat!user!session",
+        session_id: str = "webchat!user!session",
+    ) -> None:
+        self.unified_msg_origin = unified_msg_origin
+        self.session_id = session_id
         self.message_obj = SimpleNamespace(message=message_components or [])
 
     def get_extra(self, _key: str):
@@ -141,6 +150,7 @@ async def test_do_handoff_background_reports_prepared_image_urls(
         cls, tool, run_context, image_urls_prepared=False, **tool_args
     ):
         assert image_urls_prepared is True
+        assert tool_args["use_subagent_runner"] is False
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text="ok")]
         )
@@ -169,6 +179,56 @@ async def test_do_handoff_background_reports_prepared_image_urls(
     )
 
     assert captured["tool_args"]["image_urls"] == ["https://example.com/raw.png"]
+
+
+@pytest.mark.asyncio
+async def test_do_handoff_background_bypasses_subagent_runner(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured["tool_loop_agent"] = kwargs
+        return SimpleNamespace(completion_text="background ok")
+
+    async def _fake_run_internal(**_kwargs):
+        raise AssertionError("background handoff should not use SubAgentRunner")
+
+    async def _fake_wake(cls, run_context, **kwargs):
+        captured["wake"] = kwargs
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        _run_tool_loop_agent_internal=_fake_run_internal,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    context.subagent_orchestrator = SubAgentOrchestrator(
+        tool_mgr=SimpleNamespace(), persona_mgr=SimpleNamespace()
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = _build_persistent_handoff_tool()
+
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_wake_main_agent_for_background_result",
+        classmethod(_fake_wake),
+    )
+
+    await FunctionToolExecutor._do_handoff_background(
+        tool=tool,
+        run_context=run_context,
+        task_id="task-id",
+        input="hello",
+        image_urls=[],
+    )
+
+    assert captured["tool_loop_agent"]["prompt"] == "hello"
+    assert captured["wake"]["result_text"] == "background ok\n"
 
 
 @pytest.mark.asyncio
@@ -319,6 +379,174 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
     assert len(results) == 1
     assert captured["tool_call_timeout"] == 120
+
+
+def _build_persistent_handoff_tool():
+    return SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        context_persistence={
+            "enable": True,
+            "max_turns": 10,
+            "ttl_seconds": 3600,
+        },
+        config_fingerprint="fingerprint",
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[{"role": "user", "content": "begin"}],
+            run_hooks=None,
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_persists_private_subagent_context():
+    captured_contexts: list[list[Message] | None] = []
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_run_internal(**kwargs):
+        contexts = kwargs.get("contexts")
+        captured_contexts.append(contexts)
+        messages = list(contexts or [])
+        messages.extend(
+            [
+                Message(role="user", content=kwargs["prompt"]),
+                Message(role="assistant", content=f"reply {len(captured_contexts)}"),
+            ]
+        )
+        return SimpleNamespace(
+            llm_response=SimpleNamespace(
+                completion_text=f"reply {len(captured_contexts)}"
+            ),
+            run_context=SimpleNamespace(messages=messages),
+        )
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        _run_tool_loop_agent_internal=_fake_run_internal,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    context.subagent_orchestrator = SubAgentOrchestrator(
+        tool_mgr=SimpleNamespace(), persona_mgr=SimpleNamespace()
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = _build_persistent_handoff_tool()
+
+    for prompt in ("remember alpha", "what did I say"):
+        results = []
+        async for result in FunctionToolExecutor._execute_handoff(
+            tool,
+            run_context,
+            image_urls_prepared=True,
+            input=prompt,
+            image_urls=[],
+        ):
+            results.append(result)
+        assert len(results) == 1
+
+    assert captured_contexts[0][0].content == "begin"
+    assert [message.content for message in captured_contexts[1]] == [
+        "begin",
+        "remember alpha",
+        "reply 1",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_context_persistence_disabled_uses_plain_tool_loop():
+    captured: dict = {}
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    context.subagent_orchestrator = SubAgentOrchestrator(
+        tool_mgr=SimpleNamespace(), persona_mgr=SimpleNamespace()
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = _build_persistent_handoff_tool()
+    tool.context_persistence = {"enable": False}
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert captured["prompt"] == "hello"
+    assert captured["contexts"][0].content == "begin"
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_context_persistence_lock_serializes_same_key():
+    active = 0
+    max_active = 0
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_run_internal(**kwargs):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        messages = list(kwargs.get("contexts") or [])
+        messages.extend(
+            [
+                Message(role="user", content=kwargs["prompt"]),
+                Message(role="assistant", content="ok"),
+            ]
+        )
+        active -= 1
+        return SimpleNamespace(
+            llm_response=SimpleNamespace(completion_text="ok"),
+            run_context=SimpleNamespace(messages=messages),
+        )
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        _run_tool_loop_agent_internal=_fake_run_internal,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    context.subagent_orchestrator = SubAgentOrchestrator(
+        tool_mgr=SimpleNamespace(), persona_mgr=SimpleNamespace()
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = _build_persistent_handoff_tool()
+
+    async def _run_once(prompt: str):
+        async for _ in FunctionToolExecutor._execute_handoff(
+            tool,
+            run_context,
+            image_urls_prepared=True,
+            input=prompt,
+            image_urls=[],
+        ):
+            pass
+
+    await asyncio.gather(_run_once("one"), _run_once("two"))
+
+    assert max_active == 1
 
 
 @pytest.mark.asyncio

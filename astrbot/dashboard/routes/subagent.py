@@ -5,6 +5,7 @@ from quart import jsonify, request
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.subagent_runner import normalize_context_persistence
 
 from .route import Response, Route, RouteContext
 
@@ -59,6 +60,9 @@ class SubAgentRoute(Route):
                     if isinstance(a, dict):
                         a.setdefault("provider_id", None)
                         a.setdefault("persona_id", None)
+                        a["context_persistence"] = normalize_context_persistence(
+                            a.get("context_persistence")
+                        )
             return jsonify(Response().ok(data=data).__dict__)
         except Exception as e:
             logger.error(traceback.format_exc())
@@ -69,6 +73,13 @@ class SubAgentRoute(Route):
             data = await request.json
             if not isinstance(data, dict):
                 return jsonify(Response().error("配置必须为 JSON 对象").__dict__)
+
+            if isinstance(data.get("agents"), list):
+                for a in data["agents"]:
+                    if isinstance(a, dict):
+                        a["context_persistence"] = normalize_context_persistence(
+                            a.get("context_persistence")
+                        )
 
             cfg = self.core_lifecycle.astrbot_config
             cfg["subagent_orchestrator"] = data

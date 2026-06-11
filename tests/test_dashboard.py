@@ -1903,6 +1903,11 @@ async def test_subagent_config_accepts_default_persona(
         get_data = await get_response.get_json()
         assert get_data["status"] == "ok"
         assert get_data["data"]["agents"][0]["persona_id"] == "default"
+        assert get_data["data"]["agents"][0]["context_persistence"] == {
+            "enable": False,
+            "max_turns": 10,
+            "ttl_seconds": 3600,
+        }
     finally:
         await test_client.post(
             "/api/subagent/config",
