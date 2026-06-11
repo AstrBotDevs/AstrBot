@@ -37,7 +37,7 @@ class FakeClient:
 
 
 def write_metadata(plugin_dir: Path, name: str, version: str) -> None:
-    plugin_dir.mkdir()
+    plugin_dir.mkdir(parents=True, exist_ok=True)
     plugin_dir.joinpath("metadata.yaml").write_text(
         f"""
 name: {name}
@@ -75,6 +75,37 @@ def test_build_plug_list_treats_file_plugin_path_as_empty_local_set(
     monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", FakeClient)
 
     plugins = build_plug_list(plugins_file)
+
+    assert [plugin["name"] for plugin in plugins] == ["local-plugin", "remote-only"]
+    assert all(plugin["status"] == PluginStatus.NOT_INSTALLED for plugin in plugins)
+
+
+def test_build_plug_list_local_version_equal_or_newer(monkeypatch, tmp_path):
+    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", FakeClient)
+
+    # 1. test if local version == remote version
+    dir_equal = tmp_path / "dir_equal"
+    write_metadata(dir_equal / "local-plugin", "local-plugin", "2.0.0")
+    
+    plugins_equal = build_plug_list(dir_equal)
+    plugins_equal_by_name = {p["name"]: p for p in plugins_equal}
+    assert plugins_equal_by_name["local-plugin"]["status"] == PluginStatus.INSTALLED
+
+    # 2. test if local version > remote version
+    dir_newer = tmp_path / "dir_newer"
+    write_metadata(dir_newer / "local-plugin", "local-plugin", "3.0.0")
+    
+    plugins_newer = build_plug_list(dir_newer)
+    plugins_newer_by_name = {p["name"]: p for p in plugins_newer}
+    assert plugins_newer_by_name["local-plugin"]["status"] == PluginStatus.INSTALLED
+
+
+def test_build_plug_list_non_existent_path(monkeypatch, tmp_path):
+    non_existent_dir = tmp_path / "completely_non_existent_path"
+
+    monkeypatch.setattr("astrbot.cli.utils.plugin.httpx.Client", FakeClient)
+
+    plugins = build_plug_list(non_existent_dir)
 
     assert [plugin["name"] for plugin in plugins] == ["local-plugin", "remote-only"]
     assert all(plugin["status"] == PluginStatus.NOT_INSTALLED for plugin in plugins)

@@ -114,7 +114,7 @@ def build_plug_list(plugins_dir: Path) -> list:
     """
     # Get local plugin info
     result = []
-    if plugins_dir.exists():
+    if plugins_dir.is_dir():
         for plugin_dir in plugins_dir.iterdir():
             if not plugin_dir.is_dir():
                 continue
@@ -186,6 +186,7 @@ def build_plug_list(plugins_dir: Path) -> list:
     for online_plugin in online_plugins:
         if online_plugin["name"] not in local_plugin_names:
             result.append(online_plugin)
+            local_plugin_names.add(online_plugin["name"])
 
     return result
 
