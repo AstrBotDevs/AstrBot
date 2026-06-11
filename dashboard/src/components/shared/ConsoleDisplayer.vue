@@ -83,7 +83,7 @@ export default {
     },
     logColorAnsiMap() {
       const customizerStore = useCustomizerStore();
-      return customizerStore.uiTheme === 'PurpleThemeDark' ? darkColorAnsiMap : lightColorAnsiMap;
+      return customizerStore.isDark ? darkColorAnsiMap : lightColorAnsiMap;
     },
   },
   props: {
