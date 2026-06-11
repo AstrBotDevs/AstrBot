@@ -112,11 +112,9 @@ class WebChatMessageEvent(AstrMessageEvent):
                 # save file to local
                 file_path = await comp.get_file()
                 original_name = comp.name or os.path.basename(file_path)
-                ext = os.path.splitext(original_name)[1] or ""
-                filename = f"{uuid.uuid4()!s}{ext}"
-                dest_path = os.path.join(attachments_dir, filename)
+                dest_path = os.path.join(attachments_dir, original_name)
                 shutil.copy2(file_path, dest_path)
-                data = f"[FILE]{filename}"
+                data = f"[FILE]{original_name}"
                 await web_chat_back_queue.put(
                     {
                         "type": "file",

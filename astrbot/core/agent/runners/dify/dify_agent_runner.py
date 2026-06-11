@@ -161,6 +161,26 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
         )
         payload_vars.update(session_var)
         payload_vars["system_prompt"] = system_prompt
+        external_user_id = str(getattr(self.req, "external_user_id", "") or "")
+        external_user_name = str(getattr(self.req, "external_user_name", "") or "")
+        external_platform_id = str(getattr(self.req, "external_platform_id", "") or "")
+        external_group_id = str(getattr(self.req, "external_group_id", "") or "")
+        logger.info(
+            "Dify external sender: user_id=%s name=%s platform=%s group=%s",
+            external_user_id,
+            external_user_name,
+            external_platform_id,
+            external_group_id,
+        )
+        if external_user_id:
+            payload_vars.update(
+                {
+                    "astrbot_user_id": external_user_id,
+                    "astrbot_user_name": external_user_name,
+                    "astrbot_platform_id": external_platform_id,
+                    "astrbot_group_id": external_group_id,
+                }
+            )
 
         # 处理不同的 API 类型
         match self.api_type:
@@ -298,7 +318,7 @@ class DifyAgentRunner(BaseAgentRunner[TContext]):
                 case "video":
                     return Comp.Video(file=item["url"])
                 case _:
-                    return Comp.File(name=item["filename"], file=item["url"])
+                    return Comp.File(name=item["filename"], url=item["url"])
 
         output = chunk["data"]["outputs"][self.workflow_output_key]
         chains = []

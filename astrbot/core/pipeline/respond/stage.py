@@ -178,6 +178,18 @@ class RespondStage(Stage):
             return
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
             event.set_extra("_streaming_finished", True)
+            # Send file/video/image attachments from the final result that were
+            # not included in the streaming text (e.g. Dify workflow file outputs).
+            media_comps = [
+                comp
+                for comp in result.chain
+                if isinstance(comp, (Comp.File, Comp.Image, Comp.Video))
+            ]
+            if media_comps:
+                try:
+                    await event.send(result.derive(media_comps))
+                except Exception as e:
+                    logger.error(f"发送流式结果附件失败: {e}", exc_info=True)
             return
 
         logger.info(

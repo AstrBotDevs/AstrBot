@@ -313,6 +313,22 @@ class ThirdPartyAgentSubStage(Stage):
         req = ProviderRequest()
         req.session_id = event.unified_msg_origin
         req.prompt = event.message_str[len(provider_wake_prefix) :]
+        sender = getattr(event.message_obj, "sender", None)
+        req.external_user_id = str(
+            getattr(sender, "user_id", "") or event.get_sender_id() or ""
+        )
+        req.external_user_name = str(
+            getattr(sender, "nickname", "") or event.get_sender_name() or ""
+        )
+        req.external_platform_id = str(event.get_platform_id() or "")
+        req.external_group_id = str(event.get_group_id() or "")
+        logger.info(
+            "Third party external sender: user_id=%s name=%s platform=%s group=%s",
+            req.external_user_id,
+            req.external_user_name,
+            req.external_platform_id,
+            req.external_group_id,
+        )
         for comp in event.message_obj.message:
             if isinstance(comp, Image):
                 image_path = await comp.convert_to_base64()

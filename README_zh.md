@@ -102,6 +102,17 @@ uv tool upgrade astrbot --python 3.12
 
 请参考官方文档 [使用 Docker 部署 AstrBot](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot)。
 
+#### 国内用户 Docker 加速构建
+
+项目提供了国内镜像源加速的 `Dockerfile.cn` 和 `docker-compose.yml`，使用阿里云镜像源加速 apt 和 pip 依赖下载：
+
+```bash
+# 克隆项目后，使用国内加速配置构建并启动
+docker compose -f docker-compose.yml up -d --build
+```
+
+构建完成后，通过 `http://<服务器IP>:6185` 访问 WebUI 进行初始化配置。数据持久化目录为 `./data`。
+
 ### 在 雨云 上部署
 
 对于希望一键部署 AstrBot 且不想自行管理服务器的用户，我们推荐使用雨云的一键云部署服务 ☁️：
