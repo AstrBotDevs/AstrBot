@@ -13,6 +13,7 @@ export interface MessagePart {
   embedded_file?: { url?: string; filename?: string; attachment_id?: string };
   attachment_id?: string;
   filename?: string;
+  autoplay?: boolean;
   tool_calls?: ToolCall[];
   [key: string]: unknown;
 }
@@ -107,6 +108,13 @@ interface UseMessagesOptions {
   currentSessionId: Ref<string>;
   onSessionsChanged?: () => Promise<void> | void;
   onStreamUpdate?: (sessionId: string) => void;
+  onNotice?: (notice: { code: string }) => void;
+}
+
+// Global ChatUI preference: whether the assistant should reply with voice (TTS)
+// and autoplay it. Defaults to off so voice replies are an explicit opt-in.
+export function isVoiceReplyEnabled(): boolean {
+  return localStorage.getItem("chat.voiceReply") === "true";
 }
 
 export function useMessages(options: UseMessagesOptions) {
@@ -519,6 +527,7 @@ export function useMessages(options: UseMessagesOptions) {
         session_id: sessionId,
         message: parts.map(partToPayload),
         enable_streaming: enableStreaming,
+        enable_tts: isVoiceReplyEnabled(),
         selected_provider: selectedProvider,
         selected_model: selectedModel,
         _skip_user_history: skipUserHistory,
@@ -578,6 +587,7 @@ export function useMessages(options: UseMessagesOptions) {
           message_id: messageId,
           message: parts.map(partToPayload),
           enable_streaming: enableStreaming,
+          enable_tts: isVoiceReplyEnabled(),
           selected_provider: selectedProvider,
           selected_model: selectedModel,
         }),
@@ -618,6 +628,10 @@ export function useMessages(options: UseMessagesOptions) {
     const data = normalized?.data ?? "";
 
     if (msgType === "session_id" || msgType === "session_bound") return;
+    if (msgType === "tts_notice") {
+      if (data?.code) options.onNotice?.({ code: String(data.code) });
+      return;
+    }
     if (msgType === "user_message_saved") {
       if (userRecord) {
         userRecord.id = data?.id || userRecord.id;
@@ -688,6 +702,14 @@ export function useMessages(options: UseMessagesOptions) {
         .replace("[VIDEO]", "")
         .split("|", 1)[0];
       const mediaPart: MessagePart = { type: msgType, filename };
+      if (msgType === "record" && normalized?.text) {
+        mediaPart.text = normalized.text;
+      }
+      if (msgType === "record" && isVoiceReplyEnabled()) {
+        // Freshly streamed voice reply — autoplay it (history loads do not set
+        // this flag, so replaying an old conversation stays silent).
+        mediaPart.autoplay = true;
+      }
       if (msgType !== "file") {
         resolvePartMedia(mediaPart).then(() => {
           messageContent(botRecord).message.push(mediaPart);

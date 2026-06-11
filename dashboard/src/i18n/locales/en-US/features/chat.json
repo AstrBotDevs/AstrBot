@@ -104,6 +104,13 @@
     "on": "Stream",
     "off": "Normal"
   },
+  "voiceReply": {
+    "title": "Voice Reply",
+    "noProvider": "No TTS provider is enabled; replied with text instead",
+    "globallyDisabled": "TTS is not enabled in global settings; replied with text instead",
+    "sessionDisabled": "TTS is disabled for this session; replied with text instead",
+    "unavailable": "Voice reply is unavailable; replied with text instead"
+  },
   "transport": {
     "title": "Transport Mode",
     "sse": "SSE",

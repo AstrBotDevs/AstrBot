@@ -92,11 +92,11 @@
                       <img :src="partUrl(part)" :alt="part.filename || 'image'" />
                     </button>
 
-                    <audio
+                    <AudioMessagePart
                       v-else-if="part.type === 'record'"
-                      class="audio-part"
-                      controls
                       :src="partUrl(part)"
+                      :text="part.text"
+                      :autoplay="part.autoplay"
                     />
 
                     <video
@@ -259,6 +259,7 @@ import axios from "axios";
 import { setCustomComponents } from "markstream-vue";
 import "markstream-vue/index.css";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
+import AudioMessagePart from "@/components/chat/message_list_comps/AudioMessagePart.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
@@ -700,7 +701,6 @@ function formatDuration(seconds: number) {
   object-fit: contain;
 }
 
-.audio-part,
 .video-part {
   display: block;
   max-width: 100%;

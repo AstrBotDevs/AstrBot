@@ -23,6 +23,8 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     webchat_message_parts_have_content,
 )
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
@@ -514,9 +516,7 @@ class ChatRoute(Route):
         )
 
     def _build_thread_unified_msg_origin(self, creator: str, thread_id: str) -> str:
-        return (
-            f"webchat:{MessageType.FRIEND_MESSAGE.value}:webchat!{creator}!{thread_id}"
-        )
+        return self._build_webchat_umo(creator, thread_id)
 
     def _serialize_thread(self, thread) -> dict:
         return {
@@ -713,7 +713,7 @@ class ChatRoute(Route):
         llm_checkpoint_id: str | None = None,
         platform_history_id: str = "webchat",
     ):
-        """保存 bot 消息到历史记录，返回保存的记录"""
+        """保存 bot 消息到历史记录，返回保存的记录及其 content"""
         new_his = build_bot_history_content(
             message_parts,
             agent_stats=agent_stats,
@@ -728,7 +728,54 @@ class ChatRoute(Route):
             sender_name="bot",
             llm_checkpoint_id=llm_checkpoint_id,
         )
-        return record
+        return record, new_his
+
+    def _build_webchat_umo(self, username: str, webchat_conv_id: str) -> str:
+        return (
+            f"webchat:{MessageType.FRIEND_MESSAGE.value}:"
+            f"webchat!{username}!{webchat_conv_id}"
+        )
+
+    async def _resolve_webchat_tts(
+        self,
+        username: str,
+        webchat_conv_id: str,
+    ) -> tuple[bool, str | None]:
+        """Return whether TTS can run for this webchat session.
+
+        Returns ``(enabled, reason)`` where ``reason`` is a stable code the
+        frontend can localize when TTS was requested but cannot be fulfilled.
+        """
+        tts_settings = self.core_lifecycle.astrbot_config.get(
+            "provider_tts_settings", {}
+        )
+        if not tts_settings.get("enable"):
+            return False, "globally_disabled"
+
+        # Mirror the result-decorate stage's probabilistic trigger: a zero
+        # probability means TTS never fires, so treat it as disabled instead of
+        # giving up streaming for audio that will never be synthesized. (With
+        # 0 < p < 1 the stage may still skip TTS on a per-message dice roll;
+        # that randomness is inherent to the setting.)
+        try:
+            trigger_probability = float(tts_settings.get("trigger_probability", 1))
+        except (TypeError, ValueError):
+            trigger_probability = 1.0
+        if trigger_probability <= 0:
+            return False, "globally_disabled"
+
+        umo = self._build_webchat_umo(username, webchat_conv_id)
+        if not await SessionServiceManager.is_tts_enabled_for_session(umo):
+            return False, "session_disabled"
+
+        tts_provider = self.core_lifecycle.provider_manager.get_using_provider(
+            ProviderType.TEXT_TO_SPEECH,
+            umo=umo,
+        )
+        if tts_provider is None:
+            return False, "no_provider"
+
+        return True, None
 
     async def chat(self, post_data: dict | None = None):
         username = g.get("username", "guest")
@@ -758,6 +805,33 @@ class ChatRoute(Route):
 
         webchat_conv_id = session_id
 
+        # The ChatUI client carries a per-client "voice reply" preference. When
+        # provided, persist it as this session's TTS state so both the
+        # streaming-disable check below and the result-decoration stage honor it.
+        enable_tts = post_data.get("enable_tts")
+        if enable_tts is not None:
+            await SessionServiceManager.set_tts_status_for_session(
+                self._build_webchat_umo(username, webchat_conv_id),
+                bool(enable_tts),
+            )
+
+        tts_notice_code: str | None = None
+        if enable_streaming or enable_tts:
+            tts_ok, tts_reason = await self._resolve_webchat_tts(
+                username,
+                webchat_conv_id,
+            )
+            if tts_ok and enable_streaming:
+                logger.info(
+                    "[WebChat] TTS is enabled for this session; disabling streaming "
+                    "so the result decoration stage can synthesize audio.",
+                )
+                enable_streaming = False
+            elif not tts_ok and enable_tts:
+                # The client explicitly asked for a voice reply but TTS cannot run
+                # (e.g. no TTS provider enabled). Tell the client so it can hint.
+                tts_notice_code = tts_reason
+
         # 构建用户消息段（包含 path 用于传递给 adapter）
         message_parts = await self._build_user_message_parts(message)
         if not webchat_message_parts_have_content(message_parts):
@@ -781,15 +855,42 @@ class ChatRoute(Route):
             message_accumulator = BotMessageAccumulator()
             agent_stats = {}
             refs = {}
+            last_saved_record = None
+            last_saved_content: dict | None = None
 
             async def flush_pending_bot_message():
                 nonlocal message_accumulator, agent_stats, refs
+                nonlocal last_saved_record, last_saved_content
                 if not (message_accumulator.has_content() or refs or agent_stats):
                     return None
 
                 message_parts_to_save = message_accumulator.build_message_parts(
                     include_pending_tool_calls=True
                 )
+
+                # A turn can end with only trailing metadata (agent_stats / refs)
+                # and no new message content — e.g. non-streaming TTS replies whose
+                # audio was already persisted as its own record. Attach that metadata
+                # to the previously saved record instead of inserting an empty bubble.
+                # With no prior record to attach to, fall through and persist a
+                # metadata-only record so stats/refs are not silently dropped.
+                if not message_parts_to_save and last_saved_record is not None:
+                    if agent_stats or refs:
+                        merged_content = build_bot_history_content(
+                            last_saved_content.get("message", []),
+                            agent_stats=agent_stats
+                            or last_saved_content.get("agent_stats"),
+                            refs=refs or last_saved_content.get("refs"),
+                        )
+                        await self.platform_history_mgr.update(
+                            last_saved_record.id, content=merged_content
+                        )
+                        last_saved_content = merged_content
+                    message_accumulator = BotMessageAccumulator()
+                    agent_stats = {}
+                    refs = {}
+                    return None
+
                 plain_text = collect_plain_text_from_message_parts(
                     message_parts_to_save
                 )
@@ -806,7 +907,7 @@ class ChatRoute(Route):
                     )
                     extracted_refs = refs
 
-                saved_record = await self._save_bot_message(
+                saved_record, saved_content = await self._save_bot_message(
                     webchat_conv_id,
                     message_parts_to_save,
                     agent_stats,
@@ -814,6 +915,8 @@ class ChatRoute(Route):
                     llm_checkpoint_id,
                     platform_history_id,
                 )
+                last_saved_record = saved_record
+                last_saved_content = saved_content
                 message_accumulator = BotMessageAccumulator()
                 agent_stats = {}
                 refs = {}
@@ -840,6 +943,12 @@ class ChatRoute(Route):
                     "session_id": webchat_conv_id,
                 }
                 yield f"data: {json.dumps(session_info, ensure_ascii=False)}\n\n"
+                if tts_notice_code and not client_disconnected:
+                    tts_notice = {
+                        "type": "tts_notice",
+                        "data": {"code": tts_notice_code},
+                    }
+                    yield f"data: {json.dumps(tts_notice, ensure_ascii=False)}\n\n"
                 if saved_user_record and not client_disconnected:
                     user_saved_info = {
                         "type": "user_message_saved",
@@ -930,6 +1039,9 @@ class ChatRoute(Route):
                             part = await self._create_attachment_from_file(
                                 filename, "record"
                             )
+                            caption = result.get("text")
+                            if part and caption:
+                                part["text"] = caption
                             message_accumulator.add_attachment(part)
                             if attachment_saved_event := build_attachment_saved_event(
                                 part

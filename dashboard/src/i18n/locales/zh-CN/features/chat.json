@@ -104,6 +104,13 @@
     "on": "流式",
     "off": "普通"
   },
+  "voiceReply": {
+    "title": "语音回复",
+    "noProvider": "当前没有启用任何 TTS 提供商，已使用文本回复",
+    "globallyDisabled": "TTS 功能未在全局设置中启用，已使用文本回复",
+    "sessionDisabled": "当前会话已禁用 TTS，已使用文本回复",
+    "unavailable": "语音回复当前不可用，已使用文本回复"
+  },
   "transport": {
     "title": "通信传输模式",
     "sse": "SSE",

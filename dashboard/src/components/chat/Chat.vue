@@ -266,6 +266,32 @@
             <v-list-item
               class="styled-menu-item"
               rounded="md"
+              @click="voiceReply = !voiceReply"
+            >
+              <template #prepend>
+                <v-icon size="18">{{
+                  voiceReply ? "mdi-volume-high" : "mdi-volume-off"
+                }}</v-icon>
+              </template>
+              <v-list-item-title>{{
+                tm("voiceReply.title")
+              }}</v-list-item-title>
+              <template #append>
+                <v-switch
+                  :model-value="voiceReply"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  inset
+                  tabindex="-1"
+                  @click.stop="voiceReply = !voiceReply"
+                />
+              </template>
+            </v-list-item>
+
+            <v-list-item
+              class="styled-menu-item"
+              rounded="md"
               @click="toggleTheme"
             >
               <template #prepend>
@@ -693,6 +719,14 @@ const {
       scrollToBottom();
     }
   },
+  onNotice: ({ code }) => {
+    const noticeKeys: Record<string, string> = {
+      globally_disabled: "voiceReply.globallyDisabled",
+      session_disabled: "voiceReply.sessionDisabled",
+      no_provider: "voiceReply.noProvider",
+    };
+    toast.warning(tm(noticeKeys[code] ?? "voiceReply.unavailable"));
+  },
 });
 
 const transportMode = ref<TransportMode>(
@@ -713,6 +747,11 @@ const currentTransportLabel = computed(() =>
 
 watch(transportMode, (mode) => {
   localStorage.setItem("chat.transportMode", mode);
+});
+
+const voiceReply = ref(localStorage.getItem("chat.voiceReply") === "true");
+watch(voiceReply, (enabled) => {
+  localStorage.setItem("chat.voiceReply", enabled ? "true" : "false");
 });
 
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
