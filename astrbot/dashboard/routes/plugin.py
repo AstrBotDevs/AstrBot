@@ -77,6 +77,9 @@ _PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS = 60
 _PLUGIN_PAGE_ROOT_DIR_NAME = "pages"
 _PLUGIN_PAGE_ENTRY_FILE_NAME = "index.html"
 
+mimetypes.add_type("image/svg+xml", ".svg")
+mimetypes.add_type("image/webp", ".webp")
+
 
 def _normalize_plugin_page_asset_path(asset_path: str) -> str:
     return PluginRoute._normalize_plugin_page_path(asset_path, allow_empty=True)
@@ -460,7 +463,7 @@ class PluginRoute(Route):
         try:
             file_path = await self._resolve_plugin_asset_file(plugin, asset_path)
         except (FileNotFoundError, ValueError, OSError):
-            logger.warning(f"插件资源访问失败: {plugin_name}/{asset_path}")
+            logger.info(f"插件资源访问失败: {plugin_name}/{asset_path}")
             return await self._plugin_page_error_response(404, "Plugin asset not found")
 
         mimetype, _ = mimetypes.guess_type(file_path.name)
