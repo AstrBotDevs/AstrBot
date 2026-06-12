@@ -292,7 +292,8 @@ class ProviderGoogleGenAI(Provider):
 
         # If any tools (native or custom function declarations) are active for this request,
         # we must disable thinking because Gemini API does not support them simultaneously.
-        if tool_list:
+        if tool_list and thinking_config:
+            logger.warning("[Gemini] Thinking config is automatically disabled because tools are active for this request.")
             thinking_config = None
 
         return types.GenerateContentConfig(
