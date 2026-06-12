@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from astrbot import logger
-from astrbot.api import star
+from astrbot.api import sp, star
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
 from astrbot.core.utils.error_redaction import safe_error
@@ -112,7 +112,7 @@ class ProviderCommands:
         self,
         event: AstrMessageEvent,
         idx: str | int | None = None,
-        idx2: int | None = None,
+        idx2: str | int | None = None,
     ) -> None:
         """查看或者切换 LLM Provider"""
         umo = event.unified_msg_origin
@@ -192,12 +192,28 @@ class ProviderCommands:
                     MessageEventResult().message("Please enter the index.")
                 )
                 return
-            if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
+            if idx2 in ("default", "reset", "clear"):
+                await sp.session_remove(
+                    umo,
+                    f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}",
+                )
+                event.set_result(
+                    MessageEventResult().message("✅ Successfully reset TTS provider to global default.")
+                )
+                return
+            try:
+                idx2_int = int(idx2)
+            except ValueError:
                 event.set_result(
                     MessageEventResult().message("❌ Invalid provider index.")
                 )
                 return
-            provider = self.context.get_all_tts_providers()[idx2 - 1]
+            if idx2_int > len(self.context.get_all_tts_providers()) or idx2_int < 1:
+                event.set_result(
+                    MessageEventResult().message("❌ Invalid provider index.")
+                )
+                return
+            provider = self.context.get_all_tts_providers()[idx2_int - 1]
             id_ = provider.meta().id
             await self.context.provider_manager.set_provider(
                 provider_id=id_,
@@ -213,12 +229,28 @@ class ProviderCommands:
                     MessageEventResult().message("Please enter the index.")
                 )
                 return
-            if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
+            if idx2 in ("default", "reset", "clear"):
+                await sp.session_remove(
+                    umo,
+                    f"provider_perf_{ProviderType.SPEECH_TO_TEXT.value}",
+                )
+                event.set_result(
+                    MessageEventResult().message("✅ Successfully reset STT provider to global default.")
+                )
+                return
+            try:
+                idx2_int = int(idx2)
+            except ValueError:
                 event.set_result(
                     MessageEventResult().message("❌ Invalid provider index.")
                 )
                 return
-            provider = self.context.get_all_stt_providers()[idx2 - 1]
+            if idx2_int > len(self.context.get_all_stt_providers()) or idx2_int < 1:
+                event.set_result(
+                    MessageEventResult().message("❌ Invalid provider index.")
+                )
+                return
+            provider = self.context.get_all_stt_providers()[idx2_int - 1]
             id_ = provider.meta().id
             await self.context.provider_manager.set_provider(
                 provider_id=id_,
@@ -228,21 +260,36 @@ class ProviderCommands:
             event.set_result(
                 MessageEventResult().message(f"✅ Successfully switched to {id_}.")
             )
-        elif isinstance(idx, int):
-            if idx > len(self.context.get_all_providers()) or idx < 1:
-                event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
-                )
-                return
-            provider = self.context.get_all_providers()[idx - 1]
-            id_ = provider.meta().id
-            await self.context.provider_manager.set_provider(
-                provider_id=id_,
-                provider_type=ProviderType.CHAT_COMPLETION,
-                umo=umo,
+        elif idx in ("default", "reset", "clear"):
+            await sp.session_remove(
+                umo,
+                f"provider_perf_{ProviderType.CHAT_COMPLETION.value}",
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message("✅ Successfully reset Chat Completion provider to global default.")
             )
         else:
-            event.set_result(MessageEventResult().message("❌ Invalid parameter."))
+            try:
+                idx_int = int(idx)
+                is_int = True
+            except (ValueError, TypeError):
+                is_int = False
+
+            if is_int:
+                if idx_int > len(self.context.get_all_providers()) or idx_int < 1:
+                    event.set_result(
+                        MessageEventResult().message("❌ Invalid provider index.")
+                    )
+                    return
+                provider = self.context.get_all_providers()[idx_int - 1]
+                id_ = provider.meta().id
+                await self.context.provider_manager.set_provider(
+                    provider_id=id_,
+                    provider_type=ProviderType.CHAT_COMPLETION,
+                    umo=umo,
+                )
+                event.set_result(
+                    MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                )
+            else:
+                event.set_result(MessageEventResult().message("❌ Invalid parameter."))
