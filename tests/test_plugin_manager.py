@@ -596,6 +596,120 @@ async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
 
 
 @pytest.mark.asyncio
+async def test_reload_skips_deactivated_plugin(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """Reloading a deactivated plugin must not unbind it (#8582).
+
+    _terminate_plugin short-circuits for deactivated plugins, but
+    _unbind_plugin still removed their tools from func_list while load()
+    skipped re-instantiation, losing every tool registered via
+    add_llm_tools() in the plugin's __init__.
+    """
+    _clear_star_runtime_state()
+    plugin_name = "plugin_one"
+    module_path = f"data.plugins.{plugin_name}.main"
+    metadata = star_manager_module.StarMetadata(
+        name=plugin_name,
+        root_dir_name=plugin_name,
+        module_path=module_path,
+        activated=False,
+    )
+    star_manager_module.star_map[module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+
+    calls = []
+
+    async def mock_global_get(key, default=None):
+        if key == "inactivated_plugins":
+            return [module_path]
+        return default
+
+    async def mock_terminate(plugin):
+        calls.append(("terminate", plugin.name))
+
+    async def mock_unbind(plugin_name, plugin_module_path):
+        calls.append(("unbind", plugin_name))
+
+    async def mock_load(
+        specified_module_path=None,
+        specified_dir_name=None,
+        ignore_version_check=False,
+    ):
+        calls.append(("load", specified_module_path))
+        return True, None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", mock_unbind)
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
+
+    try:
+        result = await plugin_manager_pm.reload(plugin_name)
+        assert result == (True, None)
+        assert calls == []
+        assert module_path in star_manager_module.star_map
+        assert any(smd.name == plugin_name for smd in star_manager_module.star_registry)
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_reload_runs_full_cycle_for_activated_plugin(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """Activated plugins keep the full terminate -> unbind -> load cycle."""
+    _clear_star_runtime_state()
+    plugin_name = "plugin_one"
+    module_path = f"data.plugins.{plugin_name}.main"
+    metadata = star_manager_module.StarMetadata(
+        name=plugin_name,
+        root_dir_name=plugin_name,
+        module_path=module_path,
+    )
+    star_manager_module.star_map[module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+
+    calls = []
+
+    async def mock_global_get(key, default=None):
+        if key == "inactivated_plugins":
+            return []
+        return default
+
+    async def mock_terminate(plugin):
+        calls.append(("terminate", plugin.name))
+
+    async def mock_unbind(plugin_name, plugin_module_path):
+        calls.append(("unbind", plugin_name))
+        star_manager_module.star_map.pop(plugin_module_path, None)
+
+    async def mock_load(
+        specified_module_path=None,
+        specified_dir_name=None,
+        ignore_version_check=False,
+    ):
+        calls.append(("load", specified_module_path))
+        return True, None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", mock_unbind)
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
+
+    try:
+        result = await plugin_manager_pm.reload(plugin_name)
+        assert result == (True, None)
+        assert calls == [
+            ("terminate", plugin_name),
+            ("unbind", plugin_name),
+            ("load", module_path),
+        ]
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
 async def test_load_reports_unregistered_plugin_without_index_error(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
