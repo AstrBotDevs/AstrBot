@@ -82,8 +82,10 @@ class ProviderOpenAIOfficial(Provider):
             return None
 
     @staticmethod
-    def _redact_data_url_for_log(value: str) -> str:
-        match = re.match(r"^(data:[^;,]+;base64,)(.*)$", value, flags=re.IGNORECASE)
+    def _redact_data_url_for_log(value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        match = re.match(r"^(data:[^,]*;base64,)(.*)$", value, flags=re.IGNORECASE)
         if not match:
             return value
         prefix, payload = match.groups()
