@@ -1,6 +1,21 @@
+"""Dashboard 更新 / 公告代理路由.
+
+提供 AstrBot Core 与自建更新服务器之间的桥接：
+  - /api/update/*         已有：版本检查 / 下载更新
+  - /api/system/announcement 新增：代理更新服务器的 /announcement
+
+设计要点：
+  - 公告源 = 内网/官方更新服务器，无需 dashboard 直连。
+  - 通过 update_config.json 中 core_update.release_api_url 复用 base URL，
+    自动剥掉末级路径再拼 "/announcement"。
+  - 默认配置连官方 API（无 /announcement）时返回 404，前端静默隐藏公告条。
+"""
+import asyncio
 import traceback
 import uuid
+from urllib.parse import urlparse
 
+import aiohttp
 from quart import request
 
 from astrbot.core import DEMO_MODE, logger, pip_installer
@@ -31,6 +46,7 @@ class UpdateRoute(Route):
             "/update/dashboard": ("POST", self.update_dashboard),
             "/update/pip-install": ("POST", self.install_pip_package),
             "/update/migration": ("POST", self.do_migration),
+            "/system/announcement": ("GET", self.get_announcement),
         }
         self.astrbot_updator = astrbot_updator
         self.core_lifecycle = core_lifecycle
@@ -115,6 +131,91 @@ class UpdateRoute(Route):
             )
 
         return _callback
+
+    @staticmethod
+    def _resolve_announcement_upstream_url() -> str | None:
+        """从 update_config 复用 base URL 拼接出公告上游地址.
+
+        复用策略: 取 core_update.release_api_url (例如 "http://server:8080/releases"),
+        剥掉末级路径只保留 scheme://netloc, 然后拼接 "/announcement".
+        复用而非新加配置, 避免 update_config.json 字段膨胀.
+
+        Returns:
+            拼接后的上游完整 URL；若 URL 不合法返回 None.
+        """
+        try:
+            from astrbot.core.config.update_config import UpdateConfig
+
+            base_full = UpdateConfig().get_core_release_api_url()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"读取 update_config 失败，无法解析公告上游: {e!s}")
+            return None
+
+        parsed = urlparse(base_full)
+        if not parsed.scheme or not parsed.netloc:
+            return None
+        return f"{parsed.scheme}://{parsed.netloc}/announcement"
+
+    async def get_announcement(self):
+        """代理更新服务器的 /announcement 接口.
+
+        行为:
+          - 上游 200 → 原样返回 JSON.
+          - 上游 404 → 返回 404 + {"detail": "no_announcement"} (无公告/已禁用).
+          - 上游 5xx 或网络错误 → 返回 502 (后端作为代理出错).
+          - base URL 解析失败 → 返回 503 (未配置/配置错误).
+        """
+        upstream_url = self._resolve_announcement_upstream_url()
+        if not upstream_url:
+            return (
+                Response()
+                .error("更新服务器 base URL 未配置或格式不合法，无法获取公告。")
+                .__dict__
+            ), 503
+
+        try:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.get(
+                    upstream_url,
+                    timeout=aiohttp.ClientTimeout(total=5.0),
+                    headers={"Accept": "application/json"},
+                ) as response,
+            ):
+                # 透传状态码语义: 404 表示"无公告", 前端据此隐藏公告条.
+                if response.status == 404:
+                    return (
+                        Response()
+                        .error("当前没有公告")
+                        .__dict__
+                    ), 404
+                if response.status >= 400:
+                    detail = await response.text()
+                    logger.warning(
+                        f"更新服务器公告接口异常: {response.status} {detail[:200]}"
+                    )
+                    return (
+                        Response()
+                        .error(f"更新服务器返回错误: HTTP {response.status}")
+                        .__dict__
+                    ), 502
+                payload = await response.json(content_type=None)
+        except aiohttp.ClientError as e:
+            logger.warning(f"连接更新服务器失败 ({upstream_url}): {e!s}")
+            return (
+                Response()
+                .error(f"无法连接更新服务器: {e!s}")
+                .__dict__
+            ), 502
+        except (ValueError, asyncio.TimeoutError) as e:
+            logger.warning(f"获取公告响应解析失败: {e!s}")
+            return (
+                Response()
+                .error(f"获取公告失败: {e!s}")
+                .__dict__
+            ), 502
+
+        return Response().ok(payload).__dict__
 
     async def get_update_progress(self):
         progress_id = request.args.get("id", "")

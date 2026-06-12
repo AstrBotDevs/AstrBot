@@ -9,6 +9,15 @@
   "announcement": {
     "title": "公告"
   },
+  "announcementBar": {
+    "label": "公告",
+    "loading": "加载公告中…",
+    "error": "公告获取失败",
+    "viewDetail": "查看详情",
+    "close": "关闭",
+    "closeAriaLabel": "折叠此条公告",
+    "expandAriaLabel": "展开公告"
+  },
   "onboard": {
     "title": "快速引导",
     "subtitle": "欢迎页可直接完成初始化。",

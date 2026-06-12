@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 285 icons */
+/* Auto-generated MDI subset – 286 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -126,6 +126,10 @@
 
 .mdi-bug::before {
   content: "\F00E4";
+}
+
+.mdi-bullhorn-variant::before {
+  content: "\F196E";
 }
 
 .mdi-cached::before {

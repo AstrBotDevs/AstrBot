@@ -6,6 +6,7 @@ import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
+import AnnouncementBar from "@/components/shared/AnnouncementBar.vue";
 import Chat from "@/components/chat/Chat.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
@@ -138,6 +139,10 @@ onMounted(() => {
           overflow: isCurrentChatRoute ? 'hidden' : undefined,
         }"
       >
+        <!-- 顶部滚动公告条: 放在 v-main 内最顶部,
+             由 v-main 的 padding 自动让出 toolbar 和 sidebar 区域,
+             position: sticky 让其粘在 v-main 顶部, 不挡 toolbar 按钮/logo -->
+        <AnnouncementBar />
         <v-container
           fluid
           class="page-wrapper"

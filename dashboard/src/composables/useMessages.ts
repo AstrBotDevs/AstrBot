@@ -143,6 +143,55 @@ export function useMessages(options: UseMessagesOptions) {
   >({});
 
   /**
+   * 方案三: 收集再批量更新。
+   * 当同一个 SSE chunk 内包含多个 tool_call_result 事件时,
+   * Vue 3 的同步批处理会导致中间状态的 ref 更新被合并,
+   * 最终 computed 求值可能拿到非预期的中间快照。
+   *
+   * 解决: processStreamPayload 中不立即写 ref,而是存入
+   * _pendingTodoSnapshots (后面的覆盖前面的),在 SSE chunk
+   * 处理完毕、进入下一轮 await 之前,通过 _flushTodoSnapshots()
+   * 一次性将最新快照写入 ref,保证 Vue 在一个 tick 内只做一次
+   * ref 赋值,computed 求值看到的就是该 chunk 的最新状态。
+   *
+   * @author astrbot / 2026-06-10
+   */
+  const _pendingTodoSnapshots: Record<
+    string,
+    { list: any; stats: any; attentionItems: number[] }
+  > = {};
+
+  function _flushTodoSnapshots() {
+    const keys = Object.keys(_pendingTodoSnapshots);
+    if (keys.length === 0) return;
+    const updates: Record<
+      string,
+      { list: any; stats: any; attentionItems: number[] }
+    > = {};
+    for (const sid of keys) {
+      updates[sid] = _pendingTodoSnapshots[sid];
+      delete _pendingTodoSnapshots[sid];
+    }
+    // [DEBUG-keep] 临时诊断: 用于定位"快速调用时气泡不更新"问题
+    for (const sid of keys) {
+      const snap = updates[sid];
+      // eslint-disable-next-line no-console
+      console.log(
+        "[todo-flush]",
+        new Date().toISOString().slice(11, 23),
+        "stats.done=",
+        snap?.stats?.done,
+        "items=",
+        snap?.list?.items?.length,
+      );
+    }
+    latestTodoSnapshotBySession.value = {
+      ...latestTodoSnapshotBySession.value,
+      ...updates,
+    };
+  }
+
+  /**
    * 尝试从 tool result 解析出 todo_list 快照。识别特征:
    *   1. result 是 dict 且含 list.items 数组 + stats 字段(直出格式)
    *   2. result 是 dict 且含 ok+data 结构,data 里有 list/stats(spcode 包装格式)
@@ -503,6 +552,8 @@ export function useMessages(options: UseMessagesOptions) {
       await readSseStream(response.body, (payload) => {
         processStreamPayload(botRecord, payload, undefined, sessionId);
         options.onStreamUpdate?.(sessionId);
+      }, () => {
+        _flushTodoSnapshots();
       });
     } catch (error) {
       if (!abort.signal.aborted) {
@@ -605,6 +656,8 @@ export function useMessages(options: UseMessagesOptions) {
         await readSseStream(response.body, (payload) => {
           processStreamPayload(botRecord, payload, userRecord, sessionId);
           options.onStreamUpdate?.(sessionId);
+        }, () => {
+          _flushTodoSnapshots();
         });
       })
       .catch((error) => {
@@ -659,6 +712,10 @@ export function useMessages(options: UseMessagesOptions) {
       try {
         const payload = JSON.parse(event.data);
         processStreamPayload(botRecord, payload, userRecord, sessionId);
+        // WebSocket 消息逐条到达，但为保持一致性：
+        // 如果单条 WS 消息内含多个 tool_call_result 数据，
+        // 由 _flushTodoSnapshots 统一提交最新快照。
+        _flushTodoSnapshots();
         options.onStreamUpdate?.(sessionId);
         if (payload.type === "end" || payload.t === "end") {
           ws.close();
@@ -778,10 +835,9 @@ export function useMessages(options: UseMessagesOptions) {
         if (sessionId && toolResult && typeof toolResult === "object" && !Array.isArray(toolResult)) {
           const snap = _tryParseTodoSnapshotExternal(toolResult);
           if (snap) {
-            latestTodoSnapshotBySession.value = {
-              ...latestTodoSnapshotBySession.value,
-              [sessionId]: snap,
-            };
+            // 方案三: 收集快照到 pending map,同一 chunk 内后续的 snapshot 自动覆盖之前的,
+            // 由 _flushTodoSnapshots() 在 chunk 边界统一写入 ref。
+            _pendingTodoSnapshots[sessionId] = snap;
           }
         }
         finishToolCall(botRecord, parsedResult);
@@ -1021,9 +1077,17 @@ function partToPayload(part: MessagePart) {
   };
 }
 
+/**
+ * @param onBatchComplete — 每个 SSE chunk 处理完毕后调用。
+ *   用于批量提交在同一个同步 tick 内收集到的待处理数据
+ *   (如 todo_list 快照),避免 Vue 3 响应式批处理导致中间
+ *   状态的非预期渲染。
+ *   @author astrbot / 2026-06-10
+ */
 async function readSseStream(
   body: ReadableStream<Uint8Array>,
   onPayload: (payload: any) => void,
+  onBatchComplete?: () => void,
 ) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -1049,6 +1113,8 @@ async function readSseStream(
         console.error("Failed to parse SSE payload:", error, data);
       }
     }
+
+    onBatchComplete?.();
   }
 }
 

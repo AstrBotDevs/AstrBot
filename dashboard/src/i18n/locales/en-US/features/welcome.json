@@ -9,6 +9,15 @@
   "announcement": {
     "title": "Announcement"
   },
+  "announcementBar": {
+    "label": "Notice",
+    "loading": "Loading announcement…",
+    "error": "Failed to load announcement",
+    "viewDetail": "View details",
+    "close": "Close",
+    "closeAriaLabel": "Collapse this announcement",
+    "expandAriaLabel": "Expand announcement"
+  },
   "onboard": {
     "title": "Quick Onboarding",
     "subtitle": "Complete initialization directly on the welcome page.",
