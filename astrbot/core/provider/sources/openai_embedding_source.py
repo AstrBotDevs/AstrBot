@@ -1,3 +1,5 @@
+import re
+
 import httpx
 from openai import AsyncOpenAI
 
@@ -6,6 +8,15 @@ from astrbot import logger
 from ..entities import ProviderType
 from ..provider import EmbeddingProvider
 from ..register import register_provider_adapter
+
+_API_VERSION_SUFFIX_RE = re.compile(r"/v\d+$")
+
+
+def _normalize_embedding_api_base(api_base: str) -> str:
+    api_base = api_base.strip().removesuffix("/").removesuffix("/embeddings")
+    if api_base and not _API_VERSION_SUFFIX_RE.search(api_base):
+        api_base = api_base + "/v1"
+    return api_base
 
 
 @register_provider_adapter(
@@ -24,15 +35,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if proxy:
             logger.info(f"[OpenAI Embedding] {provider_id} Using proxy: {proxy}")
             http_client = httpx.AsyncClient(proxy=proxy)
-        api_base = (
+        api_base = _normalize_embedding_api_base(
             provider_config.get("embedding_api_base", "https://api.openai.com/v1")
-            .strip()
-            .removesuffix("/")
-            .removesuffix("/embeddings")
         )
-        if api_base and not api_base.endswith("/v1") and not api_base.endswith("/v4"):
-            # /v4 see #5699
-            api_base = api_base + "/v1"
         logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
         self.client = AsyncOpenAI(
             api_key=provider_config.get("embedding_api_key"),
