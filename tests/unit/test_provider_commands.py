@@ -4,6 +4,7 @@ from astrbot.builtin_stars.builtin_commands.commands.provider import ProviderCom
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
 
+
 @pytest.mark.asyncio
 async def test_provider_reset_chat_completion():
     context = MagicMock()
@@ -11,7 +12,10 @@ async def test_provider_reset_chat_completion():
     event = MagicMock(spec=AstrMessageEvent)
     event.unified_msg_origin = "session-123"
 
-    with patch("astrbot.builtin_stars.builtin_commands.commands.provider.sp.session_remove", new_callable=AsyncMock) as mock_remove:
+    with patch(
+        "astrbot.builtin_stars.builtin_commands.commands.provider.sp.session_remove",
+        new_callable=AsyncMock,
+    ) as mock_remove:
         await cmd.provider(event, idx="reset")
         mock_remove.assert_called_once_with(
             "session-123",
@@ -21,6 +25,7 @@ async def test_provider_reset_chat_completion():
         res = event.set_result.call_args[0][0]
         assert "reset Chat Completion provider" in res.get_plain_text()
 
+
 @pytest.mark.asyncio
 async def test_provider_reset_tts():
     context = MagicMock()
@@ -28,7 +33,10 @@ async def test_provider_reset_tts():
     event = MagicMock(spec=AstrMessageEvent)
     event.unified_msg_origin = "session-123"
 
-    with patch("astrbot.builtin_stars.builtin_commands.commands.provider.sp.session_remove", new_callable=AsyncMock) as mock_remove:
+    with patch(
+        "astrbot.builtin_stars.builtin_commands.commands.provider.sp.session_remove",
+        new_callable=AsyncMock,
+    ) as mock_remove:
         await cmd.provider(event, idx="tts", idx2="reset")
         mock_remove.assert_called_once_with(
             "session-123",
@@ -38,6 +46,7 @@ async def test_provider_reset_tts():
         res = event.set_result.call_args[0][0]
         assert "reset TTS provider" in res.get_plain_text()
 
+
 @pytest.mark.asyncio
 async def test_provider_reset_stt():
     context = MagicMock()
@@ -45,7 +54,10 @@ async def test_provider_reset_stt():
     event = MagicMock(spec=AstrMessageEvent)
     event.unified_msg_origin = "session-123"
 
-    with patch("astrbot.builtin_stars.builtin_commands.commands.provider.sp.session_remove", new_callable=AsyncMock) as mock_remove:
+    with patch(
+        "astrbot.builtin_stars.builtin_commands.commands.provider.sp.session_remove",
+        new_callable=AsyncMock,
+    ) as mock_remove:
         await cmd.provider(event, idx="stt", idx2="reset")
         mock_remove.assert_called_once_with(
             "session-123",

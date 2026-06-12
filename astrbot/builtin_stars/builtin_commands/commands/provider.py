@@ -198,7 +198,9 @@ class ProviderCommands:
                     f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}",
                 )
                 event.set_result(
-                    MessageEventResult().message("✅ Successfully reset TTS provider to global default.")
+                    MessageEventResult().message(
+                        "✅ Successfully reset TTS provider to global default."
+                    )
                 )
                 return
             try:
@@ -208,12 +210,13 @@ class ProviderCommands:
                     MessageEventResult().message("❌ Invalid provider index.")
                 )
                 return
-            if idx2_int > len(self.context.get_all_tts_providers()) or idx2_int < 1:
+            providers = list(self.context.get_all_tts_providers())
+            if idx2_int > len(providers) or idx2_int < 1:
                 event.set_result(
                     MessageEventResult().message("❌ Invalid provider index.")
                 )
                 return
-            provider = self.context.get_all_tts_providers()[idx2_int - 1]
+            provider = providers[idx2_int - 1]
             id_ = provider.meta().id
             await self.context.provider_manager.set_provider(
                 provider_id=id_,
@@ -235,7 +238,9 @@ class ProviderCommands:
                     f"provider_perf_{ProviderType.SPEECH_TO_TEXT.value}",
                 )
                 event.set_result(
-                    MessageEventResult().message("✅ Successfully reset STT provider to global default.")
+                    MessageEventResult().message(
+                        "✅ Successfully reset STT provider to global default."
+                    )
                 )
                 return
             try:
@@ -245,12 +250,13 @@ class ProviderCommands:
                     MessageEventResult().message("❌ Invalid provider index.")
                 )
                 return
-            if idx2_int > len(self.context.get_all_stt_providers()) or idx2_int < 1:
+            providers = list(self.context.get_all_stt_providers())
+            if idx2_int > len(providers) or idx2_int < 1:
                 event.set_result(
                     MessageEventResult().message("❌ Invalid provider index.")
                 )
                 return
-            provider = self.context.get_all_stt_providers()[idx2_int - 1]
+            provider = providers[idx2_int - 1]
             id_ = provider.meta().id
             await self.context.provider_manager.set_provider(
                 provider_id=id_,
@@ -266,7 +272,9 @@ class ProviderCommands:
                 f"provider_perf_{ProviderType.CHAT_COMPLETION.value}",
             )
             event.set_result(
-                MessageEventResult().message("✅ Successfully reset Chat Completion provider to global default.")
+                MessageEventResult().message(
+                    "✅ Successfully reset Chat Completion provider to global default."
+                )
             )
         else:
             try:
@@ -276,12 +284,13 @@ class ProviderCommands:
                 is_int = False
 
             if is_int:
-                if idx_int > len(self.context.get_all_providers()) or idx_int < 1:
+                providers = list(self.context.get_all_providers())
+                if idx_int > len(providers) or idx_int < 1:
                     event.set_result(
                         MessageEventResult().message("❌ Invalid provider index.")
                     )
                     return
-                provider = self.context.get_all_providers()[idx_int - 1]
+                provider = providers[idx_int - 1]
                 id_ = provider.meta().id
                 await self.context.provider_manager.set_provider(
                     provider_id=id_,
