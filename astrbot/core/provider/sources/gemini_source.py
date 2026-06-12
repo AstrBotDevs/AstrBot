@@ -290,6 +290,11 @@ class ProviderGoogleGenAI(Provider):
                 else:
                     thinking_config.thinking_level = level
 
+        # If any tools (native or custom function declarations) are active for this request,
+        # we must disable thinking because Gemini API does not support them simultaneously.
+        if tool_list:
+            thinking_config = None
+
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=temperature,
