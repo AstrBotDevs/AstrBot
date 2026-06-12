@@ -81,6 +81,14 @@ class ProviderOpenAIOfficial(Provider):
         except Exception:
             return None
 
+    @staticmethod
+    def _redact_data_url_for_log(value: str) -> str:
+        match = re.match(r"^(data:[^;,]+;base64,)(.*)$", value, flags=re.IGNORECASE)
+        if not match:
+            return value
+        prefix, payload = match.groups()
+        return f"{prefix}<redacted {len(payload)} chars>"
+
     def _get_image_moderation_error_patterns(self) -> list[str]:
         """Return configured moderation patterns (case-insensitive substring match, not regex)."""
         configured = self.provider_config.get("image_moderation_error_patterns", [])
@@ -384,7 +392,11 @@ class ProviderOpenAIOfficial(Provider):
                 audio_format = "wav"
             audio_bytes = Path(audio_path).read_bytes()
         except Exception as exc:
-            logger.warning("音频 %s 预处理失败，将忽略。错误: %s", audio_ref, exc)
+            logger.warning(
+                "音频 %s 预处理失败，将忽略。错误: %s",
+                self._redact_data_url_for_log(audio_ref),
+                exc,
+            )
             return None
         finally:
             for cleanup_path in cleanup_paths:
