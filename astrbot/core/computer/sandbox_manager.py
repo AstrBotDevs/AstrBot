@@ -425,14 +425,11 @@ class SandboxManager:
         if current_sandbox_id and current_record:
             status = current_record.get("status")
             current_controller_session_id = current_record.get("controller_session_id")
-            if (
-                status == SandboxStatus.RUNNING
-                and (
-                    current_controller_session_id != session_id
-                    or not lease_is_active(
-                        current_controller_session_id,
-                        current_record.get("lease_expires_at"),
-                    )
+            if status == SandboxStatus.RUNNING and (
+                current_controller_session_id != session_id
+                or not lease_is_active(
+                    current_controller_session_id,
+                    current_record.get("lease_expires_at"),
                 )
             ):
                 self._release_expired_lease(current_record)
@@ -1226,11 +1223,8 @@ class SandboxManager:
         sandbox = self.registry.get_sandbox(sandbox_id) if sandbox_id else None
         if sandbox:
             controller_session_id = sandbox.get("controller_session_id")
-            if (
-                controller_session_id != session_id
-                or not lease_is_active(
-                    controller_session_id, sandbox.get("lease_expires_at")
-                )
+            if controller_session_id != session_id or not lease_is_active(
+                controller_session_id, sandbox.get("lease_expires_at")
             ):
                 self._release_expired_lease(sandbox)
                 self.registry.set_current_sandbox_id(session_id, None)
