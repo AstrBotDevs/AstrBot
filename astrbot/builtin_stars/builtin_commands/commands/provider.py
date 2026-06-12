@@ -13,6 +13,23 @@ class ProviderCommands:
     def __init__(self, context: star.Context) -> None:
         self.context = context
 
+    async def _reset_provider_override(
+        self,
+        event: AstrMessageEvent,
+        umo: str,
+        provider_type: ProviderType,
+        display_name: str,
+    ) -> None:
+        await sp.session_remove(
+            umo,
+            f"provider_perf_{provider_type.value}",
+        )
+        event.set_result(
+            MessageEventResult().message(
+                f"✅ Successfully reset {display_name} provider to global default."
+            )
+        )
+
     def _log_reachability_failure(
         self,
         provider,
@@ -193,14 +210,8 @@ class ProviderCommands:
                 )
                 return
             if idx2 in ("default", "reset", "clear"):
-                await sp.session_remove(
-                    umo,
-                    f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}",
-                )
-                event.set_result(
-                    MessageEventResult().message(
-                        "✅ Successfully reset TTS provider to global default."
-                    )
+                await self._reset_provider_override(
+                    event, umo, ProviderType.TEXT_TO_SPEECH, "TTS"
                 )
                 return
             try:
@@ -233,14 +244,8 @@ class ProviderCommands:
                 )
                 return
             if idx2 in ("default", "reset", "clear"):
-                await sp.session_remove(
-                    umo,
-                    f"provider_perf_{ProviderType.SPEECH_TO_TEXT.value}",
-                )
-                event.set_result(
-                    MessageEventResult().message(
-                        "✅ Successfully reset STT provider to global default."
-                    )
+                await self._reset_provider_override(
+                    event, umo, ProviderType.SPEECH_TO_TEXT, "STT"
                 )
                 return
             try:
@@ -267,14 +272,8 @@ class ProviderCommands:
                 MessageEventResult().message(f"✅ Successfully switched to {id_}.")
             )
         elif idx in ("default", "reset", "clear"):
-            await sp.session_remove(
-                umo,
-                f"provider_perf_{ProviderType.CHAT_COMPLETION.value}",
-            )
-            event.set_result(
-                MessageEventResult().message(
-                    "✅ Successfully reset Chat Completion provider to global default."
-                )
+            await self._reset_provider_override(
+                event, umo, ProviderType.CHAT_COMPLETION, "Chat Completion"
             )
         else:
             try:
