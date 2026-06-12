@@ -52,6 +52,21 @@
   </div>
 </template>
 
+<script lang="ts">
+// One AudioContext shared by every player instance: browsers cap concurrent
+// contexts, and decoding is the only thing we need it for. This lives in a
+// plain <script> block because <script setup> state is per-instance.
+let sharedAudioCtx: AudioContext | null = null;
+function getSharedAudioContext(): AudioContext | null {
+  if (sharedAudioCtx) return sharedAudioCtx;
+  const AudioCtx =
+    window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) return null;
+  sharedAudioCtx = new AudioCtx();
+  return sharedAudioCtx;
+}
+</script>
+
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 
@@ -147,6 +162,7 @@ function seekToClientX(clientX: number) {
   const wave = waveRef.value;
   if (!el || !wave || !duration.value) return;
   const rect = wave.getBoundingClientRect();
+  if (rect.width === 0) return;
   const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
   const time = ratio * duration.value;
   currentTime.value = time;
@@ -199,18 +215,6 @@ function onSeekKeydown(event: KeyboardEvent) {
   el.currentTime = next;
 }
 
-// One AudioContext shared by every player instance: browsers cap concurrent
-// contexts, and decoding is the only thing we need it for.
-let sharedAudioCtx: AudioContext | null = null;
-function getSharedAudioContext(): AudioContext | null {
-  if (sharedAudioCtx) return sharedAudioCtx;
-  const AudioCtx =
-    window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtx) return null;
-  sharedAudioCtx = new AudioCtx();
-  return sharedAudioCtx;
-}
-
 // Decode the audio once and compute amplitude peaks for the waveform. This
 // downloads the full file, so it only runs lazily on first playback — a chat
 // history full of voice messages must not fetch every clip on mount.
@@ -229,10 +233,12 @@ async function buildWaveform(url: string) {
   if (!ctx) return;
   try {
     const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Failed to fetch audio: ${resp.status}`);
     const arrayBuffer = await resp.arrayBuffer();
     const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
     if (token !== decodeToken) return;
 
+    if (audioBuffer.numberOfChannels === 0) return;
     const channel = audioBuffer.getChannelData(0);
     const blockSize = Math.floor(channel.length / BAR_COUNT) || 1;
     const peaks: number[] = [];

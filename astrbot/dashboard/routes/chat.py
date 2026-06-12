@@ -746,8 +746,8 @@ class ChatRoute(Route):
         Returns ``(enabled, reason)`` where ``reason`` is a stable code the
         frontend can localize when TTS was requested but cannot be fulfilled.
         """
-        tts_settings = self.core_lifecycle.astrbot_config.get(
-            "provider_tts_settings", {}
+        tts_settings = (
+            self.core_lifecycle.astrbot_config.get("provider_tts_settings") or {}
         )
         if not tts_settings.get("enable"):
             return False, "globally_disabled"
@@ -874,7 +874,11 @@ class ChatRoute(Route):
                 # to the previously saved record instead of inserting an empty bubble.
                 # With no prior record to attach to, fall through and persist a
                 # metadata-only record so stats/refs are not silently dropped.
-                if not message_parts_to_save and last_saved_record is not None:
+                if (
+                    not message_parts_to_save
+                    and last_saved_record is not None
+                    and last_saved_content is not None
+                ):
                     if agent_stats or refs:
                         merged_content = build_bot_history_content(
                             last_saved_content.get("message", []),
