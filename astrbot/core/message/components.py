@@ -453,6 +453,13 @@ class Image(BaseMessageComponent):
     def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
 
+    def __repr__(self) -> str:
+        """截断 base64 数据，避免日志中打印完整的图片数据。"""
+        f = self.file or ""
+        if f.startswith("base64://") and len(f) > 60:
+            f = f[:57] + "..."
+        return f"Image(file={f!r})"
+
     @staticmethod
     def fromURL(url: str, **_):
         if url.startswith("http://") or url.startswith("https://"):
