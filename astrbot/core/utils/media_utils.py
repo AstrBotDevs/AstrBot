@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypeAlias
 from urllib.parse import unquote, urlparse, urlsplit
 from urllib.request import url2pathname
 
@@ -81,6 +82,21 @@ DEFAULT_MEDIA_SUFFIXES = {
 }
 
 
+MediaRefStr: TypeAlias = str
+"""
+A media reference string accepted by MediaResolver: local path, file URI, HTTP(S),
+base64://, data URI, or legacy bare base64.
+
+Examples:
+    Local path: ``/tmp/image.png``
+    File URI: ``file:///tmp/image.png``
+    HTTP(S) URL: ``https://example.com/image.png``
+    base64:// payload: ``base64://iVBORw0KGgo...``
+    Data URI: ``data:image/png;base64,iVBORw0KGgo...``
+    Legacy bare base64: ``iVBORw0KGgo...``
+"""
+
+
 @dataclass(slots=True)
 class ResolvedMediaData:
     """Base64 media bytes plus the metadata needed by provider payloads.
@@ -123,7 +139,7 @@ class ResolvedMediaFile:
     keep a path after the resolver returns should use ``MediaResolver.to_path()``.
     """
 
-    source_ref: str
+    source_ref: MediaRefStr
     media_type: str
     path: Path
     mime_type: str | None = None
@@ -174,7 +190,7 @@ def is_file_uri(value: object) -> bool:
         return False
 
 
-def file_uri_to_path(file_uri: str) -> str:
+def file_uri_to_path(file_uri: MediaRefStr) -> str:
     """Normalize file URIs to local filesystem paths.
 
     Args:
@@ -353,7 +369,7 @@ def _cleanup_paths(cleanup_paths: list[Path] | None) -> None:
 
 
 async def _materialize_media_ref(
-    media_ref: str,
+    media_ref: MediaRefStr,
     *,
     media_type: str = "file",
     default_suffix: str | None = None,
@@ -474,7 +490,7 @@ class MediaResolver:
 
     def __init__(
         self,
-        media_ref: str,
+        media_ref: MediaRefStr,
         *,
         media_type: str = "file",
         default_suffix: str | None = None,
@@ -730,7 +746,7 @@ class MediaResolver:
 
 
 async def resolve_image_ref_to_base64_data(
-    image_ref: str,
+    image_ref: MediaRefStr,
     *,
     strict: bool = False,
     default_mime_type: str | None = "image/jpeg",
@@ -752,7 +768,7 @@ async def resolve_image_ref_to_base64_data(
 
 
 async def resolve_audio_ref_to_base64_data(
-    audio_ref: str,
+    audio_ref: MediaRefStr,
     *,
     preserve_mp3: bool = False,
     target_format: str | None = None,
@@ -779,7 +795,7 @@ async def resolve_audio_ref_to_base64_data(
 
 
 async def resolve_media_ref_to_base64_data(
-    media_ref: str,
+    media_ref: MediaRefStr,
     *,
     media_type: str,
     strict: bool = False,
