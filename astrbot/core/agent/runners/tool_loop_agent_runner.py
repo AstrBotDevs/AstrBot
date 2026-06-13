@@ -143,9 +143,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         "Do not return an empty response. "
         "Do not ignore the selected tools without explanation."
     )
-    REPEATED_TOOL_NOTICE_L1_THRESHOLD = 3
-    REPEATED_TOOL_NOTICE_L2_THRESHOLD = 4
-    REPEATED_TOOL_NOTICE_L3_THRESHOLD = 5
+    REPEATED_TOOL_NOTICE_DEFAULT_THRESHOLD = 3
     REPEATED_TOOL_NOTICE_L1_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] By the way, you have executed the same tool "
         "`{tool_name}` {streak} times consecutively. Double-check whether another "
@@ -224,6 +222,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
+        repeated_tool_notice_enabled: bool = True,
+        repeated_tool_notice_threshold: int = REPEATED_TOOL_NOTICE_DEFAULT_THRESHOLD,
         fallback_providers: list[Provider] | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
@@ -280,6 +280,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
         self._same_tool_streak = 0
+        self.repeated_tool_notice_enabled = bool(repeated_tool_notice_enabled)
+        self.repeated_tool_notice_threshold = (
+            self._normalize_repeated_tool_notice_threshold(
+                repeated_tool_notice_threshold
+            )
+        )
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -666,17 +672,34 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self._same_tool_streak = 1
         return self._same_tool_streak
 
+    @classmethod
+    def _normalize_repeated_tool_notice_threshold(cls, value: T.Any) -> int:
+        if isinstance(value, bool):
+            return cls.REPEATED_TOOL_NOTICE_DEFAULT_THRESHOLD
+        try:
+            threshold = int(value)
+        except (TypeError, ValueError):
+            return cls.REPEATED_TOOL_NOTICE_DEFAULT_THRESHOLD
+        return max(1, threshold)
+
     def _build_repeated_tool_call_guidance(self, tool_name: str, streak: int) -> str:
-        if streak < self.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
+        if not self.repeated_tool_notice_enabled:
             return ""
 
-        if streak >= self.REPEATED_TOOL_NOTICE_L3_THRESHOLD:
+        l1_threshold = self.repeated_tool_notice_threshold
+        l2_threshold = l1_threshold + 1
+        l3_threshold = l1_threshold + 2
+
+        if streak < l1_threshold:
+            return ""
+
+        if streak >= l3_threshold:
             return self.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
                 tool_name=tool_name,
                 streak=streak,
             )
 
-        if streak >= self.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
+        if streak >= l2_threshold:
             return self.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
                 tool_name=tool_name,
                 streak=streak,

@@ -156,6 +156,10 @@ DEFAULT_CONFIG = {
         "max_agent_step": 30,
         "tool_call_timeout": 120,
         "tool_schema_mode": "full",
+        "repeated_tool_call_notice": {
+            "enable": True,
+            "threshold": 3,
+        },
         "llm_safety_mode": True,
         "safety_mode_strategy": "system_prompt",  # TODO: llm judge
         "file_extract": {
@@ -2918,6 +2922,17 @@ CONFIG_METADATA_2 = {
                     "tool_schema_mode": {
                         "type": "string",
                     },
+                    "repeated_tool_call_notice": {
+                        "type": "object",
+                        "items": {
+                            "enable": {
+                                "type": "bool",
+                            },
+                            "threshold": {
+                                "type": "int",
+                            },
+                        },
+                    },
                     "file_extract": {
                         "type": "object",
                         "items": {
@@ -3801,6 +3816,23 @@ CONFIG_METADATA_3 = {
                         "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.repeated_tool_call_notice.enable": {
+                        "description": "连续工具调用提醒",
+                        "type": "bool",
+                        "hint": "开启后，当模型连续调用同一个工具达到阈值时，会向模型注入 SYSTEM NOTICE，提醒其检查是否陷入重复调用。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.repeated_tool_call_notice.threshold": {
+                        "description": "触发连续调用提醒的次数",
+                        "type": "int",
+                        "hint": "同一个工具连续调用达到该次数时，开始提醒LLM，默认 3",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.repeated_tool_call_notice.enable": True,
                         },
                     },
                     "provider_settings.wake_prefix": {
