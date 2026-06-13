@@ -114,6 +114,9 @@
   },
   "reasoning": {
     "thinking": "Thinking Process",
+    "summarySeparator": ", ",
+    "thinkSummary": "Thought {count} times",
+    "toolSummary": "used {count} tools",
     "think": "Thinking",
     "toolUsed": "Using Tool"
   },
@@ -161,6 +164,11 @@
       "reconnected": "Chat connection re-established",
       "failed": "Connection failed, please refresh the page"
     }
+  },
+  "commandSuggestion": {
+    "navigate": "Navigate",
+    "select": "Select",
+    "close": "Close"
   },
   "errors": {
     "sendMessageFailed": "Failed to send message, please try again",

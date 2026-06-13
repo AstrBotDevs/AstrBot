@@ -4,6 +4,9 @@
     :content="threadedContent"
     :is-dark="isDark"
     :custom-html-tags="threadedCustomHtmlTags"
+    :final="!isStreaming"
+    :smooth-streaming="isStreaming ? 'auto' : false"
+    :fade="false"
     :typewriter="false"
     :max-live-nodes="0"
   />
@@ -20,6 +23,7 @@ const props = defineProps<{
   refs: { used?: Array<Record<string, unknown>> } | null;
   isDark: boolean;
   customHtmlTags: string[];
+  isStreaming?: boolean;
 }>();
 
 const emit = defineEmits<{

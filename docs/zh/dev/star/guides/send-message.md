@@ -1,4 +1,3 @@
-
 # 消息的发送
 
 ## 被动消息
@@ -93,14 +92,14 @@ from astrbot.api.event import filter, AstrMessageEvent
 async def test(self, event: AstrMessageEvent):
     from astrbot.api.message_components import Video
     # fromFileSystem 需要用户的协议端和机器人端处于一个系统中。
-    music = Video.fromFileSystem(
+    video = Video.fromFileSystem(
         path="test.mp4"
     )
     # 更通用
-    music = Video.fromURL(
+    video = Video.fromURL(
         url="https://example.com/video.mp4"
     )
-    yield event.chain_result([music])
+    yield event.chain_result([video])
 ```
 
 ![发送视频消息](https://files.astrbot.app/docs/source/images/plugin/db93a2bb-671c-4332-b8ba-9a91c35623c2.png)

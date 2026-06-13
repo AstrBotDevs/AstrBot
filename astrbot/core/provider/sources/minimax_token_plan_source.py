@@ -1,17 +1,9 @@
+import httpx
+
 from astrbot import logger
 from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 from ..register import register_provider_adapter
-
-MINIMAX_TOKEN_PLAN_MODELS = [
-    "MiniMax-M2.7",
-    "MiniMax-M2.7-highspeed",
-    "MiniMax-M2.5",
-    "MiniMax-M2.5-highspeed",
-    "MiniMax-M2.1",
-    "MiniMax-M2.1-highspeed",
-    "MiniMax-M2",
-]
 
 
 @register_provider_adapter(
@@ -21,9 +13,9 @@ MINIMAX_TOKEN_PLAN_MODELS = [
 class ProviderMiniMaxTokenPlan(ProviderAnthropic):
     """MiniMax Token Plan provider.
 
-    The Token Plan API does not support the /models endpoint, so get_models()
-    returns a hard-coded model list. This is a Token Plan API limitation.
-    See https://github.com/AstrBotDevs/AstrBot/issues/7585 for details.
+    The model list is fetched dynamically from the MiniMax API's /v1/models
+    endpoint, so newly released models are automatically discovered without
+    a code change. The default model is MiniMax-M3, the current flagship.
     """
 
     def __init__(
@@ -45,19 +37,25 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
             provider_settings,
         )
 
-        configured_model = provider_config.get("model", "MiniMax-M2.7")
-        if configured_model not in MINIMAX_TOKEN_PLAN_MODELS:
-            logger.warning(
-                f"Configured model {configured_model!r} is not in the known "
-                f"Token Plan model list "
-                f"({', '.join(MINIMAX_TOKEN_PLAN_MODELS)}). "
-                f"The model may still work if your plan supports it. "
-                f"If you encounter errors, please check your plan's "
-                f"model availability."
-            )
-
+        configured_model = provider_config.get("model", "MiniMax-M3")
         self.set_model(configured_model)
 
     async def get_models(self) -> list[str]:
-        """Return the hard-coded known model list because Token Plan cannot fetch it dynamically."""
-        return MINIMAX_TOKEN_PLAN_MODELS.copy()
+        """Dynamically fetch available models from the MiniMax API."""
+        key = self.chosen_api_key
+        if not key:
+            logger.warning("No API key configured for MiniMax Token Plan.")
+            return []
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    "https://api.minimaxi.com/v1/models",
+                    headers={"Authorization": f"Bearer {key}"},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return [m["id"] for m in data.get("data", [])]
+        except Exception as e:
+            logger.error(f"Failed to fetch MiniMax model list: {e}")
+            return []

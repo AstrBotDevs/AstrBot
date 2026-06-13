@@ -135,15 +135,7 @@ class ProviderOpenAIWhisperAPI(STTProvider):
 
                 audio_url = output_path
 
-        # Open the audio file and pass the handle through to the OpenAI SDK.
-        # The existing test harness expects a real file-like object (asserts on
-        # `.name` and calls `.close()`), so we keep the SDK contract identical
-        # to the original implementation and add an explicit `finally`-close
-        # so the handle is released before `os.remove(audio_url)`. The
-        # previous code leaked the handle, which caused EBUSY on Windows and
-        # accumulated FDs under POSIX concurrency.
-        audio_file = open(audio_url, "rb")
-        try:
+        with open(audio_url, "rb") as audio_file:
             result = await self.client.audio.transcriptions.create(
                 model=self.model_name,
                 file=("audio.wav", audio_file),
@@ -151,8 +143,6 @@ class ProviderOpenAIWhisperAPI(STTProvider):
                 prompt=self.prompt or NOT_GIVEN,
                 temperature=self.temperature,
             )
-        finally:
-            audio_file.close()
 
         # Remove any temp files we created: the downloaded source (if any) and
         # the format-converted output (if any). Previously only `output_path`
