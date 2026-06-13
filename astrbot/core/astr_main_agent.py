@@ -689,7 +689,20 @@ async def _append_video_attachment(
         video_path = await video.convert_to_file_path()
     except Exception as exc:  # noqa: BLE001
         if quoted:
-            logger.error("Error processing quoted video attachment: %s", exc)
+            logger.debug(
+                "Quoted video attachment is not locally resolvable, preserving ref: %s",
+                exc,
+            )
+            video_ref = video.path or video.url or video.file or ""
+            ref_name = os.path.basename(video_ref.split("?", 1)[0].rstrip("/"))
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=(
+                        "[Video Attachment in quoted message: "
+                        f"name {ref_name or 'video'}, ref {video_ref}]"
+                    )
+                )
+            )
         else:
             logger.error("Error processing video attachment: %s", exc)
         return
@@ -942,10 +955,7 @@ async def _decorate_llm_request(
                 plugin_context,
                 img_cap_prov_id,
             )
-            quote_images_already_captioned = any(
-                "<image_caption>" in getattr(part, "text", "")
-                for part in req.extra_user_content_parts
-            )
+            quote_images_already_captioned = True
 
     quoted_message_settings = _get_quoted_message_parser_settings(cfg)
     await _process_quote_message(

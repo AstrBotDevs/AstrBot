@@ -1,17 +1,11 @@
 import asyncio
-import base64
-import binascii
 import copy
 import inspect
 import json
 import random
 import re
-import uuid
 from collections.abc import AsyncGenerator
-from io import BytesIO
-from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import unquote, urlparse
 
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
@@ -20,8 +14,6 @@ from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion_usage import CompletionUsage
-from PIL import Image as PILImage
-from PIL import UnidentifiedImageError
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -37,9 +29,10 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file, download_image_by_url
-from astrbot.core.utils.media_utils import ensure_wav
+from astrbot.core.utils.media_utils import (
+    describe_media_ref,
+    resolve_media_ref_to_base64_data,
+)
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
@@ -56,17 +49,6 @@ from ..register import register_provider_adapter
 )
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
-    # 部分 OpenAI 兼容中转站会校验 data URL 的 MIME 类型是否和图片字节一致。
-    # 这里统一维护格式映射，确保本地文件和 `base64://` 图片引用使用相同声明。
-    _IMAGE_FORMAT_MIME_TYPES = {
-        "JPEG": "image/jpeg",
-        "PNG": "image/png",
-        "GIF": "image/gif",
-        "WEBP": "image/webp",
-        "BMP": "image/bmp",
-        "TIFF": "image/tiff",
-        "AVIF": "image/avif",
-    }
 
     @classmethod
     def _truncate_error_text_candidate(cls, text: str) -> str:
@@ -193,110 +175,18 @@ class ProviderOpenAIOfficial(Provider):
             return True
         return False
 
-    @classmethod
-    def _encode_image_file_to_data_url(
-        cls,
-        image_path: str,
-        *,
-        mode: Literal["safe", "strict"],
-    ) -> str | None:
-        try:
-            image_bytes = Path(image_path).read_bytes()
-        except OSError:
-            if mode == "strict":
-                raise
-            return None
-
-        image_format = cls._detect_image_format(image_bytes)
-        if image_format is None:
-            if mode == "strict":
-                raise ValueError(f"Invalid image file: {image_path}")
-            return None
-
-        mime_type = cls._image_format_to_mime_type(image_format)
-        image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
-        return f"data:{mime_type};base64,{image_bs64}"
-
-    @classmethod
-    def _detect_image_format(cls, image_bytes: bytes) -> str | None:
-        """返回 Pillow 校验后的图片格式，非法图片返回 None。"""
-        try:
-            # verify() 只校验图片容器，不完整解码像素。
-            # 这里仅需要可信的格式标签，因此这种方式足够且开销较小。
-            with PILImage.open(BytesIO(image_bytes)) as image:
-                image.verify()
-                return str(image.format or "").upper()
-        except (OSError, UnidentifiedImageError):
-            return None
-
-    @classmethod
-    def _image_format_to_mime_type(cls, image_format: str | None) -> str:
-        """将 Pillow 图片格式映射为 data URL 使用的 MIME 类型。"""
-        # 未识别格式保持历史 JPEG 兜底，兼容传入任意 `base64://` 内容的旧调用方。
-        return cls._IMAGE_FORMAT_MIME_TYPES.get(
-            str(image_format or "").upper(), "image/jpeg"
-        )
-
-    @classmethod
-    def _base64_image_ref_to_data_url(cls, image_ref: str) -> str:
-        """将 `base64://` 图片引用转换为带真实 MIME 的 data URL。"""
-        raw_base64 = image_ref.removeprefix("base64://")
-        mime_type = "image/jpeg"
-        try:
-            # 平台适配器可能通过 `base64://` 传入 PNG/GIF/WebP 等图片字节，
-            # 但不会额外携带 MIME 元数据。发送 OpenAI 请求前先识别真实格式，
-            # 避免把 PNG 等图片错误声明为 JPEG。
-            image_bytes = base64.b64decode(raw_base64)
-        except (binascii.Error, ValueError):
-            # 对错误或非图片 base64 保持旧行为：继续返回 JPEG data URL，
-            # 避免让历史调用方因为格式识别失败而直接抛异常。
-            pass
-        else:
-            image_format = cls._detect_image_format(image_bytes)
-            mime_type = cls._image_format_to_mime_type(image_format)
-        return f"data:{mime_type};base64,{raw_base64}"
-
-    @staticmethod
-    def _file_uri_to_path(file_uri: str) -> str:
-        """Normalize file URIs to paths.
-
-        `file://localhost/...` and drive-letter forms are treated as local paths.
-        Other non-empty hosts are preserved as UNC-style paths.
-        """
-        parsed = urlparse(file_uri)
-        if parsed.scheme != "file":
-            return file_uri
-
-        netloc = unquote(parsed.netloc or "")
-        path = unquote(parsed.path or "")
-        if re.fullmatch(r"[A-Za-z]:", netloc):
-            return str(Path(f"{netloc}{path}"))
-        if re.match(r"^/[A-Za-z]:/", path):
-            path = path[1:]
-        if netloc and netloc != "localhost":
-            path = f"//{netloc}{path}"
-        return str(Path(path))
-
     async def _image_ref_to_data_url(
         self,
         image_ref: str,
         *,
         mode: Literal["safe", "strict"] = "safe",
     ) -> str | None:
-        if image_ref.startswith("base64://"):
-            return self._base64_image_ref_to_data_url(image_ref)
-
-        if image_ref.startswith("http"):
-            image_path = await download_image_by_url(image_ref)
-        elif image_ref.startswith("file://"):
-            image_path = self._file_uri_to_path(image_ref)
-        else:
-            image_path = image_ref
-
-        return self._encode_image_file_to_data_url(
-            image_path,
-            mode=mode,
+        image_data = await resolve_media_ref_to_base64_data(
+            image_ref,
+            media_type="image",
+            strict=mode == "strict",
         )
+        return image_data.to_data_url() if image_data else None
 
     async def _resolve_image_part(
         self,
@@ -304,14 +194,11 @@ class ProviderOpenAIOfficial(Provider):
         *,
         image_detail: str | None = None,
     ) -> dict | None:
-        if image_url.startswith("data:"):
-            image_payload = {"url": image_url}
-        else:
-            image_data = await self._image_ref_to_data_url(image_url, mode="safe")
-            if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                return None
-            image_payload = {"url": image_data}
+        image_data = await self._image_ref_to_data_url(image_url, mode="safe")
+        if not image_data:
+            logger.warning("图片预处理结果为空，将忽略。")
+            return None
+        image_payload = {"url": image_data}
 
         if image_detail:
             image_payload["detail"] = image_detail
@@ -355,53 +242,26 @@ class ProviderOpenAIOfficial(Provider):
 
         return url
 
-    async def _audio_ref_to_local_path(self, audio_ref: str) -> tuple[str, list[Path]]:
-        cleanup_paths: list[Path] = []
-        if audio_ref.startswith("http"):
-            suffix = Path(urlparse(audio_ref).path).suffix or ".wav"
-            temp_dir = Path(get_astrbot_temp_path())
-            temp_dir.mkdir(parents=True, exist_ok=True)
-            target_path = temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
-            await download_file(audio_ref, str(target_path))
-            cleanup_paths.append(target_path)
-            return str(target_path), cleanup_paths
-        if audio_ref.startswith("file://"):
-            return self._file_uri_to_path(audio_ref), cleanup_paths
-        return audio_ref, cleanup_paths
-
     async def _resolve_audio_part(self, audio_ref: str) -> dict | None:
-        cleanup_paths: list[Path] = []
         try:
-            audio_path, cleanup_paths = await self._audio_ref_to_local_path(audio_ref)
-            suffix = Path(audio_path).suffix.lower()
-            if suffix == ".mp3":
-                audio_format = "mp3"
-            else:
-                converted_audio_path = await ensure_wav(audio_path)
-                if converted_audio_path != audio_path:
-                    cleanup_paths.append(Path(converted_audio_path))
-                audio_path = converted_audio_path
-                audio_format = "wav"
-            audio_bytes = Path(audio_path).read_bytes()
+            audio_data = await resolve_media_ref_to_base64_data(
+                audio_ref,
+                media_type="audio",
+                strict=True,
+            )
         except Exception as exc:
-            logger.warning("音频 %s 预处理失败，将忽略。错误: %s", audio_ref, exc)
+            logger.warning("音频预处理失败，将忽略。错误: %s", exc)
             return None
-        finally:
-            for cleanup_path in cleanup_paths:
-                try:
-                    cleanup_path.unlink(missing_ok=True)
-                except Exception as cleanup_exc:
-                    logger.warning(
-                        "Failed to cleanup %s: %s",
-                        cleanup_path,
-                        cleanup_exc,
-                    )
+
+        if not audio_data or not audio_data.format:
+            logger.warning("音频预处理结果为空，将忽略。")
+            return None
 
         return {
             "type": "input_audio",
             "input_audio": {
-                "data": base64.b64encode(audio_bytes).decode("utf-8"),
-                "format": audio_format,
+                "data": audio_data.base64_data,
+                "format": audio_data.format,
             },
         }
 
@@ -1476,7 +1336,9 @@ class ProviderOpenAIOfficial(Provider):
         """将图片转换为 base64"""
         image_data = await self._image_ref_to_data_url(image_url, mode="strict")
         if image_data is None:
-            raise RuntimeError(f"Failed to encode image data: {image_url}")
+            raise RuntimeError(
+                f"Failed to encode image data: {describe_media_ref(image_url)}"
+            )
         return image_data
 
     async def terminate(self):

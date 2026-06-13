@@ -26,7 +26,7 @@ from astrbot.api.platform import (
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import convert_audio_to_wav
+from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
@@ -470,11 +470,11 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 f.write(resp.content)
 
             try:
-                path_wav = os.path.join(
-                    temp_dir,
-                    f"weixin_offacc_{msg.media_id}.wav",
-                )
-                path_wav = await convert_audio_to_wav(path, path_wav)
+                path_wav = await MediaResolver(
+                    path,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
             except Exception as e:
                 logger.error(
                     f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。",

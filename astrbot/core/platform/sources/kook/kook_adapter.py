@@ -15,6 +15,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.message.components import BaseMessageComponent, File, Record, Video
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .kook_client import KookClient
 from .kook_config import KookConfig
@@ -413,7 +414,12 @@ class KookPlatformAdapter(Platform):
             elif file_type == KookModuleType.VIDEO:
                 message.append(Video(file=file_url))
             elif file_type == KookModuleType.AUDIO:
-                message.append(Record(file=file_url))
+                path_wav = await MediaResolver(
+                    file_url,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                message.append(Record(file=path_wav, url=path_wav))
             else:
                 logger.warning(f"[KOOK] 跳过未知文件类型: {file_type.name}")
 

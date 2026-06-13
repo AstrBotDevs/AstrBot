@@ -29,7 +29,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_image_by_url, file_to_base64
+from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
 
@@ -681,19 +681,17 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             if isinstance(i, Plain):
                 plain_text += i.text
             elif isinstance(i, Image) and not image_base64:
-                if i.file and i.file.startswith("file:///"):
-                    image_base64 = file_to_base64(i.file[8:])
-                    image_file_path = i.file[8:]
-                elif i.file and i.file.startswith("http"):
-                    image_file_path = await download_image_by_url(i.file)
-                    image_base64 = file_to_base64(image_file_path)
-                elif i.file and i.file.startswith("base64://"):
-                    image_base64 = i.file
-                elif i.file:
-                    image_base64 = file_to_base64(i.file)
-                else:
+                if not i.file:
                     raise ValueError("Unsupported image file format")
-                image_base64 = image_base64.removeprefix("base64://")
+                image_base64 = await MediaResolver(
+                    i.file,
+                    media_type="image",
+                ).to_base64()
+                if i.file.startswith("file://") or os.path.exists(i.file):
+                    image_file_path = await MediaResolver(
+                        i.file,
+                        media_type="image",
+                    ).to_path()
             elif isinstance(i, Record):
                 if i.file:
                     record_wav_path = await i.convert_to_file_path()  # wav 路径

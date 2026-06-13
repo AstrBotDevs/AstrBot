@@ -26,7 +26,6 @@ import base64
 import json
 import os
 import sys
-import urllib.parse
 import uuid
 from enum import Enum
 from pathlib import Path, PurePosixPath
@@ -38,7 +37,8 @@ else:
 
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file, download_image_by_url, file_to_base64
+from astrbot.core.utils.io import download_file
+from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path
 
 
 class ComponentType(str, Enum):
@@ -149,9 +149,7 @@ class Record(BaseMessageComponent):
         file:///home/user/... → /home/user/... (Linux)
         其中的 URL 编码（如 %20 空格）也会被解码。
         """
-        path = uri.removeprefix("file:///")
-        path = urllib.parse.unquote(path)
-        return path
+        return file_uri_to_path(uri)
 
     async def _resolve_file_source(self) -> str:
         """选择可用的文件源。
@@ -163,9 +161,10 @@ class Record(BaseMessageComponent):
         # 1) 优先尝试 file：如果它已包含完整 URI 或已知格式，直接使用
         if self.file:
             if (
-                self.file.startswith("file:///")
+                self.file.startswith("file://")
                 or self.file.startswith("http")
                 or self.file.startswith("base64://")
+                or self.file.startswith("data:audio/")
                 or os.path.exists(self.file)
             ):
                 return self.file
@@ -173,11 +172,12 @@ class Record(BaseMessageComponent):
         # 2) 尝试 url（可能是 file:/// 或 http 链接）
         if self.url:
             if (
-                self.url.startswith("file:///")
+                self.url.startswith("file://")
                 or self.url.startswith("http")
+                or self.url.startswith("data:audio/")
                 or os.path.exists(self.url)
                 or (
-                    self.url.startswith("file:///")
+                    self.url.startswith("file://")
                     and os.path.exists(self._decode_file_uri(self.url))
                 )
             ):
@@ -200,23 +200,11 @@ class Record(BaseMessageComponent):
         file_source = await self._resolve_file_source()
         if not file_source:
             raise Exception(f"not a valid file: {self.file}")
-        if file_source.startswith("file:///"):
-            return self._decode_file_uri(file_source)
-        if file_source.startswith("http"):
-            file_path = await download_image_by_url(file_source)
-            return os.path.abspath(file_path)
-        if file_source.startswith("base64://"):
-            bs64_data = file_source.removeprefix("base64://")
-            image_bytes = base64.b64decode(bs64_data)
-            file_path = os.path.join(
-                get_astrbot_temp_path(), f"recordseg_{uuid.uuid4()}.wav"
-            )
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-            return os.path.abspath(file_path)
-        if os.path.exists(file_source):
-            return os.path.abspath(file_source)
-        raise Exception(f"not a valid file: {self.file}")
+        return await MediaResolver(
+            file_source,
+            media_type="audio",
+            default_suffix=".wav",
+        ).to_path(target_format="wav")
 
     async def convert_to_base64(self) -> str:
         """将语音统一转换为 base64 编码。这个方法避免了手动判断语音数据类型，直接返回语音数据的 base64 编码。
@@ -228,19 +216,11 @@ class Record(BaseMessageComponent):
         file_source = await self._resolve_file_source()
         if not file_source:
             raise Exception(f"not a valid file: {self.file}")
-        if file_source.startswith("file:///"):
-            bs64_data = file_to_base64(self._decode_file_uri(file_source))
-        elif file_source.startswith("http"):
-            file_path = await download_image_by_url(file_source)
-            bs64_data = file_to_base64(file_path)
-        elif file_source.startswith("base64://"):
-            bs64_data = file_source
-        elif os.path.exists(file_source):
-            bs64_data = file_to_base64(file_source)
-        else:
-            raise Exception(f"not a valid file: {self.file}")
-        bs64_data = bs64_data.removeprefix("base64://")
-        return bs64_data
+        return await MediaResolver(
+            file_source,
+            media_type="audio",
+            default_suffix=".wav",
+        ).to_base64(target_format="wav")
 
     async def register_to_file_service(self) -> str:
         """将语音注册到文件服务。
@@ -269,6 +249,7 @@ class Record(BaseMessageComponent):
 class Video(BaseMessageComponent):
     type: ComponentType = ComponentType.Video
     file: str
+    url: str | None = ""
     cover: str | None = ""
     # 额外
     path: str | None = ""
@@ -286,6 +267,28 @@ class Video(BaseMessageComponent):
             return Video(file=url, **_)
         raise Exception("not a valid url")
 
+    @staticmethod
+    def fromBase64(base64_data: str, **_):
+        return Video(file=f"base64://{base64_data}", **_)
+
+    async def _resolve_file_source(self) -> str:
+        for candidate in (self.file, self.url):
+            if not candidate:
+                continue
+            if (
+                candidate.startswith("file://")
+                or candidate.startswith("http")
+                or candidate.startswith("base64://")
+                or candidate.startswith("data:video/")
+                or os.path.exists(candidate)
+            ):
+                return candidate
+
+        if self.path and os.path.exists(self.path):
+            return self.path
+
+        return self.file or self.url or ""
+
     async def convert_to_file_path(self) -> str:
         """将这个视频统一转换为本地文件路径。这个方法避免了手动判断视频数据类型，直接返回视频数据的本地路径（如果是网络 URL，则会自动进行下载）。
 
@@ -293,20 +296,23 @@ class Video(BaseMessageComponent):
             str: 视频的本地路径，以绝对路径表示。
 
         """
-        url = self.file
-        if url and url.startswith("file:///"):
-            return url[8:]
-        if url and url.startswith("http"):
-            video_file_path = os.path.join(
-                get_astrbot_temp_path(), f"videoseg_{uuid.uuid4().hex}"
-            )
-            await download_file(url, video_file_path)
-            if os.path.exists(video_file_path):
-                return os.path.abspath(video_file_path)
-            raise Exception(f"download failed: {url}")
-        if os.path.exists(url):
-            return os.path.abspath(url)
-        raise Exception(f"not a valid file: {url}")
+        file_source = await self._resolve_file_source()
+        if not file_source:
+            raise Exception(f"not a valid file: {self.file}")
+
+        if file_source.startswith("file:///"):
+            return file_source[8:]
+        if file_source.startswith("file://"):
+            return file_uri_to_path(file_source)
+        if file_source.startswith(("http://", "https://", "base64://", "data:")):
+            return await MediaResolver(
+                file_source,
+                media_type="video",
+                default_suffix=".mp4",
+            ).to_path()
+        if os.path.exists(file_source):
+            return os.path.abspath(file_source)
+        raise Exception(f"not a valid file: {file_source}")
 
     async def register_to_file_service(self) -> str:
         """将视频注册到文件服务。
@@ -485,23 +491,7 @@ class Image(BaseMessageComponent):
         url = self.url or self.file
         if not url:
             raise ValueError("No valid file or URL provided")
-        if url.startswith("file:///"):
-            return url[8:]
-        if url.startswith("http"):
-            image_file_path = await download_image_by_url(url)
-            return os.path.abspath(image_file_path)
-        if url.startswith("base64://"):
-            bs64_data = url.removeprefix("base64://")
-            image_bytes = base64.b64decode(bs64_data)
-            image_file_path = os.path.join(
-                get_astrbot_temp_path(), f"imgseg_{uuid.uuid4()}.jpg"
-            )
-            with open(image_file_path, "wb") as f:
-                f.write(image_bytes)
-            return os.path.abspath(image_file_path)
-        if os.path.exists(url):
-            return os.path.abspath(url)
-        raise Exception(f"not a valid file: {url}")
+        return await MediaResolver(url, media_type="image").to_path()
 
     async def convert_to_base64(self) -> str:
         """将这个图片统一转换为 base64 编码。这个方法避免了手动判断图片数据类型，直接返回图片数据的 base64 编码。
@@ -514,19 +504,7 @@ class Image(BaseMessageComponent):
         url = self.url or self.file
         if not url:
             raise ValueError("No valid file or URL provided")
-        if url.startswith("file:///"):
-            bs64_data = file_to_base64(url[8:])
-        elif url.startswith("http"):
-            image_file_path = await download_image_by_url(url)
-            bs64_data = file_to_base64(image_file_path)
-        elif url.startswith("base64://"):
-            bs64_data = url
-        elif os.path.exists(url):
-            bs64_data = file_to_base64(url)
-        else:
-            raise Exception(f"not a valid file: {url}")
-        bs64_data = bs64_data.removeprefix("base64://")
-        return bs64_data
+        return await MediaResolver(url, media_type="image").to_base64()
 
     async def register_to_file_service(self) -> str:
         """将图片注册到文件服务。

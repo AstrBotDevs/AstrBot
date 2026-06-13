@@ -29,6 +29,7 @@ from astrbot.api.platform import (
 from astrbot.core import astrbot_config
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .weixin_oc_client import WeixinOCClient
 from .weixin_oc_event import WeixinOCMessageEvent
@@ -823,7 +824,12 @@ class WeixinOCAdapter(Platform):
                 file_name="voice.silk",
                 fallback_suffix=".silk",
             )
-            return Record.fromFileSystem(str(voice_path))
+            path_wav = await MediaResolver(
+                str(voice_path),
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
+            return Record(file=path_wav, url=path_wav)
 
         return None
 
