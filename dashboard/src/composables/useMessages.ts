@@ -157,8 +157,10 @@ export function useMessages(options: UseMessagesOptions) {
    * @author astrbot / 2026-06-10
    */
   // value 可能是 Snapshot | null:
-  //   - Snapshot: 来自 create/add/update/query/delete(删单条) 的正常快照
-  //   - null:     来自 todo_clear — 显式清空,让 UI 的 summary bar 消失
+  //   - Snapshot: 来自 todo_create / todo_modify(add|update) / todo_modify(delete-单条) /
+  //               todo_query  的正常快照(后端会回传 list+stats+attention_items)
+  //   - null:     来自 todo_clear — 显式清空,或 todo_modify(delete) 把最后一项
+  //               删光(effective_total===0) 时也走 null 让 bar 隐藏
   const _pendingTodoSnapshots: Record<
     string,
     { list: any; stats: any; attentionItems: number[] } | null
@@ -855,9 +857,11 @@ export function useMessages(options: UseMessagesOptions) {
         if (sessionId && toolResult && typeof toolResult === "object" && !Array.isArray(toolResult)) {
           const snap = _tryParseTodoSnapshotExternal(toolResult);
           if (snap) {
-            // 情况 A: 正常快照 (create / add / update / query / delete-单条)
-            //   进一步细分: 如果 effective_total === 0 (例如 todo_delete 把最后一项删光,
-            //   或 todo_create 时 items=[]), UI 上没有可总结的内容, 也走 null 让 bar 隐藏。
+            // 情况 A: 正常快照 (todo_create / todo_modify(add|update) /
+            //          todo_modify(delete-单条,list 还非空) / todo_query)
+            //   进一步细分: 如果 effective_total === 0 (例如 todo_modify(delete) 把
+            //   最后一项删光,或 todo_create 时 items=[]), UI 上没有可总结的内容,
+            //   也走 null 让 bar 隐藏。
             //   注意: stats.effective_total 已排除 cancelled 项,所以这是"实际还有多少要做"的真实计数。
             if (
               typeof snap.stats?.effective_total === "number" &&
