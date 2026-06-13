@@ -272,14 +272,16 @@ class DiscordPlatformAdapter(Platform):
         abm = self._convert_message_to_abm(data)
         for component in abm.message:
             if isinstance(component, Record):
-                path_wav = await MediaResolver(
-                    component.url or component.file,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
-                component.file = path_wav
-                component.url = path_wav
-                component.path = path_wav
+                audio_ref = component.url or component.file
+                if audio_ref:
+                    path_wav = await MediaResolver(
+                        audio_ref,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_path(target_format="wav")
+                    component.file = path_wav
+                    component.url = path_wav
+                    component.path = path_wav
         return abm
 
     async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
