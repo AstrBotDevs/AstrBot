@@ -572,11 +572,10 @@ class QQOfficialPlatformAdapter(Platform):
             else:
                 abm.sender = MessageMember(message.author.user_openid, "")
             # Parse face messages to readable text
+            raw_content = message.content.strip() if message.content else ""
             abm.message_str = (
                 QQOfficialPlatformAdapter._sanitize_command_interaction_tags(
-                    QQOfficialPlatformAdapter._parse_face_message(
-                        message.content.strip()
-                    )
+                    QQOfficialPlatformAdapter._parse_face_message(raw_content)
                 )
             )
             abm.self_id = "unknown_selfid"
@@ -596,10 +595,11 @@ class QQOfficialPlatformAdapter(Platform):
             else:
                 abm.self_id = ""
 
+            raw_content = message.content or ""
             plain_content = (
                 QQOfficialPlatformAdapter._sanitize_command_interaction_tags(
                     QQOfficialPlatformAdapter._parse_face_message(
-                        message.content.replace(
+                        raw_content.replace(
                             "<@!" + str(abm.self_id) + ">",
                             "",
                         ).strip()

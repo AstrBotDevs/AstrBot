@@ -17,13 +17,27 @@ class FakeAuthor:
     username = "author-name"
 
 
+class FakeMention:
+    id = "bot-id"
+
+
 class FakeGroupMessage:
-    def __init__(self, content: str) -> None:
+    def __init__(self, content: str | None) -> None:
         self.id = "message-id"
         self.content = content
         self.author = FakeAuthor()
         self.group_openid = "group-openid"
         self.attachments = []
+
+
+class FakeGuildMessage:
+    def __init__(self, content: str | None) -> None:
+        self.id = "guild-message-id"
+        self.content = content
+        self.author = FakeAuthor()
+        self.mentions = [FakeMention()]
+        self.attachments = []
+        self.channel_id = "channel-id"
 
 
 def _plain_texts(message_components: list[object]) -> list[str]:
@@ -99,3 +113,43 @@ async def test_parse_from_qqofficial_sanitizes_message_str_and_plain_component(
 
     assert message.message_str == "hello /quick-map"
     assert _plain_texts(message.message) == ["hello /quick-map"]
+
+
+@pytest.mark.asyncio
+async def test_parse_from_qqofficial_handles_none_group_content(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        qqofficial_platform_adapter.botpy.message,
+        "GroupMessage",
+        FakeGroupMessage,
+    )
+    raw_message = FakeGroupMessage(None)
+
+    message = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        raw_message,
+        MessageType.GROUP_MESSAGE,
+    )
+
+    assert message.message_str == ""
+    assert _plain_texts(message.message) == [""]
+
+
+@pytest.mark.asyncio
+async def test_parse_from_qqofficial_handles_none_guild_content(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        qqofficial_platform_adapter.botpy.message,
+        "Message",
+        FakeGuildMessage,
+    )
+    raw_message = FakeGuildMessage(None)
+
+    message = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        raw_message,
+        MessageType.GROUP_MESSAGE,
+    )
+
+    assert message.message_str == ""
+    assert _plain_texts(message.message) == [""]
