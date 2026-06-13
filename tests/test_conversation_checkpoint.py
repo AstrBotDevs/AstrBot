@@ -1,10 +1,13 @@
 import pytest
 
 from astrbot.core.agent.message import (
+    AssistantMessageSegment,
     CheckpointData,
     CheckpointMessageSegment,
     Message,
     TextPart,
+    ToolCall,
+    ToolCallMessageSegment,
     bind_checkpoint_messages,
     dump_messages_with_checkpoints,
     get_checkpoint_id,
@@ -98,6 +101,70 @@ def test_dump_messages_filters_temp_content_parts():
     assert dump_messages_with_checkpoints(messages) == [
         {"role": "user", "content": [{"type": "text", "text": "persisted"}]},
         {"role": "assistant", "content": "ok"},
+    ]
+
+
+def test_dump_messages_filters_temp_messages():
+    temp_message = Message(role="tool", content="internal", tool_call_id="call_1")
+    temp_message._no_save = True
+    messages = [
+        Message(role="user", content="hello"),
+        temp_message,
+        Message(role="assistant", content="ok"),
+    ]
+
+    assert dump_messages_with_checkpoints(messages) == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "ok"},
+    ]
+
+
+def test_dump_messages_filters_temp_tool_calls_from_mixed_assistant_message():
+    assistant = AssistantMessageSegment(
+        content=None,
+        tool_calls=[
+            ToolCall(
+                id="call_hidden",
+                function=ToolCall.FunctionBody(
+                    name="transfer_to_subagent",
+                    arguments="{}",
+                ),
+            ),
+            ToolCall(
+                id="call_visible",
+                function=ToolCall.FunctionBody(
+                    name="visible_tool",
+                    arguments="{}",
+                ),
+            ),
+        ],
+    )
+    hidden_tool = ToolCallMessageSegment(
+        content="private",
+        tool_call_id="call_hidden",
+    )
+    hidden_tool._no_save = True
+    visible_tool = ToolCallMessageSegment(
+        content="public",
+        tool_call_id="call_visible",
+    )
+
+    assert dump_messages_with_checkpoints([assistant, hidden_tool, visible_tool]) == [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "type": "function",
+                    "id": "call_visible",
+                    "function": {
+                        "name": "visible_tool",
+                        "arguments": "{}",
+                    },
+                }
+            ],
+        },
+        {"role": "tool", "content": "public", "tool_call_id": "call_visible"},
     ]
 
 

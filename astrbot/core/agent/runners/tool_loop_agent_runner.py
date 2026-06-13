@@ -26,6 +26,7 @@ from tenacity import (
 )
 
 from astrbot import logger
+from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.message import ImageURLPart, TextPart, ThinkPart
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.agent.tool_image_cache import tool_image_cache
@@ -666,6 +667,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             self._same_tool_streak = 1
         return self._same_tool_streak
 
+    @staticmethod
+    def _is_silent_handoff_tool_call(
+        func_tool: FunctionTool | None,
+        func_tool_args: T.Any,
+    ) -> bool:
+        if not isinstance(func_tool, HandoffTool):
+            return False
+        if not isinstance(func_tool_args, dict):
+            return False
+        mode = func_tool_args.get("mode")
+        if mode is None:
+            mode = getattr(func_tool, "default_handoff_mode", "normal")
+        return str(mode).strip().lower() == "silent"
+
     def _build_repeated_tool_call_guidance(self, tool_name: str, streak: int) -> str:
         if streak < self.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
             return ""
@@ -900,6 +915,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
                 tool_calls_result=tool_call_result_blocks,
             )
+            if tool_call_result_blocks and all(
+                message._no_save for message in tool_call_result_blocks
+            ):
+                tool_calls_result.tool_calls_info._no_save = True
             # record the assistant message with tool calls
             self.run_context.messages.extend(
                 tool_calls_result.to_openai_messages_model()
@@ -999,21 +1018,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         ):
             tool_result_blocks_start = len(tool_call_result_blocks)
             tool_call_streak = self._track_tool_call_streak(func_tool_name)
-            yield _HandleFunctionToolsResult.from_message_chain(
-                MessageChain(
-                    type="tool_call",
-                    chain=[
-                        Json(
-                            data={
-                                "id": func_tool_id,
-                                "name": func_tool_name,
-                                "args": func_tool_args,
-                                "ts": time.time(),
-                            }
-                        )
-                    ],
-                )
-            )
+            is_silent_handoff = False
             try:
                 if not req.func_tool:
                     return
@@ -1033,6 +1038,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 #  Some API may return None for tools with no parameters
                 if func_tool_args is None:
                     func_tool_args = {}
+                is_silent_handoff = self._is_silent_handoff_tool_call(
+                    func_tool,
+                    func_tool_args,
+                )
+                if not is_silent_handoff:
+                    yield _HandleFunctionToolsResult.from_message_chain(
+                        MessageChain(
+                            type="tool_call",
+                            chain=[
+                                Json(
+                                    data={
+                                        "id": func_tool_id,
+                                        "name": func_tool_name,
+                                        "args": func_tool_args,
+                                        "ts": time.time(),
+                                    }
+                                )
+                            ],
+                        )
+                    )
                 logger.info(f"使用工具：{func_tool_name}，参数：{func_tool_args}")
 
                 if not func_tool:
@@ -1215,6 +1240,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
 
             if len(tool_call_result_blocks) > tool_result_blocks_start:
+                if is_silent_handoff:
+                    for block in tool_call_result_blocks[tool_result_blocks_start:]:
+                        block._no_save = True
+                    continue
                 tool_result_content = str(tool_call_result_blocks[-1].content)
                 yield _HandleFunctionToolsResult.from_message_chain(
                     MessageChain(

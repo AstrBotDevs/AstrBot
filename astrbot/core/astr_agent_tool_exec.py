@@ -138,7 +138,25 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         """
         if isinstance(tool, HandoffTool):
-            is_bg = tool_args.pop("background_task", False)
+            raw_mode = tool_args.get("mode")
+            mode = cls._resolve_handoff_mode(tool, raw_mode)
+            is_silent = mode == "silent"
+            mode_source = "explicit" if raw_mode is not None else "default"
+            background_requested = bool(tool_args.get("background_task", False))
+            is_bg = tool_args.pop("background_task", False) and not is_silent
+            background_state = (
+                "ignored_for_silent"
+                if background_requested and is_silent
+                else "enabled"
+                if is_bg
+                else "disabled"
+            )
+            logger.info(
+                f"SubAgent handoff mode={mode} "
+                f"(子代理静默调用={'开启' if is_silent else '未开启'}; source={mode_source}; "
+                f"background_task={background_state}) "
+                f"tool={tool.name}, agent={getattr(tool.agent, 'name', 'unknown')}"
+            )
             if is_bg:
                 async for r in cls._execute_handoff_background(
                     tool, run_context, **tool_args
@@ -292,6 +310,47 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 toolset.add_tool(tool_name_or_obj)
         return None if toolset.empty() else toolset
 
+    @staticmethod
+    def _resolve_handoff_mode(tool: HandoffTool, mode: T.Any) -> str:
+        if mode is not None:
+            resolved = str(mode).strip().lower()
+        else:
+            resolved = str(getattr(tool, "default_handoff_mode", "normal")).strip()
+        return resolved if resolved in {"normal", "silent"} else "normal"
+
+    @classmethod
+    def _is_silent_handoff_mode(cls, tool: HandoffTool, mode: T.Any) -> bool:
+        return cls._resolve_handoff_mode(tool, mode) == "silent"
+
+    @classmethod
+    def _remove_user_visible_tools_for_silent_handoff(
+        cls,
+        toolset: ToolSet | None,
+    ) -> ToolSet | None:
+        if toolset is None:
+            return None
+        toolset.remove_tool(SendMessageToUserTool.name)
+        return None if toolset.empty() else toolset
+
+    @classmethod
+    async def _format_handoff_response_text(
+        cls,
+        llm_resp,
+        *,
+        include_structured_chain: bool = False,
+    ) -> str:
+        result_chain = getattr(llm_resp, "result_chain", None)
+        if not include_structured_chain or not result_chain:
+            return llm_resp.completion_text
+
+        payload = {
+            "text": result_chain.get_plain_text(),
+            "components": [
+                await component.to_dict() for component in result_chain.chain
+            ],
+        }
+        return json.dumps(payload, ensure_ascii=False)
+
     @classmethod
     async def _execute_handoff(
         cls,
@@ -303,6 +362,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
     ):
         tool_args = dict(tool_args)
         input_ = tool_args.get("input")
+        is_silent = cls._is_silent_handoff_mode(tool, tool_args.get("mode"))
         if image_urls_prepared:
             prepared_image_urls = tool_args.get("image_urls")
             if isinstance(prepared_image_urls, list):
@@ -322,6 +382,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
 
         # Build handoff toolset from registered tools plus runtime computer tools.
         toolset = cls._build_handoff_toolset(run_context, tool.agent.tools)
+        if is_silent:
+            toolset = cls._remove_user_visible_tools_for_silent_handoff(toolset)
 
         ctx = run_context.context.context
         event = run_context.context.event
@@ -363,8 +425,12 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             tool_call_timeout=run_context.tool_call_timeout,
             stream=stream,
         )
+        response_text = await cls._format_handoff_response_text(
+            llm_resp,
+            include_structured_chain=is_silent,
+        )
         yield mcp.types.CallToolResult(
-            content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
+            content=[mcp.types.TextContent(type="text", text=response_text)]
         )
 
     @classmethod

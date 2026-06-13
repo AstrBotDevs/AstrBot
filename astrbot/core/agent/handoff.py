@@ -32,8 +32,20 @@ class HandoffTool(FunctionTool, Generic[TContext]):
         # Optional provider override for this subagent. When set, the handoff
         # execution will use this chat provider id instead of the global/default.
         self.provider_id: str | None = None
+        self.default_handoff_mode = "normal"
         # Note: Must assign after super().__init__() to prevent parent class from overriding this attribute
         self.agent = agent
+
+    def set_default_handoff_mode(self, mode: str) -> None:
+        self.default_handoff_mode = mode if mode in {"normal", "silent"} else "normal"
+        mode_schema = self.parameters.get("properties", {}).get("mode")
+        if not isinstance(mode_schema, dict):
+            return
+        mode_schema["description"] = (
+            f"Defaults to {self.default_handoff_mode}. "
+            "Use silent when the subagent should work privately: its result is returned only to the main agent for synthesis, "
+            "without showing this handoff tool call or result to the user."
+        )
 
     def default_parameters(self) -> dict:
         return {
@@ -54,6 +66,15 @@ class HandoffTool(FunctionTool, Generic[TContext]):
                         "Defaults to false. "
                         "Set to true if the task may take noticeable time, involves external tools, or the user does not need to wait. "
                         "Use false only for quick, immediate tasks."
+                    ),
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["normal", "silent"],
+                    "description": (
+                        "Defaults to normal. "
+                        "Use silent when the subagent should work privately: its result is returned only to the main agent for synthesis, "
+                        "without showing this handoff tool call or result to the user."
                     ),
                 },
             },
