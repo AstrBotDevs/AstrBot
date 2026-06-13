@@ -297,10 +297,8 @@ def get_sandbox_provider_info(provider_id: str) -> dict | None:
 
 
 def get_current_sandbox_provider_id(session_id: str) -> str | None:
-    current_sandbox_id = sandbox_manager.registry.get_current_sandbox_id(session_id)
-    if not current_sandbox_id:
-        return None
-    current_record = sandbox_manager.registry.get_sandbox(current_sandbox_id)
+    current = sandbox_manager.get_current_sandbox(session_id)
+    current_record = current.get("sandbox")
     if current_record is None:
         return None
     if current_record.get("status") in {
