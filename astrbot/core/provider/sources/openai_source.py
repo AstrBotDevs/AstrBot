@@ -49,6 +49,25 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
 
+# Common audio MIME types → file suffix, used when materializing a base64
+# `data:` audio URI to a temp file. Unknown types fall back to `.wav`.
+_AUDIO_DATA_URI_SUFFIXES = {
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/wave": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/ogg": ".ogg",
+    "audio/webm": ".webm",
+}
+
+
+def _truncate_for_log(value: str, limit: int = 80) -> str:
+    """Shorten a possibly huge value (e.g. a base64 `data:` URI) for logging."""
+    if len(value) <= limit:
+        return value
+    return f"{value[:limit]}...(len={len(value)})"
+
 
 @register_provider_adapter(
     "openai_chat_completion",
@@ -367,6 +386,20 @@ class ProviderOpenAIOfficial(Provider):
             return str(target_path), cleanup_paths
         if audio_ref.startswith("file://"):
             return self._file_uri_to_path(audio_ref), cleanup_paths
+        if audio_ref.startswith("data:"):
+            # Inline base64 audio (e.g. "data:audio/wav;base64,...."). Decode it
+            # to a temp file; otherwise it falls through and is later treated as
+            # a path, raising "File name too long" and silently dropping audio.
+            header, _, encoded = audio_ref.partition(",")
+            mime = header[len("data:") :].split(";", 1)[0].strip().lower()
+            suffix = _AUDIO_DATA_URI_SUFFIXES.get(mime, ".wav")
+            audio_bytes = base64.b64decode(encoded, validate=True)
+            temp_dir = Path(get_astrbot_temp_path())
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            target_path = temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
+            target_path.write_bytes(audio_bytes)
+            cleanup_paths.append(target_path)
+            return str(target_path), cleanup_paths
         return audio_ref, cleanup_paths
 
     async def _resolve_audio_part(self, audio_ref: str) -> dict | None:
@@ -384,7 +417,11 @@ class ProviderOpenAIOfficial(Provider):
                 audio_format = "wav"
             audio_bytes = Path(audio_path).read_bytes()
         except Exception as exc:
-            logger.warning("音频 %s 预处理失败，将忽略。错误: %s", audio_ref, exc)
+            logger.warning(
+                "音频 %s 预处理失败，将忽略。错误: %s",
+                _truncate_for_log(audio_ref),
+                exc,
+            )
             return None
         finally:
             for cleanup_path in cleanup_paths:

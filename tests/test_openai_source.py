@@ -1,6 +1,7 @@
 import base64
 import builtins
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -1807,5 +1808,58 @@ async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
         assert len(messages) == 2
         assert messages[0] == {"role": "user", "content": "hi"}
         assert messages[1] == {"role": "user", "content": "again"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_audio_ref_to_local_path_decodes_base64_data_uri():
+    """Inline base64 audio (a `data:` URI) must be decoded to a real temp file.
+
+    Otherwise it falls through and is treated as a filename, raising
+    `[Errno 36] File name too long`, so the audio is silently dropped.
+    Regression for #8676.
+    """
+    provider = _make_provider()
+    try:
+        raw = b"RIFF\x00\x00\x00\x00WAVEfmt fake-audio-bytes"
+        data_uri = "data:audio/wav;base64," + base64.b64encode(raw).decode("ascii")
+
+        path, cleanup_paths = await provider._audio_ref_to_local_path(data_uri)
+
+        resolved = Path(path)
+        assert resolved.exists()
+        assert resolved.read_bytes() == raw
+        assert resolved.suffix == ".wav"
+        assert resolved in cleanup_paths
+        for p in cleanup_paths:
+            p.unlink(missing_ok=True)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_audio_preprocess_failure_does_not_log_full_base64(monkeypatch):
+    """A failed audio preprocess must not dump the entire (possibly multi-MB)
+    base64 payload into the logs. Regression for #8676."""
+    provider = _make_provider()
+    recorded: list[tuple] = []
+
+    def fake_warning(msg, *args, **kwargs):
+        recorded.append((msg, args))
+
+    monkeypatch.setattr(openai_source_module.logger, "warning", fake_warning)
+    try:
+        payload = (
+            "A" * 5000
+        )  # invalid base64 (validated decode rejects "!" + bad length)
+        data_uri = f"data:audio/wav;base64,{payload}!!!"
+
+        result = await provider._resolve_audio_part(data_uri)
+
+        assert result is None
+        rendered = "".join(str(msg) + str(args) for msg, args in recorded)
+        assert payload not in rendered  # full base64 not dumped
+        assert "len=" in rendered  # truncated marker present
     finally:
         await provider.terminate()
