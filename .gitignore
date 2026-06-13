@@ -5,6 +5,7 @@ __pycache__
 .conda/
 uv.lock
 .coverage
+.codegraph
 
 # IDE and editors
 .vscode
