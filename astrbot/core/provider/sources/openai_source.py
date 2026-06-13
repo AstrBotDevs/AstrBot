@@ -393,7 +393,10 @@ class ProviderOpenAIOfficial(Provider):
             header, _, encoded = audio_ref.partition(",")
             mime = header[len("data:") :].split(";", 1)[0].strip().lower()
             suffix = _AUDIO_DATA_URI_SUFFIXES.get(mime, ".wav")
-            audio_bytes = base64.b64decode(encoded, validate=True)
+            # Lenient decode: long data URIs are often MIME-wrapped with newlines,
+            # which validate=True would reject. Garbage bytes simply fail later in
+            # _resolve_audio_part and are skipped.
+            audio_bytes = base64.b64decode(encoded)
             temp_dir = Path(get_astrbot_temp_path())
             temp_dir.mkdir(parents=True, exist_ok=True)
             target_path = temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"

@@ -1839,6 +1839,28 @@ async def test_audio_ref_to_local_path_decodes_base64_data_uri():
 
 
 @pytest.mark.asyncio
+async def test_audio_ref_to_local_path_decodes_mime_wrapped_data_uri():
+    """Long base64 data URIs are often MIME-wrapped with newlines; decoding must
+    tolerate that whitespace rather than rejecting the whole payload. Regression
+    for #8676 (guards against strict validate=True decoding)."""
+    provider = _make_provider()
+    try:
+        raw = b"wrapped-audio-payload" * 20
+        b64 = base64.b64encode(raw).decode("ascii")
+        wrapped = "\n".join(b64[i : i + 76] for i in range(0, len(b64), 76))
+        data_uri = f"data:audio/wav;base64,{wrapped}"
+
+        path, cleanup_paths = await provider._audio_ref_to_local_path(data_uri)
+
+        resolved = Path(path)
+        assert resolved.read_bytes() == raw
+        for p in cleanup_paths:
+            p.unlink(missing_ok=True)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_audio_preprocess_failure_does_not_log_full_base64(monkeypatch):
     """A failed audio preprocess must not dump the entire (possibly multi-MB)
     base64 payload into the logs. Regression for #8676."""
@@ -1849,11 +1871,15 @@ async def test_audio_preprocess_failure_does_not_log_full_base64(monkeypatch):
         recorded.append((msg, args))
 
     monkeypatch.setattr(openai_source_module.logger, "warning", fake_warning)
+
+    async def boom(_path):
+        raise RuntimeError("conversion failed")
+
+    # Force the preprocess to fail deterministically (no ffmpeg dependency).
+    monkeypatch.setattr(openai_source_module, "ensure_wav", boom)
     try:
-        payload = (
-            "A" * 5000
-        )  # invalid base64 (validated decode rejects "!" + bad length)
-        data_uri = f"data:audio/wav;base64,{payload}!!!"
+        payload = base64.b64encode(b"x" * 4000).decode("ascii")
+        data_uri = f"data:audio/wav;base64,{payload}"
 
         result = await provider._resolve_audio_part(data_uri)
 
