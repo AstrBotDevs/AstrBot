@@ -104,6 +104,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     {
                         "type": "record",
                         "data": data,
+                        "text": comp.text,
                         "streaming": streaming,
                         "message_id": message_id,
                     },

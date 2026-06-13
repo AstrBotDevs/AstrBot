@@ -191,11 +191,11 @@
                       <img :src="partUrl(part)" :alt="part.filename || 'image'" />
                     </button>
 
-                    <audio
+                    <AudioMessagePart
                       v-else-if="part.type === 'record'"
-                      class="audio-part"
-                      controls
                       :src="partUrl(part)"
+                      :text="part.text"
+                      :autoplay="part.autoplay"
                     />
 
                     <video
@@ -403,6 +403,7 @@ import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
+import AudioMessagePart from "@/components/chat/message_list_comps/AudioMessagePart.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
@@ -1175,7 +1176,6 @@ function formatDuration(seconds: number) {
   object-fit: contain;
 }
 
-.audio-part,
 .video-part {
   display: block;
   max-width: 100%;

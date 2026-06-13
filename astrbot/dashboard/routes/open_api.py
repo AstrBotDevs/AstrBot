@@ -460,7 +460,7 @@ class OpenApiRoute(Route):
                             exc_info=True,
                         )
 
-                    saved_record = await self.chat_route._save_bot_message(
+                    saved_record, _ = await self.chat_route._save_bot_message(
                         session_id,
                         message_parts_to_save,
                         agent_stats,

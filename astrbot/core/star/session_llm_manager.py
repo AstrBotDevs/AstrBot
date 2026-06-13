@@ -127,6 +127,8 @@ class SessionServiceManager:
             )
             or {}
         )
+        if session_config.get("tts_enabled") is enabled:
+            return
         session_config["tts_enabled"] = enabled
         await sp.put_async(
             scope="umo",

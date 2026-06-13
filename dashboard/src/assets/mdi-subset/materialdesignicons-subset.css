@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 272 icons */
+/* Auto-generated MDI subset – 273 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -1078,6 +1078,10 @@
 
 .mdi-volume-high::before {
   content: "\F057E";
+}
+
+.mdi-volume-off::before {
+  content: "\F0581";
 }
 
 .mdi-weather-night::before {
