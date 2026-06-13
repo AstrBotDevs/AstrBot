@@ -32,6 +32,7 @@ const changelogVersion = ref('');
 const selectedVersion = ref('');
 const availableVersions = ref([]);
 const loadingVersions = ref(false);
+const scrollContainer = ref(null);
 
 // 获取当前版本号（从版本信息中提取）
 async function getCurrentVersion() {
@@ -102,6 +103,24 @@ function onVersionChange() {
   if (selectedVersion.value) {
     loadChangelog(selectedVersion.value);
   }
+}
+
+function handleChangelogClick(event) {
+  const targetElement = event.target instanceof Element ? event.target : null;
+  const anchor = targetElement?.closest('a[href^="#"]');
+  if (!anchor) return;
+
+  const rawHref = anchor.getAttribute('href');
+  const targetId = rawHref ? decodeURIComponent(rawHref.slice(1)) : '';
+  if (!targetId) return;
+
+  const target = scrollContainer.value?.querySelector(
+    `#${CSS.escape(targetId)}`,
+  );
+  if (!target) return;
+
+  event.preventDefault();
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // 监听对话框打开，初始化数据
@@ -178,7 +197,11 @@ getCurrentVersion();
         </div>
         
         <!-- 更新日志内容 -->
-        <div style="max-height: 70vh; overflow-y: auto;">
+        <div
+          ref="scrollContainer"
+          style="max-height: 70vh; overflow-y: auto;"
+          @click="handleChangelogClick"
+        >
           <div v-if="changelogLoading" class="text-center py-8">
             <v-progress-circular indeterminate color="primary"></v-progress-circular>
             <div class="mt-4">{{ t('core.navigation.changelogDialog.loading') }}</div>
