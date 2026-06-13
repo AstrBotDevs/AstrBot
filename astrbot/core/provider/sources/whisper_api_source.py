@@ -1,12 +1,15 @@
 import os
 import uuid
+from typing import Any
 
+import httpx
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from astrbot.core import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import convert_audio_to_wav
+from astrbot.core.utils.network_utils import create_proxy_client
 from astrbot.core.utils.tencent_record_helper import (
     convert_to_pcm_wav,
     tencent_silk_to_wav,
@@ -30,14 +33,32 @@ class ProviderOpenAIWhisperAPI(STTProvider):
     ) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = provider_config.get("api_key", "")
+        self.http_client: httpx.AsyncClient | None = None
 
         self.client = AsyncOpenAI(
             api_key=self.chosen_api_key,
             base_url=provider_config.get("api_base"),
             timeout=provider_config.get("timeout", NOT_GIVEN),
+            http_client=self._create_http_client(provider_config),
         )
 
         self.set_model(provider_config["model"])
+
+    def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient:
+        proxy = provider_config.get("proxy")
+        httpx_module: Any = httpx
+        try:
+            from openai import _base_client as openai_base_client
+
+            httpx_module = getattr(openai_base_client, "httpx", httpx)
+        except ImportError:
+            pass
+        self.http_client = create_proxy_client(
+            "OpenAI Whisper",
+            proxy,
+            httpx_module=httpx_module,
+        )
+        return self.http_client
 
     async def _get_audio_format(self, file_path) -> str | None:
         # 定义要检测的头部字节
@@ -133,3 +154,5 @@ class ProviderOpenAIWhisperAPI(STTProvider):
     async def terminate(self):
         if self.client:
             await self.client.close()
+        if self.http_client:
+            await self.http_client.aclose()
