@@ -24,5 +24,5 @@ After deployment, go to AstrBot Dashboard -> Config -> System, and change `Text-
 
 > If you deployed on the same machine as AstrBot, the URL should be `http://localhost:8999`.
 
-<img width="589" height="255" alt="image" src="https://github.com/user-attachments/assets/5ef09db2-1a33-440c-9986-c7b544325e34" />
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/776fde0f-9855-4ac9-b45b-ba226b0b4a73" />
 
