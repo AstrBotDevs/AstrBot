@@ -176,6 +176,8 @@ AstrBot 切换亮色/暗色模式时，会自动将主题状态同步给插件 P
 - 亮色模式：`<html data-theme="light">`
 - 暗色模式：`<html data-theme="dark">`
 
+> 选择「跟随系统」时，AstrBot 会根据系统当前色彩模式自动决定主题，插件 Page 收到的 `data-theme` 值始终为 `light` 或 `dark`，无需额外处理。
+
 ### CSS 适配
 
 推荐使用 CSS 变量：

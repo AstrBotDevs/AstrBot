@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AuthSetup from '../authForms/AuthSetup.vue';
 import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import { useCustomizerStore } from '@/stores/customizer';
@@ -15,11 +15,22 @@ const customizer = useCustomizerStore();
 const { tm: t } = useModuleI18n('features/auth');
 const theme = useTheme();
 
-function toggleTheme() {
-  const newTheme = customizer.uiTheme === 'PurpleThemeDark' ? 'PurpleTheme' : 'PurpleThemeDark';
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+const themeOptions = [
+  { mode: 'light'  as const, icon: 'mdi-white-balance-sunny', labelKey: 'theme.light'  },
+  { mode: 'dark'   as const, icon: 'mdi-weather-night',       labelKey: 'theme.dark'   },
+  { mode: 'system' as const, icon: 'mdi-sync',                labelKey: 'theme.system' },
+] as const;
+
+function setThemeMode(mode: 'light' | 'dark' | 'system') {
+  customizer.SET_THEME_MODE(mode);
+  theme.global.name.value = customizer.uiTheme;
 }
+
+const currentThemeIcon = computed(() => {
+  if (customizer.themeMode === 'dark') return 'mdi-weather-night';
+  if (customizer.themeMode === 'system') return 'mdi-sync';
+  return 'mdi-white-balance-sunny';
+});
 
 onMounted(async () => {
   const hasToken = authStore.has_token();
@@ -52,14 +63,55 @@ onMounted(async () => {
             <LanguageSwitcher />
             <v-divider vertical class="mx-1"
               style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(var(--v-theme-primary), 0.45) !important;"></v-divider>
-            <v-btn @click="toggleTheme" class="theme-toggle-btn" icon variant="text" size="small">
-              <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
-                {{ customizer.uiTheme === 'PurpleThemeDark' ? 'mdi-white-balance-sunny' : 'mdi-weather-night' }}
-              </v-icon>
-              <v-tooltip activator="parent" location="top">
-                {{ customizer.uiTheme === 'PurpleThemeDark' ? t('theme.switchToLight') : t('theme.switchToDark') }}
-              </v-tooltip>
-            </v-btn>
+
+            <!-- 主题切换下拉菜单 -->
+            <v-menu
+              open-on-click
+              location="bottom center"
+              offset="6"
+            >
+              <template v-slot:activator="{ props: themeMenuProps }">
+                <v-btn
+                  v-bind="themeMenuProps"
+                  class="theme-toggle-btn"
+                  icon
+                  variant="text"
+                  size="small"
+                >
+                  <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
+                    {{ currentThemeIcon }}
+                  </v-icon>
+                  <v-tooltip activator="parent" location="top">
+                    {{ t('theme.title') }}
+                  </v-tooltip>
+                </v-btn>
+              </template>
+
+              <v-card
+                class="styled-menu-card"
+                style="min-width: 150px"
+                elevation="8"
+                rounded="lg"
+              >
+                <v-list density="compact" class="styled-menu-list pa-1">
+                  <v-list-item
+                    v-for="option in themeOptions"
+                    :key="option.mode"
+                    @click="setThemeMode(option.mode)"
+                    :class="{
+                      'styled-menu-item-active': customizer.themeMode === option.mode,
+                    }"
+                    class="styled-menu-item"
+                    rounded="md"
+                  >
+                    <template v-slot:prepend>
+                      <v-icon size="16" style="margin-right: 8px; opacity: 0.85;">{{ option.icon }}</v-icon>
+                    </template>
+                    <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-card>
+            </v-menu>
           </div>
         </div>
         <div class="setup-title">{{ t('setup.title') }}</div>

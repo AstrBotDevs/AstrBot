@@ -725,13 +725,16 @@ function updateDashboard() {
     });
 }
 
-function toggleDarkMode() {
-  const newTheme =
-    customizer.uiTheme === "PurpleThemeDark"
-      ? "PurpleTheme"
-      : "PurpleThemeDark";
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+// 主题选项配置
+const themeOptions = [
+  { mode: 'light' as const,  icon: 'mdi-white-balance-sunny', labelKey: 'core.header.buttons.theme.light'  },
+  { mode: 'dark'  as const,  icon: 'mdi-weather-night',       labelKey: 'core.header.buttons.theme.dark'   },
+  { mode: 'system' as const, icon: 'mdi-sync',                labelKey: 'core.header.buttons.theme.system' },
+] as const;
+
+function setThemeMode(mode: 'light' | 'dark' | 'system') {
+  customizer.SET_THEME_MODE(mode);
+  theme.global.name.value = customizer.uiTheme;
 }
 
 function openReleaseNotesDialog(body: string, tag: string) {
@@ -1077,29 +1080,68 @@ onMounted(async () => {
         </v-card>
       </v-menu>
 
-      <!-- 主题切换 -->
-      <v-list-item
-        @click="toggleDarkMode()"
-        class="styled-menu-item"
-        rounded="md"
+      <!-- 主题切换分组 -->
+      <v-menu
+        open-on-click
+        :open-on-hover="!$vuetify.display.xs"
+        :open-delay="!$vuetify.display.xs ? 60 : 0"
+        :close-delay="!$vuetify.display.xs ? 120 : 0"
+        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+        offset="8"
       >
-        <template v-slot:prepend>
-          <v-icon>
-            {{
-              useCustomizerStore().uiTheme === "PurpleThemeDark"
-                ? "mdi-weather-night"
-                : "mdi-white-balance-sunny"
-            }}
-          </v-icon>
+        <template v-slot:activator="{ props: themeMenuProps }">
+          <v-list-item
+            v-bind="themeMenuProps"
+            @click.stop
+            class="styled-menu-item theme-group-trigger"
+            rounded="md"
+          >
+            <template v-slot:prepend>
+              <v-icon>mdi-brightness-6</v-icon>
+            </template>
+            <v-list-item-title>{{
+              t("core.header.buttons.theme.title")
+            }}</v-list-item-title>
+            <template v-slot:append>
+              <span class="theme-group-current">
+                <v-icon size="16">{{
+                  customizer.themeMode === 'dark'
+                    ? 'mdi-weather-night'
+                    : customizer.themeMode === 'system'
+                      ? 'mdi-theme-light-dark'
+                      : 'mdi-white-balance-sunny'
+                }}</v-icon>
+              </span>
+              <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
+            </template>
+          </v-list-item>
         </template>
-        <v-list-item-title>
-          {{
-            useCustomizerStore().uiTheme === "PurpleThemeDark"
-              ? t("core.header.buttons.theme.light")
-              : t("core.header.buttons.theme.dark")
-          }}
-        </v-list-item-title>
-      </v-list-item>
+
+        <v-card
+          class="styled-menu-card"
+          style="min-width: 170px"
+          elevation="8"
+          rounded="lg"
+        >
+          <v-list density="compact" class="styled-menu-list pa-1">
+            <v-list-item
+              v-for="option in themeOptions"
+              :key="option.mode"
+              @click="setThemeMode(option.mode)"
+              :class="{
+                'styled-menu-item-active': customizer.themeMode === option.mode,
+              }"
+              class="styled-menu-item"
+              rounded="md"
+            >
+              <template v-slot:prepend>
+                <v-icon size="18" class="theme-option-icon">{{ option.icon }}</v-icon>
+              </template>
+              <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-menu>
 
       <!-- 更新按钮 -->
       <v-list-item
@@ -1820,6 +1862,23 @@ onMounted(async () => {
 
 .language-submenu-card {
   min-width: 180px;
+}
+
+.theme-group-trigger :deep(.v-list-item__append) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-group-current {
+  display: flex;
+  align-items: center;
+  opacity: 0.75;
+}
+
+.theme-option-icon {
+  margin-right: 8px;
+  opacity: 0.85;
 }
 
 .mobile-mode-toggle-wrapper {

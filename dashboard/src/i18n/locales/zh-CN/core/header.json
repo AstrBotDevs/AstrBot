@@ -8,8 +8,10 @@
     "update": "更新",
     "account": "账户",
     "theme": {
+      "title": "主题",
       "light": "浅色模式",
-      "dark": "深色模式"
+      "dark": "深色模式",
+      "system": "跟随系统"
     }
   },
   "updateDialog": {

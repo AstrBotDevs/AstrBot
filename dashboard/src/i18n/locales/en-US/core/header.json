@@ -8,8 +8,10 @@
     "update": "Update",
     "account": "Account",
     "theme": {
+      "title": "Theme",
       "light": "Light Mode",
-      "dark": "Dark Mode"
+      "dark": "Dark Mode",
+      "system": "Follow System"
     }
   },
   "updateDialog": {
