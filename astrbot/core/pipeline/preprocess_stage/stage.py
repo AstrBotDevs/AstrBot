@@ -8,7 +8,13 @@ from astrbot.core import logger
 from astrbot.core.message.components import Image, Plain, Record, Reply
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import describe_media_ref, ensure_jpeg, ensure_wav
+from astrbot.core.utils.media_utils import (
+    describe_media_ref,
+    ensure_jpeg,
+    ensure_wav,
+    file_uri_to_path,
+    is_file_uri,
+)
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -78,7 +84,11 @@ class PreProcessStage(Stage):
                         from_ = from_.removesuffix("/")
                         to_ = to_.removesuffix("/")
 
-                        url = component.url.removeprefix("file://")
+                        url = (
+                            file_uri_to_path(component.url)
+                            if is_file_uri(component.url)
+                            else component.url
+                        )
                         if url.startswith(from_):
                             component.url = url.replace(from_, to_, 1)
                             logger.debug(f"路径映射: {url} -> {component.url}")

@@ -38,7 +38,7 @@ else:
 from astrbot.core import astrbot_config, file_token_service, logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
-from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path
+from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
 
 class ComponentType(str, Enum):
@@ -129,7 +129,8 @@ class Record(BaseMessageComponent):
 
     @staticmethod
     def fromFileSystem(path, **_):
-        return Record(file=f"file:///{os.path.abspath(path)}", path=path, **_)
+        file_path = Path(path).resolve(strict=False)
+        return Record(file=file_path.as_uri(), path=str(file_path), **_)
 
     @staticmethod
     def fromURL(url: str, **_):
@@ -166,7 +167,7 @@ class Record(BaseMessageComponent):
             except OSError:
                 pass
             if (
-                self.file.startswith("file://")
+                is_file_uri(self.file)
                 or self.file.startswith("http")
                 or self.file.startswith("base64://")
                 or self.file.startswith("data:audio/")
@@ -182,13 +183,13 @@ class Record(BaseMessageComponent):
                 url_exists = os.path.exists(self.url)
             except OSError:
                 pass
-            if self.url.startswith("file://"):
+            if is_file_uri(self.url):
                 try:
                     decoded_url_exists = os.path.exists(self._decode_file_uri(self.url))
                 except OSError:
                     pass
             if (
-                self.url.startswith("file://")
+                is_file_uri(self.url)
                 or self.url.startswith("http")
                 or self.url.startswith("data:audio/")
                 or url_exists
@@ -276,7 +277,8 @@ class Video(BaseMessageComponent):
 
     @staticmethod
     def fromFileSystem(path, **_):
-        return Video(file=f"file:///{os.path.abspath(path)}", path=path, **_)
+        file_path = Path(path).resolve(strict=False)
+        return Video(file=file_path.as_uri(), path=str(file_path), **_)
 
     @staticmethod
     def fromURL(url: str, **_):
@@ -298,7 +300,7 @@ class Video(BaseMessageComponent):
             except OSError:
                 pass
             if (
-                candidate.startswith("file://")
+                is_file_uri(candidate)
                 or candidate.startswith("http")
                 or candidate.startswith("base64://")
                 or candidate.startswith("data:video/")
@@ -326,9 +328,7 @@ class Video(BaseMessageComponent):
         if not file_source:
             raise Exception(f"not a valid file: {self.file}")
 
-        if file_source.startswith("file:///"):
-            return file_source[8:]
-        if file_source.startswith("file://"):
+        if is_file_uri(file_source):
             return file_uri_to_path(file_source)
         if file_source.startswith(("http://", "https://", "base64://", "data:")):
             return await MediaResolver(
@@ -496,7 +496,8 @@ class Image(BaseMessageComponent):
 
     @staticmethod
     def fromFileSystem(path, **_):
-        return Image(file=f"file:///{os.path.abspath(path)}", path=path, **_)
+        file_path = Path(path).resolve(strict=False)
+        return Image(file=file_path.as_uri(), path=str(file_path), **_)
 
     @staticmethod
     def fromBase64(base64: str, **_):
@@ -758,8 +759,12 @@ class File(BaseMessageComponent):
             str: 文件路径
 
         """
-        if self.file_ and os.path.exists(self.file_):
-            return os.path.abspath(self.file_)
+        if self.file_:
+            path = (
+                file_uri_to_path(self.file_) if is_file_uri(self.file_) else self.file_
+            )
+            if os.path.exists(path):
+                return os.path.abspath(path)
 
         if self.url:
             try:
@@ -812,18 +817,8 @@ class File(BaseMessageComponent):
 
         if self.file_:
             path = self.file_
-            if path.startswith("file://"):
-                # 处理 file:// (2 slashes) 或 file:/// (3 slashes)
-                # pathlib.as_uri() 通常生成 file:///
-                path = path[7:]
-                # 兼容 Windows: file:///C:/path -> /C:/path -> C:/path
-                if (
-                    os.name == "nt"
-                    and len(path) > 2
-                    and path[0] == "/"
-                    and path[2] == ":"
-                ):
-                    path = path[1:]
+            if is_file_uri(path):
+                path = file_uri_to_path(path)
 
             if os.path.exists(path):
                 return os.path.abspath(path)
@@ -832,15 +827,8 @@ class File(BaseMessageComponent):
             await self._download_file()
             if self.file_:
                 path = self.file_
-                if path.startswith("file://"):
-                    path = path[7:]
-                    if (
-                        os.name == "nt"
-                        and len(path) > 2
-                        and path[0] == "/"
-                        and path[2] == ":"
-                    ):
-                        path = path[1:]
+                if is_file_uri(path):
+                    path = file_uri_to_path(path)
                 return os.path.abspath(path)
 
         return ""

@@ -1,4 +1,5 @@
 import base64
+import os
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import quote
@@ -6,8 +7,10 @@ from urllib.parse import quote
 import pytest
 
 import astrbot.core.utils.media_utils as media_utils
-from astrbot.core.message.components import Image, Record, Video
+from astrbot.core.file_token_service import FileTokenService
+from astrbot.core.message.components import File, Image, Record, Video
 from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.utils.path_util import path_Mapping
 
 
 @pytest.mark.asyncio
@@ -349,9 +352,105 @@ async def test_video_component_uses_media_resolver_for_data_uri(tmp_path, monkey
         Path(video_path).unlink(missing_ok=True)
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("file:///tmp/a", True),
+        ("file:/tmp/a", True),
+        ("FILE:///tmp/a", True),
+        ("/tmp/a", False),
+        ("relative/a", False),
+        ("C:/Users/a.jpg", False),
+        (None, False),
+        (Path("/tmp/a"), False),
+    ],
+)
+def test_is_file_uri_uses_parsed_file_scheme(value, expected):
+    assert media_utils.is_file_uri(value) is expected
+
+
 def test_file_uri_to_path_supports_localhost_and_encoded_paths(tmp_path):
     media_path = tmp_path / "voice note.wav"
     media_path.write_bytes(b"audio")
     file_uri = f"file://localhost{quote(media_path.as_posix())}"
 
     assert media_utils.file_uri_to_path(file_uri) == str(media_path)
+
+
+def test_file_uri_to_path_supports_standard_and_legacy_posix_file_uris(tmp_path):
+    media_path = tmp_path / "voice note.wav"
+    media_path.write_bytes(b"audio")
+
+    assert media_utils.file_uri_to_path(media_path.as_uri()) == str(media_path)
+    assert media_utils.file_uri_to_path(f"file:{quote(media_path.as_posix())}") == str(
+        media_path
+    )
+    assert media_utils.file_uri_to_path(
+        media_path.as_uri().replace("file:", "FILE:", 1)
+    ) == str(media_path)
+
+    if os.name != "nt":
+        legacy_file_uri = f"file:///{media_path.as_posix()}"
+        assert legacy_file_uri.startswith("file:////")
+        assert media_utils.file_uri_to_path(legacy_file_uri) == str(media_path)
+
+
+def test_from_file_system_uses_pathlib_file_uri(tmp_path):
+    media_path = tmp_path / "media file.bin"
+    media_path.write_bytes(b"media")
+    expected_uri = media_path.resolve(strict=False).as_uri()
+    expected_path = str(media_path.resolve(strict=False))
+
+    for component in (
+        Image.fromFileSystem(media_path),
+        Record.fromFileSystem(media_path),
+        Video.fromFileSystem(media_path),
+    ):
+        assert component.file == expected_uri
+        assert component.path == expected_path
+        if os.name != "nt":
+            assert not component.file.startswith("file:////")
+
+
+@pytest.mark.asyncio
+async def test_video_and_file_components_accept_standard_file_uri(tmp_path):
+    video_path = tmp_path / "video.mp4"
+    file_path = tmp_path / "document.txt"
+    video_path.write_bytes(b"video")
+    file_path.write_text("document", encoding="utf-8")
+
+    assert await Video(file=video_path.as_uri()).convert_to_file_path() == str(
+        video_path
+    )
+
+    file_component = File(name="document.txt", file=file_path.as_uri())
+    assert file_component.file == str(file_path)
+    assert await file_component.get_file() == str(file_path)
+
+
+@pytest.mark.asyncio
+async def test_file_token_service_accepts_standard_file_uri(tmp_path):
+    file_path = tmp_path / "document with space.txt"
+    file_path.write_text("document", encoding="utf-8")
+    service = FileTokenService()
+
+    token = await service.register_file(file_path.as_uri())
+
+    assert await service.handle_file(token) == str(file_path)
+
+
+def test_path_mapping_accepts_standard_and_legacy_file_uri(tmp_path):
+    source_root = tmp_path / "source"
+    target_root = tmp_path / "target"
+    source_root.mkdir()
+    target_root.mkdir()
+    source_file = source_root / "image.png"
+    source_file.write_bytes(b"image")
+    mapping = [f"{source_root}:{target_root}"]
+    expected_path = str(target_root / "image.png")
+
+    assert path_Mapping(mapping, source_file.as_uri()) == expected_path
+
+    if os.name != "nt":
+        legacy_file_uri = f"file:///{source_file.as_posix()}"
+        assert path_Mapping(mapping, legacy_file_uri) == expected_path

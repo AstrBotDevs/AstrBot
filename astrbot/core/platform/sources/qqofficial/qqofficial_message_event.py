@@ -29,7 +29,7 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
 
@@ -687,7 +687,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     i.file,
                     media_type="image",
                 ).to_base64()
-                if i.file.startswith("file://") or os.path.exists(i.file):
+                if is_file_uri(i.file) or os.path.exists(i.file):
                     image_file_path = await MediaResolver(
                         i.file,
                         media_type="image",
@@ -714,18 +714,16 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         logger.error(f"处理语音时出错: {e}")
                         record_file_path = None
             elif isinstance(i, Video) and not video_file_source:
-                if i.file.startswith("file:///"):
-                    video_file_source = i.file[8:]
+                if is_file_uri(i.file):
+                    video_file_source = file_uri_to_path(i.file)
                 else:
                     video_file_source = i.file
             elif isinstance(i, File) and not file_source:
                 file_name = i.name
                 if i.file_:
                     file_path = i.file_
-                    if file_path.startswith("file:///"):
-                        file_path = file_path[8:]
-                    elif file_path.startswith("file://"):
-                        file_path = file_path[7:]
+                    if is_file_uri(file_path):
+                        file_path = file_uri_to_path(file_path)
                     file_source = file_path
                 elif i.url:
                     file_source = i.url

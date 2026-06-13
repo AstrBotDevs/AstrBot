@@ -15,7 +15,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urlparse, urlsplit
+from urllib.request import url2pathname
 
 from PIL import Image as PILImage
 
@@ -155,25 +156,52 @@ class ResolvedMediaFile:
         _cleanup_paths(self.cleanup_paths)
 
 
+def is_file_uri(value: object) -> bool:
+    """Return whether a value is a ``file:`` URI.
+
+    Args:
+        value: Candidate media reference or local path.
+
+    Returns:
+        ``True`` only for string values whose parsed URI scheme is ``file``.
+    """
+
+    if not isinstance(value, str):
+        return False
+    try:
+        return urlsplit(value).scheme.lower() == "file"
+    except ValueError:
+        return False
+
+
 def file_uri_to_path(file_uri: str) -> str:
     """Normalize file URIs to local filesystem paths.
 
-    Handles localhost URIs, URL-encoded paths, Windows drive-letter URIs, and UNC
-    style hosts. Non-``file:`` inputs are returned unchanged for convenience.
+    Args:
+        file_uri: A ``file:`` URI or a plain filesystem path.
+
+    Returns:
+        The local filesystem path decoded with standard-library URL path rules.
+        Non-``file:`` inputs are returned unchanged for convenience.
     """
 
-    parsed = urlparse(file_uri)
-    if parsed.scheme != "file":
+    if not is_file_uri(file_uri):
         return file_uri
 
-    netloc = unquote(parsed.netloc or "")
-    path = unquote(parsed.path or "")
-    if netloc and netloc != "localhost":
+    parsed = urlparse(file_uri)
+    netloc = parsed.netloc or ""
+    path = parsed.path or ""
+    if netloc and netloc.lower() != "localhost":
         if len(netloc) == 2 and netloc[1] == ":" and netloc[0].isalpha():
-            return str(Path(f"{netloc}{path}"))
-        path = f"//{netloc}{path}"
-    elif len(path) >= 4 and path[0] == "/" and path[2] == ":" and path[1].isalpha():
+            return str(Path(url2pathname(f"{netloc}{path}")))
+        return str(Path(url2pathname(f"//{netloc}{path}")))
+
+    path = url2pathname(path)
+    if len(path) >= 4 and path[0] == "/" and path[2] == ":" and path[1].isalpha():
         path = path[1:]
+    elif os.name != "nt" and path.startswith("//"):
+        # Older AstrBot builds generated file:////path for POSIX absolute paths.
+        path = "/" + path.lstrip("/")
     return str(Path(path))
 
 
@@ -267,7 +295,7 @@ def describe_media_ref(media_ref: object | None) -> str:
         suffix = f" file={filename!r}" if filename else ""
         return f"{parsed.scheme} URL host={parsed.netloc!r}{suffix} len={ref_len}"
 
-    if parsed.scheme == "file":
+    if is_file_uri(media_ref):
         filename = Path(file_uri_to_path(media_ref)).name
         return f"file URI name={filename!r} len={ref_len}"
 
@@ -360,7 +388,7 @@ async def _materialize_media_ref(
             cleanup_paths=cleanup_paths,
         )
 
-    if media_ref.startswith("file://"):
+    if is_file_uri(media_ref):
         path = Path(file_uri_to_path(media_ref))
         return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
@@ -621,9 +649,10 @@ class MediaResolver:
                 ):
                     mime_type = resolved.mime_type
                 is_legacy_base64_ref = self.media_ref.startswith("base64://")
-                if not is_legacy_base64_ref and not self.media_ref.startswith(
-                    ("http://", "https://", "file://", "data:")
-                ):
+                is_remote_or_data_ref = self.media_ref.startswith(
+                    ("http://", "https://", "data:")
+                ) or is_file_uri(self.media_ref)
+                if not is_legacy_base64_ref and not is_remote_or_data_ref:
                     try:
                         _decode_base64_payload(
                             "".join(self.media_ref.split()),

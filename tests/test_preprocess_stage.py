@@ -76,3 +76,27 @@ async def test_preprocess_converts_images_to_jpeg_and_tracks_temp_files(
     assert reply_image.file in event.temporary_local_files
     with PILImage.open(reply_image.file) as converted_img:
         assert converted_img.format == "JPEG"
+
+
+@pytest.mark.asyncio
+async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
+    from PIL import Image as PILImage
+
+    source_root = tmp_path / "source"
+    target_root = tmp_path / "target"
+    source_root.mkdir()
+    target_root.mkdir()
+    source_image = source_root / "photo.jpg"
+    target_image = target_root / "photo.jpg"
+    PILImage.new("RGB", (2, 2), (255, 0, 0)).save(target_image)
+    event = FakeEvent([Image(file="", url=source_image.as_uri())])
+    stage = PreProcessStage()
+    stage.config = {}
+    stage.platform_settings = {"path_mapping": [f"{source_root}:{target_root}"]}
+    stage.stt_settings = {"enable": False}
+
+    await stage.process(event)
+
+    image = event.get_messages()[0]
+    assert isinstance(image, Image)
+    assert image.file == image.path == image.url == str(target_image)
