@@ -2,7 +2,7 @@ import base64
 import os
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import pytest
 
@@ -275,7 +275,10 @@ def test_describe_media_ref_does_not_include_payload_or_query():
 
     assert "A" * 64 not in media_utils.describe_media_ref(data_ref)
     assert "token=secret" not in media_utils.describe_media_ref(url_ref)
-    assert "example.com" in media_utils.describe_media_ref(url_ref)
+    assert (
+        urlparse(media_utils.describe_media_ref(url_ref)).hostname
+        == urlparse(url_ref).hostname
+    )
 
 
 @pytest.mark.asyncio
