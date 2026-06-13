@@ -270,12 +270,12 @@ class ProviderOpenAIOfficial(Provider):
         netloc = unquote(parsed.netloc or "")
         path = unquote(parsed.path or "")
         if re.fullmatch(r"[A-Za-z]:", netloc):
-            return str(Path(f"{netloc}{path}"))
+            return Path(f"{netloc}{path}").as_posix()
         if re.match(r"^/[A-Za-z]:/", path):
             path = path[1:]
         if netloc and netloc != "localhost":
             path = f"//{netloc}{path}"
-        return str(Path(path))
+        return Path(path).as_posix()
 
     async def _image_ref_to_data_url(
         self,

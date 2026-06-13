@@ -1063,7 +1063,10 @@ async def test_prepare_chat_payload_materializes_context_localhost_file_uri_imag
         image_path = tmp_path / "quoted-image.png"
         PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_path)
 
-        localhost_uri = f"file://localhost{image_path.as_posix()}"
+        posix_path = image_path.as_posix()
+        if not posix_path.startswith("/"):
+            posix_path = "/" + posix_path
+        localhost_uri = f"file://localhost{posix_path}"
         payloads, _ = await provider._prepare_chat_payload(
             prompt=None,
             contexts=[

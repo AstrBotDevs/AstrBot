@@ -194,7 +194,7 @@ class TestLocalPythonComponent:
         """Test executing simple Python code."""
         python = LocalPythonComponent()
         result = await python.exec("print('hello')")
-        assert result["data"]["output"]["text"] == "hello\n"
+        assert result["data"]["output"]["text"].replace("\r\n", "\n") == "hello\n"
 
     @pytest.mark.asyncio
     async def test_exec_with_error(self):
