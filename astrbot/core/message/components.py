@@ -160,32 +160,49 @@ class Record(BaseMessageComponent):
         """
         # 1) 优先尝试 file：如果它已包含完整 URI 或已知格式，直接使用
         if self.file:
+            file_exists = False
+            try:
+                file_exists = os.path.exists(self.file)
+            except OSError:
+                pass
             if (
                 self.file.startswith("file://")
                 or self.file.startswith("http")
                 or self.file.startswith("base64://")
                 or self.file.startswith("data:audio/")
-                or os.path.exists(self.file)
+                or file_exists
             ):
                 return self.file
 
         # 2) 尝试 url（可能是 file:/// 或 http 链接）
         if self.url:
+            url_exists = False
+            decoded_url_exists = False
+            try:
+                url_exists = os.path.exists(self.url)
+            except OSError:
+                pass
+            if self.url.startswith("file://"):
+                try:
+                    decoded_url_exists = os.path.exists(self._decode_file_uri(self.url))
+                except OSError:
+                    pass
             if (
                 self.url.startswith("file://")
                 or self.url.startswith("http")
                 or self.url.startswith("data:audio/")
-                or os.path.exists(self.url)
-                or (
-                    self.url.startswith("file://")
-                    and os.path.exists(self._decode_file_uri(self.url))
-                )
+                or url_exists
+                or decoded_url_exists
             ):
                 return self.url
 
         # 3) 尝试 path（可能是 Windows 绝对路径如 C:\Users\...）
-        if self.path and os.path.exists(self.path):
-            return self.path
+        if self.path:
+            try:
+                if os.path.exists(self.path):
+                    return self.path
+            except OSError:
+                pass
 
         # 4) 最后裸返回 file（即使不行也要让调用方看到原始内容）
         return self.file or self.url or ""
@@ -275,17 +292,26 @@ class Video(BaseMessageComponent):
         for candidate in (self.file, self.url):
             if not candidate:
                 continue
+            candidate_exists = False
+            try:
+                candidate_exists = os.path.exists(candidate)
+            except OSError:
+                pass
             if (
                 candidate.startswith("file://")
                 or candidate.startswith("http")
                 or candidate.startswith("base64://")
                 or candidate.startswith("data:video/")
-                or os.path.exists(candidate)
+                or candidate_exists
             ):
                 return candidate
 
-        if self.path and os.path.exists(self.path):
-            return self.path
+        if self.path:
+            try:
+                if os.path.exists(self.path):
+                    return self.path
+            except OSError:
+                pass
 
         return self.file or self.url or ""
 
@@ -310,8 +336,11 @@ class Video(BaseMessageComponent):
                 media_type="video",
                 default_suffix=".mp4",
             ).to_path()
-        if os.path.exists(file_source):
-            return os.path.abspath(file_source)
+        try:
+            if os.path.exists(file_source):
+                return os.path.abspath(file_source)
+        except OSError:
+            pass
         raise Exception(f"not a valid file: {file_source}")
 
     async def register_to_file_service(self) -> str:

@@ -87,6 +87,21 @@ async def test_resolve_audio_ref_to_base64_data_decodes_base64_scheme(
 
 
 @pytest.mark.asyncio
+async def test_record_convert_to_file_path_accepts_bare_base64(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
+    audio_base64 = base64.b64encode(audio_bytes).decode()
+
+    audio_path = await Record(file=audio_base64).convert_to_file_path()
+
+    try:
+        assert Path(audio_path).exists()
+        assert Path(audio_path).read_bytes() == audio_bytes
+    finally:
+        Path(audio_path).unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
 async def test_resolve_image_ref_to_base64_data_detects_png(tmp_path):
     from PIL import Image as PILImage
 

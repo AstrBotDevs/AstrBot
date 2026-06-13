@@ -271,7 +271,12 @@ def describe_media_ref(media_ref: object | None) -> str:
         filename = Path(file_uri_to_path(media_ref)).name
         return f"file URI name={filename!r} len={ref_len}"
 
-    if not Path(media_ref).exists():
+    media_path_exists = False
+    try:
+        media_path_exists = Path(media_ref).exists()
+    except OSError:
+        pass
+    if not media_path_exists:
         compact = "".join(media_ref.split())
         if compact:
             try:
@@ -390,7 +395,12 @@ async def _materialize_media_ref(
         return _LocalMediaFile(path=target_path, cleanup_paths=cleanup_paths)
 
     path = Path(media_ref)
-    if path.exists():
+    path_exists = False
+    try:
+        path_exists = path.exists()
+    except OSError:
+        pass
+    if path_exists:
         return _LocalMediaFile(path=path, mime_type=_guess_mime_type(path))
 
     compact_media_ref = "".join(media_ref.split())
