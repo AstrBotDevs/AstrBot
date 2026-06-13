@@ -346,45 +346,47 @@
                初始位置: 页面顶部正中;
                拖动范围: 不得超出 .chat-main 边界,不得进入 .composer-shell 区域;
                位置持久化: localStorage。-->
-          <button
-            v-if="currentTodoSnapshot"
-            type="button"
-            class="todo-summary-bar"
-            :class="{
-              'todo-summary-bar--active': todoSidebarOpen,
-              'todo-summary-bar--dragging': isDraggingTodoBar,
-              'todo-summary-bar--centered': todoBarPos === null,
-            }"
-            :style="todoBarStyle"
-            :aria-label="tm('todo.summary')"
-            @mousedown="startDragTodoBar"
-            @click="onTodoBarClick"
-          >
-            <v-icon size="16" class="todo-summary-icon">mdi-format-list-checks</v-icon>
-            <v-icon size="14" class="todo-summary-drag-handle">mdi-drag-horizontal-variant</v-icon>
-            <span class="todo-summary-text">
-              {{ currentTodoSnapshot.stats?.done || 0 }}/{{ currentTodoSnapshot.stats?.effective_total || 0 }}
-              <template v-if="currentTodoSnapshot.stats?.in_progress">
-                · <span class="todo-summary-progress">{{ currentTodoSnapshot.stats.in_progress }} in progress</span>
-              </template>
-            </span>
-            <v-progress-circular
-              v-if="currentTodoSnapshot.stats?.progress_pct > 0 && currentTodoSnapshot.stats?.progress_pct < 100"
-              :model-value="currentTodoSnapshot.stats.progress_pct"
-              :size="16"
-              :width="2"
-              class="todo-summary-circular"
+          <transition name="todo-bar-fade">
+            <button
+              v-if="currentTodoSnapshot"
+              type="button"
+              class="todo-summary-bar"
+              :class="{
+                'todo-summary-bar--active': todoSidebarOpen,
+                'todo-summary-bar--dragging': isDraggingTodoBar,
+                'todo-summary-bar--centered': todoBarPos === null,
+              }"
+              :style="todoBarStyle"
+              :aria-label="tm('todo.summary')"
+              @mousedown="startDragTodoBar"
+              @click="onTodoBarClick"
             >
-              {{ currentTodoSnapshot.stats.progress_pct }}%
-            </v-progress-circular>
-            <v-icon
-              v-if="currentTodoSnapshot.attentionItems?.length"
-              size="10"
-              color="warning"
-              class="todo-summary-attention"
-              :title="tm('todo.attentionHint', { count: currentTodoSnapshot.attentionItems.length })"
-            >mdi-circle-medium</v-icon>
-          </button>
+              <v-icon size="16" class="todo-summary-icon">mdi-format-list-checks</v-icon>
+              <v-icon size="14" class="todo-summary-drag-handle">mdi-drag-horizontal-variant</v-icon>
+              <span class="todo-summary-text">
+                {{ currentTodoSnapshot.stats?.done || 0 }}/{{ currentTodoSnapshot.stats?.effective_total || 0 }}
+                <template v-if="currentTodoSnapshot.stats?.in_progress">
+                  · <span class="todo-summary-progress">{{ currentTodoSnapshot.stats.in_progress }} in progress</span>
+                </template>
+              </span>
+              <v-progress-circular
+                v-if="currentTodoSnapshot.stats?.progress_pct > 0 && currentTodoSnapshot.stats?.progress_pct < 100"
+                :model-value="currentTodoSnapshot.stats.progress_pct"
+                :size="16"
+                :width="2"
+                class="todo-summary-circular"
+              >
+                {{ currentTodoSnapshot.stats.progress_pct }}%
+              </v-progress-circular>
+              <v-icon
+                v-if="currentTodoSnapshot.attentionItems?.length"
+                size="10"
+                color="warning"
+                class="todo-summary-attention"
+                :title="tm('todo.attentionHint', { count: currentTodoSnapshot.attentionItems.length })"
+              >mdi-circle-medium</v-icon>
+            </button>
+          </transition>
 
           <!-- 项目 breadcrumb (非 sticky,普通文档流定位在顶部) -->
           <div
@@ -1504,8 +1506,16 @@ const currentTodoSnapshot = computed(() => {
   return latestTodoSnapshotBySession.value[sid] ?? null;
 });
 
-/** summary bar 出现时,如果持久化的位置已超出当前窗口, 则重置居中。 */
+/** summary bar 出现时,如果持久化的位置已超出当前窗口, 则重置居中。
+ *  同时: 快照被清空(todo_clear / 全删光)时同步关闭抽屉,
+ *  避免出现"bar 没了但抽屉还开着显示空状态"的尴尬。
+ */
 watch(currentTodoSnapshot, (snap) => {
+  // 1) 快照为 null → 关抽屉 (清空/全删空场景)
+  if (snap === null && todoSidebarOpen.value) {
+    todoSidebarOpen.value = false;
+  }
+  // 2) 快照非空且 bar 位置已确定 → 位置越界时回弹
   if (!snap || todoBarPos.value === null) return;
   nextTick(() => {
     const main = document.querySelector(".chat-main") as HTMLElement | null;
@@ -1929,6 +1939,22 @@ function toggleTheme() {
 @keyframes todo-bar-fade-in {
   from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* 整体淡入/淡出: 跟随 currentTodoSnapshot 的 v-if 切换。
+   故意只动 opacity,不碰 transform — 避免和 --centered 的
+   translateX(-50%) 互相覆盖造成"漂"的感觉。
+   leave 时短暂禁用 pointer-events,防止用户在淡出过程中误点。 */
+.todo-bar-fade-enter-active,
+.todo-bar-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.todo-bar-fade-enter-from,
+.todo-bar-fade-leave-to {
+  opacity: 0;
+}
+.todo-bar-fade-leave-to {
+  pointer-events: none;
 }
 .todo-summary-icon {
   color: rgba(var(--v-theme-primary), 0.85);

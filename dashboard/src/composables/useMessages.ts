@@ -156,9 +156,12 @@ export function useMessages(options: UseMessagesOptions) {
    *
    * @author astrbot / 2026-06-10
    */
+  // value 可能是 Snapshot | null:
+  //   - Snapshot: 来自 create/add/update/query/delete(删单条) 的正常快照
+  //   - null:     来自 todo_clear — 显式清空,让 UI 的 summary bar 消失
   const _pendingTodoSnapshots: Record<
     string,
-    { list: any; stats: any; attentionItems: number[] }
+    { list: any; stats: any; attentionItems: number[] } | null
   > = {};
 
   function _flushTodoSnapshots() {
@@ -166,7 +169,7 @@ export function useMessages(options: UseMessagesOptions) {
     if (keys.length === 0) return;
     const updates: Record<
       string,
-      { list: any; stats: any; attentionItems: number[] }
+      { list: any; stats: any; attentionItems: number[] } | null
     > = {};
     for (const sid of keys) {
       updates[sid] = _pendingTodoSnapshots[sid];
@@ -832,12 +835,58 @@ export function useMessages(options: UseMessagesOptions) {
           return input;
         }
         const toolResult = unwrapTodoResult(parsedResult);
+
+        // 反查 tool_call 拿到工具名,用于更精准的 clear / 空列表检测。
+        // 优先按 SSE event 的 id 字段匹配;若 id 不在,fallback 到 data.result.id。
+        // 没匹配上就当普通工具处理,不影响原行为。
+        const toolCallId =
+          (parsedResult as any)?.id ?? (toolResult as any)?.id;
+        let toolName: string | undefined;
+        if (toolCallId && botRecord?.content?.message) {
+          for (const part of botRecord.content.message) {
+            if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
+            const tc = (part.tool_calls as ToolCall[]).find(
+              (t) => t?.id === toolCallId,
+            );
+            if (tc) { toolName = tc.name; break; }
+          }
+        }
+
         if (sessionId && toolResult && typeof toolResult === "object" && !Array.isArray(toolResult)) {
           const snap = _tryParseTodoSnapshotExternal(toolResult);
           if (snap) {
-            // 方案三: 收集快照到 pending map,同一 chunk 内后续的 snapshot 自动覆盖之前的,
-            // 由 _flushTodoSnapshots() 在 chunk 边界统一写入 ref。
-            _pendingTodoSnapshots[sessionId] = snap;
+            // 情况 A: 正常快照 (create / add / update / query / delete-单条)
+            //   进一步细分: 如果 effective_total === 0 (例如 todo_delete 把最后一项删光,
+            //   或 todo_create 时 items=[]), UI 上没有可总结的内容, 也走 null 让 bar 隐藏。
+            //   注意: stats.effective_total 已排除 cancelled 项,所以这是"实际还有多少要做"的真实计数。
+            if (
+              typeof snap.stats?.effective_total === "number" &&
+              snap.stats.effective_total === 0
+            ) {
+              _pendingTodoSnapshots[sessionId] = null;
+            } else {
+              // 方案三: 收集快照到 pending map,同一 chunk 内后续的 snapshot 自动覆盖之前的,
+              // 由 _flushTodoSnapshots() 在 chunk 边界统一写入 ref。
+              _pendingTodoSnapshots[sessionId] = snap;
+            }
+          } else {
+            // 情况 B: 不是带 list/stats 的快照, 检查 clear 信号。
+            //   优先级: 工具名(最稳) > 数据特征(兜底)
+            if (toolName === "todo_clear") {
+              // B-1: 工具名 = todo_clear → 必是清空
+              _pendingTodoSnapshots[sessionId] = null;
+            } else {
+              // B-2: 数据特征兜底, 兼容 botRecord 里没匹配到 tool_call 的边缘情况
+              //   (例如 tool_call_result 早于 tool_call 到达的极端 race)
+              const inner =
+                (toolResult as any).ok === true && (toolResult as any).data &&
+                typeof (toolResult as any).data === "object"
+                  ? (toolResult as any).data
+                  : toolResult;
+              if (inner && (inner as any).deleted === "list") {
+                _pendingTodoSnapshots[sessionId] = null;
+              }
+            }
           }
         }
         finishToolCall(botRecord, parsedResult);
