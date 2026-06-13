@@ -201,6 +201,7 @@ class ProviderCommands:
                 ret += "\nUse /provider tts <idx> to switch TTS providers."
             if stts:
                 ret += "\nUse /provider stt <idx> to switch STT providers."
+            ret += "\nUse /provider reset to clear session override."
 
             event.set_result(MessageEventResult().message(ret))
         elif idx == "tts":
