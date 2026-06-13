@@ -776,6 +776,7 @@ async def _process_quote_message(
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
     config: MainAgentBuildConfig | None = None,
     main_provider_supports_image: bool = False,
+    skip_quote_image_caption: bool = False,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -805,54 +806,63 @@ async def _process_quote_message(
                 image_seg = comp
                 break
 
-    if image_seg and main_provider_supports_image:
-        logger.debug(
-            "Skipping quote image captioning because the main provider supports image input."
-        )
-    elif image_seg and not img_cap_prov_id:
-        logger.debug(
-            "No dedicated image caption provider configured. "
-            "Skipping quote image captioning."
-        )
-    elif image_seg:
-        try:
-            prov = None
-            path = None
-            compress_path = None
-            prov = plugin_context.get_provider_by_id(img_cap_prov_id)
-            if prov is None:
-                prov = plugin_context.get_using_provider(event.unified_msg_origin)
+    if image_seg:
+        if skip_quote_image_caption:
+            logger.debug(
+                "Skipping quote image captioning because image captioning already handled this request."
+            )
+        elif main_provider_supports_image:
+            logger.debug(
+                "Skipping quote image captioning because the main provider supports image input."
+            )
+        elif not img_cap_prov_id:
+            logger.debug(
+                "No dedicated image caption provider configured. "
+                "Skipping quote image captioning."
+            )
+        else:
+            try:
+                prov = None
+                path = None
+                compress_path = None
+                prov = plugin_context.get_provider_by_id(img_cap_prov_id)
+                if prov is None:
+                    prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
-            if prov and isinstance(prov, Provider):
-                path = await image_seg.convert_to_file_path()
-                compress_path = await _compress_image_for_provider(
-                    path,
-                    config.provider_settings if config else None,
-                )
-                if path and _is_generated_compressed_image_path(path, compress_path):
-                    event.track_temporary_local_file(compress_path)
-                llm_resp = await prov.text_chat(
-                    prompt="Please describe the image content.",
-                    image_urls=[compress_path],
-                )
-                if llm_resp.completion_text:
-                    content_parts.append(
-                        f"[Image Caption in quoted message]: {llm_resp.completion_text}"
+                if prov and isinstance(prov, Provider):
+                    path = await image_seg.convert_to_file_path()
+                    compress_path = await _compress_image_for_provider(
+                        path,
+                        config.provider_settings if config else None,
                     )
-            else:
-                logger.warning("No provider found for image captioning in quote.")
-        except BaseException as exc:
-            logger.error("处理引用图片失败: %s", exc)
-        finally:
-            if (
-                compress_path
-                and compress_path != path
-                and os.path.exists(compress_path)
-            ):
-                try:
-                    os.remove(compress_path)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Fail to remove temporary compressed image: %s", exc)
+                    if path and _is_generated_compressed_image_path(
+                        path, compress_path
+                    ):
+                        event.track_temporary_local_file(compress_path)
+                    llm_resp = await prov.text_chat(
+                        prompt="Please describe the image content.",
+                        image_urls=[compress_path],
+                    )
+                    if llm_resp.completion_text:
+                        content_parts.append(
+                            f"[Image Caption in quoted message]: {llm_resp.completion_text}"
+                        )
+                else:
+                    logger.warning("No provider found for image captioning in quote.")
+            except BaseException as exc:
+                logger.error("处理引用图片失败: %s", exc)
+            finally:
+                if (
+                    compress_path
+                    and compress_path != path
+                    and os.path.exists(compress_path)
+                ):
+                    try:
+                        os.remove(compress_path)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Fail to remove temporary compressed image: %s", exc
+                        )
 
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
@@ -918,11 +928,12 @@ async def _decorate_llm_request(
     main_provider_supports_image = provider is not None and _provider_supports_modality(
         provider, "image"
     )
+    img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
+    quote_images_already_captioned = False
 
     if req.conversation:
         await _ensure_persona_and_skills(req, cfg, plugin_context, event)
 
-        img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
         if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
                 event,
@@ -931,8 +942,11 @@ async def _decorate_llm_request(
                 plugin_context,
                 img_cap_prov_id,
             )
+            quote_images_already_captioned = any(
+                "<image_caption>" in getattr(part, "text", "")
+                for part in req.extra_user_content_parts
+            )
 
-    img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
     quoted_message_settings = _get_quoted_message_parser_settings(cfg)
     await _process_quote_message(
         event,
@@ -942,6 +956,7 @@ async def _decorate_llm_request(
         quoted_message_settings,
         config,
         main_provider_supports_image=main_provider_supports_image,
+        skip_quote_image_caption=quote_images_already_captioned,
     )
 
     tz = config.timezone
