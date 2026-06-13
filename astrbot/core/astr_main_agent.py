@@ -152,6 +152,10 @@ class MainAgentBuildConfig:
     """
     tool_schema_mode: str = "full"
     """The tool schema mode, can be 'full' or 'skills-like'."""
+    repeated_tool_notice_enabled: bool = True
+    """Whether to inject SYSTEM NOTICE when the same tool is called repeatedly."""
+    repeated_tool_notice_threshold: int = 3
+    """The consecutive same-tool call count that triggers the first notice."""
     provider_wake_prefix: str = ""
     """The wake prefix for the provider. If the user message does not start with this prefix,
     the main agent will not be triggered."""
@@ -1247,6 +1251,29 @@ def _get_fallback_chat_providers(
     return fallbacks
 
 
+def _resolve_repeated_tool_notice_config(
+    config: MainAgentBuildConfig,
+) -> tuple[bool, object]:
+    provider_settings = config.provider_settings
+    if not isinstance(provider_settings, dict):
+        return (
+            config.repeated_tool_notice_enabled,
+            config.repeated_tool_notice_threshold,
+        )
+
+    notice_cfg = provider_settings.get("repeated_tool_call_notice")
+    if not isinstance(notice_cfg, dict):
+        return (
+            config.repeated_tool_notice_enabled,
+            config.repeated_tool_notice_threshold,
+        )
+
+    return (
+        bool(notice_cfg.get("enable", config.repeated_tool_notice_enabled)),
+        notice_cfg.get("threshold", config.repeated_tool_notice_threshold),
+    )
+
+
 def _provider_supports_modality(provider: Provider, modality: str) -> bool:
     modalities = provider.provider_config.get("modalities", None)
     if modalities == []:
@@ -1538,6 +1565,11 @@ async def build_main_agent(
     if event.get_platform_name() == "webchat":
         asyncio.create_task(_handle_webchat(event, req, provider))
 
+    (
+        repeated_tool_notice_enabled,
+        repeated_tool_notice_threshold,
+    ) = _resolve_repeated_tool_notice_config(config)
+
     if req.func_tool and req.func_tool.tools:
         tool_prompt = (
             TOOL_CALL_PROMPT
@@ -1577,6 +1609,8 @@ async def build_main_agent(
         truncate_turns=config.dequeue_context_length,
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
+        repeated_tool_notice_enabled=repeated_tool_notice_enabled,
+        repeated_tool_notice_threshold=repeated_tool_notice_threshold,
         fallback_providers=fallback_providers,
         tool_result_overflow_dir=(
             get_astrbot_system_tmp_path()

@@ -236,6 +236,32 @@ class Context:
             for k, v in kwargs.items()
             if k not in ["stream", "agent_hooks", "agent_context"]
         }
+
+        # 从 provider_settings 注入「连续工具调用提醒」的默认配置，
+        # 仅当调用者没有显式通过 kwargs 覆盖时生效。
+        # 字段命名与 ToolLoopAgentRunner.reset() / MainAgentBuildConfig 保持一致。
+        if (
+            "repeated_tool_notice_enabled" not in other_kwargs
+            or "repeated_tool_notice_threshold" not in other_kwargs
+        ):
+            try:
+                provider_settings = self.get_config(umo=event.unified_msg_origin).get(
+                    "provider_settings", {}
+                )
+            except Exception:
+                provider_settings = {}
+            if not isinstance(provider_settings, dict):
+                provider_settings = {}
+            notice_cfg = provider_settings.get("repeated_tool_call_notice")
+            if isinstance(notice_cfg, dict):
+                if "repeated_tool_notice_enabled" not in other_kwargs:
+                    other_kwargs["repeated_tool_notice_enabled"] = bool(
+                        notice_cfg.get("enable", True)
+                    )
+                if "repeated_tool_notice_threshold" not in other_kwargs:
+                    other_kwargs["repeated_tool_notice_threshold"] = notice_cfg.get(
+                        "threshold", 3
+                    )
         if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
             other_kwargs.setdefault(
                 "tool_result_overflow_dir", get_astrbot_system_tmp_path()
