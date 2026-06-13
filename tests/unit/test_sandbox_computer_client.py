@@ -174,7 +174,9 @@ async def test_get_booter_prefers_current_sandbox_over_configured_provider(
 
 
 @pytest.mark.asyncio
-async def test_get_booter_renews_current_sandbox_lease(monkeypatch, tmp_path):
+async def test_get_booter_does_not_reacquire_expired_current_binding(
+    monkeypatch, tmp_path
+):
     from astrbot.core.computer import computer_client
     from astrbot.core.computer.sandbox_manager import SandboxManager
     from astrbot.core.computer.sandbox_registry import SandboxRegistry
@@ -191,11 +193,13 @@ async def test_get_booter_renews_current_sandbox_lease(monkeypatch, tmp_path):
         "lease_expires_at"
     ] = time.time() - 1
 
-    await computer_client.get_booter(FakeContext(), "session-a")
+    booter = await computer_client.get_booter(FakeContext(), "session-a")
 
-    renewed = manager.registry.get_sandbox(current["sandbox_id"])
-    assert renewed["controller_session_id"] == "session-a"
-    assert renewed["lease_expires_at"] > time.time()
+    expired = manager.registry.get_sandbox(current["sandbox_id"])
+    current_sandbox_id = manager.registry.get_current_sandbox_id("session-a")
+    assert expired["controller_session_id"] is None
+    assert current_sandbox_id != current["sandbox_id"]
+    assert booter is manager.session_booter[current_sandbox_id]
 
 
 def test_computer_client_does_not_expose_legacy_session_cache():

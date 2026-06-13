@@ -400,7 +400,12 @@ class SandboxManager:
         )
 
     async def get_or_create_booter(
-        self, context: Context, session_id: str, provider_id: str
+        self,
+        context: Context,
+        session_id: str,
+        provider_id: str,
+        *,
+        exclude_sandbox_ids: set[str] | None = None,
     ) -> ComputerBooter:
         provider = self.get_provider(provider_id)
         create_config = provider.build_create_config(context, session_id)
@@ -409,7 +414,7 @@ class SandboxManager:
 
         current_sandbox_id = self.registry.get_current_sandbox_id(session_id)
         current_record = self.registry.get_sandbox(current_sandbox_id)
-        excluded_stale_current_ids: set[str] = set()
+        excluded_stale_current_ids = set(exclude_sandbox_ids or set())
         if current_sandbox_id and (
             current_record is None or current_record.get("provider") != provider_id
         ):
@@ -1218,14 +1223,18 @@ class SandboxManager:
         await self.save_registry_async()
         return self.registry.get_sandbox(sandbox_id) or record
 
-    def get_current_sandbox(self, session_id: str) -> dict:
+    def get_current_sandbox(
+        self, session_id: str, *, include_stale_current_id: bool = False
+    ) -> dict:
         sandbox_id = self.registry.get_current_sandbox_id(session_id)
         sandbox = self.registry.get_sandbox(sandbox_id) if sandbox_id else None
+        stale_current_sandbox_id = None
         if sandbox:
             controller_session_id = sandbox.get("controller_session_id")
             if controller_session_id != session_id or not lease_is_active(
                 controller_session_id, sandbox.get("lease_expires_at")
             ):
+                stale_current_sandbox_id = sandbox_id
                 self._release_expired_lease(sandbox)
                 self.registry.set_current_sandbox_id(session_id, None)
                 self.save_registry()
@@ -1241,10 +1250,13 @@ class SandboxManager:
                 sandbox["tool_names"] = sorted(
                     getattr(provider, "tool_names", sandbox.get("tool_names", []))
                 )
-        return {
+        result = {
             "current_sandbox_id": sandbox_id,
             "sandbox": sandbox,
         }
+        if include_stale_current_id:
+            result["stale_current_sandbox_id"] = stale_current_sandbox_id
+        return result
 
     def release_current_sandbox(
         self, session_id: str, sandbox_id: str | None = None
