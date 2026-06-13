@@ -18,10 +18,14 @@ jobs:
         with:
           script: |
             const title = (context.payload.pull_request.title || "").trim();
-            // allow only:
+            // Allow Conventional Commit style PR titles.
+            // Examples:
             // feat: xxx
             // feat(scope): xxx
-            const pattern = /^(feat)(\([a-z0-9-]+\))?:\s.+$/i;
+            // fix: xxx
+            // fix(scope): xxx
+            const allowedTypes = "feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert";
+            const pattern = new RegExp(`^(${allowedTypes})(\\([a-z0-9-]+\\))?:\\s.+$`, "i");
             const isValid = pattern.test(title);
             const isSameRepo =
               context.payload.pull_request.head.repo.full_name === context.payload.repository.full_name;
@@ -38,6 +42,12 @@ jobs:
                       "Required formats:",
                       "- `feat: xxx`",
                       "- `feat(scope): xxx`",
+                      "- `fix: xxx`",
+                      "- `fix(scope): xxx`",
+                      "- `chore: xxx`",
+                      "",
+                      "Allowed prefixes:",
+                      "`feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`, `revert`",
                       "Please update your PR title and push again."
                     ].join("\n")
                   });
@@ -50,5 +60,5 @@ jobs:
             }
 
             if (!isValid) {
-              core.setFailed("Invalid PR title. Expected format: feat: xxx or feat(scope): xxx.");
+              core.setFailed("Invalid PR title. Expected Conventional Commit format, e.g. feat: xxx, feat(scope): xxx, or fix: xxx.");
             }
