@@ -30,7 +30,7 @@ class FakeGroupMessage:
         self.attachments = []
 
 
-class FakeGuildMessage:
+class FakeChannelMessage:
     def __init__(self, content: str | None) -> None:
         self.id = "guild-message-id"
         self.content = content
@@ -93,6 +93,22 @@ def test_sanitize_command_interaction_tags_leaves_non_target_tag_unchanged() -> 
     )
 
 
+def test_normalize_message_content_handles_none() -> None:
+    assert QQOfficialPlatformAdapter._normalize_message_content(None) == ""
+
+
+def test_normalize_message_content_removes_bot_mention_and_sanitizes_tags() -> None:
+    content = '<@!bot-id> <qqbot-cmd-input text="/quick-map" show="quick map" />'
+
+    assert (
+        QQOfficialPlatformAdapter._normalize_message_content(
+            content,
+            mention_id="bot-id",
+        )
+        == "/quick-map"
+    )
+
+
 @pytest.mark.asyncio
 async def test_parse_from_qqofficial_sanitizes_message_str_and_plain_component(
     monkeypatch,
@@ -136,15 +152,15 @@ async def test_parse_from_qqofficial_handles_none_group_content(
 
 
 @pytest.mark.asyncio
-async def test_parse_from_qqofficial_handles_none_guild_content(
+async def test_parse_from_qqofficial_handles_none_channel_content(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
         qqofficial_platform_adapter.botpy.message,
         "Message",
-        FakeGuildMessage,
+        FakeChannelMessage,
     )
-    raw_message = FakeGuildMessage(None)
+    raw_message = FakeChannelMessage(None)
 
     message = await QQOfficialPlatformAdapter._parse_from_qqofficial(
         raw_message,

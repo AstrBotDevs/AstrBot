@@ -547,6 +547,21 @@ class QQOfficialPlatformAdapter(Platform):
         return tag_pattern.sub(replace_tag, content).strip()
 
     @staticmethod
+    def _normalize_message_content(
+        content: str | None,
+        mention_id: str | None = None,
+    ) -> str:
+        raw_content = content or ""
+        if mention_id is not None:
+            raw_content = raw_content.replace(
+                "<@!" + mention_id + ">",
+                "",
+            )
+        return QQOfficialPlatformAdapter._sanitize_command_interaction_tags(
+            QQOfficialPlatformAdapter._parse_face_message(raw_content.strip())
+        )
+
+    @staticmethod
     async def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
@@ -572,11 +587,8 @@ class QQOfficialPlatformAdapter(Platform):
             else:
                 abm.sender = MessageMember(message.author.user_openid, "")
             # Parse face messages to readable text
-            raw_content = message.content.strip() if message.content else ""
-            abm.message_str = (
-                QQOfficialPlatformAdapter._sanitize_command_interaction_tags(
-                    QQOfficialPlatformAdapter._parse_face_message(raw_content)
-                )
+            abm.message_str = QQOfficialPlatformAdapter._normalize_message_content(
+                message.content
             )
             abm.self_id = "unknown_selfid"
             msg.append(At(qq="qq_official"))
@@ -595,16 +607,9 @@ class QQOfficialPlatformAdapter(Platform):
             else:
                 abm.self_id = ""
 
-            raw_content = message.content or ""
-            plain_content = (
-                QQOfficialPlatformAdapter._sanitize_command_interaction_tags(
-                    QQOfficialPlatformAdapter._parse_face_message(
-                        raw_content.replace(
-                            "<@!" + str(abm.self_id) + ">",
-                            "",
-                        ).strip()
-                    )
-                )
+            plain_content = QQOfficialPlatformAdapter._normalize_message_content(
+                message.content,
+                mention_id=str(abm.self_id),
             )
 
             await QQOfficialPlatformAdapter._append_attachments(
