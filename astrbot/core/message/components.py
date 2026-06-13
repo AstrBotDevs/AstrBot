@@ -453,12 +453,20 @@ class Image(BaseMessageComponent):
     def __init__(self, file: str | None, **_) -> None:
         super().__init__(file=file, **_)
 
+    _BASE64_TRUNCATE_AT = 57  # 截断后保留的字符数
+    _BASE64_TRUNCATE_IF_OVER = 60  # 超过此长度才截断
+
     def __repr__(self) -> str:
         """截断 base64 数据，避免日志中打印完整的图片数据。"""
         f = self.file or ""
-        if f.startswith("base64://") and len(f) > 60:
-            f = f[:57] + "..."
-        return f"Image(file={f!r})"
+        if f.startswith("base64://") and len(f) > self._BASE64_TRUNCATE_IF_OVER:
+            f = f[: self._BASE64_TRUNCATE_AT] + "..."
+        parts = [f"file={f!r}"]
+        for attr in ("url", "path", "_type"):
+            val = getattr(self, attr, None) or ""
+            if val:
+                parts.append(f"{attr}={val!r}")
+        return f"Image({', '.join(parts)})"
 
     @staticmethod
     def fromURL(url: str, **_):
