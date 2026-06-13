@@ -114,9 +114,10 @@ def build_plug_list(plugins_dir: Path) -> list:
     """
     # Get local plugin info
     result = []
-    if plugins_dir.exists():
-        for plugin_name in [d.name for d in plugins_dir.glob("*") if d.is_dir()]:
-            plugin_dir = plugins_dir / plugin_name
+    if plugins_dir.is_dir():
+        for plugin_dir in plugins_dir.iterdir():
+            if not plugin_dir.is_dir():
+                continue
 
             # Load metadata from metadata.yaml
             metadata = load_yaml_metadata(plugin_dir)
@@ -141,51 +142,44 @@ def build_plug_list(plugins_dir: Path) -> list:
                 )
 
     # Get online plugin list
-    online_plugins = []
+    online_plugins_dict = {}
     try:
         with httpx.Client() as client:
             resp = client.get("https://api.soulter.top/astrbot/plugins")
             resp.raise_for_status()
             data = resp.json()
             for plugin_id, plugin_info in data.items():
-                online_plugins.append(
-                    {
-                        "name": str(plugin_id),
-                        "desc": str(plugin_info.get("desc", "")),
-                        "version": str(plugin_info.get("version", "")),
-                        "author": str(plugin_info.get("author", "")),
-                        "repo": str(plugin_info.get("repo", "")),
-                        "status": PluginStatus.NOT_INSTALLED,
-                        "local_path": None,
-                    },
-                )
+                online_plugins_dict[str(plugin_id)] = {
+                    "name": str(plugin_id),
+                    "desc": str(plugin_info.get("desc", "")),
+                    "version": str(plugin_info.get("version", "")),
+                    "author": str(plugin_info.get("author", "")),
+                    "repo": str(plugin_info.get("repo", "")),
+                    "status": PluginStatus.NOT_INSTALLED,
+                    "local_path": None,
+                }
     except Exception as e:
         click.echo(f"Failed to get online plugin list: {e}", err=True)
 
     # Compare with online plugins and update status
-    online_plugin_names = {plugin["name"] for plugin in online_plugins}
     for local_plugin in result:
-        if local_plugin["name"] in online_plugin_names:
-            # Find the corresponding online plugin
-            online_plugin = next(
-                p for p in online_plugins if p["name"] == local_plugin["name"]
-            )
-            if (
-                VersionComparator.compare_version(
-                    local_plugin["version"],
-                    online_plugin["version"],
-                )
-                < 0
-            ):
-                local_plugin["status"] = PluginStatus.NEED_UPDATE
-        else:
+        online_plugin = online_plugins_dict.pop(local_plugin["name"], None)
+        if online_plugin is None:
             # Local plugin is not published online
             local_plugin["status"] = PluginStatus.NOT_PUBLISHED
+            continue
+
+        if (
+            VersionComparator.compare_version(
+                local_plugin["version"],
+                online_plugin["version"],
+            )
+            < 0
+        ):
+            local_plugin["status"] = PluginStatus.NEED_UPDATE
 
     # Add uninstalled online plugins
-    for online_plugin in online_plugins:
-        if not any(plugin["name"] == online_plugin["name"] for plugin in result):
-            result.append(online_plugin)
+    result.extend(online_plugins_dict.values())
 
     return result
 
