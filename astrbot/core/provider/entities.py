@@ -63,6 +63,10 @@ class ProviderMetaData(ProviderMeta):
     """the default configuration template of the provider adapter"""
     provider_display_name: str | None = None
     """the display name of the provider shown in the WebUI configuration page; if empty, the type is used"""
+    i18n_resources: dict[str, dict] | None = None
+    """the i18n resources of the provider adapter"""
+    config_metadata: dict | None = None
+    """the config metadata of the provider adapter"""
 
 
 @dataclass
