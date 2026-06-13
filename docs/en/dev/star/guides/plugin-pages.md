@@ -176,6 +176,8 @@ When the user toggles light/dark mode in AstrBot, the theme state is automatical
 - Light mode: `<html data-theme="light">`
 - Dark mode: `<html data-theme="dark">`
 
+> When **Follow System** is selected, AstrBot automatically resolves the theme based on the system's color scheme. The `data-theme` value received by the plugin page is always either `light` or `dark` — no extra handling needed.
+
 ### CSS Adaptation
 
 CSS variables are the recommended approach:
