@@ -1268,7 +1268,7 @@ def _get_fallback_chat_providers(
 
 def _resolve_repeated_tool_notice_config(
     config: MainAgentBuildConfig,
-) -> tuple[bool, object]:
+) -> tuple[bool, int]:
     provider_settings = config.provider_settings
     if not isinstance(provider_settings, dict):
         return (
