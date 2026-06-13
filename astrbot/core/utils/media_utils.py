@@ -268,7 +268,7 @@ def _decode_base64_payload(
     validate: bool = False,
 ) -> bytes:
     """Decode base64 payloads while tolerating omitted padding."""
-    payload = payload.strip()
+    payload = "".join(payload.split())
     missing_padding = len(payload) % 4
     if missing_padding:
         payload += "=" * (4 - missing_padding)

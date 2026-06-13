@@ -2,7 +2,7 @@ import base64
 import os
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from urllib.parse import quote
 
 import pytest
 
@@ -76,6 +76,27 @@ async def test_resolve_audio_ref_to_base64_data_decodes_base64_scheme(
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
     audio_ref = f"base64://{base64.b64encode(audio_bytes).decode()}"
+
+    resolved = await media_utils.resolve_media_ref_to_base64_data(
+        audio_ref,
+        media_type="audio",
+    )
+
+    assert resolved is not None
+    assert resolved.base64_data == base64.b64encode(audio_bytes).decode()
+    assert resolved.mime_type == "audio/wav"
+    assert resolved.format == "wav"
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.asyncio
+async def test_resolve_audio_ref_to_base64_data_ignores_internal_whitespace(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
+    audio_base64 = base64.b64encode(audio_bytes).decode().rstrip("=")
+    audio_ref = f"base64://{audio_base64[:8]}\n {audio_base64[8:]}"
 
     resolved = await media_utils.resolve_media_ref_to_base64_data(
         audio_ref,
@@ -272,13 +293,11 @@ async def test_media_resolver_cleans_http_target_when_download_fails(
 def test_describe_media_ref_does_not_include_payload_or_query():
     data_ref = "data:image/png;base64," + "A" * 128
     url_ref = "https://example.com/path/image.png?token=secret"
+    described_url_ref = media_utils.describe_media_ref(url_ref)
 
     assert "A" * 64 not in media_utils.describe_media_ref(data_ref)
-    assert "token=secret" not in media_utils.describe_media_ref(url_ref)
-    assert (
-        urlparse(media_utils.describe_media_ref(url_ref)).hostname
-        == urlparse(url_ref).hostname
-    )
+    assert "token=secret" not in described_url_ref
+    assert described_url_ref == "https URL host='example.com' file='image.png' len=47"
 
 
 @pytest.mark.asyncio
@@ -352,6 +371,31 @@ async def test_video_component_uses_media_resolver_for_data_uri(tmp_path, monkey
         assert Path(video_path).read_bytes() == video_bytes
         assert Path(video_path).suffix == ".mp4"
     finally:
+        Path(video_path).unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_record_and_video_components_accept_generic_data_uri(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
+    video_bytes = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 8
+    record = Record(
+        file=f"data:application/octet-stream;base64,{base64.b64encode(audio_bytes).decode()}"
+    )
+    video = Video(
+        file=f"data:application/octet-stream;base64,{base64.b64encode(video_bytes).decode()}"
+    )
+
+    record_path = await record.convert_to_file_path()
+    video_path = await video.convert_to_file_path()
+
+    try:
+        assert Path(record_path).read_bytes() == audio_bytes
+        assert Path(video_path).read_bytes() == video_bytes
+    finally:
+        Path(record_path).unlink(missing_ok=True)
         Path(video_path).unlink(missing_ok=True)
 
 

@@ -352,13 +352,11 @@ class CozeAgentRunner(BaseAgentRunner[TContext]):
                 return file_id
 
         try:
-            image_data = await MediaResolver(
+            image_bytes = await MediaResolver(
                 image_url,
                 media_type="image",
-            ).to_base64_data(strict=True)
-            if image_data is None:
-                raise ValueError("invalid image data")
-            file_id = await self.api_client.upload_file(image_data.to_bytes())
+            ).to_bytes()
+            file_id = await self.api_client.upload_file(image_bytes)
 
             if session_id:
                 self.file_id_cache[session_id][cache_key] = file_id

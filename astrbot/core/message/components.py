@@ -170,7 +170,7 @@ class Record(BaseMessageComponent):
                 is_file_uri(self.file)
                 or self.file.startswith("http")
                 or self.file.startswith("base64://")
-                or self.file.startswith("data:audio/")
+                or self.file.startswith("data:")
                 or file_exists
             ):
                 return self.file
@@ -191,7 +191,7 @@ class Record(BaseMessageComponent):
             if (
                 is_file_uri(self.url)
                 or self.url.startswith("http")
-                or self.url.startswith("data:audio/")
+                or self.url.startswith("data:")
                 or url_exists
                 or decoded_url_exists
             ):
@@ -303,7 +303,7 @@ class Video(BaseMessageComponent):
                 is_file_uri(candidate)
                 or candidate.startswith("http")
                 or candidate.startswith("base64://")
-                or candidate.startswith("data:video/")
+                or candidate.startswith("data:")
                 or candidate_exists
             ):
                 return candidate

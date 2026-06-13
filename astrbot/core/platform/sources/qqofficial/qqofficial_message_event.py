@@ -683,15 +683,19 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             elif isinstance(i, Image) and not image_base64:
                 if not i.file:
                     raise ValueError("Unsupported image file format")
-                image_base64 = await MediaResolver(
-                    i.file,
-                    media_type="image",
-                ).to_base64()
-                if is_file_uri(i.file) or os.path.exists(i.file):
-                    image_file_path = await MediaResolver(
-                        i.file,
-                        media_type="image",
-                    ).to_path()
+                image_is_local = is_file_uri(i.file)
+                if not image_is_local:
+                    try:
+                        image_is_local = os.path.exists(i.file)
+                    except OSError:
+                        image_is_local = False
+                resolver = MediaResolver(i.file, media_type="image")
+                if image_is_local:
+                    async with resolver.as_path() as resolved:
+                        image_file_path = str(resolved.path.resolve())
+                        image_base64 = resolved.to_base64()
+                else:
+                    image_base64 = await resolver.to_base64()
             elif isinstance(i, Record):
                 if i.file:
                     record_wav_path = await i.convert_to_file_path()  # wav 路径
