@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 272 icons */
+/* Auto-generated MDI subset – 274 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -114,6 +114,10 @@
 
 .mdi-brain::before {
   content: "\F09D1";
+}
+
+.mdi-brightness-6::before {
+  content: "\F00DF";
 }
 
 .mdi-broadcast::before {
@@ -1022,6 +1026,10 @@
 
 .mdi-text-search::before {
   content: "\F13B8";
+}
+
+.mdi-theme-light-dark::before {
+  content: "\F050E";
 }
 
 .mdi-timeline-text-outline::before {
