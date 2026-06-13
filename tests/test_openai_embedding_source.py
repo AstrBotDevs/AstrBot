@@ -20,6 +20,8 @@ from astrbot.core.provider.sources.openai_embedding_source import (
             " https://example.com/openai/v3/embeddings/ ",
             "https://example.com/openai/v3",
         ),
+        (None, ""),
+        ("", ""),
     ],
 )
 def test_normalize_embedding_api_base(api_base, expected):

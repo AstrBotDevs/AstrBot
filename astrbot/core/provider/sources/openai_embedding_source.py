@@ -12,7 +12,9 @@ from ..register import register_provider_adapter
 _API_VERSION_SUFFIX_RE = re.compile(r"/v\d+$")
 
 
-def _normalize_embedding_api_base(api_base: str) -> str:
+def _normalize_embedding_api_base(api_base: str | None) -> str:
+    if not api_base:
+        return ""
     api_base = api_base.strip().removesuffix("/").removesuffix("/embeddings")
     if api_base and not _API_VERSION_SUFFIX_RE.search(api_base):
         api_base = api_base + "/v1"
@@ -36,7 +38,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             logger.info(f"[OpenAI Embedding] {provider_id} Using proxy: {proxy}")
             http_client = httpx.AsyncClient(proxy=proxy)
         api_base = _normalize_embedding_api_base(
-            provider_config.get("embedding_api_base", "https://api.openai.com/v1")
+            provider_config.get("embedding_api_base") or "https://api.openai.com/v1"
         )
         logger.info(f"[OpenAI Embedding] {provider_id} Using API Base: {api_base}")
         self.client = AsyncOpenAI(
