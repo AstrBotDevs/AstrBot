@@ -186,6 +186,10 @@
             "description": "Shipyard Neo Profile",
             "hint": "Sandbox profile for Shipyard Neo, e.g. python-default. Leave empty to auto-select the most capable profile."
           },
+          "shipyard_neo_cargo_id": {
+            "description": "Shipyard Neo Cargo ID",
+            "hint": "Optional external Cargo ID used to bind the sandbox to a specific Cargo resource. Leave empty to skip binding."
+          },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox TTL",
             "hint": "Sandbox time-to-live in seconds."

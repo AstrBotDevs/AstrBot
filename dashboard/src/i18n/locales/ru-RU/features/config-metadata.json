@@ -186,6 +186,10 @@
                         "description": "Профиль Shipyard Neo",
                         "hint": "Профиль песочницы, например, python-default. Оставьте пустым для автоматического выбора самого функционального профиля."
                     },
+                    "shipyard_neo_cargo_id": {
+                        "description": "Shipyard Neo Cargo ID",
+                        "hint": "Необязательный внешний идентификатор Cargo, используемый для привязки песочницы к указанному ресурсу Cargo. Оставьте пустым, чтобы не привязывать."
+                    },
                     "shipyard_neo_ttl": {
                         "description": "TTL песочницы Shipyard Neo",
                         "hint": "Время жизни песочницы в секундах."
