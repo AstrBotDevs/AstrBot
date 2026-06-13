@@ -823,8 +823,14 @@ async def test_runner_clears_tools_for_provider_without_tool_use(
 async def test_same_tool_consecutive_results_include_escalating_guidance(
     runner, mock_tool_executor, mock_hooks
 ):
+    """默认配置下，连续调用同一工具应依次注入 L1/L2/L3 三档 SYSTEM NOTICE。
+
+    阈值来自 runner.repeated_tool_notice_threshold（默认 3）。
+    """
     runner_cls = type(runner)
-    total_calls = runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD
+    # 显式 reset 之前无法读取实例属性，这里手动传入预期阈值
+    expected_threshold = runner_cls.REPEATED_TOOL_NOTICE_DEFAULT_THRESHOLD
+    total_calls = expected_threshold + 2  # 覆盖 L1 / L2 / L3 三档
     provider = SequentialToolProvider(["test_tool"] * total_calls)
     tool = FunctionTool(
         name="test_tool",
@@ -847,6 +853,11 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
         streaming=False,
     )
 
+    # reset() 后实例属性已规范化，可以从中读取
+    threshold = runner.repeated_tool_notice_threshold
+    assert runner.repeated_tool_notice_enabled is True
+    assert threshold == expected_threshold
+
     async for _ in runner.step_until_done(total_calls + 1):
         pass
 
@@ -858,27 +869,27 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
     tool_contents = [str(message.content) for message in tool_messages]
     level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
         tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+        streak=threshold,
     )
     level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
         tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+        streak=threshold + 1,
     )
     level_3_notice = runner_cls.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
         tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD,
+        streak=threshold + 2,
     )
 
     for streak, content in enumerate(tool_contents, start=1):
-        if streak < runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
+        if streak < threshold:
             assert level_1_notice not in content
             assert level_2_notice not in content
             assert level_3_notice not in content
-        elif streak < runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
+        elif streak < threshold + 1:
             assert level_1_notice in content
             assert level_2_notice not in content
             assert level_3_notice not in content
-        elif streak < runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD:
+        elif streak < threshold + 2:
             assert level_1_notice not in content
             assert level_2_notice in content
             assert level_3_notice not in content
@@ -892,8 +903,10 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
 async def test_same_tool_streak_resets_after_switching_tools(
     runner, mock_tool_executor, mock_hooks
 ):
+    """切换工具后，连续调用计数应被重置；阈值由 runner.repeated_tool_notice_threshold 决定。"""
     runner_cls = type(runner)
-    repeated_after_reset = runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD
+    expected_threshold = runner_cls.REPEATED_TOOL_NOTICE_DEFAULT_THRESHOLD
+    repeated_after_reset = expected_threshold + 1  # 覆盖 L1 + L2 两档
     provider = SequentialToolProvider(
         ["test_tool", "other_tool", *(["test_tool"] * repeated_after_reset)]
     )
@@ -924,6 +937,9 @@ async def test_same_tool_streak_resets_after_switching_tools(
         streaming=False,
     )
 
+    threshold = runner.repeated_tool_notice_threshold
+    assert threshold == expected_threshold
+
     async for _ in runner.step_until_done(repeated_after_reset + 3):
         pass
 
@@ -935,11 +951,11 @@ async def test_same_tool_streak_resets_after_switching_tools(
     tool_contents = [str(message.content) for message in tool_messages]
     level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
         tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD,
+        streak=threshold,
     )
     level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
         tool_name="test_tool",
-        streak=runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD,
+        streak=threshold + 1,
     )
 
     assert level_1_notice not in tool_contents[0]
@@ -949,15 +965,181 @@ async def test_same_tool_streak_resets_after_switching_tools(
 
     repeated_contents = tool_contents[2:]
     for streak_after_reset, content in enumerate(repeated_contents, start=1):
-        if streak_after_reset < runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
+        if streak_after_reset < threshold:
             assert level_1_notice not in content
             assert level_2_notice not in content
-        elif streak_after_reset < runner_cls.REPEATED_TOOL_NOTICE_L2_THRESHOLD:
+        elif streak_after_reset < threshold + 1:
             assert level_1_notice in content
             assert level_2_notice not in content
         else:
             assert level_1_notice not in content
             assert level_2_notice in content
+
+
+@pytest.mark.asyncio
+async def test_repeated_tool_notice_disabled(
+    runner, mock_tool_executor, mock_hooks
+):
+    """enable=False 时，_build_repeated_tool_call_guidance 应始终返回空字符串。"""
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="禁用提醒后连续执行",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=MockProvider(),
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        repeated_tool_notice_enabled=False,
+    )
+
+    assert runner.repeated_tool_notice_enabled is False
+    for streak in range(1, 10):
+        assert runner._build_repeated_tool_call_guidance("test_tool", streak) == ""
+
+
+@pytest.mark.asyncio
+async def test_repeated_tool_notice_custom_threshold(
+    runner, mock_tool_executor, mock_hooks
+):
+    """自定义 threshold=2 时，第二次连续调用即应触发 L1 提示。"""
+    runner_cls = type(runner)
+    custom_threshold = 2
+    total_calls = custom_threshold + 2  # 覆盖 L1 / L2 / L3
+    provider = SequentialToolProvider(["test_tool"] * total_calls)
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="自定义阈值测试",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        repeated_tool_notice_threshold=custom_threshold,
+    )
+
+    assert runner.repeated_tool_notice_enabled is True
+    assert runner.repeated_tool_notice_threshold == custom_threshold
+
+    async for _ in runner.step_until_done(total_calls + 1):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == total_calls
+
+    tool_contents = [str(message.content) for message in tool_messages]
+    level_1_notice = runner_cls.REPEATED_TOOL_NOTICE_L1_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=custom_threshold,
+    )
+    level_2_notice = runner_cls.REPEATED_TOOL_NOTICE_L2_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=custom_threshold + 1,
+    )
+    level_3_notice = runner_cls.REPEATED_TOOL_NOTICE_L3_TEMPLATE.format(
+        tool_name="test_tool",
+        streak=custom_threshold + 2,
+    )
+
+    # 第 1 次：未达阈值，不注入
+    assert level_1_notice not in tool_contents[0]
+    # 第 2 次：达到阈值，注入 L1
+    assert level_1_notice in tool_contents[1]
+    assert level_2_notice not in tool_contents[1]
+    # 第 3 次：升级为 L2
+    assert level_2_notice in tool_contents[2]
+    assert level_3_notice not in tool_contents[2]
+    # 第 4 次：升级为 L3
+    assert level_3_notice in tool_contents[3]
+
+
+def test_normalize_repeated_tool_notice_threshold():
+    """_normalize_repeated_tool_notice_threshold 应正确处理各种边界输入。"""
+    runner_cls = ToolLoopAgentRunner
+    default = runner_cls.REPEATED_TOOL_NOTICE_DEFAULT_THRESHOLD
+
+    # 正常正整数
+    assert runner_cls._normalize_repeated_tool_notice_threshold(5) == 5
+    # 数字字符串
+    assert runner_cls._normalize_repeated_tool_notice_threshold("7") == 7
+    # 浮点数（截断为整数）
+    assert runner_cls._normalize_repeated_tool_notice_threshold(4.9) == 4
+    # 0 / 负数：兜底为 1
+    assert runner_cls._normalize_repeated_tool_notice_threshold(0) == 1
+    assert runner_cls._normalize_repeated_tool_notice_threshold(-3) == 1
+    # 布尔值：视为非法，回退到默认值
+    assert runner_cls._normalize_repeated_tool_notice_threshold(True) == default
+    assert runner_cls._normalize_repeated_tool_notice_threshold(False) == default
+    # None / 非数字字符串 / 容器：回退到默认值
+    assert runner_cls._normalize_repeated_tool_notice_threshold(None) == default
+    assert runner_cls._normalize_repeated_tool_notice_threshold("abc") == default
+    assert runner_cls._normalize_repeated_tool_notice_threshold([1, 2]) == default
+
+
+@pytest.mark.asyncio
+async def test_repeated_tool_notice_persists_across_reset(
+    runner, mock_tool_executor, mock_hooks
+):
+    """reset() 显式传入的参数应被保留，跨多次 reset 不丢失。"""
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="reset 参数持久化",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=MockProvider(),
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+        repeated_tool_notice_enabled=False,
+        repeated_tool_notice_threshold=7,
+    )
+    assert runner.repeated_tool_notice_enabled is False
+    assert runner.repeated_tool_notice_threshold == 7
+
+    # 再次 reset 时不传参，应沿用默认（与首次 reset 的参数无关）
+    await runner.reset(
+        provider=MockProvider(),
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+    assert runner.repeated_tool_notice_enabled is True
+    assert runner.repeated_tool_notice_threshold == 3
 
 
 @pytest.mark.asyncio
