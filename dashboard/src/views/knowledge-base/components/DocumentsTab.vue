@@ -341,7 +341,10 @@ const loadDocuments = async () => {
   loading.value = true
   try {
     const response = await axios.get('/api/kb/document/list', {
-      params: { kb_id: props.kbId }
+      params: {
+        kb_id: props.kbId,
+        page_size: props.kb?.doc_count || 10000
+      }
     })
     if (response.data.status === 'ok') {
       documents.value = response.data.data.items || []
