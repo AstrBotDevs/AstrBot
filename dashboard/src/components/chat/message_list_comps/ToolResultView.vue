@@ -76,13 +76,22 @@
       />
     </template>
 
+    <!-- ── 交互式 Shell(inta_shell)5 个工具 ────────────────────── -->
+    <template v-else-if="isIntaShellTool">
+      <IntaShellToolResultView
+        :tool-name="toolName"
+        :result="resultText"
+        :args="toolArgs"
+      />
+    </template>
+
     <!-- ── fallback ────────────────────────────────────────────── -->
     <template v-else>
       <pre class="result-raw">{{ formattedResult }}</pre>
     </template>
 
     <!-- ── shared system suffix ([SYSTEM NOTICE] + overflow notice; exclude shell which handles it separately) ── -->
-    <div v-if="resultSuffix && toolName !== 'astrbot_execute_shell'" class="result-suffix">{{ resultSuffix }}</div>
+    <div v-if="resultSuffix && toolName !== 'astrbot_execute_shell' && !isIntaShellTool" class="result-suffix">{{ resultSuffix }}</div>
   </div>
 </template>
 
@@ -96,6 +105,8 @@ import {
 import { findSystemNoticeIndex } from "@/utils/systemNotice";
 import SpcodeToolResultView from "./SpcodeToolResultView.vue";
 import { SPCODE_TOOL_NAMES } from "./spcode_tools/icons";
+import { INTA_SHELL_TOOL_NAMES } from "./inta_shell_tools/icons";
+import IntaShellToolResultView from "./IntaShellToolResultView.vue";
 
 const props = defineProps<{
   toolName: string;
@@ -195,6 +206,10 @@ const formattedResult = computed(() => {
 // ── spcode 插件工具分发 ─────────────────────────────────────────
 
 const isSpcodeTool = computed(() => SPCODE_TOOL_NAMES.has(props.toolName));
+
+// ── inta_shell 交互式 Shell 工具分发 ────────────────────────────
+
+const isIntaShellTool = computed(() => INTA_SHELL_TOOL_NAMES.has(props.toolName));
 
 // ── file_read_tool ──────────────────────────────────────────────
 

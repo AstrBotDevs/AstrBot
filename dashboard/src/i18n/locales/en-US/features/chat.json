@@ -88,6 +88,33 @@
   "ipython": {
     "output": "Output"
   },
+  "intaShell": {
+    "headers": {
+      "start": "Session started",
+      "send": "Input sent",
+      "read": "Read output",
+      "stop": "Session terminated",
+      "list": "Active sessions ({count})"
+    },
+    "labels": {
+      "command": "Command",
+      "pid": "PID",
+      "created": "Created",
+      "message": "Message",
+      "initialOutput": "Initial output",
+      "output": "Output",
+      "noOutput": "No new output",
+      "noSessions": "No active sessions",
+      "exitCode": "Exit code"
+    },
+    "stateLabels": {
+      "running": "running",
+      "waitingInput": "waiting input",
+      "outputReady": "output ready",
+      "terminated": "terminated",
+      "error": "error"
+    }
+  },
   "toolStatus": {
     "done": "Done",
     "running": "Running"

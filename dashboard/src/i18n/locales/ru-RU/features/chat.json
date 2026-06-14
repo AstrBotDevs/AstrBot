@@ -88,6 +88,33 @@
   "ipython": {
     "output": "Вывод"
   },
+  "intaShell": {
+    "headers": {
+      "start": "Сессия запущена",
+      "send": "Ввод отправлен",
+      "read": "Чтение вывода",
+      "stop": "Сессия завершена",
+      "list": "Активные сессии ({count})"
+    },
+    "labels": {
+      "command": "Команда",
+      "pid": "PID",
+      "created": "Создано",
+      "message": "Сообщение",
+      "initialOutput": "Начальный вывод",
+      "output": "Вывод",
+      "noOutput": "Нового вывода нет",
+      "noSessions": "Активных сессий нет",
+      "exitCode": "Код выхода"
+    },
+    "stateLabels": {
+      "running": "выполняется",
+      "waitingInput": "ожидание ввода",
+      "outputReady": "вывод готов",
+      "terminated": "завершена",
+      "error": "ошибка"
+    }
+  },
   "toolStatus": {
     "done": "Готово",
     "running": "Выполняется"

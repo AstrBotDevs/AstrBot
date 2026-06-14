@@ -132,6 +132,11 @@ const toolCallIcon = computed(() => {
   if (name === "astrbot_grep_tool") return "mdi-magnify";
   if (name === "astrbot_execute_shell") return "mdi-console-line";
   if (name === "astrbot_execute_python" || name === "astrbot_execute_ipython") return "mdi-language-python";
+  if (name === "astrbot_inta_shell_start") return "mdi-play-circle-outline";
+  if (name === "astrbot_inta_shell_send") return "mdi-keyboard-outline";
+  if (name === "astrbot_inta_shell_read") return "mdi-eye-outline";
+  if (name === "astrbot_inta_shell_stop") return "mdi-stop-circle-outline";
+  if (name === "astrbot_inta_shell_list") return "mdi-format-list-bulleted";
   if (name === "astrbot_upload_file") return "mdi-upload-outline";
   if (name === "astrbot_download_file") return "mdi-download-outline";
   if (name.includes("web_search") || name.includes("tavily")) return "mdi-web";
