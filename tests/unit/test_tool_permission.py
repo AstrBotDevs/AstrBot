@@ -302,9 +302,9 @@ def test_get_full_tool_set_wraps_non_builtin():
 
     plugin_tools = [t for t in tool_set.tools if t.name == "my_plugin_tool"]
     assert plugin_tools
-    assert isinstance(
-        plugin_tools[0], _PermissionGuardedTool
-    ), "non-builtin tools must be wrapped"
+    assert isinstance(plugin_tools[0], _PermissionGuardedTool), (
+        "non-builtin tools must be wrapped"
+    )
 
 
 # ── API: get_tool_list permission fields ──────────────────────────────
@@ -357,9 +357,7 @@ class TestUpdateToolPermission:
         )
         assert "target_tool" in message
 
-        stored = sp.get(
-            "tool_permissions", {}, scope="global", scope_id="global"
-        )
+        stored = sp.get("tool_permissions", {}, scope="global", scope_id="global")
         assert stored["_default"]["target_tool"] == "admin"
 
     @pytest.mark.asyncio
@@ -376,7 +374,9 @@ class TestUpdateToolPermission:
         service = _make_tools_service()
 
         with pytest.raises(ToolsServiceError, match="not found"):
-            service.update_tool_permission({"name": "ghost_tool", "permission": "admin"})
+            service.update_tool_permission(
+                {"name": "ghost_tool", "permission": "admin"}
+            )
 
     @pytest.mark.asyncio
     async def test_reject_invalid_permission_value(self):
