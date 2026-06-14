@@ -8,6 +8,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import PlainTextResponse, Response
 
+from astrbot.api.web import PluginRequest, bind_request_context
 from astrbot.core import logger
 from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
@@ -200,20 +201,29 @@ async def _call_plugin_extension(
         return {"status": "error", "message": "未找到该路由", "data": {}}
 
     view_handler, path_values = matched_api
+    plugin_name = plugin_path.strip("/").split("/", 1)[0].strip() or None
+    plugin_request = PluginRequest(
+        request,
+        path_params=path_values,
+        plugin_name=plugin_name,
+        username=username,
+    )
     app_adapter = getattr(request.app.state, "dashboard_app_adapter", None)
     if app_adapter is None:
-        return await run_maybe_async(lambda: view_handler(**path_values))
+        with bind_request_context(plugin_request):
+            return await run_maybe_async(lambda: view_handler(**path_values))
 
     g_obj = DashboardRequestState()
     g_obj.username = username
-    return await call_request_view(
-        request,
-        app_adapter,
-        view_handler,
-        path_values,
-        g_obj=g_obj,
-        quart_compat_path=_plugin_extension_legacy_path(plugin_path, request),
-    )
+    with bind_request_context(plugin_request):
+        return await call_request_view(
+            request,
+            app_adapter,
+            view_handler,
+            path_values,
+            g_obj=g_obj,
+            quart_compat_path=_plugin_extension_legacy_path(plugin_path, request),
+        )
 
 
 def _get_request_locale(request: Request, default: str = "zh-CN") -> str:

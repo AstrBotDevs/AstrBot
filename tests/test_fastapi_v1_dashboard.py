@@ -1774,6 +1774,106 @@ async def test_v1_plugin_extension_maps_nested_plugin_path(
 
 
 @pytest.mark.asyncio
+async def test_v1_plugin_extension_supports_astrbot_web_api(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    from astrbot.api.web import json_response
+    from astrbot.api.web import request as plugin_request
+
+    async def astrbot_web_plugin_extension(item_id: str):
+        return json_response(
+            {
+                "item_id": item_id,
+                "path_value": plugin_request.path_params["item_id"],
+                "path": plugin_request.path,
+                "method": plugin_request.method,
+                "limit": plugin_request.query.get("limit", 20, type=int),
+                "tags": plugin_request.query.getlist("tag"),
+                "payload": await plugin_request.json(default={}),
+                "username": plugin_request.username,
+                "plugin_name": plugin_request.plugin_name,
+            },
+            status_code=201,
+        )
+
+    fake_core_lifecycle.star_context.registered_web_apis = [
+        ("/web/<item_id>", astrbot_web_plugin_extension, ["POST"], "web")
+    ]
+
+    response = await asgi_client.post(
+        "/api/v1/plugins/extensions/web/demo-item?limit=7&tag=one&tag=two",
+        json={"value": "demo"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data == {
+        "item_id": "demo-item",
+        "path_value": "demo-item",
+        "path": "/api/v1/plugins/extensions/web/demo-item",
+        "method": "POST",
+        "limit": 7,
+        "tags": ["one", "two"],
+        "payload": {"value": "demo"},
+        "username": "fastapi-v1-test",
+        "plugin_name": "web",
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_extension_astrbot_web_api_reads_form_and_files(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    from astrbot.api.web import json_response
+    from astrbot.api.web import request as plugin_request
+
+    async def astrbot_web_upload_extension():
+        form = await plugin_request.form()
+        files = await plugin_request.files()
+        upload = files.get("file")
+        return json_response(
+            {
+                "tags": form.getlist("tag"),
+                "filename": upload.filename,
+                "content_type": upload.content_type,
+                "content": (await upload.read()).decode("utf-8"),
+            }
+        )
+
+    fake_core_lifecycle.star_context.registered_web_apis = [
+        ("/upload", astrbot_web_upload_extension, ["POST"], "upload")
+    ]
+
+    response = await asgi_client.post(
+        "/api/v1/plugins/extensions/upload",
+        files=[
+            ("tag", (None, "one")),
+            ("tag", (None, "two")),
+            ("file", ("demo.txt", b"hello", "text/plain")),
+        ],
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "tags": ["one", "two"],
+        "filename": "demo.txt",
+        "content_type": "text/plain",
+        "content": "hello",
+    }
+
+
+def test_astrbot_web_request_requires_plugin_context():
+    from astrbot.api.web import request as plugin_request
+
+    with pytest.raises(RuntimeError, match="plugin Web API handler"):
+        _ = plugin_request.method
+
+
+@pytest.mark.asyncio
 async def test_v1_plugin_extension_supports_quart_request_context(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,

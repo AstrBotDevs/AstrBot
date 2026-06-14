@@ -176,6 +176,19 @@ const sendBridgeResponse = (requestId, ok, payload) => {
   });
 };
 
+const getBridgeErrorMessage = (error, fallback) => {
+  const responseData = error?.response?.data;
+  if (responseData && typeof responseData === "object") {
+    if (typeof responseData.message === "string" && responseData.message) {
+      return responseData.message;
+    }
+    if (typeof responseData.error === "string" && responseData.error) {
+      return responseData.error;
+    }
+  }
+  return error?.message || fallback;
+};
+
 const closeSSEConnection = (subscriptionId) => {
   const eventSource = sseConnections.get(subscriptionId);
   if (eventSource) {
@@ -335,7 +348,7 @@ const handleBridgeRequest = async (message) => {
     sendBridgeResponse(
       requestId,
       false,
-      error?.message || "Plugin bridge request failed.",
+      getBridgeErrorMessage(error, "Plugin bridge request failed."),
     );
   }
 };
