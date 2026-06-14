@@ -294,7 +294,7 @@ const apiKeys = ref([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref('');
 const newApiKeyExpiresInDays = ref(30);
-const newApiKeyScopes = ref(['chat', 'config', 'im']);
+const newApiKeyScopes = ref(['bot', 'provider', 'im', 'config', 'chat']);
 const createdApiKeyPlaintext = ref('');
 const apiKeyExpiryOptions = computed(() => [
     { title: tm('apiKey.expiryOptions.day1'), value: 1 },
@@ -311,8 +311,29 @@ const availableScopes = [
     { value: 'im', label: 'im' },
     { value: 'config', label: 'config' },
     { value: 'chat', label: 'chat' },
-    { value: 'plugin', label: 'plugin' }
+    { value: 'plugin', label: 'plugin' },
+    { value: 'mcp', label: 'mcp' },
+    { value: 'skills', label: 'skills' }
 ];
+
+const configIncludedScopes = ['bot', 'provider'];
+
+watch(
+    newApiKeyScopes,
+    (scopes) => {
+        if (!scopes.includes('config')) return;
+        const selectedScopes = new Set(scopes);
+        for (const scope of configIncludedScopes) {
+            selectedScopes.add(scope);
+        }
+        if (selectedScopes.size !== scopes.length) {
+            newApiKeyScopes.value = availableScopes
+                .map((scope) => scope.value)
+                .filter((scope) => selectedScopes.has(scope));
+        }
+    },
+    { deep: true, immediate: true }
+);
 
 const showToast = (message, color = 'success') => {
     toastStore.add({
@@ -353,9 +374,15 @@ const copyCreatedApiKey = async () => {
 };
 
 const createApiKey = async () => {
+    const selectedScopeSet = new Set(newApiKeyScopes.value);
+    if (selectedScopeSet.has('config')) {
+        for (const scope of configIncludedScopes) {
+            selectedScopeSet.add(scope);
+        }
+    }
     const selectedScopes = availableScopes
         .map((scope) => scope.value)
-        .filter((scope) => newApiKeyScopes.value.includes(scope));
+        .filter((scope) => selectedScopeSet.has(scope));
 
     if (selectedScopes.length === 0) {
         showToast(tm('apiKey.messages.scopeRequired'), 'warning');

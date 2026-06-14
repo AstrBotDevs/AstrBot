@@ -37,7 +37,7 @@ def get_service(request: Request) -> SkillsService:
 
 
 async def require_skill_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "skill")
+    return await require_scope(request, "skills")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:

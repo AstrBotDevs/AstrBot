@@ -757,6 +757,36 @@ async def test_open_send_message_error_paths(
 
 
 @pytest.mark.asyncio
+async def test_open_api_key_scope_normalization(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+
+    config_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "config-contained-scopes-key", "scopes": ["config"]},
+        headers=authenticated_header,
+    )
+    config_data = await config_res.get_json()
+
+    assert config_res.status_code == 200
+    assert config_data["status"] == "ok"
+    assert set(config_data["data"]["scopes"]) == {"config", "bot", "provider"}
+
+    extra_scope_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "mcp-skills-scope-key", "scopes": ["mcp", "skills"]},
+        headers=authenticated_header,
+    )
+    extra_scope_data = await extra_scope_res.get_json()
+
+    assert extra_scope_res.status_code == 200
+    assert extra_scope_data["status"] == "ok"
+    assert set(extra_scope_data["data"]["scopes"]) == {"mcp", "skills"}
+
+
+@pytest.mark.asyncio
 async def test_file_scope_is_not_available_for_developer_api_key(
     app: FastAPIAppAdapter,
     authenticated_header: dict,

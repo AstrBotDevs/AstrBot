@@ -1521,19 +1521,24 @@ async def test_v1_safe_bot_routes_accept_slash_ids(
 
 
 @pytest.mark.asyncio
-async def test_v1_bot_scope_accepts_api_key(
+async def test_v1_config_scope_includes_bot_and_provider(
     asgi_client: httpx.AsyncClient,
     fake_db: FakeDb,
 ):
     config_key = "abk_fastapi_v1_config"
     fake_db.add_api_key(config_key, scopes=["config"])
 
-    config_response = await asgi_client.get(
+    bot_response = await asgi_client.get(
         "/api/v1/bots",
         headers={"X-API-Key": config_key},
     )
+    provider_response = await asgi_client.get(
+        "/api/v1/providers/schema",
+        headers={"X-API-Key": config_key},
+    )
 
-    assert config_response.status_code == 403
+    assert bot_response.status_code == 200
+    assert provider_response.status_code == 200
 
     bot_key = "abk_fastapi_v1_bot"
     fake_db.add_api_key(bot_key, scopes=["bot"])
@@ -1547,7 +1552,7 @@ async def test_v1_bot_scope_accepts_api_key(
     data = response.json()
     assert data["status"] == "ok"
     assert isinstance(data["data"]["bots"], list)
-    assert fake_db.touched_key_ids == ["config-key"]
+    assert fake_db.touched_key_ids == ["config-key", "config-key", "config-key"]
 
 
 @pytest.mark.asyncio
@@ -2084,29 +2089,60 @@ async def test_v1_safe_mcp_routes_accept_slash_server_names(
 
 
 @pytest.mark.asyncio
-async def test_v1_skills_reject_developer_api_key_scope(
+async def test_v1_mcp_scope_accepts_api_key(
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+):
+    raw_key = "abk_fastapi_v1_mcp"
+    fake_db.add_api_key(raw_key, scopes=["mcp"])
+
+    response = await asgi_client.get(
+        "/api/v1/mcp/servers",
+        headers={"X-API-Key": raw_key},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert any(server["name"] == "demo-server" for server in data["data"])
+
+
+@pytest.mark.asyncio
+async def test_v1_skills_scope_accepts_api_key_and_rejects_legacy_singular_scope(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,
     fake_db: FakeDb,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    raw_key = "abk_fastapi_v1_skill"
-    fake_db.add_api_key(raw_key, scopes=["skill"])
     monkeypatch.setattr(
         asgi_app.state.services.skills,
         "get_skills",
         lambda: {"skills": [{"name": "demo_skill"}]},
     )
 
+    legacy_key = "abk_fastapi_v1_skill"
+    fake_db.add_api_key(legacy_key, scopes=["skill"])
+    legacy_response = await asgi_client.get(
+        "/api/v1/skills",
+        headers={"X-API-Key": legacy_key},
+    )
+
+    assert legacy_response.status_code == 403
+    data = legacy_response.json()
+    assert data["status"] == "error"
+    assert data["message"] == "Insufficient API key scope"
+
+    raw_key = "abk_fastapi_v1_skills"
+    fake_db.add_api_key(raw_key, scopes=["skills"])
     response = await asgi_client.get(
         "/api/v1/skills",
         headers={"X-API-Key": raw_key},
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "error"
-    assert data["message"] == "Insufficient API key scope"
+    assert data["status"] == "ok"
+    assert data["data"]["skills"] == [{"name": "demo_skill"}]
 
 
 @pytest.mark.asyncio

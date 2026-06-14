@@ -8,7 +8,7 @@ from typing import Any
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.datetime_utils import normalize_datetime_utc
 
-from .auth_service import ALL_OPEN_API_SCOPES
+from .auth_service import ALL_OPEN_API_SCOPES, OPEN_API_SCOPE_INCLUDES
 
 
 class ApiKeyServiceError(Exception):
@@ -73,6 +73,8 @@ class ApiKeyService:
                 invalid_scopes.append(str(scope))
         if invalid_scopes:
             raise ApiKeyServiceError(f"Invalid scopes: {', '.join(invalid_scopes)}")
+        for scope in tuple(scopes):
+            scopes.extend(OPEN_API_SCOPE_INCLUDES.get(scope, ()))
         normalized_scopes = list(dict.fromkeys(scopes))
         if not normalized_scopes:
             raise ApiKeyServiceError("At least one valid scope is required")

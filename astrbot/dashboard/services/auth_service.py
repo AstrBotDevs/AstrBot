@@ -55,7 +55,13 @@ ALL_OPEN_API_SCOPES = (
     "config",
     "chat",
     "plugin",
+    "mcp",
+    "skills",
 )
+
+OPEN_API_SCOPE_INCLUDES = {
+    "config": ("bot", "provider"),
+}
 
 DASHBOARD_JWT_COOKIE_NAME = "astrbot_dashboard_jwt"
 DASHBOARD_JWT_COOKIE_MAX_AGE = 7 * 24 * 60 * 60

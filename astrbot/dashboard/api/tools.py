@@ -33,6 +33,10 @@ async def require_tool_scope(request: Request) -> AuthContext:
     return await require_scope(request, "tool")
 
 
+async def require_mcp_scope(request: Request) -> AuthContext:
+    return await require_scope(request, "mcp")
+
+
 async def _json_or_empty(request: Request) -> dict[str, Any]:
     try:
         data = await request.json()
@@ -208,7 +212,7 @@ async def set_tool_permission(
 
 @router.get("/mcp/servers")
 async def list_mcp_servers(
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _run(service.get_mcp_servers)
@@ -217,7 +221,7 @@ async def list_mcp_servers(
 @router.post("/mcp/servers")
 async def create_mcp_server(
     payload: McpServerRequest,
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _create_mcp_server(_model_dict(payload), service)
@@ -226,7 +230,7 @@ async def create_mcp_server(
 @router.put("/mcp/servers/by-name")
 async def update_mcp_server_by_name(
     payload: McpServerByNameRequest,
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     body = _model_dict(payload)
@@ -236,7 +240,7 @@ async def update_mcp_server_by_name(
 @router.delete("/mcp/servers/by-name")
 async def delete_mcp_server_by_name(
     server_name: str = Query(...),
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _delete_mcp_server(server_name, service)
@@ -245,7 +249,7 @@ async def delete_mcp_server_by_name(
 @router.patch("/mcp/servers/enabled")
 async def set_mcp_server_enabled_by_name(
     payload: McpServerByNameRequest,
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     body = _model_dict(payload)
@@ -255,7 +259,7 @@ async def set_mcp_server_enabled_by_name(
 @router.post("/mcp/servers/test")
 async def test_mcp_server_by_name(
     payload: McpServerByNameRequest,
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     body = _model_dict(payload)
@@ -266,7 +270,7 @@ async def test_mcp_server_by_name(
 async def set_mcp_server_enabled(
     server_name: str,
     payload: ToolEnabledRequest,
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _update_mcp_server(
@@ -280,7 +284,7 @@ async def set_mcp_server_enabled(
 async def test_mcp_server(
     server_name: str,
     payload: McpServerRequest | None = None,
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     body = _model_dict(payload) if payload is not None else {}
@@ -291,7 +295,7 @@ async def test_mcp_server(
 async def update_mcp_server(
     server_name: str,
     payload: McpServerRequest,
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     body = _model_dict(payload)
@@ -301,7 +305,7 @@ async def update_mcp_server(
 @router.delete("/mcp/servers/{server_name:path}")
 async def delete_mcp_server(
     server_name: str,
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     return await _delete_mcp_server(server_name, service)
@@ -310,7 +314,7 @@ async def delete_mcp_server(
 @router.post("/mcp/providers/modelscope/sync")
 async def sync_modelscope_mcp_servers(
     payload: ModelScopeSyncRequest | None = None,
-    _auth: AuthContext = Depends(require_tool_scope),
+    _auth: AuthContext = Depends(require_mcp_scope),
     service: ToolsService = Depends(get_service),
 ):
     access_token = payload.access_token if payload is not None else ""

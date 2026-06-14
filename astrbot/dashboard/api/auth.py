@@ -18,6 +18,7 @@ from astrbot.dashboard.services.auth_service import (
     ALL_OPEN_API_SCOPES,
     DASHBOARD_JWT_COOKIE_MAX_AGE,
     DASHBOARD_JWT_COOKIE_NAME,
+    OPEN_API_SCOPE_INCLUDES,
     TOTP_TRUSTED_DEVICE_COOKIE_NAME,
     TOTP_TRUSTED_DEVICE_MAX_AGE,
     AuthService,
@@ -123,7 +124,14 @@ async def _require_api_key_scope(
         if isinstance(api_key.scopes, list)
         else [str(scope) for scope in ALL_OPEN_API_SCOPES]
     )
-    if "*" not in scopes and scope not in scopes:
+    if (
+        "*" not in scopes
+        and scope not in scopes
+        and not any(
+            scope in OPEN_API_SCOPE_INCLUDES.get(api_key_scope, ())
+            for api_key_scope in scopes
+        )
+    ):
         raise ApiError("Insufficient API key scope", status_code=403)
     await request.app.state.db.touch_api_key(api_key.key_id)
     return AuthContext(
