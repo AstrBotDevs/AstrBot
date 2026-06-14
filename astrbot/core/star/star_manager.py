@@ -1731,7 +1731,7 @@ class PluginManager:
                 if (
                     plugin.module_path
                     and mp
-                    and plugin.module_path.startswith(mp)
+                    and mp.startswith(plugin.module_path)
                     and not mp.endswith(("astrbot.builtin_stars", "data.plugins"))
                 ):
                     func_tool.active = False
@@ -1806,7 +1806,7 @@ class PluginManager:
             if (
                 plugin.module_path
                 and mp
-                and plugin.module_path.startswith(mp)
+                and mp.startswith(plugin.module_path)
                 and not mp.endswith(("astrbot.builtin_stars", "data.plugins"))
                 and func_tool.name in inactivated_llm_tools
             ):

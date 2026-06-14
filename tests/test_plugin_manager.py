@@ -528,6 +528,74 @@ async def test_reload_all_unbinds_every_registered_plugin(
 
 
 @pytest.mark.asyncio
+async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    plugin = star_manager_module.StarMetadata(
+        name="demo_plugin",
+        root_dir_name="demo_plugin",
+        module_path="data.plugins.demo_plugin.main",
+    )
+    cast(Any, plugin_manager_pm.context).stars.append(plugin)
+    plugin_tool = star_manager_module.FunctionTool(
+        name="plugin_search",
+        description="plugin search",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="data.plugins.demo_plugin.main.tools.search",
+    )
+    other_tool = star_manager_module.FunctionTool(
+        name="other_search",
+        description="other search",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="data.plugins.other_plugin.main.tools.search",
+    )
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = [plugin_tool, other_tool]
+    preferences = {
+        "inactivated_plugins": [],
+        "inactivated_llm_tools": [],
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    async def mock_terminate(star_metadata):
+        assert star_metadata is plugin
+
+    async def mock_reload(plugin_name):
+        assert plugin_name == plugin.root_dir_name
+        return True, None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "reload", mock_reload)
+
+    try:
+        await plugin_manager_pm.turn_off_plugin(plugin.root_dir_name)
+
+        assert plugin_tool.active is False
+        assert other_tool.active is True
+        assert preferences["inactivated_plugins"] == [plugin.module_path]
+        assert preferences["inactivated_llm_tools"] == [plugin_tool.name]
+        assert plugin.activated is False
+
+        await plugin_manager_pm.turn_on_plugin(plugin.root_dir_name)
+
+        assert plugin_tool.active is True
+        assert other_tool.active is True
+        assert preferences["inactivated_plugins"] == []
+        assert preferences["inactivated_llm_tools"] == []
+    finally:
+        llm_tools.func_list = original_func_list
+
+
+@pytest.mark.asyncio
 async def test_load_reports_unregistered_plugin_without_index_error(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
