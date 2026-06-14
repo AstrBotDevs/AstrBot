@@ -1,6 +1,7 @@
-"""媒体文件处理工具
+"""Media file utilities.
 
-提供音视频格式转换、时长获取等功能。
+Provides shared media reference materialization, format conversion, duration
+probing, and image compression helpers.
 """
 
 import asyncio
@@ -267,7 +268,20 @@ def _decode_base64_payload(
     error_message: str,
     validate: bool = False,
 ) -> bytes:
-    """Decode base64 payloads while tolerating omitted padding."""
+    """Decode a base64 payload while tolerating omitted padding.
+
+    Args:
+        payload: Base64 payload without a data URI header.
+        error_message: Message to use when decoding fails.
+        validate: Whether to ask ``base64.b64decode`` to reject non-base64
+            characters.
+
+    Returns:
+        Decoded bytes.
+
+    Raises:
+        ValueError: Raised when the payload cannot be decoded.
+    """
     payload = "".join(payload.split())
     missing_padding = len(payload) % 4
     if missing_padding:
@@ -342,7 +356,16 @@ def detect_image_mime_type(
     *,
     default_mime_type: str | None = "image/jpeg",
 ) -> str | None:
-    """Detect an image MIME type from bytes."""
+    """Detect an image MIME type from bytes.
+
+    Args:
+        image_bytes: Encoded image bytes to inspect.
+        default_mime_type: MIME type to return when detection fails.
+
+    Returns:
+        The detected MIME type, or ``default_mime_type`` when detection fails or
+        the format is unknown.
+    """
 
     try:
         with PILImage.open(io.BytesIO(image_bytes)) as image:
@@ -820,16 +843,16 @@ async def resolve_media_ref_to_base64_data(
 
 
 async def get_media_duration(file_path: str) -> int | None:
-    """使用ffprobe获取媒体文件时长
+    """Probe media duration with ffprobe.
 
     Args:
-        file_path: 媒体文件路径
+        file_path: Local media file path.
 
     Returns:
-        时长（毫秒），如果获取失败返回None
+        Duration in milliseconds, or ``None`` when probing fails.
     """
     try:
-        # 使用ffprobe获取时长
+        # Probe duration with ffprobe.
         process = await asyncio.create_subprocess_exec(
             "ffprobe",
             "-v",
@@ -848,24 +871,34 @@ async def get_media_duration(file_path: str) -> int | None:
         if process.returncode == 0 and stdout:
             duration_seconds = float(stdout.decode().strip())
             duration_ms = int(duration_seconds * 1000)
-            logger.debug(f"[Media Utils] 获取媒体时长: {duration_ms}ms")
+            logger.debug("Media duration detected: %sms", duration_ms)
             return duration_ms
         else:
-            logger.warning(f"[Media Utils] 无法获取媒体文件时长: {file_path}")
+            logger.warning("Failed to get media duration: %s", file_path)
             return None
 
     except FileNotFoundError:
         logger.warning(
-            "[Media Utils] ffprobe未安装或不在PATH中，无法获取媒体时长。请安装ffmpeg: https://ffmpeg.org/"
+            "ffprobe is not installed or not in PATH. "
+            "Install ffmpeg: https://ffmpeg.org/"
         )
         return None
     except Exception as e:
-        logger.warning(f"[Media Utils] 获取媒体时长时出错: {e}")
+        logger.warning("Error while probing media duration: %s", e)
         return None
 
 
 async def convert_audio_to_opus(audio_path: str, output_path: str | None = None) -> str:
-    """将音频转换为opus格式。"""
+    """Convert an audio file to Opus format.
+
+    Args:
+        audio_path: Source audio file path.
+        output_path: Optional output file path. When omitted, a temporary path is
+            created under AstrBot's temp directory.
+
+    Returns:
+        The converted Opus file path.
+    """
     return await convert_audio_format(
         audio_path=audio_path,
         output_format="opus",
@@ -876,24 +909,25 @@ async def convert_audio_to_opus(audio_path: str, output_path: str | None = None)
 async def convert_video_format(
     video_path: str, output_format: str = "mp4", output_path: str | None = None
 ) -> str:
-    """使用ffmpeg转换视频格式
+    """Convert a video file with ffmpeg.
 
     Args:
-        video_path: 原始视频文件路径
-        output_format: 目标格式，默认mp4
-        output_path: 输出文件路径，如果为None则自动生成
+        video_path: Source video file path.
+        output_format: Target format, such as ``mp4``.
+        output_path: Optional output file path. When omitted, a temporary path is
+            created under AstrBot's temp directory.
 
     Returns:
-        转换后的视频文件路径
+        The converted video file path.
 
     Raises:
-        Exception: 转换失败时抛出异常
+        Exception: Raised when ffmpeg is unavailable or conversion fails.
     """
-    # 如果已经是目标格式，直接返回
+    # Return early when the source already appears to be in the target format.
     if video_path.lower().endswith(f".{output_format}"):
         return video_path
 
-    # 生成输出文件路径
+    # Create an output path when the caller does not provide one.
     if output_path is None:
         temp_dir = get_astrbot_temp_path()
         os.makedirs(temp_dir, exist_ok=True)
@@ -903,7 +937,7 @@ async def convert_video_format(
         )
 
     try:
-        # 使用ffmpeg转换视频格式
+        # Convert the video with ffmpeg.
         process = await asyncio.create_subprocess_exec(
             "ffmpeg",
             "-y",
@@ -921,32 +955,41 @@ async def convert_video_format(
         stdout, stderr = await process.communicate()
 
         if process.returncode != 0:
-            # 清理可能已生成但无效的临时文件
+            # Remove a partial output file created by a failed ffmpeg run.
             if output_path and os.path.exists(output_path):
                 try:
                     os.remove(output_path)
                     logger.debug(
-                        f"[Media Utils] 已清理失败的{output_format}输出文件: {output_path}"
+                        "Removed failed %s output file: %s",
+                        output_format,
+                        output_path,
                     )
                 except OSError as e:
                     logger.warning(
-                        f"[Media Utils] 清理失败的{output_format}输出文件时出错: {e}"
+                        "Failed to remove failed %s output file: %s",
+                        output_format,
+                        e,
                     )
 
-            error_msg = stderr.decode() if stderr else "未知错误"
-            logger.error(f"[Media Utils] ffmpeg转换视频失败: {error_msg}")
+            error_msg = stderr.decode() if stderr else "unknown error"
+            logger.error("ffmpeg video conversion failed: %s", error_msg)
             raise Exception(f"ffmpeg conversion failed: {error_msg}")
 
-        logger.debug(f"[Media Utils] 视频转换成功: {video_path} -> {output_path}")
+        logger.debug(
+            "Video converted successfully: %s -> %s",
+            video_path,
+            output_path,
+        )
         return output_path
 
     except FileNotFoundError:
         logger.error(
-            "[Media Utils] ffmpeg未安装或不在PATH中，无法转换视频格式。请安装ffmpeg: https://ffmpeg.org/"
+            "ffmpeg is not installed or not in PATH. "
+            "Install ffmpeg: https://ffmpeg.org/"
         )
         raise Exception("ffmpeg not found")
     except Exception as e:
-        logger.error(f"[Media Utils] 转换视频格式时出错: {e}")
+        logger.error("Error while converting video format: %s", e)
         raise
 
 
@@ -955,15 +998,20 @@ async def convert_audio_format(
     output_format: str = "amr",
     output_path: str | None = None,
 ) -> str:
-    """使用ffmpeg将音频转换为指定格式。
+    """Convert an audio file to the requested format with ffmpeg.
 
     Args:
-        audio_path: 原始音频文件路径
-        output_format: 目标格式，例如 amr / ogg / opus / wav
-        output_path: 输出文件路径，如果为None则自动生成
+        audio_path: Source audio file path.
+        output_format: Target format, such as ``amr``, ``ogg``, ``opus``, or
+            ``wav``.
+        output_path: Optional output file path. When omitted, a temporary path is
+            created under AstrBot's temp directory.
 
     Returns:
-        转换后的音频文件路径
+        The converted audio file path.
+
+    Raises:
+        Exception: Raised when ffmpeg is unavailable or conversion fails.
     """
     if audio_path.lower().endswith(f".{output_format}"):
         return audio_path
@@ -1011,17 +1059,33 @@ async def convert_audio_format(
                 try:
                     os.remove(output_path)
                 except OSError as e:
-                    logger.warning(f"[Media Utils] 清理失败的音频输出文件时出错: {e}")
-            error_msg = stderr.decode() if stderr else "未知错误"
+                    logger.warning(
+                        "Failed to remove failed audio output file: %s",
+                        e,
+                    )
+            error_msg = stderr.decode() if stderr else "unknown error"
             raise Exception(f"ffmpeg conversion failed: {error_msg}")
-        logger.debug(f"[Media Utils] 音频转换成功: {audio_path} -> {output_path}")
+        logger.debug(
+            "Audio converted successfully: %s -> %s",
+            audio_path,
+            output_path,
+        )
         return output_path
     except FileNotFoundError:
         raise Exception("ffmpeg not found")
 
 
 async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) -> str:
-    """将音频转换为amr格式。"""
+    """Convert an audio file to AMR format.
+
+    Args:
+        audio_path: Source audio file path.
+        output_path: Optional output file path. When omitted, a temporary path is
+            created under AstrBot's temp directory.
+
+    Returns:
+        The converted AMR file path.
+    """
     return await convert_audio_format(
         audio_path=audio_path,
         output_format="amr",
@@ -1030,7 +1094,16 @@ async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) 
 
 
 async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) -> str:
-    """将音频转换为wav格式。"""
+    """Convert an audio file to WAV format.
+
+    Args:
+        audio_path: Source audio file path.
+        output_path: Optional output file path. When omitted, a temporary path is
+            created under AstrBot's temp directory.
+
+    Returns:
+        The converted WAV file path.
+    """
     return await convert_audio_format(
         audio_path=audio_path,
         output_format="wav",
@@ -1041,7 +1114,22 @@ async def convert_audio_to_wav(audio_path: str, output_path: str | None = None) 
 async def ensure_wav(audio_path: str, output_path: str | None = None) -> str:
     """Ensure the audio path points to wav format by extension/guess and convert when needed.
 
-    If the file appears to already be wav, return it directly to avoid extra conversion.
+    If the file appears to already be WAV, return it directly to avoid extra
+    conversion. If the file does not exist yet, return the original path so
+    upstream retry logic can handle platform races.
+
+    Args:
+        audio_path: Local audio path to inspect and convert when needed.
+        output_path: Optional destination path. When omitted, conversion helpers
+            create a temporary file under AstrBot's temp directory.
+
+    Returns:
+        The original path when it is already WAV or unavailable; otherwise the
+        converted WAV path.
+
+    Raises:
+        Exception: Raised by the underlying conversion helper when conversion
+            fails.
     """
 
     if not audio_path:
@@ -1139,20 +1227,35 @@ async def ensure_jpeg(image_path: str, output_path: str | None = None) -> str:
             try:
                 os.remove(output_path)
             except OSError as e:
-                logger.warning(f"[Media Utils] 清理失败的图片输出文件时出错: {e}")
+                logger.warning(
+                    "Failed to remove failed image output file: %s",
+                    e,
+                )
         raise
 
 
 def _get_audio_magic_type(audio_path: str) -> str:
-    """Detect common audio formats from magic bytes."""
+    """Detect common audio formats from magic bytes.
+
+    Args:
+        audio_path: Local audio path to inspect.
+
+    Returns:
+        A normalized format name such as ``wav``, ``mp3``, ``opus``, ``silk``, or
+        an empty string when the type cannot be detected.
+    """
     try:
         with open(audio_path, "rb") as f:
             header = f.read(64)
     except FileNotFoundError:
-        logger.warning(f"[Media Utils] wav check file not found: {audio_path}")
+        logger.warning("WAV probe file not found: %s", audio_path)
         return ""
     except Exception as e:
-        logger.warning(f"[Media Utils] wav check failed: {audio_path}, error: {e}")
+        logger.warning(
+            "WAV probe failed: %s, error: %s",
+            audio_path,
+            e,
+        )
         return ""
 
     if len(header) < 12:
@@ -1192,7 +1295,19 @@ async def extract_video_cover(
     video_path: str,
     output_path: str | None = None,
 ) -> str:
-    """从视频中提取封面图(JPG)"""
+    """Extract a JPEG cover frame from a video.
+
+    Args:
+        video_path: Source video file path.
+        output_path: Optional output image path. When omitted, a temporary JPEG
+            path is created under AstrBot's temp directory.
+
+    Returns:
+        The extracted JPEG cover path.
+
+    Raises:
+        Exception: Raised when ffmpeg is unavailable or cover extraction fails.
+    """
     if output_path is None:
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
@@ -1218,8 +1333,11 @@ async def extract_video_cover(
                 try:
                     os.remove(output_path)
                 except OSError as e:
-                    logger.warning(f"[Media Utils] 清理失败的视频封面文件时出错: {e}")
-            error_msg = stderr.decode() if stderr else "未知错误"
+                    logger.warning(
+                        "Failed to remove failed video cover file: %s",
+                        e,
+                    )
+            error_msg = stderr.decode() if stderr else "unknown error"
             raise Exception(f"ffmpeg extract cover failed: {error_msg}")
         return output_path
     except FileNotFoundError:
