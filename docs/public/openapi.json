@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, plugin.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, plugin, mcp, skills. The config scope also grants bot and provider access.\n"
   },
   "servers": [
     {
@@ -4360,6 +4360,36 @@
         }
       }
     },
+    "/api/v1/tools/{tool_id}/permission": {
+      "patch": {
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Update an LLM tool permission",
+        "operationId": "setToolPermission",
+        "x-astrbot-scope": "tool",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ToolId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolPermissionPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
     "/api/v1/mcp/servers": {
       "get": {
         "tags": [
@@ -4367,7 +4397,7 @@
         ],
         "summary": "List MCP servers",
         "operationId": "listMcpServers",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
@@ -4380,7 +4410,7 @@
         ],
         "summary": "Add an MCP server",
         "operationId": "createMcpServer",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "requestBody": {
           "required": true,
           "content": {
@@ -4405,7 +4435,7 @@
         ],
         "summary": "Update an MCP server by body name",
         "operationId": "updateMcpServerByName",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "requestBody": {
           "required": true,
           "content": {
@@ -4443,7 +4473,7 @@
         ],
         "summary": "Delete an MCP server by query name",
         "operationId": "deleteMcpServerByName",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "parameters": [
           {
             "name": "server_name",
@@ -4468,7 +4498,7 @@
         ],
         "summary": "Enable or disable an MCP server by body name",
         "operationId": "setMcpServerEnabledByName",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "requestBody": {
           "required": true,
           "content": {
@@ -4506,7 +4536,7 @@
         ],
         "summary": "Test an MCP server connection by body name",
         "operationId": "testMcpServerByName",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "requestBody": {
           "required": true,
           "content": {
@@ -4546,7 +4576,7 @@
         ],
         "summary": "Update an MCP server",
         "operationId": "updateMcpServer",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "parameters": [
           {
             "$ref": "#/components/parameters/ServerName"
@@ -4574,7 +4604,7 @@
         ],
         "summary": "Delete an MCP server",
         "operationId": "deleteMcpServer",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "parameters": [
           {
             "$ref": "#/components/parameters/ServerName"
@@ -4594,7 +4624,7 @@
         ],
         "summary": "Enable or disable an MCP server",
         "operationId": "setMcpServerEnabled",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "parameters": [
           {
             "$ref": "#/components/parameters/ServerName"
@@ -4624,7 +4654,7 @@
         ],
         "summary": "Test an MCP server connection",
         "operationId": "testMcpServer",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "parameters": [
           {
             "$ref": "#/components/parameters/ServerName"
@@ -4661,7 +4691,7 @@
         ],
         "summary": "Sync MCP servers from ModelScope",
         "operationId": "syncModelScopeMcpServers",
-        "x-astrbot-scope": "tool",
+        "x-astrbot-scope": "mcp",
         "requestBody": {
           "required": false,
           "content": {
@@ -4686,7 +4716,7 @@
         ],
         "summary": "List skills",
         "operationId": "listSkills",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "name": "enabled",
@@ -4715,7 +4745,7 @@
         ],
         "summary": "Upload or import a skill archive",
         "operationId": "uploadSkill",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -4740,7 +4770,7 @@
         ],
         "summary": "Upload multiple skill archives",
         "operationId": "uploadSkillsBatch",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -4777,7 +4807,7 @@
         ],
         "summary": "Update skill metadata or enabled state by body name",
         "operationId": "updateSkillByName",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -4815,7 +4845,7 @@
         ],
         "summary": "Delete a skill by query name",
         "operationId": "deleteSkillByName",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "name": "skill_name",
@@ -4840,7 +4870,7 @@
         ],
         "summary": "Download a skill archive by query name",
         "operationId": "downloadSkillByName",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "name": "skill_name",
@@ -4873,7 +4903,7 @@
         ],
         "summary": "List files in a skill by query name",
         "operationId": "listSkillFilesByName",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "name": "skill_name",
@@ -4905,7 +4935,7 @@
         ],
         "summary": "Get skill file content by query name and path",
         "operationId": "getSkillFileByName",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "name": "skill_name",
@@ -4936,7 +4966,7 @@
         ],
         "summary": "Update skill file content by body name and path",
         "operationId": "updateSkillFileByName",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -4978,7 +5008,7 @@
         ],
         "summary": "Update skill metadata or enabled state",
         "operationId": "updateSkill",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5006,7 +5036,7 @@
         ],
         "summary": "Delete a skill",
         "operationId": "deleteSkill",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5026,7 +5056,7 @@
         ],
         "summary": "Download a skill archive",
         "operationId": "downloadSkill",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5054,7 +5084,7 @@
         ],
         "summary": "List files in a skill",
         "operationId": "listSkillFiles",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5081,7 +5111,7 @@
         ],
         "summary": "Get skill file content",
         "operationId": "getSkillFile",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5102,7 +5132,7 @@
         ],
         "summary": "Update skill file content",
         "operationId": "updateSkillFile",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5135,7 +5165,7 @@
         ],
         "summary": "List Shipyard Neo skill candidates",
         "operationId": "listNeoSkillCandidates",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "name": "skill_key",
@@ -5166,7 +5196,7 @@
         ],
         "summary": "List Shipyard Neo skill releases",
         "operationId": "listNeoSkillReleases",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "name": "skill_key",
@@ -5197,7 +5227,7 @@
         ],
         "summary": "Get a Shipyard Neo skill payload",
         "operationId": "getNeoSkillPayload",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "parameters": [
           {
             "name": "payload_ref",
@@ -5222,7 +5252,7 @@
         ],
         "summary": "Evaluate a Shipyard Neo skill candidate",
         "operationId": "evaluateNeoSkillCandidate",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -5247,7 +5277,7 @@
         ],
         "summary": "Promote a Shipyard Neo skill candidate",
         "operationId": "promoteNeoSkillCandidate",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -5272,7 +5302,7 @@
         ],
         "summary": "Roll back a Shipyard Neo skill release",
         "operationId": "rollbackNeoSkillRelease",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -5297,7 +5327,7 @@
         ],
         "summary": "Sync a Shipyard Neo skill release",
         "operationId": "syncNeoSkillRelease",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -5322,7 +5352,7 @@
         ],
         "summary": "Delete a Shipyard Neo skill candidate",
         "operationId": "deleteNeoSkillCandidate",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -5347,7 +5377,7 @@
         ],
         "summary": "Delete a Shipyard Neo skill release",
         "operationId": "deleteNeoSkillRelease",
-        "x-astrbot-scope": "skill",
+        "x-astrbot-scope": "skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -8269,7 +8299,9 @@
                 "im",
                 "config",
                 "chat",
-                "plugin"
+                "plugin",
+                "mcp",
+                "skills"
               ]
             },
             "example": [
@@ -8279,7 +8311,9 @@
               "im",
               "config",
               "chat",
-              "plugin"
+              "plugin",
+              "mcp",
+              "skills"
             ]
           },
           "expires_at": {
@@ -8420,6 +8454,22 @@
         "properties": {
           "enabled": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ToolPermissionPatch": {
+        "type": "object",
+        "required": [
+          "permission"
+        ],
+        "properties": {
+          "permission": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "member"
+            ]
           }
         },
         "additionalProperties": false

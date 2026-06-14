@@ -38,13 +38,17 @@ When creating an API Key, you can configure `scopes`. Each scope controls the ra
 | `provider` | Manage model providers and provider sources | `GET/POST /api/v1/providers`, `GET/PUT/DELETE /api/v1/provider-sources/by-id` |
 | `persona` | Manage personas and persona folders | `GET/POST /api/v1/personas`, `GET/POST /api/v1/persona-folders` |
 | `im` | Send proactive IM messages and query bot/platform list | `POST /api/v1/im/message`, `GET /api/v1/im/bots` |
-| `config` | Manage config profiles, system config, and shared configuration | `GET /api/v1/configs`, `GET/PUT /api/v1/system-config`, `GET/POST /api/v1/config-profiles` |
+| `config` | Manage config profiles, system config, and shared configuration. This scope also includes `bot` and `provider` access. | `GET /api/v1/configs`, `GET/PUT /api/v1/system-config`, `GET/POST /api/v1/config-profiles` |
 | `chat` | Access chat capabilities and query sessions | `POST /api/v1/chat`, `GET /api/v1/chat/sessions` |
 | `plugin` | Manage plugins, plugin config, plugin sources, and marketplace entries | `GET /api/v1/plugins`, `GET/PUT /api/v1/plugins/config`, `POST /api/v1/plugins/install/url` |
+| `mcp` | Manage MCP server configurations and provider sync | `GET/POST /api/v1/mcp/servers`, `PATCH /api/v1/mcp/servers/{server_name}/enabled`, `POST /api/v1/mcp/providers/modelscope/sync` |
+| `skills` | Manage skills, skill archives, skill files, and Shipyard Neo skill workflows | `GET/POST /api/v1/skills`, `PUT /api/v1/skills/{skill_name}/files/{file_path}`, `POST /api/v1/skills/neo/sync` |
 
 If the API Key does not include the required scope for the target endpoint, the request will return `403 Insufficient API key scope`.
 
-Developer API keys currently support only the 7 scopes listed above. `file`, `tool`, `skill`, `kb`, `data`, and `system` are not valid developer API key scopes. Related endpoints may still appear in the `/api/v1` reference, but they are not available to developer API keys.
+`config` is a broad management scope. When an API key is created with `config`, AstrBot grants the key `config`, `bot`, and `provider` access together. The WebUI mirrors this dependency: selecting `config` selects `bot` and `provider`; deselecting `bot` or `provider` removes `config`.
+
+Developer API keys currently support only the 9 scopes listed above. `file`, `tool`, `skill`, `kb`, `data`, and `system` are not valid developer API key scopes. Use the plural `skills` scope for `/api/v1/skills/*` endpoints. Related endpoints may still appear in the `/api/v1` reference, but they are not available to developer API keys unless their scope is one of the supported scopes above.
 
 ## Common Endpoints
 
@@ -63,10 +67,12 @@ Interact with AstrBot's built-in Agent. Supports plugin calls, tool calls, and o
 - `GET /api/v1/providers`: list model provider configurations
 - `GET /api/v1/provider-sources`: list provider source configurations
 
-**Personas and Plugins**
+**Personas, Plugins, MCP, and Skills**
 
 - `GET /api/v1/personas`: list personas
 - `GET /api/v1/plugins`: list plugins
+- `GET /api/v1/mcp/servers`: list MCP servers
+- `GET /api/v1/skills`: list skills
 
 **Proactive IM Messages**
 
