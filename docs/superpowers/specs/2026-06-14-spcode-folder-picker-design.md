@@ -407,18 +407,20 @@ yield event.plain_result(
 
 ### 7.6 国际化
 
-新增 i18n key：
+> **注：** dashboard 的 i18n 按 locale 拆分（`zh-CN.json` / `en-US.json` 各自独立），下方仅展示 key 列表；实施时拆开填入各自文件。
 
-```json
+新增 i18n key 列表：
+
+```jsonc
+// 通用 key（两个 locale 都需要）
 {
-  "input.selectFolder": "选择文件夹 / Select Folder",
-  "input.folderPathLabel": "项目文件夹绝对路径 / Project Folder Absolute Path",
-  "input.folderPathPlaceholder": "例如: C:\\Users\\me\\projects\\my-app",
-  "input.folderPathSubmit": "加载项目 / Load Project",
-  "input.folderPathCancel": "取消 / Cancel",
-  "input.projectLoaded": "已加载项目",
-  "input.projectUnload": "卸载 / Unload",
-  "input.projectLoadError": "项目加载失败，请查看聊天流 / Project load failed, see chat stream"
+  "input.selectFolder": "选择文件夹",          // en-US: "Select Folder"
+  "input.folderPathLabel": "项目文件夹绝对路径", // en-US: "Project Folder Absolute Path"
+  "input.folderPathPlaceholder": "例如: C:\\Users\\me\\projects\\my-app", // en-US: "e.g. C:\\Users\\me\\projects\\my-app"
+  "input.folderPathSubmit": "加载项目",          // en-US: "Load Project"
+  "input.folderPathCancel": "取消",             // en-US: "Cancel"
+  "input.projectUnload": "卸载",                // en-US: "Unload"
+  "input.projectLoadError": "项目加载失败，请查看聊天流" // en-US: "Project load failed, see chat stream"
 }
 ```
 
