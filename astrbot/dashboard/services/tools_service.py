@@ -568,9 +568,7 @@ class ToolsService:
                 scope_id="global",
             )
             defaults = (
-                perms_store.get("_default", {})
-                if isinstance(perms_store, dict)
-                else {}
+                perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
             )
             configured = tool.name in defaults
             permission = defaults[tool.name] if configured else "member"

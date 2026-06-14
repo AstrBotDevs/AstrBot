@@ -64,6 +64,15 @@ def _strip_query(url: str) -> str:
     return urlunsplit(("", "", parsed.path, "", parsed.fragment))
 
 
+def _assert_cookie_samesite_strict(cookie_header: str) -> None:
+    """Assert that a cookie header carries a strict SameSite attribute.
+
+    Args:
+        cookie_header: The raw Set-Cookie header value to inspect.
+    """
+    assert "samesite=strict" in cookie_header.lower()
+
+
 @pytest.fixture
 def registered_plugin_page(core_lifecycle_td: AstrBotCoreLifecycle, monkeypatch):
     plugin_root = (
@@ -337,7 +346,7 @@ async def test_auth_login(
     )
     assert jwt_cookie_header
     assert "HttpOnly" in jwt_cookie_header
-    assert "SameSite=Strict" in jwt_cookie_header
+    _assert_cookie_samesite_strict(jwt_cookie_header)
     assert "Secure" not in jwt_cookie_header
 
 
@@ -366,7 +375,7 @@ async def test_auth_login_secure_cookie_override(
     )
     assert jwt_cookie_header
     assert "Secure" in jwt_cookie_header
-    assert "SameSite=Strict" in jwt_cookie_header
+    _assert_cookie_samesite_strict(jwt_cookie_header)
 
 
 @pytest.mark.asyncio
@@ -724,7 +733,7 @@ async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
         )
         assert trusted_cookie_header
         assert "HttpOnly" in trusted_cookie_header
-        assert "SameSite=Strict" in trusted_cookie_header
+        _assert_cookie_samesite_strict(trusted_cookie_header)
         assert "Path=/api/auth" in trusted_cookie_header
     finally:
         await _restore_dashboard_password_state(
@@ -1878,7 +1887,7 @@ async def test_logout_clears_cookie_for_plugin_page(
     assert clear_cookie_header
     assert f"{DASHBOARD_JWT_COOKIE_NAME}=;" in clear_cookie_header
     assert "Max-Age=0" in clear_cookie_header
-    assert "SameSite=Strict" in clear_cookie_header
+    _assert_cookie_samesite_strict(clear_cookie_header)
 
     response = await test_client.get(
         f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
