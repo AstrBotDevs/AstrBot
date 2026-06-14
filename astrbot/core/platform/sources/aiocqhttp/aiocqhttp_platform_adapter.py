@@ -396,10 +396,7 @@ class AiocqhttpAdapter(Platform):
 
                 message_str += "".join(at_parts)
             elif t == "mface":
-                for m in m_group:
-                    name = str(m["data"].get("name") or "[动画表情]")
-                    abm.message.append(Plain(text=name))
-                    message_str += name
+                continue
             elif t == "markdown":
                 for m in m_group:
                     text = m["data"].get("markdown") or m["data"].get("content", "")
