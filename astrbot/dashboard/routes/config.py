@@ -82,6 +82,30 @@ def _expect_type(value, expected_type, path_key, errors, expected_name=None) -> 
     return True
 
 
+def _default_empty_value_allowed(value, meta: dict) -> bool:
+    type_ = meta.get("type")
+    if "default" in meta or type_ not in DEFAULT_VALUE_MAP:
+        return False
+    return value == DEFAULT_VALUE_MAP[type_]
+
+
+def _validate_options(value, meta: dict, path_key: str, errors: list[str]) -> None:
+    options = meta.get("options")
+    if not isinstance(options, list):
+        return
+
+    if meta.get("type") == "list":
+        if not isinstance(value, list):
+            return
+        invalid_values = [item for item in value if item not in options]
+        if invalid_values:
+            errors.append(f"无效的选项 {path_key}: {invalid_values}")
+        return
+
+    if value not in options and not _default_empty_value_allowed(value, meta):
+        errors.append(f"无效的选项 {path_key}: {value}")
+
+
 def _validate_template_list(value, meta, path_key, errors, validate_fn) -> None:
     if not _expect_type(value, list, path_key, errors, "list"):
         return
@@ -205,6 +229,12 @@ def validate_config(data, schema: dict, is_core: bool) -> tuple[list[str], dict]
                 errors.append(
                     f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}",
                 )
+            elif meta["type"] == "dict" and not isinstance(value, dict):
+                errors.append(
+                    f"错误的类型 {path}{key}: 期望是 dict, 得到了 {type(value).__name__}",
+                )
+
+            _validate_options(data.get(key), meta, f"{path}{key}", errors)
 
     if is_core:
         meta_all = {
