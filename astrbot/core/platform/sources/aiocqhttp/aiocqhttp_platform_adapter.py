@@ -239,6 +239,7 @@ class AiocqhttpAdapter(Platform):
             raise ValueError(err)
 
         # 按消息段类型类型适配
+        routing_params = {"self_id": event.self_id} if event.self_id else {}
         for t, m_group in itertools.groupby(event.message, key=lambda x: x["type"]):
             a = None
             if t == "text":
@@ -272,11 +273,13 @@ class AiocqhttpAdapter(Platform):
                                     action="get_group_file_url",
                                     file_id=event.message[0]["data"]["file_id"],
                                     group_id=event.group_id,
+                                    **routing_params,
                                 )
                             elif abm.type == MessageType.FRIEND_MESSAGE:
                                 ret = await self.bot.call_action(
                                     action="get_private_file_url",
                                     file_id=event.message[0]["data"]["file_id"],
+                                    **routing_params,
                                 )
                             if ret and "url" in ret:
                                 file_url = ret["url"]  # https
@@ -307,6 +310,7 @@ class AiocqhttpAdapter(Platform):
                             reply_event_data = await self.bot.call_action(
                                 action="get_msg",
                                 message_id=int(m["data"]["id"]),
+                                **routing_params,
                             )
                             # 添加必要的 post_type 字段，防止 Event.from_payload 报错
                             reply_event_data["post_type"] = "message"
@@ -353,6 +357,7 @@ class AiocqhttpAdapter(Platform):
                             group_id=event.group_id,
                             user_id=int(m["data"]["qq"]),
                             no_cache=False,
+                            **routing_params,
                         )
                         if at_info:
                             nickname = at_info.get("card", "")
@@ -361,6 +366,7 @@ class AiocqhttpAdapter(Platform):
                                     action="get_stranger_info",
                                     user_id=int(m["data"]["qq"]),
                                     no_cache=False,
+                                    **routing_params,
                                 )
                                 nickname = at_info.get("nick", "") or at_info.get(
                                     "nickname",
@@ -389,6 +395,8 @@ class AiocqhttpAdapter(Platform):
                         logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
 
                 message_str += "".join(at_parts)
+            elif t == "mface":
+                continue
             elif t == "markdown":
                 for m in m_group:
                     text = m["data"].get("markdown") or m["data"].get("content", "")
