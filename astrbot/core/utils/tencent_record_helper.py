@@ -30,34 +30,34 @@ async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
     return output_path
 
 
-async def wav_to_tencent_silk(wav_path: str, output_path: str) -> int:
-    """返回 duration"""
+async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
+    """Encode a WAV file to Tencent Silk.
+
+    Args:
+        wav_path: Input WAV file path.
+        output_path: Output Tencent Silk file path.
+
+    Returns:
+        Audio duration in seconds.
+    """
     try:
-        import pilk
+        import pysilk
     except (ImportError, ModuleNotFoundError) as _:
         raise Exception(
-            "pilk 模块未安装，请前往管理面板->平台日志->安装pip库 安装 pilk 这个库",
+            "pysilk 模块未安装，请前往管理面板->平台日志->安装 silk-python 这个库",
         )
-    # with wave.open(wav_path, 'rb') as wav:
-    #     wav_data = wav.readframes(wav.getnframes())
-    #     wav_data = BytesIO(wav_data)
-    #     output_io = BytesIO()
-    #     pysilk.encode(wav_data, output_io, 24000, 24000)
-    #     output_io.seek(0)
 
-    #     # 在首字节添加 \x02,去除结尾的\xff\xff
-    #     silk_data = output_io.read()
-    #     silk_data_with_prefix = b'\x02' + silk_data[:-2]
-
-    #     # return BytesIO(silk_data_with_prefix)
-    #     with open(output_path, "wb") as f:
-    #         f.write(silk_data_with_prefix)
-
-    #     return 0
     with wave.open(wav_path, "rb") as wav:
         rate = wav.getframerate()
-        duration = pilk.encode(wav_path, output_path, pcm_rate=rate, tencent=True)
-        return duration
+        frames = wav.getnframes()
+        pcm_data = wav.readframes(frames)
+
+    input_io = BytesIO(pcm_data)
+    output_io = BytesIO()
+    pysilk.encode(input_io, output_io, rate, rate, tencent=True)
+    with open(output_path, "wb") as f:
+        f.write(output_io.getvalue())
+    return frames / rate if rate else 0
 
 
 async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
@@ -103,19 +103,19 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
 
 
 async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
-    """将 MP3/WAV 文件转为 Tencent Silk 并返回 base64 编码与时长（秒）。
+    """Encode an audio file to Tencent Silk base64.
 
-    参数:
-    - audio_path: 输入音频文件路径（.mp3 或 .wav）
+    Args:
+        audio_path: Input audio file path. Non-WAV input is converted to WAV first.
 
-    返回:
-    - silk_b64: Base64 编码的 Silk 字符串
-    - duration: 音频时长（秒）
+    Returns:
+        A tuple containing the base64 encoded Tencent Silk payload and duration in
+        seconds.
     """
     try:
-        import pilk
+        import pysilk
     except ImportError as e:
-        raise Exception("未安装 pilk: pip install pilk") from e
+        raise Exception("未安装 pysilk: pip install silk-python") from e
 
     temp_dir = get_astrbot_temp_path()
     os.makedirs(temp_dir, exist_ok=True)
@@ -139,6 +139,8 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
 
     with wave.open(wav_path, "rb") as wav_file:
         rate = wav_file.getframerate()
+        frames = wav_file.getnframes()
+        pcm_data = wav_file.readframes(frames)
 
     silk_path = tempfile.NamedTemporaryFile(
         prefix="tencent_record_",
@@ -148,19 +150,25 @@ async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
     ).name
 
     try:
-        duration = await asyncio.to_thread(
-            pilk.encode,
-            wav_path,
-            silk_path,
-            pcm_rate=rate,
+        input_io = BytesIO(pcm_data)
+        output_io = BytesIO()
+        await asyncio.to_thread(
+            pysilk.encode,
+            input_io,
+            output_io,
+            rate,
+            rate,
             tencent=True,
         )
+
+        with open(silk_path, "wb") as f:
+            await asyncio.to_thread(f.write, output_io.getvalue())
 
         with open(silk_path, "rb") as f:
             silk_bytes = await asyncio.to_thread(f.read)
             silk_b64 = base64.b64encode(silk_bytes).decode("utf-8")
 
-        return silk_b64, duration  # 已是秒
+        return silk_b64, frames / rate if rate else 0
     finally:
         if os.path.exists(wav_path) and wav_path != audio_path:
             os.remove(wav_path)

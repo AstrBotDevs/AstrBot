@@ -1,5 +1,8 @@
 import base64
+import math
 import os
+import struct
+import wave
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import quote
@@ -11,6 +14,10 @@ from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.message.components import File, Image, Record, Video
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.path_util import path_Mapping
+from astrbot.core.utils.tencent_record_helper import (
+    audio_to_tencent_silk_base64,
+    wav_to_tencent_silk,
+)
 
 
 @pytest.mark.asyncio
@@ -501,3 +508,27 @@ def test_path_mapping_accepts_standard_and_legacy_file_uri(tmp_path):
     if os.name != "nt":
         legacy_file_uri = f"file:///{source_file.as_posix()}"
         assert path_Mapping(mapping, legacy_file_uri) == expected_path
+
+
+@pytest.mark.asyncio
+async def test_tencent_silk_encoding_uses_pysilk_tencent_format(tmp_path):
+    wav_path = tmp_path / "tone.wav"
+    silk_path = tmp_path / "tone.silk"
+    rate = 24000
+    frames = int(rate * 0.2)
+    with wave.open(str(wav_path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        for i in range(frames):
+            sample = int(0.2 * 32767 * math.sin(2 * math.pi * 440 * i / rate))
+            wav.writeframesraw(struct.pack("<h", sample))
+
+    duration = await wav_to_tencent_silk(str(wav_path), str(silk_path))
+    silk_bytes = silk_path.read_bytes()
+    silk_b64, b64_duration = await audio_to_tencent_silk_base64(str(wav_path))
+
+    assert duration == pytest.approx(0.2)
+    assert b64_duration == pytest.approx(0.2)
+    assert silk_bytes.startswith(b"\x02#!SILK_V3")
+    assert base64.b64decode(silk_b64).startswith(b"\x02#!SILK_V3")
