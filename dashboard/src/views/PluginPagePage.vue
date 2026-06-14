@@ -127,6 +127,9 @@ const isBridgeUploadFile = (value) => {
   if (!value || typeof value !== "object") {
     return false;
   }
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+    return true;
+  }
   if (typeof File !== "undefined" && value instanceof File) {
     return true;
   }
@@ -142,29 +145,64 @@ const isBridgeUploadFile = (value) => {
   );
 };
 
-const coerceBridgeUploadFile = async (value, fileName) => {
+const createBridgeUploadBlob = (parts, fileName, fileType, lastModified) => {
+  const normalizedType =
+    typeof fileType === "string" && fileType
+      ? fileType
+      : "application/octet-stream";
+  if (typeof File !== "undefined") {
+    return new File(parts, fileName, {
+      type: normalizedType,
+      lastModified:
+        typeof lastModified === "number" ? lastModified : Date.now(),
+    });
+  }
+  return new Blob(parts, { type: normalizedType });
+};
+
+const coerceBridgeUploadFile = async (
+  value,
+  fileName,
+  fileType,
+  lastModified,
+) => {
   if (!isBridgeUploadFile(value)) {
     throw new Error("Missing uploaded file payload.");
+  }
+  if (value instanceof ArrayBuffer) {
+    return createBridgeUploadBlob([value], fileName, fileType, lastModified);
+  }
+  if (ArrayBuffer.isView(value)) {
+    const viewBuffer = value.buffer.slice(
+      value.byteOffset,
+      value.byteOffset + value.byteLength,
+    );
+    return createBridgeUploadBlob(
+      [viewBuffer],
+      fileName,
+      fileType,
+      lastModified,
+    );
   }
   if (typeof Blob !== "undefined" && value instanceof Blob) {
     return value;
   }
 
   const buffer = await value.arrayBuffer();
-  const fileType =
+  const fallbackType =
     typeof value.type === "string" && value.type
       ? value.type
       : "application/octet-stream";
-  if (typeof File !== "undefined") {
-    return new File([buffer], fileName, {
-      type: fileType,
-      lastModified:
-        typeof value.lastModified === "number"
-          ? value.lastModified
-          : Date.now(),
-    });
-  }
-  return new Blob([buffer], { type: fileType });
+  const normalizedType =
+    typeof fileType === "string" && fileType
+      ? fileType
+      : fallbackType;
+  return createBridgeUploadBlob(
+    [buffer],
+    fileName,
+    normalizedType,
+    typeof lastModified === "number" ? lastModified : value.lastModified,
+  );
 };
 
 const sendBridgeResponse = (requestId, ok, payload) => {
@@ -247,13 +285,17 @@ const handleBridgeRequest = async (message) => {
 
     if (action === "files:upload") {
       const formData = new FormData();
-      const uploadFile = await coerceBridgeUploadFile(
-        message.file,
+      const fileName =
         typeof message.fileName === "string" && message.fileName
           ? message.fileName
-          : "upload.bin",
+          : "upload.bin";
+      const uploadFile = await coerceBridgeUploadFile(
+        message.fileBuffer || message.file,
+        fileName,
+        message.fileType,
+        message.fileLastModified,
       );
-      formData.append("file", uploadFile);
+      formData.append("file", uploadFile, fileName);
       const response = await axios.post(
         buildPluginApiPath(message.endpoint),
         formData,
