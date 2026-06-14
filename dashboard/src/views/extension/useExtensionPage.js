@@ -11,6 +11,10 @@ import {
     toInitials,
     toPinyinText,
 } from "@/utils/pluginSearch";
+import {
+    readPinnedExtensions,
+    writePinnedExtensions,
+} from "./extensionPreferenceStorage.mjs";
 import axios from "axios";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -138,6 +142,57 @@ export const useExtensionPage = () => {
 
   const pluginSearch = ref("");
   const loading_ = ref(false);
+
+  // 已安装插件排序
+  const installedSortBy = ref("default"); // default, name, author, activated, updateStatus
+  const installedSortOrder = ref("asc"); // asc or desc
+
+  // 已安装插件置顶
+  const pinnedExtensionNames = ref(readPinnedExtensions());
+  const pinnedExtensionOrder = computed(() => {
+    const order = new Map();
+    pinnedExtensionNames.value.forEach((name, index) => {
+      order.set(name, index);
+    });
+    return order;
+  });
+
+  watch(
+    pinnedExtensionNames,
+    (names) => {
+      writePinnedExtensions(names);
+    },
+    { deep: true },
+  );
+
+  const isPinnedExtension = (extension) => {
+    const name = extension?.name;
+    return !!name && pinnedExtensionOrder.value.has(name);
+  };
+
+  const togglePinnedExtension = (extension) => {
+    const name = extension?.name;
+    if (!name) return;
+    const next = pinnedExtensionNames.value.filter((item) => item !== name);
+    if (next.length === pinnedExtensionNames.value.length) {
+      next.unshift(name);
+    }
+    pinnedExtensionNames.value = next;
+  };
+
+  // 批量操作
+  const batchSelectionMode = ref(false);
+  const selectedPluginNames = ref(new Set());
+  const batchOperationInProgress = ref(false);
+  const batchConfirmDialog = reactive({
+    show: false,
+    operation: "", // "enable", "disable", "uninstall"
+    count: 0,
+    reservedCount: 0,
+    onConfirm: null,
+  });
+  const batchDeleteConfig = ref(false);
+  const batchDeleteData = ref(false);
 
   // 分页相关
   const currentPage = ref(1);
@@ -329,6 +384,276 @@ export const useExtensionPage = () => {
 
     return sortInstalledPlugins(filtered);
   });
+
+  // 已安装插件排序（带置顶）
+  const sortedInstalledPlugins = computed(() => {
+    const plugins = [...filteredPlugins.value];
+    const pinnedNames = new Set(pinnedExtensionNames.value);
+
+    if (installedSortBy.value === "default") {
+      // 默认排序：置顶插件按 pin 顺序排最前，其余按 sortInstalledPlugins 的顺序
+      const pinned = plugins.filter((p) => pinnedNames.has(p?.name));
+      const unpinned = plugins.filter((p) => !pinnedNames.has(p?.name));
+      pinned.sort((a, b) => {
+        const aIdx = pinnedExtensionOrder.value.get(a?.name) ?? Number.POSITIVE_INFINITY;
+        const bIdx = pinnedExtensionOrder.value.get(b?.name) ?? Number.POSITIVE_INFINITY;
+        return aIdx - bIdx;
+      });
+      return [...pinned, ...unpinned];
+    }
+
+    // 非默认排序：先按排序字段排，然后置顶插件浮到各组顶部
+    switch (installedSortBy.value) {
+      case "name":
+        plugins.sort((a, b) => {
+          const result = normalizeStr(a?.display_name || a?.name || "").localeCompare(
+            normalizeStr(b?.display_name || b?.name || ""),
+            undefined,
+            { sensitivity: "base" },
+          );
+          return installedSortOrder.value === "desc" ? -result : result;
+        });
+        break;
+      case "author": {
+        const getAuthor = (ext) => {
+          const author = ext?.author;
+          if (Array.isArray(author)) return author.join(", ").toLowerCase();
+          return String(author || "").toLowerCase();
+        };
+        plugins.sort((a, b) => {
+          const result = getAuthor(a).localeCompare(getAuthor(b));
+          return installedSortOrder.value === "desc" ? -result : result;
+        });
+        break;
+      }
+      case "activated":
+        plugins.sort((a, b) => {
+          const result = Number(!!b?.activated) - Number(!!a?.activated);
+          return installedSortOrder.value === "asc" ? -result : result;
+        });
+        break;
+      case "updateStatus":
+        plugins.sort((a, b) => {
+          const result = Number(!!b?.has_update) - Number(!!a?.has_update);
+          return installedSortOrder.value === "desc" ? -result : result;
+        });
+        break;
+    }
+
+    // 置顶插件浮到最前
+    if (pinnedNames.size > 0) {
+      const pinned = plugins.filter((p) => pinnedNames.has(p?.name));
+      const unpinned = plugins.filter((p) => !pinnedNames.has(p?.name));
+      return [...pinned, ...unpinned];
+    }
+
+    return plugins;
+  });
+
+  // 批量操作方法
+  const toggleBatchSelectionMode = () => {
+    batchSelectionMode.value = !batchSelectionMode.value;
+    if (!batchSelectionMode.value) {
+      selectedPluginNames.value = new Set();
+    }
+  };
+
+  const exitBatchSelectionMode = () => {
+    batchSelectionMode.value = false;
+    selectedPluginNames.value = new Set();
+  };
+
+  const togglePluginSelection = (pluginName) => {
+    const next = new Set(selectedPluginNames.value);
+    if (next.has(pluginName)) {
+      next.delete(pluginName);
+    } else {
+      next.add(pluginName);
+    }
+    selectedPluginNames.value = next;
+  };
+
+  const selectAllPlugins = () => {
+    const allNames = new Set(
+      filteredPlugins.value.map((p) => p?.name).filter(Boolean),
+    );
+    selectedPluginNames.value = allNames;
+  };
+
+  const deselectAllPlugins = () => {
+    selectedPluginNames.value = new Set();
+  };
+
+  const invertSelection = () => {
+    const allNames = new Set(
+      filteredPlugins.value.map((p) => p?.name).filter(Boolean),
+    );
+    const next = new Set();
+    for (const name of allNames) {
+      if (!selectedPluginNames.value.has(name)) {
+        next.add(name);
+      }
+    }
+    selectedPluginNames.value = next;
+  };
+
+  const isPluginSelected = (pluginName) => {
+    return selectedPluginNames.value.has(pluginName);
+  };
+
+  const showBatchConfirm = (operation, onConfirm) => {
+    const selected = [...selectedPluginNames.value];
+    const plugins = filteredPlugins.value.filter((p) =>
+      selected.includes(p?.name),
+    );
+    const reservedCount = plugins.filter((p) => p?.reserved).length;
+    batchConfirmDialog.operation = operation;
+    batchConfirmDialog.count = selected.length;
+    batchConfirmDialog.reservedCount = reservedCount;
+    batchConfirmDialog.onConfirm = onConfirm;
+    batchConfirmDialog.show = true;
+  };
+
+  const cancelBatchConfirm = () => {
+    batchConfirmDialog.show = false;
+    batchConfirmDialog.onConfirm = null;
+  };
+
+  const confirmBatchOperation = () => {
+    const onConfirm = batchConfirmDialog.onConfirm;
+    batchConfirmDialog.show = false;
+    batchConfirmDialog.onConfirm = null;
+    if (onConfirm) {
+      onConfirm();
+    }
+  };
+
+  const batchEnablePlugins = async () => {
+    const names = [...selectedPluginNames.value];
+    if (names.length === 0) return;
+    batchOperationInProgress.value = true;
+
+    const results = await Promise.allSettled(
+      names.map((name) => axios.post("/api/plugin/on", { name })),
+    );
+
+    const succeeded = [];
+    const failed = [];
+    results.forEach((result, index) => {
+      const name = names[index];
+      if (result.status === "fulfilled" && result.value.data?.status !== "error") {
+        succeeded.push(name);
+      } else {
+        const errorMsg =
+          result.status === "fulfilled"
+            ? result.value.data?.message
+            : result.reason?.message;
+        failed.push({ name, error: errorMsg });
+      }
+    });
+
+    batchOperationInProgress.value = false;
+    await getExtensions({ withLoading: false });
+    await checkAndPromptConflicts();
+    deselectAllPlugins();
+
+    if (failed.length > 0) {
+      toast(
+        `${tm("batch.results.title")}: ${tm("batch.results.summary", { succeeded: succeeded.length, failed: failed.length })}`,
+        "warning",
+      );
+    } else {
+      toast(tm("batch.results.title") + " — " + tm("messages.updateSuccess").replace("!", ""), "success");
+    }
+  };
+
+  const batchDisablePlugins = async () => {
+    const names = [...selectedPluginNames.value];
+    if (names.length === 0) return;
+    batchOperationInProgress.value = true;
+
+    const results = await Promise.allSettled(
+      names.map((name) => axios.post("/api/plugin/off", { name })),
+    );
+
+    const succeeded = [];
+    const failed = [];
+    results.forEach((result, index) => {
+      const name = names[index];
+      if (result.status === "fulfilled" && result.value.data?.status !== "error") {
+        succeeded.push(name);
+      } else {
+        const errorMsg =
+          result.status === "fulfilled"
+            ? result.value.data?.message
+            : result.reason?.message;
+        failed.push({ name, error: errorMsg });
+      }
+    });
+
+    batchOperationInProgress.value = false;
+    await getExtensions({ withLoading: false });
+    deselectAllPlugins();
+
+    if (failed.length > 0) {
+      toast(
+        `${tm("batch.results.title")}: ${tm("batch.results.summary", { succeeded: succeeded.length, failed: failed.length })}`,
+        "warning",
+      );
+    } else {
+      toast(tm("batch.results.title") + " — OK", "success");
+    }
+  };
+
+  const batchUninstallPlugins = async () => {
+    // 跳过保留插件
+    const names = [...selectedPluginNames.value].filter((name) => {
+      const ext = filteredPlugins.value.find((p) => p?.name === name);
+      return ext && !ext.reserved;
+    });
+    if (names.length === 0) return;
+    batchOperationInProgress.value = true;
+
+    const results = await Promise.allSettled(
+      names.map((name) =>
+        axios.post("/api/plugin/uninstall", {
+          name,
+          delete_config: batchDeleteConfig.value,
+          delete_data: batchDeleteData.value,
+        }),
+      ),
+    );
+
+    const succeeded = [];
+    const failed = [];
+    results.forEach((result, index) => {
+      const name = names[index];
+      if (result.status === "fulfilled" && result.value.data?.status !== "error") {
+        succeeded.push(name);
+      } else {
+        const errorMsg =
+          result.status === "fulfilled"
+            ? result.value.data?.message
+            : result.reason?.message;
+        failed.push({ name, error: errorMsg });
+      }
+    });
+
+    batchOperationInProgress.value = false;
+    batchDeleteConfig.value = false;
+    batchDeleteData.value = false;
+    await getExtensions({ withLoading: false });
+    exitBatchSelectionMode();
+
+    if (failed.length > 0) {
+      toast(
+        `${tm("batch.results.title")}: ${tm("batch.results.summary", { succeeded: succeeded.length, failed: failed.length })}`,
+        "warning",
+      );
+    } else {
+      toast(tm("messages.deleteSuccess"), "success");
+    }
+  };
 
   // 过滤后的插件市场数据（带搜索）
   const filteredMarketPlugins = computed(() => {
@@ -1896,5 +2221,35 @@ export const useExtensionPage = () => {
     refreshPluginMarket,
     handleLocaleChange,
     searchDebounceTimer,
+    // 已安装插件排序
+    installedSortBy,
+    installedSortOrder,
+    // 已安装插件置顶
+    pinnedExtensionNames,
+    pinnedExtensionOrder,
+    isPinnedExtension,
+    togglePinnedExtension,
+    // 已安装插件排序结果
+    sortedInstalledPlugins,
+    // 批量操作
+    batchSelectionMode,
+    selectedPluginNames,
+    batchOperationInProgress,
+    batchConfirmDialog,
+    batchDeleteConfig,
+    batchDeleteData,
+    toggleBatchSelectionMode,
+    exitBatchSelectionMode,
+    togglePluginSelection,
+    selectAllPlugins,
+    deselectAllPlugins,
+    invertSelection,
+    isPluginSelected,
+    showBatchConfirm,
+    cancelBatchConfirm,
+    confirmBatchOperation,
+    batchEnablePlugins,
+    batchDisablePlugins,
+    batchUninstallPlugins,
   };
 };

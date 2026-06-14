@@ -181,11 +181,36 @@
     "author": "作者名",
     "updated": "更新时间",
     "updateStatus": "更新状态",
+    "activated": "状态（启用/禁用）",
     "ascending": "升序",
     "descending": "降序"
   },
   "tags": {
     "danger": "危险"
+  },
+  "batch": {
+    "select": "多选",
+    "exitSelect": "退出多选",
+    "selectedCount": "已选择 {count} 个",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "invertSelection": "反选",
+    "enable": "批量启用",
+    "disable": "批量禁用",
+    "uninstall": "批量卸载",
+    "confirmTitle": {
+      "enable": "批量启用",
+      "disable": "批量禁用",
+      "uninstall": "批量卸载"
+    },
+    "confirmMessage": "确定要{operation} {count} 个插件吗？",
+    "confirmAction": "确认",
+    "reservedSkipped": "{count} 个系统插件将被跳过。",
+    "results": {
+      "title": "批量操作结果",
+      "summary": "{succeeded} 个成功，{failed} 个失败。",
+      "failedList": "失败的插件："
+    }
   },
   "dialogs": {
     "error": {

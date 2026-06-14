@@ -25,6 +25,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selectable: {
+    type: Boolean,
+    default: false,
+  },
+  selected: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // 定义要发送到父组件的事件
@@ -39,6 +47,7 @@ const emit = defineEmits([
   "view-changelog",
   "toggle-pin",
   "open-webui",
+  "select",
 ]);
 
 const hasPages = computed(() => {
@@ -149,6 +158,7 @@ const openWebui = () => {
     height="100%"
     :ripple="false"
     variant="outlined"
+    :class="{ 'extension-card--selected': selectable && selected }"
     :style="{
       position: 'relative',
       backgroundColor:
@@ -231,6 +241,15 @@ const openWebui = () => {
             </p>
 
             <template v-if="!marketMode">
+              <v-checkbox
+                :model-value="selected"
+                density="compact"
+                hide-details
+                color="primary"
+                class="extension-checkbox-inline"
+                @click.stop="emit('select')"
+                @update:model-value="emit('select')"
+              />
               <v-tooltip location="left">
                 <template v-slot:activator="{ props: tooltipProps }">
                   <div class="extension-switch-wrap" @click.stop>
@@ -423,6 +442,21 @@ const openWebui = () => {
 
 .extension-card {
   cursor: pointer;
+}
+
+.extension-card--selected {
+  border-color: rgb(var(--v-theme-primary)) !important;
+  border-width: 2px;
+}
+
+.extension-checkbox-inline {
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.extension-checkbox-inline :deep(.v-switch),
+.extension-checkbox-inline :deep(.v-selection-control) {
+  min-height: 0;
 }
 
 .extension-image-container {
