@@ -279,7 +279,7 @@ class UpdateService:
             self.update_progress[progress_id].update(
                 {
                     "status": "error",
-                    "message": exc.__str__(),
+                    "message": "更新失败，请查看服务端日志。",
                 },
             )
             logger.error(f"/api/update_project: {traceback.format_exc()}")

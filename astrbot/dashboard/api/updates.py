@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
+from astrbot.core import logger
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.schemas import MigrationRequest, PipInstallRequest, UpdateRequest
 from astrbot.dashboard.services.update_service import (
@@ -56,8 +57,9 @@ def _service_response(result: UpdateServiceResult) -> JSONResponse:
 
 
 def _service_error(exc: UpdateServiceError) -> JSONResponse:
+    logger.error(f"Dashboard update operation failed: {exc}", exc_info=True)
     return JSONResponse(
-        {"status": "error", "message": str(exc), "data": None},
+        {"status": "error", "message": "An internal error has occurred.", "data": None},
         status_code=200,
     )
 

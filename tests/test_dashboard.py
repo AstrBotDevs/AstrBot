@@ -2622,7 +2622,48 @@ async def test_do_update(
 
 
 @pytest.mark.asyncio
-async def test_install_pip_package_returns_pip_install_error_message(
+async def test_do_update_hides_internal_error_message_in_response_and_progress(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    async def mock_download_dashboard(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("secret stack trace")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.update_service.download_dashboard",
+        mock_download_dashboard,
+    )
+
+    response = await test_client.post(
+        "/api/update/do",
+        headers=authenticated_header,
+        json={"version": "v3.4.0", "reboot": False, "progress_id": "failed-progress"},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert data["message"] == "An internal error has occurred."
+    assert "secret stack trace" not in str(data)
+
+    progress_response = await test_client.get(
+        "/api/update/progress?id=failed-progress",
+        headers=authenticated_header,
+    )
+    progress_data = await progress_response.get_json()
+
+    assert progress_data["status"] == "ok"
+    assert progress_data["data"]["status"] == "error"
+    assert progress_data["data"]["message"] == "更新失败，请查看服务端日志。"
+    assert "secret stack trace" not in str(progress_data)
+
+
+@pytest.mark.asyncio
+async def test_install_pip_package_returns_generic_error_message(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
@@ -2647,7 +2688,7 @@ async def test_install_pip_package_returns_pip_install_error_message(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "error"
-    assert data["message"] == "install failed"
+    assert data["message"] == "An internal error has occurred."
 
 
 class _FakeNeoSkills:
