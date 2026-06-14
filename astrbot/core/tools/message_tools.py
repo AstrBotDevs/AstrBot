@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import os
@@ -31,8 +32,10 @@ from astrbot.core.utils.astrbot_path import (
 # 消息发送去重：防止 LLM 在同一 agent run 中重复调用 send_message_to_user 发送相同内容。
 # 已知触发模型：mimo（会在同一响应中同时返回 completion_text 和 send_message_to_user 工具调用，
 # 或在连续多次响应中重复调用同一工具）。
-# 指纹 = md5(session + 序列化后的 messages)，在时间窗口内相同则跳过。
+# 指纹 = md5(target_session + sender_id + platform_id + 序列化后的 messages)，
+# 在时间窗口内相同则跳过。使用 asyncio.Lock 保证并发安全。
 _recent_sends: dict[str, float] = {}
+_recent_sends_lock = asyncio.Lock()
 _DEDUP_WINDOW_SECONDS = 30.0
 
 
@@ -325,23 +328,32 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             else:
                 return f"error: invalid session: {session}"
 
-        # 去重：计算消息指纹，跳过短时间内重复发送的相同内容
-        global _recent_sends
+        # 去重：计算消息指纹，跳过短时间内重复发送的相同内容。
+        # 使用 target_session（已解析的规范会话标识）而非原始 session 字符串，
+        # 并加入 sender_id 和 platform_id 以区分不同来源的相同消息内容。
+        global _recent_sends, _recent_sends_lock
         now = time.time()
-        _recent_sends = {
-            k: v for k, v in _recent_sends.items()
-            if now - v < _DEDUP_WINDOW_SECONDS
-        }
-        fingerprint = hashlib.md5(
-            (str(session) + json.dumps(messages, ensure_ascii=False, sort_keys=True)).encode()
-        ).hexdigest()
-        if fingerprint in _recent_sends:
-            logger.info(
-                f"[send_message_to_user] 检测到重复发送，已跳过。"
-                f" session={session}, fingerprint={fingerprint[:8]}"
-            )
-            return f"Message skipped (duplicate), session={target_session}"
-        _recent_sends[fingerprint] = now
+        event = context.context.event
+        dedup_key = "|".join([
+            str(target_session),
+            str(getattr(event, "sender_id", "")),
+            str(getattr(event, "platform_id", "")),
+            json.dumps(messages, ensure_ascii=False, sort_keys=True),
+        ])
+        fingerprint = hashlib.md5(dedup_key.encode()).hexdigest()
+        async with _recent_sends_lock:
+            _recent_sends = {
+                k: v for k, v in _recent_sends.items()
+                if now - v < _DEDUP_WINDOW_SECONDS
+            }
+            if fingerprint in _recent_sends:
+                logger.info(
+                    f"[send_message_to_user] 检测到重复发送，已跳过。"
+                    f" session={session}, target_session={target_session},"
+                    f" fingerprint={fingerprint[:8]}"
+                )
+                return f"Message skipped (duplicate), session={target_session}"
+            _recent_sends[fingerprint] = now
 
         await context.context.context.send_message(
             target_session,
