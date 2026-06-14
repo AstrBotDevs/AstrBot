@@ -70,8 +70,8 @@ When the frontend calls `bridge.apiGet("ping")`, the Dashboard forwards it to:
 The registered Web API route must include the plugin name as a prefix:
 
 ```python
+from quart import jsonify
 from astrbot.api.star import Context, Star
-from astrbot.dashboard.fastapi_compat import jsonify
 
 PLUGIN_NAME = "astrbot_plugin_page_demo"
 
@@ -89,6 +89,8 @@ class MyPlugin(Star):
     async def page_ping(self):
         return jsonify({"message": "pong"})
 ```
+
+Although the Dashboard runtime uses FastAPI/ASGI, plugin Web APIs registered through `context.register_web_api()` still run with a Quart-compatible request context for backward compatibility. Existing plugins can continue to import and use `quart.request`, `quart.g`, and `quart.jsonify`; AstrBot keeps `quart` as a direct dependency for this compatibility layer.
 
 ## Bridge API
 

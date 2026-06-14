@@ -70,8 +70,8 @@ document.getElementById("ping").addEventListener("click", async () => {
 因此注册 Web API 时，路由必须带上插件名作为前缀：
 
 ```python
+from quart import jsonify
 from astrbot.api.star import Context, Star
-from astrbot.dashboard.fastapi_compat import jsonify
 
 PLUGIN_NAME = "astrbot_plugin_page_demo"
 
@@ -89,6 +89,8 @@ class MyPlugin(Star):
     async def page_ping(self):
         return jsonify({"message": "pong"})
 ```
+
+虽然 Dashboard 运行时已经迁移到 FastAPI/ASGI，但通过 `context.register_web_api()` 注册的插件 Web API 仍会进入 Quart 兼容请求上下文，以保持旧插件兼容。已有插件可以继续导入并使用 `quart.request`、`quart.g` 和 `quart.jsonify`；AstrBot 会继续把 `quart` 作为直接依赖保留，用于这层兼容能力。
 
 ## Bridge API
 
