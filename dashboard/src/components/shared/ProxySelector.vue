@@ -64,6 +64,7 @@ export default {
                 "https://edgeone.gh-proxy.com",
                 "https://hk.gh-proxy.com",
                 "https://gh-proxy.com",
+                "https://gh.dpik.top",
             ],
             githubProxyRadioControl: "0", // the index of the selected proxy
             selectedGitHubProxy: "",
