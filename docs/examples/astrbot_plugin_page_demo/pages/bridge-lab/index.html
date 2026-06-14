@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bridge Lab</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="page-header">
+        <div>
+          <h1 data-i18n="pages.bridge-lab.heading">Plugin Page Bridge Lab</h1>
+          <p data-i18n="pages.bridge-lab.subtitle">
+            This page follows WebUI locale and theme changes live.
+          </p>
+        </div>
+        <div class="status-strip" aria-live="polite">
+          <span id="locale-chip">Locale</span>
+          <span id="theme-chip">Theme</span>
+        </div>
+      </header>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="panel-title">
+            <h2 data-i18n="pages.bridge-lab.context">Context</h2>
+            <button id="refresh-context" type="button" data-i18n="pages.bridge-lab.refreshContext">
+              Refresh Context
+            </button>
+          </div>
+          <dl class="context-list">
+            <div>
+              <dt>pluginName</dt>
+              <dd id="plugin-name">-</dd>
+            </div>
+            <div>
+              <dt>pageName</dt>
+              <dd id="page-name">-</dd>
+            </div>
+            <div>
+              <dt>displayName</dt>
+              <dd id="display-name">-</dd>
+            </div>
+            <div>
+              <dt>pageTitle</dt>
+              <dd id="page-title">-</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article class="panel">
+          <div class="panel-title">
+            <h2 data-i18n="pages.bridge-lab.backend">Backend Requests</h2>
+          </div>
+          <div class="control-grid">
+            <label>
+              limit
+              <input id="limit-input" type="number" min="1" max="50" value="20" />
+            </label>
+            <label>
+              tag
+              <input id="tag-input" type="text" value="bridge-demo" />
+            </label>
+            <label>
+              <span data-i18n="pages.bridge-lab.enabled">Enabled</span>
+              <input id="enabled-input" type="checkbox" checked />
+            </label>
+            <label>
+              <span data-i18n="pages.bridge-lab.threshold">Threshold</span>
+              <input id="threshold-input" type="number" min="0" max="1" step="0.1" value="0.8" />
+            </label>
+            <label class="wide">
+              <span data-i18n="pages.bridge-lab.note">Note</span>
+              <input id="note-input" type="text" value="Hello Plugin Page" />
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="call-get" type="button" data-i18n="pages.bridge-lab.callGet">Call GET</button>
+            <button id="call-post" type="button" data-i18n="pages.bridge-lab.callPost">Call POST</button>
+            <button id="call-error" type="button" data-i18n="pages.bridge-lab.callError">Trigger Error</button>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-title">
+            <h2 data-i18n="pages.bridge-lab.bridge">Bridge APIs</h2>
+          </div>
+          <div class="file-row">
+            <input id="file-input" type="file" />
+            <span data-i18n="pages.bridge-lab.chooseFile">Choose a file before testing upload().</span>
+          </div>
+          <div class="button-row">
+            <button id="upload-file" type="button" data-i18n="pages.bridge-lab.upload">Upload File</button>
+            <button id="download-file" type="button" data-i18n="pages.bridge-lab.download">Download File</button>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-title">
+            <h2 data-i18n="pages.bridge-lab.events">SSE Events</h2>
+          </div>
+          <div class="button-row">
+            <button id="start-sse" type="button" data-i18n="pages.bridge-lab.startSse">Subscribe SSE</button>
+            <button id="stop-sse" type="button" data-i18n="pages.bridge-lab.stopSse">Unsubscribe SSE</button>
+          </div>
+          <ol id="event-list" class="event-list"></ol>
+        </article>
+      </section>
+
+      <section class="output-panel">
+        <div class="panel-title">
+          <h2 data-i18n="pages.bridge-lab.output">Output</h2>
+        </div>
+        <pre id="output">{}</pre>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

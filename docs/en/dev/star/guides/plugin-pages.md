@@ -26,6 +26,8 @@ Use simple directory names for `page_name`, such as `settings` or `bridge-demo`.
 
 Users open Pages from the plugin detail page in the WebUI.
 
+See the complete runnable example at [`docs/examples/astrbot_plugin_page_demo`](../../../../examples/astrbot_plugin_page_demo/).
+
 ## Development Flow
 
 1. Create `pages/<page_name>/index.html` in the plugin directory.

@@ -1,0 +1,40 @@
+{
+  "metadata": {
+    "display_name": "Plugin Page 演示",
+    "short_desc": "复现 Plugin Page bridge、i18n、主题和后端 API。",
+    "desc": "用于验证 AstrBot 插件 Pages 与 bridge API 的完整演示插件。"
+  },
+  "pages": {
+    "bridge-lab": {
+      "title": "Bridge 实验台",
+      "description": "复现 ready、context、i18n、theme、GET、POST、upload、download 和 SSE。",
+      "heading": "Plugin Page Bridge 实验台",
+      "subtitle": "当前页面会跟随 WebUI 语言和主题实时更新。",
+      "context": "上下文",
+      "bridge": "Bridge 接口",
+      "backend": "后端请求",
+      "events": "SSE 事件",
+      "output": "输出",
+      "locale": "语言",
+      "theme": "主题",
+      "light": "亮色",
+      "dark": "暗色",
+      "refreshContext": "刷新上下文",
+      "callGet": "调用 GET",
+      "callPost": "调用 POST",
+      "upload": "上传文件",
+      "download": "下载文件",
+      "startSse": "订阅 SSE",
+      "stopSse": "取消 SSE",
+      "callError": "触发错误",
+      "enabled": "启用",
+      "threshold": "阈值",
+      "note": "备注",
+      "chooseFile": "选择一个文件后测试 upload()",
+      "noFile": "请先选择文件。",
+      "ready": "bridge.ready() 已完成",
+      "contextChanged": "上下文已更新",
+      "sseClosed": "SSE 已关闭"
+    }
+  }
+}

@@ -26,6 +26,8 @@ astrbot_plugin_page_demo/
 
 用户可以在 WebUI 的插件页点击插件卡片进入插件详情页，然后打开插件声明的 Pages。
 
+完整可运行示例见 [`docs/examples/astrbot_plugin_page_demo`](../../../../examples/astrbot_plugin_page_demo/)。
+
 ## 开发流程
 
 1. 在插件目录下创建 `pages/<page_name>/index.html`。

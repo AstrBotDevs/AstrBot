@@ -1,0 +1,7 @@
+name: astrbot_plugin_page_demo
+display_name: Plugin Page Demo
+desc: Demo plugin for AstrBot Plugin Pages and bridge APIs.
+short_desc: Reproduces Plugin Page bridge, i18n, theme, and backend APIs.
+version: 0.1.0
+author: AstrBot Team
+repo: https://github.com/AstrBotDevs/AstrBot

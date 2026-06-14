@@ -1,0 +1,40 @@
+{
+  "metadata": {
+    "display_name": "Plugin Page Demo",
+    "short_desc": "Reproduces Plugin Page bridge, i18n, theme, and backend APIs.",
+    "desc": "Demo plugin for validating AstrBot Plugin Pages and bridge APIs."
+  },
+  "pages": {
+    "bridge-lab": {
+      "title": "Bridge Lab",
+      "description": "Reproduces ready, context, i18n, theme, GET, POST, upload, download, and SSE.",
+      "heading": "Plugin Page Bridge Lab",
+      "subtitle": "This page follows WebUI locale and theme changes live.",
+      "context": "Context",
+      "bridge": "Bridge APIs",
+      "backend": "Backend Requests",
+      "events": "SSE Events",
+      "output": "Output",
+      "locale": "Locale",
+      "theme": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "refreshContext": "Refresh Context",
+      "callGet": "Call GET",
+      "callPost": "Call POST",
+      "upload": "Upload File",
+      "download": "Download File",
+      "startSse": "Subscribe SSE",
+      "stopSse": "Unsubscribe SSE",
+      "callError": "Trigger Error",
+      "enabled": "Enabled",
+      "threshold": "Threshold",
+      "note": "Note",
+      "chooseFile": "Choose a file before testing upload().",
+      "noFile": "Choose a file first.",
+      "ready": "bridge.ready() completed",
+      "contextChanged": "Context updated",
+      "sseClosed": "SSE closed"
+    }
+  }
+}
