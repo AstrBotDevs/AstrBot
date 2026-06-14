@@ -290,15 +290,6 @@ class ProviderGoogleGenAI(Provider):
                 else:
                     thinking_config.thinking_level = level
 
-        # If any tools (native or custom function declarations) are active for this request,
-        # we must disable thinking because Gemini API does not support them simultaneously.
-        if tool_list and thinking_config:
-            if getattr(thinking_config, "thinking_budget", None) != 0:
-                logger.warning(
-                    "[Gemini] Thinking config is automatically disabled because tools are active for this request."
-                )
-            thinking_config = None
-
         return types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=temperature,
@@ -415,8 +406,9 @@ class ProviderGoogleGenAI(Provider):
                         )
                     )
 
-                if not native_tool_enabled and "tool_calls" in message:
-                    for tool in message["tool_calls"]:
+                tool_calls = message.get("tool_calls") or []
+                if not native_tool_enabled and tool_calls:
+                    for tool in tool_calls:
                         part = types.Part.from_function_call(
                             name=tool["function"]["name"],
                             args=json.loads(tool["function"]["arguments"]),
