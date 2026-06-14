@@ -180,11 +180,36 @@
         "author": "Автору",
         "updated": "Дате обновления",
         "updateStatus": "Статусу обновления",
+        "activated": "Статус (Включен/Выключен)",
         "ascending": "По возрастанию",
         "descending": "По убыванию"
     },
     "tags": {
         "danger": "Опасно"
+    },
+    "batch": {
+        "select": "Выбрать",
+        "exitSelect": "Отменить выбор",
+        "selectedCount": "Выбрано: {count}",
+        "selectAll": "Выбрать все",
+        "deselectAll": "Снять выбор",
+        "invertSelection": "Инвертировать",
+        "enable": "Включить",
+        "disable": "Выключить",
+        "uninstall": "Удалить",
+        "confirmTitle": {
+            "enable": "Включить выбранные",
+            "disable": "Выключить выбранные",
+            "uninstall": "Удалить выбранные"
+        },
+        "confirmMessage": "Вы уверены, что хотите {operation} {count} плагин(ов)?",
+        "confirmAction": "Подтвердить",
+        "reservedSkipped": "{count} системных плагинов будут пропущены.",
+        "results": {
+            "title": "Результаты массовой операции",
+            "summary": "{succeeded} успешно, {failed} с ошибками.",
+            "failedList": "Ошибки:"
+        }
     },
     "dialogs": {
         "error": {

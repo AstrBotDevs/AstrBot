@@ -1,11 +1,8 @@
 <script setup>
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
+import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
-import {
-  readPinnedExtensions,
-  writePinnedExtensions,
-} from "./extensionPreferenceStorage.mjs";
-import { computed, ref, watch } from "vue";
+import { computed } from "vue";
 
 const props = defineProps({
   state: {
@@ -141,6 +138,35 @@ const {
   refreshPluginMarket,
   handleLocaleChange,
   searchDebounceTimer,
+  // 已安装插件排序
+  installedSortBy,
+  installedSortOrder,
+  // 已安装插件置顶
+  pinnedExtensionNames,
+  isPinnedExtension,
+  togglePinnedExtension,
+  // 已安装插件排序结果
+  sortedInstalledPlugins,
+  // 批量操作
+  batchSelectionMode,
+  selectedPluginNames,
+  batchOperationInProgress,
+  batchConfirmDialog,
+  batchDeleteConfig,
+  batchDeleteData,
+  toggleBatchSelectionMode,
+  exitBatchSelectionMode,
+  togglePluginSelection,
+  selectAllPlugins,
+  deselectAllPlugins,
+  invertSelection,
+  isPluginSelected,
+  showBatchConfirm,
+  cancelBatchConfirm,
+  confirmBatchOperation,
+  batchEnablePlugins,
+  batchDisablePlugins,
+  batchUninstallPlugins,
 } = props.state;
 
 const openPluginDetail = (extension) => {
@@ -164,65 +190,149 @@ const openPluginWebui = (extension) => {
   });
 };
 
-const pinnedExtensionNames = ref(readPinnedExtensions());
+const installedSortItems = computed(() => [
+  { title: tm("sort.default"), value: "default" },
+  { title: tm("sort.name"), value: "name" },
+  { title: tm("sort.author"), value: "author" },
+  { title: tm("sort.activated"), value: "activated" },
+  { title: tm("sort.updateStatus"), value: "updateStatus" },
+]);
 
-const pinnedExtensionOrder = computed(() => {
-  const order = new Map();
-  pinnedExtensionNames.value.forEach((name, index) => {
-    order.set(name, index);
-  });
-  return order;
-});
-
-const sortedInstalledPlugins = computed(() => {
-  const order = pinnedExtensionOrder.value;
-  return [...filteredPlugins.value].sort((a, b) => {
-    const aIndex = order.has(a?.name)
-      ? order.get(a.name)
-      : Number.POSITIVE_INFINITY;
-    const bIndex = order.has(b?.name)
-      ? order.get(b.name)
-      : Number.POSITIVE_INFINITY;
-
-    if (aIndex !== bIndex) {
-      return aIndex - bIndex;
-    }
-    return 0;
-  });
-});
-
-watch(
-  pinnedExtensionNames,
-  (names) => {
-    writePinnedExtensions(names);
-  },
-  { deep: true },
-);
-
-const isPinnedExtension = (extension) => {
-  const name = extension?.name;
-  return !!name && pinnedExtensionOrder.value.has(name);
-};
-
-const togglePinnedExtension = (extension) => {
-  const name = extension?.name;
-  if (!name) return;
-
-  const next = pinnedExtensionNames.value.filter((item) => item !== name);
-  if (next.length === pinnedExtensionNames.value.length) {
-    next.unshift(name);
+const handleCardClick = (extension) => {
+  if (batchSelectionMode.value) {
+    togglePluginSelection(extension.name);
+  } else {
+    openPluginDetail(extension);
   }
-  pinnedExtensionNames.value = next;
 };
+
+const handleCheckboxClick = (extension) => {
+  if (!batchSelectionMode.value) {
+    batchSelectionMode.value = true;
+  }
+  togglePluginSelection(extension.name);
+};
+
+const batchConfirmIcon = computed(() => {
+  switch (batchConfirmDialog.operation) {
+    case "enable": return "mdi-check-circle";
+    case "disable": return "mdi-close-circle";
+    case "uninstall": return "mdi-delete";
+    default: return "mdi-help-circle";
+  }
+});
+
+const batchConfirmColor = computed(() => {
+  switch (batchConfirmDialog.operation) {
+    case "enable": return "success";
+    case "disable": return "warning";
+    case "uninstall": return "error";
+    default: return "primary";
+  }
+});
+
+const batchConfirmTitle = computed(() => {
+  const op = batchConfirmDialog.operation;
+  return tm(`batch.confirmTitle.${op}`) || "";
+});
+
+const batchConfirmMessage = computed(() => {
+  const op = batchConfirmDialog.operation;
+  const opLabel = tm(`batch.confirmTitle.${op}`) || "";
+  return tm("batch.confirmMessage", { operation: opLabel, count: batchConfirmDialog.count });
+});
 </script>
 
 <template>
   <v-tab-item v-show="activeTab === 'installed'">
     <div class="mb-4 pt-4 pb-4">
-      <div class="d-flex align-center flex-wrap" style="gap: 12px">
+      <!-- 批量操作栏 -->
+      <v-expand-transition>
+        <div v-if="batchSelectionMode" class="batch-action-bar mb-3">
+          <div class="d-flex align-center flex-wrap" style="gap: 8px">
+            <v-btn
+              icon
+              variant="text"
+              size="small"
+              @click="exitBatchSelectionMode"
+            >
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+            <span class="text-subtitle-1 font-weight-medium">
+              {{ tm("batch.selectedCount", { count: selectedPluginNames.size }) }}
+            </span>
+            <v-spacer></v-spacer>
+            <v-btn
+              variant="text"
+              size="small"
+              @click="selectAllPlugins"
+            >
+              {{ tm("batch.selectAll") }}
+            </v-btn>
+            <v-btn
+              variant="text"
+              size="small"
+              @click="deselectAllPlugins"
+            >
+              {{ tm("batch.deselectAll") }}
+            </v-btn>
+            <v-btn
+              variant="text"
+              size="small"
+              @click="invertSelection"
+            >
+              {{ tm("batch.invertSelection") }}
+            </v-btn>
+            <v-divider vertical class="mx-1"></v-divider>
+            <v-btn
+              color="success"
+              variant="tonal"
+              size="small"
+              prepend-icon="mdi-check-circle"
+              :disabled="selectedPluginNames.size === 0 || batchOperationInProgress"
+              @click="showBatchConfirm('enable', batchEnablePlugins)"
+            >
+              {{ tm("batch.enable") }}
+            </v-btn>
+            <v-btn
+              color="warning"
+              variant="tonal"
+              size="small"
+              prepend-icon="mdi-close-circle"
+              :disabled="selectedPluginNames.size === 0 || batchOperationInProgress"
+              @click="showBatchConfirm('disable', batchDisablePlugins)"
+            >
+              {{ tm("batch.disable") }}
+            </v-btn>
+            <v-btn
+              color="error"
+              variant="tonal"
+              size="small"
+              prepend-icon="mdi-delete"
+              :disabled="selectedPluginNames.size === 0 || batchOperationInProgress"
+              @click="showBatchConfirm('uninstall', batchUninstallPlugins)"
+            >
+              {{ tm("batch.uninstall") }}
+            </v-btn>
+          </div>
+        </div>
+      </v-expand-transition>
+
+      <!-- 正常工具栏 -->
+      <div v-if="!batchSelectionMode" class="d-flex align-center flex-wrap" style="gap: 12px">
         <h2 class="text-h2 mb-0">{{ tm("titles.installedAstrBotPlugins") }}</h2>
 
         <div class="d-flex align-center flex-wrap ml-auto" style="gap: 8px">
+          <PluginSortControl
+            v-model="installedSortBy"
+            :items="installedSortItems"
+            :label="tm('sort.by')"
+            :order="installedSortOrder"
+            :ascending-label="tm('sort.ascending')"
+            :descending-label="tm('sort.descending')"
+            :show-order="installedSortBy !== 'default'"
+            @update:order="installedSortOrder = $event"
+          />
           <v-text-field
             :model-value="pluginSearch"
             @update:model-value="pluginSearch = normalizeTextInput($event)"
@@ -237,6 +347,19 @@ const togglePinnedExtension = (extension) => {
             style="min-width: 220px; max-width: 340px"
           >
           </v-text-field>
+          <v-tooltip :text="tm('batch.select')" location="top">
+            <template v-slot:activator="{ props: batchProps }">
+              <v-btn
+                v-bind="batchProps"
+                icon
+                variant="text"
+                size="small"
+                @click="toggleBatchSelectionMode"
+              >
+                <v-icon>mdi-checkbox-multiple-marked-outline</v-icon>
+              </v-btn>
+            </template>
+          </v-tooltip>
         </div>
       </div>
     </div>
@@ -340,9 +463,12 @@ const togglePinnedExtension = (extension) => {
             <ExtensionCard
               :extension="extension"
               :is-pinned="isPinnedExtension(extension)"
+              :selectable="batchSelectionMode"
+              :selected="isPluginSelected(extension.name)"
               class="rounded-lg"
               style="background-color: rgb(var(--v-theme-mcpCardBg))"
-              @click="openPluginDetail(extension)"
+              @click="handleCardClick(extension)"
+              @select="handleCheckboxClick(extension)"
               @toggle-pin="togglePinnedExtension(extension)"
               @configure="openExtensionConfig(extension.name)"
               @uninstall="
@@ -364,7 +490,7 @@ const togglePinnedExtension = (extension) => {
       </div>
     </v-fade-transition>
 
-    <v-tooltip :text="tm('market.installPlugin')" location="left">
+    <v-tooltip v-if="!batchSelectionMode" :text="tm('market.installPlugin')" location="left">
       <template v-slot:activator="{ props }">
         <button
           v-bind="props"
@@ -392,7 +518,7 @@ const togglePinnedExtension = (extension) => {
       </template>
     </v-tooltip>
 
-    <v-tooltip :text="tm('buttons.updateAll')" location="left">
+    <v-tooltip v-if="!batchSelectionMode" :text="tm('buttons.updateAll')" location="left">
       <template v-slot:activator="{ props }">
         <v-btn
           v-bind="props"
@@ -406,6 +532,48 @@ const togglePinnedExtension = (extension) => {
         />
       </template>
     </v-tooltip>
+
+    <!-- 批量操作确认对话框 -->
+    <v-dialog v-model="batchConfirmDialog.show" max-width="480">
+      <v-card class="rounded-lg">
+        <v-card-title class="d-flex align-center pa-4">
+          <v-icon :color="batchConfirmColor" class="mr-2">{{ batchConfirmIcon }}</v-icon>
+          {{ batchConfirmTitle }}
+        </v-card-title>
+        <v-card-text>
+          <p>{{ batchConfirmMessage }}</p>
+          <v-alert
+            v-if="batchConfirmDialog.reservedCount > 0"
+            type="info"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+          >
+            {{ tm("batch.reservedSkipped", { count: batchConfirmDialog.reservedCount }) }}
+          </v-alert>
+          <template v-if="batchConfirmDialog.operation === 'uninstall'">
+            <v-divider class="my-4" />
+            <v-checkbox
+              v-model="batchDeleteConfig"
+              :label="tm('dialogs.uninstall.deleteConfig')"
+              color="warning"
+              hide-details
+            />
+            <v-checkbox
+              v-model="batchDeleteData"
+              :label="tm('dialogs.uninstall.deleteData')"
+              color="error"
+              hide-details
+            />
+          </template>
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="cancelBatchConfirm">{{ tm("buttons.cancel") }}</v-btn>
+          <v-btn :color="batchConfirmColor" variant="flat" :loading="batchOperationInProgress" @click="confirmBatchOperation">{{ tm("batch.confirmAction") }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-tab-item>
 </template>
 
@@ -433,5 +601,12 @@ const togglePinnedExtension = (extension) => {
 .update-all-fab:hover {
   transform: translateY(-4px) scale(1.05);
   box-shadow: 0 12px 20px rgba(var(--v-theme-primary), 0.4);
+}
+
+.batch-action-bar {
+  background-color: rgb(var(--v-theme-surface));
+  border: 1px solid rgb(var(--v-theme-on-surface), 0.12);
+  border-radius: 12px;
+  padding: 12px 16px;
 }
 </style>

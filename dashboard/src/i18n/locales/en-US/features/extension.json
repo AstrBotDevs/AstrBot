@@ -181,11 +181,36 @@
     "author": "Author",
     "updated": "Last Updated",
     "updateStatus": "Update Status",
+    "activated": "Status (Enabled/Disabled)",
     "ascending": "Ascending",
     "descending": "Descending"
   },
   "tags": {
     "danger": "Danger"
+  },
+  "batch": {
+    "select": "Select",
+    "exitSelect": "Exit Select",
+    "selectedCount": "{count} selected",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "invertSelection": "Invert",
+    "enable": "Enable",
+    "disable": "Disable",
+    "uninstall": "Uninstall",
+    "confirmTitle": {
+      "enable": "Batch Enable",
+      "disable": "Batch Disable",
+      "uninstall": "Batch Uninstall"
+    },
+    "confirmMessage": "Are you sure you want to {operation} {count} plugin(s)?",
+    "confirmAction": "Confirm",
+    "reservedSkipped": "{count} system plugin(s) will be skipped.",
+    "results": {
+      "title": "Batch Operation Results",
+      "summary": "{succeeded} succeeded, {failed} failed.",
+      "failedList": "Failed plugins:"
+    }
   },
   "dialogs": {
     "error": {
