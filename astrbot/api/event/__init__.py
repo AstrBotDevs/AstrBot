@@ -5,7 +5,7 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
-from astrbot.core.platform import AstrMessageEvent
+from astrbot.core.platform import AstrMessageEvent, RawPlatformEvent
 
 __all__ = [
     "AstrMessageEvent",
@@ -13,5 +13,6 @@ __all__ = [
     "EventResultType",
     "MessageChain",
     "MessageEventResult",
+    "RawPlatformEvent",
     "ResultContentType",
 ]

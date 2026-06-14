@@ -7,6 +7,7 @@ from astrbot.core.platform import (
     MessageType,
     Platform,
     PlatformMetadata,
+    RawPlatformEvent,
 )
 from astrbot.core.platform.register import register_platform_adapter
 
@@ -18,5 +19,6 @@ __all__ = [
     "MessageType",
     "Platform",
     "PlatformMetadata",
+    "RawPlatformEvent",
     "register_platform_adapter",
 ]
