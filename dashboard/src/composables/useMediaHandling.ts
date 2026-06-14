@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import axios from 'axios';
+import { fileApi } from '@/api/v1';
 
 export interface StagedFileInfo {
     attachment_id: string;
@@ -41,10 +41,7 @@ export function useMediaHandling() {
         }
 
         try {
-            const response = await axios.get('/api/chat/get_file', {
-                params: { filename },
-                responseType: 'blob'
-            });
+            const response = await fileApi.getByName(filename);
 
             const blobUrl = URL.createObjectURL(response.data);
             mediaCache.value[filename] = blobUrl;
@@ -64,11 +61,7 @@ export function useMediaHandling() {
         formData.append('file', file);
 
         try {
-            const response = await axios.post('/api/chat/post_file', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
+            const response = await fileApi.upload(formData);
 
             const { attachment_id, filename, type } = response.data.data;
             const stagedFile = {

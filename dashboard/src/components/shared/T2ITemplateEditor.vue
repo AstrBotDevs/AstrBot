@@ -244,7 +244,7 @@ import { ref, computed, nextTick, watch } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { useToast } from '@/utils/toast'
-import axios from 'axios'
+import { statsApi, t2iApi } from '@/api/v1'
 
 const { t } = useI18n()
 const { tm } = useModuleI18n('core.shared')
@@ -288,7 +288,7 @@ const editorOptions = {
 const previewVersion = ref('v4.0.0')
 const syncPreviewVersion = async () => {
   try {
-    const res = await axios.get('/api/stat/version')
+    const res = await statsApi.version()
     const rawVersion = res?.data?.data?.version || res?.data?.version
     if (rawVersion) {
       previewVersion.value = rawVersion.startsWith('v') ? rawVersion : `v${rawVersion}`
@@ -363,16 +363,16 @@ const previewContent = computed(() => {
     let content = normalizeMarkdownSource(templateContent.value)
     content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, () => previewData.value.text)
     content = content.replace(/\{\{\s*version\s*\}\}/g, () => previewData.value.version)
-    let usedLegacyShikiPlaceholder = false
+    let usedExistingShikiPlaceholder = false
     content = content.replace(/<script\b[^>]*>\s*\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}\s*<\/script>/gi, () => {
-      usedLegacyShikiPlaceholder = true
+      usedExistingShikiPlaceholder = true
       return getShikiRuntimeScript()
     })
     content = content.replace(/\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}/g, () => {
-      usedLegacyShikiPlaceholder = true
+      usedExistingShikiPlaceholder = true
       return getShikiRuntimeScript()
     })
-    return usedLegacyShikiPlaceholder ? content : injectShikiRuntime(content)
+    return usedExistingShikiPlaceholder ? content : injectShikiRuntime(content)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     return `<div style="color: red; padding: 20px;">模板渲染错误: ${errorMessage}</div>`
@@ -384,8 +384,8 @@ const loadInitialData = async () => {
   loading.value = true
   try {
     const [listRes, activeRes] = await Promise.all([
-      axios.get('/api/t2i/templates'),
-      axios.get('/api/t2i/templates/active')
+      t2iApi.listTemplates(),
+      t2iApi.getActiveTemplate()
     ])
 
     if (listRes.data.status === 'ok') {
@@ -416,7 +416,7 @@ const loadTemplateContent = async (name) => {
   if (!name) return
   previewLoading.value = true
   try {
-    const response = await axios.get(`/api/t2i/templates/${name}`)
+    const response = await t2iApi.getTemplate(name)
     if (response.data.status === 'ok') {
       templateContent.value = response.data.data.content
     } else {
@@ -435,7 +435,7 @@ const saveTemplate = async () => {
     if (isCreatingNew.value) {
       // --- 创建新模板 ---
       if (!editingName.value) return
-      const response = await axios.post('/api/t2i/templates/create', {
+      const response = await t2iApi.createTemplate({
         name: editingName.value,
         content: templateContent.value
       })
@@ -445,9 +445,7 @@ const saveTemplate = async () => {
     } else {
       // --- 更新现有模板 ---
       if (!selectedTemplate.value) return
-      await axios.put(`/api/t2i/templates/${selectedTemplate.value}`, {
-        content: templateContent.value
-      })
+      await t2iApi.updateTemplate(selectedTemplate.value, templateContent.value)
     }
   } catch (error) {
     const msg = error?.response?.data?.message || error?.message || String(error)
@@ -461,7 +459,7 @@ const saveTemplate = async () => {
 const setActiveTemplate = async (name) => {
   applyLoading.value = true
   try {
-    await axios.post('/api/t2i/templates/set_active', { name })
+    await t2iApi.setActiveTemplate(name)
     activeTemplate.value = name
   } catch (error) {
     const msg = error?.response?.data?.message || error?.message || String(error)
@@ -477,7 +475,7 @@ const confirmDelete = async () => {
   saveLoading.value = true
   try {
     const nameToDelete = selectedTemplate.value
-    await axios.delete(`/api/t2i/templates/${nameToDelete}`)
+    await t2iApi.deleteTemplate(nameToDelete)
     deleteDialog.value = false
 
     // 如果删除的是当前活动模板，则将活动模板重置为base
@@ -498,7 +496,7 @@ const confirmDelete = async () => {
 const confirmReset = async () => {
   resetLoading.value = true
   try {
-    await axios.post('/api/t2i/templates/reset_default')
+    await t2iApi.resetDefaultTemplate()
     resetDialog.value = false
     if (selectedTemplate.value === 'base') {
       await loadTemplateContent('base')

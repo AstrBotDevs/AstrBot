@@ -35,7 +35,7 @@
     },
     "migration": {
       "title": "Data Migration to v4.0.0",
-      "subtitle": "If you encounter data compatibility issues, you can manually start the database migration assistant",
+      "subtitle": "If you encounter data migration issues, you can manually start the database migration assistant",
       "button": "Start Migration Assistant"
     },
     "backup": {
@@ -142,7 +142,7 @@
         "matchTitle": "✅ Version Match",
         "matchMessage": "Import will clear and overwrite all existing data, including:\n• Main database (conversations, settings, etc.)\n• Knowledge bases\n• Plugins and plugin data\n• Configuration files\n• Skills\n\nThis action cannot be undone! Do you want to continue?",
         "minorDiffTitle": "⚠️ Version Difference Warning",
-        "minorDiffMessage": "Minor version differences are usually compatible, but there may be some data structure changes.\nImport will clear and overwrite all existing data!\n\nDo you want to continue?",
+        "minorDiffMessage": "Minor version differences can usually be imported, but there may be some data structure changes.\nImport will clear and overwrite all existing data!\n\nDo you want to continue?",
         "majorDiffTitle": "⛔ Cannot Import",
         "majorDiffMessage": "Major version numbers are different. Cross-major-version import may cause data corruption.\nPlease use the same major version of AstrBot for import."
       }

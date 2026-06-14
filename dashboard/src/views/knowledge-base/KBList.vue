@@ -257,7 +257,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import { knowledgeApi, providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue'
 
@@ -329,7 +329,11 @@ const loadKnowledgeBases = async (refreshStats = false) => {
       params.refresh_stats = 'true'
     }
 
-    const response = await axios.get('/api/kb/list', { params })
+    const response = await knowledgeApi.list({
+      page: params.page,
+      page_size: params.page_size,
+      refresh_stats: params.refresh_stats === 'true'
+    })
     if (response.data.status === 'ok') {
       kbList.value = response.data.data.items || []
     } else {
@@ -346,9 +350,7 @@ const loadKnowledgeBases = async (refreshStats = false) => {
 // 加载提供商配置
 const loadProviders = async () => {
   try {
-    const response = await axios.get('/api/config/provider/list', {
-      params: { provider_type: 'embedding,rerank' }
-    })
+    const response = await providerApi.listByProviderType('embedding,rerank')
     if (response.data.status === 'ok') {
       embeddingProviders.value = response.data.data.filter(
         (p: any) => p.provider_type === 'embedding'
@@ -399,9 +401,7 @@ const deleteKB = async () => {
 
   deleting.value = true
   try {
-    const response = await axios.post('/api/kb/delete', {
-      kb_id: deleteTarget.value.kb_id
-    })
+    const response = await knowledgeApi.delete(deleteTarget.value.kb_id)
 
     console.log('Delete response:', response.data) // 调试日志
 
@@ -439,12 +439,9 @@ const submitForm = async () => {
 
     let response
     if (editingKB.value) {
-      response = await axios.post('/api/kb/update', {
-        kb_id: editingKB.value.kb_id,
-        ...payload
-      })
+      response = await knowledgeApi.update(editingKB.value.kb_id, payload)
     } else {
-      response = await axios.post('/api/kb/create', payload)
+      response = await knowledgeApi.create(payload)
     }
 
     if (response.data.status === 'ok') {

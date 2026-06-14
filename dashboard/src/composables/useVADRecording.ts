@@ -13,7 +13,7 @@ interface VADOptions {
     preSpeechPadMs?: number;
     minSpeechMs?: number;
     submitUserSpeechOnPause?: boolean;
-    model?: 'v5' | 'legacy';
+    model?: 'v5' | string;
     baseAssetPath?: string;
     onnxWASMBasePath?: string;
 }

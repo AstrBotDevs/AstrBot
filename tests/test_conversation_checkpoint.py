@@ -12,7 +12,7 @@ from astrbot.core.agent.message import (
 )
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.provider.provider import Provider
-from astrbot.dashboard.routes.chat import ChatRoute
+from astrbot.dashboard.services.chat_service import find_turn_range
 
 
 def test_checkpoint_message_segment_round_trip():
@@ -151,8 +151,7 @@ def test_provider_ensure_message_to_dicts_skips_checkpoints():
     ]
 
 
-def test_chat_route_find_turn_range():
-    route = ChatRoute.__new__(ChatRoute)
+def test_chat_service_find_turn_range():
     history = [
         {"role": "user", "content": "a"},
         {"role": "assistant", "content": "b"},
@@ -162,5 +161,5 @@ def test_chat_route_find_turn_range():
         {"role": "_checkpoint", "content": {"id": "cp-2"}},
     ]
 
-    assert route._find_turn_range(history, "cp-2") == (3, 5)
-    assert route._find_turn_range(history, "missing") is None
+    assert find_turn_range(history, "cp-2") == (3, 5)
+    assert find_turn_range(history, "missing") is None

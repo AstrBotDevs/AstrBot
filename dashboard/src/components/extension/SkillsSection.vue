@@ -754,9 +754,9 @@
 </template>
 
 <script>
-import axios from "axios";
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import { skillApi, systemConfigApi } from "@/api/v1";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -1156,7 +1156,7 @@ export default {
     const fetchSkills = async () => {
       loading.value = true;
       try {
-        const res = await axios.get("/api/skills");
+        const res = await skillApi.list();
         skills.value = normalizeSkillsPayload(res);
       } catch (_err) {
         showMessage(tm("skills.loadFailed"), "error");
@@ -1200,9 +1200,7 @@ export default {
           formData.append("files", item.file);
         }
 
-        const res = await axios.post("/api/skills/batch-upload", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        const res = await skillApi.uploadBatch(formData);
 
         const payload = res?.data?.data || {};
         applyUploadResults(attemptedItems, payload);
@@ -1246,10 +1244,7 @@ export default {
       const nextActive = !skill.active;
       itemLoading[skill.name] = true;
       try {
-        const res = await axios.post("/api/skills/update", {
-          name: skill.name,
-          active: nextActive,
-        });
+        const res = await skillApi.setEnabled(skill.name, nextActive);
         handleApiResponse(
           res,
           tm("skills.updateSuccess"),
@@ -1282,9 +1277,7 @@ export default {
       if (!skillToDelete.value) return;
       deleting.value = true;
       try {
-        const res = await axios.post("/api/skills/delete", {
-          name: skillToDelete.value.name,
-        });
+        const res = await skillApi.delete(skillToDelete.value.name);
         handleApiResponse(
           res,
           tm("skills.deleteSuccess"),
@@ -1312,10 +1305,7 @@ export default {
       }
       itemLoading[skill.name] = true;
       try {
-        const res = await axios.get("/api/skills/download", {
-          params: { name: skill.name },
-          responseType: "blob",
-        });
+        const res = await skillApi.download(skill.name);
         const blob = new Blob([res.data], { type: "application/zip" });
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -1352,9 +1342,7 @@ export default {
       editorDialog.loadingFiles = true;
       editorDialog.error = "";
       try {
-        const res = await axios.get("/api/skills/files", {
-          params: { name: editorDialog.skillName, path },
-        });
+        const res = await skillApi.listFiles(editorDialog.skillName, path);
         if (res?.data?.status !== "ok") {
           editorDialog.error =
             res?.data?.message || tm("skills.editorLoadFailed");
@@ -1385,9 +1373,7 @@ export default {
       editorDialog.loadingFile = true;
       editorDialog.error = "";
       try {
-        const res = await axios.get("/api/skills/file", {
-          params: { name: editorDialog.skillName, path },
-        });
+        const res = await skillApi.getFile(editorDialog.skillName, path);
         if (res?.data?.status !== "ok") {
           editorDialog.error =
             res?.data?.message || tm("skills.editorLoadFailed");
@@ -1472,11 +1458,11 @@ export default {
       editorDialog.saving = true;
       editorDialog.error = "";
       try {
-        const res = await axios.post("/api/skills/file", {
-          name: editorDialog.skillName,
-          path: editorDialog.filePath,
-          content: editorDialog.content,
-        });
+        const res = await skillApi.updateFile(
+          editorDialog.skillName,
+          editorDialog.filePath,
+          editorDialog.content,
+        );
         if (res?.data?.status !== "ok") {
           editorDialog.error =
             res?.data?.message || tm("skills.editorSaveFailed");
@@ -1499,7 +1485,7 @@ export default {
         skill_key: neoFilters.skill_key || undefined,
         status: neoFilters.status || undefined,
       };
-      const res = await axios.get("/api/skills/neo/candidates", { params });
+      const res = await skillApi.neoCandidates(params);
       neoCandidates.value = normalizeNeoItemsPayload(res);
     };
 
@@ -1508,7 +1494,7 @@ export default {
         skill_key: neoFilters.skill_key || undefined,
         stage: neoFilters.stage || undefined,
       };
-      const res = await axios.get("/api/skills/neo/releases", { params });
+      const res = await skillApi.neoReleases(params);
       neoReleases.value = normalizeNeoItemsPayload(res).map((item) => {
         if (!item || typeof item !== "object") {
           return item;
@@ -1522,7 +1508,7 @@ export default {
 
     const loadNeoAvailability = async () => {
       try {
-        const res = await axios.get("/api/config/get");
+        const res = await systemConfigApi.get();
         const config = res?.data?.data?.config || {};
         const providerSettings = config?.provider_settings || {};
         const currentRuntime =
@@ -1553,7 +1539,7 @@ export default {
 
     const evaluateCandidate = async (candidate, passed) => {
       try {
-        const res = await axios.post("/api/skills/neo/evaluate", {
+        const res = await skillApi.evaluateNeoCandidate({
           candidate_id: candidate.id,
           passed,
           score: passed ? 1.0 : 0.0,
@@ -1587,7 +1573,7 @@ export default {
       if (candidatePromoteLoading[loadingKey]) return;
       candidatePromoteLoading[loadingKey] = true;
       try {
-        const res = await axios.post("/api/skills/neo/promote", {
+        const res = await skillApi.promoteNeoCandidate({
           candidate_id: candidateId,
           stage,
           sync_to_local: true,
@@ -1614,7 +1600,7 @@ export default {
 
     const rollbackRelease = async (release) => {
       try {
-        const res = await axios.post("/api/skills/neo/rollback", {
+        const res = await skillApi.rollbackNeoRelease({
           release_id: release.id,
         });
         handleApiResponse(
@@ -1632,7 +1618,7 @@ export default {
 
     const deactivateRelease = async (release) => {
       try {
-        const res = await axios.post("/api/skills/neo/rollback", {
+        const res = await skillApi.rollbackNeoRelease({
           release_id: release.id,
         });
         handleApiResponse(
@@ -1658,7 +1644,7 @@ export default {
 
     const syncRelease = async (release) => {
       try {
-        const res = await axios.post("/api/skills/neo/sync", {
+        const res = await skillApi.syncNeoRelease({
           release_id: release.id,
         });
         handleApiResponse(
@@ -1677,9 +1663,7 @@ export default {
     const viewPayload = async (payloadRef) => {
       if (!payloadRef) return;
       try {
-        const res = await axios.get("/api/skills/neo/payload", {
-          params: { payload_ref: payloadRef },
-        });
+        const res = await skillApi.neoPayload(payloadRef);
         if (res?.data?.status !== "ok") {
           showMessage(
             res?.data?.message || tm("skills.neoPayloadFailed"),
@@ -1697,7 +1681,7 @@ export default {
 
     const deleteCandidate = async (candidate) => {
       try {
-        const res = await axios.post("/api/skills/neo/delete-candidate", {
+        const res = await skillApi.deleteNeoCandidate({
           candidate_id: candidate.id,
           reason: "deleted_from_webui",
         });
@@ -1716,7 +1700,7 @@ export default {
 
     const deleteRelease = async (release) => {
       try {
-        const res = await axios.post("/api/skills/neo/delete-release", {
+        const res = await skillApi.deleteNeoRelease({
           release_id: release.id,
           reason: "deleted_from_webui",
         });

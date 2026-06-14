@@ -102,7 +102,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import axios from 'axios';
+import { statsApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import { useToastStore } from '@/stores/toast';
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
@@ -182,7 +182,7 @@ const storageCards = computed(() => [
 const loadStorageStatus = async () => {
     statusLoading.value = true;
     try {
-        const res = await axios.get('/api/stat/storage');
+        const res = await statsApi.storage();
         if (res.data.status !== 'ok') {
             showToast(res.data.message || tm('system.cleanup.messages.statusFailed'), 'error');
             return;
@@ -204,7 +204,7 @@ const cleanupStorage = async (target) => {
 
     cleaningTarget.value = target;
     try {
-        const res = await axios.post('/api/stat/storage/cleanup', { target });
+        const res = await statsApi.cleanupStorage(target);
         if (res.data.status !== 'ok') {
             showToast(res.data.message || tm('system.cleanup.messages.cleanupFailed'), 'error');
             return;

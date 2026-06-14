@@ -615,7 +615,7 @@
       },
       "unified_webhook_mode": {
         "description": "统一 Webhook 模式",
-        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。"
+        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/v1/webhooks/platforms/{webhook_uuid}。"
       },
       "webhook_uuid": {
         "description": "Webhook UUID",

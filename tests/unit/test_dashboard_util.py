@@ -1,7 +1,6 @@
 """Tests for dashboard route utility helpers."""
 
-from astrbot.dashboard.routes.config import validate_config
-from astrbot.dashboard.routes.util import get_schema_item
+from astrbot.dashboard.services.config_service import get_schema_item, validate_config
 
 
 def test_get_schema_item_template_list_file_item():

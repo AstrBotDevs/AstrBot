@@ -609,7 +609,7 @@
             },
             "unified_webhook_mode": {
                 "description": "Единый режим Webhook",
-                "hint": "Использовать общий вход вебхуков AstrBot без открытия новых портов. URL: /api/platform/webhook/{uuid}."
+                "hint": "Использовать общий вход вебхуков AstrBot без открытия новых портов. URL: /api/v1/webhooks/platforms/{uuid}."
             },
             "webhook_uuid": {
                 "description": "UUID вебхука",

@@ -55,6 +55,7 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount, watch } from 'vue';
 import { useTheme } from 'vuetify';
+import { chatApi } from '@/api/v1';
 import { useVADRecording } from '@/composables/useVADRecording';
 import SiriOrb from './LiveOrb.vue';
 
@@ -280,8 +281,7 @@ function connectWebSocket(): Promise<void> {
             return;
         }
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//localhost:6185/api/live_chat/ws?token=${encodeURIComponent(token)}`;
+        const wsUrl = chatApi.liveWebSocketUrl(token);
 
         ws = new WebSocket(wsUrl);
 

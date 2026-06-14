@@ -103,7 +103,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import axios from 'axios'
+import { pluginApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import { usePluginI18n } from '@/utils/pluginI18n'
 
@@ -170,7 +170,7 @@ async function openDialog() {
 async function loadPlugins() {
   loading.value = true
   try {
-    const response = await axios.get('/api/plugin/get')
+    const response = await pluginApi.list()
     if (response.data.status === 'ok') {
       // 只显示已激活且非系统的插件，并按名称排序
       pluginList.value = (response.data.data || [])

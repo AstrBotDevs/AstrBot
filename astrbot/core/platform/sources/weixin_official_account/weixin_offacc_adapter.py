@@ -5,7 +5,6 @@ import time
 from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
-import quart
 from requests import Response
 from wechatpy import WeChatClient, create_reply, parse_message
 from wechatpy.crypto import WeChatCrypto
@@ -25,6 +24,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
@@ -44,7 +44,7 @@ class WeixinOfficialAccountServer:
         config: dict,
         user_buffer: dict[Any, dict[str, Any]],
     ) -> None:
-        self.server = quart.Quart(__name__)
+        self.server = FastAPIWebhookServer("weixin-official-account-webhook")
         self.port = int(cast(int | str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.token = config.get("token")
@@ -73,15 +73,15 @@ class WeixinOfficialAccountServer:
         self.user_buffer: dict[str, dict[str, Any]] = user_buffer  # from_user -> state
         self.active_send_mode = False  # 是否启用主动发送模式，启用后 callback 将直接返回回复内容，无需等待微信回调
 
-    async def verify(self):
+    async def verify(self, request):
         """内部服务器的 GET 验证入口"""
-        return await self.handle_verify(quart.request)
+        return await self.handle_verify(request)
 
     async def handle_verify(self, request) -> str:
         """处理验证请求，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: FastAPI webhook request 对象
 
         Returns:
             验证响应
@@ -105,9 +105,9 @@ class WeixinOfficialAccountServer:
             logger.error("验证请求有效性失败，签名异常，请检查配置。")
             return "err"
 
-    async def callback_command(self):
+    async def callback_command(self, request):
         """内部服务器的 POST 回调入口"""
-        return await self.handle_callback(quart.request)
+        return await self.handle_callback(request)
 
     def _maybe_encrypt(self, xml: str, nonce: str | None, timestamp: str | None) -> str:
         if xml and "<Encrypt>" not in xml and nonce and timestamp:
@@ -129,7 +129,7 @@ class WeixinOfficialAccountServer:
         """处理回调请求，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: FastAPI webhook request 对象
 
         Returns:
             响应内容

@@ -4,8 +4,6 @@ This module tests the fix for issue #5821: when an MCP external tool shares a na
 with a disabled built-in tool, the MCP tool should not be removed as collateral damage.
 """
 
-import pytest
-
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 

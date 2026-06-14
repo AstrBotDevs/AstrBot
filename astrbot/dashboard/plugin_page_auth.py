@@ -1,7 +1,5 @@
 from urllib.parse import unquote
 
-from quart import request
-
 PLUGIN_PAGE_CONTENT_PREFIX = "/api/plugin/page/content/"
 PLUGIN_PAGE_BRIDGE_PATH = "/api/plugin/page/bridge-sdk.js"
 PLUGIN_PAGE_TOKEN_TYPE = "plugin_page_asset"
@@ -19,8 +17,8 @@ class PluginPageAuth:
         return payload.get("token_type") == PLUGIN_PAGE_TOKEN_TYPE
 
     @staticmethod
-    def extract_asset_token() -> str | None:
-        query_asset_token = request.args.get("asset_token", "").strip()
+    def extract_asset_token(query_params) -> str | None:
+        query_asset_token = query_params.get("asset_token", "").strip()
         return query_asset_token or None
 
     @staticmethod

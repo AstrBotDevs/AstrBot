@@ -228,7 +228,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import axios from 'axios';
+import { apiKeyApi } from '@/api/v1';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
@@ -294,7 +294,7 @@ const apiKeys = ref([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref('');
 const newApiKeyExpiresInDays = ref(30);
-const newApiKeyScopes = ref(['chat', 'config', 'file', 'im']);
+const newApiKeyScopes = ref(['bot', 'provider', 'im', 'config', 'chat']);
 const createdApiKeyPlaintext = ref('');
 const apiKeyExpiryOptions = computed(() => [
     { title: tm('apiKey.expiryOptions.day1'), value: 1 },
@@ -305,11 +305,53 @@ const apiKeyExpiryOptions = computed(() => [
 ]);
 
 const availableScopes = [
-    { value: 'chat', label: 'chat' },
+    { value: 'bot', label: 'bot' },
+    { value: 'provider', label: 'provider' },
+    { value: 'persona', label: 'persona' },
+    { value: 'im', label: 'im' },
     { value: 'config', label: 'config' },
-    { value: 'file', label: 'file' },
-    { value: 'im', label: 'im' }
+    { value: 'chat', label: 'chat' },
+    { value: 'plugin', label: 'plugin' },
+    { value: 'mcp', label: 'mcp' },
+    { value: 'skill', label: 'skill' }
 ];
+
+const configIncludedScopes = ['bot', 'provider'];
+const previousApiKeyScopes = ref([...newApiKeyScopes.value]);
+
+watch(
+    newApiKeyScopes,
+    (scopes) => {
+        let nextScopes = scopes;
+        const selectedScopes = new Set(scopes);
+        if (selectedScopes.has('config')) {
+            const previousScopes = new Set(previousApiKeyScopes.value);
+            const includedScopeRemoved = configIncludedScopes.some(
+                (scope) => previousScopes.has(scope) && !selectedScopes.has(scope)
+            );
+
+            if (includedScopeRemoved) {
+                selectedScopes.delete('config');
+            } else {
+                for (const scope of configIncludedScopes) {
+                    selectedScopes.add(scope);
+                }
+            }
+
+            nextScopes = availableScopes
+                .map((scopeOption) => scopeOption.value)
+                .filter((scope) => selectedScopes.has(scope));
+            if (
+                nextScopes.length !== scopes.length ||
+                nextScopes.some((scope, index) => scope !== scopes[index])
+            ) {
+                newApiKeyScopes.value = nextScopes;
+            }
+        }
+        previousApiKeyScopes.value = [...nextScopes];
+    },
+    { deep: true, immediate: true }
+);
 
 const showToast = (message, color = 'success') => {
     toastStore.add({
@@ -328,7 +370,7 @@ const formatDate = (value) => {
 
 const loadApiKeys = async () => {
     try {
-        const res = await axios.get('/api/apikey/list');
+        const res = await apiKeyApi.list();
         if (res.data.status !== 'ok') {
             showToast(res.data.message || tm('apiKey.messages.loadFailed'), 'error');
             return;
@@ -350,9 +392,15 @@ const copyCreatedApiKey = async () => {
 };
 
 const createApiKey = async () => {
+    const selectedScopeSet = new Set(newApiKeyScopes.value);
+    if (selectedScopeSet.has('config')) {
+        for (const scope of configIncludedScopes) {
+            selectedScopeSet.add(scope);
+        }
+    }
     const selectedScopes = availableScopes
         .map((scope) => scope.value)
-        .filter((scope) => newApiKeyScopes.value.includes(scope));
+        .filter((scope) => selectedScopeSet.has(scope));
 
     if (selectedScopes.length === 0) {
         showToast(tm('apiKey.messages.scopeRequired'), 'warning');
@@ -367,7 +415,7 @@ const createApiKey = async () => {
         if (newApiKeyExpiresInDays.value !== 'permanent') {
             payload.expires_in_days = Number(newApiKeyExpiresInDays.value);
         }
-        const res = await axios.post('/api/apikey/create', payload);
+        const res = await apiKeyApi.create(payload);
         if (res.data.status !== 'ok') {
             showToast(res.data.message || tm('apiKey.messages.createFailed'), 'error');
             return;
@@ -386,7 +434,7 @@ const createApiKey = async () => {
 
 const revokeApiKey = async (keyId) => {
     try {
-        const res = await axios.post('/api/apikey/revoke', { key_id: keyId });
+        const res = await apiKeyApi.revoke(keyId);
         if (res.data.status !== 'ok') {
             showToast(res.data.message || tm('apiKey.messages.revokeFailed'), 'error');
             return;
@@ -400,7 +448,7 @@ const revokeApiKey = async (keyId) => {
 
 const deleteApiKey = async (keyId) => {
     try {
-        const res = await axios.post('/api/apikey/delete', { key_id: keyId });
+        const res = await apiKeyApi.delete(keyId);
         if (res.data.status !== 'ok') {
             showToast(res.data.message || tm('apiKey.messages.deleteFailed'), 'error');
             return;

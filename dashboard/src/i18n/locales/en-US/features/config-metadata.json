@@ -613,7 +613,7 @@
       },
       "unified_webhook_mode": {
         "description": "Unified Webhook Mode",
-        "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/platform/webhook/{webhook_uuid}."
+        "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/v1/webhooks/platforms/{webhook_uuid}."
       },
       "webhook_uuid": {
         "description": "Webhook UUID",
@@ -1380,7 +1380,7 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "If testing fails, try adding /v1 at the end to be compatible with some OpenAI API versions."
+        "hint": "If testing fails, try adding /v1 at the end for some OpenAI API versions."
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."

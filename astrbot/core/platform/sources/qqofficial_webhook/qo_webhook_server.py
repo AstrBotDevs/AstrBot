@@ -5,12 +5,12 @@ import time
 from binascii import Error as BinasciiError
 from typing import cast
 
-import quart
 from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Token
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from astrbot.api import logger
+from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 
 # remove logger handler
 for handler in logging.root.handlers[:]:
@@ -90,7 +90,7 @@ class QQOfficialWebhook:
         self.api: BotAPI = BotAPI(http=self.http)
         self.token = Token(self.appid, self.secret)
 
-        self.server = quart.Quart(__name__)
+        self.server = FastAPIWebhookServer("qq-official-webhook")
         self.server.add_url_rule(
             "/astrbot-qo-webhook/callback",
             view_func=self.callback,
@@ -159,15 +159,15 @@ class QQOfficialWebhook:
         """Pop and return extra fields cached from the raw webhook payload for a given message ID."""
         return self._extra_data_cache.pop(message_id, {})
 
-    async def callback(self):
+    async def callback(self, request):
         """内部服务器的回调入口"""
-        return await self.handle_callback(quart.request)
+        return await self.handle_callback(request)
 
     async def handle_callback(self, request) -> dict:
         """处理 webhook 回调，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: FastAPI webhook request 对象
 
         Returns:
             响应数据

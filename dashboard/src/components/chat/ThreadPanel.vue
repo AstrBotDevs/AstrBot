@@ -56,7 +56,8 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
-import axios from "axios";
+import { chatApi } from "@/api/v1";
+import { fetchWithAuth } from "@/api/http";
 import {
   appendPlain,
   appendReasoningPart,
@@ -110,9 +111,7 @@ function close() {
 
 async function loadThread(threadId: string) {
   try {
-    const response = await axios.get("/api/chat/thread/get", {
-      params: { thread_id: threadId },
-    });
+    const response = await chatApi.getThread(threadId);
     const history = response.data?.data?.history || [];
     messages.value = history.map(normalizeRecord);
     scrollToBottom();
@@ -153,14 +152,12 @@ async function send() {
   const abort = new AbortController();
   sending.value = true;
   try {
-    const response = await fetch("/api/chat/thread/send", {
+    const response = await fetchWithAuth(chatApi.sendThreadMessageUrl(props.thread.thread_id), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
       },
       body: JSON.stringify({
-        thread_id: props.thread.thread_id,
         message: [{ type: "plain", text }],
         enable_streaming: true,
       }),

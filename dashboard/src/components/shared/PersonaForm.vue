@@ -359,7 +359,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { mcpApi, personaApi, skillApi, toolApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import {
     askForConfirmation as askForConfirmationDialog,
@@ -565,7 +565,7 @@ export default {
 
         async loadMcpServers() {
             try {
-                const response = await axios.get('/api/tools/mcp/servers');
+                const response = await mcpApi.list();
                 if (response.data.status === 'ok') {
                     this.mcpServers = response.data.data || [];
                 } else {
@@ -580,7 +580,7 @@ export default {
         async loadTools() {
             this.loadingTools = true;
             try {
-                const response = await axios.get('/api/tools/list');
+                const response = await toolApi.list();
                 if (response.data.status === 'ok') {
                     this.availableTools = response.data.data || [];
                 } else {
@@ -597,7 +597,7 @@ export default {
         async loadSkills() {
             this.loadingSkills = true;
             try {
-                const response = await axios.get('/api/skills');
+                const response = await skillApi.list();
                 if (response.data.status === 'ok') {
                     const payload = response.data.data || [];
                     if (Array.isArray(payload)) {
@@ -619,7 +619,7 @@ export default {
 
         async loadExistingPersonaIds() {
             try {
-                const response = await axios.get('/api/persona/list');
+                const response = await personaApi.list();
                 if (response.data.status === 'ok') {
                     this.existingPersonaIds = (response.data.data || []).map(p => p.persona_id);
                 }
@@ -645,8 +645,9 @@ export default {
 
             this.saving = true;
             try {
-                const url = this.editingPersona ? '/api/persona/update' : '/api/persona/create';
-                const response = await axios.post(url, this.personaForm);
+                const response = this.editingPersona
+                    ? await personaApi.update(this.personaForm.persona_id, this.personaForm)
+                    : await personaApi.create(this.personaForm);
 
                 if (response.data.status === 'ok') {
                     this.$emit('saved', response.data.message || this.tm('messages.saveSuccess'));
@@ -674,9 +675,7 @@ export default {
 
             this.saving = true;
             try {
-                const response = await axios.post('/api/persona/delete', {
-                    persona_id: this.editingPersona.persona_id
-                });
+                const response = await personaApi.delete(this.editingPersona.persona_id);
 
                 if (response.data.status === 'ok') {
                     this.$emit('deleted', response.data.message || this.tm('messages.deleteSuccess'));

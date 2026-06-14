@@ -321,7 +321,7 @@ import { useDisplay } from "vuetify";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
-import axios from "axios";
+import { commandApi } from "@/api/v1";
 import type { CommandItem } from "@/components/extension/componentPanel/types";
 import ConfigSelector from "./ConfigSelector.vue";
 import ProviderModelMenu from "./ProviderModelMenu.vue";
@@ -742,16 +742,12 @@ async function fetchCommands() {
   if (commandSuggestionLoading.value) return;
   commandSuggestionLoading.value = true;
   try {
-    const params: Record<string, string> = {};
     const cid = currentConfigId.value;
-    if (cid && cid !== "default") {
-      params.config_id = cid;
-    }
-    const res = await axios.get("/api/commands", { params });
+    const res = await commandApi.list(cid && cid !== "default" ? cid : undefined);
     if (res.data.status === "ok") {
       allCommands.value = res.data.data.items || [];
       // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
-      const prefixes: string[] = res.data.data.wake_prefix;
+      const prefixes: string[] = res.data.data.wake_prefix || [];
       if (prefixes && prefixes.length > 0) {
         wakePrefixes.value = prefixes;
       }

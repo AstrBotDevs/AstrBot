@@ -50,7 +50,7 @@
 
 
 <script>
-import axios from 'axios';
+import { statsApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 
 export default {
@@ -93,7 +93,7 @@ export default {
             const proxy = this.githubProxies[idx];
             
             try {
-                const response = await axios.post('/api/stat/test-ghproxy-connection', {
+                const response = await statsApi.testGhproxy({
                     proxy_url: proxy
                 });
                 console.log(response.data);

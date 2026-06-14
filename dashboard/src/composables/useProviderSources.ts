@@ -1,5 +1,5 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import axios from 'axios'
+import { providerApi } from '@/api/v1'
 import { getProviderIcon } from '@/utils/providerUtils'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
 import { normalizeTextInput } from '@/utils/inputValue'
@@ -450,7 +450,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!confirmed) return
 
     try {
-      await axios.post('/api/config/provider_sources/delete', { id: source.id })
+      await providerApi.deleteSource(source.id)
 
       providers.value = providers.value.filter((p) => p.provider_source_id !== source.id)
       providerSources.value = providerSources.value.filter((s) => s.id !== source.id)
@@ -473,15 +473,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!selectedProviderSource.value) return
 
     savingSource.value = true
-    const originalId = selectedProviderSourceOriginalId.value || selectedProviderSource.value.id
+    const originalId = String(selectedProviderSourceOriginalId.value || selectedProviderSource.value.id || '')
     try {
-      const response = await axios.post('/api/config/provider_sources/update', {
-        config: editableProviderSource.value,
-        original_id: originalId
-      })
+      const response = await providerApi.upsertSource(originalId, editableProviderSource.value)
 
       if (response.data.status !== 'ok') {
-        throw new Error(response.data.message)
+        throw new Error(response.data.message || tm('providerSources.saveError'))
       }
 
       if (editableProviderSource.value!.id !== originalId) {
@@ -529,12 +526,10 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     loadingModels.value = true
     try {
-      const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id
-      const response = await axios.get('/api/config/provider_sources/models', {
-        params: { source_id: sourceId }
-      })
+      const sourceId = String(editableProviderSource.value?.id || selectedProviderSource.value.id || '')
+      const response = await providerApi.sourceModels(sourceId)
       if (response.data.status === 'ok') {
-        const metadataMap = response.data.data.model_metadata || {}
+        const metadataMap = (response.data.data.model_metadata || {}) as Record<string, any>
         modelMetadata.value = metadataMap
         availableModels.value = (response.data.data.models || []).map((model: string) => ({
           name: model,
@@ -544,7 +539,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           showMessage(tm('models.noModelsFound'), 'info')
         }
       } else {
-        throw new Error(response.data.message)
+        throw new Error(response.data.message || tm('models.fetchError'))
       }
     } catch (error: any) {
       modelMetadata.value = {}
@@ -600,9 +595,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!newProvider) return
 
     try {
-      const res = await axios.post('/api/config/provider/new', newProvider)
+      const res = await providerApi.createInSource(
+        String(newProvider.provider_source_id),
+        newProvider
+      )
       if (res.data.status === 'error') {
-        throw new Error(res.data.message)
+        throw new Error(res.data.message || tm('providerSources.saveError'))
       }
       providers.value.push(newProvider)
       showMessage(res.data.message || tm('models.addSuccess', { model: modelName }))
@@ -622,7 +620,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!confirmed) return
 
     try {
-      await axios.post('/api/config/provider/delete', { id: provider.id })
+      await providerApi.delete(String(provider.id))
       providers.value = providers.value.filter((p) => p.id !== provider.id)
       showMessage(tm('models.deleteSuccess'))
     } catch (error: any) {
@@ -639,15 +637,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     savingProviderToggles.value.push(provider.id)
     try {
-      const nextConfig = { ...provider, enable: Boolean(value) }
-      const response = await axios.post('/api/config/provider/update', {
-        id: provider.id,
-        config: nextConfig
+      const response = await providerApi.setEnabled(String(provider.id), {
+        enabled: Boolean(value)
       })
       if (response.data.status === 'error') {
-        throw new Error(response.data.message)
+        throw new Error(response.data.message || tm('providerSources.saveError'))
       }
-      provider.enable = nextConfig.enable
+      provider.enable = Boolean(value)
       showMessage(response.data.message || tm('messages.success.statusUpdate'))
       return true
     } catch (error: any) {
@@ -663,7 +659,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     testingProviders.value.push(provider.id)
     try {
       const startTime = performance.now()
-      const response = await axios.get('/api/config/provider/check_one', { params: { id: provider.id } })
+      const response = await providerApi.test(String(provider.id))
       if (response.data.status === 'ok' && response.data.data.error === null) {
         const latency = Math.max(0, Math.round(performance.now() - startTime))
         showMessage(tm('models.testSuccessWithLatency', { id: provider.id, latency }))
@@ -683,7 +679,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   async function loadProviderTemplate() {
     try {
-      const response = await axios.get('/api/config/provider/template')
+      const response = await providerApi.schema()
       if (response.data.status === 'ok') {
         configSchema.value = response.data.data.config_schema || {}
         if (configSchema.value.provider?.config_template) {

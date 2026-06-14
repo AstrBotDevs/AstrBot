@@ -157,7 +157,9 @@ async def test_on_message_skips_recording_when_command_handler_matched():
         handle_message=AsyncMock(),
     )
     event = make_event(
-        handlers_parsed_params={"astrbot.builtin_stars.builtin_commands.main_reset": {}},
+        handlers_parsed_params={
+            "astrbot.builtin_stars.builtin_commands.main_reset": {}
+        },
     )
 
     async for _ in main.on_message(event):

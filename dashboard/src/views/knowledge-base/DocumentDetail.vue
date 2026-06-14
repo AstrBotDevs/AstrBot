@@ -235,7 +235,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import axios from 'axios'
+import { knowledgeApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 
@@ -294,9 +294,7 @@ const filteredChunks = computed(() => {
 const loadDocument = async () => {
   loading.value = true
   try {
-    const response = await axios.get('/api/kb/document/get', {
-      params: { doc_id: docId.value, kb_id: kbId.value }
-    })
+    const response = await knowledgeApi.document(kbId.value, docId.value)
     if (response.data.status === 'ok') {
       document.value = response.data.data
     }
@@ -312,13 +310,10 @@ const loadDocument = async () => {
 const loadChunks = async () => {
   loadingChunks.value = true
   try {
-    const response = await axios.get('/api/kb/chunk/list', {
-      params: { 
-        doc_id: docId.value, 
-        kb_id: kbId.value,
+    const response = await knowledgeApi.chunks(kbId.value, {
+        document_id: docId.value, 
         page: page.value,
         page_size: pageSize.value
-      }
     })
     if (response.data.status === 'ok') {
       chunks.value = response.data.data.items || []
@@ -354,11 +349,7 @@ const viewChunk = (chunk: any) => {
 const deleteChunk = async (chunk: any) => {
   if (!(await askForConfirmation(t('chunks.deleteConfirm'), confirmDialog))) return
   try {
-    const response = await axios.post('/api/kb/chunk/delete', {
-      chunk_id: chunk.chunk_id,
-      doc_id: docId.value,
-      kb_id: kbId.value
-    })
+    const response = await knowledgeApi.deleteChunk(kbId.value, chunk.chunk_id, docId.value)
     if (response.data.status === 'ok') {
       showSnackbar(t('chunks.deleteSuccess'))
       loadChunks()

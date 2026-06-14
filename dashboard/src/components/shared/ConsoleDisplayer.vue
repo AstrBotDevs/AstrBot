@@ -1,6 +1,6 @@
 <script setup>
 import { useCommonStore } from '@/stores/common';
-import axios from 'axios';
+import { logApi } from '@/api/v1';
 import { EventSourcePolyfill } from 'event-source-polyfill';
 </script>
 
@@ -114,7 +114,7 @@ export default {
       
       const token = localStorage.getItem('token');
 
-      this.eventSource = new EventSourcePolyfill('/api/live-log', {
+      this.eventSource = new EventSourcePolyfill(logApi.liveUrl(), {
         headers: {
             'Authorization': token ? `Bearer ${token}` : ''
         },
@@ -222,7 +222,7 @@ export default {
 
     async fetchLogHistory() {
       try {
-        const res = await axios.get('/api/log-history');
+        const res = await logApi.history();
         if (res.data.data.logs && res.data.data.logs.length > 0) {
           this.processNewLogs(res.data.data.logs);
         }

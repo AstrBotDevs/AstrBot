@@ -1,9 +1,9 @@
 <script setup>
 import TraceDisplayer from '@/components/shared/TraceDisplayer.vue';
+import { traceApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import { computed, ref, onMounted } from 'vue';
 import { useTheme } from 'vuetify';
-import axios from 'axios';
 
 const { tm } = useModuleI18n('features/trace');
 const theme = useTheme();
@@ -15,7 +15,7 @@ const traceDisplayerKey = ref(0);
 
 const fetchTraceSettings = async () => {
   try {
-    const res = await axios.get('/api/trace/settings');
+    const res = await traceApi.getSettings();
     if (res.data?.status === 'ok') {
       traceEnabled.value = res.data.data?.trace_enable ?? true;
     }
@@ -27,7 +27,7 @@ const fetchTraceSettings = async () => {
 const updateTraceSettings = async () => {
   loading.value = true;
   try {
-    await axios.post('/api/trace/settings', {
+    await traceApi.updateSettings({
       trace_enable: traceEnabled.value
     });
     // Refresh the TraceDisplayer component to reconnect SSE

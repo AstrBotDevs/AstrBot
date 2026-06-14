@@ -60,8 +60,8 @@ except ImportError:
         logger.warning("未安装 watchfiles，无法实现插件的热重载。")
 
 
-class PluginVersionIncompatibleError(Exception):
-    """Raised when plugin astrbot_version is incompatible with current AstrBot."""
+class PluginVersionUnsupportedError(Exception):
+    """Raised when plugin astrbot_version is not supported by current AstrBot."""
 
 
 class PluginDependencyInstallError(Exception):
@@ -1029,9 +1029,9 @@ class PluginManager:
                             )
                         )
                         if not is_valid:
-                            raise PluginVersionIncompatibleError(
+                            raise PluginVersionUnsupportedError(
                                 error_message
-                                or "The plugin is not compatible with the current AstrBot version."
+                                or "The plugin does not support the current AstrBot version."
                             )
 
                     logger.info(metadata)
@@ -1160,9 +1160,9 @@ class PluginManager:
                             )
                         )
                         if not is_valid:
-                            raise PluginVersionIncompatibleError(
+                            raise PluginVersionUnsupportedError(
                                 error_message
-                                or "The plugin is not compatible with the current AstrBot version."
+                                or "The plugin does not support the current AstrBot version."
                             )
 
                     metadata.star_cls = obj

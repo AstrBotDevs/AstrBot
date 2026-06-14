@@ -436,9 +436,9 @@
 </template>
 
 <script setup lang="ts">
-import axios from "axios";
 import { computed, onMounted, ref } from "vue";
 import { useTheme } from "vuetify";
+import { botApi, cronApi, sessionApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
@@ -802,7 +802,7 @@ async function loadUmos(force = false) {
   if (loadingUmos.value || (!force && availableUmos.value.length)) return;
   loadingUmos.value = true;
   try {
-    const res = await axios.get("/api/session/active-umos");
+    const res = await sessionApi.activeUmos();
     if (res.data.status === "ok") {
       const loadedUmos = Array.isArray(res.data.data?.umos)
         ? res.data.data.umos
@@ -822,7 +822,7 @@ async function loadUmos(force = false) {
 async function loadJobs() {
   loading.value = true;
   try {
-    const res = await axios.get("/api/cron/jobs");
+    const res = await cronApi.list();
     if (res.data.status === "ok") {
       const data = Array.isArray(res.data.data) ? res.data.data : [];
       jobs.value = data.map((job: any) => ({
@@ -844,7 +844,7 @@ async function loadJobs() {
 
 async function loadPlatforms() {
   try {
-    const res = await axios.get("/api/platform/stats");
+    const res = await botApi.stats();
     if (res.data.status === "ok" && Array.isArray(res.data.data?.platforms)) {
       proactivePlatforms.value = res.data.data.platforms
         .filter((p: any) => p?.meta?.support_proactive_message)
@@ -861,7 +861,7 @@ async function loadPlatforms() {
 
 async function toggleJob(job: any) {
   try {
-    const res = await axios.patch(`/api/cron/jobs/${job.job_id}`, {
+    const res = await cronApi.update(job.job_id, {
       enabled: job.enabled,
     });
     if (res.data.status !== "ok") {
@@ -876,7 +876,7 @@ async function toggleJob(job: any) {
 
 async function deleteJob(job: any) {
   try {
-    const res = await axios.delete(`/api/cron/jobs/${job.job_id}`);
+    const res = await cronApi.delete(job.job_id);
     if (res.data.status === "ok") {
       toast(tm("messages.deleteSuccess"));
       jobs.value = jobs.value.filter((item) => item.job_id !== job.job_id);
@@ -893,7 +893,7 @@ async function runJobNow(job: any) {
   if (!jobId || runningJobIds.value.has(jobId)) return;
   runningJobIds.value = new Set([...runningJobIds.value, jobId]);
   try {
-    const res = await axios.post(`/api/cron/jobs/${jobId}/run`);
+    const res = await cronApi.run(jobId);
     if (res.data.status === "ok") {
       toast(tm("messages.runStarted"));
       await loadJobs();
@@ -1263,7 +1263,7 @@ async function createJob() {
   creating.value = true;
   try {
     const payload = buildPayload();
-    const res = await axios.post("/api/cron/jobs", payload);
+    const res = await cronApi.create(payload);
     if (res.data.status === "ok") {
       toast(tm("messages.createSuccess"));
       createDialog.value = false;
@@ -1294,10 +1294,7 @@ async function updateJob() {
       ...buildPayload(),
       description: newJob.value.note,
     };
-    const res = await axios.patch(
-      `/api/cron/jobs/${editingJobId.value}`,
-      payload,
-    );
+    const res = await cronApi.update(editingJobId.value, payload);
     if (res.data.status === "ok") {
       toast(tm("messages.updateSuccess"));
       createDialog.value = false;

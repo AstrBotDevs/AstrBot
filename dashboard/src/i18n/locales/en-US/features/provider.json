@@ -20,8 +20,8 @@
       "typed": "No {type} type service providers available, click Add Provider to add one"
     },
     "description": {
-      "openai": "Supports all OpenAI API compatible providers.",
-      "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API compatibility layer.",
+      "openai": "Supports all OpenAI API-style providers.",
+      "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API adapter.",
       "default": ""
     }
   },

@@ -1,5 +1,5 @@
 import { reactive, shallowRef, onMounted, watch } from "vue";
-import axios from "axios";
+import { pluginApi } from "@/api/v1";
 import type { menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
 
 const DEFAULT_ICON = "mdi-puzzle";
@@ -52,7 +52,7 @@ async function initPluginState() {
   if (initialFetched) return;
   initialFetched = true;
   try {
-    const res = await axios.get("/api/plugin/get");
+    const res = await pluginApi.list();
     if (res.data?.status === "ok") {
       pluginSidebarState.plugins = res.data.data ?? [];
     }

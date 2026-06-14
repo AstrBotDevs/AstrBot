@@ -158,7 +158,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import axios from 'axios'
+import { knowledgeApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import DocumentsTab from './components/DocumentsTab.vue'
 import RetrievalTab from './components/RetrievalTab.vue'
@@ -192,9 +192,7 @@ const showSnackbar = (text: string, color: string = 'success') => {
 const loadKB = async () => {
   loading.value = true
   try {
-    const response = await axios.get('/api/kb/get', {
-      params: { kb_id: kbId.value }
-    })
+    const response = await knowledgeApi.get(kbId.value)
     if (response.data.status === 'ok') {
       kb.value = response.data.data
       emit('title-change', kb.value.kb_name || '')

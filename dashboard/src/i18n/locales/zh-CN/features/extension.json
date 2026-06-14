@@ -67,7 +67,7 @@
     "loading": "加载中...",
     "installed": "已安装",
     "unknown": "未知",
-    "incompatible": "不兼容"
+    "unsupported": "不支持"
   },
   "tooltips": {
     "enable": "点击启用",
@@ -229,7 +229,7 @@
       "confirm": "继续",
       "cancel": "取消"
     },
-    "versionCompatibility": {
+    "versionSupport": {
       "title": "版本兼容性警告",
       "message": "该插件声明的 AstrBot 版本范围与当前版本不匹配。你可以无视警告继续安装，但可能无法正常运行。",
       "confirm": "无视警告，继续安装",

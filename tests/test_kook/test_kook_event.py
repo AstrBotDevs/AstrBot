@@ -1,19 +1,18 @@
 import json
 
 import pytest
+
 from astrbot.api.platform import PlatformMetadata, Unknown
 from astrbot.core.message.components import (
-    Image,
-    Plain,
-    Video,
     At,
     AtAll,
     BaseMessageComponent,
+    Image,
     Json,
+    Plain,
     Reply,
+    Video,
 )
-
-
 from astrbot.core.platform.sources.kook.kook_event import KookEvent
 from astrbot.core.platform.sources.kook.kook_types import KookMessageType, OrderMessage
 from tests.test_kook.shared import (
@@ -162,7 +161,7 @@ async def test_kook_event_warp_message(
     try:
         expected_output_text = json.loads(expected_output_text)
         is_json_text = True
-    except:
+    except (TypeError, json.JSONDecodeError):
         pass
 
     if is_json_text:

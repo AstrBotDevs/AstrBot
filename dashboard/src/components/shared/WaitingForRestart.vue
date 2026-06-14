@@ -10,7 +10,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import { statsApi } from '@/api/v1'
 import { useCommonStore } from '@/stores/common';
 import { useI18n } from '@/i18n/composables';
 
@@ -76,7 +76,7 @@ export default {
         },
         async checkStartTime() {
             try {
-                let res = await axios.get('/api/stat/start-time', { timeout: 3000 })
+                let res = await statsApi.startTime()
                 let newStartTime = res.data.data.start_time
                 console.log('wfr: checkStartTime', newStartTime, this.startTime)
                 if (this.startTime !== -1 && newStartTime !== this.startTime) {

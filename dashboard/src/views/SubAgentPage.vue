@@ -210,10 +210,10 @@
 </template>
 
 <script setup lang="ts">
-import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useTheme } from 'vuetify'
+import { subagentApi } from '@/api/v1'
 import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue'
 import PersonaSelector from '@/components/shared/PersonaSelector.vue'
 import ProviderSelector from '@/components/shared/ProviderSelector.vue'
@@ -302,7 +302,7 @@ function serializeConfig(config: SubAgentConfig): string {
 async function loadConfig() {
   loading.value = true
   try {
-    const res = await axios.get('/api/subagent/config')
+    const res = await subagentApi.getConfig()
     if (res.data.status === 'ok') {
       cfg.value = normalizeConfig(res.data.data)
       expandedAgents.value = Object.fromEntries(cfg.value.agents.map((agent) => [agent.__key, false]))
@@ -390,7 +390,7 @@ async function save() {
       }))
     }
 
-    const res = await axios.post('/api/subagent/config', payload)
+    const res = await subagentApi.updateConfig(payload)
     if (res.data.status === 'ok') {
       initialSnapshot.value = serializeConfig(cfg.value)
       hasLoaded.value = true

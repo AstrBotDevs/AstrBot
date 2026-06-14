@@ -103,7 +103,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import axios from "axios";
+import { providerApi } from "@/api/v1";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useModuleI18n } from "@/i18n/composables";
 
@@ -139,11 +139,9 @@ async function loadProviderConfigs(force = false) {
   if (loadingProviders.value || (providersLoaded.value && !force)) return;
   loadingProviders.value = true;
   try {
-    const response = await axios.get("/api/config/provider/list", {
-      params: { provider_type: "chat_completion" },
-    });
+    const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      providerConfigs.value = (response.data.data || []).filter(
+      providerConfigs.value = ((response.data.data || []) as unknown as ProviderConfig[]).filter(
         (provider: ProviderConfig) => provider.enable !== false,
       );
       providersLoaded.value = true;

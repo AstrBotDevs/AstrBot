@@ -1,7 +1,8 @@
 """Tests for astrbot.core.star.base module."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 class TestStarBase:
@@ -146,14 +147,11 @@ class TestStarBase:
 
     def test_star_metadata_registration(self):
         """Test that Star subclass is automatically registered."""
-        from astrbot.core.star import star_map, star_registry
-        from astrbot.core.star.star import StarMetadata
-
-        # Clear any previous registration for this test module
-        module_path = __name__
+        from astrbot.core.star import star_registry
 
         class UniqueTestStar:
             """Not a Star subclass, should not be registered."""
+
             pass
 
         # Verify Star subclass gets registered
@@ -181,11 +179,9 @@ class TestNoCircularImports:
 
     def test_import_both_modules(self):
         """Test that both modules can be imported together."""
-        import astrbot.core.pipeline
-        import astrbot.core.star
 
         # Verify key exports are available
-        from astrbot.core.star import Context, Star, PluginManager
+        from astrbot.core.star import Context, PluginManager, Star
 
         assert Context is not None
         assert Star is not None

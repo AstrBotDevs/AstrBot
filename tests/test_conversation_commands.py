@@ -32,18 +32,22 @@ async def test_clear_third_party_agent_runner_state_deletes_deerflow_thread_befo
 
     context = SimpleNamespace(
         get_config=lambda **kwargs: {
-            "provider_settings": {"deerflow_agent_runner_provider_id": "deerflow-runner"}
+            "provider_settings": {
+                "deerflow_agent_runner_provider_id": "deerflow-runner"
+            }
         },
         provider_manager=SimpleNamespace(
-            get_provider_config_by_id=lambda provider_id, merged=False: {
-                "id": provider_id,
-                "deerflow_api_base": "http://127.0.0.1:2026",
-                "deerflow_api_key": "token",
-                "deerflow_auth_header": "",
-                "proxy": "",
-            }
-            if merged
-            else {"id": provider_id},
+            get_provider_config_by_id=lambda provider_id, merged=False: (
+                {
+                    "id": provider_id,
+                    "deerflow_api_base": "http://127.0.0.1:2026",
+                    "deerflow_api_key": "token",
+                    "deerflow_auth_header": "",
+                    "proxy": "",
+                }
+                if merged
+                else {"id": provider_id}
+            ),
         ),
     )
 
@@ -95,18 +99,22 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
 
     context = SimpleNamespace(
         get_config=lambda **kwargs: {
-            "provider_settings": {"deerflow_agent_runner_provider_id": "deerflow-runner"}
+            "provider_settings": {
+                "deerflow_agent_runner_provider_id": "deerflow-runner"
+            }
         },
         provider_manager=SimpleNamespace(
-            get_provider_config_by_id=lambda provider_id, merged=False: {
-                "id": provider_id,
-                "deerflow_api_base": "http://127.0.0.1:2026",
-                "deerflow_api_key": "",
-                "deerflow_auth_header": "",
-                "proxy": "",
-            }
-            if merged
-            else {"id": provider_id},
+            get_provider_config_by_id=lambda provider_id, merged=False: (
+                {
+                    "id": provider_id,
+                    "deerflow_api_base": "http://127.0.0.1:2026",
+                    "deerflow_api_key": "",
+                    "deerflow_auth_header": "",
+                    "proxy": "",
+                }
+                if merged
+                else {"id": provider_id}
+            ),
         ),
     )
 
@@ -148,18 +156,22 @@ async def test_clear_third_party_agent_runner_state_removes_local_state_when_dee
 
     context = SimpleNamespace(
         get_config=lambda **kwargs: {
-            "provider_settings": {"deerflow_agent_runner_provider_id": "deerflow-runner"}
+            "provider_settings": {
+                "deerflow_agent_runner_provider_id": "deerflow-runner"
+            }
         },
         provider_manager=SimpleNamespace(
-            get_provider_config_by_id=lambda provider_id, merged=False: {
-                "id": provider_id,
-                "deerflow_api_base": "http://127.0.0.1:2026",
-                "deerflow_api_key": "",
-                "deerflow_auth_header": "",
-                "proxy": "",
-            }
-            if merged
-            else {"id": provider_id},
+            get_provider_config_by_id=lambda provider_id, merged=False: (
+                {
+                    "id": provider_id,
+                    "deerflow_api_base": "http://127.0.0.1:2026",
+                    "deerflow_api_key": "",
+                    "deerflow_auth_header": "",
+                    "proxy": "",
+                }
+                if merged
+                else {"id": provider_id}
+            ),
         ),
     )
 

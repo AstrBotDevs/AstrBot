@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
-import axios from "axios";
+import { logApi, pluginApi, statsApi } from "@/api/v1";
+import { fetchWithAuth } from "@/api/http";
 
 export const useCommonStore = defineStore("common", {
   state: () => ({
@@ -30,7 +31,7 @@ export const useCommonStore = defineStore("common", {
         Authorization: "Bearer " + localStorage.getItem("token"),
       };
 
-      fetch("/api/live-log", {
+      fetchWithAuth(logApi.liveUrl(), {
         method: "GET",
         headers,
         signal,
@@ -151,7 +152,7 @@ export const useCommonStore = defineStore("common", {
       return this.log_cache;
     },
     async fetchStartTime() {
-      const res = await axios.get("/api/stat/start-time");
+      const res = await statsApi.startTime();
       this.startTime = res.data.data.start_time;
       return this.startTime;
     },
@@ -163,7 +164,7 @@ export const useCommonStore = defineStore("common", {
       if (!force && this.astrbotVersion) {
         return this.astrbotVersion;
       }
-      const res = await axios.get("/api/stat/version");
+      const res = await statsApi.version();
       const data = res.data?.data || {};
       this.setAstrBotVersion(data.version, data.dashboard_version);
       return this.astrbotVersion;
@@ -181,18 +182,11 @@ export const useCommonStore = defineStore("common", {
         return Promise.resolve(this.pluginMarketData);
       }
 
-      // 构建URL
-      let url = force
-        ? "/api/plugin/market_list?force_refresh=true"
-        : "/api/plugin/market_list";
-      if (customSource) {
-        url +=
-          (url.includes("?") ? "&" : "?") +
-          `custom_registry=${encodeURIComponent(customSource)}`;
-      }
-
-      return axios
-        .get(url)
+      return pluginApi
+        .market({
+          force_refresh: force || undefined,
+          custom_registry: customSource || undefined,
+        })
         .then((res) => {
           let data = [];
           if (res.data.data && typeof res.data.data === "object") {

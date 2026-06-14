@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ═══════════════════════════════════════════════════════════════
 # ShipyardNeoBooter.capabilities
 # ═══════════════════════════════════════════════════════════════
@@ -93,9 +92,7 @@ class TestApplySandboxToolsConditional:
         config = _make_config("shipyard_neo")
         req = _make_req()
 
-        with patch(
-            "astrbot.core.computer.computer_client.session_booter", {}
-        ):
+        with patch("astrbot.core.computer.computer_client.session_booter", {}):
             fn(config, req, "session-1")
 
         names = self._tool_names(req)
@@ -126,9 +123,7 @@ class TestApplySandboxToolsConditional:
         fn = _import_apply_sandbox_tools()
         config = _make_config("shipyard_neo")
         req = _make_req()
-        fake_booter = SimpleNamespace(
-            capabilities=["python", "shell", "filesystem"]
-        )
+        fake_booter = SimpleNamespace(capabilities=["python", "shell", "filesystem"])
 
         with patch(
             "astrbot.core.computer.computer_client.session_booter",

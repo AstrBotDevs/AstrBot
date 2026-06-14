@@ -97,8 +97,8 @@
   "accountDialog": {
     "title": "Modify Account",
     "securityWarning": "Security Reminder: Please change your password to secure your account",
-    "securityWarningLegacy": "The new AstrBot version has improved security. Please change your password.",
-    "securityWarningUpgrade": "Legacy password storage detected. Please change your password to complete the security upgrade.",
+    "securityWarningMd5": "The new AstrBot version has improved security. Please change your password.",
+    "securityWarningUpgrade": "MD5 password storage detected. Please change your password to complete the security upgrade.",
     "form": {
       "currentPassword": "Current Password",
       "newPassword": "New Password",

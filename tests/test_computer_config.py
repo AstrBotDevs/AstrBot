@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from astrbot.core.computer.computer_client import _discover_bay_credentials
-from astrbot.dashboard.routes.config import _log_computer_config_changes
-
+from astrbot.dashboard.services.config_service import _log_computer_config_changes
 
 # ═══════════════════════════════════════════════════════════════
 # _discover_bay_credentials
@@ -174,7 +172,7 @@ class TestDiscoverBayCredentials:
 class TestLogComputerConfigChanges:
     """Test config change detection and logging."""
 
-    @patch("astrbot.dashboard.routes.config.logger")
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_logs_runtime_change(self, mock_logger) -> None:
         """Detects computer_use_runtime change."""
         old = {"provider_settings": {"computer_use_runtime": "none"}}
@@ -184,9 +182,12 @@ class TestLogComputerConfigChanges:
 
         mock_logger.info.assert_called()
         call_args = [str(c) for c in mock_logger.info.call_args_list]
-        assert any("computer_use_runtime" in c and "none" in c and "sandbox" in c for c in call_args)
+        assert any(
+            "computer_use_runtime" in c and "none" in c and "sandbox" in c
+            for c in call_args
+        )
 
-    @patch("astrbot.dashboard.routes.config.logger")
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_no_log_when_runtime_unchanged(self, mock_logger) -> None:
         """No log when runtime stays the same."""
         old = {"provider_settings": {"computer_use_runtime": "sandbox"}}
@@ -196,7 +197,7 @@ class TestLogComputerConfigChanges:
 
         mock_logger.info.assert_not_called()
 
-    @patch("astrbot.dashboard.routes.config.logger")
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_logs_sandbox_key_change(self, mock_logger) -> None:
         """Detects sandbox sub-key change."""
         old = {"provider_settings": {"sandbox": {"booter": "shipyard"}}}
@@ -214,9 +215,11 @@ class TestLogComputerConfigChanges:
                 assert args[3] == "shipyard_neo"
                 found = True
                 break
-        assert found, f"Expected booter change in log calls: {mock_logger.info.call_args_list}"
+        assert found, (
+            f"Expected booter change in log calls: {mock_logger.info.call_args_list}"
+        )
 
-    @patch("astrbot.dashboard.routes.config.logger")
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_masks_token_values(self, mock_logger) -> None:
         """Token/secret values are masked in log output."""
         old = {"provider_settings": {"sandbox": {"shipyard_neo_access_token": ""}}}
@@ -233,13 +236,11 @@ class TestLogComputerConfigChanges:
         assert "***" in call_args_str
         assert "sk-bay-secret123" not in call_args_str
 
-    @patch("astrbot.dashboard.routes.config.logger")
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_masks_empty_token_as_empty_label(self, mock_logger) -> None:
         """Empty token values show as '(empty)' not '***'."""
         old = {
-            "provider_settings": {
-                "sandbox": {"shipyard_neo_access_token": "old-key"}
-            }
+            "provider_settings": {"sandbox": {"shipyard_neo_access_token": "old-key"}}
         }
         new = {"provider_settings": {"sandbox": {"shipyard_neo_access_token": ""}}}
 
@@ -249,7 +250,7 @@ class TestLogComputerConfigChanges:
         call_args_str = str(mock_logger.info.call_args_list)
         assert "(empty)" in call_args_str
 
-    @patch("astrbot.dashboard.routes.config.logger")
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_no_log_when_nothing_changed(self, mock_logger) -> None:
         """No logs at all when config is identical."""
         cfg = {
@@ -266,7 +267,7 @@ class TestLogComputerConfigChanges:
 
         mock_logger.info.assert_not_called()
 
-    @patch("astrbot.dashboard.routes.config.logger")
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_handles_missing_provider_settings(self, mock_logger) -> None:
         """Gracefully handles configs without provider_settings."""
         _log_computer_config_changes(
@@ -277,7 +278,7 @@ class TestLogComputerConfigChanges:
         call_args_str = str(mock_logger.info.call_args_list)
         assert "computer_use_runtime" in call_args_str
 
-    @patch("astrbot.dashboard.routes.config.logger")
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_detects_new_sandbox_key(self, mock_logger) -> None:
         """Detects a newly added sandbox key."""
         old = {"provider_settings": {"sandbox": {}}}
@@ -293,7 +294,7 @@ class TestLogComputerConfigChanges:
         call_args_str = str(mock_logger.info.call_args_list)
         assert "shipyard_neo_endpoint" in call_args_str
 
-    @patch("astrbot.dashboard.routes.config.logger")
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_detects_removed_sandbox_key(self, mock_logger) -> None:
         """Detects a removed sandbox key."""
         old = {
@@ -309,13 +310,11 @@ class TestLogComputerConfigChanges:
         call_args_str = str(mock_logger.info.call_args_list)
         assert "shipyard_neo_endpoint" in call_args_str
 
-    @patch("astrbot.dashboard.routes.config.logger")
+    @patch("astrbot.dashboard.services.config_service.logger")
     def test_secret_key_masked(self, mock_logger) -> None:
         """Any key containing 'secret' is also masked."""
         old = {"provider_settings": {"sandbox": {"my_secret_key": ""}}}
-        new = {
-            "provider_settings": {"sandbox": {"my_secret_key": "very-secret-value"}}
-        }
+        new = {"provider_settings": {"sandbox": {"my_secret_key": "very-secret-value"}}}
 
         _log_computer_config_changes(old, new)
 
