@@ -202,10 +202,12 @@ class WebChatAdapter(Platform):
 
     async def convert_message(self, data: tuple) -> AstrBotMessage:
         username, cid, payload = data
+        sender_id = str(payload.get("sender_id") or username)
+        sender_name = str(payload.get("sender_name") or username)
 
         abm = AstrBotMessage()
         abm.self_id = "webchat"
-        abm.sender = MessageMember(username, username)
+        abm.sender = MessageMember(sender_id, sender_name)
 
         abm.type = MessageType.FRIEND_MESSAGE
 
