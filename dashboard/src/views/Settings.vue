@@ -317,20 +317,38 @@ const availableScopes = [
 ];
 
 const configIncludedScopes = ['bot', 'provider'];
+const previousApiKeyScopes = ref([...newApiKeyScopes.value]);
 
 watch(
     newApiKeyScopes,
     (scopes) => {
-        if (!scopes.includes('config')) return;
+        let nextScopes = scopes;
         const selectedScopes = new Set(scopes);
-        for (const scope of configIncludedScopes) {
-            selectedScopes.add(scope);
-        }
-        if (selectedScopes.size !== scopes.length) {
-            newApiKeyScopes.value = availableScopes
-                .map((scope) => scope.value)
+        if (selectedScopes.has('config')) {
+            const previousScopes = new Set(previousApiKeyScopes.value);
+            const includedScopeRemoved = configIncludedScopes.some(
+                (scope) => previousScopes.has(scope) && !selectedScopes.has(scope)
+            );
+
+            if (includedScopeRemoved) {
+                selectedScopes.delete('config');
+            } else {
+                for (const scope of configIncludedScopes) {
+                    selectedScopes.add(scope);
+                }
+            }
+
+            nextScopes = availableScopes
+                .map((scopeOption) => scopeOption.value)
                 .filter((scope) => selectedScopes.has(scope));
+            if (
+                nextScopes.length !== scopes.length ||
+                nextScopes.some((scope, index) => scope !== scopes[index])
+            ) {
+                newApiKeyScopes.value = nextScopes;
+            }
         }
+        previousApiKeyScopes.value = [...nextScopes];
     },
     { deep: true, immediate: true }
 );
