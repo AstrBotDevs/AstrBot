@@ -209,14 +209,14 @@ enabled = bool(payload.get("enabled"))
 from pathlib import Path
 
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
-from astrbot.api.web import error_response, json_response, request
+from astrbot.api.web import PluginUploadFile, error_response, json_response, request
 
 
 async def import_file(self):
     form = await request.form()
     files = await request.files()
-    upload = files.get("file")
-    if upload is None:
+    upload: PluginUploadFile | None = files.get("file")
+    if not isinstance(upload, PluginUploadFile):
         return error_response("missing file")
 
     target_dir = (
@@ -452,10 +452,13 @@ const result = await bridge.upload("files/import", file);
 后端读取：
 
 ```python
+from astrbot.api.web import PluginUploadFile, error_response, json_response, request
+
+
 async def import_file(self):
     files = await request.files()
-    upload = files.get("file")
-    if upload is None:
+    upload: PluginUploadFile | None = files.get("file")
+    if not isinstance(upload, PluginUploadFile):
         return error_response("missing file", status_code=400)
     return json_response({"filename": upload.filename})
 ```

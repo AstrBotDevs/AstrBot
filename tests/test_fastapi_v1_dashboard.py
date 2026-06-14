@@ -1827,13 +1827,14 @@ async def test_v1_plugin_extension_astrbot_web_api_reads_form_and_files(
     asgi_client: httpx.AsyncClient,
     fake_core_lifecycle,
 ):
-    from astrbot.api.web import json_response
+    from astrbot.api.web import PluginUploadFile, json_response
     from astrbot.api.web import request as plugin_request
 
     async def astrbot_web_upload_extension():
         form = await plugin_request.form()
         files = await plugin_request.files()
-        upload = files.get("file")
+        upload: PluginUploadFile | None = files.get("file")
+        assert isinstance(upload, PluginUploadFile)
         return json_response(
             {
                 "tags": form.getlist("tag"),

@@ -4,19 +4,37 @@ import contextvars
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, TypeVar, overload
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.responses import StreamingResponse
 
+ValueT = TypeVar("ValueT")
+DefaultT = TypeVar("DefaultT")
+ConvertedT = TypeVar("ConvertedT")
 
-class PluginMultiDict:
+
+class PluginMultiDict(Generic[ValueT]):
     """Dictionary-like request values that preserves duplicate keys."""
 
-    def __init__(self, pairs: list[tuple[str, Any]]) -> None:
+    def __init__(self, pairs: list[tuple[str, ValueT]]) -> None:
         self._pairs = pairs
+
+    @overload
+    def get(self, key: str) -> ValueT | None: ...
+
+    @overload
+    def get(self, key: str, default: DefaultT) -> ValueT | DefaultT: ...
+
+    @overload
+    def get(
+        self,
+        key: str,
+        default: DefaultT,
+        type: Callable[[ValueT], ConvertedT],
+    ) -> ConvertedT | DefaultT: ...
 
     def get(self, key: str, default: Any = None, type: Callable | None = None):
         """Return the last value for a key.
@@ -40,7 +58,7 @@ class PluginMultiDict:
                 return default
         return default
 
-    def getlist(self, key: str) -> list[Any]:
+    def getlist(self, key: str) -> list[ValueT]:
         """Return all values for a key.
 
         Args:
@@ -54,16 +72,16 @@ class PluginMultiDict:
     def keys(self):
         return dict.fromkeys(item_key for item_key, _ in self._pairs).keys()
 
-    def values(self):
+    def values(self) -> list[ValueT]:
         return [self[key] for key in self.keys()]
 
-    def items(self):
+    def items(self) -> list[tuple[str, ValueT]]:
         return [(key, self[key]) for key in self.keys()]
 
     def __contains__(self, key: str) -> bool:
         return any(item_key == key for item_key, _ in self._pairs)
 
-    def __getitem__(self, key: str):
+    def __getitem__(self, key: str) -> ValueT:
         value = self.get(key)
         if value is None and key not in self:
             raise KeyError(key)
@@ -133,9 +151,9 @@ class PluginRequest:
         self.path_params = path_params or {}
         self.plugin_name = plugin_name
         self.username = username
-        self.query = PluginMultiDict(list(request_.query_params.multi_items()))
-        self._form_cache: PluginMultiDict | None = None
-        self._files_cache: PluginMultiDict | None = None
+        self.query = PluginMultiDict[str](list(request_.query_params.multi_items()))
+        self._form_cache: PluginMultiDict[str] | None = None
+        self._files_cache: PluginMultiDict[PluginUploadFile] | None = None
 
     async def body(self) -> bytes:
         """Read the raw request body.
@@ -163,8 +181,8 @@ class PluginRequest:
         if self._form_cache is not None and self._files_cache is not None:
             return
         form = await self._request.form()
-        form_pairs: list[tuple[str, Any]] = []
-        file_pairs: list[tuple[str, Any]] = []
+        form_pairs: list[tuple[str, str]] = []
+        file_pairs: list[tuple[str, PluginUploadFile]] = []
         for key, value in form.multi_items():
             if isinstance(value, StarletteUploadFile):
                 file_pairs.append((key, PluginUploadFile(value)))
@@ -173,7 +191,7 @@ class PluginRequest:
         self._form_cache = PluginMultiDict(form_pairs)
         self._files_cache = PluginMultiDict(file_pairs)
 
-    async def form(self) -> PluginMultiDict:
+    async def form(self) -> PluginMultiDict[str]:
         """Read form fields from a multipart or form-urlencoded request.
 
         Returns:
@@ -183,7 +201,7 @@ class PluginRequest:
         assert self._form_cache is not None
         return self._form_cache
 
-    async def files(self) -> PluginMultiDict:
+    async def files(self) -> PluginMultiDict[PluginUploadFile]:
         """Read uploaded files from a multipart request.
 
         Returns:

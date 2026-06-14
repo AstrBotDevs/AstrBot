@@ -8,6 +8,7 @@ from typing import Any
 
 from astrbot.api.star import Context, Star
 from astrbot.api.web import (
+    PluginUploadFile,
     error_response,
     file_response,
     json_response,
@@ -135,8 +136,8 @@ class PageDemoPlugin(Star):
         """
         form = await request.form()
         files = await request.files()
-        upload = files.get("file")
-        if upload is None:
+        upload: PluginUploadFile | None = files.get("file")
+        if not isinstance(upload, PluginUploadFile):
             return error_response("missing file", status_code=400)
 
         self.upload_dir.mkdir(parents=True, exist_ok=True)
