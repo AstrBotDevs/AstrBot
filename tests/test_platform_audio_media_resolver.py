@@ -1,5 +1,6 @@
 import pytest
 
+from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Record
 from astrbot.core.platform.sources.lark import lark_adapter
 from astrbot.core.platform.sources.lark.lark_adapter import LarkPlatformAdapter
@@ -7,7 +8,13 @@ from astrbot.core.platform.sources.line import line_adapter
 from astrbot.core.platform.sources.line.line_adapter import LinePlatformAdapter
 from astrbot.core.platform.sources.misskey import misskey_utils
 from astrbot.core.platform.sources.misskey.misskey_utils import create_file_component
-from astrbot.core.platform.sources.qqofficial import qqofficial_platform_adapter
+from astrbot.core.platform.sources.qqofficial import (
+    qqofficial_message_event,
+    qqofficial_platform_adapter,
+)
+from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
+    QQOfficialMessageEvent,
+)
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     QQOfficialPlatformAdapter,
 )
@@ -112,6 +119,24 @@ async def test_qqofficial_audio_attachment_uses_media_resolver(monkeypatch):
             "https://example.test/voice.amr",
             {"media_type": "audio", "default_suffix": ".amr"},
             {"target_format": "wav"},
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_send_record_resolves_to_tencent_silk(monkeypatch):
+    _patch_resolver(monkeypatch, qqofficial_message_event)
+
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
+        MessageChain([Record(file="voice.amr", url="https://example.test/voice.amr")])
+    )
+
+    assert parsed[3] == WAV_PATH
+    assert FakeMediaResolver.calls == [
+        (
+            "https://example.test/voice.amr",
+            {"media_type": "audio", "default_suffix": ".wav"},
+            {"target_format": "tencent_silk"},
         )
     ]
 

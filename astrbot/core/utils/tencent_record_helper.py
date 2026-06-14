@@ -1,20 +1,34 @@
+"""Tencent Silk audio conversion helpers."""
+
 import asyncio
-import base64
 import os
 import subprocess
-import tempfile
 import wave
 from io import BytesIO
 
 from astrbot.core import logger
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
+    """Decode a Tencent Silk file to 24 kHz mono PCM WAV.
+
+    Args:
+        silk_path: Input Tencent Silk file path.
+        output_path: Output WAV file path.
+
+    Returns:
+        The output WAV file path.
+
+    Raises:
+        ImportError: Raised when ``silk-python`` is not installed.
+        pysilk.SilkError: Raised when the Silk payload cannot be decoded.
+        OSError: Raised when input or output files cannot be accessed.
+    """
     import pysilk
 
     with open(silk_path, "rb") as f:
         input_data = f.read()
+        # QQ/Tencent voice payloads may include a leading 0x02 marker before SILK.
         if input_data.startswith(b"\x02"):
             input_data = input_data[1:]
         input_io = BytesIO(input_data)
@@ -39,13 +53,19 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
 
     Returns:
         Audio duration in seconds.
+
+    Raises:
+        Exception: Raised when ``silk-python`` is not installed.
+        OSError: Raised when input or output files cannot be accessed.
+        wave.Error: Raised when the input file is not a readable WAV file.
     """
     try:
         import pysilk
-    except (ImportError, ModuleNotFoundError) as _:
+    except (ImportError, ModuleNotFoundError) as e:
         raise Exception(
-            "pysilk 模块未安装，请前往管理面板->平台日志->安装 silk-python 这个库",
-        )
+            "pysilk is not installed. Install the silk-python package from the "
+            "dashboard platform logs page.",
+        ) from e
 
     with wave.open(wav_path, "rb") as wav:
         rate = wav.getframerate()
@@ -54,6 +74,7 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
 
     input_io = BytesIO(pcm_data)
     output_io = BytesIO()
+    # tencent=True makes pysilk emit the QQ-compatible 0x02-prefixed SILK stream.
     pysilk.encode(input_io, output_io, rate, rate, tencent=True)
     with open(output_path, "wb") as f:
         f.write(output_io.getvalue())
@@ -61,8 +82,17 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
 
 
 async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
-    """将 MP3 或其他音频格式转换为 PCM 16bit WAV，采样率24000Hz，单声道。
-    若转换失败则抛出异常。
+    """Convert an audio file to 24 kHz mono 16-bit PCM WAV.
+
+    Args:
+        input_path: Source audio file path.
+        output_path: Destination WAV file path.
+
+    Returns:
+        The output WAV file path.
+
+    Raises:
+        RuntimeError: Raised when conversion does not produce a non-empty WAV file.
     """
     try:
         from pyffmpeg import FFmpeg
@@ -70,8 +100,13 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
         ff = FFmpeg()
         ff.convert(input_file=input_path, output_file=output_path)
     except Exception as e:
-        logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
+        logger.debug(
+            "pyffmpeg conversion failed: %s. Falling back to ffmpeg CLI.",
+            e,
+        )
 
+        # FFmpeg normalizes arbitrary audio input to the PCM WAV format required
+        # by Tencent Silk encoding.
         p = await asyncio.create_subprocess_exec(
             "ffmpeg",
             "-y",
@@ -99,78 +134,4 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
 
     if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
         return output_path
-    raise RuntimeError("生成的WAV文件不存在或为空")
-
-
-async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
-    """Encode an audio file to Tencent Silk base64.
-
-    Args:
-        audio_path: Input audio file path. Non-WAV input is converted to WAV first.
-
-    Returns:
-        A tuple containing the base64 encoded Tencent Silk payload and duration in
-        seconds.
-    """
-    try:
-        import pysilk
-    except ImportError as e:
-        raise Exception("未安装 pysilk: pip install silk-python") from e
-
-    temp_dir = get_astrbot_temp_path()
-    os.makedirs(temp_dir, exist_ok=True)
-
-    # 是否需要转换为 WAV
-    ext = os.path.splitext(audio_path)[1].lower()
-    temp_wav = tempfile.NamedTemporaryFile(
-        prefix="tencent_record_",
-        suffix=".wav",
-        delete=False,
-        dir=temp_dir,
-    ).name
-
-    if ext != ".wav":
-        await convert_to_pcm_wav(audio_path, temp_wav)
-        # 删除原文件
-        os.remove(audio_path)
-        wav_path = temp_wav
-    else:
-        wav_path = audio_path
-
-    with wave.open(wav_path, "rb") as wav_file:
-        rate = wav_file.getframerate()
-        frames = wav_file.getnframes()
-        pcm_data = wav_file.readframes(frames)
-
-    silk_path = tempfile.NamedTemporaryFile(
-        prefix="tencent_record_",
-        suffix=".silk",
-        delete=False,
-        dir=temp_dir,
-    ).name
-
-    try:
-        input_io = BytesIO(pcm_data)
-        output_io = BytesIO()
-        await asyncio.to_thread(
-            pysilk.encode,
-            input_io,
-            output_io,
-            rate,
-            rate,
-            tencent=True,
-        )
-
-        with open(silk_path, "wb") as f:
-            await asyncio.to_thread(f.write, output_io.getvalue())
-
-        with open(silk_path, "rb") as f:
-            silk_bytes = await asyncio.to_thread(f.read)
-            silk_b64 = base64.b64encode(silk_bytes).decode("utf-8")
-
-        return silk_b64, frames / rate if rate else 0
-    finally:
-        if os.path.exists(wav_path) and wav_path != audio_path:
-            os.remove(wav_path)
-        if os.path.exists(silk_path):
-            os.remove(silk_path)
+    raise RuntimeError("Converted WAV file is missing or empty")

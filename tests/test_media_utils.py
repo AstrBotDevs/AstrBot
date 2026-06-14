@@ -14,10 +14,7 @@ from astrbot.core.file_token_service import FileTokenService
 from astrbot.core.message.components import File, Image, Record, Video
 from astrbot.core.provider.entities import ProviderRequest
 from astrbot.core.utils.path_util import path_Mapping
-from astrbot.core.utils.tencent_record_helper import (
-    audio_to_tencent_silk_base64,
-    wav_to_tencent_silk,
-)
+from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
 
 
 @pytest.mark.asyncio
@@ -511,7 +508,8 @@ def test_path_mapping_accepts_standard_and_legacy_file_uri(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_tencent_silk_encoding_uses_pysilk_tencent_format(tmp_path):
+async def test_tencent_silk_encoding_uses_pysilk_tencent_format(tmp_path, monkeypatch):
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     wav_path = tmp_path / "tone.wav"
     silk_path = tmp_path / "tone.silk"
     rate = 24000
@@ -526,9 +524,17 @@ async def test_tencent_silk_encoding_uses_pysilk_tencent_format(tmp_path):
 
     duration = await wav_to_tencent_silk(str(wav_path), str(silk_path))
     silk_bytes = silk_path.read_bytes()
-    silk_b64, b64_duration = await audio_to_tencent_silk_base64(str(wav_path))
+    async with media_utils.MediaResolver(
+        str(wav_path),
+        media_type="audio",
+        default_suffix=".wav",
+    ).as_path(target_format="tencent_silk") as resolved:
+        resolved_silk_path = resolved.path
+        resolved_silk_bytes = resolved_silk_path.read_bytes()
+        assert resolved.format == "tencent_silk"
+        assert resolved.mime_type == "audio/silk"
 
     assert duration == pytest.approx(0.2)
-    assert b64_duration == pytest.approx(0.2)
     assert silk_bytes.startswith(b"\x02#!SILK_V3")
-    assert base64.b64decode(silk_b64).startswith(b"\x02#!SILK_V3")
+    assert resolved_silk_bytes.startswith(b"\x02#!SILK_V3")
+    assert not resolved_silk_path.exists()

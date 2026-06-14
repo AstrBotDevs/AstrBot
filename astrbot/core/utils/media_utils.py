@@ -25,7 +25,10 @@ from PIL import Image as PILImage
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
-from astrbot.core.utils.tencent_record_helper import tencent_silk_to_wav
+from astrbot.core.utils.tencent_record_helper import (
+    tencent_silk_to_wav,
+    wav_to_tencent_silk,
+)
 
 IMAGE_COMPRESS_DEFAULT_MAX_SIZE = 1280
 IMAGE_COMPRESS_DEFAULT_QUALITY = 95
@@ -43,6 +46,7 @@ MEDIA_MIME_EXTENSIONS = {
     "audio/flac": ".flac",
     "audio/aac": ".aac",
     "audio/amr": ".amr",
+    "audio/silk": ".silk",
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/gif": ".gif",
@@ -72,6 +76,8 @@ AUDIO_FORMAT_MIME_TYPES = {
     "mp3": "audio/mp3",
     "ogg": "audio/ogg",
     "opus": "audio/opus",
+    "silk": "audio/silk",
+    "tencent_silk": "audio/silk",
     "wav": "audio/wav",
 }
 
@@ -530,9 +536,10 @@ class MediaResolver:
     ) -> ResolvedMediaFile:
         """Materialize the source and apply media-type-specific conversion.
 
-        For audio, ``target_format`` controls the output format. When it is not
-        set, audio resolves to WAV unless ``preserve_mp3`` is true and the source
-        already appears to be MP3.
+        For audio, ``target_format`` controls the output format, including the
+        QQ / Wechat / Wecom ``tencent_silk`` upload format. When it is not set, audio
+        resolves to WAV unless ``preserve_mp3`` is true and the source already
+        appears to be MP3.
         """
         local_file = await _materialize_media_ref(
             self.media_ref,
@@ -552,23 +559,51 @@ class MediaResolver:
                         "mp3" if preserve_mp3 and resolved_format == "mp3" else "wav"
                     )
 
-                if audio_format == "wav":
-                    converted_audio_path = Path(await ensure_wav(str(resolved_path)))
-                elif resolved_format == audio_format:
-                    converted_audio_path = resolved_path
-                else:
-                    converted_audio_path = Path(
-                        await convert_audio_format(
-                            str(resolved_path),
-                            output_format=audio_format,
+                if audio_format == "tencent_silk":
+                    intermediate_cleanup_paths = list(cleanup_paths)
+                    silk_path = _temp_media_path("audio", ".silk")
+                    try:
+                        wav_path = Path(await ensure_wav(str(resolved_path)))
+                        if wav_path != resolved_path:
+                            intermediate_cleanup_paths.append(wav_path)
+                        duration = await wav_to_tencent_silk(
+                            str(wav_path), str(silk_path)
                         )
-                    )
+                        if duration <= 0:
+                            raise ValueError(
+                                "Tencent Silk conversion returned empty duration"
+                            )
+                    except Exception:
+                        _cleanup_paths([*intermediate_cleanup_paths, silk_path])
+                        raise
 
-                if converted_audio_path != resolved_path:
-                    cleanup_paths.append(converted_audio_path)
-                resolved_path = converted_audio_path
-                resolved_format = audio_format
-                mime_type = AUDIO_FORMAT_MIME_TYPES.get(resolved_format, "audio/wav")
+                    _cleanup_paths(intermediate_cleanup_paths)
+                    cleanup_paths = [silk_path]
+                    resolved_path = silk_path
+                    resolved_format = audio_format
+                    mime_type = AUDIO_FORMAT_MIME_TYPES[resolved_format]
+                else:
+                    if audio_format == "wav":
+                        converted_audio_path = Path(
+                            await ensure_wav(str(resolved_path))
+                        )
+                    elif resolved_format == audio_format:
+                        converted_audio_path = resolved_path
+                    else:
+                        converted_audio_path = Path(
+                            await convert_audio_format(
+                                str(resolved_path),
+                                output_format=audio_format,
+                            )
+                        )
+
+                    if converted_audio_path != resolved_path:
+                        cleanup_paths.append(converted_audio_path)
+                    resolved_path = converted_audio_path
+                    resolved_format = audio_format
+                    mime_type = AUDIO_FORMAT_MIME_TYPES.get(
+                        resolved_format, "audio/wav"
+                    )
         except Exception:
             _cleanup_paths(cleanup_paths)
             raise
@@ -592,7 +627,8 @@ class MediaResolver:
         """Yield a resolved local file and clean resolver-owned temp files on exit.
 
         Use this when the consumer only needs the file during the context manager.
-        For audio, pass ``target_format`` to force a format such as ``wav``.
+        For audio, pass ``target_format`` to force a format such as ``wav`` or
+        ``tencent_silk``.
         """
         resolved = await self._resolve_path(
             target_format=target_format,
