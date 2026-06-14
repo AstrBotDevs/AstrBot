@@ -1874,6 +1874,23 @@ def test_astrbot_web_request_requires_plugin_context():
         _ = plugin_request.method
 
 
+def test_astrbot_web_request_proxy_exposes_typed_methods():
+    from typing import get_type_hints
+
+    from astrbot.api.web import (
+        PluginMultiDict,
+        PluginRequestProxy,
+        PluginUploadFile,
+    )
+    from astrbot.api.web import request as plugin_request
+
+    assert isinstance(plugin_request, PluginRequestProxy)
+    assert get_type_hints(type(plugin_request).form)["return"] == PluginMultiDict[str]
+    assert get_type_hints(type(plugin_request).files)["return"] == PluginMultiDict[
+        PluginUploadFile
+    ]
+
+
 @pytest.mark.asyncio
 async def test_v1_plugin_extension_supports_quart_request_context(
     asgi_client: httpx.AsyncClient,

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import contextvars
-from collections.abc import Callable
+from collections.abc import Callable, KeysView
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Generic, TypeVar, overload
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.datastructures import Headers
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.responses import StreamingResponse
 
@@ -69,7 +70,7 @@ class PluginMultiDict(Generic[ValueT]):
         """
         return [item_value for item_key, item_value in self._pairs if item_key == key]
 
-    def keys(self):
+    def keys(self) -> KeysView[str]:
         return dict.fromkeys(item_key for item_key, _ in self._pairs).keys()
 
     def values(self) -> list[ValueT]:
@@ -95,11 +96,11 @@ class PluginUploadFile:
     """Uploaded file wrapper exposed to plugin Web API handlers."""
 
     def __init__(self, upload_file: StarletteUploadFile) -> None:
-        self._upload_file = upload_file
-        self.filename = upload_file.filename
-        self.content_type = upload_file.content_type
-        self.headers = upload_file.headers
-        self.content_length = self._resolve_content_length()
+        self._upload_file: StarletteUploadFile = upload_file
+        self.filename: str | None = upload_file.filename
+        self.content_type: str | None = upload_file.content_type
+        self.headers: Headers = upload_file.headers
+        self.content_length: int | None = self._resolve_content_length()
 
     def _resolve_content_length(self) -> int | None:
         try:
@@ -126,7 +127,38 @@ class PluginUploadFile:
                     break
                 output.write(chunk)
 
-    def __getattr__(self, key: str):
+    async def read(self, size: int = -1) -> bytes:
+        """Read bytes from the uploaded file.
+
+        Args:
+            size: Maximum number of bytes to read. Use -1 to read all bytes.
+
+        Returns:
+            File bytes.
+        """
+        return await self._upload_file.read(size)
+
+    async def write(self, data: bytes) -> None:
+        """Write bytes to the uploaded file object.
+
+        Args:
+            data: Bytes to write.
+        """
+        await self._upload_file.write(data)
+
+    async def seek(self, offset: int) -> None:
+        """Move the uploaded file cursor.
+
+        Args:
+            offset: Absolute byte offset.
+        """
+        await self._upload_file.seek(offset)
+
+    async def close(self) -> None:
+        """Close the uploaded file."""
+        await self._upload_file.close()
+
+    def __getattr__(self, key: str) -> Any:
         return getattr(self._upload_file, key)
 
 
@@ -141,17 +173,19 @@ class PluginRequest:
         plugin_name: str | None = None,
         username: str | None = None,
     ) -> None:
-        self._request = request_
-        self.method = request_.method
-        self.path = request_.url.path
-        self.headers = request_.headers
-        self.cookies = request_.cookies
-        self.content_type = request_.headers.get("content-type")
-        self.client_host = request_.client.host if request_.client else None
-        self.path_params = path_params or {}
-        self.plugin_name = plugin_name
-        self.username = username
-        self.query = PluginMultiDict[str](list(request_.query_params.multi_items()))
+        self._request: Any = request_
+        self.method: str = request_.method
+        self.path: str = request_.url.path
+        self.headers: Headers = request_.headers
+        self.cookies: dict[str, str] = request_.cookies
+        self.content_type: str | None = request_.headers.get("content-type")
+        self.client_host: str | None = request_.client.host if request_.client else None
+        self.path_params: dict[str, Any] = path_params or {}
+        self.plugin_name: str | None = plugin_name
+        self.username: str | None = username
+        self.query: PluginMultiDict[str] = PluginMultiDict[str](
+            list(request_.query_params.multi_items())
+        )
         self._form_cache: PluginMultiDict[str] | None = None
         self._files_cache: PluginMultiDict[PluginUploadFile] | None = None
 
@@ -163,7 +197,7 @@ class PluginRequest:
         """
         return await self._request.body()
 
-    async def json(self, default: Any = None):
+    async def json(self, default: DefaultT | None = None) -> Any | DefaultT | None:
         """Read the JSON request body.
 
         Args:
@@ -217,7 +251,9 @@ _request_var: contextvars.ContextVar[PluginRequest] = contextvars.ContextVar(
 )
 
 
-class _RequestProxy:
+class PluginRequestProxy:
+    """Typed proxy for the request bound to the current plugin Web handler."""
+
     def _get_current(self) -> PluginRequest:
         try:
             return _request_var.get()
@@ -227,11 +263,63 @@ class _RequestProxy:
                 "handler."
             ) from exc
 
-    def __getattr__(self, key: str):
+    @property
+    def method(self) -> str:
+        return self._get_current().method
+
+    @property
+    def path(self) -> str:
+        return self._get_current().path
+
+    @property
+    def headers(self) -> Headers:
+        return self._get_current().headers
+
+    @property
+    def cookies(self) -> dict[str, str]:
+        return self._get_current().cookies
+
+    @property
+    def content_type(self) -> str | None:
+        return self._get_current().content_type
+
+    @property
+    def client_host(self) -> str | None:
+        return self._get_current().client_host
+
+    @property
+    def path_params(self) -> dict[str, Any]:
+        return self._get_current().path_params
+
+    @property
+    def plugin_name(self) -> str | None:
+        return self._get_current().plugin_name
+
+    @property
+    def username(self) -> str | None:
+        return self._get_current().username
+
+    @property
+    def query(self) -> PluginMultiDict[str]:
+        return self._get_current().query
+
+    async def body(self) -> bytes:
+        return await self._get_current().body()
+
+    async def json(self, default: DefaultT | None = None) -> Any | DefaultT | None:
+        return await self._get_current().json(default=default)
+
+    async def form(self) -> PluginMultiDict[str]:
+        return await self._get_current().form()
+
+    async def files(self) -> PluginMultiDict[PluginUploadFile]:
+        return await self._get_current().files()
+
+    def __getattr__(self, key: str) -> Any:
         return getattr(self._get_current(), key)
 
 
-request = _RequestProxy()
+request: PluginRequestProxy = PluginRequestProxy()
 
 
 @contextmanager
@@ -354,6 +442,7 @@ def stream_response(
 __all__ = [
     "PluginMultiDict",
     "PluginRequest",
+    "PluginRequestProxy",
     "PluginUploadFile",
     "bind_request_context",
     "error_response",
