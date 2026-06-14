@@ -43,7 +43,7 @@
       "aiocqhttpTokenMissing": "To enhance connection security, it is strongly recommended to set ws_reverse_token. Not setting a token may lead to security risks.",
       "learnMore": "Learn More"
     },
-    "invalidPlatformId": "Platform ID cannot contain ':' or '!'."
+    "invalidPlatformId": "Platform ID cannot contain whitespace, ':' or '!'."
   },
   "createDialog": {
     "step1Title": "Choose Platform Category",

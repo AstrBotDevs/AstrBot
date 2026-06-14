@@ -1,4 +1,5 @@
 import asyncio
+import re
 import traceback
 from asyncio import Queue
 from dataclasses import dataclass
@@ -11,6 +12,8 @@ from astrbot.core.utils.webhook_utils import ensure_platform_webhook_config
 from .platform import Platform, PlatformStatus
 from .register import platform_cls_map
 from .sources.webchat.webchat_adapter import WebChatAdapter
+
+INVALID_PLATFORM_ID_PATTERN = re.compile(r"[!:\s]")
 
 
 @dataclass
@@ -38,12 +41,12 @@ class PlatformManager:
     def _is_valid_platform_id(self, platform_id: str | None) -> bool:
         if not platform_id:
             return False
-        return ":" not in platform_id and "!" not in platform_id
+        return INVALID_PLATFORM_ID_PATTERN.search(platform_id) is None
 
     def _sanitize_platform_id(self, platform_id: str | None) -> tuple[str | None, bool]:
         if not platform_id:
             return platform_id, False
-        sanitized = platform_id.replace(":", "_").replace("!", "_")
+        sanitized = re.sub(r"\s+", "", platform_id).replace(":", "_").replace("!", "_")
         return sanitized, sanitized != platform_id
 
     def _start_platform_task(self, task_name: str, inst: Platform) -> None:
@@ -110,11 +113,12 @@ class PlatformManager:
                 sanitized_id, changed = self._sanitize_platform_id(platform_id)
                 if sanitized_id and changed:
                     logger.warning(
-                        "平台 ID %r 包含非法字符 ':' 或 '!'，已替换为 %r。",
+                        "平台 ID %r 包含非法字符 ':', '!' 或空白字符，已替换为 %r。",
                         platform_id,
                         sanitized_id,
                     )
                     platform_config["id"] = sanitized_id
+                    platform_id = sanitized_id
                     self.astrbot_config.save_config()
                 else:
                     logger.error(

@@ -43,7 +43,7 @@
       "aiocqhttpTokenMissing": "为了增强连接安全性，强烈建议您设置 ws_reverse_token。未设置 Token 可能导致安全风险。",
       "learnMore": "了解更多"
     },
-    "invalidPlatformId": "平台 ID 不能包含 ':' 或 '!'。"
+    "invalidPlatformId": "平台 ID 不能包含空白字符、':' 或 '!'。"
   },
   "createDialog": {
     "step1Title": "选择消息平台类别",
