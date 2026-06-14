@@ -17,12 +17,6 @@ from astrbot.core import (
 )
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
-from astrbot.core.db.migration.helper import (
-    check_migration_needed_v4 as _check_migration_needed_v4,
-)
-from astrbot.core.db.migration.helper import (
-    do_migration_v4 as _do_migration_v4,
-)
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.io import (
     download_dashboard as _download_dashboard,
@@ -35,8 +29,6 @@ DEMO_MODE = _DEMO_MODE
 pip_installer = _pip_installer
 download_dashboard = _download_dashboard
 get_dashboard_version = _get_dashboard_version
-default_check_migration_needed_v4 = _check_migration_needed_v4
-default_do_migration_v4 = _do_migration_v4
 
 
 async def call_download_dashboard(*args, **kwargs):
@@ -49,14 +41,6 @@ async def call_get_dashboard_version(*args, **kwargs):
 
 async def call_pip_install(*args, **kwargs):
     return await pip_installer.install(*args, **kwargs)
-
-
-async def call_check_migration_needed_v4(*args, **kwargs):
-    return await default_check_migration_needed_v4(*args, **kwargs)
-
-
-async def call_do_migration_v4(*args, **kwargs):
-    return await default_do_migration_v4(*args, **kwargs)
 
 
 @dataclass
@@ -80,8 +64,6 @@ class UpdateService:
         download_dashboard_func: Callable[..., Awaitable[Any]],
         get_dashboard_version_func: Callable[..., Awaitable[str | None]],
         pip_install_func: Callable[..., Awaitable[Any]],
-        check_migration_needed_func: Callable[..., Awaitable[bool]],
-        do_migration_func: Callable[..., Awaitable[Any]],
         demo_mode: bool,
         clear_site_data_headers: dict,
     ) -> None:
@@ -90,8 +72,6 @@ class UpdateService:
         self.download_dashboard = download_dashboard_func
         self.get_dashboard_version = get_dashboard_version_func
         self.pip_install = pip_install_func
-        self.check_migration_needed = check_migration_needed_func
-        self.do_migration = do_migration_func
         self.demo_mode = demo_mode
         self.clear_site_data_headers = clear_site_data_headers
         self.update_progress: dict[str, dict] = {}
@@ -106,23 +86,6 @@ class UpdateService:
                 message="没有正在进行的更新。",
             )
         return UpdateServiceResult(data=progress)
-
-    async def do_migration_v4(self, data: object) -> UpdateServiceResult:
-        need_migration = await self.check_migration_needed(self.core_lifecycle.db)
-        if not need_migration:
-            return UpdateServiceResult(message="不需要进行迁移。")
-        try:
-            payload = data if isinstance(data, dict) else {}
-            platform_id_map = payload.get("platform_id_map", {})
-            await self.do_migration(
-                self.core_lifecycle.db,
-                platform_id_map,
-                self.core_lifecycle.astrbot_config,
-            )
-            return UpdateServiceResult(message="迁移成功。")
-        except Exception as exc:
-            logger.error(f"迁移失败: {traceback.format_exc()}")
-            raise UpdateServiceError(f"迁移失败: {exc!s}") from exc
 
     async def check_update(self, update_type: str | None) -> UpdateServiceResult:
         try:
