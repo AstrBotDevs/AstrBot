@@ -511,7 +511,7 @@ const subscriptionId = await bridge.subscribeSSE(
 );
 ```
 
-`event.raw` is the raw string. If the message is a JSON string, `event.parsed` is parsed automatically; otherwise it equals the raw string.
+`event.raw` is the raw string. If the message is a JSON string, `event.parsed` is parsed automatically; otherwise it equals the raw string. `event.eventType` matches the SSE `event:` field and defaults to `message`.
 
 The backend must return `text/event-stream`:
 
@@ -649,3 +649,4 @@ Backend handlers must still validate input. Do not trust paths, filenames, forma
 - Query or JSON is empty: pass GET values through `apiGet(endpoint, params)` and POST JSON through `apiPost(endpoint, body)`.
 - Upload is empty: `upload()` always uses the field name `file`; read it with `(await request.files()).get("file")`.
 - SSE has no messages: make sure the backend response is `text/event-stream` and each message ends with a blank line, such as `data: ...\n\n`.
+- SSE returns 401: do not call `new EventSource("/api/v1/...")` directly from the Page. Native `EventSource` cannot send the `Authorization` header; call through `bridge.subscribeSSE()` instead.

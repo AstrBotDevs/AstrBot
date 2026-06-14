@@ -186,6 +186,7 @@
         handlers.onMessage({
           raw: message.data,
           parsed: parseMaybeJson(message.data),
+          eventType: message.eventType || "message",
           lastEventId: message.lastEventId,
         });
       }

@@ -3,6 +3,7 @@ import axios from "axios";
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from "vue";
 import { useRoute } from "vue-router";
 import { pluginApi } from "@/api/v1";
+import { fetchWithAuth } from "@/api/http";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -49,8 +50,8 @@ const toPostMessageData = (value, fallback = null) => {
 };
 
 const cleanupSSEConnections = () => {
-  for (const eventSource of sseConnections.values()) {
-    eventSource.close();
+  for (const connection of sseConnections.values()) {
+    connection.close();
   }
   sseConnections.clear();
 };
@@ -228,10 +229,128 @@ const getBridgeErrorMessage = (error, fallback) => {
 };
 
 const closeSSEConnection = (subscriptionId) => {
-  const eventSource = sseConnections.get(subscriptionId);
-  if (eventSource) {
-    eventSource.close();
+  const connection = sseConnections.get(subscriptionId);
+  if (connection) {
+    connection.close();
     sseConnections.delete(subscriptionId);
+  }
+};
+
+const getFetchErrorMessage = async (response, fallback) => {
+  let text = "";
+  try {
+    text = await response.text();
+  } catch {
+    return fallback;
+  }
+  if (!text) {
+    return fallback;
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.message === "string" && parsed.message) {
+      return parsed.message;
+    }
+    if (typeof parsed?.error === "string" && parsed.error) {
+      return parsed.error;
+    }
+  } catch {
+    return text;
+  }
+  return text;
+};
+
+const parseSSEBlock = (block, previousLastEventId) => {
+  let eventType = "message";
+  let lastEventId = previousLastEventId;
+  const dataLines = [];
+
+  for (const rawLine of block.split("\n")) {
+    if (!rawLine || rawLine.startsWith(":")) {
+      continue;
+    }
+
+    const colonIndex = rawLine.indexOf(":");
+    const field = colonIndex === -1 ? rawLine : rawLine.slice(0, colonIndex);
+    let value = colonIndex === -1 ? "" : rawLine.slice(colonIndex + 1);
+    if (value.startsWith(" ")) {
+      value = value.slice(1);
+    }
+
+    if (field === "event") {
+      eventType = value || "message";
+    } else if (field === "data") {
+      dataLines.push(value);
+    } else if (field === "id" && !value.includes("\0")) {
+      lastEventId = value;
+    }
+  }
+
+  return {
+    eventType,
+    lastEventId,
+    data: dataLines.join("\n"),
+    hasData: dataLines.length > 0,
+  };
+};
+
+const readSSEStream = async (subscriptionId, response, abortController) => {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let lastEventId = "";
+
+  const dispatchBufferedEvents = (flush = false) => {
+    const normalized = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const blocks = normalized.split("\n\n");
+    const completeBlocks = flush ? blocks : blocks.slice(0, -1);
+    buffer = flush ? "" : blocks[blocks.length - 1] || "";
+
+    for (const block of completeBlocks) {
+      if (!sseConnections.has(subscriptionId)) {
+        return;
+      }
+      const event = parseSSEBlock(block, lastEventId);
+      lastEventId = event.lastEventId;
+      if (!event.hasData) {
+        continue;
+      }
+      postToIframe({
+        kind: "sse_message",
+        subscriptionId,
+        data: event.data,
+        eventType: event.eventType,
+        lastEventId,
+      });
+    }
+  };
+
+  try {
+    while (!abortController.signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      dispatchBufferedEvents();
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      dispatchBufferedEvents(true);
+    }
+
+    if (!abortController.signal.aborted) {
+      postToIframe({ kind: "sse_state", subscriptionId, state: "closed" });
+    }
+  } catch {
+    if (!abortController.signal.aborted) {
+      postToIframe({ kind: "sse_state", subscriptionId, state: "error" });
+    }
+  } finally {
+    if (sseConnections.get(subscriptionId)?.abortController === abortController) {
+      sseConnections.delete(subscriptionId);
+    }
   }
 };
 
@@ -350,30 +469,35 @@ const handleBridgeRequest = async (message) => {
       Object.entries(message.params || {}).forEach(([key, value]) => {
         url.searchParams.set(key, String(value));
       });
-      const eventSource = new EventSource(url.toString(), {
-        withCredentials: true,
+      const abortController = new AbortController();
+      const connection = {
+        abortController,
+        close() {
+          abortController.abort();
+        },
+      };
+      sseConnections.set(subscriptionId, connection);
+
+      const response = await fetchWithAuth(url.toString(), {
+        headers: { Accept: "text/event-stream" },
+        signal: abortController.signal,
       });
-      sseConnections.set(subscriptionId, eventSource);
-      eventSource.onopen = () => {
-        postToIframe({ kind: "sse_state", subscriptionId, state: "open" });
-      };
-      eventSource.onmessage = (event) => {
-        postToIframe({
-          kind: "sse_message",
-          subscriptionId,
-          data: event.data,
-          lastEventId: event.lastEventId,
-        });
-      };
-      eventSource.onerror = () => {
-        if (eventSource.readyState === EventSource.CLOSED) {
-          closeSSEConnection(subscriptionId);
-          postToIframe({ kind: "sse_state", subscriptionId, state: "closed" });
-          return;
-        }
-        postToIframe({ kind: "sse_state", subscriptionId, state: "error" });
-      };
+      if (!response.ok) {
+        const errorMessage = await getFetchErrorMessage(
+          response,
+          `Plugin SSE request failed with status ${response.status}.`,
+        );
+        closeSSEConnection(subscriptionId);
+        throw new Error(errorMessage);
+      }
+      if (!response.body) {
+        closeSSEConnection(subscriptionId);
+        throw new Error("Plugin SSE response body is not readable.");
+      }
+
       sendBridgeResponse(requestId, true, { subscriptionId });
+      postToIframe({ kind: "sse_state", subscriptionId, state: "open" });
+      void readSSEStream(subscriptionId, response, abortController);
       return;
     }
 
