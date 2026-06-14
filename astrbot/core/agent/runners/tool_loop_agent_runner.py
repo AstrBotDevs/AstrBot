@@ -792,6 +792,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
+        # 当 LLM 同时返回 completion_text 和 send_message_to_user 工具调用时，
+        # 抑制 completion_text 的 yield，避免 respond 阶段重复发送相同内容。
+        # 这是 mimo 模型的已知问题：它会在同一响应中既输出文本又调用 send_message_to_user。
+        _has_send_message_tool = (
+            llm_resp.tools_call_name
+            and "send_message_to_user" in llm_resp.tools_call_name
+        )
         if llm_resp.reasoning_content:
             yield AgentResponse(
                 type="llm_result",
@@ -802,17 +809,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
         if llm_resp.result_chain:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(chain=llm_resp.result_chain),
-            )
+            if _has_send_message_tool:
+                logger.info(
+                    "检测到 send_message_to_user 工具调用，抑制 result_chain 以避免重复发送。"
+                )
+            else:
+                yield AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(chain=llm_resp.result_chain),
+                )
         elif llm_resp.completion_text:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(
-                    chain=MessageChain().message(llm_resp.completion_text),
-                ),
-            )
+            if _has_send_message_tool:
+                logger.info(
+                    "检测到 send_message_to_user 工具调用，抑制 completion_text 以避免重复发送。"
+                )
+            else:
+                yield AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(
+                        chain=MessageChain().message(llm_resp.completion_text),
+                    ),
+                )
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:

@@ -1,6 +1,8 @@
+import hashlib
 import json
 import os
 import shlex
+import time
 import uuid
 from pathlib import Path
 
@@ -25,6 +27,13 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
 )
+
+# 消息发送去重：防止 LLM 在同一 agent run 中重复调用 send_message_to_user 发送相同内容。
+# 已知触发模型：mimo（会在同一响应中同时返回 completion_text 和 send_message_to_user 工具调用，
+# 或在连续多次响应中重复调用同一工具）。
+# 指纹 = md5(session + 序列化后的 messages)，在时间窗口内相同则跳过。
+_recent_sends: dict[str, float] = {}
+_DEDUP_WINDOW_SECONDS = 30.0
 
 
 def _file_send_allowed_roots(umo: str | None) -> tuple[Path, ...]:
@@ -315,6 +324,24 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     return f"error: invalid session: {session}"
             else:
                 return f"error: invalid session: {session}"
+
+        # 去重：计算消息指纹，跳过短时间内重复发送的相同内容
+        global _recent_sends
+        now = time.time()
+        _recent_sends = {
+            k: v for k, v in _recent_sends.items()
+            if now - v < _DEDUP_WINDOW_SECONDS
+        }
+        fingerprint = hashlib.md5(
+            (str(session) + json.dumps(messages, ensure_ascii=False, sort_keys=True)).encode()
+        ).hexdigest()
+        if fingerprint in _recent_sends:
+            logger.info(
+                f"[send_message_to_user] 检测到重复发送，已跳过。"
+                f" session={session}, fingerprint={fingerprint[:8]}"
+            )
+            return f"Message skipped (duplicate), session={target_session}"
+        _recent_sends[fingerprint] = now
 
         await context.context.context.send_message(
             target_session,
