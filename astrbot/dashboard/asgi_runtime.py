@@ -632,6 +632,7 @@ async def call_websocket_view(
 class FastAPIAppAdapter:
     def __init__(self, app: FastAPI, static_folder: str | None = None) -> None:
         self._app = app
+        app.state.dashboard_app_adapter = self
         self.static_folder = static_folder
         self._dashboard_server: Any | None = None
         self.config: dict[str, Any] = {}

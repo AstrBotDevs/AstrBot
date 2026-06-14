@@ -68,8 +68,10 @@ class FastAPIWebhookServer:
         view_func: Callable,
         methods: list[str] | None = None,
     ) -> None:
+        has_params = bool(inspect.signature(view_func).parameters)
+
         async def endpoint(request: Request):
-            if inspect.signature(view_func).parameters:
+            if has_params:
                 result = view_func(WebhookRequest(request))
             else:
                 result = view_func()

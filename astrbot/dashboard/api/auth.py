@@ -147,10 +147,9 @@ async def require_scope(request: Request, scope: str) -> AuthContext:
     if raw_key:
         return await _require_api_key_scope(request, raw_key, scope)
 
-    auth_header = request.headers.get("Authorization", "").strip()
-    if not auth_header.startswith("Bearer "):
+    token = _extract_dashboard_jwt(request)
+    if not token:
         raise ApiError("Missing API key", status_code=401)
-    token = auth_header.removeprefix("Bearer ").strip()
     try:
         payload = jwt.decode(
             token,
@@ -160,10 +159,13 @@ async def require_scope(request: Request, scope: str) -> AuthContext:
     except jwt.ExpiredSignatureError as exc:
         raise ApiError("Token expired", status_code=401) from exc
     except jwt.InvalidTokenError as exc:
-        try:
-            return await _require_api_key_scope(request, token, scope)
-        except ApiError as api_key_exc:
-            raise api_key_exc from exc
+        auth_header = request.headers.get("Authorization", "").strip()
+        if auth_header.startswith("Bearer "):
+            try:
+                return await _require_api_key_scope(request, token, scope)
+            except ApiError as api_key_exc:
+                raise api_key_exc from exc
+        raise ApiError("Invalid token", status_code=401) from exc
 
     username = payload.get("username")
     if not isinstance(username, str) or not username.strip():

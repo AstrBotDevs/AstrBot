@@ -267,11 +267,15 @@ async def chat_ws(websocket: WebSocket) -> None:
     await websocket.accept()
     service: OpenApiService = websocket.app.state.services.open_api
     chat_service: ChatService = websocket.app.state.services.chat
+
+    async def close_ws(code: int, reason: str) -> None:
+        await websocket.close(code=code, reason=reason)
+
     await service.run_chat_websocket(
         raw_api_key=_extract_ws_api_key(websocket),
         receive_json=websocket.receive_json,
         send_json=websocket.send_json,
-        close=lambda code, reason: websocket.close(code=code, reason=reason),
+        close=close_ws,
         conf_list=_get_chat_config_list(service),
         chat_bridge=_build_chat_ws_bridge(service, chat_service),
     )

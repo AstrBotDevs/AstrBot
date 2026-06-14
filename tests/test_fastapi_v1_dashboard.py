@@ -22,6 +22,7 @@ from astrbot.dashboard.asgi_runtime import (
 )
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.services.api_key_service import ApiKeyService
+from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.skills_service import SkillArchive
 
 JWT_SECRET = "fastapi-v1-test-secret-with-32-bytes"
@@ -972,6 +973,34 @@ def _jwt_headers() -> dict[str, str]:
         algorithm="HS256",
     )
     return {"Authorization": f"Bearer {token}"}
+
+
+def test_fastapi_app_adapter_registers_on_app_state():
+    app = FastAPI()
+    adapter = FastAPIAppAdapter(app)
+
+    assert app.state.dashboard_app_adapter is adapter
+
+
+@pytest.mark.asyncio
+async def test_v1_scope_dependencies_accept_dashboard_cookie(
+    asgi_client: httpx.AsyncClient,
+):
+    token = jwt.encode(
+        {"username": "fastapi-v1-cookie-test"},
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+
+    response = await asgi_client.get(
+        "/api/v1/bots",
+        headers={"Cookie": f"{DASHBOARD_JWT_COOKIE_NAME}={token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert isinstance(data["data"]["bots"], list)
 
 
 @pytest.mark.asyncio
