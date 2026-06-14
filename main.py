@@ -79,25 +79,38 @@ async def check_dashboard_files(webui_dir: str | None = None):
 
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
     if os.path.exists(data_dist_path):
-        v = await get_dashboard_version()
-        if should_use_bundled_dashboard_dist(data_dist_path, VERSION):
-            bundled_dist = get_bundled_dashboard_dist_path()
-            logger.info(
-                "Using bundled WebUI because data/dist is older than core version v%s.",
-                VERSION,
+        index_html = os.path.join(data_dist_path, "index.html")
+        assets_dir = os.path.join(data_dist_path, "assets")
+        version_file = os.path.join(assets_dir, "version")
+        if not (
+            os.path.isfile(index_html)
+            and os.path.isdir(assets_dir)
+            and os.path.isfile(version_file)
+        ):
+            logger.warning(
+                "WebUI directory is incomplete: %s. Downloading a fresh copy.",
+                data_dist_path,
             )
-            return str(bundled_dist)
-        if v is not None:
-            # 存在文件
-            if v == f"v{VERSION}":
-                logger.info("WebUI is up to date.")
-            else:
-                logger.warning(
-                    "WebUI version mismatch: %s, expected v%s.",
-                    v,
+        else:
+            v = await get_dashboard_version()
+            if should_use_bundled_dashboard_dist(data_dist_path, VERSION):
+                bundled_dist = get_bundled_dashboard_dist_path()
+                logger.info(
+                    "Using bundled WebUI because data/dist is older than core version v%s.",
                     VERSION,
                 )
-        return data_dist_path
+                return str(bundled_dist)
+            if v is not None:
+                # 存在文件
+                if v == f"v{VERSION}":
+                    logger.info("WebUI is up to date.")
+                else:
+                    logger.warning(
+                        "WebUI version mismatch: %s, expected v%s.",
+                        v,
+                        VERSION,
+                    )
+            return data_dist_path
 
     logger.info(
         "Downloading WebUI. If it fails, download dist.zip from https://github.com/AstrBotDevs/AstrBot/releases/latest and extract dist to data/.",
