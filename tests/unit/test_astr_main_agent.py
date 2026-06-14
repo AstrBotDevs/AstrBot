@@ -1535,7 +1535,7 @@ class TestBuildMainAgent:
         assert result is not None
         assert [
             part.text for part in result.provider_request.extra_user_content_parts
-        ] == ["[Video Attachment: name video.mp4, path path/to/video.mp4]"]
+        ] == ["[Video Attachment: name video.mp4, path /path/to/video.mp4]"]
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_quoted_video_attachment(
@@ -1576,7 +1576,7 @@ class TestBuildMainAgent:
         assert result is not None
         assert (
             "[Video Attachment in quoted message: "
-            "name quoted-video.mp4, path path/to/quoted-video.mp4]"
+            "name quoted-video.mp4, path /path/to/quoted-video.mp4]"
         ) in [part.text for part in result.provider_request.extra_user_content_parts]
 
     @pytest.mark.asyncio
