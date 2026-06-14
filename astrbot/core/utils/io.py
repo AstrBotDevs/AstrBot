@@ -10,6 +10,8 @@ import time
 import uuid
 import zipfile
 from pathlib import Path
+from typing import cast
+from urllib.parse import unquote, urlparse
 
 import aiohttp
 import certifi
@@ -20,6 +22,24 @@ from .astrbot_path import get_astrbot_data_path, get_astrbot_path, get_astrbot_t
 from .version_comparator import VersionComparator
 
 logger = logging.getLogger("astrbot")
+
+
+def _safe_url_for_log(url: str) -> str:
+    """Return a URL summary that omits query strings and fragments.
+
+    Args:
+        url: URL that may contain signed query parameters.
+
+    Returns:
+        A short description suitable for logs.
+    """
+
+    parsed = urlparse(url)
+    if parsed.scheme in {"http", "https"}:
+        filename = Path(unquote(parsed.path or "")).name
+        suffix = f" file={filename!r}" if filename else ""
+        return f"{parsed.scheme} URL host={parsed.netloc!r}{suffix} len={len(url)}"
+    return f"URL len={len(url)}"
 
 
 def on_error(func, path, exc_info) -> None:
@@ -83,7 +103,7 @@ def save_temp_img(img: Image.Image | bytes) -> str:
     p = os.path.join(temp_dir, f"io_temp_img_{timestamp}.jpg")
 
     if isinstance(img, Image.Image):
-        img.save(p)
+        cast(Image.Image, img).save(p)
     else:
         with open(p, "wb") as f:
             f.write(img)
@@ -123,7 +143,7 @@ async def download_image_by_url(
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
-            f"SSL certificate verification failed for {url}. "
+            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
             "Disabling SSL verification (CERT_NONE) as a fallback. "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
             "Please investigate and resolve certificate issues."
@@ -177,13 +197,18 @@ async def download_file(
             async with session.get(url, timeout=1800) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f"Failed to download file from {url}. HTTP status code: {resp.status}"
+                        "Failed to download file from %s. HTTP status code: %s",
+                        _safe_url_for_log(url),
+                        resp.status,
                     )
                 total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"Downloading: {url} | Size: {total_size / 1024:.2f} KB")
+                    print(
+                        f"Downloading: {_safe_url_for_log(url)} | "
+                        f"Size: {total_size / 1024:.2f} KB"
+                    )
                 await _emit_download_progress(
                     progress_callback,
                     {
@@ -236,11 +261,11 @@ async def download_file(
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
-            f"SSL certificate verification failed for {url}. "
+            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
             "Falling back to unverified connection (CERT_NONE). "
         )
         logger.warning(
-            f"SSL certificate verification failed for {url}. "
+            f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
             "Falling back to unverified connection (CERT_NONE). "
             "This is insecure and exposes the application to man-in-the-middle attacks. "
             "Please investigate certificate issues with the remote server."
@@ -254,7 +279,10 @@ async def download_file(
                 downloaded_size = 0
                 start_time = time.time()
                 if show_progress:
-                    print(f"Size: {total_size / 1024:.2f} KB | URL: {url}")
+                    print(
+                        f"Size: {total_size / 1024:.2f} KB | "
+                        f"URL: {_safe_url_for_log(url)}"
+                    )
                 await _emit_download_progress(
                     progress_callback,
                     {

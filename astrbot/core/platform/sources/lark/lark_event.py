@@ -1,9 +1,7 @@
 import asyncio
-import base64
 import json
 import os
 import uuid
-from io import BytesIO
 
 import lark_oapi as lark
 from lark_oapi.api.cardkit.v1 import (
@@ -30,9 +28,8 @@ from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Json, Plain, Record, Video
 from astrbot.api.message_components import Image as AstrBotImage
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.media_utils import (
+    MediaResolver,
     convert_audio_to_opus,
     convert_video_format,
     get_media_duration,
@@ -200,54 +197,38 @@ class LarkMessageEvent(AstrMessageEvent):
             elif isinstance(comp, At):
                 _stage.append({"tag": "at", "user_id": comp.qq, "style": []})
             elif isinstance(comp, AstrBotImage):
-                file_path = ""
-                image_file = None
-
-                if comp.file and comp.file.startswith("file:///"):
-                    file_path = comp.file.replace("file:///", "")
-                elif comp.file and comp.file.startswith("http"):
-                    image_file_path = await download_image_by_url(comp.file)
-                    file_path = image_file_path if image_file_path else ""
-                elif comp.file and comp.file.startswith("base64://"):
-                    base64_str = comp.file.removeprefix("base64://")
-                    image_data = base64.b64decode(base64_str)
-                    # save as temp file
-                    temp_dir = get_astrbot_temp_path()
-                    file_path = os.path.join(
-                        temp_dir,
-                        f"lark_image_{uuid.uuid4().hex[:8]}.jpg",
-                    )
-                    with open(file_path, "wb") as f:
-                        f.write(BytesIO(image_data).getvalue())
-                else:
-                    file_path = comp.file if comp.file else ""
-
-                if image_file is None:
-                    if not file_path:
-                        logger.error("[Lark] 图片路径为空，无法上传")
-                        continue
-                    try:
-                        image_file = open(file_path, "rb")
-                    except Exception as e:
-                        logger.error(f"[Lark] 无法打开图片文件: {e}")
-                        continue
-
-                request = (
-                    CreateImageRequest.builder()
-                    .request_body(
-                        CreateImageRequestBody.builder()
-                        .image_type("message")
-                        .image(image_file)
-                        .build(),
-                    )
-                    .build()
-                )
-
-                if lark_client.im is None:
-                    logger.error("[Lark] API Client im 模块未初始化，无法上传图片")
+                if not comp.file:
+                    logger.error("[Lark] 图片路径为空，无法上传")
                     continue
 
-                response = await lark_client.im.v1.image.acreate(request)
+                try:
+                    async with MediaResolver(
+                        comp.file,
+                        media_type="image",
+                    ).as_path() as image:
+                        with image.open("rb") as image_file:
+                            request = (
+                                CreateImageRequest.builder()
+                                .request_body(
+                                    CreateImageRequestBody.builder()
+                                    .image_type("message")
+                                    .image(image_file)
+                                    .build(),
+                                )
+                                .build()
+                            )
+
+                            if lark_client.im is None:
+                                logger.error(
+                                    "[Lark] API Client im 模块未初始化，无法上传图片"
+                                )
+                                continue
+
+                            response = await lark_client.im.v1.image.acreate(request)
+                except Exception as e:
+                    logger.error(f"[Lark] 无法打开或上传图片文件: {e}")
+                    continue
+
                 if not response.success():
                     logger.error(f"无法上传飞书图片({response.code}): {response.msg}")
                     continue

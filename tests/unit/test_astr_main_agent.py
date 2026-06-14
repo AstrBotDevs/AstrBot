@@ -1319,6 +1319,77 @@ class TestBuildMainAgent:
         assert "[Image Caption in quoted message]" not in extra_text
 
     @pytest.mark.asyncio
+    async def test_build_main_agent_does_not_retry_quoted_image_caption_when_empty(
+        self, mock_event, mock_context
+    ):
+        """Quoted images already sent to image captioning should not be retried."""
+        module = ama
+        text_provider = MagicMock(spec=Provider)
+        text_provider.provider_config = {
+            "id": "text-provider",
+            "modalities": ["text", "tool_use"],
+        }
+        text_provider.get_model.return_value = "text-model"
+
+        caption_provider = MagicMock(spec=Provider)
+        caption_provider.text_chat = AsyncMock(
+            return_value=MagicMock(completion_text="")
+        )
+
+        mock_reply = Reply(
+            id="reply-1",
+            chain=[Plain(text="quoted text"), Image(file="file:///tmp/quoted.jpg")],
+            sender_nickname="Alice",
+            message_str="quoted text",
+        )
+        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply]
+
+        mock_context.get_provider_by_id.return_value = caption_provider
+        mock_context.get_using_provider.return_value = text_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+            patch.object(
+                Image,
+                "convert_to_file_path",
+                AsyncMock(return_value="/tmp/quoted.jpg"),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent._compress_image_for_provider",
+                AsyncMock(side_effect=lambda path, _settings: path),
+            ),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    provider_settings={
+                        "default_image_caption_provider_id": "caption-provider",
+                    },
+                ),
+                provider=text_provider,
+            )
+
+        assert result is not None
+        assert caption_provider.text_chat.await_count == 1
+
+        extra_text = "\n".join(
+            part.text for part in result.provider_request.extra_user_content_parts
+        )
+        assert "<image_caption>" not in extra_text
+        assert "[Image Caption in quoted message]" not in extra_text
+
+    @pytest.mark.asyncio
     async def test_build_main_agent_uses_image_fallback_provider(
         self, mock_event, mock_context
     ):
@@ -1464,7 +1535,7 @@ class TestBuildMainAgent:
         assert result is not None
         assert [
             part.text for part in result.provider_request.extra_user_content_parts
-        ] == ["[Video Attachment: name video.mp4, path path/to/video.mp4]"]
+        ] == ["[Video Attachment: name video.mp4, path /path/to/video.mp4]"]
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_quoted_video_attachment(
@@ -1505,14 +1576,14 @@ class TestBuildMainAgent:
         assert result is not None
         assert (
             "[Video Attachment in quoted message: "
-            "name quoted-video.mp4, path path/to/quoted-video.mp4]"
+            "name quoted-video.mp4, path /path/to/quoted-video.mp4]"
         ) in [part.text for part in result.provider_request.extra_user_content_parts]
 
     @pytest.mark.asyncio
-    async def test_build_main_agent_skips_video_attachment_when_conversion_fails(
+    async def test_build_main_agent_preserves_quoted_video_when_conversion_fails(
         self, mock_event, mock_context, mock_provider
     ):
-        """Test video attachment failures do not abort request construction."""
+        """Test quoted video failures preserve the ref without error logging."""
         module = ama
         mock_video = Video(file="file:///path/to/direct.mp4")
         mock_quoted_video = Video(file="file:///path/to/quoted.mp4")
@@ -1557,18 +1628,22 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
-        assert not any(
-            "Video Attachment" in part.text
-            for part in result.provider_request.extra_user_content_parts
-        )
-        assert mock_logger.error.call_count == 2
+        extra_texts = [
+            part.text for part in result.provider_request.extra_user_content_parts
+        ]
+        assert (
+            "[Video Attachment in quoted message: "
+            "name quoted.mp4, ref file:///path/to/quoted.mp4]"
+        ) in extra_texts
+        assert not any("[Video Attachment: name" in part for part in extra_texts)
+        assert mock_logger.error.call_count == 1
         assert (
             "Error processing video attachment"
             in mock_logger.error.call_args_list[0][0][0]
         )
-        assert (
-            "Error processing quoted video attachment"
-            in mock_logger.error.call_args_list[1][0][0]
+        assert not any(
+            "Error processing quoted video attachment" in call[0][0]
+            for call in mock_logger.error.call_args_list
         )
 
     @pytest.mark.asyncio

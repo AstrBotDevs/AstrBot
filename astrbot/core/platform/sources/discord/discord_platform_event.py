@@ -1,6 +1,4 @@
 import asyncio
-import base64
-import binascii
 from collections.abc import AsyncGenerator
 from io import BytesIO
 from pathlib import Path
@@ -16,9 +14,15 @@ from astrbot.api.message_components import (
     File,
     Image,
     Plain,
+    Record,
     Reply,
 )
 from astrbot.api.platform import AstrBotMessage, At, PlatformMetadata
+from astrbot.core.utils.media_utils import (
+    MEDIA_MIME_EXTENSIONS,
+    MediaResolver,
+    describe_media_ref,
+)
 
 from .client import DiscordBotClient
 from .components import DiscordEmbed, DiscordView
@@ -158,76 +162,76 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         logger.warning(f"[Discord] Image 组件没有 file 属性: {i}")
                         continue
 
-                    discord_file = None
-
-                    # 1. URL
                     if file_content.startswith("http"):
-                        logger.debug(f"[Discord] 处理 URL 图片: {file_content}")
+                        logger.debug(
+                            "[Discord] 处理 URL 图片: %s",
+                            describe_media_ref(file_content),
+                        )
                         embed = discord.Embed().set_image(url=file_content)
                         embeds.append(embed)
                         continue
 
-                    # 2. File URI
-                    if file_content.startswith("file:///"):
-                        logger.debug(f"[Discord] 处理 File URI: {file_content}")
-                        path = Path(file_content[8:])
-                        if await asyncio.to_thread(path.exists):
-                            file_bytes = await asyncio.to_thread(path.read_bytes)
-                            discord_file = discord.File(
-                                BytesIO(file_bytes),
-                                filename=filename or path.name,
-                            )
-                        else:
-                            logger.warning(f"[Discord] 图片文件不存在: {path}")
-
-                    # 3. Base64 URI
-                    elif file_content.startswith("base64://"):
-                        logger.debug("[Discord] 处理 Base64 URI")
-                        b64_data = file_content.split("base64://", 1)[1]
-                        missing_padding = len(b64_data) % 4
-                        if missing_padding:
-                            b64_data += "=" * (4 - missing_padding)
-                        img_bytes = base64.b64decode(b64_data)
-                        discord_file = discord.File(
-                            BytesIO(img_bytes),
-                            filename=filename or "image.png",
+                    image_data = await MediaResolver(
+                        file_content,
+                        media_type="image",
+                    ).to_base64_data(strict=True)
+                    if not image_data:
+                        logger.warning(
+                            "[Discord] 图片解析失败: %s",
+                            describe_media_ref(file_content),
                         )
+                        continue
 
-                    # 4. 裸 Base64 或本地路径
-                    else:
-                        try:
-                            logger.debug("[Discord] 尝试作为裸 Base64 处理")
-                            b64_data = file_content
-                            missing_padding = len(b64_data) % 4
-                            if missing_padding:
-                                b64_data += "=" * (4 - missing_padding)
-                            img_bytes = base64.b64decode(b64_data)
-                            discord_file = discord.File(
-                                BytesIO(img_bytes),
-                                filename=filename or "image.png",
-                            )
-                        except (ValueError, TypeError, binascii.Error):
-                            logger.debug(
-                                f"[Discord] 裸 Base64 解码失败，作为本地路径处理: {file_content}",
-                            )
-                            path = Path(file_content)
-                            if await asyncio.to_thread(path.exists):
-                                file_bytes = await asyncio.to_thread(path.read_bytes)
-                                discord_file = discord.File(
-                                    BytesIO(file_bytes),
-                                    filename=filename or path.name,
-                                )
-                            else:
-                                logger.warning(f"[Discord] 图片文件不存在: {path}")
-
-                    if discord_file:
-                        files.append(discord_file)
+                    suffix = MEDIA_MIME_EXTENSIONS.get(image_data.mime_type, ".png")
+                    files.append(
+                        discord.File(
+                            BytesIO(image_data.to_bytes()),
+                            filename=filename or f"image{suffix}",
+                        )
+                    )
 
                 except Exception:
                     # 使用 getattr 来安全地访问 i.file，以防 i 本身就是问题
                     file_info = getattr(i, "file", "未知")
                     logger.error(
-                        f"[Discord] 处理图片时发生未知严重错误: {file_info}",
+                        "[Discord] 处理图片时发生未知严重错误: %s",
+                        describe_media_ref(file_info),
+                        exc_info=True,
+                    )
+            elif isinstance(i, Record):
+                logger.debug(f"[Discord] 开始处理 Record 组件: {i}")
+                try:
+                    audio_ref = getattr(i, "file", None) or getattr(i, "url", None)
+                    if not audio_ref:
+                        logger.warning(f"[Discord] Record 组件没有 file/url 属性: {i}")
+                        continue
+
+                    audio_data = await MediaResolver(
+                        audio_ref,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_base64_data(
+                        strict=True,
+                        target_format="wav",
+                    )
+                    if not audio_data:
+                        logger.warning(
+                            "[Discord] 语音解析失败: %s",
+                            describe_media_ref(audio_ref),
+                        )
+                        continue
+
+                    files.append(
+                        discord.File(
+                            BytesIO(audio_data.to_bytes()),
+                            filename="audio.wav",
+                        )
+                    )
+                except Exception:
+                    audio_ref = getattr(i, "file", "未知")
+                    logger.error(
+                        "[Discord] 处理语音时发生未知严重错误: %s",
+                        describe_media_ref(audio_ref),
                         exc_info=True,
                     )
             elif isinstance(i, File):

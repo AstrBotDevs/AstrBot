@@ -32,7 +32,7 @@ from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
-from astrbot.core.utils.media_utils import convert_audio_to_wav
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .tg_event import TelegramPlatformEvent
 
@@ -571,11 +571,11 @@ class TelegramPlatformAdapter(Platform):
             temp_dir = get_astrbot_temp_path()
             temp_path = os.path.join(temp_dir, file_basename)
             await download_file(cast(str, file.file_path), path=temp_path)
-            path_wav = os.path.join(
-                temp_dir,
-                f"{file_basename}.wav",
-            )
-            path_wav = await convert_audio_to_wav(temp_path, path_wav)
+            path_wav = await MediaResolver(
+                temp_path,
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
 
             record = Comp.Record(file=path_wav, url=path_wav)
             record.path = path_wav

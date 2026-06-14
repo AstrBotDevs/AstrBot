@@ -661,7 +661,7 @@ class MisskeyPlatformAdapter(Platform):
             message_parts.extend(text_parts)
 
         files = raw_data.get("files", [])
-        file_parts = process_files(message, files)
+        file_parts = await process_files(message, files)
         message_parts.extend(file_parts)
 
         poll = raw_data.get("poll") or (
@@ -701,7 +701,7 @@ class MisskeyPlatformAdapter(Platform):
             message.message.append(Comp.Plain(raw_text))
 
         files = raw_data.get("files", [])
-        process_files(message, files, include_text_parts=False)
+        await process_files(message, files, include_text_parts=False)
 
         message.message_str = raw_text if raw_text else ""
         return message
@@ -744,7 +744,7 @@ class MisskeyPlatformAdapter(Platform):
                 message_parts.append(raw_text)
 
         files = raw_data.get("files", [])
-        file_parts = process_files(message, files)
+        file_parts = await process_files(message, files)
         message_parts.extend(file_parts)
 
         message.message_str = (

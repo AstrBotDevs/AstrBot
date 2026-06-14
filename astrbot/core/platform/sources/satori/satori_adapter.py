@@ -26,6 +26,7 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core.platform.astr_message_event import MessageSession
+from astrbot.core.utils.media_utils import MediaResolver
 
 
 @register_platform_adapter(
@@ -668,7 +669,12 @@ class SatoriPlatformAdapter(Platform):
                 src = attrs.get("src", "")
                 if not src:
                     continue
-                elements.append(Record(file=src))
+                path_wav = await MediaResolver(
+                    src,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                elements.append(Record(file=path_wav, url=path_wav))
 
             elif tag_name == "quote":
                 # quote标签已经被特殊处理

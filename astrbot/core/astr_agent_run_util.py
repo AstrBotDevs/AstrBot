@@ -3,6 +3,7 @@ import re
 import time
 import traceback
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
@@ -422,7 +423,12 @@ async def run_live_agent(
         )
     else:
         tts_task = asyncio.create_task(
-            _simulated_stream_tts(tts_provider, text_queue, audio_queue)
+            _simulated_stream_tts(
+                tts_provider,
+                text_queue,
+                audio_queue,
+                agent_runner.run_context.context.event,
+            )
         )
 
     # 3. 主循环：从 audio_queue 读取音频并 yield
@@ -573,8 +579,18 @@ async def _simulated_stream_tts(
     tts_provider: TTSProvider,
     text_queue: asyncio.Queue[str | None],
     audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
+    astr_event: Any,
 ) -> None:
-    """模拟流式 TTS 分句生成音频"""
+    """模拟流式 TTS 分句生成音频.
+
+    Args:
+        tts_provider: Provider used to synthesize audio files.
+        text_queue: Text chunks to synthesize. ``None`` ends the worker.
+        audio_queue: Synthesized audio bytes output queue.
+        astr_event: Current event used to cleanup generated TTS files after the
+            event finishes.
+    """
+
     try:
         while True:
             text = await text_queue.get()
@@ -587,6 +603,7 @@ async def _simulated_stream_tts(
                 if audio_path:
                     with open(audio_path, "rb") as f:
                         audio_data = f.read()
+                    astr_event.track_temporary_local_file(audio_path)
                     await audio_queue.put((text, audio_data))
             except Exception as e:
                 logger.error(

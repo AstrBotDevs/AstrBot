@@ -131,7 +131,6 @@ from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.api.message_components import Plain, Image
 from .client import FakeClient
-from astrbot.core.utils.io import download_image_by_url
 
 class FakePlatformEvent(AstrMessageEvent):
     def __init__(self, message_str: str, message_obj: AstrBotMessage, platform_meta: PlatformMetadata, session_id: str, client: FakeClient):
@@ -143,21 +142,68 @@ class FakePlatformEvent(AstrMessageEvent):
             if isinstance(i, Plain): # If it's a text message
                 await self.client.send_text(to=self.get_sender_id(), message=i.text)
             elif isinstance(i, Image): # If it's an image
-                img_url = i.file
-                img_path = ""
-                # The three conditions below can be used as a reference.
-                if img_url.startswith("file:///"):
-                    img_path = img_url[8:]
-                elif i.file and i.file.startswith("http"):
-                    img_path = await download_image_by_url(i.file)
-                else:
-                    img_path = img_url
-
-                # Make good use of debugging!
-                    
+                # convert_to_file_path() resolves supported media refs through
+                # the shared media utilities.
+                img_path = await i.convert_to_file_path()
                 await self.client.send_image(to=self.get_sender_id(), image_path=img_path)
 
         await super().send(message) # Must be called at the end to invoke the parent class's send method.
+```
+
+## Media Message Handling
+
+Platform adapters do not need to reimplement media parsing for every platform. Convert the platform message into AstrBot message components, and put the media reference in the component's `file` / `url` field. The supported reference forms are:
+
+- Local path, such as `/tmp/a.jpg`
+- Standard `file:` URI, such as `file:///tmp/a.jpg`
+- HTTP(S) URL, such as `https://example.com/a.jpg`
+- `base64://`, such as `base64://iVBORw0KGgo...`
+- Data URI, such as `data:image/png;base64,iVBORw0KGgo...`
+- Legacy bare base64, such as `iVBORw0KGgo...`; supported for compatibility, but new code should not generate it intentionally
+
+If you already have a local file, prefer the component factory methods. They generate standard `file:` URIs:
+
+```py
+from astrbot.api.message_components import Image, Record, Video
+
+abm.message.append(Image.fromFileSystem("/tmp/image.png"))
+abm.message.append(Record.fromFileSystem("/tmp/audio.wav"))
+abm.message.append(Video.fromFileSystem("/tmp/video.mp4"))
+```
+
+If the platform gives you an accessible URL, pass it directly to the component:
+
+```py
+abm.message.append(Image(file=image_url, url=image_url))
+abm.message.append(Record(file=audio_url, url=audio_url))
+abm.message.append(Video(file=video_url, url=video_url))
+```
+
+Before plugins and LLM providers see the event, AstrBot's preprocess stage tries to normalize media in the message chain:
+
+- `Image` is materialized through the shared media utilities and converted to JPEG when needed.
+- `Record` is materialized through the shared media utilities and converted to WAV when needed.
+- `Image` / `Record` inside `Reply` chains are normalized in the same way.
+- Temporary files created by core are attached to the current event and cleaned up when the event finishes.
+
+When sending messages, if the platform SDK needs a local file path, call the component's `convert_to_file_path()` instead of writing checks like `path.startswith("file://")`:
+
+```py
+if isinstance(i, Image):
+    image_path = await i.convert_to_file_path()
+    await self.client.send_image(to=self.get_sender_id(), image_path=image_path)
+elif isinstance(i, Record):
+    audio_path = await i.convert_to_file_path()
+    await self.client.send_audio(to=self.get_sender_id(), audio_path=audio_path)
+elif isinstance(i, Video):
+    video_path = await i.convert_to_file_path()
+    await self.client.send_video(to=self.get_sender_id(), video_path=video_path)
+```
+
+If the adapter downloads platform media into AstrBot's temporary directory by itself, register the path on the event after creating it so the file does not remain after the event finishes:
+
+```py
+message_event.track_temporary_local_file(temp_media_path)
 ```
 
 Finally, in `main.py`, simply import the `fake_platform_adapter` module during initialization. The decorator will handle registration automatically.

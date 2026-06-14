@@ -16,7 +16,10 @@ from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, 
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
-from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.media_utils import (
+    describe_media_ref,
+    resolve_media_ref_to_base64_data,
+)
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
@@ -237,7 +240,9 @@ class ProviderAnthropic(Provider):
                     )
                 )
 
-                if can_append_to_previous_tool_results:
+                if can_append_to_previous_tool_results and isinstance(
+                    last_content, list
+                ):
                     last_content.append(tool_result_block)
                 else:
                     new_messages.append(
@@ -738,29 +743,20 @@ class ProviderAnthropic(Provider):
         """组装上下文，支持文本和图片"""
 
         async def resolve_image_url(image_url: str) -> dict | None:
-            if image_url.startswith("http"):
-                image_path = await download_image_by_url(image_url)
-                image_data, mime_type = await self.encode_image_bs64(image_path)
-            elif image_url.startswith("file:///"):
-                image_path = image_url.replace("file:///", "")
-                image_data, mime_type = await self.encode_image_bs64(image_path)
-            else:
-                image_data, mime_type = await self.encode_image_bs64(image_url)
-
+            image_data = await resolve_media_ref_to_base64_data(
+                image_url,
+                media_type="image",
+            )
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                logger.warning("图片预处理结果为空，将忽略。")
                 return None
 
             return {
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "media_type": mime_type,
-                    "data": (
-                        image_data.split("base64,")[1]
-                        if "base64," in image_data
-                        else image_data
-                    ),
+                    "media_type": image_data.mime_type,
+                    "data": image_data.base64_data,
                 },
             }
 
@@ -818,20 +814,16 @@ class ProviderAnthropic(Provider):
 
     async def encode_image_bs64(self, image_url: str) -> tuple[str, str]:
         """将图片转换为 base64，同时检测实际 MIME 类型"""
-        if image_url.startswith("base64://"):
-            raw_base64 = image_url.replace("base64://", "")
-            try:
-                image_bytes = base64.b64decode(raw_base64)
-                mime_type = self._detect_image_mime_type(image_bytes)
-            except Exception:
-                mime_type = "image/jpeg"
-            return f"data:{mime_type};base64,{raw_base64}", mime_type
-        with open(image_url, "rb") as f:
-            image_bytes = f.read()
-            mime_type = self._detect_image_mime_type(image_bytes)
-            image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
-            return f"data:{mime_type};base64,{image_bs64}", mime_type
-        return "", "image/jpeg"
+        image_data = await resolve_media_ref_to_base64_data(
+            image_url,
+            media_type="image",
+            strict=True,
+        )
+        if image_data is None:
+            raise RuntimeError(
+                f"Failed to encode image data: {describe_media_ref(image_url)}"
+            )
+        return image_data.to_data_url(), image_data.mime_type
 
     def get_current_key(self) -> str:
         return self.chosen_api_key

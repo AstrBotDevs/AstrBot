@@ -3,7 +3,6 @@ import base64
 import logging
 import os
 import random
-import uuid
 from typing import cast
 
 import aiofiles
@@ -28,9 +27,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_image_by_url, file_to_base64
-from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
+from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -260,6 +257,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             file_source,
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
+        if record_file_path:
+            self.track_temporary_local_file(record_file_path)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
         if stream and (
@@ -681,53 +680,46 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             if isinstance(i, Plain):
                 plain_text += i.text
             elif isinstance(i, Image) and not image_base64:
-                if i.file and i.file.startswith("file:///"):
-                    image_base64 = file_to_base64(i.file[8:])
-                    image_file_path = i.file[8:]
-                elif i.file and i.file.startswith("http"):
-                    image_file_path = await download_image_by_url(i.file)
-                    image_base64 = file_to_base64(image_file_path)
-                elif i.file and i.file.startswith("base64://"):
-                    image_base64 = i.file
-                elif i.file:
-                    image_base64 = file_to_base64(i.file)
-                else:
+                if not i.file:
                     raise ValueError("Unsupported image file format")
-                image_base64 = image_base64.removeprefix("base64://")
-            elif isinstance(i, Record):
-                if i.file:
-                    record_wav_path = await i.convert_to_file_path()  # wav 路径
-                    temp_dir = get_astrbot_temp_path()
-                    record_tecent_silk_path = os.path.join(
-                        temp_dir,
-                        f"qqofficial_{uuid.uuid4()}.silk",
-                    )
+                image_is_local = is_file_uri(i.file)
+                if not image_is_local:
                     try:
-                        duration = await wav_to_tencent_silk(
-                            record_wav_path,
-                            record_tecent_silk_path,
+                        image_is_local = os.path.exists(i.file)
+                    except OSError:
+                        image_is_local = False
+                resolver = MediaResolver(i.file, media_type="image")
+                if image_is_local:
+                    async with resolver.as_path() as resolved:
+                        image_file_path = str(resolved.path.resolve())
+                        image_base64 = resolved.to_base64()
+                else:
+                    image_base64 = await resolver.to_base64()
+            elif isinstance(i, Record):
+                record_ref = i.url or i.file
+                if record_ref:
+                    try:
+                        record_file_path = await MediaResolver(
+                            record_ref,
+                            media_type="audio",
+                            default_suffix=".wav",
+                        ).to_path(
+                            target_format="tencent_silk",
                         )
-                        if duration > 0:
-                            record_file_path = record_tecent_silk_path
-                        else:
-                            record_file_path = None
-                            logger.error("转换音频格式时出错：音频时长不大于0")
                     except Exception as e:
                         logger.error(f"处理语音时出错: {e}")
                         record_file_path = None
             elif isinstance(i, Video) and not video_file_source:
-                if i.file.startswith("file:///"):
-                    video_file_source = i.file[8:]
+                if is_file_uri(i.file):
+                    video_file_source = file_uri_to_path(i.file)
                 else:
                     video_file_source = i.file
             elif isinstance(i, File) and not file_source:
                 file_name = i.name
                 if i.file_:
                     file_path = i.file_
-                    if file_path.startswith("file:///"):
-                        file_path = file_path[8:]
-                    elif file_path.startswith("file://"):
-                        file_path = file_path[7:]
+                    if is_file_uri(file_path):
+                        file_path = file_uri_to_path(file_path)
                     file_source = file_path
                 elif i.url:
                     file_source = i.url

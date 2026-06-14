@@ -1,9 +1,7 @@
 import asyncio
 import os
-import platform
 import time
 import uuid
-from urllib.parse import unquote, urlparse
 
 
 class FileTokenService:
@@ -42,18 +40,14 @@ class FileTokenService:
             FileNotFoundError: 当路径不存在时抛出
 
         """
-        # 处理 file:///
         try:
-            parsed_uri = urlparse(file_path)
-            if parsed_uri.scheme == "file":
-                local_path = unquote(parsed_uri.path)
-                if platform.system() == "Windows" and local_path.startswith("/"):
-                    local_path = local_path[1:]
-            else:
-                # 如果没有 file:/// 前缀，则认为是普通路径
-                local_path = file_path
+            from astrbot.core.utils.media_utils import file_uri_to_path, is_file_uri
+
+            local_path = (
+                file_uri_to_path(file_path) if is_file_uri(file_path) else file_path
+            )
         except Exception:
-            # 解析失败时，按原路径处理
+            # Fall back to the original path if URL parsing fails.
             local_path = file_path
 
         async with self.lock:
