@@ -46,6 +46,9 @@ from .route import Response, Route, RouteContext
 PLUGIN_UPDATE_CONCURRENCY = (
     3  # limit concurrent updates to avoid overwhelming plugin sources
 )
+PLUGIN_ASSET_MIME_PREFIX = "image/"
+GITHUB_DEFAULT_BRANCH_REF = "HEAD"
+GITHUB_REPO_PART_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 _PLUGIN_PAGE_BRIDGE_FILE = (
     Path(__file__).resolve().parent.parent / "plugin_page_bridge.js"
 )
@@ -73,6 +76,9 @@ _PLUGIN_PAGE_ASSET_TOKEN_TYPE = "plugin_page_asset"
 _PLUGIN_PAGE_ASSET_TOKEN_TTL_SECONDS = 60
 _PLUGIN_PAGE_ROOT_DIR_NAME = "pages"
 _PLUGIN_PAGE_ENTRY_FILE_NAME = "index.html"
+
+mimetypes.add_type("image/svg+xml", ".svg")
+mimetypes.add_type("image/webp", ".webp")
 
 
 def _normalize_plugin_page_asset_path(asset_path: str) -> str:
@@ -128,6 +134,7 @@ class PluginRoute(Route):
             "/plugin/reload-failed": ("POST", self.reload_failed_plugins),
             "/plugin/reload": ("POST", self.reload_plugins),
             "/plugin/readme": ("GET", self.get_plugin_readme),
+            "/plugin/asset": ("GET", self.get_plugin_asset),
             "/plugin/changelog": ("GET", self.get_plugin_changelog),
             "/plugin/source/get": ("GET", self.get_custom_source),
             "/plugin/source/save": ("POST", self.save_custom_source),
@@ -209,6 +216,45 @@ class PluginRoute(Route):
             if plugin.name == plugin_name:
                 return plugin
         return None
+
+    def _parse_github_repo_url(self, repo_url: str | None) -> tuple[str, str] | None:
+        if not isinstance(repo_url, str):
+            return None
+
+        normalized_repo_url = repo_url.strip()
+        if not normalized_repo_url:
+            return None
+
+        parsed = urlsplit(normalized_repo_url)
+        if parsed.scheme not in ("http", "https"):
+            return None
+        if parsed.netloc.lower() not in {"github.com", "www.github.com"}:
+            return None
+
+        parts = [part for part in parsed.path.strip("/").split("/") if part]
+        if len(parts) < 2:
+            return None
+
+        owner = parts[0]
+        repo = parts[1].removesuffix(".git")
+        if not owner or not repo:
+            return None
+        if owner in {".", ".."} or repo in {".", ".."}:
+            return None
+        if not GITHUB_REPO_PART_PATTERN.fullmatch(owner):
+            return None
+        if not GITHUB_REPO_PART_PATTERN.fullmatch(repo):
+            return None
+
+        return owner, repo
+
+    def _build_github_raw_base(self, repo_url: str | None) -> str | None:
+        repo_info = self._parse_github_repo_url(repo_url)
+        if not repo_info:
+            return None
+
+        owner, repo = repo_info
+        return f"https://github.com/{owner}/{repo}/raw/{GITHUB_DEFAULT_BRANCH_REF}"
 
     @staticmethod
     def _get_by_path(source: dict | None, key: str):
@@ -389,6 +435,45 @@ class PluginRoute(Route):
         plugin_root = (base_dir / plugin.root_dir_name).resolve(strict=False)
         plugin_root.relative_to(base_dir)
         return plugin_root
+
+    async def _resolve_plugin_asset_file(
+        self,
+        plugin: StarMetadata,
+        asset_path: str,
+    ) -> Path:
+        plugin_root = self._get_plugin_root_dir(plugin)
+        normalized_path = self._normalize_plugin_page_path(asset_path)
+        target_path = (plugin_root / normalized_path).resolve(strict=False)
+        target_path.relative_to(plugin_root)
+        if not await aio_ospath.isfile(str(target_path)):
+            raise FileNotFoundError("Plugin asset not found")
+        return target_path
+
+    async def get_plugin_asset(self):
+        plugin_name = request.args.get("name")
+        asset_path = request.args.get("path")
+
+        if not plugin_name or not asset_path:
+            return await self._plugin_page_error_response(404, "Plugin asset not found")
+
+        plugin = self._get_plugin_metadata_by_name(plugin_name)
+        if not plugin:
+            return await self._plugin_page_error_response(404, "Plugin not found")
+
+        try:
+            file_path = await self._resolve_plugin_asset_file(plugin, asset_path)
+        except (FileNotFoundError, ValueError, OSError):
+            logger.info(f"插件资源访问失败: {plugin_name}/{asset_path}")
+            return await self._plugin_page_error_response(404, "Plugin asset not found")
+
+        mimetype, _ = mimetypes.guess_type(file_path.name)
+        if not mimetype or not mimetype.startswith(PLUGIN_ASSET_MIME_PREFIX):
+            return await self._plugin_page_error_response(404, "Plugin asset not found")
+
+        response = await self._serve_plugin_page_static_asset(file_path)
+        if mimetype == "image/svg+xml":
+            response.headers["Content-Security-Policy"] = "default-src 'none'"
+        return response
 
     async def _resolve_plugin_pages_root(
         self,
@@ -2001,12 +2086,7 @@ class PluginRoute(Route):
             logger.warning("插件名称为空")
             return Response().error("插件名称不能为空").__dict__
 
-        plugin_obj = None
-        for plugin in self.plugin_manager.context.get_all_stars():
-            if plugin.name == plugin_name:
-                plugin_obj = plugin
-                break
-
+        plugin_obj = self._get_plugin_metadata_by_name(plugin_name)
         if not plugin_obj:
             logger.warning(f"插件 {plugin_name} 不存在")
             return Response().error(f"插件 {plugin_name} 不存在").__dict__
@@ -2015,34 +2095,34 @@ class PluginRoute(Route):
             logger.warning(f"插件 {plugin_name} 目录不存在")
             return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
 
-        if plugin_obj.reserved:
-            plugin_dir = os.path.join(
-                self.plugin_manager.reserved_plugin_path,
-                plugin_obj.root_dir_name,
-            )
-        else:
-            plugin_dir = os.path.join(
-                self.plugin_manager.plugin_store_path,
-                plugin_obj.root_dir_name,
-            )
+        try:
+            plugin_dir = self._get_plugin_root_dir(plugin_obj)
+        except (FileNotFoundError, ValueError):
+            logger.warning(f"插件 {plugin_name} 目录不存在")
+            return Response().error(f"插件 {plugin_name} 目录不存在").__dict__
 
-        if not os.path.isdir(plugin_dir):
+        if not await aio_ospath.isdir(str(plugin_dir)):
             logger.warning(f"无法找到插件目录: {plugin_dir}")
             return Response().error(f"无法找到插件 {plugin_name} 的目录").__dict__
 
-        readme_path = os.path.join(plugin_dir, "README.md")
+        readme_path = plugin_dir / "README.md"
 
-        if not os.path.isfile(readme_path):
+        if not await aio_ospath.isfile(str(readme_path)):
             logger.warning(f"插件 {plugin_name} 没有README文件")
             return Response().error(f"插件 {plugin_name} 没有README文件").__dict__
 
         try:
-            with open(readme_path, encoding="utf-8") as f:
-                readme_content = f.read()
+            readme_content = await self._read_plugin_page_text(readme_path)
 
             return (
                 Response()
-                .ok({"content": readme_content}, "成功获取README内容")
+                .ok(
+                    {
+                        "content": readme_content,
+                        "github_raw_base": self._build_github_raw_base(plugin_obj.repo),
+                    },
+                    "成功获取README内容",
+                )
                 .__dict__
             )
         except Exception as e:

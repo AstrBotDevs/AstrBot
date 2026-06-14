@@ -1753,6 +1753,123 @@ async def test_plugin_page_content_blocks_path_traversal(
 
 
 @pytest.mark.asyncio
+async def test_plugin_readme_returns_default_branch_github_raw_base(
+    app: Quart,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    plugin_root = Path(registered_plugin_page.root_dir_name)
+    plugin_dir = Path(core_lifecycle_td.plugin_manager.plugin_store_path) / plugin_root
+    (plugin_dir / "README.md").write_text(
+        "# Demo\n![logo](images/logo.svg)\n",
+        encoding="utf-8",
+    )
+    registered_plugin_page.repo = "https://github.com/AstrBotDevs/AstrBot.git"
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/readme?name={PLUGIN_PAGE_DEMO_NAME}",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["content"].startswith("# Demo")
+    assert (
+        data["data"]["github_raw_base"]
+        == "https://github.com/AstrBotDevs/AstrBot/raw/HEAD"
+    )
+
+
+@pytest.mark.parametrize(
+    "repo_url",
+    [
+        None,
+        123,
+        "",
+        "https://github.com/./AstrBot",
+        "https://github.com/../AstrBot",
+        "https://github.com/AstrBotDevs/.",
+        "https://github.com/AstrBotDevs/..",
+    ],
+)
+def test_plugin_readme_github_raw_base_rejects_invalid_repo_url(repo_url):
+    route = PluginRoute.__new__(PluginRoute)
+
+    assert route._build_github_raw_base(repo_url) is None
+
+
+def test_plugin_readme_github_raw_base_accepts_www_github_repo_url():
+    route = PluginRoute.__new__(PluginRoute)
+
+    assert (
+        route._build_github_raw_base("https://www.github.com/AstrBotDevs/AstrBot.git")
+        == "https://github.com/AstrBotDevs/AstrBot/raw/HEAD"
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_readme_asset_serves_image_from_plugin_root(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/asset?name={PLUGIN_PAGE_DEMO_NAME}&path=pages/{PLUGIN_PAGE_DEMO_PAGE_NAME}/images/logo.svg",
+        headers=authenticated_header,
+    )
+    content = (await response.get_data()).decode("utf-8")
+
+    assert response.status_code == 200
+    assert response.headers["Content-Type"].startswith("image/svg+xml")
+    assert response.headers["Content-Security-Policy"] == "default-src 'none'"
+    assert "<svg" in content
+
+
+@pytest.mark.asyncio
+async def test_plugin_readme_asset_rejects_dashboard_token_query(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    token = authenticated_header["Authorization"].removeprefix("Bearer ")
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/plugin/asset",
+        query_string={
+            "name": PLUGIN_PAGE_DEMO_NAME,
+            "path": f"pages/{PLUGIN_PAGE_DEMO_PAGE_NAME}/images/logo.svg",
+            "token": token,
+        },
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_plugin_readme_asset_blocks_non_images_and_path_traversal(
+    app: Quart,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    non_image_response = await test_client.get(
+        f"/api/plugin/asset?name={PLUGIN_PAGE_DEMO_NAME}&path=pages/{PLUGIN_PAGE_DEMO_PAGE_NAME}/app.js",
+        headers=authenticated_header,
+    )
+    traversal_response = await test_client.get(
+        f"/api/plugin/asset?name={PLUGIN_PAGE_DEMO_NAME}&path=../README.md",
+        headers=authenticated_header,
+    )
+
+    assert non_image_response.status_code == 404
+    assert traversal_response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_logout_clears_cookie_for_plugin_page(
     app: Quart,
     core_lifecycle_td: AstrBotCoreLifecycle,

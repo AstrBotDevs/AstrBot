@@ -8,6 +8,9 @@
             <v-list-item>
                 <ProxySelector></ProxySelector>
             </v-list-item>
+            <v-list-item>
+                <PluginReadmeImageSourceSetting></PluginReadmeImageSourceSetting>
+            </v-list-item>
 
             <v-list-subheader>{{ tm('sidebar.title') }}</v-list-subheader>
 
@@ -231,6 +234,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import axios from 'axios';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
+import PluginReadmeImageSourceSetting from '@/components/shared/PluginReadmeImageSourceSetting.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
 import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';

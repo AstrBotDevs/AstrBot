@@ -13,7 +13,11 @@
       "testConnection": "测试代理连通性",
       "available": "可用",
       "unavailable": "不可用",
-      "custom": "自定义"
+      "custom": "自定义",
+      "readmeImages": {
+        "useGitHub": "插件文档图片从 GitHub 加载",
+        "hint": "默认从本地插件目录加载，开启后会使用插件仓库的默认分支地址；若启用 GitHub 加速，将自动使用加速地址。"
+      }
     }
   },
   "theme": {

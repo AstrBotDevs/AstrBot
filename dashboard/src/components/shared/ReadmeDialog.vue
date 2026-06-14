@@ -1,11 +1,16 @@
 <script setup>
-import { ref, watch, computed, onUnmounted } from "vue";
+import { ref, watch, computed, onMounted, onUnmounted } from "vue";
 import { useTheme } from "vuetify";
 import MarkdownIt from "markdown-it";
 import axios from "axios";
 import DOMPurify from "dompurify";
 import { useI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
+import {
+  PLUGIN_README_IMAGE_SOURCE_CHANGED_EVENT,
+  buildGitHubProxyUrl,
+  isPluginReadmeGitHubImageSource,
+} from "@/utils/githubProxy";
 import {
   escapeHtml,
   ensureShikiLanguages,
@@ -58,6 +63,8 @@ const lastRequestId = ref(0);
 const lastRenderId = ref(0);
 const scrollContainer = ref(null);
 const renderedHtml = ref("");
+const githubRawBase = ref(null);
+const readmeImageSourceVersion = ref(0);
 const isDark = computed(() => theme.global.current.value.dark);
 
 const MARKDOWN_SANITIZE_OPTIONS = {
@@ -172,7 +179,87 @@ function slugifyHeading(text, slugCounts) {
 
 onUnmounted(() => {
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
+  if (typeof window !== "undefined") {
+    window.removeEventListener(
+      PLUGIN_README_IMAGE_SOURCE_CHANGED_EVENT,
+      handleReadmeImageSourceChanged,
+    );
+  }
 });
+
+function handleReadmeImageSourceChanged() {
+  readmeImageSourceVersion.value += 1;
+}
+
+onMounted(() => {
+  if (typeof window !== "undefined") {
+    window.addEventListener(
+      PLUGIN_README_IMAGE_SOURCE_CHANGED_EVENT,
+      handleReadmeImageSourceChanged,
+    );
+  }
+});
+
+function isRemoteImageSrc(src) {
+  const value = (src || "").trim().toLowerCase();
+  return (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("//") ||
+    value.startsWith("data:") ||
+    value.startsWith("blob:")
+  );
+}
+
+function normalizeGitHubAssetPath(decodedPath) {
+  const segments = [];
+  for (const segment of decodedPath.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") return null;
+    segments.push(segment);
+  }
+  return segments.length ? segments.join("/") : null;
+}
+
+function getPluginAssetSrc(src) {
+  if (!props.pluginName) return src;
+
+  const value = (src || "").trim();
+  if (!value || value.startsWith("#") || isRemoteImageSrc(value)) return src;
+  if (value.startsWith("/api/")) return src;
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(value)) return src;
+
+  const normalizedValue = value.startsWith("/") ? value.slice(1) : value;
+  const pathEnd = normalizedValue.search(/[?#]/);
+  const rawPath =
+    pathEnd === -1 ? normalizedValue : normalizedValue.slice(0, pathEnd);
+  if (!rawPath) return src;
+
+  let decodedPath = rawPath;
+  try {
+    decodedPath = decodeURI(rawPath);
+  } catch (err) {
+    decodedPath = rawPath;
+  }
+
+  const suffix = pathEnd === -1 ? "" : normalizedValue.slice(pathEnd);
+  if (githubRawBase.value && isPluginReadmeGitHubImageSource()) {
+    const githubPath = normalizeGitHubAssetPath(decodedPath);
+    if (!githubPath) return src;
+
+    const encodedPath = githubPath
+      .split("/")
+      .map((part) => encodeURIComponent(part))
+      .join("/");
+    return buildGitHubProxyUrl(`${githubRawBase.value}/${encodedPath}${suffix}`);
+  }
+
+  const params = new URLSearchParams({
+    name: props.pluginName,
+    path: decodedPath,
+  });
+  return `/api/plugin/asset?${params.toString()}`;
+}
 
 function sanitizeHighlightedBlock(html) {
   return DOMPurify.sanitize(html, CODE_BLOCK_SANITIZE_OPTIONS);
@@ -251,6 +338,11 @@ async function updateRenderedHtml() {
       link.setAttribute("rel", "noopener noreferrer");
     }
   });
+  tempDiv.querySelectorAll("img").forEach((img) => {
+    const src = img.getAttribute("src");
+    const assetSrc = getPluginAssetSrc(src);
+    if (assetSrc && assetSrc !== src) img.setAttribute("src", assetSrc);
+  });
 
   tempDiv.querySelectorAll("[data-code-block-index]").forEach((placeholder) => {
     const index = Number(placeholder.getAttribute("data-code-block-index"));
@@ -310,6 +402,7 @@ async function fetchContent() {
   const requestId = ++lastRequestId.value;
   loading.value = true;
   content.value = null;
+  githubRawBase.value = null;
   error.value = null;
   isEmpty.value = false;
 
@@ -326,6 +419,7 @@ async function fetchContent() {
     if (res.data.status === "ok") {
       if (res.data.data.content) content.value = res.data.data.content;
       else isEmpty.value = true;
+      githubRawBase.value = res.data.data.github_raw_base || null;
     } else {
       error.value = res.data.message;
     }
@@ -346,7 +440,7 @@ watch(
   { immediate: true },
 );
 
-watch([content, locale, isDark], () => {
+watch([content, locale, isDark, readmeImageSourceVersion], () => {
   updateRenderedHtml();
 }, { immediate: true });
 

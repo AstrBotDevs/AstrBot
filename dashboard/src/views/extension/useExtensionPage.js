@@ -2,14 +2,15 @@ import { pluginSidebarState } from "@/composables/usePluginSidebarItems";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
 import { resolveErrorMessage } from "@/utils/errorUtils";
+import { getSelectedGitHubProxy } from "@/utils/githubProxy";
 import { getValidHashTab, replaceTabRoute } from "@/utils/hashRouteTabs.mjs";
 import { getPlatformDisplayName } from "@/utils/platformUtils";
 import {
-    buildSearchQuery,
-    matchesPluginSearch,
-    normalizeStr,
-    toInitials,
-    toPinyinText,
+  buildSearchQuery,
+  matchesPluginSearch,
+  normalizeStr,
+  toInitials,
+  toPinyinText,
 } from "@/utils/pluginSearch";
 import axios from "axios";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
@@ -36,13 +37,6 @@ export const useExtensionPage = () => {
   const { tm } = useModuleI18n("features/extension");
   const router = useRouter();
   const route = useRoute();
-
-  const getSelectedGitHubProxy = () => {
-    if (typeof window === "undefined" || !window.localStorage) return "";
-    return localStorage.getItem("githubProxyRadioValue") === "1"
-      ? localStorage.getItem("selectedGitHubProxy") || ""
-      : "";
-  };
 
   // 检查指令冲突并提示
   const conflictDialog = reactive({
