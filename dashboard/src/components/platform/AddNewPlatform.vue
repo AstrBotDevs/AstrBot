@@ -1409,6 +1409,13 @@ export default {
       return suffix;
     },
 
+    sanitizePlatformIdPart(value) {
+      return String(value || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .replace(/[!:]/g, "_");
+    },
+
     handlePlatformRegistrationCreated(data) {
       if (!this.selectedPlatformConfig || !data) {
         return;
@@ -1420,18 +1427,14 @@ export default {
       }
 
       let suffix = "";
-      const explicitSuffix = String(data.platform_id_suffix || "")
-        .trim()
-        .replace(/[!:]/g, "_");
+      const explicitSuffix = this.sanitizePlatformIdPart(data.platform_id_suffix);
       if (explicitSuffix) {
         suffix =
           explicitSuffix.startsWith("_") || explicitSuffix.startsWith("-")
             ? explicitSuffix
             : `_${explicitSuffix}`;
       } else if (data.bot_name) {
-        const safeBotName = String(data.bot_name || "")
-          .trim()
-          .replace(/[!:]/g, "_");
+        const safeBotName = this.sanitizePlatformIdPart(data.bot_name);
         if (safeBotName) {
           suffix = `-${safeBotName}`;
         }
@@ -1459,7 +1462,7 @@ export default {
       if (!id) {
         return false;
       }
-      return !/[!:]/.test(id);
+      return !/[!:\s]/.test(id);
     },
 
     // 获取该平台适配器使用的所有配置文件（新版本：直接操作路由表）
