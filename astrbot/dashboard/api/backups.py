@@ -46,6 +46,14 @@ def _ok_result(result):
     return ok(result)
 
 
+def _safe_backup_filename(filename: str | None) -> str:
+    if not filename:
+        raise BackupServiceError("缺少参数 filename")
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise BackupServiceError("文件名包含非法路径字符")
+    return filename
+
+
 async def _json_or_empty(request: Request) -> dict:
     try:
         data = await request.json()
@@ -80,6 +88,7 @@ def _download_backup(
     service: BackupService,
 ):
     try:
+        filename = _safe_backup_filename(filename)
         return _download_response(
             service.prepare_download(
                 filename=filename,
@@ -309,7 +318,9 @@ async def rename_backup(
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.rename_backup({"filename": filename, **_model_dict(payload)}),
+        lambda: service.rename_backup(
+            {"filename": _safe_backup_filename(filename), **_model_dict(payload)}
+        ),
         prefix="重命名备份失败",
     )
 
@@ -334,7 +345,7 @@ async def delete_backup(
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.delete_backup({"filename": filename}),
+        lambda: service.delete_backup({"filename": _safe_backup_filename(filename)}),
         prefix="删除备份失败",
     )
 
@@ -360,7 +371,7 @@ async def check_backup(
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.check_backup({"filename": filename}),
+        lambda: service.check_backup({"filename": _safe_backup_filename(filename)}),
         prefix="预检查备份文件失败",
     )
 
@@ -387,7 +398,9 @@ async def import_backup(
     service: BackupService = Depends(get_service),
 ):
     return await _run(
-        lambda: service.import_backup({"filename": filename, **_model_dict(payload)}),
+        lambda: service.import_backup(
+            {"filename": _safe_backup_filename(filename), **_model_dict(payload)}
+        ),
         prefix="导入备份失败",
     )
 

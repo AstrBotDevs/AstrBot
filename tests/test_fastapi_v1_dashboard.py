@@ -1086,6 +1086,25 @@ async def test_dashboard_static_dist_files_are_served(
 
 
 @pytest.mark.asyncio
+async def test_v1_backup_path_rejects_traversal(asgi_client: httpx.AsyncClient):
+    download_response = await asgi_client.get(
+        "/api/v1/backups/%2E%2E/secret.zip",
+        params={"token": "demo"},
+    )
+    delete_response = await asgi_client.delete(
+        "/api/v1/backups/%2E%2E/secret.zip",
+        headers=_jwt_headers(),
+    )
+
+    assert download_response.status_code == 200
+    assert delete_response.status_code == 200
+    assert download_response.json()["status"] == "error"
+    assert delete_response.json()["status"] == "error"
+    assert "非法路径" in download_response.json()["message"]
+    assert "非法路径" in delete_response.json()["message"]
+
+
+@pytest.mark.asyncio
 async def test_v1_openapi_uses_pydantic_request_bodies(
     asgi_client: httpx.AsyncClient,
 ):
@@ -1128,6 +1147,18 @@ async def test_v1_conversation_path_id_allows_slash(asgi_client: httpx.AsyncClie
     payload = response.json()
     assert payload["status"] == "ok"
     assert payload["data"]["cid"] == "conversation/with/slash"
+
+
+@pytest.mark.asyncio
+async def test_v1_conversation_detail_requires_user_id(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.get(
+        "/api/v1/conversations/conversation%2Fwith%2Fslash",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -1788,6 +1819,22 @@ async def test_v1_plugin_extension_supports_quart_request_context(
         "payload": {"value": "demo"},
         "username": "fastapi-v1-test",
     }
+
+
+@pytest.mark.asyncio
+async def test_multipart_parts_preserves_duplicate_form_values():
+    from starlette.datastructures import FormData
+
+    from astrbot.dashboard.api.multipart import multipart_parts
+
+    class FakeRequest:
+        async def form(self):
+            return FormData([("tag", "one"), ("tag", "two")])
+
+    form, files = await multipart_parts(FakeRequest())
+
+    assert form.getlist("tag") == ["one", "two"]
+    assert not files
 
 
 @pytest.mark.asyncio

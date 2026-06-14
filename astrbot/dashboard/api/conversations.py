@@ -63,8 +63,13 @@ async def _run(operation):
 
 def _export_response(export: ConversationExport) -> StreamingResponse:
     export.file_obj.seek(0)
+
+    def iter_file():
+        while chunk := export.file_obj.read(8192):
+            yield chunk
+
     return StreamingResponse(
-        export.file_obj,
+        iter_file(),
         media_type=export.mimetype,
         headers={"Content-Disposition": f'attachment; filename="{export.filename}"'},
     )
@@ -150,7 +155,7 @@ async def batch_delete_conversations(
 async def replace_conversation_messages(
     conversation_id: str,
     payload: ConversationMessagesReplaceRequest,
-    user_id: str | None = Query(default=None),
+    user_id: str = Query(...),
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
 ):
@@ -168,7 +173,7 @@ async def replace_conversation_messages(
 @router.get("/conversations/{conversation_id:path}")
 async def get_conversation(
     conversation_id: str,
-    user_id: str | None = Query(default=None),
+    user_id: str = Query(...),
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
 ):
@@ -183,7 +188,7 @@ async def get_conversation(
 async def update_conversation(
     conversation_id: str,
     payload: ConversationPatchRequest,
-    user_id: str | None = Query(default=None),
+    user_id: str = Query(...),
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
 ):
@@ -199,7 +204,7 @@ async def update_conversation(
 @router.delete("/conversations/{conversation_id:path}")
 async def delete_conversation(
     conversation_id: str,
-    user_id: str | None = Query(default=None),
+    user_id: str = Query(...),
     _auth: AuthContext = Depends(require_data_scope),
     service: ConversationService = Depends(get_service),
 ):

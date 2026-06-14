@@ -54,6 +54,9 @@ class StaticFileService:
             return None
         if requested_path.startswith("api/"):
             return None
+        path_parts = requested_path.replace("\\", "/").split("/")
+        if requested_path.startswith(("/", "\\")) or ".." in path_parts:
+            return None
 
         static_root = Path(static_folder).resolve()
         target_file = (static_root / requested_path).resolve()

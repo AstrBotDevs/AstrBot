@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
@@ -11,6 +9,7 @@ from astrbot.dashboard.services.chat_service import ChatService, ChatServiceErro
 from astrbot.dashboard.services.file_service import FileService, FileServiceError
 
 from .auth import AuthContext, require_scope
+from .multipart import UploadFileAdapter
 
 router = APIRouter(tags=["Files"])
 legacy_router = APIRouter(prefix="/api", include_in_schema=False)
@@ -26,16 +25,6 @@ def get_chat_service(request: Request) -> ChatService:
 
 async def require_file_scope(request: Request) -> AuthContext:
     return await require_scope(request, "file")
-
-
-class UploadFileAdapter:
-    def __init__(self, file: UploadFile) -> None:
-        self.file = file
-        self.filename = file.filename
-        self.content_type = file.content_type
-
-    async def save(self, target_path: str) -> None:
-        Path(target_path).write_bytes(await self.file.read())
 
 
 async def _serve_token_file(file_token: str, service: FileService):
