@@ -1,7 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from astrbot.api.event import AstrMessageEvent
 from astrbot.builtin_stars.builtin_commands.commands.provider import ProviderCommands
-from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from astrbot.core.provider.entities import ProviderType
 
 
