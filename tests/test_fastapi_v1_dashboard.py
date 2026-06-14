@@ -2108,7 +2108,7 @@ async def test_v1_mcp_scope_accepts_api_key(
 
 
 @pytest.mark.asyncio
-async def test_v1_skills_scope_accepts_api_key_and_rejects_legacy_singular_scope(
+async def test_v1_skill_scope_accepts_api_key_and_rejects_plural_scope(
     asgi_app: FastAPI,
     asgi_client: httpx.AsyncClient,
     fake_db: FakeDb,
@@ -2120,20 +2120,20 @@ async def test_v1_skills_scope_accepts_api_key_and_rejects_legacy_singular_scope
         lambda: {"skills": [{"name": "demo_skill"}]},
     )
 
-    legacy_key = "abk_fastapi_v1_skill"
-    fake_db.add_api_key(legacy_key, scopes=["skill"])
-    legacy_response = await asgi_client.get(
+    plural_key = "abk_fastapi_v1_skills"
+    fake_db.add_api_key(plural_key, scopes=["skills"])
+    plural_response = await asgi_client.get(
         "/api/v1/skills",
-        headers={"X-API-Key": legacy_key},
+        headers={"X-API-Key": plural_key},
     )
 
-    assert legacy_response.status_code == 403
-    data = legacy_response.json()
+    assert plural_response.status_code == 403
+    data = plural_response.json()
     assert data["status"] == "error"
     assert data["message"] == "Insufficient API key scope"
 
-    raw_key = "abk_fastapi_v1_skills"
-    fake_db.add_api_key(raw_key, scopes=["skills"])
+    raw_key = "abk_fastapi_v1_skill"
+    fake_db.add_api_key(raw_key, scopes=["skill"])
     response = await asgi_client.get(
         "/api/v1/skills",
         headers={"X-API-Key": raw_key},

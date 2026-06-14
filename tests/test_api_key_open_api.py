@@ -776,14 +776,14 @@ async def test_open_api_key_scope_normalization(
 
     extra_scope_res = await test_client.post(
         "/api/apikey/create",
-        json={"name": "mcp-skills-scope-key", "scopes": ["mcp", "skills"]},
+        json={"name": "mcp-skill-scope-key", "scopes": ["mcp", "skill"]},
         headers=authenticated_header,
     )
     extra_scope_data = await extra_scope_res.get_json()
 
     assert extra_scope_res.status_code == 200
     assert extra_scope_data["status"] == "ok"
-    assert set(extra_scope_data["data"]["scopes"]) == {"mcp", "skills"}
+    assert set(extra_scope_data["data"]["scopes"]) == {"mcp", "skill"}
 
 
 @pytest.mark.asyncio

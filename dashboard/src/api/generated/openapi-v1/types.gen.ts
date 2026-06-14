@@ -191,7 +191,7 @@ export type ConversationRef = {
 
 export type CreateApiKeyRequest = {
     name: string;
-    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'plugin' | 'mcp' | 'skills')>;
+    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'plugin' | 'mcp' | 'skill')>;
     expires_at?: string;
     expires_in_days?: number;
 };

@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, plugin, mcp, skills. The config scope also grants bot and provider access.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, plugin, mcp, skill. The config scope also grants bot and provider access.\n"
   },
   "servers": [
     {
@@ -4716,7 +4716,7 @@
         ],
         "summary": "List skills",
         "operationId": "listSkills",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "name": "enabled",
@@ -4745,7 +4745,7 @@
         ],
         "summary": "Upload or import a skill archive",
         "operationId": "uploadSkill",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "requestBody": {
           "required": true,
           "content": {
@@ -4770,7 +4770,7 @@
         ],
         "summary": "Upload multiple skill archives",
         "operationId": "uploadSkillsBatch",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "requestBody": {
           "required": true,
           "content": {
@@ -4807,7 +4807,7 @@
         ],
         "summary": "Update skill metadata or enabled state by body name",
         "operationId": "updateSkillByName",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "requestBody": {
           "required": true,
           "content": {
@@ -4845,7 +4845,7 @@
         ],
         "summary": "Delete a skill by query name",
         "operationId": "deleteSkillByName",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "name": "skill_name",
@@ -4870,7 +4870,7 @@
         ],
         "summary": "Download a skill archive by query name",
         "operationId": "downloadSkillByName",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "name": "skill_name",
@@ -4903,7 +4903,7 @@
         ],
         "summary": "List files in a skill by query name",
         "operationId": "listSkillFilesByName",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "name": "skill_name",
@@ -4935,7 +4935,7 @@
         ],
         "summary": "Get skill file content by query name and path",
         "operationId": "getSkillFileByName",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "name": "skill_name",
@@ -4966,7 +4966,7 @@
         ],
         "summary": "Update skill file content by body name and path",
         "operationId": "updateSkillFileByName",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "requestBody": {
           "required": true,
           "content": {
@@ -5008,7 +5008,7 @@
         ],
         "summary": "Update skill metadata or enabled state",
         "operationId": "updateSkill",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5036,7 +5036,7 @@
         ],
         "summary": "Delete a skill",
         "operationId": "deleteSkill",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5056,7 +5056,7 @@
         ],
         "summary": "Download a skill archive",
         "operationId": "downloadSkill",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5084,7 +5084,7 @@
         ],
         "summary": "List files in a skill",
         "operationId": "listSkillFiles",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5111,7 +5111,7 @@
         ],
         "summary": "Get skill file content",
         "operationId": "getSkillFile",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5132,7 +5132,7 @@
         ],
         "summary": "Update skill file content",
         "operationId": "updateSkillFile",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "$ref": "#/components/parameters/SkillName"
@@ -5165,7 +5165,7 @@
         ],
         "summary": "List Shipyard Neo skill candidates",
         "operationId": "listNeoSkillCandidates",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "name": "skill_key",
@@ -5196,7 +5196,7 @@
         ],
         "summary": "List Shipyard Neo skill releases",
         "operationId": "listNeoSkillReleases",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "name": "skill_key",
@@ -5227,7 +5227,7 @@
         ],
         "summary": "Get a Shipyard Neo skill payload",
         "operationId": "getNeoSkillPayload",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "parameters": [
           {
             "name": "payload_ref",
@@ -5252,7 +5252,7 @@
         ],
         "summary": "Evaluate a Shipyard Neo skill candidate",
         "operationId": "evaluateNeoSkillCandidate",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "requestBody": {
           "required": true,
           "content": {
@@ -5277,7 +5277,7 @@
         ],
         "summary": "Promote a Shipyard Neo skill candidate",
         "operationId": "promoteNeoSkillCandidate",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "requestBody": {
           "required": true,
           "content": {
@@ -5302,7 +5302,7 @@
         ],
         "summary": "Roll back a Shipyard Neo skill release",
         "operationId": "rollbackNeoSkillRelease",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "requestBody": {
           "required": true,
           "content": {
@@ -5327,7 +5327,7 @@
         ],
         "summary": "Sync a Shipyard Neo skill release",
         "operationId": "syncNeoSkillRelease",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "requestBody": {
           "required": true,
           "content": {
@@ -5352,7 +5352,7 @@
         ],
         "summary": "Delete a Shipyard Neo skill candidate",
         "operationId": "deleteNeoSkillCandidate",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "requestBody": {
           "required": true,
           "content": {
@@ -5377,7 +5377,7 @@
         ],
         "summary": "Delete a Shipyard Neo skill release",
         "operationId": "deleteNeoSkillRelease",
-        "x-astrbot-scope": "skills",
+        "x-astrbot-scope": "skill",
         "requestBody": {
           "required": true,
           "content": {
@@ -8301,7 +8301,7 @@
                 "chat",
                 "plugin",
                 "mcp",
-                "skills"
+                "skill"
               ]
             },
             "example": [
@@ -8313,7 +8313,7 @@
               "chat",
               "plugin",
               "mcp",
-              "skills"
+              "skill"
             ]
           },
           "expires_at": {

@@ -313,7 +313,7 @@ const availableScopes = [
     { value: 'chat', label: 'chat' },
     { value: 'plugin', label: 'plugin' },
     { value: 'mcp', label: 'mcp' },
-    { value: 'skills', label: 'skills' }
+    { value: 'skill', label: 'skill' }
 ];
 
 const configIncludedScopes = ['bot', 'provider'];

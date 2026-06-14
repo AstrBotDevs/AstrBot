@@ -42,13 +42,13 @@ X-API-Key: abk_xxx
 | `chat` | 调用对话能力、查询对话会话 | `POST /api/v1/chat`、`GET /api/v1/chat/sessions` |
 | `plugin` | 管理插件、插件配置、插件源和插件市场 | `GET /api/v1/plugins`、`GET/PUT /api/v1/plugins/config`、`POST /api/v1/plugins/install/url` |
 | `mcp` | 管理 MCP 服务器配置和服务端同步 | `GET/POST /api/v1/mcp/servers`、`PATCH /api/v1/mcp/servers/{server_name}/enabled`、`POST /api/v1/mcp/providers/modelscope/sync` |
-| `skills` | 管理 Skills、Skill 压缩包、Skill 文件和 Shipyard Neo Skill 流程 | `GET/POST /api/v1/skills`、`PUT /api/v1/skills/{skill_name}/files/{file_path}`、`POST /api/v1/skills/neo/sync` |
+| `skill` | 管理 Skills、Skill 压缩包、Skill 文件和 Shipyard Neo Skill 流程 | `GET/POST /api/v1/skills`、`PUT /api/v1/skills/{skill_name}/files/{file_path}`、`POST /api/v1/skills/neo/sync` |
 
 如果 API Key 未包含目标接口所需 scope，请求会返回 `403 Insufficient API key scope`。
 
 `config` 是较大的管理 scope。创建 API Key 时如果包含 `config`，AstrBot 会同时授予该 Key `config`、`bot` 和 `provider` 访问权限。WebUI 的勾选逻辑也会体现这个依赖关系：选中 `config` 会同时选中 `bot` 和 `provider`；取消选中 `bot` 或 `provider` 时，会同步取消 `config`。
 
-当前开发者 API Key 仅开放以上 9 个 scope。`file`、`tool`、`skill`、`kb`、`data`、`system` 暂不支持作为开发者 API Key scope。`/api/v1/skills/*` 接口使用复数 `skills` scope，不使用单数 `skill`。相关接口可能仍出现在 `/api/v1` 文档中，但只有 scope 属于上表支持范围时才对开发者 API Key 开放。
+当前开发者 API Key 仅开放以上 9 个 scope。`file`、`tool`、`skills`、`kb`、`data`、`system` 暂不支持作为开发者 API Key scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。相关接口可能仍出现在 `/api/v1` 文档中，但只有 scope 属于上表支持范围时才对开发者 API Key 开放。
 
 ## 常用接口
 

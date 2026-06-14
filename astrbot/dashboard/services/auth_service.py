@@ -56,7 +56,7 @@ ALL_OPEN_API_SCOPES = (
     "chat",
     "plugin",
     "mcp",
-    "skills",
+    "skill",
 )
 
 OPEN_API_SCOPE_INCLUDES = {
