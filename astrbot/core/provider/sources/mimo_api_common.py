@@ -46,7 +46,7 @@ def get_temp_dir() -> Path:
 
 
 def create_http_client(timeout: int | None, proxy: str) -> httpx.AsyncClient:
-    client_kwargs: dict[str, object] = {
+    client_kwargs: dict = {
         "timeout": timeout,
         "follow_redirects": True,
     }
