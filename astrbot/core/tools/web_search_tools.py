@@ -405,8 +405,8 @@ async def _keenable_search(
                     url=item.get("url", ""),
                     snippet=item.get("snippet") or item.get("description") or "",
                 )
-                for item in data.get("results", [])
-                if item.get("url")
+                for item in (data.get("results") or [])
+                if item and item.get("url")
             ]
 
 

@@ -490,6 +490,39 @@ async def test_keenable_search_uses_api_key_header_and_falls_back_to_description
 
 
 @pytest.mark.asyncio
+async def test_keenable_search_handles_null_results_and_items(monkeypatch):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(status=200, json_data={"results": None})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    assert (
+        await tools._keenable_search(
+            {"websearch_keenable_key": ["keenable-key"]}, {"query": "AstrBot"}
+        )
+        == []
+    )
+
+    session.response = _FakeFirecrawlResponse(
+        status=200,
+        json_data={
+            "results": [None, {"title": "AstrBot", "url": "https://example.com"}]
+        },
+    )
+    results = await tools._keenable_search(
+        {"websearch_keenable_key": ["keenable-key"]}, {"query": "AstrBot"}
+    )
+    assert results == [
+        tools.SearchResult(title="AstrBot", url="https://example.com", snippet="")
+    ]
+
+
+@pytest.mark.asyncio
 async def test_keenable_search_raises_error_for_http_errors(monkeypatch):
     session = _FakeKeenableSession(
         _FakeFirecrawlResponse(status=401, text_data="Unauthorized")
