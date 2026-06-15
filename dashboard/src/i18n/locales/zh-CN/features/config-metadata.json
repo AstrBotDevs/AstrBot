@@ -778,6 +778,14 @@
         "forward_threshold": {
           "description": "转发消息的字数阈值"
         },
+        "forward_node_max_length": {
+          "description": "单个转发节点目标长度",
+          "hint": "合并转发内单个节点期望容纳的文本长度，达到该长度后会优先寻找句号、换行等自然断点，避免一句话被切得太碎。"
+        },
+        "forward_node_hard_limit": {
+          "description": "单个转发节点硬上限",
+          "hint": "合并转发内单个节点的最大文本长度。超过后一定会强制切开，用来避开 QQ/NapCat 对单条转发节点的隐藏限制。"
+        },
         "empty_mention_waiting": {
           "description": "只 @ 机器人是否触发等待"
         }

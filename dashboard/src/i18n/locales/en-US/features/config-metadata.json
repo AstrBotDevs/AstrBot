@@ -776,6 +776,14 @@
         "forward_threshold": {
           "description": "Forward Message Word Count Threshold"
         },
+        "forward_node_max_length": {
+          "description": "Target Length per Forward Node",
+          "hint": "The expected plain-text length for each forward node. When reached, AstrBot will prefer to split at natural breakpoints like periods or newlines to avoid breaking sentences."
+        },
+        "forward_node_hard_limit": {
+          "description": "Hard Limit per Forward Node",
+          "hint": "The maximum plain-text length allowed in a single forward node. AstrBot will force-split beyond this limit to avoid QQ/NapCat hidden limits on a single node."
+        },
         "empty_mention_waiting": {
           "description": "Trigger Waiting on Mention-only Messages"
         }
