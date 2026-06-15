@@ -426,12 +426,27 @@ async def download_dashboard(
     version: str | None = None,
     proxy: str | None = None,
     progress_callback=None,
+    extract: bool = True,
 ) -> None:
-    """下载管理面板文件"""
+    """Download dashboard assets and optionally extract them.
+
+    Args:
+        path: Destination zip path. Defaults to the AstrBot data directory.
+        extract_path: Directory where assets should be extracted.
+        latest: Whether to download the latest dashboard build.
+        version: Specific release tag or commit hash to download.
+        proxy: Optional download proxy prefix.
+        progress_callback: Optional callback for download progress payloads.
+        extract: Whether to extract the archive after download.
+
+    Returns:
+        None.
+    """
     if path is None:
         zip_path = Path(get_astrbot_data_path()).absolute() / "dashboard.zip"
     else:
         zip_path = Path(path).absolute()
+    ensure_dir(zip_path.parent)
 
     if latest or len(str(version)) != 40:
         ver_name = "latest" if latest else version
@@ -484,5 +499,28 @@ async def download_dashboard(
             show_progress=True,
             progress_callback=progress_callback,
         )
+    if extract:
+        extract_dashboard(zip_path, extract_path)
+
+
+def extract_dashboard(zip_path: str | Path, extract_path: str | Path = "data") -> None:
+    """Extract a downloaded dashboard archive.
+
+    Args:
+        zip_path: Dashboard zip archive path.
+        extract_path: Directory where the archive contents should be extracted.
+
+    Returns:
+        None.
+    """
+
+    extract_root = Path(extract_path).resolve()
+    ensure_dir(extract_root)
     with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(extract_path)
+        for member in z.infolist():
+            target_path = (extract_root / member.filename).resolve()
+            if not target_path.is_relative_to(extract_root):
+                raise ValueError(
+                    f"Unsafe dashboard archive path: {member.filename}",
+                )
+            z.extract(member, extract_root)

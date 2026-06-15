@@ -540,6 +540,12 @@ class FakeAstrBotUpdator:
     async def update(self, *_args, **_kwargs) -> None:
         return None
 
+    async def download_update_package(self, *_args, **kwargs):
+        return kwargs.get("path", "temp.zip")
+
+    def apply_update_package(self, *_args, **_kwargs) -> None:
+        return None
+
 
 class FakeAstrBotConfig(dict):
     def save_config(self, post_config: dict) -> None:
