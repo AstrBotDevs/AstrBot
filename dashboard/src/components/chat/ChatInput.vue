@@ -523,7 +523,14 @@ const filteredCommands = computed(() => {
 
 const localPrompt = computed({
   get: () => props.prompt,
-  set: (value) => emit("update:prompt", value),
+  set: (value) => {
+    // Suppress v-model sync during IME composition to avoid a reactive
+    // feedback loop. Vue's :value binding overwrites the native textarea
+    // DOM state mid-composition, which interferes with IME insertion at
+    // non-terminal cursor positions (alternating character loss).
+    // The final value is synced manually in handleCompositionEnd.
+    if (!isComposing.value) emit("update:prompt", value);
+  },
 });
 
 const sessionPlatformId = computed(
@@ -768,6 +775,17 @@ function handleCompositionStart() {
 function handleCompositionEnd(e: CompositionEvent) {
   lastCompositionEndAt.value = e.timeStamp;
   clearCompositionState({ keepLastEndAt: true });
+
+  // Manually sync the final composited text to the parent component
+  // after the IME commits. The v-model setter is suppressed during
+  // composition (see localPrompt computed), so we must explicitly
+  // propagate the DOM value once composition ends.
+  nextTick(() => {
+    const el = inputField.value;
+    if (el && el.value !== props.prompt) {
+      emit("update:prompt", el.value);
+    }
+  });
 }
 
 function clearCompositionState({ keepLastEndAt = false } = {}) {
