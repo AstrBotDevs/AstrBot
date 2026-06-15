@@ -7,7 +7,7 @@ import click
 
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
-    hash_legacy_dashboard_password,
+    hash_md5_dashboard_password,
     validate_dashboard_password,
 )
 
@@ -147,7 +147,7 @@ def _set_dashboard_password(config: dict[str, Any], raw_password: str) -> None:
     _set_nested_item(
         config,
         "dashboard.password",
-        hash_legacy_dashboard_password(raw_password),
+        hash_md5_dashboard_password(raw_password),
     )
     _set_nested_item(config, "dashboard.password_storage_upgraded", True)
     _set_nested_item(config, "dashboard.password_change_required", False)

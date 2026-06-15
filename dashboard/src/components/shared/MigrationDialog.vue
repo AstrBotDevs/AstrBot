@@ -111,7 +111,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import axios from 'axios'
+import { botApi, updatesApi } from '@/api/v1'
 import { useI18n } from '@/i18n/composables'
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot'
 import ConsoleDisplayer from './ConsoleDisplayer.vue'
@@ -173,9 +173,9 @@ const loadPlatforms = async () => {
     error.value = ''
 
     try {
-        const response = await axios.get('/api/config/platform/list')
+        const response = await botApi.list()
         if (response.data.status === 'ok') {
-            platforms.value = response.data.data.platforms || []
+            platforms.value = response.data.data.bots || []
 
             // 为每个平台类型初始化默认选择（选择第一个）
             platformGroups.value.forEach(group => {
@@ -214,7 +214,7 @@ const handleMigration = async () => {
 
         console.log('Migration platform_id_map:', platformIdMap)
 
-        const response = await axios.post('/api/update/migration', {
+        const response = await updatesApi.runMigrations({
             platform_id_map: platformIdMap
         })
 

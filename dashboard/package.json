@@ -10,11 +10,14 @@
     "build-stage": "node scripts/subset-mdi-font.mjs && vue-tsc --noEmit && vite build --base=/vue/free/stage/",
     "build-prod": "node scripts/subset-mdi-font.mjs && vue-tsc --noEmit && vite build --base=/vue/free/",
     "preview": "vite preview --port 5050",
+    "generate:api": "rm -rf src/api/generated/openapi-v1 src/api/generated/openapi-v1.ts && openapi-ts -i ../openspec/openapi-v1.yaml -o src/api/generated/openapi-v1 -c @hey-api/client-axios",
+    "generate:docs:openapi": "uv run python ../docs/scripts/update_openapi_json.py",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
   },
   "dependencies": {
     "@guolao/vue-monaco-editor": "^1.5.4",
+    "@hey-api/client-axios": "0.2.12",
     "@tiptap/starter-kit": "2.1.7",
     "@tiptap/vue-3": "2.1.7",
     "apexcharts": "3.42.0",
@@ -47,6 +50,7 @@
     "yup": "1.2.0"
   },
   "devDependencies": {
+    "@hey-api/openapi-ts": "0.60.0",
     "@mdi/font": "7.2.96",
     "@rushstack/eslint-patch": "1.3.3",
     "@types/chance": "1.1.3",

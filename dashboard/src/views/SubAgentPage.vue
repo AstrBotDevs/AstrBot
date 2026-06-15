@@ -755,10 +755,10 @@
 </template>
 
 <script setup lang="ts">
-import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useTheme } from 'vuetify'
+import { subagentApi } from '@/api/v1'
 import PersonaQuickPreview from '@/components/shared/PersonaQuickPreview.vue'
 import PersonaSelector from '@/components/shared/PersonaSelector.vue'
 import ProviderSelector from '@/components/shared/ProviderSelector.vue'
@@ -1061,7 +1061,7 @@ async function loadAvailableTools() {
 async function loadConfig() {
   loading.value = true
   try {
-    const res = await axios.get('/api/subagent/config')
+    const res = await subagentApi.getConfig()
     if (res.data.status === 'ok') {
       const data = res.data.data
       // 兼容新旧格式：data 可能直接包含字段，或通过 subagent_orchestrator 嵌套
@@ -1174,7 +1174,7 @@ async function save() {
       dag_max_inject_length: dagCfg.value.dag_max_inject_length
     }
 
-    const res = await axios.post('/api/subagent/config', payload)
+    const res = await subagentApi.updateConfig(payload)
     if (res.data.status === 'ok') {
       initialSnapshot.value = serializeFullConfig(cfg.value, dynamicCfg.value, rootCfg.value, dagCfg.value)
       toast(res.data.message || tm('messages.saveSuccess'), 'success')

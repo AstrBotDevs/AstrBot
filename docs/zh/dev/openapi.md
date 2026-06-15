@@ -26,18 +26,29 @@ X-API-Key: abk_xxx
 - `POST /api/v1/chat`：请求体必须包含 `username`
 - `GET /api/v1/chat/sessions`：查询参数必须包含 `username`
 
+本地 OpenAPI 描述文件地址为 `http://localhost:6185/api/v1/openapi.json`，交互式文档地址为 `http://localhost:6185/api/v1/docs`。
+
 ## Scope 权限说明
 
 创建 API Key 时可配置 `scopes`。每个 scope 控制可访问的接口范围：
 
 | Scope | 作用 | 可访问接口 |
 | --- | --- | --- |
-| `chat` | 调用对话能力、查询对话会话 | `POST /api/v1/chat`、`GET /api/v1/chat/sessions` |
-| `config` | 获取可用配置文件列表 | `GET /api/v1/configs` |
-| `file` | 上传附件文件，获取 `attachment_id` | `POST /api/v1/file` |
+| `bot` | 管理机器人/平台配置 | `GET /api/v1/bot-types`、`GET/POST /api/v1/bots`、`PATCH /api/v1/bots/enabled` |
+| `provider` | 管理模型提供商和提供商源 | `GET/POST /api/v1/providers`、`GET/PUT/DELETE /api/v1/provider-sources/by-id` |
+| `persona` | 管理人格和人格文件夹 | `GET/POST /api/v1/personas`、`GET/POST /api/v1/persona-folders` |
 | `im` | 主动发 IM 消息、查询 bot/platform 列表 | `POST /api/v1/im/message`、`GET /api/v1/im/bots` |
+| `config` | 管理配置文件、系统配置和通用配置。该 scope 同时包含 `bot` 和 `provider` 访问权限。 | `GET /api/v1/configs`、`GET/PUT /api/v1/system-config`、`GET/POST /api/v1/config-profiles` |
+| `chat` | 调用对话能力、查询对话会话 | `POST /api/v1/chat`、`GET /api/v1/chat/sessions` |
+| `plugin` | 管理插件、插件配置、插件源和插件市场 | `GET /api/v1/plugins`、`GET/PUT /api/v1/plugins/config`、`POST /api/v1/plugins/install/url` |
+| `mcp` | 管理 MCP 服务器配置和服务端同步 | `GET/POST /api/v1/mcp/servers`、`PATCH /api/v1/mcp/servers/{server_name}/enabled`、`POST /api/v1/mcp/providers/modelscope/sync` |
+| `skill` | 管理 Skills、Skill 压缩包、Skill 文件和 Shipyard Neo Skill 流程 | `GET/POST /api/v1/skills`、`PUT /api/v1/skills/{skill_name}/files/{file_path}`、`POST /api/v1/skills/neo/sync` |
 
 如果 API Key 未包含目标接口所需 scope，请求会返回 `403 Insufficient API key scope`。
+
+`config` 是较大的管理 scope。创建 API Key 时如果包含 `config`，AstrBot 会同时授予该 Key `config`、`bot` 和 `provider` 访问权限。WebUI 的勾选逻辑也会体现这个依赖关系：选中 `config` 会同时选中 `bot` 和 `provider`；取消选中 `bot` 或 `provider` 时，会同步取消 `config`。
+
+当前开发者 API Key 仅开放以上 9 个 scope。`file`、`tool`、`skills`、`kb`、`data`、`system` 暂不支持作为开发者 API Key scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。相关接口可能仍出现在 `/api/v1` 文档中，但只有 scope 属于上表支持范围时才对开发者 API Key 开放。
 
 ## 常用接口
 
@@ -49,9 +60,19 @@ X-API-Key: abk_xxx
 - `GET /api/v1/chat/sessions`：分页获取指定 `username` 的会话
 - `GET /api/v1/configs`：获取可用配置文件列表
 
-**文件上传**
+**机器人和模型提供商**
 
-- `POST /api/v1/file`：上传附件
+- `GET /api/v1/bots`：获取机器人/平台配置列表
+- `POST /api/v1/bots`：创建机器人/平台配置
+- `GET /api/v1/providers`：获取模型提供商配置列表
+- `GET /api/v1/provider-sources`：获取提供商源配置列表
+
+**人格、插件、MCP 和 Skills**
+
+- `GET /api/v1/personas`：获取人格列表
+- `GET /api/v1/plugins`：获取插件列表
+- `GET /api/v1/mcp/servers`：获取 MCP 服务器列表
+- `GET /api/v1/skills`：获取 Skills 列表
 
 **IM 消息发送**
 
@@ -100,7 +121,7 @@ X-API-Key: abk_xxx
 
 说明：
 
-- `attachment_id` 来自 `POST /api/v1/file` 上传结果。
+- `attachment_id` 来自已存在的附件记录。开发者 API Key 当前不能使用 `POST /api/v1/file` 上传附件。
 - `reply` 不能单独作为唯一内容，至少需要一个有实际内容的段（如 `plain/image/file/...`）。
 - 仅 `reply` 或空内容会返回错误。
 

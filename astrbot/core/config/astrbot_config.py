@@ -7,7 +7,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
     hash_dashboard_password,
-    hash_legacy_dashboard_password,
+    hash_md5_dashboard_password,
     validate_dashboard_password,
 )
 
@@ -64,11 +64,11 @@ class AstrBotConfig(dict):
                 conf_str = conf_str[1:]
             conf = json.loads(conf_str)
         dashboard_conf = conf.get("dashboard")
-        legacy_dashboard_password_change_required = bool(
+        stored_dashboard_password_change_required = bool(
             isinstance(dashboard_conf, dict)
             and dashboard_conf.get("password_change_required", False)
         )
-        if legacy_dashboard_password_change_required:
+        if stored_dashboard_password_change_required:
             object.__setattr__(
                 self,
                 "_dashboard_password_change_required_from_config",
@@ -87,7 +87,7 @@ class AstrBotConfig(dict):
         elif (
             "dashboard" in conf
             and isinstance(conf["dashboard"], dict)
-            and legacy_dashboard_password_change_required
+            and stored_dashboard_password_change_required
             and conf["dashboard"].get("pbkdf2_password")
         ):
             self._reset_generated_dashboard_password(conf)
@@ -103,9 +103,7 @@ class AstrBotConfig(dict):
         conf["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
             generated_password
         )
-        conf["dashboard"]["password"] = hash_legacy_dashboard_password(
-            generated_password
-        )
+        conf["dashboard"]["password"] = hash_md5_dashboard_password(generated_password)
         conf["dashboard"]["password_storage_upgraded"] = True
         conf["dashboard"]["password_change_required"] = True
         object.__setattr__(

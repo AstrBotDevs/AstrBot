@@ -180,7 +180,6 @@ async def test_check_dashboard_files_exists_but_version_mismatch(monkeypatch):
     with mock.patch(
         "main.get_dashboard_version", mock.AsyncMock(return_value="v0.0.1")
     ):
-
         with mock.patch("main.logger.warning") as mock_logger_warning:
             await check_dashboard_files()
             mock_logger_warning.assert_called_once()

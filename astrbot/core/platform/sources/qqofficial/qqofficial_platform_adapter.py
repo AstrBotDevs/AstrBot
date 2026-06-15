@@ -5,7 +5,6 @@ import logging
 import os
 import random
 import time
-import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -27,8 +26,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file
+from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
 from .qqofficial_message_event import QQOfficialMessageEvent
@@ -404,15 +402,15 @@ class QQOfficialPlatformAdapter(Platform):
         url: str,
         filename: str,
     ) -> Record:
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
-
         ext = Path(filename).suffix.lower()
         source_ext = ext or ".audio"
-        source_path = temp_dir / f"qqofficial_{uuid.uuid4().hex}{source_ext}"
-        await download_file(url, str(source_path))
+        path_wav = await MediaResolver(
+            url,
+            media_type="audio",
+            default_suffix=source_ext,
+        ).to_path(target_format="wav")
 
-        return Record(file=str(source_path), url=str(source_path))
+        return Record(file=path_wav, url=path_wav)
 
     @staticmethod
     async def _append_attachments(

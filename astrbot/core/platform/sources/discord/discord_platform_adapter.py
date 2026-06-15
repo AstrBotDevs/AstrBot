@@ -9,7 +9,7 @@ from discord.channel import DMChannel
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain
+from astrbot.api.message_components import File, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -23,6 +23,7 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
@@ -248,6 +249,12 @@ class DiscordPlatformAdapter(Platform):
                     message_chain.append(
                         Image(file=attachment.url, filename=attachment.filename),
                     )
+                elif attachment.content_type and attachment.content_type.startswith(
+                    "audio/",
+                ):
+                    message_chain.append(
+                        Record(file=attachment.url, url=attachment.url),
+                    )
                 else:
                     message_chain.append(
                         File(name=attachment.filename, url=attachment.url),
@@ -262,7 +269,20 @@ class DiscordPlatformAdapter(Platform):
     async def convert_message(self, data: dict) -> AstrBotMessage:
         """将平台消息转换成 AstrBotMessage"""
         # 由于 on_interaction 已被禁用，我们只处理普通消息
-        return self._convert_message_to_abm(data)
+        abm = self._convert_message_to_abm(data)
+        for component in abm.message:
+            if isinstance(component, Record):
+                audio_ref = component.url or component.file
+                if audio_ref:
+                    path_wav = await MediaResolver(
+                        audio_ref,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_path(target_format="wav")
+                    component.file = path_wav
+                    component.url = path_wav
+                    component.path = path_wav
+        return abm
 
     async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
         """处理消息"""
