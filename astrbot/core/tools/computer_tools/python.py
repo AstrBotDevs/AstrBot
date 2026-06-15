@@ -11,7 +11,7 @@ from astrbot.core.computer.computer_client import get_booter, get_local_booter
 from astrbot.core.message.message_event_result import MessageChain
 
 from ..registry import builtin_tool
-from .util import check_admin_permission
+from .util import check_admin_permission, workspace_root
 
 _OS_NAME = platform.system()
 _SANDBOX_PYTHON_TOOL_CONFIG = {
@@ -137,10 +137,15 @@ class LocalPythonTool(FunctionTool):
             else context.tool_call_timeout
         )
         try:
+            current_workspace_root = workspace_root(
+                context.context.event.unified_msg_origin
+            )
+            current_workspace_root.mkdir(parents=True, exist_ok=True)
             result = await sb.python.exec(
                 code,
                 timeout=effective_timeout,
                 silent=silent,
+                cwd=str(current_workspace_root),
             )
             return await handle_result(result, context.context.event)
         except Exception as e:
