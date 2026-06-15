@@ -194,6 +194,10 @@ class PlatformManager:
                     from .sources.mattermost.mattermost_adapter import (
                         MattermostPlatformAdapter,  # noqa: F401
                     )
+                case "ntfy": 
+                    from .sources.ntfy.ntfy_adapter import (
+                        NtfyPlatformAdapter,  # noqa: F401
+                    )
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(
                 f"加载平台适配器 {platform_config['type']} 失败，原因：{e}。请检查依赖库是否安装。提示：可以在 管理面板->平台日志->安装Pip库 中安装依赖库。",

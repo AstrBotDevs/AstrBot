@@ -751,7 +751,19 @@
         "description": "最大连续失败次数",
         "type": "int",
         "hint": "允许的最大连续失败次数，超过后停止重试"
-      }
+      },
+      "ntfy_server_url": {
+            "description": "ntfy 服务器地址",
+            "hint": "ntfy 服务器地址，例如 https://ntfy.sh"
+        },
+        "ntfy_topic": {
+            "description": "订阅主题 (Topic)",
+            "hint": "用于收发消息的唯一订阅主题名称。"
+        },
+        "ntfy_access_token": {
+            "description": "访问令牌 (可选)",
+            "hint": "有访问权限控制的服务器需要填写此 Token。"
+        }
     },
     "general": {
       "description": "基本",
