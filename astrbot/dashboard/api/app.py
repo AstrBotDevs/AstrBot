@@ -48,6 +48,7 @@ from astrbot.dashboard.services.update_service import (
     call_check_migration_needed_v4,
     call_do_migration_v4,
     call_download_dashboard,
+    call_extract_dashboard,
     call_get_dashboard_version,
     call_pip_install,
 )
@@ -139,6 +140,7 @@ def create_dashboard_asgi_app(
             core_lifecycle.astrbot_updator,
             core_lifecycle,
             download_dashboard_func=call_download_dashboard,
+            extract_dashboard_func=call_extract_dashboard,
             get_dashboard_version_func=call_get_dashboard_version,
             pip_install_func=call_pip_install,
             check_migration_needed_func=call_check_migration_needed_v4,

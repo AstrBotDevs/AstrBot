@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+from pathlib import Path
 
 import psutil
 
@@ -151,6 +152,41 @@ class AstrBotUpdator(RepoZipUpdator):
         proxy="",
         progress_callback=None,
     ) -> None:
+        zip_path = await self.download_update_package(
+            latest=latest,
+            version=version,
+            proxy=proxy,
+            progress_callback=progress_callback,
+        )
+        self.apply_update_package(zip_path)
+
+        if reboot:
+            self._reboot()
+
+    async def download_update_package(
+        self,
+        latest=True,
+        version=None,
+        proxy="",
+        path: str | Path = "temp.zip",
+        progress_callback=None,
+    ) -> Path:
+        """Download an AstrBot core update package without applying it.
+
+        Args:
+            latest: Whether to download the latest release.
+            version: Specific release tag or commit hash to download.
+            proxy: Optional GitHub proxy prefix.
+            path: Destination zip path.
+            progress_callback: Optional callback for download progress payloads.
+
+        Returns:
+            Path to the downloaded update package.
+
+        Raises:
+            Exception: If update metadata cannot resolve a package URL.
+        """
+
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
 
@@ -181,16 +217,26 @@ class AstrBotUpdator(RepoZipUpdator):
             proxy = proxy.removesuffix("/")
             file_url = f"{proxy}/{file_url}"
 
-        try:
-            await self._download_file(
-                file_url,
-                "temp.zip",
-                progress_callback=progress_callback,
-            )
-            logger.info("下载 AstrBot Core 更新文件完成，正在执行解压...")
-            self.unzip_file("temp.zip", self.MAIN_PATH)
-        except BaseException as e:
-            raise e
+        zip_path = Path(path)
+        await self._download_file(
+            file_url,
+            str(zip_path),
+            progress_callback=progress_callback,
+        )
+        return zip_path
 
-        if reboot:
-            self._reboot()
+    def apply_update_package(self, zip_path: str | Path) -> None:
+        """Apply a previously downloaded AstrBot core update package.
+
+        Args:
+            zip_path: Core update zip archive path.
+
+        Returns:
+            None.
+
+        Raises:
+            Exception: If the archive cannot be extracted or applied.
+        """
+
+        logger.info("下载 AstrBot Core 更新文件完成，正在执行解压...")
+        self.unzip_file(str(zip_path), self.MAIN_PATH)
