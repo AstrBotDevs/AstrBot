@@ -130,6 +130,7 @@ async def main_async(webui_dir_arg: str | None) -> None:
 
     core_lifecycle = InitialLoader(db, log_broker)
     core_lifecycle.webui_dir = webui_dir
+    core_lifecycle.webui_available = webui_dir is not None
     await core_lifecycle.start()
 
 

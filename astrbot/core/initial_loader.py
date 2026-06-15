@@ -22,6 +22,7 @@ class InitialLoader:
         self.logger = logger
         self.log_broker = log_broker
         self.webui_dir: str | None = None
+        self.webui_available = True
 
     async def start(self) -> None:
         core_lifecycle = AstrBotCoreLifecycle(self.log_broker, self.db)
@@ -34,6 +35,10 @@ class InitialLoader:
             return
 
         core_task = core_lifecycle.start()
+
+        if not self.webui_available:
+            await core_task
+            return
 
         webui_dir = self.webui_dir
 

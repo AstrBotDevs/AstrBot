@@ -257,3 +257,47 @@ async def test_check_dashboard_files_with_webui_dir_arg(monkeypatch):
             assert result == valid_dir
             mock_download.assert_not_called()
             mock_get_version.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_main_async_disables_webui_when_dashboard_check_fails():
+    with mock.patch(
+        "main.check_dashboard_files",
+        mock.AsyncMock(return_value=None),
+    ):
+        with mock.patch("main.log_broker", create=True):
+            with mock.patch("main.InitialLoader") as mock_loader:
+                mock_loader.return_value.start = mock.AsyncMock()
+
+                from main import main_async
+
+                await main_async(None)
+
+    assert mock_loader.return_value.webui_dir is None
+    assert mock_loader.return_value.webui_available is False
+    mock_loader.return_value.start.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_initial_loader_skips_unavailable_webui():
+    from astrbot.core.initial_loader import InitialLoader
+
+    core_lifecycle = mock.MagicMock()
+    core_lifecycle.initialize = mock.AsyncMock()
+    core_lifecycle.start = mock.AsyncMock()
+
+    with mock.patch(
+        "astrbot.core.initial_loader.AstrBotCoreLifecycle",
+        return_value=core_lifecycle,
+    ):
+        with mock.patch(
+            "astrbot.core.initial_loader.AstrBotDashboard",
+        ) as mock_dashboard:
+            loader = InitialLoader(mock.MagicMock(), mock.MagicMock())
+            loader.webui_available = False
+
+            await loader.start()
+
+    core_lifecycle.initialize.assert_awaited_once()
+    core_lifecycle.start.assert_awaited_once()
+    mock_dashboard.assert_not_called()
