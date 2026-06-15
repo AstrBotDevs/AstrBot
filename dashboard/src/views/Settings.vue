@@ -1405,7 +1405,9 @@ onMounted(async () => {
     width: min(420px, calc(100vw - 48px));
     border: 0;
     border-radius: 12px;
-    background: rgba(var(--v-theme-surface), 0.72);
+    background:
+        linear-gradient(rgba(var(--v-theme-on-surface), 0.055), rgba(var(--v-theme-on-surface), 0.055)),
+        rgba(var(--v-theme-surface), 0.74);
     box-shadow: none;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
