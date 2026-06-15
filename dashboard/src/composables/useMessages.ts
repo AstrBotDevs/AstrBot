@@ -28,6 +28,58 @@ export interface ToolCall {
   [key: string]: unknown;
 }
 
+/**
+ * Todo 工具返回的标准化快照结构。
+ *
+ * 数据源:spcode 插件 4 个 todo 工具的 `call()` 返回值(经 `unwrap()` 包装成
+ * `{"ok": true, "data": {list, stats, attention_items}}`)。前端在 SSE
+ * `tool_call_result` 阶段从 tool.result 字符串中解析出来,按 sessionId 缓存,
+ * 供 Chat.vue 的 todo summary bar / TodoSidebar 实时消费。
+ *
+ * - `list.items[].attention` 由后端在 `_build_list_state` 时注入,标识需要
+ *   关注的 item(stuck/blocked:`in_progress` 且 `notes` 非空)。
+ * - `attentionItems` 是后端的 attention id 数组(便于 summary bar 展示徽标)。
+ */
+export type TodoItemStatus = "pending" | "in_progress" | "done" | "cancelled";
+
+export interface TodoItem {
+  id: number;
+  title: string;
+  status: TodoItemStatus;
+  notes?: string;
+  attention?: boolean;
+}
+
+export interface TodoList {
+  title: string;
+  items: TodoItem[];
+  created_at?: string;
+  updated_at?: string;
+  sender_key?: string;
+  platform?: string;
+  sender_id?: string;
+  [key: string]: unknown;
+}
+
+export interface TodoStats {
+  total: number;
+  done: number;
+  in_progress: number;
+  pending: number;
+  cancelled: number;
+  effective_total: number;
+  progress_pct: number;
+  blocked_count?: number;
+}
+
+export interface TodoSnapshot {
+  list: TodoList;
+  stats: TodoStats;
+  attentionItems: number[];
+  /** 写入时间戳,便于在多次事件中排序/去抖。 */
+  updatedAt: number;
+}
+
 export interface ChatContent {
   type: "user" | "bot" | string;
   message: MessagePart[];
@@ -436,7 +488,7 @@ export function useMessages(options: UseMessagesOptions) {
         throw new Error(payload?.message || "Regenerate failed.");
       }
       await readSseStream(response.body, (payload) => {
-        processStreamPayload(botRecord, payload);
+        processStreamPayload(botRecord, payload, undefined, sessionId);
         options.onStreamUpdate?.(sessionId);
       });
     } catch (error) {
@@ -543,7 +595,7 @@ export function useMessages(options: UseMessagesOptions) {
           throw new Error(`SSE connection failed: ${response.status}`);
         }
         await readSseStream(response.body, (payload) => {
-          processStreamPayload(botRecord, payload, userRecord);
+          processStreamPayload(botRecord, payload, userRecord, sessionId);
           options.onStreamUpdate?.(sessionId);
         });
       })
@@ -686,7 +738,12 @@ export function useMessages(options: UseMessagesOptions) {
 
     try {
       const payload = JSON.parse(event.data);
-      processStreamPayload(connection.botRecord, payload, connection.userRecord);
+      processStreamPayload(
+        connection.botRecord,
+        payload,
+        connection.userRecord,
+        sessionId,
+      );
       options.onStreamUpdate?.(sessionId);
       if (payload.type === "end" || payload.t === "end") {
         void finishWebSocketStream(sessionId, connection.messageId);
@@ -719,10 +776,136 @@ export function useMessages(options: UseMessagesOptions) {
     }
   }
 
+  /**
+   * spcode 插件 4 个 todo_* 工具 + 旧 `todo_list` 的统一识别集合。
+   *
+   * - `todo_create` / `todo_query` / `todo_modify` / `todo_clear` 是 v2.2.0
+   *   拆出来的 4 个独立工具,各自返回的 data 都含 `list` / `stats` /
+   *   `attention_items` 三件套(clear 除外,clear 后 list 不存在)。
+   * - `todo_list` 是 v2.2.0 之前的合并工具,这里保留以便兼容老会话历史
+   *   中可能出现的 tool_call 事件。
+   */
+  const TODO_TOOL_NAMES: ReadonlySet<string> = new Set([
+    "todo_create",
+    "todo_query",
+    "todo_modify",
+    "todo_clear",
+    "todo_list",
+  ]);
+
+  /**
+   * 按 sessionId 隔离的最新 todo 快照。
+   *
+   * - value[sid] = TodoSnapshot:todo_create/modify/query 成功时写入。
+   * - value[sid] = null:todo_clear 成功时显式置空(bar 立即消失)。
+   * - key 不存在:该 session 尚未调用过 todo 工具(bar 不显示)。
+   *
+   * 写入策略:每次整体替换 `value = {...current, [sid]: snap}`,
+   * 100% 触发依赖此 ref 的 computed 重算(Chat.vue 里的 currentTodoSnapshot)。
+   * 整体替换而非 in-place 修改,是为了在 useMessages 多次调用 writeTodos
+   * 时 Vue 一定能捕获到依赖变化(对 in-place 写入 `value[sid] = x`,
+   * Vue 3 的 ref 对嵌套对象可能不触发响应,需要 .value = .value 触发)。
+   */
+  const latestTodoSnapshotBySession = ref<Record<string, TodoSnapshot | null>>(
+    {},
+  );
+
+  /**
+   * 从 tool.result(JSON 字符串)中解析出 TodoSnapshot。
+   *
+   * 返回值语义:
+   * - `TodoSnapshot` 对象:write 进去,bar/sidebar 立即刷新。
+   * - `null`:显式清空(todo_clear 成功路径)。
+   * - `undefined`:保持现状 — 用于失败/无法解析的情况,避免覆盖已有快照。
+   *
+   * 协议参考:spcode 插件 `tools/_helpers.py` 中的 `unwrap()` —
+   * 成功路径输出 `{"ok": true, "data": {list, stats, attention_items}, ...}`,
+   * 失败路径输出 `{"ok": false, "error": "..."}`(或 err_json)。
+   * 部分响应可能携带 `proposal` / `options` 字段,这些不影响 data 段。
+   */
+  function parseTodoToolResult(
+    toolName: string,
+    resultJson: string,
+  ): TodoSnapshot | null | undefined {
+    if (!resultJson || typeof resultJson !== "string") return undefined;
+    let parsed: any;
+    try {
+      parsed = JSON.parse(resultJson);
+    } catch {
+      return undefined;
+    }
+    if (!parsed || typeof parsed !== "object") return undefined;
+
+    // 失败路径 → 保持现状,不动快照
+    if (parsed.ok === false) return undefined;
+
+    // todo_clear 成功 → 显式置空(让 bar 立即消失)
+    if (toolName === "todo_clear") {
+      return null;
+    }
+
+    // 拆 envelope:{"ok": true, "data": {...}} → 取 data
+    // 也兼容少数情况(老 todo_list 工具、proposal 路径等)data 直接挂在根上
+    const data =
+      parsed.ok === true && parsed.data && typeof parsed.data === "object"
+        ? parsed.data
+        : parsed;
+
+    const list = data?.list;
+    const stats = data?.stats;
+    if (!list || typeof list !== "object") return undefined;
+    if (!stats || typeof stats !== "object") return undefined;
+
+    const attentionRaw = data?.attention_items;
+    const attentionItems: number[] = Array.isArray(attentionRaw)
+      ? attentionRaw.filter((n) => typeof n === "number")
+      : [];
+
+    return {
+      list: list as TodoList,
+      stats: stats as TodoStats,
+      attentionItems,
+      updatedAt: Date.now(),
+    };
+  }
+
+  /**
+   * 在 record 的 tool_call parts 中按 id 找到对应的 tool 调用项。
+   * 用于在 tool_call_result 阶段反查 tool_name 和 tool.arguments。
+   */
+  function findToolCallById(
+    record: ChatRecord,
+    callId: string | number | undefined,
+  ): ToolCall | null {
+    if (callId == null) return null;
+    for (const part of record.content.message) {
+      if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
+      const matched = part.tool_calls.find((item) => item.id === callId);
+      if (matched) return matched;
+    }
+    return null;
+  }
+
+  /**
+   * 写入 / 清除某个 session 的 todo 快照。
+   * 触发响应式更新(整体替换 ref.value)。
+   */
+  function writeTodoSnapshot(
+    sessionId: string | null | undefined,
+    snapshot: TodoSnapshot | null,
+  ) {
+    if (!sessionId) return;
+    latestTodoSnapshotBySession.value = {
+      ...latestTodoSnapshotBySession.value,
+      [sessionId]: snapshot,
+    };
+  }
+
   function processStreamPayload(
     botRecord: ChatRecord,
     payload: any,
     userRecord?: ChatRecord,
+    sessionId?: string,
   ) {
     const normalized =
       payload?.ct === "chat"
@@ -787,7 +970,31 @@ export function useMessages(options: UseMessagesOptions) {
         return;
       }
       if (chainType === "tool_call_result") {
-        finishToolCall(botRecord, parseJsonSafe(data));
+        const parsed = parseJsonSafe(data);
+        finishToolCall(botRecord, parsed);
+
+        // todo 工具结果 → 解析并写入按 sessionId 隔离的快照。
+        // 注意:tool_call 事件先于 tool_call_result 到达,tool.name 已被
+        // upsertToolCall 写入 botRecord,这里按 id 反查即可。
+        if (sessionId && parsed && typeof parsed === "object") {
+          const callId = (parsed as any).id;
+          const matched = findToolCallById(botRecord, callId);
+          const toolName = matched?.name;
+          if (
+            toolName
+            && TODO_TOOL_NAMES.has(toolName)
+            && typeof (parsed as any).result === "string"
+          ) {
+            const snapshot = parseTodoToolResult(
+              toolName,
+              (parsed as any).result,
+            );
+            // undefined → 保持现状;null → 清空;对象 → 写入。
+            if (snapshot !== undefined) {
+              writeTodoSnapshot(sessionId, snapshot);
+            }
+          }
+        }
         return;
       }
       appendPlain(botRecord, payloadText(data), normalized.streaming !== false);
@@ -833,6 +1040,12 @@ export function useMessages(options: UseMessagesOptions) {
     regenerateMessage,
     stopSession,
     cleanupConnections,
+    /**
+     * 按 sessionId 隔离的最新 todo 快照。
+     * Chat.vue 通过此字段渲染 todo summary bar 与 TodoSidebar。
+     * 详见 `parseTodoToolResult` 注释。
+     */
+    latestTodoSnapshotBySession,
   };
 }
 

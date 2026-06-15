@@ -1,11 +1,4 @@
 <template>
-    <!-- DEBUG: 临时诊断 toolName 实际值（修复后可移除） -->
-    <div
-        v-if="showDebug"
-        style="padding:2px 6px;margin-bottom:4px;background:rgba(255,180,0,0.15);border-left:2px solid #b58400;font-family:ui-monospace,monospace;font-size:10.5px;color:#b58400"
-    >
-        [SpcodeToolResultView] toolName={{ JSON.stringify(toolName) }} matched={{ matchedKey ?? "NONE" }}
-    </div>
     <CodeCheckResult v-if="toolName === 'code_check'" :data="parsedData" :args="args" />
     <CodeIndexResult v-else-if="toolName === 'code_index'" :data="parsedData" />
     <CodeExploreResult v-else-if="toolName === 'code_explore'" :data="parsedData" :args="args" />
@@ -47,51 +40,15 @@ const props = defineProps<{
     args?: Record<string, any>;
 }>();
 
-// DEBUG: 临时计算实际匹配的 key + 控制台日志
-const TODO_TOOL_NAMES = new Set([
+/** 拆分的 4 个 todo_* 工具 + 老 todo_list 统一识别。 */
+const TODO_TOOL_NAMES: ReadonlySet<string> = new Set([
     "todo_create",
     "todo_query",
     "todo_modify",
     "todo_clear",
     "todo_list", // 兼容老历史
 ]);
-const KNOWN_KEYS = [
-    "code_check",
-    "code_index",
-    "code_explore",
-    "es_search",
-    "astrbot_file_remove",
-    "astrbot_file_compare",
-    "todo_create",
-    "todo_query",
-    "todo_modify",
-    "todo_clear",
-    "todo_list",
-] as const;
-
-/** 拆分的 4 个 todo_* 工具 + 老 todo_list 统一识别。 */
 const isTodoTool = computed(() => TODO_TOOL_NAMES.has(props.toolName));
-const matchedKey = computed(() => {
-    if (!props.toolName) return null;
-    const m = KNOWN_KEYS.find((k) => k === props.toolName);
-    if (!m) {
-        // eslint-disable-next-line no-console
-        console.warn(
-            "[SpcodeToolResultView] toolName not in known spcode set:",
-            JSON.stringify(props.toolName),
-            "len=",
-            props.toolName.length,
-            "charCodes=",
-            [...props.toolName].map((c) => c.charCodeAt(0)).join(","),
-        );
-    }
-    return m ?? null;
-});
-// DEBUG: 用 URL hash 控制是否显示诊断条（?spcode_debug=1）
-const showDebug = computed(() => {
-    if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("spcode_debug") === "1";
-});
 
 /** 解析 result JSON 字符串为对象，自动剥离 spcode 插件 unwrap() 加的 envelope。
  *

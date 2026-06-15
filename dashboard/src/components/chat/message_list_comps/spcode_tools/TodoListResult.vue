@@ -123,7 +123,7 @@
             <TodoListPanel
                 :list="data.list"
                 :stats="data.stats"
-                :attention-items="data.attention_items"
+                :attention-items="normalizedAttentionItems"
             />
         </div>
     </div>
@@ -176,7 +176,10 @@ const actionType = computed<ActionType>(() => {
         if (mode === "add" || mode === "update" || mode === "delete") return mode;
         // 兜底:从 data 字段反推
         if (props.data.deleted !== undefined) return "delete";
-        // args.item 列表存在 → add(批量)
+        // args.items 列表存在 → add(批量)
+        // 注意:后端 TodoModifyTool schema 只声明了 `items` (array, minItems=1),
+        // 没有 `item` 单数形式 — LLM 传单 dict 会被 **kwargs 吞掉。
+        // 这里不增加 `item` 单数 fallback,避免前端误判后端实际不处理的请求。
         if (Array.isArray(props.args?.items)) return "add";
         return "update";
     }
@@ -206,6 +209,22 @@ const showFullList = computed<boolean>(() => {
         || t === "query"
         || t === "delete"
     );
+});
+
+/** 把后端 snake_case 字段统一归一为前端 camelCase 风格。
+ *
+ * 后端 `tools/todo_list.py` 返回的 `_build_list_state` 段使用 snake_case
+ * (`attention_items`),与 `useMessages.ts` 的 `TodoSnapshot.attentionItems`
+ * 命名规范不一致。本组件是 message-list 侧唯一直接消费 raw data 的入口,
+ * 在此显式 normalize,让上游(spcode 的 TodoListPanel / sidebar 等)只见到
+ * camelCase,避免在每个调用点重复处理 snake_case/camelCase 差异。
+ *
+ * 也兼容老会话历史中可能出现的 camelCase 形式(防御性)。
+ */
+const normalizedAttentionItems = computed<number[]>(() => {
+    const raw = props.data?.attention_items ?? props.data?.attentionItems ?? [];
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((n): n is number => typeof n === "number");
 });
 
 /** 渲染 item_ids 列表成 "Item #1, #2, #3 added" 这种紧凑文案。 */

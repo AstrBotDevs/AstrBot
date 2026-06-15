@@ -38,74 +38,68 @@
   </transition>
 </template>
 
-<script lang="ts">
-import { defineComponent } from "vue";
+<script setup lang="ts">
+import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import type { TodoList, TodoStats } from "@/composables/useMessages";
 import TodoListPanel from "./spcode_tools/TodoListPanel.vue";
 
 /**
  * TodoSidebar — 实时显示当前 todo_list 工具调用最新一份快照的右侧抽屉。
  *
- * 数据由父组件 (Chat.vue) 从消息流的 tool_call 节点中提取并传入。
- * 与 RefsSidebar 互斥显示：父组件控制 v-model 即可。
+ * 数据由父组件 (Chat.vue) 从 useMessages 的 latestTodoSnapshotBySession 中
+ * 取出,经 currentTodoSnapshot computed 隔离当前 session 后传入。
+ * 与 RefsSidebar 互斥显示:父组件控制 v-model 即可。
  */
-export default defineComponent({
-  name: "TodoSidebar",
-  components: { TodoListPanel },
-  props: {
-    modelValue: {
-      type: Boolean,
-      default: false,
-    },
-    list: {
-      type: Object,
-      default: null,
-    },
-    stats: {
-      type: Object,
-      default: null,
-    },
-    attentionItems: {
-      type: Array as () => number[],
-      default: () => [],
-    },
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean;
+    list: TodoList | null;
+    stats: TodoStats | null;
+    attentionItems: number[];
+  }>(),
+  {
+    modelValue: false,
+    list: null,
+    stats: null,
+    attentionItems: () => [],
   },
-  emits: ["update:modelValue"],
-  setup() {
-    const { tm } = useModuleI18n("features/chat");
-    return { tm };
-  },
-  computed: {
-    isOpen: {
-      get(): boolean {
-        return this.modelValue;
-      },
-      set(value: boolean) {
-        this.$emit("update:modelValue", value);
-      },
-    },
-  },
-  methods: {
-    close() {
-      this.isOpen = false;
-    },
-    formatUpdatedAt(value: string): string {
-      if (!value) return "";
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return value;
-      // 形如 "18:14:08" 或 "06-08 18:14" 这样的紧凑格式
-      const pad = (n: number) => String(n).padStart(2, "0");
-      const now = new Date();
-      const sameDay =
-        date.getFullYear() === now.getFullYear() &&
-        date.getMonth() === now.getMonth() &&
-        date.getDate() === now.getDate();
-      const hm = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-      if (sameDay) return hm;
-      return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${hm}`;
-    },
-  },
+);
+
+const emit = defineEmits<{
+  "update:modelValue": [value: boolean];
+}>();
+
+const { tm } = useModuleI18n("features/chat");
+
+/** v-model 受控的开关 getter/setter。 */
+const isOpen = computed<boolean>({
+  get: () => props.modelValue,
+  set: (value: boolean) => emit("update:modelValue", value),
 });
+
+function close() {
+  isOpen.value = false;
+}
+
+/** 把 list.updated_at ISO 字符串渲染为紧凑时间显示。
+ *
+ * 形如 "18:14" (当天) 或 "06-08 18:14" (其他日期)。
+ */
+function formatUpdatedAt(value: string | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  const hm = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  if (sameDay) return hm;
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${hm}`;
+}
 </script>
 
 <style scoped>

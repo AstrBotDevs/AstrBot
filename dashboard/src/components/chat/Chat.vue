@@ -345,7 +345,10 @@
           <!-- 可拖动的 todo summary 浮窗:
                初始位置: 页面顶部正中;
                拖动范围: 不得超出 .chat-main 边界,不得进入 .composer-shell 区域;
-               位置持久化: localStorage。-->
+               位置持久化: localStorage。
+               键盘 a11y: tabindex=0 让 button 可被 Tab 聚焦;Enter/Space 自动触发 click
+               (浏览器对 <button> 的默认行为,会调用 onTodoBarClick → toggleTodoSidebar);
+               方向键移动位置 (8px/次),复用 clampBarPos + 同一个 localStorage key。-->
           <transition name="todo-bar-fade">
             <button
               v-if="currentTodoSnapshot"
@@ -357,9 +360,12 @@
                 'todo-summary-bar--centered': todoBarPos === null,
               }"
               :style="todoBarStyle"
+              tabindex="0"
               :aria-label="tm('todo.summary')"
+              :aria-keyshortcuts="todoBarKeyShortcuts"
               @mousedown="startDragTodoBar"
               @click="onTodoBarClick"
+              @keydown="onTodoBarKeydown"
             >
               <v-icon size="16" class="todo-summary-icon">mdi-format-list-checks</v-icon>
               <v-icon size="14" class="todo-summary-drag-handle">mdi-drag-horizontal-variant</v-icon>
@@ -1548,6 +1554,73 @@ watch(refsSidebarOpen, (open) => {
 
 function toggleTodoSidebar() {
   todoSidebarOpen.value = !todoSidebarOpen.value;
+}
+
+/** 键盘焦点落在 bar 上时的快捷键声明(用于 a11y 屏幕阅读器)。
+ *
+ * 实际行为:
+ * - Enter / Space  → 浏览器对 <button> 的默认行为 → 触发 @click → toggleTodoSidebar()
+ * - Arrow 方向键  → onTodoBarKeydown → 移动位置 8px
+ */
+const todoBarKeyShortcuts = "Enter Space ArrowLeft ArrowRight ArrowUp ArrowDown";
+
+/** 键盘移动 bar 位置。Shift 加速为 32px/次;Home 复位到居中。 */
+const TODO_BAR_KEY_STEP = 8;
+function onTodoBarKeydown(e: KeyboardEvent) {
+  // 防御:只有 bar 可见且有快照时才进入(理论上 v-if 已 guard,但 keydown 仍要防)
+  if (!currentTodoSnapshot.value) return;
+
+  // 方向键移动
+  let dx = 0;
+  let dy = 0;
+  if (e.key === "ArrowLeft") dx = -1;
+  else if (e.key === "ArrowRight") dx = 1;
+  else if (e.key === "ArrowUp") dy = -1;
+  else if (e.key === "ArrowDown") dy = 1;
+  else if (e.key === "Home") {
+    // 复位:清空位置让 CSS centered 样式接管
+    todoBarPos.value = null;
+    try { localStorage.removeItem(TODO_BAR_POS_KEY); } catch { /* ignore */ }
+    e.preventDefault();
+    return;
+  } else {
+    // 其它键不拦(让 Enter/Space 等透传给 button 默认行为)
+    return;
+  }
+
+  // 阻止页面方向键滚动
+  e.preventDefault();
+  e.stopPropagation();
+  const step = (e.shiftKey ? 4 : 1) * TODO_BAR_KEY_STEP;
+
+  // 第一次方向键按下:如果位置未初始化,先按当前 CSS centered 位置算一个起点
+  if (todoBarPos.value === null) {
+    const bar = document.querySelector(".todo-summary-bar") as HTMLElement | null;
+    const main = document.querySelector(".chat-main") as HTMLElement | null;
+    if (!bar || !main) return;
+    const mainRect = main.getBoundingClientRect();
+    const barRect = bar.getBoundingClientRect();
+    const startLeft = mainRect.left + Math.max(16, (mainRect.width - barRect.width) / 2);
+    const startTop = mainRect.top + 16;
+    todoBarPos.value = clampBarPos(startLeft, startTop, barRect, mainRect);
+  }
+
+  const current = todoBarPos.value!;
+  const bar = document.querySelector(".todo-summary-bar") as HTMLElement | null;
+  const main = document.querySelector(".chat-main") as HTMLElement | null;
+  if (!bar || !main) return;
+  const mainRect = main.getBoundingClientRect();
+  const barRect = bar.getBoundingClientRect();
+  todoBarPos.value = clampBarPos(
+    current.left + dx * step,
+    current.top + dy * step,
+    barRect,
+    mainRect,
+  );
+  // 持久化(与鼠标拖动 endDragTodoBar 共用同一 key,策略一致)
+  try {
+    localStorage.setItem(TODO_BAR_POS_KEY, JSON.stringify(todoBarPos.value));
+  } catch { /* ignore quota / private mode */ }
 }
 
 /** RefsSidebar 的 modelValue 变化回调:关闭时由用户主动操作,无需特别处理;
