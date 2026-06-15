@@ -385,6 +385,7 @@ async def _keenable_search(
     api_key = await _KEENABLE_KEY_ROTATOR.get(provider_settings)
     header = {
         "X-API-Key": api_key,
+        "X-Keenable-Title": "astrbot",
         "Content-Type": "application/json",
     }
     async with aiohttp.ClientSession(trust_env=True) as session:
@@ -412,7 +413,7 @@ async def _keenable_search(
 
 async def _keenable_fetch(provider_settings: dict, params: dict) -> dict:
     api_key = await _KEENABLE_KEY_ROTATOR.get(provider_settings)
-    header = {"X-API-Key": api_key}
+    header = {"X-API-Key": api_key, "X-Keenable-Title": "astrbot"}
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.get(
             "https://api.keenable.ai/v1/fetch",

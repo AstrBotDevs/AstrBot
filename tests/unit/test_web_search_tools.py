@@ -479,6 +479,7 @@ async def test_keenable_search_uses_api_key_header_and_falls_back_to_description
         "json": {"query": "AstrBot"},
         "headers": {
             "X-API-Key": "keenable-key",
+            "X-Keenable-Title": "astrbot",
             "Content-Type": "application/json",
         },
     }
@@ -586,7 +587,7 @@ async def test_keenable_fetch_uses_get_with_api_key_header(monkeypatch):
     assert session.got == {
         "url": "https://api.keenable.ai/v1/fetch",
         "params": {"url": "https://example.com"},
-        "headers": {"X-API-Key": "keenable-key"},
+        "headers": {"X-API-Key": "keenable-key", "X-Keenable-Title": "astrbot"},
     }
 
 
