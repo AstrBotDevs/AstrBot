@@ -790,13 +790,14 @@ function handleCompositionEnd(e: CompositionEvent) {
     // Only sync if the DOM hasn't been changed externally in the meantime.
     if (el && el.value === endValue && el.value !== props.prompt) {
       emit("update:prompt", el.value);
+      // Re-evaluate command suggestions that were suppressed during IME
+      // composition (handleInput checks isComposing). Only needed when
+      // the value actually changed. Runs in a nested nextTick so
+      // props.prompt reflects the emit above.
+      nextTick(() => {
+        handleInput();
+      });
     }
-    // Re-evaluate command suggestions that were suppressed during IME
-    // composition (handleInput checks isComposing). This runs in a
-    // nested nextTick so props.prompt reflects the emit above.
-    nextTick(() => {
-      handleInput();
-    });
   });
 }
 
