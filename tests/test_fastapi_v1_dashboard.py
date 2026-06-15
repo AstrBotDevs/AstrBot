@@ -9,7 +9,6 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
-from starlette.routing import Route, WebSocketRoute
 
 import astrbot.dashboard.services.config_service as config_service
 from astrbot.core import file_token_service
@@ -2196,35 +2195,24 @@ async def test_v1_token_file_is_public(
 
 
 def test_v1_openapi_alias_websocket_routes_are_mounted(asgi_app):
-    websocket_paths = set()
-    pending_routes = list(asgi_app.router.routes)
-    while pending_routes:
-        route = pending_routes.pop()
-        if isinstance(route, WebSocketRoute):
-            websocket_paths.add(route.path)
-        # FastAPI may expose included routers as intermediate route nodes.
-        if nested_routes := getattr(route, "routes", None):
-            pending_routes.extend(nested_routes)
-
-    assert "/api/v1/chat/ws" in websocket_paths
-    assert "/api/v1/live-chat/ws" in websocket_paths
-    assert "/api/v1/unified-chat/ws" in websocket_paths
+    assert str(asgi_app.url_path_for("chat_ws")) == "/api/v1/chat/ws"
+    assert str(asgi_app.url_path_for("live_chat_ws")) == "/api/v1/live-chat/ws"
+    assert str(asgi_app.url_path_for("unified_chat_ws")) == "/api/v1/unified-chat/ws"
 
 
 def test_dashboard_config_aliases_are_registered_on_fastapi(asgi_app):
-    http_paths = set()
-    pending_routes = list(asgi_app.router.routes)
-    while pending_routes:
-        route = pending_routes.pop()
-        if isinstance(route, Route):
-            http_paths.add(route.path)
-        # FastAPI may expose included routers as intermediate route nodes.
-        if nested_routes := getattr(route, "routes", None):
-            pending_routes.extend(nested_routes)
-
-    assert "/api/config/platform/list" in http_paths
-    assert "/api/config/provider/list" in http_paths
-    assert "/api/config/provider_sources/update" in http_paths
+    assert (
+        str(asgi_app.url_path_for("dashboard_alias_platform_list"))
+        == "/api/config/platform/list"
+    )
+    assert (
+        str(asgi_app.url_path_for("dashboard_alias_provider_list"))
+        == "/api/config/provider/list"
+    )
+    assert (
+        str(asgi_app.url_path_for("update_dashboard_alias_provider_source"))
+        == "/api/config/provider_sources/update"
+    )
 
 
 @pytest.mark.asyncio

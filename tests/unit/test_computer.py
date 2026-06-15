@@ -4,6 +4,7 @@ This module tests the ComputerClient, Booter implementations (local, shipyard, b
 filesystem operations, Python execution, shell execution, and security restrictions.
 """
 
+import shlex
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -169,7 +170,7 @@ class TestLocalShellComponent:
         ):
             # Use python to read file to avoid Windows vs Unix command differences
             result = await shell.exec(
-                f'python -c "print(open(r\\"{test_file}\\"))"',
+                f'{shlex.quote(sys.executable)} -c "print(open(r\\"{test_file}\\").read())"',
                 cwd=str(tmp_path),
             )
             assert result["exit_code"] == 0
@@ -179,7 +180,7 @@ class TestLocalShellComponent:
         """Test command execution with custom environment variables."""
         shell = LocalShellComponent()
         result = await shell.exec(
-            'python -c "import os; print(os.environ.get(\\"TEST_VAR\\", \\"\\"))"',
+            f'{shlex.quote(sys.executable)} -c "import os; print(os.environ.get(\\"TEST_VAR\\", \\"\\"))"',
             env={"TEST_VAR": "test_value"},
         )
         assert result["exit_code"] == 0
