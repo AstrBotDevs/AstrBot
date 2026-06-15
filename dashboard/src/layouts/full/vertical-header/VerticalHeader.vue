@@ -659,6 +659,13 @@ function waitForAstrBotRestart(initialStartTime: number | string | null) {
 }
 
 function applyUpdateProgress(payload: UpdateProgress) {
+  if (
+    payload.status === "idle" &&
+    payload.id === updateProgress.value.id &&
+    updateProgress.value.status !== "idle"
+  ) {
+    return;
+  }
   updateProgress.value = {
     ...createEmptyUpdateProgress(),
     ...payload,
@@ -667,6 +674,11 @@ function applyUpdateProgress(payload: UpdateProgress) {
       ...(payload.stages || {}),
     },
   };
+  if (payload.stage === "restart") {
+    stopUpdateProgressPolling();
+    waitForAstrBotRestart(restartStartTime.value);
+    return;
+  }
   if (payload.status === "success" || payload.status === "error") {
     stopUpdateProgressPolling();
   }
