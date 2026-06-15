@@ -37,7 +37,11 @@ class InitialLoader:
         core_task = core_lifecycle.start()
 
         if not self.webui_available:
-            await core_task
+            try:
+                await core_task
+            except asyncio.CancelledError:
+                logger.info("🌈 正在关闭 AstrBot...")
+                await core_lifecycle.stop()
             return
 
         webui_dir = self.webui_dir

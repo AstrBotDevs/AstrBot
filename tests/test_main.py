@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -301,3 +302,24 @@ async def test_initial_loader_skips_unavailable_webui():
     core_lifecycle.initialize.assert_awaited_once()
     core_lifecycle.start.assert_awaited_once()
     mock_dashboard.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_initial_loader_stops_core_when_unavailable_webui_is_cancelled():
+    from astrbot.core.initial_loader import InitialLoader
+
+    core_lifecycle = mock.MagicMock()
+    core_lifecycle.initialize = mock.AsyncMock()
+    core_lifecycle.start = mock.AsyncMock(side_effect=asyncio.CancelledError)
+    core_lifecycle.stop = mock.AsyncMock()
+
+    with mock.patch(
+        "astrbot.core.initial_loader.AstrBotCoreLifecycle",
+        return_value=core_lifecycle,
+    ):
+        loader = InitialLoader(mock.MagicMock(), mock.MagicMock())
+        loader.webui_available = False
+
+        await loader.start()
+
+    core_lifecycle.stop.assert_awaited_once()
