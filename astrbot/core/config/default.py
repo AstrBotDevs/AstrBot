@@ -7,6 +7,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = "4.26.0-beta.1"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+FORWARD_NODE_MAX_LENGTH_DEFAULT = 1000
+FORWARD_NODE_HARD_LIMIT_DEFAULT = 1200
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
         "description": "Base URL",
@@ -62,8 +64,8 @@ DEFAULT_CONFIG = {
         },
         "reply_prefix": "",
         "forward_threshold": 1500,
-        "forward_node_max_length": 1000,
-        "forward_node_hard_limit": 1200,
+        "forward_node_max_length": FORWARD_NODE_MAX_LENGTH_DEFAULT,
+        "forward_node_hard_limit": FORWARD_NODE_HARD_LIMIT_DEFAULT,
         "enable_id_white_list": True,
         "id_whitelist": [],
         "id_whitelist_log": True,

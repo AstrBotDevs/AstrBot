@@ -5,6 +5,10 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
+from astrbot.core.config.default import (
+    FORWARD_NODE_HARD_LIMIT_DEFAULT,
+    FORWARD_NODE_MAX_LENGTH_DEFAULT,
+)
 from astrbot.core.message.components import (
     At,
     Image,
@@ -53,28 +57,26 @@ class ResultDecorateStage(Stage):
         ]
 
         # Long-reply auto-forward node splitting settings
-        _default_forward_node_max_length = 1000
-        _default_forward_node_hard_limit = 1200
         try:
             self.forward_node_max_length = int(
                 ctx.astrbot_config["platform_settings"].get(
-                    "forward_node_max_length", _default_forward_node_max_length
+                    "forward_node_max_length", FORWARD_NODE_MAX_LENGTH_DEFAULT
                 )
             )
         except (TypeError, ValueError):
-            self.forward_node_max_length = _default_forward_node_max_length
+            self.forward_node_max_length = FORWARD_NODE_MAX_LENGTH_DEFAULT
         try:
             self.forward_node_hard_limit = int(
                 ctx.astrbot_config["platform_settings"].get(
-                    "forward_node_hard_limit", _default_forward_node_hard_limit
+                    "forward_node_hard_limit", FORWARD_NODE_HARD_LIMIT_DEFAULT
                 )
             )
         except (TypeError, ValueError):
-            self.forward_node_hard_limit = _default_forward_node_hard_limit
+            self.forward_node_hard_limit = FORWARD_NODE_HARD_LIMIT_DEFAULT
         if self.forward_node_max_length <= 0:
-            self.forward_node_max_length = _default_forward_node_max_length
+            self.forward_node_max_length = FORWARD_NODE_MAX_LENGTH_DEFAULT
         if self.forward_node_hard_limit <= 0:
-            self.forward_node_hard_limit = _default_forward_node_hard_limit
+            self.forward_node_hard_limit = FORWARD_NODE_HARD_LIMIT_DEFAULT
         if self.forward_node_max_length > self.forward_node_hard_limit:
             logger.warning(
                 "forward_node_max_length is greater than forward_node_hard_limit; "
@@ -189,19 +191,16 @@ class ResultDecorateStage(Stage):
         If none exists, fall back to the nearest breakpoint before target_len.
         If still none, hard-cut at hard_limit.
         """
+        search_end = min(hard_limit, len(text))
         if len(text) <= target_len:
             return len(text)
 
-        search_end = min(hard_limit, len(text))
         if split_pattern is not None:
-            # Look for breakpoints after target_len but within hard_limit.
-            for match in split_pattern.finditer(text, target_len, search_end):
-                return match.end()
-
-            # Fall back to the nearest breakpoint before target_len.
             previous_end = 0
-            for match in split_pattern.finditer(text, 0, min(target_len, len(text))):
-                if 0 < match.end() <= target_len:
+            for match in split_pattern.finditer(text, 0, search_end):
+                if match.end() >= target_len:
+                    return match.end()
+                if match.end() > 0:
                     previous_end = match.end()
             if previous_end > 0:
                 return previous_end

@@ -5,6 +5,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from astrbot.core.config.default import (
+    FORWARD_NODE_HARD_LIMIT_DEFAULT,
+    FORWARD_NODE_MAX_LENGTH_DEFAULT,
+)
 from astrbot.core.message.components import At, Image, Node, Nodes, Plain, Reply
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
@@ -54,8 +58,11 @@ def _make_configured_stage(
     stage.split_mode = "regex"
     stage.regex = ".*?[。？！~…]+|.+$"
     stage.split_words = list(DEFAULT_SPLIT_WORDS)
+    escaped_words = sorted(
+        [re.escape(w) for w in stage.split_words], key=len, reverse=True
+    )
     stage.split_words_pattern = re.compile(
-        f"(.*?({'|'.join(sorted([re.escape(w) for w in stage.split_words], key=len, reverse=True))})|.+$)",
+        f"(.*?({'|'.join(escaped_words)})|.+$)",
         re.DOTALL,
     )
     stage.words_count_threshold = 150
@@ -132,6 +139,12 @@ class TestFindForwardSplitPos:
         text = "a" * 45 + "\n" + "b" * 100
         pos = ResultDecorateStage._find_forward_split_pos(text, 40, 70, pattern)
         assert pos == 46
+
+    def test_multichar_breakpoint_crossing_target_boundary(self):
+        pattern = re.compile(r"(?:END|\n)+")
+        text = "a" * 49 + "END" + "b" * 100
+        pos = ResultDecorateStage._find_forward_split_pos(text, 50, 70, pattern)
+        assert pos == 52
 
 
 class TestBuildForwardNodes:
@@ -469,8 +482,8 @@ class TestConfigSanitization:
         )
         stage = ResultDecorateStage()
         await stage.initialize(ctx)
-        assert stage.forward_node_max_length == 1000
-        assert stage.forward_node_hard_limit == 1200
+        assert stage.forward_node_max_length == FORWARD_NODE_MAX_LENGTH_DEFAULT
+        assert stage.forward_node_hard_limit == FORWARD_NODE_HARD_LIMIT_DEFAULT
 
     @pytest.mark.asyncio
     async def test_initialize_converges_max_greater_than_hard(self):
