@@ -1290,46 +1290,37 @@ onMounted(async () => {
               class="update-progress-panel mt-5"
               :class="{ 'update-progress-panel--success': restartCompleted }"
             >
-              <div v-if="restartCompleted" class="update-success-panel">
-                <div class="update-success-header">
-                  <v-icon
-                    icon="mdi-check-circle"
-                    color="success"
-                    size="34"
-                  ></v-icon>
-                  <div>
-                    <div class="text-subtitle-1 font-weight-medium">
-                      {{ t("core.header.updateDialog.progress.successReady") }}
-                    </div>
-                    <div class="text-caption text-medium-emphasis">
-                      {{
-                        t("core.header.updateDialog.progress.autoReloadIn", {
-                          seconds: restartReloadCountdown,
-                        })
-                      }}
-                    </div>
-                  </div>
-                </div>
-                <v-progress-linear
-                  :model-value="100"
-                  height="8"
-                  rounded
+              <div
+                v-if="restartCompleted"
+                class="update-feedback-panel update-feedback-panel--success"
+              >
+                <v-icon
+                  icon="mdi-check-circle"
                   color="success"
-                ></v-progress-linear>
-                <div class="d-flex justify-end">
-                  <v-btn
-                    color="success"
-                    variant="elevated"
-                    size="small"
-                    @click="reloadAfterUpdate"
-                  >
-                    <v-icon class="mr-1" size="18">mdi-refresh</v-icon>
-                    {{ t("core.header.updateDialog.progress.reloadNow") }}
-                  </v-btn>
+                  size="46"
+                ></v-icon>
+                <div class="text-subtitle-1 font-weight-medium">
+                  {{ t("core.header.updateDialog.progress.successReady") }}
                 </div>
+                <div class="text-caption text-medium-emphasis">
+                  {{
+                    t("core.header.updateDialog.progress.autoReloadIn", {
+                      seconds: restartReloadCountdown,
+                    })
+                  }}
+                </div>
+                <v-btn
+                  color="success"
+                  variant="elevated"
+                  size="small"
+                  @click="reloadAfterUpdate"
+                >
+                  <v-icon class="mr-1" size="18">mdi-refresh</v-icon>
+                  {{ t("core.header.updateDialog.progress.reloadNow") }}
+                </v-btn>
               </div>
 
-              <div v-else-if="restartWaiting" class="restart-waiting-panel">
+              <div v-else-if="restartWaiting" class="update-feedback-panel">
                 <v-progress-circular
                   indeterminate
                   color="primary"
@@ -2023,6 +2014,33 @@ onMounted(async () => {
   padding: 16px;
 }
 
+.update-progress-panel {
+  overflow: hidden;
+  position: relative;
+  transition:
+    border-color 0.9s ease,
+    box-shadow 0.9s ease;
+}
+
+.update-progress-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(var(--v-theme-success), 0.16),
+    rgba(var(--v-theme-success), 0.07)
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.1s ease;
+}
+
+.update-progress-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
 .release-message-preview {
   max-height: 220px;
   overflow: hidden;
@@ -2052,20 +2070,50 @@ onMounted(async () => {
 }
 
 .update-progress-panel--success {
-  border-color: rgba(var(--v-theme-success), 0.42);
-  background: rgba(var(--v-theme-success), 0.08);
+  border-color: rgba(var(--v-theme-success), 0.48);
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.08);
 }
 
-.update-success-panel {
+.update-progress-panel--success::before {
+  animation: update-success-green-in 1.2s ease-out;
+  opacity: 1;
+}
+
+.update-feedback-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 150px;
+  padding: 18px 0 22px;
+  text-align: center;
 }
 
-.update-success-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.update-feedback-panel--success {
+  animation: update-success-content-in 0.45s ease-out both;
+}
+
+@keyframes update-success-green-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes update-success-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .advanced-settings-toggle {
@@ -2085,14 +2133,6 @@ onMounted(async () => {
 
 .advanced-settings-toggle:hover {
   color: rgb(var(--v-theme-primary));
-}
-
-.restart-waiting-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 0 22px;
 }
 
 .update-stage-list {
