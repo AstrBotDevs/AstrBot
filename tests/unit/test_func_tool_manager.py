@@ -9,6 +9,8 @@ from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    KeenableExtractWebPageTool,
+    KeenableWebSearchTool,
 )
 
 
@@ -345,3 +347,15 @@ def test_firecrawl_tools_are_registered_as_builtin_tools():
     assert extract_tool.name == "firecrawl_extract_web_page"
     assert manager.is_builtin_tool("web_search_firecrawl") is True
     assert manager.is_builtin_tool("firecrawl_extract_web_page") is True
+
+
+def test_keenable_tools_are_registered_as_builtin_tools():
+    manager = FunctionToolManager()
+
+    search_tool = manager.get_builtin_tool(KeenableWebSearchTool)
+    extract_tool = manager.get_builtin_tool(KeenableExtractWebPageTool)
+
+    assert search_tool.name == "web_search_keenable"
+    assert extract_tool.name == "keenable_extract_web_page"
+    assert manager.is_builtin_tool("web_search_keenable") is True
+    assert manager.is_builtin_tool("keenable_extract_web_page") is True

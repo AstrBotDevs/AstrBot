@@ -510,6 +510,37 @@ class TestBuiltinToolInjection:
         assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
         assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
 
+    @pytest.mark.asyncio
+    async def test_apply_web_search_tools_adds_keenable_search_and_extract_tools(
+        self, mock_event, mock_context
+    ):
+        """Test Keenable web search injects search and extract tools."""
+        module = ama
+        req = ProviderRequest()
+        mock_context.get_config.return_value = {
+            "provider_settings": {
+                "web_search": True,
+                "websearch_provider": "keenable",
+            }
+        }
+        search_tool = MagicMock(spec=FunctionTool)
+        search_tool.name = "web_search_keenable"
+        extract_tool = MagicMock(spec=FunctionTool)
+        extract_tool.name = "keenable_extract_web_page"
+        tool_mgr = MagicMock()
+        tool_mgr.get_builtin_tool.side_effect = [search_tool, extract_tool]
+        mock_context.get_llm_tool_manager.return_value = tool_mgr
+
+        await module._apply_web_search_tools(mock_event, req, mock_context)
+
+        assert tool_mgr.get_builtin_tool.call_args_list == [
+            ((module.KeenableWebSearchTool,),),
+            ((module.KeenableExtractWebPageTool,),),
+        ]
+        assert req.func_tool is not None
+        assert req.func_tool.get_tool("web_search_keenable") is search_tool
+        assert req.func_tool.get_tool("keenable_extract_web_page") is extract_tool
+
     def test_apply_web_search_citation_prompt_for_webchat(self, mock_event):
         module = ama
         req = ProviderRequest(system_prompt="base")

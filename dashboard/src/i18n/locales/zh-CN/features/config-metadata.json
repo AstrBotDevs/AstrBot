@@ -135,6 +135,10 @@
           "description": "百度千帆智能云 APP Builder API Key",
           "hint": "参考:[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
         },
+        "websearch_keenable_key": {
+          "description": "Keenable API Key",
+          "hint": "可添加多个 Key 进行轮询。获取地址:[https://keenable.ai](https://keenable.ai)"
+        },
         "web_search_link": {
           "description": "显示来源引用"
         }

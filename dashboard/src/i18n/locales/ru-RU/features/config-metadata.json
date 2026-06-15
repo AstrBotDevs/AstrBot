@@ -133,6 +133,10 @@
                     "description": "API-ключ Baidu Qianfan APP Builder",
                     "hint": "Ссылка: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
                 },
+                "websearch_keenable_key": {
+                    "description": "API-ключ Keenable",
+                    "hint": "Можно добавить несколько ключей для ротации. Получить ключ: [https://keenable.ai](https://keenable.ai)."
+                },
                 "web_search_link": {
                     "description": "Показывать ссылки на источники"
                 }

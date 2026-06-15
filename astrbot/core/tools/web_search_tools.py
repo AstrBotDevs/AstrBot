@@ -21,6 +21,8 @@ WEB_SEARCH_TOOL_NAMES = [
     "web_search_brave",
     "web_search_firecrawl",
     "firecrawl_extract_web_page",
+    "web_search_keenable",
+    "keenable_extract_web_page",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -41,6 +43,10 @@ _FIRECRAWL_WEB_SEARCH_TOOL_CONFIG = {
 _BAIDU_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "baidu_ai_search",
+}
+_KEENABLE_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "keenable",
 }
 
 
@@ -76,6 +82,7 @@ _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
 _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
 _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
+_KEENABLE_KEY_ROTATOR = _KeyRotator("websearch_keenable_key", "Keenable")
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -99,6 +106,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_bocha_key",
         "websearch_brave_key",
         "websearch_firecrawl_key",
+        "websearch_keenable_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -368,6 +376,60 @@ async def _baidu_search(
                 for item in references
                 if item.get("url")
             ]
+
+
+async def _keenable_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    api_key = await _KEENABLE_KEY_ROTATOR.get(provider_settings)
+    header = {
+        "X-API-Key": api_key,
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            "https://api.keenable.ai/v1/search",
+            json=payload,
+            headers=header,
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    f"Keenable web search failed: {reason}, status: {response.status}",
+                )
+            data = await response.json()
+            return [
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("url", ""),
+                    snippet=item.get("snippet") or item.get("description") or "",
+                )
+                for item in data.get("results", [])
+                if item.get("url")
+            ]
+
+
+async def _keenable_fetch(provider_settings: dict, params: dict) -> dict:
+    api_key = await _KEENABLE_KEY_ROTATOR.get(provider_settings)
+    header = {"X-API-Key": api_key}
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.get(
+            "https://api.keenable.ai/v1/fetch",
+            params=params,
+            headers=header,
+        ) as response:
+            if response.status != 200:
+                reason = await response.text()
+                raise Exception(
+                    f"Keenable web fetch failed: {reason}, status: {response.status}",
+                )
+            data = await response.json()
+            if not data.get("content"):
+                raise ValueError(
+                    "Error: Keenable web fetcher does not return any results."
+                )
+            return data
 
 
 @builtin_tool(config=_TAVILY_WEB_SEARCH_TOOL_CONFIG)
@@ -803,10 +865,117 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
+@builtin_tool(config=_KEENABLE_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class KeenableWebSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "web_search_keenable"
+    description: str = (
+        "A web search tool based on Keenable Search API, used to retrieve web "
+        "pages related to the user's query."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "site": {
+                    "type": "string",
+                    "description": 'Optional. Restrict results to a specific site, for example "techcrunch.com".',
+                },
+                "published_after": {
+                    "type": "string",
+                    "description": 'Optional. Only include pages published at or after this time. Accepts "YYYY-MM-DD", an ISO 8601 datetime, or a relative delta like "7d", "3mo".',
+                },
+                "published_before": {
+                    "type": "string",
+                    "description": "Optional. Only include pages published at or before this time. Same formats as published_after.",
+                },
+                "acquired_after": {
+                    "type": "string",
+                    "description": "Optional. Only include pages indexed at or after this time. Same formats as published_after.",
+                },
+                "acquired_before": {
+                    "type": "string",
+                    "description": "Optional. Only include pages indexed at or before this time. Same formats as published_after.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_keenable_key", []):
+            return "Error: Keenable API key is not configured in AstrBot."
+
+        payload = {"query": kwargs["query"]}
+        for key in (
+            "site",
+            "published_after",
+            "published_before",
+            "acquired_after",
+            "acquired_before",
+        ):
+            if kwargs.get(key):
+                payload[key] = kwargs[key]
+
+        results = await _keenable_search(provider_settings, payload)
+        if not results:
+            return "Error: Keenable web searcher does not return any results."
+        return _search_result_payload(results)
+
+
+@builtin_tool(config=_KEENABLE_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class KeenableExtractWebPageTool(FunctionTool[AstrAgentContext]):
+    name: str = "keenable_extract_web_page"
+    description: str = (
+        "Extract the content of a web page using Keenable. "
+        "Only URLs indexed by Keenable are supported."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Required. A URL to extract content from.",
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "description": "Optional. Maximum number of characters of content to return. Default is 50000.",
+                },
+            },
+            "required": ["url"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        if not provider_settings.get("websearch_keenable_key", []):
+            return "Error: Keenable API key is not configured in AstrBot."
+
+        url = str(kwargs.get("url", "")).strip()
+        if not url:
+            return "Error: url must be a non-empty string."
+
+        params = {"url": url}
+        if kwargs.get("max_chars"):
+            params["max_chars"] = kwargs["max_chars"]
+
+        result = await _keenable_fetch(provider_settings, params)
+        content = result.get("content", "")
+        result_url = result.get("url") or url
+        ret = f"URL: {result_url}\nContent: {content}" if content else ""
+        return ret or "Error: Keenable web fetcher does not return any results."
+
+
 __all__ = [
     "BaiduWebSearchTool",
     "BochaWebSearchTool",
     "BraveWebSearchTool",
+    "KeenableExtractWebPageTool",
+    "KeenableWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",
