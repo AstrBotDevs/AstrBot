@@ -85,10 +85,13 @@ async def call_event_hook(
     #
 
     """
+    from astrbot.core.star.session_plugin_manager import SessionPluginManager
+
     handlers = star_handlers_registry.get_handlers_by_event_type(
         hook_type,
         plugins_name=event.plugins_name,
     )
+    handlers = await SessionPluginManager.filter_handlers_by_session(event, handlers)
     for handler in handlers:
         try:
             assert inspect.iscoroutinefunction(handler.handler)
