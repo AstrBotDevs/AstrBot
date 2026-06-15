@@ -10,6 +10,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import MediaResolver
 
 
 class MattermostClient:
@@ -241,7 +242,12 @@ class MattermostClient:
             if mime_type.startswith("image/"):
                 components.append(Image.fromFileSystem(str(file_path)))
             elif mime_type.startswith("audio/"):
-                components.append(Record.fromFileSystem(str(file_path)))
+                path_wav = await MediaResolver(
+                    str(file_path),
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                components.append(Record(file=path_wav, url=path_wav))
             elif mime_type.startswith("video/"):
                 components.append(Video.fromFileSystem(str(file_path)))
             else:

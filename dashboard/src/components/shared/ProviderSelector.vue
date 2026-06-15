@@ -179,7 +179,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import axios from 'axios'
+import { providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue'
 import ProviderPage from '@/views/ProviderPage.vue'
@@ -263,11 +263,7 @@ async function openDialog() {
 async function loadProviders() {
   loading.value = true
   try {
-    const response = await axios.get('/api/config/provider/list', {
-      params: {
-        provider_type: props.providerType
-      }
-    })
+    const response = await providerApi.listByProviderType(props.providerType)
     if (response.data.status === 'ok') {
       const providers = response.data.data || []
       providerList.value = props.providerSubtype

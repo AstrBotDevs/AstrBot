@@ -17,6 +17,7 @@ import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
+import { authApi, statsApi, updatesApi } from "@/api/v1";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 
 enableKatex();
@@ -31,7 +32,7 @@ const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
 const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
 let dialog = ref(false);
 let accountWarning = ref(false);
-let accountWarningLegacy = ref(false);
+let accountWarningMd5 = ref(false);
 let accountWarningUpgrade = ref(false);
 let updateStatusDialog = ref(false);
 let aboutDialog = ref(false);
@@ -47,7 +48,7 @@ let hasNewVersion = ref(false);
 let botCurrVersion = ref("");
 let dashboardHasNewVersion = ref(false);
 let dashboardCurrentVersion = ref("");
-let releases = ref([]);
+let releases = ref<any[]>([]);
 let releasesLoading = ref(false);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
@@ -350,24 +351,24 @@ function accountEdit() {
     ? confirmPassword.value
     : "";
 
-  axios
-    .post("/api/auth/account/edit", {
+  authApi
+    .updateAccount({
       password: currentPasswordValue,
       new_password: newPasswordValue,
       confirm_password: confirmPasswordValue,
-      new_username: newUsername.value ? newUsername.value : username,
+      new_username: newUsername.value || username || undefined,
     })
     .then((res) => {
       if (res.data.status == "error") {
         accountEditStatus.value.error = true;
-        accountEditStatus.value.message = res.data.message;
+        accountEditStatus.value.message = res.data.message || "";
         password.value = "";
         newPassword.value = "";
         confirmPassword.value = "";
         return;
       }
       accountEditStatus.value.success = true;
-      accountEditStatus.value.message = res.data.message;
+      accountEditStatus.value.message = res.data.message || "";
       setTimeout(() => {
         dialog.value = !dialog.value;
         const authStore = useAuthStore();
@@ -391,37 +392,37 @@ function accountEdit() {
 }
 
 function getVersion() {
-  axios
-    .get("/api/stat/version")
+  statsApi
+    .version()
     .then((res) => {
-      botCurrVersion.value = "v" + res.data.data.version;
-      dashboardCurrentVersion.value = res.data.data?.dashboard_version;
+      botCurrVersion.value = "v" + (res.data.data.version || "");
+      dashboardCurrentVersion.value = res.data.data?.dashboard_version || "";
       commonStore.setAstrBotVersion(
-        res.data.data.version,
-        res.data.data?.dashboard_version,
+        res.data.data.version || "",
+        res.data.data?.dashboard_version || undefined,
       );
       const change_pwd_hint = res.data.data?.change_pwd_hint;
-      const legacy_pwd_hint = res.data.data?.legacy_pwd_hint;
+      const md5_pwd_hint = res.data.data?.md5_pwd_hint;
       const password_upgrade_required =
         res.data.data?.password_upgrade_required;
-      if (change_pwd_hint || legacy_pwd_hint || password_upgrade_required) {
+      if (change_pwd_hint || md5_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
         accountWarningUpgrade.value = !!password_upgrade_required;
-        accountWarningLegacy.value =
-          !!legacy_pwd_hint && !password_upgrade_required;
+        accountWarningMd5.value =
+          !!md5_pwd_hint && !password_upgrade_required;
         if (
           change_pwd_hint ||
-          (legacy_pwd_hint && !password_upgrade_required)
+          (md5_pwd_hint && !password_upgrade_required)
         ) {
           localStorage.setItem("change_pwd_hint", "true");
         } else {
           localStorage.removeItem("change_pwd_hint");
         }
-        if (legacy_pwd_hint && !password_upgrade_required) {
-          localStorage.setItem("legacy_pwd_hint", "true");
+        if (md5_pwd_hint && !password_upgrade_required) {
+          localStorage.setItem("md5_pwd_hint", "true");
         } else {
-          localStorage.removeItem("legacy_pwd_hint");
+          localStorage.removeItem("md5_pwd_hint");
         }
         if (password_upgrade_required) {
           localStorage.setItem("password_upgrade_required", "true");
@@ -429,10 +430,10 @@ function getVersion() {
           localStorage.removeItem("password_upgrade_required");
         }
       } else {
-        accountWarningLegacy.value = false;
+        accountWarningMd5.value = false;
         accountWarningUpgrade.value = false;
         localStorage.removeItem("change_pwd_hint");
-        localStorage.removeItem("legacy_pwd_hint");
+        localStorage.removeItem("md5_pwd_hint");
         localStorage.removeItem("password_upgrade_required");
       }
     })
@@ -443,30 +444,31 @@ function getVersion() {
 
 function initPasswordWarningFromStorage() {
   const hasChangePwdHint = localStorage.getItem("change_pwd_hint") === "true";
-  const hasLegacyPwdHint = localStorage.getItem("legacy_pwd_hint") === "true";
+  const hasMd5PwdHint =
+    localStorage.getItem("md5_pwd_hint") === "true";
   const hasPasswordUpgradeRequired =
     localStorage.getItem("password_upgrade_required") === "true";
-  if (hasChangePwdHint || hasLegacyPwdHint || hasPasswordUpgradeRequired) {
+  if (hasChangePwdHint || hasMd5PwdHint || hasPasswordUpgradeRequired) {
     dialog.value = true;
     accountWarning.value = true;
     accountWarningUpgrade.value = hasPasswordUpgradeRequired;
-    accountWarningLegacy.value =
-      hasLegacyPwdHint && !hasPasswordUpgradeRequired;
+    accountWarningMd5.value =
+      hasMd5PwdHint && !hasPasswordUpgradeRequired;
   }
 }
 
 function checkUpdate() {
   updateStatus.value = t("core.header.updateDialog.status.checking");
-  axios
-    .get("/api/update/check")
+  updatesApi
+    .check()
     .then((res) => {
       hasNewVersion.value = res.data.data.has_new_version;
 
       if (res.data.data.has_new_version) {
-        releaseMessage.value = res.data.message;
+        releaseMessage.value = res.data.message || "";
         updateStatus.value = t("core.header.version.hasNewVersion");
       } else {
-        updateStatus.value = res.data.message;
+        updateStatus.value = res.data.message || "";
       }
       dashboardHasNewVersion.value = isDesktopReleaseMode.value
         ? false
@@ -486,8 +488,8 @@ function checkUpdate() {
 
 function getReleases() {
   releasesLoading.value = true;
-  return axios
-    .get("/api/update/releases")
+  return updatesApi
+    .releases()
     .then((res) => {
       releases.value = res.data.data.map((item: any) => {
         item.published_at = new Date(item.published_at).toLocaleString();
@@ -563,8 +565,11 @@ function stopRestartPolling() {
 }
 
 async function fetchAstrBotStartTime() {
-  const res = await axios.get("/api/stat/start-time", { timeout: 3000 });
-  const startTime = res.data?.data?.start_time ?? null;
+  const res = await statsApi.startTime();
+  const rawStartTime = res.data?.data?.start_time;
+  const parsedStartTime =
+    typeof rawStartTime === "number" ? rawStartTime : Number(rawStartTime || 0);
+  const startTime = Number.isFinite(parsedStartTime) ? parsedStartTime : 0;
   commonStore.startTime = startTime;
   return startTime;
 }
@@ -626,8 +631,8 @@ function applyUpdateProgress(payload: UpdateProgress) {
 function startUpdateProgressPolling(progressId: string) {
   stopUpdateProgressPolling();
   const poll = () => {
-    axios
-      .get("/api/update/progress", { params: { id: progressId } })
+    updatesApi
+      .progress(progressId)
       .then((res) => {
         if (res.data?.data) {
           applyUpdateProgress(res.data.data);
@@ -665,19 +670,19 @@ async function switchVersion(targetVersion: string) {
   restartStartTime.value = initialStartTime;
   startUpdateProgressPolling(progressId);
 
-  axios
-    .post("/api/update/do", {
+  updatesApi
+    .core({
       version: targetVersion,
       proxy: getSelectedGitHubProxy(),
       progress_id: progressId,
     })
     .then((res) => {
-      updateStatus.value = res.data.message;
+      updateStatus.value = res.data.message || "";
       updateProgress.value = {
         ...updateProgress.value,
         status:
           res.data.status === "ok" ? "success" : updateProgress.value.status,
-        message: res.data.message,
+        message: res.data.message || "",
         overall_percent:
           res.data.status === "ok" ? 100 : updateProgress.value.overall_percent,
       };
@@ -706,10 +711,10 @@ async function switchVersion(targetVersion: string) {
 function updateDashboard() {
   updatingDashboardLoading.value = true;
   updateStatus.value = t("core.header.updateDialog.status.updating");
-  axios
-    .post("/api/update/dashboard")
+  updatesApi
+    .dashboard()
     .then((res) => {
-      updateStatus.value = res.data.message;
+      updateStatus.value = res.data.message || "";
       if (res.data.status == "ok") {
         setTimeout(() => {
           window.location.reload();
@@ -725,13 +730,16 @@ function updateDashboard() {
     });
 }
 
-function toggleDarkMode() {
-  const newTheme =
-    customizer.uiTheme === "PurpleThemeDark"
-      ? "PurpleTheme"
-      : "PurpleThemeDark";
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+// 主题选项配置
+const themeOptions = [
+  { mode: 'light' as const,  icon: 'mdi-white-balance-sunny', labelKey: 'core.header.buttons.theme.light'  },
+  { mode: 'dark'  as const,  icon: 'mdi-weather-night',       labelKey: 'core.header.buttons.theme.dark'   },
+  { mode: 'system' as const, icon: 'mdi-sync',                labelKey: 'core.header.buttons.theme.system' },
+] as const;
+
+function setThemeMode(mode: 'light' | 'dark' | 'system') {
+  customizer.SET_THEME_MODE(mode);
+  theme.global.name.value = customizer.uiTheme;
 }
 
 function openReleaseNotesDialog(body: string, tag: string) {
@@ -1077,29 +1085,68 @@ onMounted(async () => {
         </v-card>
       </v-menu>
 
-      <!-- 主题切换 -->
-      <v-list-item
-        @click="toggleDarkMode()"
-        class="styled-menu-item"
-        rounded="md"
+      <!-- 主题切换分组 -->
+      <v-menu
+        open-on-click
+        :open-on-hover="!$vuetify.display.xs"
+        :open-delay="!$vuetify.display.xs ? 60 : 0"
+        :close-delay="!$vuetify.display.xs ? 120 : 0"
+        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+        offset="8"
       >
-        <template v-slot:prepend>
-          <v-icon>
-            {{
-              useCustomizerStore().uiTheme === "PurpleThemeDark"
-                ? "mdi-weather-night"
-                : "mdi-white-balance-sunny"
-            }}
-          </v-icon>
+        <template v-slot:activator="{ props: themeMenuProps }">
+          <v-list-item
+            v-bind="themeMenuProps"
+            @click.stop
+            class="styled-menu-item theme-group-trigger"
+            rounded="md"
+          >
+            <template v-slot:prepend>
+              <v-icon>mdi-brightness-6</v-icon>
+            </template>
+            <v-list-item-title>{{
+              t("core.header.buttons.theme.title")
+            }}</v-list-item-title>
+            <template v-slot:append>
+              <span class="theme-group-current">
+                <v-icon size="16">{{
+                  customizer.themeMode === 'dark'
+                    ? 'mdi-weather-night'
+                    : customizer.themeMode === 'system'
+                      ? 'mdi-theme-light-dark'
+                      : 'mdi-white-balance-sunny'
+                }}</v-icon>
+              </span>
+              <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
+            </template>
+          </v-list-item>
         </template>
-        <v-list-item-title>
-          {{
-            useCustomizerStore().uiTheme === "PurpleThemeDark"
-              ? t("core.header.buttons.theme.light")
-              : t("core.header.buttons.theme.dark")
-          }}
-        </v-list-item-title>
-      </v-list-item>
+
+        <v-card
+          class="styled-menu-card"
+          style="min-width: 170px"
+          elevation="8"
+          rounded="lg"
+        >
+          <v-list density="compact" class="styled-menu-list pa-1">
+            <v-list-item
+              v-for="option in themeOptions"
+              :key="option.mode"
+              @click="setThemeMode(option.mode)"
+              :class="{
+                'styled-menu-item-active': customizer.themeMode === option.mode,
+              }"
+              class="styled-menu-item"
+              rounded="md"
+            >
+              <template v-slot:prepend>
+                <v-icon size="18" class="theme-option-icon">{{ option.icon }}</v-icon>
+              </template>
+              <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-menu>
 
       <!-- 更新按钮 -->
       <v-list-item
@@ -1560,8 +1607,8 @@ onMounted(async () => {
               t(
                 accountWarningUpgrade
                   ? "core.header.accountDialog.securityWarningUpgrade"
-                  : accountWarningLegacy
-                  ? "core.header.accountDialog.securityWarningLegacy"
+                  : accountWarningMd5
+                  ? "core.header.accountDialog.securityWarningMd5"
                   : "core.header.accountDialog.securityWarning",
               )
             }}</strong>
@@ -1820,6 +1867,23 @@ onMounted(async () => {
 
 .language-submenu-card {
   min-width: 180px;
+}
+
+.theme-group-trigger :deep(.v-list-item__append) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-group-current {
+  display: flex;
+  align-items: center;
+  opacity: 0.75;
+}
+
+.theme-option-icon {
+  margin-right: 8px;
+  opacity: 0.85;
 }
 
 .mobile-mode-toggle-wrapper {

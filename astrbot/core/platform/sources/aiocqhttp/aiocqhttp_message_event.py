@@ -134,13 +134,24 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         session_id: str | None,
         messages: list[dict],
     ) -> None:
-        # session_id 必须是数字字符串
+        # session_id 必须是纯数字字符串
         session_id_int = cls._parse_session_id_int(session_id)
+        routing_params = {}
+        if isinstance(event, Event) and event.get("self_id"):
+            routing_params["self_id"] = event["self_id"]
 
         if is_group and isinstance(session_id_int, int):
-            await bot.send_group_msg(group_id=session_id_int, message=messages)
+            await bot.send_group_msg(
+                group_id=session_id_int,
+                message=messages,
+                **routing_params,
+            )
         elif not is_group and isinstance(session_id_int, int):
-            await bot.send_private_msg(user_id=session_id_int, message=messages)
+            await bot.send_private_msg(
+                user_id=session_id_int,
+                message=messages,
+                **routing_params,
+            )
         elif isinstance(event, Event):  # 最后兜底
             await bot.send(event=event, message=messages)
         else:
@@ -188,9 +199,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
                 if is_group:
                     payload["group_id"] = session_id
+                    if isinstance(event, Event) and event.get("self_id"):
+                        payload["self_id"] = event["self_id"]
                     await bot.call_action("send_group_forward_msg", **payload)
                 else:
                     payload["user_id"] = session_id
+                    if isinstance(event, Event) and event.get("self_id"):
+                        payload["self_id"] = event["self_id"]
                     await bot.call_action("send_private_forward_msg", **payload)
             elif isinstance(seg, File):
                 try:
@@ -265,14 +280,20 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         else:
             return None
 
+        routing_params = {}
+        if getattr(self.message_obj, "self_id", None):
+            routing_params["self_id"] = self.message_obj.self_id
+
         info: dict = await self.bot.call_action(
             "get_group_info",
             group_id=group_id,
+            **routing_params,
         )
 
         members: list[dict] = await self.bot.call_action(
             "get_group_member_list",
             group_id=group_id,
+            **routing_params,
         )
 
         owner_id = None

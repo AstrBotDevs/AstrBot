@@ -368,7 +368,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import axios from 'axios'
+import { backupApi } from '@/api/v1'
 import { useI18n } from '@/i18n/composables'
 import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog'
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot'
@@ -476,7 +476,7 @@ watch(activeTab, (newVal) => {
 const loadBackupList = async () => {
     loadingList.value = true
     try {
-        const response = await axios.get('/api/backup/list')
+        const response = await backupApi.list()
         if (response.data.status === 'ok') {
             backupList.value = response.data.data.items || []
         }
@@ -493,7 +493,7 @@ const startExport = async () => {
     exportProgress.value = { current: 0, total: 100, message: '' }
 
     try {
-        const response = await axios.post('/api/backup/export')
+        const response = await backupApi.create()
         if (response.data.status === 'ok') {
             exportTaskId.value = response.data.data.task_id
             pollExportProgress()
@@ -511,9 +511,7 @@ const pollExportProgress = async () => {
     if (!exportTaskId.value) return
 
     try {
-        const response = await axios.get('/api/backup/progress', {
-            params: { task_id: exportTaskId.value }
-        })
+        const response = await backupApi.progress(exportTaskId.value)
 
         if (response.data.status === 'ok') {
             const data = response.data.data
@@ -581,9 +579,7 @@ const uploadChunksInParallel = async (file, totalChunks, currentUploadId, curren
         formData.append('chunk_index', chunkIndex.toString())
         formData.append('chunk', chunk)
 
-        const response = await axios.post('/api/backup/upload/chunk', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        })
+        const response = await backupApi.uploadChunk(formData)
 
         if (response.data.status !== 'ok') {
             throw new Error(response.data.message)
@@ -638,7 +634,7 @@ const uploadAndCheck = async () => {
         }
 
         // 步骤1: 初始化分片上传（后端计算并返回 chunk_size 和 total_chunks）
-        const initResponse = await axios.post('/api/backup/upload/init', {
+        const initResponse = await backupApi.initUpload({
             filename: file.name,
             total_size: file.size
         })
@@ -659,7 +655,7 @@ const uploadAndCheck = async () => {
         // 步骤3: 完成上传
         uploadProgress.value.message = t('features.settings.backup.import.uploadComplete')
 
-        const completeResponse = await axios.post('/api/backup/upload/complete', {
+        const completeResponse = await backupApi.completeUpload({
             upload_id: uploadId.value
         })
 
@@ -672,9 +668,7 @@ const uploadAndCheck = async () => {
         // 步骤4: 预检查
         uploadProgress.value.message = t('features.settings.backup.import.checking')
 
-        const checkResponse = await axios.post('/api/backup/check', {
-            filename: uploadedFilename.value
-        })
+        const checkResponse = await backupApi.check(uploadedFilename.value)
 
         if (checkResponse.data.status !== 'ok') {
             throw new Error(checkResponse.data.message)
@@ -696,7 +690,7 @@ const uploadAndCheck = async () => {
         // 上传失败时尝试清理已上传的分片
         if (uploadId.value) {
             try {
-                await axios.post('/api/backup/upload/abort', {
+                await backupApi.abortUpload({
                     upload_id: uploadId.value
                 })
             } catch (abortError) {
@@ -717,10 +711,7 @@ const confirmImport = async () => {
     importProgress.value = { current: 0, total: 100, message: '' }
 
     try {
-        const response = await axios.post('/api/backup/import', {
-            filename: uploadedFilename.value,
-            confirmed: true
-        })
+        const response = await backupApi.import(uploadedFilename.value, true)
 
         if (response.data.status === 'ok') {
             importTaskId.value = response.data.data.task_id
@@ -739,9 +730,7 @@ const pollImportProgress = async () => {
     if (!importTaskId.value) return
 
     try {
-        const response = await axios.get('/api/backup/progress', {
-            params: { task_id: importTaskId.value }
-        })
+        const response = await backupApi.progress(importTaskId.value)
 
         if (response.data.status === 'ok') {
             const data = response.data.data
@@ -773,7 +762,7 @@ const resetImport = async () => {
     // 如果有进行中的上传，先取消
     if (uploadId.value && importStatus.value === 'uploading') {
         try {
-            await axios.post('/api/backup/upload/abort', {
+            await backupApi.abortUpload({
                 upload_id: uploadId.value
             })
         } catch (error) {
@@ -803,7 +792,7 @@ const downloadBackup = (filename) => {
     }
     
     // 直接使用浏览器下载，这样可以看到原生下载进度条
-    const downloadUrl = `/api/backup/download?filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(token)}`
+    const downloadUrl = backupApi.downloadUrl(filename, token)
     
     // 创建隐藏的 a 标签触发下载
     const link = document.createElement('a')
@@ -822,9 +811,7 @@ const restoreFromList = async (filename) => {
     
     // 预检查
     try {
-        const checkResponse = await axios.post('/api/backup/check', {
-            filename: filename
-        })
+        const checkResponse = await backupApi.check(filename)
 
         if (checkResponse.data.status !== 'ok') {
             throw new Error(checkResponse.data.message)
@@ -851,7 +838,7 @@ const deleteBackup = async (filename) => {
     if (!(await askForConfirmation(t('features.settings.backup.list.confirmDelete'), confirmDialog))) return
 
     try {
-        const response = await axios.post('/api/backup/delete', { filename })
+        const response = await backupApi.delete(filename)
         if (response.data.status === 'ok') {
             loadBackupList()
         } else {
@@ -906,8 +893,7 @@ const confirmRename = async () => {
     renameError.value = ''
 
     try {
-        const response = await axios.post('/api/backup/rename', {
-            filename: renameOldFilename.value,
+        const response = await backupApi.rename(renameOldFilename.value, {
             new_name: renameNewName.value
         })
 

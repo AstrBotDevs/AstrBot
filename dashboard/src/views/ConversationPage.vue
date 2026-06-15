@@ -384,9 +384,10 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { isCancel } from 'axios';
 import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+import { conversationApi } from '@/api/v1';
 import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
@@ -760,9 +761,8 @@ export default {
                     params.exclude_ids = 'astrbot';
                     params.exclude_platforms = 'webchat';
 
-                    const response = await axios.get('/api/conversation/list', {
+                    const response = await conversationApi.list(params, {
                         signal: controller.signal,
-                        params
                     });
 
                     this.lastAppliedFilters = { ...this.currentFilters }; // 记录已应用的筛选条件
@@ -803,7 +803,7 @@ export default {
                         this.showErrorMessage(response.data.message || this.tm('messages.fetchError'));
                     }
                 } catch (error) {
-                    if (axios.isCancel(error)) return;
+                    if (isCancel(error)) return;
                     
                     console.error('获取对话列表出错:', error);
                     if (error.response) {
@@ -825,10 +825,7 @@ export default {
 
             try {
                 console.log(`正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`);
-                const response = await axios.post('/api/conversation/detail', {
-                    user_id: item.user_id,
-                    cid: item.cid
-                });
+                const response = await conversationApi.get(item.user_id, item.cid);
 
                 if (response.data.status === "ok") {
                     try {
@@ -878,11 +875,13 @@ export default {
                     return;
                 }
 
-                const response = await axios.post('/api/conversation/update_history', {
-                    user_id: this.selectedConversation.user_id,
-                    cid: this.selectedConversation.cid,
+                const response = await conversationApi.replaceMessages(
+                    this.selectedConversation.user_id,
+                    this.selectedConversation.cid,
+                    {
                     history: historyJson
-                });
+                    }
+                );
 
                 if (response.data.status === "ok") {
                     this.conversationHistory = historyJson;
@@ -923,11 +922,13 @@ export default {
 
             this.loading = true;
             try {
-                const response = await axios.post('/api/conversation/update', {
-                    user_id: this.editedItem.user_id,
-                    cid: this.editedItem.cid,
+                const response = await conversationApi.update(
+                    this.editedItem.user_id,
+                    this.editedItem.cid,
+                    {
                     title: this.editedItem.title
-                });
+                    }
+                );
 
                 if (response.data.status === "ok") {
                     // 更新本地数据
@@ -963,10 +964,10 @@ export default {
         async deleteConversation() {
             this.loading = true;
             try {
-                const response = await axios.post('/api/conversation/delete', {
-                    user_id: this.selectedConversation.user_id,
-                    cid: this.selectedConversation.cid
-                });
+                const response = await conversationApi.delete(
+                    this.selectedConversation.user_id,
+                    this.selectedConversation.cid
+                );
 
                 if (response.data.status === "ok") {
                     const index = this.conversations.findIndex(item => item.user_id === this.selectedConversation.user_id && item.cid === this.selectedConversation.cid
@@ -1032,7 +1033,7 @@ export default {
                     cid: item.cid
                 }));
 
-                const response = await axios.post('/api/conversation/delete', {
+                const response = await conversationApi.batchDelete({
                     conversations: conversations
                 });
 
@@ -1085,10 +1086,8 @@ export default {
                     cid: item.cid
                 }));
 
-                const response = await axios.post('/api/conversation/export', {
+                const response = await conversationApi.export({
                     conversations: conversations
-                }, {
-                    responseType: 'blob' // 重要：告诉 axios 响应是一个 blob
                 });
 
                 // 创建一个下载链接
