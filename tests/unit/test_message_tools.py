@@ -8,6 +8,24 @@ import pytest
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 
 
+class _MockEvent:
+    """Minimal event mock with get_extra/set_extra support."""
+
+    def __init__(self, unified_msg_origin, role):
+        self.unified_msg_origin = unified_msg_origin
+        self.role = role
+        self._extras: dict = {}
+
+    def get_sender_id(self):
+        return "user-1"
+
+    def get_extra(self, key, default=None):
+        return self._extras.get(key, default)
+
+    def set_extra(self, key, value):
+        self._extras[key] = value
+
+
 def _make_context(
     current_session="feishu:GroupMessage:oc_xxx",
     role="admin",
@@ -23,11 +41,7 @@ def _make_context(
     }
     return SimpleNamespace(
         context=SimpleNamespace(
-            event=SimpleNamespace(
-                unified_msg_origin=current_session,
-                role=role,
-                get_sender_id=lambda: "user-1",
-            ),
+            event=_MockEvent(current_session, role),
             context=SimpleNamespace(
                 get_config=lambda umo: cfg,
                 send_message=AsyncMock(),
