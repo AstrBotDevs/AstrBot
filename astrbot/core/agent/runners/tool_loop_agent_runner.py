@@ -107,6 +107,33 @@ class _ToolExecutionInterrupted(Exception):
 ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
 
 
+def _extract_send_message_text(
+    tools_call_name: list[str] | None,
+    tools_call_args: list[dict] | None,
+) -> str | None:
+    """从 send_message_to_user 工具调用参数中提取纯文本内容。
+
+    用于比对 completion_text 与工具 payload 是否一致，判断是否为重复发送。
+    仅提取 type="plain" 的文本部分。
+    """
+    if not tools_call_name or not tools_call_args:
+        return None
+    for name, args in zip(tools_call_name, tools_call_args):
+        if name == "send_message_to_user" and isinstance(args, dict):
+            messages = args.get("messages")
+            if not isinstance(messages, list):
+                continue
+            texts = []
+            for msg in messages:
+                if isinstance(msg, dict) and msg.get("type") == "plain":
+                    text = msg.get("text", "").strip()
+                    if text:
+                        texts.append(text)
+            if texts:
+                return " ".join(texts)
+    return None
+
+
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     TOOL_RESULT_MAX_ESTIMATED_TOKENS = 27_500
     TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 7000
@@ -792,13 +819,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
-        # 当 LLM 同时返回 completion_text 和 send_message_to_user 工具调用时，
-        # 抑制 completion_text 的 yield，避免 respond 阶段重复发送相同内容。
-        # 这是 mimo 模型的已知问题：它会在同一响应中既输出文本又调用 send_message_to_user。
-        _has_send_message_tool = (
+        # 当 send_message_to_user 的 payload 与 completion_text 内容一致时，
+        # 抑制 completion_text 的 yield，避免 respond 阶段重复发送。
+        # 仅在内容匹配时抑制，不影响发到其他会话或内容不同的场景。
+        _should_suppress_text = False
+        if (
             llm_resp.tools_call_name
             and "send_message_to_user" in llm_resp.tools_call_name
-        )
+        ):
+            _tool_text = _extract_send_message_text(
+                llm_resp.tools_call_name, llm_resp.tools_call_args
+            )
+            _completion = (llm_resp.completion_text or "").strip()
+            if _tool_text and _completion and _tool_text == _completion:
+                _should_suppress_text = True
+                logger.info(
+                    "send_message_to_user payload 与 completion_text 一致，"
+                    "抑制以避免重复发送。"
+                )
         if llm_resp.reasoning_content:
             yield AgentResponse(
                 type="llm_result",
@@ -809,21 +847,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
         if llm_resp.result_chain:
-            if _has_send_message_tool:
-                logger.info(
-                    "检测到 send_message_to_user 工具调用，抑制 result_chain 以避免重复发送。"
-                )
-            else:
+            if not _should_suppress_text:
                 yield AgentResponse(
                     type="llm_result",
                     data=AgentResponseData(chain=llm_resp.result_chain),
                 )
         elif llm_resp.completion_text:
-            if _has_send_message_tool:
-                logger.info(
-                    "检测到 send_message_to_user 工具调用，抑制 completion_text 以避免重复发送。"
-                )
-            else:
+            if not _should_suppress_text:
                 yield AgentResponse(
                     type="llm_result",
                     data=AgentResponseData(
