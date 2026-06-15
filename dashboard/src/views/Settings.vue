@@ -21,7 +21,7 @@
             </nav>
 
             <main class="settings-main">
-                <v-slide-y-transition>
+                <v-slide-y-reverse-transition>
                     <div v-if="systemConfigRestartRequired" class="system-config-restart-bar" role="status">
                         <div class="system-config-restart-bar__inner">
                             <div class="system-config-restart-bar__message">
@@ -39,7 +39,7 @@
                             </v-btn>
                         </div>
                     </div>
-                </v-slide-y-transition>
+                </v-slide-y-reverse-transition>
 
                 <v-progress-linear
                     v-if="systemConfigLoading || systemConfigSaving"
@@ -1398,9 +1398,13 @@ onMounted(async () => {
 }
 
 .system-config-restart-bar {
-    width: 100%;
-    margin-bottom: 18px;
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 30;
+    width: min(420px, calc(100vw - 48px));
     border: 0;
+    border-radius: 12px;
     background: rgba(var(--v-theme-on-surface), 0.07);
     box-shadow: none;
 }
@@ -1411,8 +1415,8 @@ onMounted(async () => {
     justify-content: space-between;
     gap: 16px;
     width: 100%;
-    min-height: 42px;
-    padding: 5px 18px;
+    min-height: 48px;
+    padding: 8px 12px 8px 16px;
 }
 
 .system-config-restart-bar__message {
@@ -1514,9 +1518,9 @@ onMounted(async () => {
     }
 
     .system-config-restart-bar__inner {
-        align-items: stretch;
+        align-items: center;
         gap: 8px;
-        padding: 8px 14px;
+        padding: 8px 10px 8px 12px;
     }
 
     .system-config-restart-bar__message {
