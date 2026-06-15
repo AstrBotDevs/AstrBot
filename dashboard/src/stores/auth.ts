@@ -1,12 +1,12 @@
 import { defineStore } from 'pinia';
 import { router } from '@/router';
-import axios from 'axios';
+import { authApi, providerApi, systemConfigApi } from '@/api/v1';
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
     // @ts-ignore
     username: '',
-    returnUrl: null
+    returnUrl: null,
   }),
   actions: {
     async finishAuthenticatedSession(data: any): Promise<void> {
@@ -14,19 +14,20 @@ export const useAuthStore = defineStore("auth", {
       localStorage.setItem('user', this.username);
       localStorage.setItem('token', data.token);
       const passwordUpgradeRequired = !!data?.password_upgrade_required;
+      const md5PwdHint = !!data?.md5_pwd_hint;
       const passwordWarning =
         !!data?.change_pwd_hint ||
-        (!!data?.legacy_pwd_hint && !passwordUpgradeRequired);
+        (md5PwdHint && !passwordUpgradeRequired);
       if (passwordWarning) {
         localStorage.setItem('change_pwd_hint', 'true');
-        if (data?.legacy_pwd_hint && !passwordUpgradeRequired) {
-          localStorage.setItem('legacy_pwd_hint', 'true');
+        if (md5PwdHint && !passwordUpgradeRequired) {
+          localStorage.setItem('md5_pwd_hint', 'true');
         } else {
-          localStorage.removeItem('legacy_pwd_hint');
+          localStorage.removeItem('md5_pwd_hint');
         }
       } else {
         localStorage.removeItem('change_pwd_hint');
-        localStorage.removeItem('legacy_pwd_hint');
+        localStorage.removeItem('md5_pwd_hint');
       }
       if (passwordUpgradeRequired) {
         localStorage.setItem('password_upgrade_required', 'true');
@@ -46,29 +47,42 @@ export const useAuthStore = defineStore("auth", {
         router.push('/welcome');
       }
     },
-    async login(username: string, password: string): Promise<void> {
+    async login(
+      username: string,
+      password: string,
+      code?: string,
+      trustDeviceToken = false,
+    ): Promise<'totp_required' | void> {
       try {
-        const res = await axios.post('/api/auth/login', {
-          username: username,
-          password: password
+        const res = await authApi.login({
+          username,
+          password,
+          code,
+          trust_device_flag: trustDeviceToken,
         });
-    
+
         if (res.data.status === 'error') {
           return Promise.reject(res.data.message);
         }
 
         await this.finishAuthenticatedSession(res.data.data);
-      } catch (error) {
-        return Promise.reject(error);
+      } catch (error: any) {
+        if (error?.response?.status === 401 && error.response?.data?.data?.totp_required) {
+          return 'totp_required';
+        }
+        return Promise.reject(error?.response?.data?.message || error);
       }
     },
-    async setup(username: string, password: string, confirmPassword: string): Promise<void> {
+    async setup(
+      username: string,
+      password: string,
+      confirmPassword: string,
+    ): Promise<void> {
       try {
-        const setupEndpoint = this.has_token() ? '/api/auth/setup-authenticated' : '/api/auth/setup';
-        const res = await axios.post(setupEndpoint, {
-          username: username,
-          password: password,
-          confirm_password: confirmPassword
+        const res = await authApi.setup({
+          username,
+          password,
+          confirm_password: confirmPassword,
         });
 
         if (res.data.status === 'error') {
@@ -83,12 +97,13 @@ export const useAuthStore = defineStore("auth", {
     async checkOnboardingCompleted(): Promise<boolean> {
       try {
         // 1. 检查平台配置
-        const platformRes = await axios.get('/api/config/get');
-        const hasPlatform = (platformRes.data.data.config.platform || []).length > 0;
+        const platformRes = await systemConfigApi.get();
+        const systemConfig = (platformRes.data.data as any).config || {};
+        const hasPlatform = (systemConfig.platform || []).length > 0;
         if (!hasPlatform) return false;
 
         // 2. 检查提供者配置
-        const providerRes = await axios.get('/api/config/provider/template');
+        const providerRes = await providerApi.schema();
         const providers = providerRes.data.data?.providers || [];
         const sources = providerRes.data.data?.provider_sources || [];
         const sourceMap = new Map();
@@ -114,9 +129,9 @@ export const useAuthStore = defineStore("auth", {
       localStorage.removeItem('user');
       localStorage.removeItem('token');
       localStorage.removeItem('change_pwd_hint');
-      localStorage.removeItem('legacy_pwd_hint');
+      localStorage.removeItem('md5_pwd_hint');
       localStorage.removeItem('password_upgrade_required');
-      void axios.post('/api/auth/logout').catch(() => undefined);
+      void authApi.logout().catch(() => undefined);
       router.push('/auth/login');
     },
     has_token(): boolean {

@@ -245,7 +245,8 @@ class ResultDecorateStage(Stage):
                             for seg in split_response:
                                 if self.content_cleanup_rule:
                                     seg = re.sub(self.content_cleanup_rule, "", seg)
-                                if seg.strip():
+                                seg = seg.strip()
+                                if seg:
                                     new_chain.append(Plain(seg))
                         else:
                             # 非 Plain 类型的消息段不分段
@@ -308,6 +309,8 @@ class ResultDecorateStage(Stage):
                                 new_chain.append(comp)
                                 continue
 
+                            event.track_temporary_local_file(audio_path)
+
                             use_file_service = self.ctx.astrbot_config[
                                 "provider_tts_settings"
                             ]["use_file_service"]
@@ -368,7 +371,7 @@ class ResultDecorateStage(Stage):
                         return
                     if time.time() - render_start > 3:
                         logger.warning(
-                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以使用 /t2i 关闭文本转图片模式。",
+                            "文本转图片耗时超过了 3 秒，如果觉得很慢可以在 WebUI 中关闭文本转图片模式。",
                         )
                     if url:
                         if url.startswith("http"):

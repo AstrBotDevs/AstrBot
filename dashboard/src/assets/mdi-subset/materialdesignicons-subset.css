@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 263 icons */
+/* Auto-generated MDI subset – 274 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -116,6 +116,10 @@
   content: "\F09D1";
 }
 
+.mdi-brightness-6::before {
+  content: "\F00DF";
+}
+
 .mdi-broadcast::before {
   content: "\F1720";
 }
@@ -216,12 +220,20 @@
   content: "\F0765";
 }
 
+.mdi-circle-outline::before {
+  content: "\F0766";
+}
+
 .mdi-circle-small::before {
   content: "\F09DF";
 }
 
 .mdi-clock-outline::before {
   content: "\F0150";
+}
+
+.mdi-clock-time-four-outline::before {
+  content: "\F144E";
 }
 
 .mdi-close::before {
@@ -456,6 +468,10 @@
   content: "\F1036";
 }
 
+.mdi-file-search-outline::before {
+  content: "\F0C7D";
+}
+
 .mdi-file-upload::before {
   content: "\F0A4D";
 }
@@ -590,6 +606,10 @@
 
 .mdi-key-plus::before {
   content: "\F0309";
+}
+
+.mdi-key-variant::before {
+  content: "\F030B";
 }
 
 .mdi-label::before {
@@ -812,6 +832,10 @@
   content: "\F040A";
 }
 
+.mdi-play-circle-outline::before {
+  content: "\F040D";
+}
+
 .mdi-plus::before {
   content: "\F0415";
 }
@@ -822,6 +846,10 @@
 
 .mdi-progress-check::before {
   content: "\F0995";
+}
+
+.mdi-progress-download::before {
+  content: "\F0997";
 }
 
 .mdi-puzzle::before {
@@ -880,6 +908,10 @@
   content: "\F167A";
 }
 
+.mdi-send-outline::before {
+  content: "\F1165";
+}
+
 .mdi-server::before {
   content: "\F048B";
 }
@@ -902,6 +934,10 @@
 
 .mdi-shield-check-outline::before {
   content: "\F0CC8";
+}
+
+.mdi-shield-key::before {
+  content: "\F0BC4";
 }
 
 .mdi-shuffle-variant::before {
@@ -992,12 +1028,20 @@
   content: "\F13B8";
 }
 
+.mdi-theme-light-dark::before {
+  content: "\F050E";
+}
+
 .mdi-timeline-text-outline::before {
   content: "\F0BD4";
 }
 
 .mdi-timer-outline::before {
   content: "\F051B";
+}
+
+.mdi-timer-sand::before {
+  content: "\F051F";
 }
 
 .mdi-tools::before {

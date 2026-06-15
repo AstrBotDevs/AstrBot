@@ -45,6 +45,7 @@
         "viewRepo": "Репозиторий",
         "openPages": "Pages",
         "openPage": "Открыть",
+        "openWebui": "Открыть UI плагина",
         "close": "Закрыть",
         "save": "Сохранить",
         "saveAndClose": "Сохранить и закрыть",
@@ -66,7 +67,7 @@
         "loading": "Загрузка...",
         "installed": "Установлен",
         "unknown": "Неизвестно",
-        "incompatible": "Несовместимо"
+        "unsupported": "Не поддерживается"
     },
     "tooltips": {
         "enable": "Включить",
@@ -106,6 +107,7 @@
         "docsEmpty": "Документация отсутствует",
         "changelogTitle": "Журнал изменений",
         "changelogEmpty": "Журнал изменений отсутствует",
+        "subCommandsCount": "{count} подкоманд",
         "handlerGroups": {
             "page": "Pages",
             "skill": "Skills",
@@ -226,7 +228,7 @@
             "confirm": "Продолжить",
             "cancel": "Отмена"
         },
-        "versionCompatibility": {
+        "versionSupport": {
             "title": "Предупреждение о версии",
             "message": "Требуемая плагином версия AstrBot не совпадает с вашей текущей версией. Вы можете продолжить установку на свой страх и риск.",
             "confirm": "Игнорировать и установить",

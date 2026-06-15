@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from "vue-router";
 import { ref, onMounted, computed, watch } from "vue";
-import axios from "axios";
 import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
@@ -10,6 +9,7 @@ import Chat from "@/components/chat/Chat.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
 import { useCommonStore } from "@/stores/common";
+import { statsApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
 
 const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
@@ -21,6 +21,12 @@ const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
+);
+const isPluginPageRoute = computed(
+  () => route.path.startsWith("/plugin-page/"),
+);
+const isFullScreenRoute = computed(
+  () => isCurrentChatRoute.value || isPluginPageRoute.value,
 );
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
@@ -37,7 +43,7 @@ watch(isCurrentChatRoute, (isChatRoute) => {
 
 const checkMigration = async (): Promise<boolean> => {
   try {
-    const response = await axios.get("/api/stat/version");
+    const response = await statsApi.version();
     if (response.data.status === "ok") {
       commonStore.setAstrBotVersion(
         response.data.data?.version,
@@ -69,9 +75,7 @@ const maybeShowFirstNotice = async () => {
   }
 
   try {
-    const response = await axios.get("/api/stat/first-notice", {
-      params: { locale: locale.value },
-    });
+    const response = await statsApi.firstNotice(locale.value);
     if (response.data.status !== "ok") {
       return;
     }
@@ -137,9 +141,9 @@ onMounted(() => {
           class="page-wrapper"
           :class="{ 'chat-mode-container': isCurrentChatRoute }"
           :style="{
-            height: isCurrentChatRoute ? '100%' : 'calc(100% - 8px)',
-            padding: isCurrentChatRoute ? '0' : undefined,
-            minHeight: isCurrentChatRoute ? 'unset' : undefined,
+            height: isFullScreenRoute ? '100%' : 'calc(100% - 8px)',
+            padding: isFullScreenRoute ? '0' : undefined,
+            minHeight: isFullScreenRoute ? 'unset' : undefined,
           }"
         >
           <div
@@ -147,6 +151,7 @@ onMounted(() => {
               height: '100%',
               width: '100%',
               overflow: isCurrentChatRoute ? 'hidden' : undefined,
+              position: isPluginPageRoute ? 'relative' : undefined,
             }"
           >
             <div
