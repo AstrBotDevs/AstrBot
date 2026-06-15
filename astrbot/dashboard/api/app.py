@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -83,6 +84,70 @@ from .tools import legacy_router as legacy_tools_router
 from .updates import legacy_router as legacy_updates_router
 
 CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
+
+
+def _materialize_included_routes(app: FastAPI) -> None:
+    """Expose lazily included routes at the top level.
+
+    FastAPI's lazy included-router objects keep routes routable, but dashboard
+    tests and route introspection enumerate `app.router.routes`.
+
+    Args:
+        app: Dashboard FastAPI app to normalize after router registration.
+    """
+    materialized_routes = []
+    for route in app.router.routes:
+        if route.__class__.__name__ != "_IncludedRouter":
+            materialized_routes.append(route)
+            continue
+        effective_route_contexts = getattr(route, "effective_route_contexts", None)
+        if not callable(effective_route_contexts):
+            materialized_routes.append(route)
+            continue
+        for route_context in effective_route_contexts():
+            starlette_route = getattr(route_context, "starlette_route", None)
+            if starlette_route is not None:
+                materialized_routes.append(starlette_route)
+                continue
+            if not isinstance(route_context.original_route, APIRoute):
+                materialized_routes.append(route_context.original_route)
+                continue
+            materialized_routes.append(
+                APIRoute(
+                    route_context.path,
+                    route_context.endpoint,
+                    response_model=route_context.response_model,
+                    status_code=route_context.status_code,
+                    tags=route_context.tags,
+                    dependencies=route_context.dependencies,
+                    summary=route_context.summary,
+                    description=route_context.description,
+                    response_description=route_context.response_description,
+                    responses=route_context.responses,
+                    deprecated=route_context.deprecated,
+                    name=route_context.name,
+                    methods=route_context.methods,
+                    operation_id=route_context.operation_id,
+                    response_model_include=route_context.response_model_include,
+                    response_model_exclude=route_context.response_model_exclude,
+                    response_model_by_alias=route_context.response_model_by_alias,
+                    response_model_exclude_unset=route_context.response_model_exclude_unset,
+                    response_model_exclude_defaults=route_context.response_model_exclude_defaults,
+                    response_model_exclude_none=route_context.response_model_exclude_none,
+                    include_in_schema=route_context.include_in_schema,
+                    response_class=route_context.response_class,
+                    dependency_overrides_provider=(
+                        route_context.dependency_overrides_provider
+                    ),
+                    callbacks=route_context.callbacks,
+                    openapi_extra=route_context.openapi_extra,
+                    generate_unique_id_function=(
+                        route_context.generate_unique_id_function
+                    ),
+                    strict_content_type=route_context.strict_content_type,
+                )
+            )
+    app.router.routes = materialized_routes
 
 
 def create_dashboard_asgi_app(
@@ -194,6 +259,7 @@ def create_dashboard_asgi_app(
     app.include_router(legacy_t2i_router)
     app.include_router(legacy_personas_router)
     app.include_router(legacy_updates_router)
-    app.include_router(build_api_router())
+    app.router.routes.extend(build_api_router().routes)
     app.include_router(static_files_router)
+    _materialize_included_routes(app)
     return app

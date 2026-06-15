@@ -43,7 +43,7 @@ async def _run(operation):
         result = await run_maybe_async(operation)
         return ok(result)
     except SandboxServiceError as exc:
-        return error(str(exc))
+        return error(exc.public_message)
 
 
 def _session_id(session_id: str | None) -> str:

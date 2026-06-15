@@ -13,8 +13,15 @@ from .sandbox_helpers import (
 
 
 class SandboxServiceError(Exception):
-    def __init__(self, message: str, *, log_traceback: bool = True) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        public_message: str | None = None,
+        log_traceback: bool = True,
+    ) -> None:
         super().__init__(message)
+        self.public_message = public_message or message
         self.log_traceback = log_traceback
 
 
@@ -38,7 +45,8 @@ class SandboxService:
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise SandboxServiceError(
-                f"Failed to list sandbox providers: {exc!s}"
+                f"Failed to list sandbox providers: {exc!s}",
+                public_message="Failed to list sandbox providers.",
             ) from exc
 
     async def list_sandboxes(self) -> dict:
@@ -48,7 +56,10 @@ class SandboxService:
             }
         except Exception as exc:
             logger.error(traceback.format_exc())
-            raise SandboxServiceError(f"Failed to list sandboxes: {exc!s}") from exc
+            raise SandboxServiceError(
+                f"Failed to list sandboxes: {exc!s}",
+                public_message="Failed to list sandboxes.",
+            ) from exc
 
     def get_current_sandbox(self, session_id: str) -> dict:
         try:
@@ -56,7 +67,8 @@ class SandboxService:
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise SandboxServiceError(
-                f"Failed to get current sandbox: {exc!s}"
+                f"Failed to get current sandbox: {exc!s}",
+                public_message="Failed to get current sandbox.",
             ) from exc
 
     async def create_sandbox(self, session_id: str, data: dict) -> dict:
@@ -78,12 +90,18 @@ class SandboxService:
                 logger.warning(str(exc))
                 raise SandboxServiceError(str(exc), log_traceback=False) from exc
             logger.error(traceback.format_exc())
-            raise SandboxServiceError(f"Failed to create sandbox: {exc!s}") from exc
+            raise SandboxServiceError(
+                f"Failed to create sandbox: {exc!s}",
+                public_message="Failed to create sandbox.",
+            ) from exc
         except SandboxServiceError:
             raise
         except Exception as exc:
             logger.error(traceback.format_exc())
-            raise SandboxServiceError(f"Failed to create sandbox: {exc!s}") from exc
+            raise SandboxServiceError(
+                f"Failed to create sandbox: {exc!s}",
+                public_message="Failed to create sandbox.",
+            ) from exc
 
     async def switch_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         try:
@@ -97,7 +115,10 @@ class SandboxService:
             return {"sandbox": sandbox}
         except Exception as exc:
             logger.error(traceback.format_exc())
-            raise SandboxServiceError(f"Failed to switch sandbox: {exc!s}") from exc
+            raise SandboxServiceError(
+                f"Failed to switch sandbox: {exc!s}",
+                public_message="Failed to switch sandbox.",
+            ) from exc
 
     def release_current_sandbox(
         self, session_id: str, sandbox_id: str | None = None
@@ -114,7 +135,10 @@ class SandboxService:
             return {"sandbox": sandbox}
         except Exception as exc:
             logger.error(traceback.format_exc())
-            raise SandboxServiceError(f"Failed to release sandbox: {exc!s}") from exc
+            raise SandboxServiceError(
+                f"Failed to release sandbox: {exc!s}",
+                public_message="Failed to release sandbox.",
+            ) from exc
 
     async def takeover_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         try:
@@ -124,7 +148,10 @@ class SandboxService:
             return {"sandbox": sandbox}
         except Exception as exc:
             logger.error(traceback.format_exc())
-            raise SandboxServiceError(f"Failed to takeover sandbox: {exc!s}") from exc
+            raise SandboxServiceError(
+                f"Failed to takeover sandbox: {exc!s}",
+                public_message="Failed to takeover sandbox.",
+            ) from exc
 
     def set_default_sandbox(self, sandbox_id: str) -> dict:
         try:
@@ -133,7 +160,8 @@ class SandboxService:
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise SandboxServiceError(
-                f"Failed to set default sandbox: {exc!s}"
+                f"Failed to set default sandbox: {exc!s}",
+                public_message="Failed to set default sandbox.",
             ) from exc
 
     async def run_shell(self, session_id: str, sandbox_id: str, data: dict) -> dict:
@@ -164,7 +192,10 @@ class SandboxService:
             raise
         except Exception as exc:
             logger.error(traceback.format_exc())
-            raise SandboxServiceError(f"Failed to run sandbox shell: {exc!s}") from exc
+            raise SandboxServiceError(
+                f"Failed to run sandbox shell: {exc!s}",
+                public_message="Failed to run sandbox shell.",
+            ) from exc
 
     async def capture_screenshot(
         self, session_id: str, sandbox_id: str, data: dict
@@ -188,7 +219,8 @@ class SandboxService:
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise SandboxServiceError(
-                f"Failed to capture sandbox screenshot: {exc!s}"
+                f"Failed to capture sandbox screenshot: {exc!s}",
+                public_message="Failed to capture sandbox screenshot.",
             ) from exc
 
     def update_sandbox(self, sandbox_id: str, data: dict) -> dict:
@@ -223,7 +255,10 @@ class SandboxService:
                 logger.info("Failed to update sandbox: %s", exc)
                 raise SandboxServiceError(str(exc), log_traceback=False) from exc
             logger.error(traceback.format_exc())
-            raise SandboxServiceError(f"Failed to update sandbox: {exc!s}") from exc
+            raise SandboxServiceError(
+                f"Failed to update sandbox: {exc!s}",
+                public_message="Failed to update sandbox.",
+            ) from exc
 
     async def destroy_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         try:
@@ -233,4 +268,7 @@ class SandboxService:
             return {"sandbox": sandbox}
         except Exception as exc:
             logger.error(traceback.format_exc())
-            raise SandboxServiceError(f"Failed to destroy sandbox: {exc!s}") from exc
+            raise SandboxServiceError(
+                f"Failed to destroy sandbox: {exc!s}",
+                public_message="Failed to destroy sandbox.",
+            ) from exc
