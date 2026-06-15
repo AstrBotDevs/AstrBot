@@ -545,7 +545,13 @@ class AstrBotDashboard:
 
             raise Exception(f"端口 {port} 已被占用")
 
-        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI is ready\n\n"]
+        if (Path(self.data_path) / "index.html").is_file():
+            webui_status = "WebUI is ready"
+        else:
+            webui_status = (
+                f"WebUI is NOT ready: static files are missing at {self.data_path}"
+            )
+        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} {webui_status}\n\n"]
         parts.append(f"   ➜  Local: {scheme}://localhost:{port}\n")
         for ip in ip_addr:
             parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
