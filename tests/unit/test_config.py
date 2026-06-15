@@ -529,6 +529,38 @@ class TestConfigHotReload:
         # Original fields are preserved because update merges
         assert "platform_settings" in loaded_config
 
+    def test_save_config_preserves_existing_file_when_write_fails(
+        self, temp_config_path, minimal_default_config, monkeypatch
+    ):
+        """Config saves should not corrupt the existing file on write failure."""
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=minimal_default_config
+        )
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            original_content = f.read()
+
+        def failing_dump(*args, **kwargs):
+            file_obj = args[1]
+            file_obj.write("{")
+            raise RuntimeError("simulated interrupted write")
+
+        config.new_field = "new_value"
+        monkeypatch.setattr(
+            "astrbot.core.config.astrbot_config.json.dump",
+            failing_dump,
+        )
+
+        with pytest.raises(RuntimeError, match="simulated interrupted write"):
+            config.save_config()
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert f.read() == original_content
+        assert [
+            entry.name
+            for entry in os.scandir(os.path.dirname(temp_config_path))
+            if entry.name != os.path.basename(temp_config_path)
+        ] == []
+
     def test_modification_persists_after_reload(
         self, temp_config_path, minimal_default_config
     ):

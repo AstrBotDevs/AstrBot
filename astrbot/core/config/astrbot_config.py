@@ -2,6 +2,7 @@ import enum
 import json
 import logging
 import os
+import tempfile
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
@@ -53,9 +54,9 @@ class AstrBotConfig(dict):
 
         if not self.check_exist():
             """不存在时载入默认配置"""
-            with open(config_path, "w", encoding="utf-8-sig") as f:
-                json.dump(default_config, f, indent=4, ensure_ascii=False)
-                object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
+            self.update(default_config)
+            self.save_config(indent=4)
+            object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
 
         with open(config_path, encoding="utf-8-sig") as f:
             conf_str = f.read()
@@ -211,15 +212,33 @@ class AstrBotConfig(dict):
 
         return has_new
 
-    def save_config(self, replace_config: dict | None = None) -> None:
+    def save_config(
+        self, replace_config: dict | None = None, *, indent: int = 2
+    ) -> None:
         """将配置写入文件
 
         如果传入 replace_config，则将配置替换为 replace_config
         """
         if replace_config:
             self.update(replace_config)
-        with open(self.config_path, "w", encoding="utf-8-sig") as f:
-            json.dump(self, f, indent=2, ensure_ascii=False)
+        directory = os.path.dirname(os.path.abspath(self.config_path)) or "."
+        fd, temp_path = tempfile.mkstemp(
+            dir=directory,
+            prefix=f".{os.path.basename(self.config_path)}.",
+            suffix=".tmp",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8-sig") as f:
+                json.dump(self, f, indent=indent, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, self.config_path)
+        except Exception:
+            try:
+                os.unlink(temp_path)
+            except FileNotFoundError:
+                pass
+            raise
 
     def __getattr__(self, item):
         try:
