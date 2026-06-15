@@ -226,7 +226,6 @@ class AstrBotConfig(dict):
             dir=directory,
             prefix=f".{os.path.basename(self.config_path)}.",
             suffix=".tmp",
-            text=True,
         )
         try:
             with os.fdopen(fd, "w", encoding="utf-8-sig") as f:
