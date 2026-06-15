@@ -8,6 +8,7 @@ import psutil
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
 from astrbot.core.utils.astrbot_path import get_astrbot_path
+from astrbot.core.utils.io import ensure_dir
 
 from .zip_updator import ReleaseInfo, RepoZipUpdator
 
@@ -218,6 +219,7 @@ class AstrBotUpdator(RepoZipUpdator):
             file_url = f"{proxy}/{file_url}"
 
         zip_path = Path(path)
+        ensure_dir(zip_path.parent)
         await self._download_file(
             file_url,
             str(zip_path),

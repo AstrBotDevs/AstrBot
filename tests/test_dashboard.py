@@ -2773,6 +2773,20 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
     assert calls == ["download-dashboard", "download-core"]
 
 
+def test_extract_dashboard_rejects_zip_path_traversal(tmp_path: Path):
+    from astrbot.core.utils.io import extract_dashboard
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("../evil.txt", "unsafe")
+
+    with pytest.raises(ValueError, match="Unsafe dashboard archive path"):
+        extract_dashboard(archive_path, extract_path)
+
+    assert not (tmp_path / "evil.txt").exists()
+
+
 @pytest.mark.asyncio
 async def test_do_update_hides_internal_error_message_in_response_and_progress(
     app: FastAPIAppAdapter,

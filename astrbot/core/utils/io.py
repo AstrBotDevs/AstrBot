@@ -514,6 +514,13 @@ def extract_dashboard(zip_path: str | Path, extract_path: str | Path = "data") -
         None.
     """
 
-    ensure_dir(extract_path)
+    extract_root = Path(extract_path).resolve()
+    ensure_dir(extract_root)
     with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(extract_path)
+        for member in z.infolist():
+            target_path = (extract_root / member.filename).resolve()
+            if not target_path.is_relative_to(extract_root):
+                raise ValueError(
+                    f"Unsafe dashboard archive path: {member.filename}",
+                )
+            z.extract(member, extract_root)

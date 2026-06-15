@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import traceback
 import uuid
@@ -49,7 +50,9 @@ async def call_download_dashboard(*args, **kwargs):
 
 
 async def call_extract_dashboard(*args, **kwargs):
-    result = extract_dashboard(*args, **kwargs)
+    if inspect.iscoroutinefunction(extract_dashboard):
+        return await extract_dashboard(*args, **kwargs)
+    result = await asyncio.to_thread(extract_dashboard, *args, **kwargs)
     if inspect.isawaitable(result):
         return await result
     return result
@@ -90,7 +93,7 @@ class UpdateService:
         core_lifecycle: AstrBotCoreLifecycle,
         *,
         download_dashboard_func: Callable[..., Awaitable[Any]],
-        extract_dashboard_func: Callable[..., Awaitable[Any]],
+        extract_dashboard_func: Callable[..., Any],
         get_dashboard_version_func: Callable[..., Awaitable[str | None]],
         pip_install_func: Callable[..., Awaitable[Any]],
         check_migration_needed_func: Callable[..., Awaitable[bool]],
@@ -261,11 +264,15 @@ class UpdateService:
                 "下载完成，正在校验更新包...",
                 90,
             )
-            for zip_path in (dashboard_zip_path, core_zip_path):
-                with zipfile.ZipFile(zip_path, "r") as archive:
-                    corrupt_member = archive.testzip()
-                if corrupt_member:
-                    raise UpdateServiceError(f"更新包校验失败: {corrupt_member}")
+
+            def _verify_update_packages() -> None:
+                for zip_path in (dashboard_zip_path, core_zip_path):
+                    with zipfile.ZipFile(zip_path, "r") as archive:
+                        corrupt_member = archive.testzip()
+                    if corrupt_member:
+                        raise UpdateServiceError(f"更新包校验失败: {corrupt_member}")
+
+            await asyncio.to_thread(_verify_update_packages)
             self._set_update_stage(
                 progress_id,
                 "verify",
@@ -281,7 +288,10 @@ class UpdateService:
                 "下载完成，正在应用更新...",
                 91,
             )
-            self.astrbot_updator.apply_update_package(core_zip_path)
+            await asyncio.to_thread(
+                self.astrbot_updator.apply_update_package,
+                core_zip_path,
+            )
             await self.extract_dashboard(
                 dashboard_zip_path,
                 Path(get_astrbot_data_path()),
