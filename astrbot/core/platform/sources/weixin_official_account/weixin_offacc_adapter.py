@@ -508,12 +508,20 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         await self.handle_msg(abm)
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
-        buffer = self.user_buffer.get(message.sender.user_id, None)
-        if buffer is None:
-            logger.critical(
-                f"用户消息未找到缓冲状态，无法处理消息: user={message.sender.user_id} message_id={message.message_id}"
-            )
-            return
+        # 主动发送模式下不依赖被动回复的缓冲机制，
+        # 回复通过微信客服 API (client.message.send_text) 直接推送。
+        if self.active_send_mode:
+            buffer = {}
+        else:
+            # 被动回复模式必须有缓冲状态来暂存 LLM 的异步回复，
+            # 以应对微信 5 秒响应期限。
+            buffer = self.user_buffer.get(message.sender.user_id, None)
+            if buffer is None:
+                logger.critical(
+                    f"用户消息未找到缓冲状态，无法处理消息: user={message.sender.user_id} message_id={message.message_id}"
+                )
+                return
+
         message_event = WeixinOfficialAccountPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
