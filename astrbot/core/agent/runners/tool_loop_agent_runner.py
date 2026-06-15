@@ -113,8 +113,8 @@ def _extract_send_message_text(
 ) -> str | None:
     """从 send_message_to_user 工具调用参数中提取纯文本内容。
 
-    用于比对 completion_text 与工具 payload 是否一致，判断是否为重复发送。
-    仅提取 type="plain" 的文本部分。
+    用于比对 completion_text 与工具 payload 是否一致，
+    判断是否为重复发送。仅提取 type="plain" 的文本部分。
     """
     if not tools_call_name or not tools_call_args:
         return None
@@ -819,8 +819,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
-        # 当 send_message_to_user 的 payload 与 completion_text 内容一致时，
-        # 抑制 completion_text 的 yield，避免 respond 阶段重复发送。
+        # 当 send_message_to_user 的 payload 与 completion_text
+        # 内容一致时，抑制 completion_text 的 yield，
+        # 避免 respond 阶段重复发送。
         # 仅在内容匹配时抑制，不影响发到其他会话或内容不同的场景。
         _should_suppress_text = False
         if (

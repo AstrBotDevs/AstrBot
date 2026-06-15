@@ -318,12 +318,16 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             else:
                 return f"error: invalid session: {session}"
 
-        # 去重：按事件作用域记录已发送的消息指纹，拦截同一 agent run 内的重复调用。
+        # 去重：按事件作用域记录已发送的消息指纹，
+        # 拦截同一 agent run 内的重复调用。
         # 作用域限定在当前事件，不影响其他事件的合法重复发送。
-        fingerprint = hashlib.md5(
-            (str(target_session) + json.dumps(messages, ensure_ascii=False, sort_keys=True)).encode()
-        ).hexdigest()
-        sent_fingerprints = context.context.event.get_extra("_send_message_fingerprints")
+        dedup_key = str(target_session) + json.dumps(
+            messages, ensure_ascii=False, sort_keys=True
+        )
+        fingerprint = hashlib.md5(dedup_key.encode()).hexdigest()
+        sent_fingerprints = context.context.event.get_extra(
+            "_send_message_fingerprints"
+        )
         if sent_fingerprints is None:
             sent_fingerprints = set()
         if fingerprint in sent_fingerprints:
