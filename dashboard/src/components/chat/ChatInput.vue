@@ -780,11 +780,23 @@ function handleCompositionEnd(e: CompositionEvent) {
   // after the IME commits. The v-model setter is suppressed during
   // composition (see localPrompt computed), so we must explicitly
   // propagate the DOM value once composition ends.
+  //
+  // Capture the DOM value at compositionend to guard against a race
+  // where props.prompt is externally updated between now and nextTick.
+  const endValue = inputField.value?.value;
+
   nextTick(() => {
     const el = inputField.value;
-    if (el && el.value !== props.prompt) {
+    // Only sync if the DOM hasn't been changed externally in the meantime.
+    if (el && el.value === endValue && el.value !== props.prompt) {
       emit("update:prompt", el.value);
     }
+    // Re-evaluate command suggestions that were suppressed during IME
+    // composition (handleInput checks isComposing). This runs in a
+    // nested nextTick so props.prompt reflects the emit above.
+    nextTick(() => {
+      handleInput();
+    });
   });
 }
 
