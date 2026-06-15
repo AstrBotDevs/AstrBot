@@ -56,6 +56,10 @@ let showAdvancedUpdateSettings = ref(false);
 let restartWaiting = ref(false);
 let restartStartTime = ref<number | string | null>(null);
 let restartPollTimer: ReturnType<typeof setInterval> | null = null;
+let restartCompleted = ref(false);
+let restartReloadCountdown = ref(3);
+let restartReloadTimer: ReturnType<typeof setInterval> | null = null;
+const RESTART_FEEDBACK_DELAY_SECONDS = 3;
 type DownloadStageStatus = "pending" | "running" | "done" | "error";
 type DownloadStage = {
   status: DownloadStageStatus;
@@ -564,6 +568,21 @@ function stopRestartPolling() {
   }
 }
 
+function stopRestartReloadTimer() {
+  if (restartReloadTimer) {
+    clearInterval(restartReloadTimer);
+    restartReloadTimer = null;
+  }
+}
+
+function resetRestartFeedbackState() {
+  stopRestartReloadTimer();
+  stopRestartPolling();
+  restartCompleted.value = false;
+  restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
+  restartWaiting.value = false;
+}
+
 async function fetchAstrBotStartTime() {
   const res = await statsApi.startTime();
   const rawStartTime = res.data?.data?.start_time;
@@ -574,8 +593,37 @@ async function fetchAstrBotStartTime() {
   return startTime;
 }
 
+function reloadAfterUpdate() {
+  stopRestartReloadTimer();
+  window.location.reload();
+}
+
+function showRestartCompleted() {
+  if (restartCompleted.value) {
+    return;
+  }
+  stopRestartReloadTimer();
+  restartWaiting.value = false;
+  restartCompleted.value = true;
+  restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
+  updateProgress.value = {
+    ...updateProgress.value,
+    status: "success",
+    stage: "done",
+    message: t("core.header.updateDialog.progress.successReady"),
+    overall_percent: 100,
+  };
+  restartReloadTimer = setInterval(() => {
+    if (restartReloadCountdown.value <= 1) {
+      reloadAfterUpdate();
+      return;
+    }
+    restartReloadCountdown.value -= 1;
+  }, 1000);
+}
+
 function waitForAstrBotRestart(initialStartTime: number | string | null) {
-  if (restartWaiting.value) {
+  if (restartWaiting.value || restartCompleted.value) {
     return;
   }
   stopRestartPolling();
@@ -598,8 +646,7 @@ function waitForAstrBotRestart(initialStartTime: number | string | null) {
         currentStartTime !== initialStartTime
       ) {
         stopRestartPolling();
-        restartWaiting.value = false;
-        window.location.reload();
+        showRestartCompleted();
       }
     } catch (_error) {
       // Backend may be unavailable while the process is restarting.
@@ -659,6 +706,7 @@ async function switchVersion(targetVersion: string) {
     version: targetVersion,
     message: t("core.header.updateDialog.progress.preparing"),
   } as UpdateProgress;
+  resetRestartFeedbackState();
   updateStatus.value = t("core.header.updateDialog.status.switching");
   installLoading.value = true;
 
@@ -686,7 +734,7 @@ async function switchVersion(targetVersion: string) {
         overall_percent:
           res.data.status === "ok" ? 100 : updateProgress.value.overall_percent,
       };
-      if (res.data.status == "ok") {
+      if (res.data.status === "ok") {
         waitForAstrBotRestart(initialStartTime);
       }
     })
@@ -766,6 +814,7 @@ commonStore.getStartTime();
 onUnmounted(() => {
   stopUpdateProgressPolling();
   stopRestartPolling();
+  stopRestartReloadTimer();
 });
 
 // 视图模式切换
@@ -1227,8 +1276,48 @@ onMounted(async () => {
             <div
               v-if="installLoading || updateProgress.status !== 'idle'"
               class="update-progress-panel mt-5"
+              :class="{ 'update-progress-panel--success': restartCompleted }"
             >
-              <div v-if="restartWaiting" class="restart-waiting-panel">
+              <div v-if="restartCompleted" class="update-success-panel">
+                <div class="update-success-header">
+                  <v-icon
+                    icon="mdi-check-circle"
+                    color="success"
+                    size="34"
+                  ></v-icon>
+                  <div>
+                    <div class="text-subtitle-1 font-weight-medium">
+                      {{ t("core.header.updateDialog.progress.successReady") }}
+                    </div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{
+                        t("core.header.updateDialog.progress.autoReloadIn", {
+                          seconds: restartReloadCountdown,
+                        })
+                      }}
+                    </div>
+                  </div>
+                </div>
+                <v-progress-linear
+                  :model-value="100"
+                  height="8"
+                  rounded
+                  color="success"
+                ></v-progress-linear>
+                <div class="d-flex justify-end">
+                  <v-btn
+                    color="success"
+                    variant="elevated"
+                    size="small"
+                    @click="reloadAfterUpdate"
+                  >
+                    <v-icon class="mr-1" size="18">mdi-refresh</v-icon>
+                    {{ t("core.header.updateDialog.progress.reloadNow") }}
+                  </v-btn>
+                </div>
+              </div>
+
+              <div v-else-if="restartWaiting" class="restart-waiting-panel">
                 <v-progress-circular
                   indeterminate
                   color="primary"
@@ -1948,6 +2037,23 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+.update-progress-panel--success {
+  border-color: rgba(var(--v-theme-success), 0.42);
+  background: rgba(var(--v-theme-success), 0.08);
+}
+
+.update-success-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.update-success-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .advanced-settings-toggle {
