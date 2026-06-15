@@ -107,17 +107,37 @@ class _ToolExecutionInterrupted(Exception):
 ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
 
 
-def _extract_send_message_text(
+def _normalize_text(text: str) -> str:
+    """标准化文本用于比对：strip + 合并连续空白。"""
+    return " ".join(text.strip().split())
+
+
+def _extract_text_from_chain(chain) -> str | None:
+    """从 MessageChain 中提取纯文本内容。"""
+    if not chain or not hasattr(chain, "chain") or not chain.chain:
+        return None
+    texts = []
+    for comp in chain.chain:
+        if hasattr(comp, "text"):
+            text = comp.text.strip()
+            if text:
+                texts.append(text)
+    return " ".join(texts) if texts else None
+
+
+def _extract_send_message_texts(
     tools_call_name: list[str] | None,
     tools_call_args: list[dict] | None,
-) -> str | None:
-    """从 send_message_to_user 工具调用参数中提取纯文本内容。
+) -> list[str]:
+    """从所有 send_message_to_user 调用中提取纯文本。
 
-    用于比对 completion_text 与工具 payload 是否一致，
-    判断是否为重复发送。仅提取 type="plain" 的文本部分。
+    用于比对 completion_text / result_chain 与工具 payload
+    是否一致，判断是否为重复发送。
+    仅提取 type="plain" 的文本部分。
     """
     if not tools_call_name or not tools_call_args:
-        return None
+        return []
+    results = []
     for name, args in zip(tools_call_name, tools_call_args):
         if name == "send_message_to_user" and isinstance(args, dict):
             messages = args.get("messages")
@@ -130,8 +150,8 @@ def _extract_send_message_text(
                     if text:
                         texts.append(text)
             if texts:
-                return " ".join(texts)
-    return None
+                results.append(" ".join(texts))
+    return results
 
 
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
@@ -820,7 +840,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # 返回 LLM 结果
         # 当 send_message_to_user 的 payload 与 completion_text
-        # 内容一致时，抑制 completion_text 的 yield，
+        # 或 result_chain 内容一致时，抑制 yield，
         # 避免 respond 阶段重复发送。
         # 仅在内容匹配时抑制，不影响发到其他会话或内容不同的场景。
         _should_suppress_text = False
@@ -828,16 +848,27 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_resp.tools_call_name
             and "send_message_to_user" in llm_resp.tools_call_name
         ):
-            _tool_text = _extract_send_message_text(
+            _tool_texts = _extract_send_message_texts(
                 llm_resp.tools_call_name, llm_resp.tools_call_args
             )
-            _completion = (llm_resp.completion_text or "").strip()
-            if _tool_text and _completion and _tool_text == _completion:
-                _should_suppress_text = True
-                logger.info(
-                    "send_message_to_user payload 与 completion_text 一致，"
-                    "抑制以避免重复发送。"
+            if _tool_texts:
+                _completion = _normalize_text(
+                    llm_resp.completion_text or ""
                 )
+                _chain_text = _normalize_text(
+                    _extract_text_from_chain(llm_resp.result_chain) or ""
+                )
+                for _tt in _tool_texts:
+                    _nt = _normalize_text(_tt)
+                    if (_nt and _completion and _nt == _completion) or (
+                        _nt and _chain_text and _nt == _chain_text
+                    ):
+                        _should_suppress_text = True
+                        logger.info(
+                            "send_message_to_user payload 与响应文本一致，"
+                            f"抑制以避免重复发送。 text={_tt[:50]!r}"
+                        )
+                        break
         if llm_resp.reasoning_content:
             yield AgentResponse(
                 type="llm_result",

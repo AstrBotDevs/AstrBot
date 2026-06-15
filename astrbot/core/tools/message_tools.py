@@ -325,11 +325,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             messages, ensure_ascii=False, sort_keys=True
         )
         fingerprint = hashlib.md5(dedup_key.encode()).hexdigest()
-        sent_fingerprints = context.context.event.get_extra(
+        existing = context.context.event.get_extra(
             "_send_message_fingerprints"
         )
-        if sent_fingerprints is None:
-            sent_fingerprints = set()
+        sent_fingerprints = set(existing) if existing else set()
         if fingerprint in sent_fingerprints:
             logger.info(
                 f"[send_message_to_user] 当前事件内重复发送，已跳过。"
@@ -338,7 +337,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             )
             return f"Message skipped (duplicate), session={target_session}"
         sent_fingerprints.add(fingerprint)
-        context.context.event.set_extra("_send_message_fingerprints", sent_fingerprints)
+        context.context.event.set_extra(
+            "_send_message_fingerprints", sent_fingerprints
+        )
 
         await context.context.context.send_message(
             target_session,
