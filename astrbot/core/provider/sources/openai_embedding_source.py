@@ -69,14 +69,22 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         """构建嵌入请求的可选参数"""
         kwargs = {}
         if "embedding_dimensions" in self.provider_config:
-            try:
-                dim_val = int(self.provider_config["embedding_dimensions"])
-                if dim_val > 0:
-                    kwargs["dimensions"] = dim_val
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."
-                )
+            dim_setting = self.provider_config["embedding_dimensions"]
+            if dim_setting is not None and str(dim_setting).strip() != "":
+                try:
+                    dim_val = int(dim_setting)
+                    # 只有明确指定维度且大于0时才携带参数。
+                    if dim_val > 0:
+                        kwargs["dimensions"] = dim_val
+                    else:
+                        # 留空或填 0 隐式丢弃此参数，用于规避 SiliconFlow、vLLM 等严格校验平台报 HTTP 400
+                        logger.debug(
+                            f"embedding_dimensions '{dim_val}' is <= 0, omitted to ensure compatibility with strict providers."
+                        )
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"embedding_dimensions in embedding configs is not a valid integer: '{dim_setting}', ignored."
+                    )
         return kwargs
 
     def get_dim(self) -> int:
