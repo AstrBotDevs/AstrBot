@@ -9,6 +9,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
+from starlette.routing import Route, WebSocketRoute
 
 import astrbot.dashboard.services.config_service as config_service
 from astrbot.core import file_token_service
@@ -1886,9 +1887,10 @@ def test_astrbot_web_request_proxy_exposes_typed_methods():
 
     assert isinstance(plugin_request, PluginRequestProxy)
     assert get_type_hints(type(plugin_request).form)["return"] == PluginMultiDict[str]
-    assert get_type_hints(type(plugin_request).files)["return"] == PluginMultiDict[
-        PluginUploadFile
-    ]
+    assert (
+        get_type_hints(type(plugin_request).files)["return"]
+        == PluginMultiDict[PluginUploadFile]
+    )
 
 
 @pytest.mark.asyncio
@@ -2194,11 +2196,15 @@ async def test_v1_token_file_is_public(
 
 
 def test_v1_openapi_alias_websocket_routes_are_mounted(asgi_app):
-    websocket_paths = {
-        route.path
-        for route in asgi_app.router.routes
-        if "websocket" in route.__class__.__name__.lower()
-    }
+    websocket_paths = set()
+    pending_routes = list(asgi_app.router.routes)
+    while pending_routes:
+        route = pending_routes.pop()
+        if isinstance(route, WebSocketRoute):
+            websocket_paths.add(route.path)
+        # FastAPI may expose included routers as intermediate route nodes.
+        if nested_routes := getattr(route, "routes", None):
+            pending_routes.extend(nested_routes)
 
     assert "/api/v1/chat/ws" in websocket_paths
     assert "/api/v1/live-chat/ws" in websocket_paths
@@ -2206,11 +2212,15 @@ def test_v1_openapi_alias_websocket_routes_are_mounted(asgi_app):
 
 
 def test_dashboard_config_aliases_are_registered_on_fastapi(asgi_app):
-    http_paths = {
-        route.path
-        for route in asgi_app.router.routes
-        if "route" in route.__class__.__name__.lower()
-    }
+    http_paths = set()
+    pending_routes = list(asgi_app.router.routes)
+    while pending_routes:
+        route = pending_routes.pop()
+        if isinstance(route, Route):
+            http_paths.add(route.path)
+        # FastAPI may expose included routers as intermediate route nodes.
+        if nested_routes := getattr(route, "routes", None):
+            pending_routes.extend(nested_routes)
 
     assert "/api/config/platform/list" in http_paths
     assert "/api/config/provider/list" in http_paths
