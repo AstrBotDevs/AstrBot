@@ -18,11 +18,11 @@
 """
 
 import inspect
-import logging
 import os
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
+from types import ModuleType
 from typing import Any, ClassVar
 
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
@@ -36,50 +36,131 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_platform_adapter import (
     AiocqhttpAdapter,
 )
 from astrbot.core.star.context import Context
-from astrbot.core.star.star import star_map
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.star.star import StarMetadata, star_map
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_path,
+    get_astrbot_plugin_path,
+)
 from astrbot.core.utils.io import ensure_dir
 
-logger = logging.getLogger("astrbot")
+_PLUGIN_MODULE_FLAGS = {"plugins", "builtin_stars"}
 
 
-def _resolve_plugin_from_star_map(module, star_map):
-    return star_map.get(module.__name__)
+def _split_module_path(module_path: str | None) -> list[str]:
+    if not module_path:
+        return []
+    return module_path.split(".")
 
 
-def _resolve_plugin_from_prefix(module, star_map):
-    if "." not in module.__name__:
-        return None
-    caller_name = module.__name__
-    # Prefer main modules or shorter paths deterministically
-    sorted_keys = sorted(
-        star_map.keys(), key=lambda k: (not k.endswith(".main"), len(k))
-    )
-    for mod_name in sorted_keys:
-        mod_package = mod_name.rpartition(".")[0] if "." in mod_name else mod_name
-        if caller_name == mod_package or caller_name.startswith(mod_package + "."):
-            return star_map[mod_name]
+def _plugin_root_from_module_path(module_path: str | None) -> tuple[str, str] | None:
+    parts = _split_module_path(module_path)
+    for index, part in enumerate(parts):
+        if part in _PLUGIN_MODULE_FLAGS and index + 1 < len(parts):
+            return part, parts[index + 1]
     return None
 
 
-def _resolve_plugin_from_path(module):
-    if not (hasattr(module, "__file__") and module.__file__):
-        return None
-    try:
-        from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
+def _metadata_root_dir_name(
+    metadata: StarMetadata,
+    module_path: str | None,
+) -> str | None:
+    if metadata.root_dir_name:
+        return metadata.root_dir_name
 
-        plugin_root = Path(get_astrbot_plugin_path()).resolve()
-        module_path = Path(module.__file__).resolve()
-        return module_path.relative_to(plugin_root).parts[0]
+    root_info = _plugin_root_from_module_path(metadata.module_path or module_path)
+    return root_info[1] if root_info else None
+
+
+def _iter_star_metadata(
+    stars: Mapping[str, StarMetadata],
+) -> list[tuple[str, StarMetadata]]:
+    seen: set[int] = set()
+    metadata_items: list[tuple[str, StarMetadata]] = []
+    for module_path, metadata in reversed(tuple(stars.items())):
+        metadata_id = id(metadata)
+        if metadata_id in seen:
+            continue
+        seen.add(metadata_id)
+        metadata_items.append((module_path, metadata))
+    return metadata_items
+
+
+def _resolve_plugin_from_root_dir(
+    root_dir_name: str,
+    stars: Mapping[str, StarMetadata],
+    module_flag: str | None = None,
+) -> StarMetadata | None:
+    for module_path, metadata in _iter_star_metadata(stars):
+        registered_module_path = metadata.module_path or module_path
+        registered_root = _plugin_root_from_module_path(registered_module_path)
+        if module_flag and registered_root and registered_root[0] != module_flag:
+            continue
+        if _metadata_root_dir_name(metadata, module_path) == root_dir_name:
+            return metadata
+    return None
+
+
+def _resolve_plugin_from_registered_package(
+    module_path: str,
+    stars: Mapping[str, StarMetadata],
+) -> StarMetadata | None:
+    root_info = _plugin_root_from_module_path(module_path)
+    if not root_info:
+        return None
+
+    module_flag, root_dir_name = root_info
+    return _resolve_plugin_from_root_dir(root_dir_name, stars, module_flag)
+
+
+def _plugin_search_roots() -> tuple[tuple[str, Path], ...]:
+    return (
+        ("plugins", Path(get_astrbot_plugin_path()).resolve()),
+        (
+            "builtin_stars",
+            Path(get_astrbot_path()).resolve() / "astrbot" / "builtin_stars",
+        ),
+    )
+
+
+def _resolve_plugin_from_file_path(
+    module: ModuleType,
+    stars: Mapping[str, StarMetadata],
+) -> StarMetadata | None:
+    module_file = getattr(module, "__file__", None)
+    if not module_file:
+        return None
+
+    try:
+        module_path = Path(module_file).resolve()
     except Exception:
         return None
 
+    for module_flag, plugin_root in _plugin_search_roots():
+        try:
+            relative_parts = module_path.relative_to(plugin_root).parts
+        except ValueError:
+            continue
 
-def _fallback_plugin_name(module):
-    logger.warning(
-        f"无法获取模块 {module.__name__} 的元数据信息，已安全回退到 'unknown_plugin'"
+        if relative_parts:
+            return _resolve_plugin_from_root_dir(
+                relative_parts[0],
+                stars,
+                module_flag,
+            )
+
+    return None
+
+
+def _resolve_plugin_metadata(
+    module: ModuleType,
+    stars: Mapping[str, StarMetadata],
+) -> StarMetadata | None:
+    return (
+        stars.get(module.__name__)
+        or _resolve_plugin_from_registered_package(module.__name__, stars)
+        or _resolve_plugin_from_file_path(module, stars)
     )
-    return "unknown_plugin"
 
 
 class StarTools:
@@ -333,16 +414,15 @@ class StarTools:
             if not module:
                 raise RuntimeError("无法获取调用者模块信息")
 
-            metadata = _resolve_plugin_from_star_map(
-                module, star_map
-            ) or _resolve_plugin_from_prefix(module, star_map)
+            metadata = _resolve_plugin_metadata(module, star_map)
 
-            if metadata:
-                plugin_name = metadata.name
-            else:
-                plugin_name = _resolve_plugin_from_path(
-                    module
-                ) or _fallback_plugin_name(module)
+            if not metadata:
+                raise RuntimeError(f"无法获取模块 {module.__name__} 的元数据信息")
+
+            plugin_name = metadata.name
+
+        if not plugin_name:
+            raise ValueError("无法获取插件名称")
 
         data_dir = Path(
             os.path.join(get_astrbot_data_path(), "plugin_data", plugin_name),
