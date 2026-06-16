@@ -328,7 +328,7 @@ CONFIG_METADATA_2 = {
                 "description": "消息平台适配器",
                 "type": "list",
                 "config_template": {
-                    "QQ 官方机器人(WebSocket)": {
+                    "QQ 官方机器人(Websocket, 推荐)": {
                         "id": "default",
                         "type": "qq_official",
                         "enable": True,
