@@ -47,11 +47,21 @@ class AutoUpdateManager:
 
     @property
     def check_interval(self) -> int:
-        return self.config.get("check_interval", 86400)
+        val = self.config.get("check_interval", 86400)
+        try:
+            val = int(val)
+            return val if val > 0 else 86400
+        except (TypeError, ValueError):
+            return 86400
 
     @property
     def backup_retention_days(self) -> int:
-        return self.config.get("backup_retention_days", 14)
+        val = self.config.get("backup_retention_days", 14)
+        try:
+            val = int(val)
+            return val if val >= 0 else 14
+        except (TypeError, ValueError):
+            return 14
 
     @property
     def notify_on_new_version(self) -> bool:
@@ -185,7 +195,15 @@ class AutoUpdateManager:
                     main_db=self.core_lifecycle.db,
                     kb_manager=kb_manager,
                 )
-                backup_path = await exporter.export_all()
+                raw_backup_path = await exporter.export_all()
+                # 重命名为含 "update_backup" 标记的文件名，以便清理逻辑正确识别
+                backup_dir = os.path.dirname(raw_backup_path)
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                backup_filename = (
+                    f"astrbot_update_backup_v{VERSION}_{timestamp}.zip"
+                )
+                backup_path = os.path.join(backup_dir, backup_filename)
+                os.rename(raw_backup_path, backup_path)
                 logger.info(f"更新前备份已创建: {backup_path}")
             except Exception as backup_exc:
                 logger.warning(f"创建备份失败（继续更新）: {backup_exc}")

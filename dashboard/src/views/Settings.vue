@@ -99,7 +99,7 @@
                 <v-text-field
                     v-model.number="autoUpdateBackupRetention"
                     type="number"
-                    min="1"
+                    min="0"
                     max="365"
                     variant="outlined"
                     density="compact"
@@ -369,8 +369,8 @@ const saveAutoUpdateConfig = async () => {
         const config = res.data?.data ?? res.data ?? {};
         config.auto_update = {
             enabled: autoUpdateEnabled.value,
-            check_interval: autoUpdateCheckInterval.value * 3600,
-            backup_retention_days: autoUpdateBackupRetention.value,
+            check_interval: Math.max(1, Number(autoUpdateCheckInterval.value) || 24) * 3600,
+            backup_retention_days: Math.max(0, Number(autoUpdateBackupRetention.value) || 14),
             auto_backup_before_update: autoUpdateBackupBefore.value,
             notify_on_new_version: autoUpdateNotify.value,
         };
@@ -388,14 +388,14 @@ const checkForUpdate = async () => {
         const data = res.data?.data ?? res.data ?? {};
         if (data.has_new_version) {
             showToast(
-                `New version available: ${data.version || 'unknown'} (current: ${data.dashboard_version || 'unknown'})`,
+                tm('autoUpdate.checkForUpdate.newVersionAvailable').replace('{version}', data.version || 'unknown'),
                 'info',
             );
         } else {
-            showToast('You are running the latest version.', 'success');
+            showToast(tm('autoUpdate.checkForUpdate.latest'), 'success');
         }
     } catch (e) {
-        showToast(e?.response?.data?.message || 'Failed to check for updates', 'error');
+        showToast(e?.response?.data?.message || tm('autoUpdate.checkForUpdate.failed'), 'error');
     } finally {
         checkingUpdate.value = false;
     }

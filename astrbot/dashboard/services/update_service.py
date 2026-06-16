@@ -485,12 +485,7 @@ class UpdateService:
         )
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        version_str = getattr(
-            __import__("astrbot.core.config.default", fromlist=["VERSION"]),
-            "VERSION",
-            "pre_update",
-        )
-        backup_filename = f"astrbot_update_backup_v{version_str}_{timestamp}.zip"
+        backup_filename = f"astrbot_update_backup_v{VERSION}_{timestamp}.zip"
 
         # 直接导出，使用自定义文件名
         zip_path = os.path.join(backup_dir, backup_filename)

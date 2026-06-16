@@ -102,6 +102,12 @@
     },
     "checkNow": "Check Now",
     "updateNow": "Update Now",
+    "checkForUpdate": {
+      "checking": "Checking for updates...",
+      "latest": "You are running the latest version.",
+      "newVersionAvailable": "A new version is available! (Current version: {version})",
+      "failed": "Failed to check for updates"
+    },
     "actions": {
       "save": "Save Settings",
       "saved": "Saved",

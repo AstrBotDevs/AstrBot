@@ -21,6 +21,7 @@ class UpdateCommands:
 
     def __init__(self, context: Context) -> None:
         self.context = context
+        self._update_task: asyncio.Task | None = None
 
     async def update_check(self, event: AstrMessageEvent) -> None:
         """Check for new AstrBot versions."""
@@ -90,7 +91,8 @@ class UpdateCommands:
 
         try:
             # 在后台触发更新，让当前消息先发出去
-            asyncio.create_task(
+            # 保存任务引用，防止被 Python 垃圾回收机制提前销毁
+            self._update_task = asyncio.create_task(
                 self._trigger_update_with_delay(auto_update_mgr, version)
             )
         except Exception as exc:
