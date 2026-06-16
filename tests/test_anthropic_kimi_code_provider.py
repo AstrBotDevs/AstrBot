@@ -484,6 +484,40 @@ def _setup_provider_with_mock_client(monkeypatch) -> anthropic_source.ProviderAn
 
 
 @pytest.mark.asyncio
+async def test_query_handles_none_usage_when_content_filtered(monkeypatch):
+    provider = _setup_provider_with_mock_client(monkeypatch)
+    content_filter_message = (
+        "The request was rejected because it was considered high risk"
+    )
+
+    class _FakeMessageBlock:
+        def __init__(self, text: str):
+            self.type = "text"
+            self.text = text
+
+    class _FakeMessage:
+        def __init__(self):
+            self.id = "msg_content_filter"
+            self.content = [_FakeMessageBlock(content_filter_message)]
+            self.stop_reason = "content_filter"
+            self.usage = None
+
+    async def fake_create(**kwargs):
+        return _FakeMessage()
+
+    monkeypatch.setattr(anthropic_source, "Message", _FakeMessage)
+    provider.client.messages.create = fake_create
+
+    llm_response = await provider.text_chat(prompt="test")
+
+    assert llm_response.completion_text == content_filter_message
+    assert llm_response.usage is not None
+    assert llm_response.usage.input_other == 0
+    assert llm_response.usage.input_cached == 0
+    assert llm_response.usage.output == 0
+
+
+@pytest.mark.asyncio
 async def test_tool_choice_auto_converts_to_dict(monkeypatch):
     """tool_choice='auto' 应转换为 {'type': 'auto'}"""
     provider = _setup_provider_with_mock_client(monkeypatch)

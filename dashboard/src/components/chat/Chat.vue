@@ -503,7 +503,8 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
-import axios from "axios";
+import { isAxiosError } from "axios";
+import { chatApi } from "@/api/v1";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ProjectDialog, {
   type ProjectFormData,
@@ -903,8 +904,7 @@ async function saveSessionTitleDialog() {
   try {
     const sessionId = editingSessionTitleId.value;
     const displayName = sessionTitleDraft.value.trim();
-    await axios.post("/api/chat/update_session_display_name", {
-      session_id: sessionId,
+    await chatApi.updateSession(sessionId, {
       display_name: displayName,
     });
     updateSessionTitle(sessionId, displayName);
@@ -1202,7 +1202,7 @@ async function createThreadFromSelection() {
   const message = threadSelection.message;
   if (!currSessionId.value || !message?.id || !threadSelection.selectedText) return;
   try {
-    const response = await axios.post("/api/chat/thread/create", {
+    const response = await chatApi.createThread({
       session_id: currSessionId.value,
       parent_message_id: message.id,
       selected_text: threadSelection.selectedText,
@@ -1224,7 +1224,7 @@ async function createThreadFromSelection() {
     window.getSelection()?.removeAllRanges();
   } catch (error) {
     toast.error(
-      axios.isAxiosError(error)
+      isAxiosError(error)
         ? error.response?.data?.message || error.message
         : tm("thread.createFailed"),
     );
@@ -1269,9 +1269,7 @@ async function deleteThread(thread: ChatThread) {
   if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog))) return;
   deletingThread.value = true;
   try {
-    await axios.post("/api/chat/thread/delete", {
-      thread_id: thread.thread_id,
-    });
+    await chatApi.deleteThread(thread.thread_id);
     removeThreadFromMessages(thread.thread_id);
     if (activeThread.value?.thread_id === thread.thread_id) {
       threadPanelOpen.value = false;

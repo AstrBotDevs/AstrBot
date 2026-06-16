@@ -3,11 +3,8 @@ import base64
 import json
 import logging
 import random
-import uuid
 from collections.abc import AsyncGenerator
-from pathlib import Path
 from typing import Literal, cast
-from urllib.parse import urlparse
 
 import httpx
 from google import genai
@@ -22,9 +19,10 @@ from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file, download_image_by_url
-from astrbot.core.utils.media_utils import ensure_wav
+from astrbot.core.utils.media_utils import (
+    describe_media_ref,
+    resolve_media_ref_to_base64_data,
+)
 from astrbot.core.utils.network_utils import is_connection_error, log_connection_failure
 
 from ..register import register_provider_adapter
@@ -971,57 +969,35 @@ class ProviderGoogleGenAI(Provider):
         """组装上下文。"""
 
         async def resolve_image_part(image_url: str) -> dict | None:
-            if image_url.startswith("http"):
-                image_path = await download_image_by_url(image_url)
-                image_data = await self.encode_image_bs64(image_path)
-            elif image_url.startswith("file:///"):
-                image_path = image_url.replace("file:///", "")
-                image_data = await self.encode_image_bs64(image_path)
-            else:
-                image_data = await self.encode_image_bs64(image_url)
+            image_data = await resolve_media_ref_to_base64_data(
+                image_url,
+                media_type="image",
+            )
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                logger.warning("图片预处理结果为空，将忽略。")
                 return None
             return {
                 "type": "image_url",
-                "image_url": {"url": image_data},
+                "image_url": {"url": image_data.to_data_url()},
             }
 
         async def resolve_audio_part(audio_path: str) -> dict | None:
-            if audio_path.startswith("http"):
-                suffix = Path(urlparse(audio_path).path).suffix or ".wav"
-                temp_dir = Path(get_astrbot_temp_path())
-                temp_dir.mkdir(parents=True, exist_ok=True)
-                resolved_path = str(
-                    temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
-                )
-                await download_file(audio_path, resolved_path)
-            elif audio_path.startswith("file:///"):
-                resolved_path = audio_path.replace("file:///", "")
-            else:
-                resolved_path = audio_path
-
-            suffix = Path(resolved_path).suffix.lower()
-            if suffix != ".mp3":
-                resolved_path = await ensure_wav(resolved_path)
-                suffix = ".wav"
-
             try:
-                audio_bytes = Path(resolved_path).read_bytes()
-            except OSError as exc:
-                logger.warning(
-                    f"Failed to read audio file {resolved_path}, skipping. Error: {exc}"
+                audio_data = await resolve_media_ref_to_base64_data(
+                    audio_path,
+                    media_type="audio",
+                    strict=True,
                 )
+            except Exception as exc:
+                logger.warning("音频预处理失败，将忽略。错误: %s", exc)
                 return None
 
-            mime_type = {
-                ".wav": "audio/wav",
-                ".mp3": "audio/mp3",
-            }.get(suffix, "audio/wav")
-            audio_data = base64.b64encode(audio_bytes).decode("utf-8")
+            if not audio_data:
+                logger.warning("音频预处理结果为空，将忽略。")
+                return None
             return {
                 "type": "audio_url",
-                "audio_url": {"url": f"data:{mime_type};base64,{audio_data}"},
+                "audio_url": {"url": audio_data.to_data_url()},
             }
 
         # 构建内容块列表
@@ -1084,11 +1060,16 @@ class ProviderGoogleGenAI(Provider):
 
     async def encode_image_bs64(self, image_url: str) -> str:
         """将图片转换为 base64"""
-        if image_url.startswith("base64://"):
-            return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
+        image_data = await resolve_media_ref_to_base64_data(
+            image_url,
+            media_type="image",
+            strict=True,
+        )
+        if image_data is None:
+            raise RuntimeError(
+                f"Failed to encode image data: {describe_media_ref(image_url)}"
+            )
+        return image_data.to_data_url()
 
     async def _close_httpx_client(self, client: httpx.AsyncClient | None) -> None:
         """Safely close an httpx.AsyncClient, swallowing errors for idempotency."""

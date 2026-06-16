@@ -5,7 +5,7 @@ import os
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.25.2"
+VERSION = "4.26.0-beta.3"
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -364,7 +364,7 @@ CONFIG_METADATA_2 = {
                 "description": "消息平台适配器",
                 "type": "list",
                 "config_template": {
-                    "QQ 官方机器人(WebSocket)": {
+                    "QQ 官方机器人(Websocket, 推荐)": {
                         "id": "default",
                         "type": "qq_official",
                         "enable": True,
@@ -453,7 +453,7 @@ CONFIG_METADATA_2 = {
                         "weixin_oc_bot_type": "3",
                         "weixin_oc_qr_poll_interval": 1,
                         "weixin_oc_long_poll_timeout_ms": 35_000,
-                        "weixin_oc_api_timeout_ms": 15_000,
+                        "weixin_oc_api_timeout_ms": 120_000,
                     },
                     "飞书(Lark)": {
                         "id": "lark",
@@ -1841,6 +1841,25 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_model": "gemini-2.5-flash-preview-tts",
                         "gemini_tts_prefix": "",
                         "gemini_tts_voice_name": "Leda",
+                        "proxy": "",
+                    },
+                    "ElevenLabs TTS(API)": {
+                        "hint": "API Key 从 https://elevenlabs.io/app/settings/api-keys 获取。Voice ID 可在 https://elevenlabs.io/app/voice-library 浏览选择。",
+                        "id": "elevenlabs_tts",
+                        "type": "elevenlabs_tts_api",
+                        "provider": "elevenlabs",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.elevenlabs.io/v1",
+                        "model": "eleven_multilingual_v2",
+                        "elevenlabs-tts-voice-id": "JBFqnCBsd6RMkjVDRZzb",
+                        "elevenlabs-tts-output-format": "mp3_44100_128",
+                        "elevenlabs-tts-stability": "",
+                        "elevenlabs-tts-similarity-boost": "",
+                        "elevenlabs-tts-style": "",
+                        "elevenlabs-tts-use-speaker-boost": True,
+                        "timeout": "20",
                         "proxy": "",
                     },
                     "OpenAI Embedding": {
@@ -3911,7 +3930,7 @@ CONFIG_METADATA_3 = {
                     "disable_builtin_commands": {
                         "description": "禁用自带指令",
                         "type": "bool",
-                        "hint": "禁用所有 AstrBot 的自带指令，如 help, provider, model 等。",
+                        "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
                     },
                 },
             },

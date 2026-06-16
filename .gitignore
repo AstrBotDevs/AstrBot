@@ -64,3 +64,6 @@ GenieData/
 .worktrees/
 
 dashboard/bun.lock
+.codegraph/.gitignore
+.codegraph/codegraph.lock
+.codegraph/daemon.pid

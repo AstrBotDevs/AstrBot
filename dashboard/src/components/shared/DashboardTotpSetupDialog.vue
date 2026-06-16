@@ -115,7 +115,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import axios from 'axios'
+import { authApi } from '@/api/v1'
 import QrCodeViewer from './QrCodeViewer.vue'
 import { useModuleI18n } from '@/i18n/composables'
 
@@ -221,7 +221,7 @@ async function fetchNewSecret() {
   }
   loading.value = true
   try {
-    const res = await axios.post('/api/auth/totp/setup')
+    const res = await authApi.setupTotp()
     if (res.data.status !== 'ok') {
       return
     }
@@ -238,7 +238,7 @@ async function verifyIdentity() {
   verifyingIdentity.value = true
   verifyError.value = ''
   try {
-    const res = await axios.post('/api/auth/totp/setup', { code: verifyCode.value })
+    const res = await authApi.setupTotp({ code: verifyCode.value })
     if (res.data.status !== 'ok') {
       verifyError.value = res.data.message || '验证失败'
       return
@@ -257,7 +257,7 @@ async function confirmSetup() {
   verifying.value = true
   codeError.value = ''
   try {
-    const res = await axios.post('/api/auth/totp/setup', {
+    const res = await authApi.setupTotp({
       secret: newSecret.value,
       code: code.value,
     })
