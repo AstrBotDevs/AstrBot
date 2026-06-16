@@ -1,3 +1,4 @@
+import base64
 import json
 from typing import Any
 from urllib.parse import unquote
@@ -106,14 +107,25 @@ class NtfyAPIClient:
         message: str | None = None,
     ) -> bool:
         """Uploads a rich attachment asset via PUT binary stream."""
+
+        def encode_non_ascii(text: str) -> str:
+            if text.isascii():
+                return text
+            else:
+                try:
+                    text.encode("ascii")
+                    return text
+                except UnicodeEncodeError:
+                    return f"=?utf-8?B?{base64.b64encode(text.encode('utf-8')).decode('ascii')}?="
+
         headers = {
             **self.headers,
             "X-Title": "AstrBot",
             "X-Tags": "robot",
-            "X-Filename": filename,
+            "X-Filename": encode_non_ascii(filename),
         }
         if message:
-            headers["X-Message"] = message
+            headers["X-Message"] = encode_non_ascii(message)
 
         session = await self._get_session()
         try:

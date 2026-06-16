@@ -89,10 +89,10 @@ class NtfyPlatformAdapter(Platform):
         self.shutdown_event = asyncio.Event()
 
         server_url = str(
-            platform_config.get("ntfy_server_url", "https://ntfy.sh")
+            platform_config.get("ntfy_server_url") or "https://ntfy.sh"
         ).strip()
-        topic = str(platform_config.get("ntfy_topic", "")).strip()
-        access_token = str(platform_config.get("ntfy_access_token", "")).strip()
+        topic = str(platform_config.get("ntfy_topic") or "").strip()
+        access_token = str(platform_config.get("ntfy_access_token") or "").strip()
 
         logger.info(platform_config)
 

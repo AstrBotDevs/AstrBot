@@ -539,7 +539,7 @@ CONFIG_METADATA_2 = {
                         "id": "ntfy",
                         "type": "ntfy",
                         "enable": True,
-                        "ntfy_server_url": "https:ntfy.sh",
+                        "ntfy_server_url": "https://ntfy.sh",
                         "ntfy_topic": "",
                         "ntfy_access_token": "",
                     },
