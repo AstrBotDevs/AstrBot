@@ -60,6 +60,9 @@
       "restart": "Preparing restart...",
       "restarting": "Restarting AstrBot",
       "completed": "Update complete",
+      "successReady": "Update successful",
+      "autoReloadIn": "Refreshing automatically in {seconds}s",
+      "reloadNow": "Refresh now",
       "failed": "Update failed"
     },
     "redirectConfirm": {

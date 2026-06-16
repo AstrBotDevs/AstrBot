@@ -56,6 +56,10 @@ let showAdvancedUpdateSettings = ref(false);
 let restartWaiting = ref(false);
 let restartStartTime = ref<number | string | null>(null);
 let restartPollTimer: ReturnType<typeof setInterval> | null = null;
+let restartCompleted = ref(false);
+let restartReloadCountdown = ref(3);
+let restartReloadTimer: ReturnType<typeof setInterval> | null = null;
+const RESTART_FEEDBACK_DELAY_SECONDS = 3;
 type DownloadStageStatus = "pending" | "running" | "done" | "error";
 type DownloadStage = {
   status: DownloadStageStatus;
@@ -564,6 +568,21 @@ function stopRestartPolling() {
   }
 }
 
+function stopRestartReloadTimer() {
+  if (restartReloadTimer) {
+    clearInterval(restartReloadTimer);
+    restartReloadTimer = null;
+  }
+}
+
+function resetRestartFeedbackState() {
+  stopRestartReloadTimer();
+  stopRestartPolling();
+  restartCompleted.value = false;
+  restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
+  restartWaiting.value = false;
+}
+
 async function fetchAstrBotStartTime() {
   const res = await statsApi.startTime();
   const rawStartTime = res.data?.data?.start_time;
@@ -574,8 +593,37 @@ async function fetchAstrBotStartTime() {
   return startTime;
 }
 
+function reloadAfterUpdate() {
+  stopRestartReloadTimer();
+  window.location.reload();
+}
+
+function showRestartCompleted() {
+  if (restartCompleted.value) {
+    return;
+  }
+  stopRestartReloadTimer();
+  restartWaiting.value = false;
+  restartCompleted.value = true;
+  restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
+  updateProgress.value = {
+    ...updateProgress.value,
+    status: "success",
+    stage: "done",
+    message: t("core.header.updateDialog.progress.successReady"),
+    overall_percent: 100,
+  };
+  restartReloadTimer = setInterval(() => {
+    if (restartReloadCountdown.value <= 1) {
+      reloadAfterUpdate();
+      return;
+    }
+    restartReloadCountdown.value -= 1;
+  }, 1000);
+}
+
 function waitForAstrBotRestart(initialStartTime: number | string | null) {
-  if (restartWaiting.value) {
+  if (restartWaiting.value || restartCompleted.value) {
     return;
   }
   stopRestartPolling();
@@ -598,8 +646,7 @@ function waitForAstrBotRestart(initialStartTime: number | string | null) {
         currentStartTime !== initialStartTime
       ) {
         stopRestartPolling();
-        restartWaiting.value = false;
-        window.location.reload();
+        showRestartCompleted();
       }
     } catch (_error) {
       // Backend may be unavailable while the process is restarting.
@@ -612,6 +659,13 @@ function waitForAstrBotRestart(initialStartTime: number | string | null) {
 }
 
 function applyUpdateProgress(payload: UpdateProgress) {
+  if (
+    payload.status === "idle" &&
+    payload.id === updateProgress.value.id &&
+    updateProgress.value.status !== "idle"
+  ) {
+    return;
+  }
   updateProgress.value = {
     ...createEmptyUpdateProgress(),
     ...payload,
@@ -620,6 +674,11 @@ function applyUpdateProgress(payload: UpdateProgress) {
       ...(payload.stages || {}),
     },
   };
+  if (payload.stage === "restart") {
+    stopUpdateProgressPolling();
+    waitForAstrBotRestart(restartStartTime.value);
+    return;
+  }
   if (payload.status === "success" || payload.status === "error") {
     stopUpdateProgressPolling();
   }
@@ -659,6 +718,7 @@ async function switchVersion(targetVersion: string) {
     version: targetVersion,
     message: t("core.header.updateDialog.progress.preparing"),
   } as UpdateProgress;
+  resetRestartFeedbackState();
   updateStatus.value = t("core.header.updateDialog.status.switching");
   installLoading.value = true;
 
@@ -686,7 +746,7 @@ async function switchVersion(targetVersion: string) {
         overall_percent:
           res.data.status === "ok" ? 100 : updateProgress.value.overall_percent,
       };
-      if (res.data.status == "ok") {
+      if (res.data.status === "ok") {
         waitForAstrBotRestart(initialStartTime);
       }
     })
@@ -766,6 +826,7 @@ commonStore.getStartTime();
 onUnmounted(() => {
   stopUpdateProgressPolling();
   stopRestartPolling();
+  stopRestartReloadTimer();
 });
 
 // 视图模式切换
@@ -1227,8 +1288,39 @@ onMounted(async () => {
             <div
               v-if="installLoading || updateProgress.status !== 'idle'"
               class="update-progress-panel mt-5"
+              :class="{ 'update-progress-panel--success': restartCompleted }"
             >
-              <div v-if="restartWaiting" class="restart-waiting-panel">
+              <div
+                v-if="restartCompleted"
+                class="update-feedback-panel update-feedback-panel--success"
+              >
+                <v-icon
+                  icon="mdi-check-circle"
+                  color="success"
+                  size="46"
+                ></v-icon>
+                <div class="text-subtitle-1 font-weight-medium">
+                  {{ t("core.header.updateDialog.progress.successReady") }}
+                </div>
+                <div class="text-caption text-medium-emphasis">
+                  {{
+                    t("core.header.updateDialog.progress.autoReloadIn", {
+                      seconds: restartReloadCountdown,
+                    })
+                  }}
+                </div>
+                <v-btn
+                  color="success"
+                  variant="elevated"
+                  size="small"
+                  @click="reloadAfterUpdate"
+                >
+                  <v-icon class="mr-1" size="18">mdi-refresh</v-icon>
+                  {{ t("core.header.updateDialog.progress.reloadNow") }}
+                </v-btn>
+              </div>
+
+              <div v-else-if="restartWaiting" class="update-feedback-panel">
                 <v-progress-circular
                   indeterminate
                   color="primary"
@@ -1922,6 +2014,33 @@ onMounted(async () => {
   padding: 16px;
 }
 
+.update-progress-panel {
+  overflow: hidden;
+  position: relative;
+  transition:
+    border-color 0.9s ease,
+    box-shadow 0.9s ease;
+}
+
+.update-progress-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(var(--v-theme-success), 0.16),
+    rgba(var(--v-theme-success), 0.07)
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.1s ease;
+}
+
+.update-progress-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
 .release-message-preview {
   max-height: 220px;
   overflow: hidden;
@@ -1950,6 +2069,53 @@ onMounted(async () => {
   gap: 16px;
 }
 
+.update-progress-panel--success {
+  border-color: rgba(var(--v-theme-success), 0.48);
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.08);
+}
+
+.update-progress-panel--success::before {
+  animation: update-success-green-in 1.2s ease-out;
+  opacity: 1;
+}
+
+.update-feedback-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 150px;
+  padding: 18px 0 22px;
+  text-align: center;
+}
+
+.update-feedback-panel--success {
+  animation: update-success-content-in 0.45s ease-out both;
+}
+
+@keyframes update-success-green-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes update-success-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .advanced-settings-toggle {
   display: inline-flex;
   align-items: center;
@@ -1967,14 +2133,6 @@ onMounted(async () => {
 
 .advanced-settings-toggle:hover {
   color: rgb(var(--v-theme-primary));
-}
-
-.restart-waiting-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 0 22px;
 }
 
 .update-stage-list {

@@ -60,6 +60,9 @@
       "restart": "Подготовка перезапуска...",
       "restarting": "Перезапуск AstrBot",
       "completed": "Обновление завершено",
+      "successReady": "Обновление успешно",
+      "autoReloadIn": "Автоматическое обновление через {seconds} с",
+      "reloadNow": "Обновить сейчас",
       "failed": "Ошибка обновления"
     },
     "redirectConfirm": {

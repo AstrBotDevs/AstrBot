@@ -60,6 +60,9 @@
       "restart": "正在准备重启...",
       "restarting": "正在重启 AstrBot",
       "completed": "更新完成",
+      "successReady": "更新成功",
+      "autoReloadIn": "{seconds} 秒后自动刷新",
+      "reloadNow": "立即刷新",
       "failed": "更新失败"
     },
     "redirectConfirm": {

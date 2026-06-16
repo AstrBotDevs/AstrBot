@@ -116,6 +116,7 @@ def _resolve_tool_handler_module_path(tool: FunctionTool) -> str:
 
 class PlatformManagerProtocol(Protocol):
     platform_insts: list[Platform]
+    get_insts: Callable[[], list[Platform]]
 
 
 class Context:
