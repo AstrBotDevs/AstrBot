@@ -599,6 +599,10 @@ async def get_booter(
             token = sandbox_cfg.get("shipyard_neo_access_token", "")
             ttl = sandbox_cfg.get("shipyard_neo_ttl", 3600)
             profile = sandbox_cfg.get("shipyard_neo_profile", "python-default")
+            persist_id = sandbox_cfg.get("shipyard_neo_persist_id", "").strip() or None
+            
+            # Inject db for persist_id lookup in ShipyardNeoBooter
+            db_helper = context.get_db()
 
             # Auto-discover token from Bay's credentials.json if not configured
             if not token:
@@ -611,7 +615,9 @@ async def get_booter(
                 endpoint_url=ep,
                 access_token=token,
                 profile=profile,
+                persist_id=persist_id,
                 ttl=ttl,
+                db_helper=db_helper,
             )
         elif booter_type == "cua":
             from .booters.cua import CuaBooter, build_cua_booter_kwargs

@@ -23,6 +23,7 @@ from astrbot.core.db.po import (
     Preference,
     ProviderStat,
     SessionProjectRelation,
+    ShipyardNeoPersist,
     Stats,
     UmoAlias,
     WebChatThread,
@@ -825,6 +826,25 @@ class BaseDatabase(abc.ABC):
     @abc.abstractmethod
     async def get_umo_aliases(self, umos: list[str] | None = None) -> list[UmoAlias]:
         """Get alias metadata, optionally restricted to the given UMO list."""
+        ...
+        
+    # ====
+    # Shipyard Neo Persist Management
+    # ====
+
+    @abc.abstractmethod
+    async def upsert_shipyard_neo_persist(self, persist_id: str, cargo_id: str) -> None:
+        """Create or update the persistent mapping for a Shipyard Neo cargo."""
+        ...
+
+    @abc.abstractmethod
+    async def get_shipyard_neo_persist(self, persist_id: str) -> ShipyardNeoPersist | None:
+        """Get the persistent mapping for a Shipyard Neo cargo."""
+        ...
+        
+    @abc.abstractmethod
+    async def delete_shipyard_neo_persist(self, persist_id: str) -> None:
+        """Delete the persistent mapping for a Shipyard Neo cargo."""
         ...
 
     # ====
