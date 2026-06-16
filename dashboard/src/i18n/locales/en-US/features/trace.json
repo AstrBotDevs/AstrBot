@@ -6,5 +6,10 @@
   },
   "hint": "Real-time display of the complete model call chain, tool calls, and execution results for AstrBot main Agent and SubAgents.",
   "recording": "Recording",
-  "paused": "Paused"
+  "paused": "Paused",
+  "mainTitle": "Main Agent Traces",
+  "subTitle": "SubAgent Traces",
+  "mainEmpty": "No main agent traces yet.",
+  "subEmpty": "No subagent traces yet.",
+  "parentMissing": "Parent trace has been cleared"
 }

@@ -1049,7 +1049,7 @@ function addToolFromCombobox() {
 
 async function loadAvailableTools() {
   try {
-    const res = await axios.get('/api/subagent/available-tools')
+    const res = await subagentApi.availableTools()
     if (res.data.status === 'ok') {
       availableTools.value = res.data.data
     }
