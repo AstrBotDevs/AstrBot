@@ -25,7 +25,7 @@
                     <div v-if="systemConfigRestartRequired" class="system-config-restart-bar" role="status">
                         <div class="system-config-restart-bar__inner">
                             <div class="system-config-restart-bar__message">
-                                <v-icon size="18">mdi-content-save-check-outline</v-icon>
+                                <v-icon size="18">mdi-alert-circle</v-icon>
                                 <span>{{ tm('systemConfig.restartRequired') }}</span>
                             </div>
                             <v-btn
