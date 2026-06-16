@@ -44,6 +44,30 @@ def _is_safe_command(command: str) -> bool:
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
 
 
+def _kill_process_tree(proc: subprocess.Popen) -> None:
+    """Forcefully terminate a process and every child it spawned.
+
+    On Windows ``Popen.kill()`` only terminates the immediate (shell) process.
+    Any child it started keeps running and holds the captured stdout/stderr
+    pipes open, so ``communicate()`` blocks until those children exit and the
+    requested timeout is never actually enforced. ``taskkill /T`` tears down the
+    whole tree. On POSIX we keep the existing ``proc.kill()`` behavior.
+    """
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            return
+        except OSError:
+            # taskkill missing/unavailable: fall back to a single-process kill.
+            pass
+    proc.kill()
+
+
 def _decode_bytes_with_fallback(
     output: bytes | None,
     *,
@@ -118,18 +142,31 @@ class LocalShellComponent(ShellComponent):
             # `command` is intentionally executed through the current shell so
             # local computer-use behavior matches existing tool semantics.
             # Safety relies on `_is_safe_command()` and the allowed-root checks.
-            result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+            with subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 command,
                 shell=shell,
                 cwd=working_dir,
                 env=run_env,
-                timeout=timeout or 300,
-                capture_output=True,
-            )
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ) as proc:
+                try:
+                    stdout, stderr = proc.communicate(timeout=timeout or 300)
+                except subprocess.TimeoutExpired:
+                    # subprocess.run only kills the immediate process here, which
+                    # leaves the shell's children alive on Windows and keeps the
+                    # pipes open. Kill the whole tree, then drain/reap mirroring
+                    # CPython's subprocess.run, and re-raise the same timeout.
+                    _kill_process_tree(proc)
+                    if os.name == "nt":
+                        proc.communicate()
+                    else:
+                        proc.wait()
+                    raise
             return {
-                "stdout": _decode_shell_output(result.stdout),
-                "stderr": _decode_shell_output(result.stderr),
-                "exit_code": result.returncode,
+                "stdout": _decode_shell_output(stdout),
+                "stderr": _decode_shell_output(stderr),
+                "exit_code": proc.returncode,
             }
 
         return await asyncio.to_thread(_run)
