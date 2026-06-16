@@ -833,7 +833,7 @@ class BaseDatabase(abc.ABC):
     # ====
 
     @abc.abstractmethod
-    async def upsert_shipyard_neo_persist(self, persist_id: str, cargo_id: str) -> None:
+    async def upsert_shipyard_neo_persist(self, persist_id: str, cargo_id: str) -> ShipyardNeoPersist:
         """Create or update the persistent mapping for a Shipyard Neo cargo."""
         ...
 

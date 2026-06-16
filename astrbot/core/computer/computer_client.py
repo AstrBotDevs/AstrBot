@@ -609,7 +609,7 @@ async def get_booter(
                 token = _discover_bay_credentials(ep)
 
             logger.info(
-                f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, ttl={ttl}"
+                f"[Computer] Shipyard Neo config: endpoint={ep}, profile={profile}, persist_id={persist_id}, ttl={ttl}"
             )
             client = ShipyardNeoBooter(
                 endpoint_url=ep,

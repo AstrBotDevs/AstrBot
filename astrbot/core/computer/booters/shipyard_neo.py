@@ -625,14 +625,6 @@ class ShipyardNeoBooter(ComputerBooter):
                     self._persist_id,
                 )
                 cargo_id = None
-            except Exception as e:
-                logger.warning(
-                    "[Computer] Error checking existing cargo for persist_id=%s: %s; "
-                    "a new cargo will be created.",
-                    self._persist_id,
-                    e,
-                )
-                cargo_id = None
                 
         if cargo_id is None:
             # Create a new cargo and save the mapping
