@@ -70,6 +70,13 @@ const REGISTRATION_ACTIONS = {
     scanTitleKey: 'registrationAction.dingtalk.scanTitle',
     successKey: 'registrationAction.dingtalk.created',
   },
+  qq_official: {
+    icon: 'mdi-qrcode',
+    titleKey: 'registrationAction.qqOfficial.title',
+    scanTitleKey: 'registrationAction.qqOfficial.scanTitle',
+    successKey: 'registrationAction.qqOfficial.created',
+    statusKeyPrefix: 'registrationAction.qqOfficial.status',
+  },
 };
 
 export default {
@@ -202,12 +209,19 @@ export default {
       if (!this.action || !this.flow.registration_code) {
         return;
       }
+      const pollPayload = {
+        registration_code: this.flow.registration_code,
+      };
+      if (this.flow.task_id) {
+        pollPayload.task_id = this.flow.task_id;
+      }
+      if (this.flow.bind_key) {
+        pollPayload.bind_key = this.flow.bind_key;
+      }
       try {
         const res = await botApi.registration(
           this.platformConfig.type,
-          this.buildPayload('poll', {
-            registration_code: this.flow.registration_code,
-          }),
+          this.buildPayload('poll', pollPayload),
         );
         if (res.data.status !== 'ok') {
           throw new Error(res.data.message || this.tm('registrationAction.pollFailed'));
@@ -253,6 +267,12 @@ export default {
       }
       if (data.app_secret) {
         this.platformConfig.app_secret = data.app_secret;
+      }
+      if (data.appid) {
+        this.platformConfig.appid = data.appid;
+      }
+      if (data.secret) {
+        this.platformConfig.secret = data.secret;
       }
       if (data.domain) {
         this.platformConfig.domain = data.domain;

@@ -163,6 +163,20 @@
       "scanTitle": "请使用手机钉钉扫码",
       "created": "创建成功"
     },
+    "qqOfficial": {
+      "title": "QQ 官方机器人扫码绑定",
+      "scanTitle": "请使用手机 QQ 扫码",
+      "created": "绑定成功",
+      "status": {
+        "idle": "未开始",
+        "starting": "正在获取二维码",
+        "pending": "等待扫码确认",
+        "created": "绑定成功，记得点击下方保存按钮！",
+        "denied": "用户取消",
+        "expired": "已过期",
+        "error": "绑定失败"
+      }
+    },
     "start": "开始创建",
     "created": "创建成功",
     "startFailed": "发起扫码创建失败",

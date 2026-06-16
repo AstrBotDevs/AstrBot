@@ -15,6 +15,10 @@ from astrbot.core.platform.sources.lark.app_registration import (
     request_app_registration,
 )
 from astrbot.core.platform.sources.lark.bot_info import request_lark_bot_info
+from astrbot.core.platform.sources.qqofficial.login_registration import (
+    poll_qqofficial_login_once,
+    request_qqofficial_login_qr,
+)
 from astrbot.core.platform.sources.weixin_oc.login_registration import (
     poll_weixin_oc_login_once,
     request_weixin_oc_login_qr,
@@ -95,6 +99,12 @@ class PlatformService:
                 )
             if platform_type == "dingtalk":
                 return await self._handle_dingtalk_registration(action, payload)
+            if platform_type == "qq_official":
+                return await self._handle_qqofficial_registration(
+                    action,
+                    payload,
+                    platform_config,
+                )
 
             raise PlatformServiceError(
                 f"Unsupported platform registration: {platform_type}",
@@ -182,6 +192,41 @@ class PlatformService:
             if result.get("status") == "created":
                 result["platform_id_suffix"] = random_platform_id_suffix()
             return result
+
+        raise PlatformServiceError(f"Unsupported action: {action}", 400)
+
+    async def _handle_qqofficial_registration(
+        self,
+        action: str,
+        payload: dict,
+        platform_config: dict,
+    ) -> dict:
+        if action == "start":
+            registration = await request_qqofficial_login_qr(platform_config)
+            return {
+                "status": "pending",
+                "registration_code": registration.task_id,
+                "task_id": registration.task_id,
+                "bind_key": registration.bind_key,
+                "qrcode": registration.qrcode,
+                "qrcode_img_content": registration.qrcode,
+                "interval": registration.interval,
+            }
+
+        if action == "poll":
+            task_id = str(
+                payload.get("task_id") or payload.get("registration_code") or ""
+            ).strip()
+            bind_key = str(payload.get("bind_key") or "").strip()
+            if not task_id:
+                raise PlatformServiceError("Missing task_id", 400)
+            if not bind_key:
+                raise PlatformServiceError("Missing bind_key", 400)
+            return await poll_qqofficial_login_once(
+                platform_config=platform_config,
+                task_id=task_id,
+                bind_key=bind_key,
+            )
 
         raise PlatformServiceError(f"Unsupported action: {action}", 400)
 
