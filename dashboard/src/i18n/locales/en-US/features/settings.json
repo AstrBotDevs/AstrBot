@@ -1,4 +1,61 @@
 {
+  "page": {
+    "title": "Settings"
+  },
+  "sections": {
+    "general": {
+      "title": "General"
+    },
+    "appearance": {
+      "title": "Appearance"
+    },
+    "network": {
+      "title": "Network"
+    },
+    "security": {
+      "title": "Security"
+    },
+    "maintenance": {
+      "title": "Maintenance"
+    },
+    "openapi": {
+      "title": "OpenAPI"
+    }
+  },
+  "systemConfig": {
+    "restartRequired": "System config saved. Some changes only take effect after restarting AstrBot.",
+    "groups": {
+      "runtime": {
+        "title": "Runtime Basics",
+        "subtitle": "Timezone and externally reachable callback URL."
+      },
+      "network": {
+        "title": "Proxy & Dependency Sources",
+        "subtitle": "Runtime proxy, Python dependency install options, and PyPI source."
+      },
+      "webuiSecurity": {
+        "title": "WebUI Security",
+        "subtitle": "HTTPS, trusted proxy headers, login rate limits, and TOTP."
+      },
+      "logs": {
+        "title": "Logs",
+        "subtitle": "Console logs, file logs, and Trace file logging."
+      },
+      "tempStorage": {
+        "title": "Cache",
+        "subtitle": "Automatic cleanup threshold for the temporary directory."
+      },
+      "t2iRendering": {
+        "title": "Text-to-Image",
+        "subtitle": "Rendering strategy, endpoint, and custom templates for text-to-image."
+      }
+    },
+    "messages": {
+      "loadFailed": "Failed to load system config",
+      "saveSuccess": "System config saved",
+      "saveFailed": "Failed to save system config"
+    }
+  },
   "network": {
     "title": "Network",
     "githubProxy": {
@@ -31,12 +88,8 @@
     "restart": {
       "title": "Restart",
       "subtitle": "Restart AstrBot",
+      "confirm": "Restart AstrBot now? The WebUI may be temporarily unavailable during restart.",
       "button": "Restart"
-    },
-    "migration": {
-      "title": "Data Migration to v4.0.0",
-      "subtitle": "If you encounter data migration issues, you can manually start the database migration assistant",
-      "button": "Start Migration Assistant"
     },
     "backup": {
       "title": "Backup & Restore",
@@ -47,6 +100,7 @@
       "title": "Log & Cache Cleanup",
       "subtitle": "Review disk usage for logs and caches, then clean them from the UI without shell commands.",
       "refresh": "Refresh Usage",
+      "clean": "Clean",
       "cleanAll": "Clean All",
       "panel": {
         "title": "Cleanup Details",

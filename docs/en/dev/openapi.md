@@ -48,7 +48,7 @@ If the API Key does not include the required scope for the target endpoint, the 
 
 `config` is a broad management scope. When an API key is created with `config`, AstrBot grants the key `config`, `bot`, and `provider` access together. The WebUI mirrors this dependency: selecting `config` selects `bot` and `provider`; deselecting `bot` or `provider` removes `config`.
 
-Developer API keys currently support only the 9 scopes listed above. `file`, `tool`, `skills`, `kb`, `data`, and `system` are not valid developer API key scopes. Use the singular `skill` scope for `/api/v1/skills/*` endpoints. Related endpoints may still appear in the `/api/v1` reference, but they are not available to developer API keys unless their scope is one of the supported scopes above.
+Developer API keys currently support only the 9 scopes listed above. `file`, `tool`, `skills`, `kb`, `data`, and `system` are not valid developer API key scopes. Use the singular `skill` scope for `/api/v1/skills/*` endpoints. The public OpenAPI reference only includes endpoints covered by supported developer API key scopes.
 
 ## Common Endpoints
 

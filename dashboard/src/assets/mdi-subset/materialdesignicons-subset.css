@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 274 icons */
+/* Auto-generated MDI subset – 280 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -58,6 +58,10 @@
 
 .mdi-alert-outline::before {
   content: "\F002A";
+}
+
+.mdi-api::before {
+  content: "\F109B";
 }
 
 .mdi-api-off::before {
@@ -306,6 +310,10 @@
 
 .mdi-content-save::before {
   content: "\F0193";
+}
+
+.mdi-content-save-check-outline::before {
+  content: "\F18EB";
 }
 
 .mdi-content-save-outline::before {
@@ -616,6 +624,10 @@
   content: "\F0315";
 }
 
+.mdi-lan-connect::before {
+  content: "\F0318";
+}
+
 .mdi-language-css3::before {
   content: "\F031C";
 }
@@ -792,6 +804,10 @@
   content: "\F0601";
 }
 
+.mdi-palette-outline::before {
+  content: "\F0E0C";
+}
+
 .mdi-paperclip::before {
   content: "\F03E2";
 }
@@ -940,6 +956,10 @@
   content: "\F0BC4";
 }
 
+.mdi-shield-lock-outline::before {
+  content: "\F0CCC";
+}
+
 .mdi-shuffle-variant::before {
   content: "\F049F";
 }
@@ -1054,6 +1074,10 @@
 
 .mdi-trash-can-outline::before {
   content: "\F0A7A";
+}
+
+.mdi-tune-variant::before {
+  content: "\F1542";
 }
 
 .mdi-unfold-more-horizontal::before {

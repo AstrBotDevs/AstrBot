@@ -3,7 +3,6 @@ import { RouterView, useRoute } from "vue-router";
 import { ref, onMounted, computed, watch } from "vue";
 import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
-import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import Chat from "@/components/chat/Chat.vue";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -32,7 +31,6 @@ const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
 
-const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
 const showFirstNoticeDialog = ref(false);
 
 watch(isCurrentChatRoute, (isChatRoute) => {
@@ -40,34 +38,6 @@ watch(isCurrentChatRoute, (isChatRoute) => {
     shouldMountChat.value = true;
   }
 });
-
-const checkMigration = async (): Promise<boolean> => {
-  try {
-    const response = await statsApi.version();
-    if (response.data.status === "ok") {
-      commonStore.setAstrBotVersion(
-        response.data.data?.version,
-        response.data.data?.dashboard_version,
-      );
-    }
-    if (response.data.status === "ok" && response.data.data.need_migration) {
-      if (
-        migrationDialog.value &&
-        typeof migrationDialog.value.open === "function"
-      ) {
-        const result = await migrationDialog.value.open();
-        if (result.success) {
-          console.log("Migration completed successfully:", result.message);
-          window.location.reload();
-        }
-      }
-      return true;
-    }
-  } catch (error) {
-    console.error("Failed to check migration status:", error);
-  }
-  return false;
-};
 
 const maybeShowFirstNotice = async () => {
   if (localStorage.getItem(FIRST_NOTICE_SEEN_KEY) === "1") {
@@ -101,10 +71,18 @@ const onFirstNoticeDialogUpdate = (visible: boolean) => {
 
 onMounted(() => {
   setTimeout(async () => {
-    const migrationPending = await checkMigration();
-    if (!migrationPending) {
-      await maybeShowFirstNotice();
+    try {
+      const response = await statsApi.version();
+      if (response.data.status === "ok") {
+        commonStore.setAstrBotVersion(
+          response.data.data?.version,
+          response.data.data?.dashboard_version,
+        );
+      }
+    } catch (error) {
+      console.error("Failed to load version info:", error);
     }
+    await maybeShowFirstNotice();
   }, 1000);
 });
 </script>
@@ -166,7 +144,6 @@ onMounted(() => {
         </v-container>
       </v-main>
 
-      <MigrationDialog ref="migrationDialog" />
       <ReadmeDialog
         :show="showFirstNoticeDialog"
         mode="first-notice"

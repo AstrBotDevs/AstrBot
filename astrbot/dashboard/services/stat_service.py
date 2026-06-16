@@ -19,7 +19,6 @@ from astrbot.core.config import VERSION
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
-from astrbot.core.db.migration.helper import check_migration_needed_v4
 from astrbot.core.db.po import ProviderStat
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.auth_password import (
@@ -87,7 +86,6 @@ class StatService:
         ) and not DEMO_MODE
 
     async def get_version(self) -> dict:
-        need_migration = await check_migration_needed_v4(self.core_lifecycle.db)
         storage_upgraded = await is_password_storage_upgraded(
             self.db_helper,
             self.config,
@@ -104,7 +102,6 @@ class StatService:
             "change_pwd_hint": await self.is_default_cred(),
             "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
-            "need_migration": need_migration,
         }
 
     def get_start_time(self) -> dict:

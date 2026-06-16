@@ -1,102 +1,53 @@
 <template>
     <div class="storage-cleanup-panel">
-        <div class="text-subtitle-1 font-weight-medium mb-1">
-            {{ tm('system.cleanup.title') }}
-        </div>
-        <div class="text-body-2 text-medium-emphasis mb-4">
-            {{ tm('system.cleanup.subtitle') }}
-        </div>
-
-        <v-expansion-panels variant="accordion">
-            <v-expansion-panel elevation="0" class="border rounded-lg">
-                <v-expansion-panel-title class="py-4">
-                    <div class="d-flex align-center justify-space-between w-100 pr-4 ga-3">
-                        <div class="d-flex align-center ga-3">
-                            <v-icon color="warning">mdi-broom</v-icon>
-                            <div>
-                                <div class="font-weight-medium">{{ tm('system.cleanup.panel.title') }}</div>
-                                <div class="text-caption text-medium-emphasis">
-                                    {{ tm('system.cleanup.panel.subtitle', { size: formatBytes(storageStatus.total_bytes || 0) }) }}
-                                </div>
-                            </div>
-                        </div>
-                        <v-chip size="small" color="warning" variant="tonal">
-                            {{ formatBytes(storageStatus.total_bytes || 0) }}
-                        </v-chip>
+        <div class="storage-cleanup-card">
+            <div class="storage-cleanup-row">
+                <div class="storage-cleanup-info">
+                    <div class="storage-cleanup-title">{{ tm('system.cleanup.title') }}</div>
+                    <div class="storage-cleanup-hint">
+                        {{ tm('system.cleanup.panel.subtitle', { size: formatBytes(storageStatus.total_bytes || 0) }) }}
                     </div>
-                </v-expansion-panel-title>
-
-                <v-expansion-panel-text>
-                    <div class="d-flex flex-wrap ga-2 mb-4">
-                        <v-btn
-                            size="small"
-                            variant="tonal"
-                            color="primary"
-                            :loading="statusLoading"
-                            @click="loadStorageStatus"
-                        >
-                            <v-icon class="mr-2">mdi-refresh</v-icon>
-                            {{ tm('system.cleanup.refresh') }}
-                        </v-btn>
-                        <v-btn
-                            size="small"
-                            color="warning"
-                            :loading="cleaningTarget === 'all'"
-                            @click="cleanupStorage('all')"
-                        >
-                            <v-icon class="mr-2">mdi-broom</v-icon>
-                            {{ tm('system.cleanup.cleanAll') }}
-                        </v-btn>
-                    </div>
-
-                    <v-row dense>
-                        <v-col
-                            v-for="item in storageCards"
-                            :key="item.key"
-                            cols="12"
-                            md="6"
-                        >
-                            <v-card variant="tonal" class="h-100">
-                                <v-card-text>
-                                    <div class="d-flex align-start justify-space-between ga-3">
-                                        <div>
-                                            <div class="text-subtitle-1 font-weight-medium">
-                                                {{ item.title }}
-                                            </div>
-                                            <div class="text-body-2 text-medium-emphasis mt-1">
-                                                {{ item.subtitle }}
-                                            </div>
-                                        </div>
-                                        <v-icon :color="item.color">{{ item.icon }}</v-icon>
-                                    </div>
-
-                                    <div class="text-h5 mt-4">
-                                        {{ formatBytes(item.sizeBytes) }}
-                                    </div>
-                                    <div class="text-caption text-medium-emphasis mt-1">
-                                        {{ tm('system.cleanup.fileCount', { count: item.fileCount }) }}
-                                    </div>
-                                    <div class="text-caption text-medium-emphasis mt-2 storage-cleanup-path">
-                                        {{ item.path }}
-                                    </div>
-
-                                    <v-btn
-                                        class="mt-4"
-                                        size="small"
-                                        :color="item.color"
-                                        :loading="cleaningTarget === item.key"
-                                        @click="cleanupStorage(item.key)"
-                                    >
-                                        <v-icon class="mr-2">mdi-delete-sweep-outline</v-icon>
-                                        {{ item.buttonText }}
-                                    </v-btn>
-                                </v-card-text>
-                            </v-card>
-                        </v-col>
-                    </v-row>
-                </v-expansion-panel-text>
-            </v-expansion-panel>
-        </v-expansion-panels>
+                </div>
+                <div class="storage-cleanup-control">
+                    <v-chip size="small" variant="tonal" class="storage-cleanup-chip">
+                        {{ formatBytes(storageStatus.total_bytes || 0) }}
+                    </v-chip>
+                    <v-menu location="bottom end">
+                        <template #activator="{ props }">
+                            <v-btn
+                                v-bind="props"
+                                size="small"
+                                variant="tonal"
+                                class="storage-cleanup-action"
+                                :loading="Boolean(cleaningTarget)"
+                            >
+                                <v-icon class="mr-2">mdi-broom</v-icon>
+                                {{ tm('system.cleanup.clean') }}
+                            </v-btn>
+                        </template>
+                        <v-list density="compact" min-width="220">
+                            <v-list-item
+                                v-for="item in storageCards"
+                                :key="item.key"
+                                :prepend-icon="item.icon"
+                                :title="item.buttonText"
+                                :subtitle="formatBytes(item.sizeBytes)"
+                                :disabled="Boolean(cleaningTarget)"
+                                @click="cleanupStorage(item.key)"
+                            />
+                            <v-divider />
+                            <v-list-item
+                                prepend-icon="mdi-delete-sweep-outline"
+                                :title="tm('system.cleanup.cleanAll')"
+                                :subtitle="formatBytes(storageStatus.total_bytes || 0)"
+                                :disabled="Boolean(cleaningTarget)"
+                                @click="cleanupStorage('all')"
+                            />
+                        </v-list>
+                    </v-menu>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -111,7 +62,6 @@ const { tm } = useModuleI18n('features/settings');
 const toastStore = useToastStore();
 const confirmDialog = useConfirmDialog();
 
-const statusLoading = ref(false);
 const cleaningTarget = ref('');
 const storageStatus = ref({
     logs: {
@@ -157,30 +107,19 @@ const formatBytes = (bytes) => {
 const storageCards = computed(() => [
     {
         key: 'cache',
-        title: tm('system.cleanup.targets.cache.title'),
-        subtitle: tm('system.cleanup.targets.cache.subtitle'),
         buttonText: tm('system.cleanup.targets.cache.button'),
         icon: 'mdi-database-refresh-outline',
-        color: 'primary',
-        sizeBytes: storageStatus.value.cache?.size_bytes || 0,
-        fileCount: storageStatus.value.cache?.file_count || 0,
-        path: storageStatus.value.cache?.path || '-'
+        sizeBytes: storageStatus.value.cache?.size_bytes || 0
     },
     {
         key: 'logs',
-        title: tm('system.cleanup.targets.logs.title'),
-        subtitle: tm('system.cleanup.targets.logs.subtitle'),
         buttonText: tm('system.cleanup.targets.logs.button'),
         icon: 'mdi-file-document-outline',
-        color: 'warning',
-        sizeBytes: storageStatus.value.logs?.size_bytes || 0,
-        fileCount: storageStatus.value.logs?.file_count || 0,
-        path: storageStatus.value.logs?.path || '-'
+        sizeBytes: storageStatus.value.logs?.size_bytes || 0
     }
 ]);
 
 const loadStorageStatus = async () => {
-    statusLoading.value = true;
     try {
         const res = await statsApi.storage();
         if (res.data.status !== 'ok') {
@@ -190,8 +129,6 @@ const loadStorageStatus = async () => {
         storageStatus.value = res.data.data || storageStatus.value;
     } catch (error) {
         showToast(error?.response?.data?.message || tm('system.cleanup.messages.statusFailed'), 'error');
-    } finally {
-        statusLoading.value = false;
     }
 };
 
@@ -231,11 +168,73 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.storage-cleanup-path {
-    word-break: break-all;
+.storage-cleanup-panel {
+    margin: 0;
 }
 
-.storage-cleanup-panel {
-    margin: 8px 0 12px;
+.storage-cleanup-card {
+    overflow: hidden;
+    border: 1px solid var(--settings-border, rgba(17, 24, 39, 0.13));
+    border-radius: 10px;
+    background: rgb(var(--v-theme-surface));
+    box-shadow: none;
+}
+
+.storage-cleanup-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 38%);
+    gap: 18px;
+    align-items: center;
+    min-height: 60px;
+    padding: 12px 16px;
+}
+
+.storage-cleanup-title {
+    color: rgb(var(--v-theme-on-surface));
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.4;
+}
+
+.storage-cleanup-hint {
+    margin-top: 4px;
+    color: rgba(var(--v-theme-on-surface), 0.76);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.storage-cleanup-control {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+    justify-self: end;
+}
+
+.storage-cleanup-control :deep(.v-btn),
+.storage-cleanup-control :deep(.v-chip) {
+    border-radius: 10px;
+}
+
+.storage-cleanup-chip,
+.storage-cleanup-action {
+    background: rgba(var(--v-theme-on-surface), 0.06) !important;
+    color: rgba(var(--v-theme-on-surface), 0.72) !important;
+}
+
+@media (max-width: 720px) {
+    .storage-cleanup-row {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+        padding: 14px 16px;
+    }
+
+    .storage-cleanup-control {
+        justify-content: flex-start;
+        justify-self: stretch;
+    }
 }
 </style>

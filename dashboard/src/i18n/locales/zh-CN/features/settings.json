@@ -1,4 +1,61 @@
 {
+  "page": {
+    "title": "设置"
+  },
+  "sections": {
+    "general": {
+      "title": "常规"
+    },
+    "appearance": {
+      "title": "外观"
+    },
+    "network": {
+      "title": "网络"
+    },
+    "security": {
+      "title": "安全"
+    },
+    "maintenance": {
+      "title": "维护"
+    },
+    "openapi": {
+      "title": "OpenAPI"
+    }
+  },
+  "systemConfig": {
+    "restartRequired": "系统配置已保存。部分配置需要重启 AstrBot 后才会生效。",
+    "groups": {
+      "runtime": {
+        "title": "基础运行",
+        "subtitle": "时区与外部回调地址。"
+      },
+      "network": {
+        "title": "代理与依赖源",
+        "subtitle": "运行时代理、Python 依赖安装参数和 PyPI 源。"
+      },
+      "webuiSecurity": {
+        "title": "WebUI 安全",
+        "subtitle": "HTTPS、代理头、登录限速与 TOTP。"
+      },
+      "logs": {
+        "title": "日志",
+        "subtitle": "控制台日志、文件日志和 Trace 文件日志。"
+      },
+      "tempStorage": {
+        "title": "缓存",
+        "subtitle": "临时目录自动清理阈值。"
+      },
+      "t2iRendering": {
+        "title": "文本转图像",
+        "subtitle": "文本转图像渲染策略、端点和自定义模板。"
+      }
+    },
+    "messages": {
+      "loadFailed": "加载系统配置失败",
+      "saveSuccess": "系统配置已保存",
+      "saveFailed": "保存系统配置失败"
+    }
+  },
   "network": {
     "title": "网络",
     "githubProxy": {
@@ -18,7 +75,7 @@
   },
   "theme": {
     "title": "主题",
-    "subtitle": "自定义主题主色与辅助色。修改后立即生效，并保存在浏览器本地。",
+    "subtitle": "自定义主题主色与辅助色，数据保存在浏览器本地。",
     "customize": {
       "title": "主题颜色",
       "primary": "主色",
@@ -31,12 +88,8 @@
     "restart": {
       "title": "重启",
       "subtitle": "重启 AstrBot",
+      "confirm": "确定要重启 AstrBot 吗？重启期间 WebUI 会短暂不可用。",
       "button": "重启"
-    },
-    "migration": {
-      "title": "数据迁移到 v4.0.0 格式",
-      "subtitle": "如果您遇到数据兼容性问题，可以手动启动数据库迁移助手",
-      "button": "启动迁移助手"
     },
     "backup": {
       "title": "数据备份与恢复",
@@ -47,6 +100,7 @@
       "title": "日志与缓存清理",
       "subtitle": "查看当前日志和缓存占用，并一键清理。",
       "refresh": "刷新占用",
+      "clean": "清理",
       "cleanAll": "全部清理",
       "panel": {
         "title": "清理详情",

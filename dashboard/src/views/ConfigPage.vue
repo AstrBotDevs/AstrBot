@@ -179,8 +179,6 @@
     @cancel="handleConfigSave2faCancel"
   />
 
-  <WaitingForRestart ref="wfr"></WaitingForRestart>
-
   <!-- 测试聊天抽屉 -->
   <v-overlay
     v-model="testChatDrawer"
@@ -218,11 +216,9 @@
 <script>
 import { configProfileApi, systemConfigApi } from '@/api/v1';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
-import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
@@ -236,7 +232,6 @@ export default {
   components: {
     AstrBotCoreConfigWrapper,
     VueMonacoEditor,
-    WaitingForRestart,
     StandaloneChat,
     UnsavedChangesConfirmDialog,
     DashboardTwoFactorDialog
@@ -358,6 +353,10 @@ export default {
       }
     },
     async '$route.fullPath'(newVal) {
+      if (this.extractConfigTypeFromHash(newVal) === 'system') {
+        this.$router.replace('/settings#system-config');
+        return;
+      }
       await this.syncConfigTypeFromHash(newVal);
     },
     initialConfigId(newVal) {
@@ -425,6 +424,10 @@ export default {
     const hashConfigType = this.extractConfigTypeFromHash(
       this.$route?.fullPath || ''
     );
+    if (hashConfigType === 'system') {
+      this.$router.replace('/settings#system-config');
+      return;
+    }
     this.configType = hashConfigType || 'normal';
     this.isSystemConfig = this.configType === 'system';
 
@@ -585,9 +588,6 @@ export default {
           this.save_message_success = "success";
           this.onConfigSaved();
 
-          if (this.isSystemConfig) {
-            restartAstrBotRuntime(this.$refs.wfr).catch(() => {})
-          }
           return { success: true };
         }
 
@@ -912,7 +912,7 @@ export default {
           await this.updateConfig();
           // 系统配置保存后不跳转
           if (this.isSystemConfig) {
-            this.$router.replace('/config#system');
+            this.$router.replace('/settings#system-config');
             return;
           }
         }

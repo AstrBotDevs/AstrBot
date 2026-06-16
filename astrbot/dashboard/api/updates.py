@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 
 from astrbot.core import logger
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.schemas import MigrationRequest, PipInstallRequest, UpdateRequest
+from astrbot.dashboard.schemas import PipInstallRequest, UpdateRequest
 from astrbot.dashboard.services.update_service import (
     UpdateService,
     UpdateServiceError,
@@ -174,23 +174,3 @@ async def install_dashboard_pip_package(
     service: UpdateService = Depends(get_service),
 ):
     return await _run(lambda: service.install_pip_package(_model_dict(payload)))
-
-
-@router.post("/migrations")
-async def run_migration(
-    payload: MigrationRequest | None = None,
-    _auth: AuthContext = Depends(require_system_scope),
-    service: UpdateService = Depends(get_service),
-):
-    body = _model_dict(payload) if payload is not None else {}
-    return await _run(lambda: service.do_migration_v4(body))
-
-
-@legacy_router.post("/migration")
-async def run_dashboard_migration(
-    payload: MigrationRequest | None = None,
-    _username: str = Depends(require_dashboard_user),
-    service: UpdateService = Depends(get_service),
-):
-    body = _model_dict(payload) if payload is not None else {}
-    return await _run(lambda: service.do_migration_v4(body))

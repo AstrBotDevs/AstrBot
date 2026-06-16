@@ -178,6 +178,8 @@ def get_auth_service(request: Request) -> AuthService:
 
 
 def _payload(payload) -> dict:
+    if payload is None:
+        return {}
     return payload.model_dump(exclude_none=True)
 
 
@@ -331,7 +333,7 @@ async def _setup(
 
 async def _totp_setup(
     request: Request,
-    payload: TotpSetupRequest,
+    payload: TotpSetupRequest | None,
     service: AuthService,
 ):
     return _auth_service_response(
@@ -438,7 +440,7 @@ async def dashboard_setup_authenticated(
 @router.post("/auth/totp/setup")
 async def totp_setup(
     request: Request,
-    payload: TotpSetupRequest,
+    payload: TotpSetupRequest | None = None,
     _auth: AuthContext = Depends(require_system_scope),
     service: AuthService = Depends(get_auth_service),
 ):
@@ -448,7 +450,7 @@ async def totp_setup(
 @legacy_router.post("/totp/setup")
 async def dashboard_totp_setup(
     request: Request,
-    payload: TotpSetupRequest,
+    payload: TotpSetupRequest | None = None,
     _username: str = Depends(require_dashboard_user),
     service: AuthService = Depends(get_auth_service),
 ):

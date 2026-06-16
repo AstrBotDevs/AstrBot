@@ -320,13 +320,6 @@ export type MessagePart = {
 
 export type type = 'text' | 'plain' | 'image' | 'file' | 'audio' | 'record' | 'video' | 'reply';
 
-export type MigrationRequest = {
-    platform_id_map?: {
-        [key: string]: unknown;
-    };
-    [key: string]: unknown;
-};
-
 export type ModelScopeSyncRequest = {
     access_token?: string;
 };
@@ -3298,14 +3291,6 @@ export type InstallPipPackageData = {
 export type InstallPipPackageResponse = (SuccessEnvelope);
 
 export type InstallPipPackageError = unknown;
-
-export type RunMigrationsData = {
-    body?: MigrationRequest;
-};
-
-export type RunMigrationsResponse = (SuccessEnvelope);
-
-export type RunMigrationsError = unknown;
 
 export type ListCronJobsData = {
     query?: {

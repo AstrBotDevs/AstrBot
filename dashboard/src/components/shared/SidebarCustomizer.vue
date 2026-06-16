@@ -2,7 +2,7 @@
   <div style="margin-top: 16px;">
     <v-btn 
       color="primary" 
-      variant="outlined"
+      variant="tonal"
       size="small"
       @click="openDialog"
       style="margin-bottom: 8px;"
@@ -104,6 +104,7 @@
           <v-spacer></v-spacer>
           <v-btn
             color="primary"
+            variant="tonal"
             @click="saveCustomization"
           >
             {{ t('core.actions.save') }}
