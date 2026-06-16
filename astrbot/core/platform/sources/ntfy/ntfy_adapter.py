@@ -20,17 +20,17 @@ from .ntfy_api import NtfyAPIClient
 from .ntfy_event import NtfyMessageEvent
 
 NTFY_CONFIG_METADATA = {
-    "server_url": {
+    "ntfy_server_url": {
         "description": "ntfy Server URL",
         "type": "string",
         "hint": "ntfy 服务器地址，例如 https://ntfy.sh 或您的自建实例地址。",
     },
-    "topic": {
+    "ntfy_topic": {
         "description": "ntfy Topic",
         "type": "string",
         "hint": "用于收发消息的唯一订阅主题名称 (请确保其足够私密)。",
     },
-    "access_token": {
+    "ntfy_access_token": {
         "description": "Access Token (Optional)",
         "type": "string",
         "hint": "如果您的 ntfy 服务器开启了身份验证，请在此输入 Bearer Token。",
