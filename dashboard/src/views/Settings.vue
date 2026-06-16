@@ -412,7 +412,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { apiKeyApi, systemConfigApi } from '@/api/v1';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
@@ -772,15 +772,9 @@ const handleConfigSave2faConfirm = async (payload) => {
 };
 
 const handleConfigSave2faCancel = () => {
-    if (systemConfigLastSavedSnapshot.value && systemConfigData.value?.dashboard?.totp) {
+    if (systemConfigLastSavedSnapshot.value) {
         try {
-            const savedConfig = JSON.parse(systemConfigLastSavedSnapshot.value);
-            const savedTotp = savedConfig?.dashboard?.totp;
-            if (savedTotp) {
-                systemConfigData.value.dashboard.totp.enable = savedTotp.enable;
-                systemConfigData.value.dashboard.totp.secret = savedTotp.secret;
-                systemConfigData.value.dashboard.totp.recovery_code_hash = savedTotp.recovery_code_hash;
-            }
+            systemConfigData.value = JSON.parse(systemConfigLastSavedSnapshot.value);
         } catch (_) {
             // Ignore invalid snapshots.
         }
@@ -920,6 +914,13 @@ onMounted(async () => {
         activeSettingsSection.value = 'maintenance';
     } else if (hash.includes('settings-openapi')) {
         activeSettingsSection.value = 'openapi';
+    }
+});
+
+onUnmounted(() => {
+    if (systemConfigAutoSaveTimer.value) {
+        clearTimeout(systemConfigAutoSaveTimer.value);
+        systemConfigAutoSaveTimer.value = null;
     }
 });
 </script>
