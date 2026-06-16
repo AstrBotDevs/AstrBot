@@ -24,13 +24,22 @@ const SPCODE_PLUGIN = "astrbot_plugin_spcode_toolkit";
  *   `true` if the menu entry should be visible.
  */
 function isProjectLoadAvailable(commands: CommandItem[]): boolean {
-  return commands.some(
-    (cmd) =>
+  for (const cmd of commands) {
+    if (
       cmd.enabled &&
       cmd.plugin === SPCODE_PLUGIN &&
       cmd.effective_command === "project load" &&
-      cmd.type === "sub_command",
-  );
+      cmd.type === "sub_command"
+    ) {
+      return true;
+    }
+    // Recurse into nested sub_commands: backend nests them under their parent
+    // group, so `project load` lives under `project`'s sub_commands array.
+    if (cmd.sub_commands && isProjectLoadAvailable(cmd.sub_commands)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -56,9 +65,9 @@ function getPathHistory(): string[] {
 }
 
 /**
- * Push `path` to the front of the history list, deduping by exact match
- * and capping the total length at `HISTORY_CAP`. Silently swallows
- * `localStorage` write failures (quota, private-mode, etc.).
+ * Push `path` to the front of the history, deduping by exact match and
+ * capping total length at `HISTORY_CAP`. Updates both the reactive ref
+ * (in-memory source of truth) and the localStorage mirror.
  *
  * Args:
  *   path: Absolute project path the user just confirmed.
@@ -66,15 +75,33 @@ function getPathHistory(): string[] {
 function addToPathHistory(path: string): void {
   const trimmed = path.trim();
   if (!trimmed) return;
-  const current = getPathHistory();
-  const deduped = [trimmed, ...current.filter((p) => p !== trimmed)].slice(
+  const deduped = [trimmed, ...pathHistory.value.filter((p) => p !== trimmed)].slice(
     0,
     HISTORY_CAP,
   );
+  pathHistory.value = deduped;
   try {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(deduped));
   } catch {
     // localStorage write failure (quota, private mode, etc.); silent.
+  }
+}
+
+/**
+ * Remove `path` from the history. Updates both the reactive ref and
+ * the localStorage mirror. No-op if `path` is not currently in history.
+ *
+ * Args:
+ *   path: The history entry to remove.
+ */
+function removeFromPathHistory(path: string): void {
+  const filtered = pathHistory.value.filter((p) => p !== path);
+  if (filtered.length === pathHistory.value.length) return; // no-op
+  pathHistory.value = filtered;
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered));
+  } catch {
+    // localStorage write failure; silent.
   }
 }
 
@@ -116,8 +143,12 @@ const { tm } = useModuleI18n("features/chat");
 const dialogOpen = ref(false);
 const path = ref("");
 
+// In-memory reactive source of truth for history; mirrors localStorage.
+// Reassigned on add/remove so `recentPaths` recomputes and the list re-renders.
+const pathHistory = ref<string[]>(getPathHistory());
+
 const recentPaths = computed<string[]>(() =>
-  getPathHistory().slice(0, RECENT_DROPDOWN_COUNT),
+  pathHistory.value.slice(0, RECENT_DROPDOWN_COUNT),
 );
 const canSubmit = computed(() => path.value.trim().length > 0);
 const showMenuItem = computed(() => isProjectLoadAvailable(props.commands));
@@ -140,6 +171,19 @@ function onConfirm(): void {
   addToPathHistory(trimmed);
   const text = buildLoadCommand(props.wakePrefixes[0] || "/", trimmed);
   emit("submit", text);
+  dialogOpen.value = false;
+}
+
+/**
+ * Emit the `/project unload` command text and close the dialog.
+ *
+ * No confirmation prompt by design — spcode's unload is idempotent and the
+ * user can simply re-load. Mirrors the no-confirm behavior of the load
+ * action above.
+ */
+function onUnload(): void {
+  const prefix = props.wakePrefixes[0] || "/";
+  emit("submit", `${prefix}project unload`);
   dialogOpen.value = false;
 }
 </script>
@@ -165,6 +209,17 @@ function onConfirm(): void {
         {{ tm("spcodeProjectLoad.dialog.title") }}
       </v-card-title>
       <v-card-text>
+        <!-- Unload current project (separate from the load form, above a divider) -->
+        <v-btn
+          block
+          variant="outlined"
+          prepend-icon="mdi-folder-remove-outline"
+          class="mb-2"
+          @click="onUnload"
+        >
+          {{ tm("spcodeProjectLoad.dialog.unloadButton") }}
+        </v-btn>
+        <v-divider class="my-4" />
         <v-form @submit.prevent="onConfirm">
           <v-text-field
             v-model="path"
@@ -195,6 +250,21 @@ function onConfirm(): void {
                 <v-list-item-title class="text-body-2">
                   {{ item }}
                 </v-list-item-title>
+                <template #append>
+                  <!--
+                    `@click.stop` prevents the parent v-list-item click
+                    (`path = item`) from firing when the user intends to
+                    remove the entry.
+                  -->
+                  <v-btn
+                    icon="mdi-close"
+                    variant="text"
+                    size="x-small"
+                    density="compact"
+                    :aria-label="tm('spcodeProjectLoad.dialog.removeFromHistory')"
+                    @click.stop="removeFromPathHistory(item)"
+                  />
+                </template>
               </v-list-item>
             </v-list>
           </div>

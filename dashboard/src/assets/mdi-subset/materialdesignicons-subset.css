@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 292 icons */
+/* Auto-generated MDI subset – 294 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -540,6 +540,10 @@
   content: "\F0257";
 }
 
+.mdi-folder-remove-outline::before {
+  content: "\F0B9E";
+}
+
 .mdi-folder-zip-outline::before {
   content: "\F07B9";
 }
@@ -598,6 +602,10 @@
 
 .mdi-help-circle-outline::before {
   content: "\F0625";
+}
+
+.mdi-history::before {
+  content: "\F02DA";
 }
 
 .mdi-home::before {

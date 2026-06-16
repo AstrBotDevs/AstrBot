@@ -258,7 +258,9 @@
       "historyLabel": "最近使用",
       "historyEmpty": "暂无历史路径",
       "submit": "加载",
-      "cancel": "取消"
+      "cancel": "取消",
+      "unloadButton": "卸载当前加载目录",
+      "removeFromHistory": "删除此历史"
     }
   }
 }

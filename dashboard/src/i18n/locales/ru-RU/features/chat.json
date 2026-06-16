@@ -248,7 +248,9 @@
       "historyLabel": "Недавние",
       "historyEmpty": "История пуста",
       "submit": "Загрузить",
-      "cancel": "Отмена"
+            "cancel": "Отмена",
+            "unloadButton": "Выгрузить текущий каталог",
+            "removeFromHistory": "Удалить из истории"
     }
   }
 }

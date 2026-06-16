@@ -258,7 +258,9 @@
       "historyLabel": "Recent",
       "historyEmpty": "No history",
       "submit": "Load",
-      "cancel": "Cancel"
+            "cancel": "Cancel",
+            "unloadButton": "Unload current directory",
+            "removeFromHistory": "Remove from history"
     }
   }
 }
