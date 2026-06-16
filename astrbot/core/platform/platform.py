@@ -12,6 +12,7 @@ from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.utils.metrics import Metric
 
 from .astr_message_event import AstrMessageEvent
+from .astrbot_message import AstrBotMessage
 from .message_session import MessageSesion
 from .platform_metadata import PlatformMetadata
 
@@ -146,6 +147,22 @@ class Platform(abc.ABC):
     def commit_event(self, event: AstrMessageEvent) -> None:
         """提交一个事件到事件队列。"""
         self._event_queue.put_nowait(event)
+
+    def create_event(self, message: AstrBotMessage) -> AstrMessageEvent:
+        """Creates a message event for this platform.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created message event.
+        """
+        return AstrMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+        )
 
     def get_client(self) -> object:
         """获取平台的客户端对象。"""

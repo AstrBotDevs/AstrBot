@@ -115,15 +115,7 @@ class botClient(Client):
 
     def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
-        self.platform.commit_event(
-            QQOfficialMessageEvent(
-                abm.message_str,
-                abm,
-                self.platform.meta(),
-                abm.session_id,
-                self.platform.client,
-            ),
-        )
+        self.platform.commit_event(self.platform.create_event(abm))
 
     async def bot_connect(self, session) -> None:
         logger.info("[QQOfficial] Websocket session starting.")
@@ -387,6 +379,23 @@ class QQOfficialPlatformAdapter(Platform):
             description="QQ 机器人官方 API 适配器",
             id=cast(str, self.config.get("id")),
             support_proactive_message=True,
+        )
+
+    def create_event(self, message: AstrBotMessage) -> QQOfficialMessageEvent:
+        """Creates a QQ Official message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created QQ Official message event.
+        """
+        return QQOfficialMessageEvent(
+            message.message_str,
+            message,
+            self.meta(),
+            message.session_id,
+            self.client,
         )
 
     @staticmethod

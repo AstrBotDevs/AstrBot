@@ -465,12 +465,22 @@ class LinePlatformAdapter(Platform):
         self._event_id_timestamps[event_id] = time.time()
         return False
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        event = LineMessageEvent(
-            message_str=abm.message_str,
-            message_obj=abm,
+    def create_event(self, message: AstrBotMessage) -> LineMessageEvent:
+        """Creates a LINE message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created LINE message event.
+        """
+        return LineMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
             platform_meta=self.meta(),
-            session_id=abm.session_id,
+            session_id=message.session_id,
             line_api=self.line_api,
         )
-        self._event_queue.put_nowait(event)
+
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(abm))

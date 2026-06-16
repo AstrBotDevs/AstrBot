@@ -753,17 +753,26 @@ class DingtalkPlatformAdapter(Platform):
                 # at_str=at_str,
             )
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        event = DingtalkMessageEvent(
-            message_str=abm.message_str,
-            message_obj=abm,
+    def create_event(self, message: AstrBotMessage) -> DingtalkMessageEvent:
+        """Creates a Dingtalk message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Dingtalk message event.
+        """
+        return DingtalkMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
             platform_meta=self.meta(),
-            session_id=abm.session_id,
+            session_id=message.session_id,
             client=self.client,
             adapter=self,
         )
 
-        self._event_queue.put_nowait(event)
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(abm))
 
     async def run(self) -> None:
         # await self.client_.start()

@@ -489,8 +489,16 @@ class AiocqhttpAdapter(Platform):
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = AiocqhttpMessageEvent(
+    def create_event(self, message: AstrBotMessage) -> AiocqhttpMessageEvent:
+        """Creates an aiocqhttp message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created aiocqhttp message event.
+        """
+        return AiocqhttpMessageEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
@@ -498,7 +506,8 @@ class AiocqhttpAdapter(Platform):
             bot=self.bot,
         )
 
-        self.commit_event(message_event)
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     def get_client(self) -> CQHttp:
         return self.bot

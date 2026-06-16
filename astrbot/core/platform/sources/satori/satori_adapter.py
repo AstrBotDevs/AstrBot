@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+from typing import TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
 import websockets
@@ -27,6 +28,9 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSession
 from astrbot.core.utils.media_utils import MediaResolver
+
+if TYPE_CHECKING:
+    from .satori_event import SatoriPlatformEvent
 
 
 @register_platform_adapter(
@@ -726,17 +730,27 @@ class SatoriPlatformAdapter(Platform):
             if child.tail and child.tail.strip():
                 elements.append(Plain(text=child.tail))
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
+    def create_event(self, message: AstrBotMessage) -> "SatoriPlatformEvent":
+        """Creates a Satori message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Satori message event.
+        """
         from .satori_event import SatoriPlatformEvent
 
-        message_event = SatoriPlatformEvent(
+        return SatoriPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             adapter=self,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     async def send_http_request(
         self,

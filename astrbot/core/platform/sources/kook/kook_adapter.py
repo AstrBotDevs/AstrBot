@@ -67,13 +67,8 @@ class KookPlatformAdapter(Platform):
         inner_message = AstrBotMessage()
         inner_message.session_id = session.session_id
         inner_message.type = session.message_type
-        message_event = KookEvent(
-            message_str=message_chain.get_plain_text(),
-            message_obj=inner_message,
-            platform_meta=self.meta(),
-            session_id=session.session_id,
-            client=self.client,
-        )
+        inner_message.message_str = message_chain.get_plain_text()
+        message_event = self.create_event(inner_message)
         await message_event.send(message_chain)
 
     def meta(self) -> PlatformMetadata:
@@ -494,12 +489,22 @@ class KookPlatformAdapter(Platform):
 
         return abm
 
-    async def handle_msg(self, message: AstrBotMessage):
-        message_event = KookEvent(
+    def create_event(self, message: AstrBotMessage) -> KookEvent:
+        """Creates a KOOK message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created KOOK message event.
+        """
+        return KookEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage):
+        self.commit_event(self.create_event(message))

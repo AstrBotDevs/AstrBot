@@ -593,16 +593,25 @@ class LarkPlatformAdapter(Platform):
 
         await self.handle_msg(abm)
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        event = LarkMessageEvent(
-            message_str=abm.message_str,
-            message_obj=abm,
+    def create_event(self, message: AstrBotMessage) -> LarkMessageEvent:
+        """Creates a Lark message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Lark message event.
+        """
+        return LarkMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
             platform_meta=self.meta(),
-            session_id=abm.session_id,
+            session_id=message.session_id,
             bot=self.lark_api,
         )
 
-        self._event_queue.put_nowait(event)
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(abm))
 
     async def handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件
