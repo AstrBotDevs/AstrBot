@@ -100,14 +100,7 @@ class DiscordPlatformAdapter(Platform):
         message_obj.session_id = session.session_id
         message_obj.message = message_chain.chain
 
-        # 创建临时事件对象来发送消息
-        temp_event = DiscordPlatformEvent(
-            message_str=message_chain.get_plain_text(),
-            message_obj=message_obj,
-            platform_meta=self.meta(),
-            session_id=session.session_id,
-            client=self.client,
-        )
+        temp_event = self.create_event(message_obj)
         await temp_event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
@@ -284,9 +277,19 @@ class DiscordPlatformAdapter(Platform):
                     component.path = path_wav
         return abm
 
-    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
-        """处理消息"""
-        message_event = DiscordPlatformEvent(
+    def create_event(
+        self, message: AstrBotMessage, followup_webhook=None
+    ) -> DiscordPlatformEvent:
+        """Creates a Discord message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+            followup_webhook: Optional slash-command follow-up webhook.
+
+        Returns:
+            Created Discord message event.
+        """
+        return DiscordPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
@@ -294,6 +297,10 @@ class DiscordPlatformAdapter(Platform):
             client=self.client,
             interaction_followup_webhook=followup_webhook,
         )
+
+    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
+        """处理消息"""
+        message_event = self.create_event(message, followup_webhook)
 
         if self.client.user is None:
             logger.error(
