@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 274 icons */
+/* Auto-generated MDI subset – 275 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -246,6 +246,10 @@
 
 .mdi-close-circle-outline::before {
   content: "\F015A";
+}
+
+.mdi-cloud-search::before {
+  content: "\F0956";
 }
 
 .mdi-cloud-upload::before {

@@ -13,6 +13,8 @@ from typing import Any
 from astrbot.core import DEMO_MODE as _DEMO_MODE
 from astrbot.core import logger
 from astrbot.core import pip_installer as _pip_installer
+from astrbot.core.backup.exporter import AstrBotExporter
+from astrbot.core.backup.importer import AstrBotImporter
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.migration.helper import (
@@ -23,6 +25,7 @@ from astrbot.core.db.migration.helper import (
 )
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.astrbot_path import (
+    get_astrbot_backups_path,
     get_astrbot_data_path,
     get_astrbot_system_tmp_path,
 )
@@ -112,6 +115,7 @@ class UpdateService:
         self.demo_mode = demo_mode
         self.clear_site_data_headers = clear_site_data_headers
         self.update_progress: dict[str, dict] = {}
+        self._last_update_backup_path: str | None = None
 
     def get_update_progress(self, progress_id: str) -> UpdateServiceResult:
         if not progress_id:
@@ -199,6 +203,19 @@ class UpdateService:
         update_token = uuid.uuid4().hex
         dashboard_zip_path = update_temp_dir / f"{update_token}-dashboard.zip"
         core_zip_path = update_temp_dir / f"{update_token}-core.zip"
+
+        # 更新前自动备份
+        backup_path: str | None = None
+        config = self.core_lifecycle.astrbot_config
+        auto_backup = config.get("auto_update", {}).get(
+            "auto_backup_before_update", True
+        )
+        if auto_backup:
+            try:
+                backup_path = await self._create_backup(progress_id)
+            except Exception as exc:
+                logger.warning(f"更新前备份失败（继续更新）: {exc}")
+
         try:
             self._set_update_stage(
                 progress_id,
@@ -357,6 +374,41 @@ class UpdateService:
                 },
             )
             logger.error(f"/api/update_project: {traceback.format_exc()}")
+
+            # 自动回滚：如果更新前创建了备份，尝试恢复
+            if backup_path:
+                self._set_update_stage(
+                    progress_id,
+                    "rollback",
+                    "running",
+                    "更新失败，正在自动回滚到更新前的状态...",
+                    0,
+                )
+                try:
+                    await self._restore_backup(backup_path)
+                    self._set_update_stage(
+                        progress_id,
+                        "rollback",
+                        "done",
+                        "已自动回滚到更新前的状态。",
+                        100,
+                    )
+                    logger.info("更新失败后已自动回滚。")
+                except Exception as rollback_exc:
+                    logger.error(
+                        f"自动回滚失败: {rollback_exc}，请手动从备份恢复: {backup_path}"
+                    )
+                    self.update_progress[progress_id].update(
+                        {
+                            "status": "error",
+                            "stage": "rollback",
+                            "message": (
+                                f"自动回滚失败，请手动从备份恢复。"
+                                f"备份路径: {backup_path}"
+                            ),
+                        },
+                    )
+
             raise UpdateServiceError(exc.__str__()) from exc
         finally:
             for zip_path in (dashboard_zip_path, core_zip_path):
@@ -400,6 +452,104 @@ class UpdateService:
         except Exception as exc:
             logger.error(f"/api/update_pip: {traceback.format_exc()}")
             raise UpdateServiceError(exc.__str__()) from exc
+
+    async def _create_backup(self, progress_id: str) -> str:
+        """在更新前创建完整备份。
+
+        Returns:
+            str: 备份文件路径。
+
+        Raises:
+            Exception: 备份创建失败时抛出。
+        """
+        import os
+        from datetime import datetime
+
+        self._set_update_stage(
+            progress_id,
+            "backup",
+            "running",
+            "正在创建更新前备份...",
+            0,
+        )
+
+        kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
+        data_dir = get_astrbot_data_path()
+        config_path = os.path.join(data_dir, "cmd_config.json")
+        backup_dir = get_astrbot_backups_path()
+
+        exporter = AstrBotExporter(
+            main_db=self.core_lifecycle.db,
+            kb_manager=kb_manager,
+            config_path=config_path,
+        )
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        version_str = getattr(
+            __import__("astrbot.core.config.default", fromlist=["VERSION"]),
+            "VERSION",
+            "pre_update",
+        )
+        backup_filename = f"astrbot_update_backup_v{version_str}_{timestamp}.zip"
+
+        # 直接导出，使用自定义文件名
+        zip_path = os.path.join(backup_dir, backup_filename)
+        zip_path = await exporter.export_all(output_dir=backup_dir)
+
+        # 重命名为带版本标记的文件名
+        if os.path.basename(zip_path) != backup_filename:
+            final_path = os.path.join(backup_dir, backup_filename)
+            os.rename(zip_path, final_path)
+            zip_path = final_path
+
+        self._last_update_backup_path = zip_path
+
+        self._set_update_stage(
+            progress_id,
+            "backup",
+            "done",
+            f"更新前备份完成: {backup_filename}",
+            5,
+        )
+        logger.info(f"更新前备份已创建: {zip_path}")
+        return zip_path
+
+    async def _restore_backup(self, backup_path: str) -> None:
+        """从备份恢复数据。
+
+        Args:
+            backup_path: 备份 ZIP 文件路径。
+        """
+        import os
+
+        if not os.path.exists(backup_path):
+            raise FileNotFoundError(f"备份文件不存在: {backup_path}")
+
+        kb_manager = getattr(self.core_lifecycle, "kb_manager", None)
+        data_dir = get_astrbot_data_path()
+        config_path = os.path.join(data_dir, "cmd_config.json")
+
+        importer = AstrBotImporter(
+            main_db=self.core_lifecycle.db,
+            kb_manager=kb_manager,
+            config_path=config_path,
+        )
+
+        # 先做前置检查
+        pre_check = importer.pre_check(backup_path)
+        if not pre_check.can_import:
+            raise UpdateServiceError(f"备份文件无法导入: {'; '.join(pre_check.errors)}")
+
+        # 执行导入（replace 模式：清空现有数据后导入）
+        result = await importer.import_all(
+            zip_path=backup_path,
+            mode="replace",
+        )
+
+        if not result.success:
+            raise UpdateServiceError(f"从备份恢复失败: {'; '.join(result.errors)}")
+
+        logger.info(f"已从备份恢复数据: {backup_path}")
 
     def _init_update_progress(self, progress_id: str, version: str) -> None:
         self.update_progress[progress_id] = {

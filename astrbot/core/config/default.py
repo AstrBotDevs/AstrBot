@@ -272,6 +272,13 @@ DEFAULT_CONFIG = {
             "ca_certs": "",
         },
     },
+    "auto_update": {
+        "enabled": False,
+        "check_interval": 86400,  # 检查间隔（秒），默认 24 小时
+        "backup_retention_days": 14,  # 更新备份保留天数
+        "auto_backup_before_update": True,  # 更新前自动备份
+        "notify_on_new_version": True,  # 发现新版本时通知管理员
+    },
     "platform": [],
     "platform_specific": {
         # 平台特异配置：按平台分类，平台下按功能分组

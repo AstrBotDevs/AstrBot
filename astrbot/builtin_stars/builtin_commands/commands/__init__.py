@@ -7,6 +7,7 @@ from .name import NameCommand
 from .provider import ProviderCommands
 from .setunset import SetUnsetCommands
 from .sid import SIDCommand
+from .update import UpdateCommands
 
 __all__ = [
     "AdminCommands",
@@ -16,4 +17,5 @@ __all__ = [
     "ProviderCommands",
     "SetUnsetCommands",
     "SIDCommand",
+    "UpdateCommands",
 ]

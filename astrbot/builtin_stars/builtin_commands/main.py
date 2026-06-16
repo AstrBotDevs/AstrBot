@@ -10,6 +10,7 @@ from .commands import (
     ProviderCommands,
     SetUnsetCommands,
     SIDCommand,
+    UpdateCommands,
 )
 
 
@@ -24,6 +25,7 @@ class Main(star.Star):
         self.provider_c = ProviderCommands(self.context)
         self.setunset_c = SetUnsetCommands(self.context)
         self.sid_c = SIDCommand(self.context)
+        self.update_c = UpdateCommands(self.context)
 
     @filter.command("help")
     async def help(self, event: AstrMessageEvent) -> None:
@@ -87,3 +89,42 @@ class Main(star.Star):
     async def unset_variable(self, event: AstrMessageEvent, key: str) -> None:
         """Unset session variable"""
         await self.setunset_c.unset_variable(event, key)
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("update")
+    async def update(
+        self,
+        event: AstrMessageEvent,
+        subcommand: str | None = None,
+        arg: str | None = None,
+    ) -> None:
+        """Manage AstrBot updates.
+
+        Subcommands:
+            check  — Check for new versions
+            now [version] — Update immediately (default: latest)
+            auto on|off — Enable/disable automatic updates
+            status — Show current version and update settings
+        """
+        sub = (subcommand or "").strip().lower()
+
+        if sub == "check":
+            await self.update_c.update_check(event)
+        elif sub == "now":
+            await self.update_c.update_now(event, arg)
+        elif sub == "auto":
+            await self.update_c.update_auto(event, arg or "")
+        elif sub == "status" or not sub:
+            await self.update_c.update_status(event)
+        else:
+            from astrbot.api.event import MessageChain
+
+            await event.send(
+                MessageChain().message(
+                    "Unknown subcommand. Usage:\n"
+                    "  /update check     — Check for new version\n"
+                    "  /update now [ver] — Update immediately\n"
+                    "  /update auto on|off — Toggle auto-update\n"
+                    "  /update status    — Show status"
+                )
+            )

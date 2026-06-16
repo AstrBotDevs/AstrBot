@@ -67,6 +67,84 @@
                 <StorageCleanupPanel />
             </v-list-item>
 
+            <v-list-subheader>{{ tm('autoUpdate.title') }}</v-list-subheader>
+
+            <v-list-item :subtitle="tm('autoUpdate.enabled.subtitle')" :title="tm('autoUpdate.enabled.title')">
+                <v-switch
+                    v-model="autoUpdateEnabled"
+                    color="primary"
+                    hide-details
+                    class="mt-2"
+                    @update:model-value="saveAutoUpdateConfig"
+                />
+            </v-list-item>
+
+            <v-list-item :subtitle="tm('autoUpdate.checkInterval.subtitle')" :title="tm('autoUpdate.checkInterval.title')">
+                <v-text-field
+                    v-model.number="autoUpdateCheckInterval"
+                    type="number"
+                    min="1"
+                    max="720"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    style="max-width: 120px;"
+                    class="mt-2"
+                    suffix="h"
+                    @update:model-value="debounceSaveAutoUpdateConfig"
+                />
+            </v-list-item>
+
+            <v-list-item :subtitle="tm('autoUpdate.backupRetention.subtitle')" :title="tm('autoUpdate.backupRetention.title')">
+                <v-text-field
+                    v-model.number="autoUpdateBackupRetention"
+                    type="number"
+                    min="1"
+                    max="365"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    style="max-width: 120px;"
+                    class="mt-2"
+                    suffix="d"
+                    @update:model-value="debounceSaveAutoUpdateConfig"
+                />
+            </v-list-item>
+
+            <v-list-item :subtitle="tm('autoUpdate.autoBackup.subtitle')" :title="tm('autoUpdate.autoBackup.title')">
+                <v-switch
+                    v-model="autoUpdateBackupBefore"
+                    color="primary"
+                    hide-details
+                    class="mt-2"
+                    @update:model-value="saveAutoUpdateConfig"
+                />
+            </v-list-item>
+
+            <v-list-item :subtitle="tm('autoUpdate.notify.subtitle')" :title="tm('autoUpdate.notify.title')">
+                <v-switch
+                    v-model="autoUpdateNotify"
+                    color="primary"
+                    hide-details
+                    class="mt-2"
+                    @update:model-value="saveAutoUpdateConfig"
+                />
+            </v-list-item>
+
+            <v-list-item>
+                <div class="d-flex ga-2 mt-2">
+                    <v-btn
+                        color="secondary"
+                        variant="tonal"
+                        :loading="checkingUpdate"
+                        @click="checkForUpdate"
+                    >
+                        <v-icon class="mr-2">mdi-cloud-search</v-icon>
+                        {{ tm('autoUpdate.checkNow') }}
+                    </v-btn>
+                </div>
+            </v-list-item>
+
             <v-list-subheader>{{ tm('apiKey.title') }}</v-list-subheader>
 
             <v-list-item :subtitle="tm('apiKey.subtitle')">
@@ -228,7 +306,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { apiKeyApi } from '@/api/v1';
+import { apiKeyApi, systemConfigApi, updatesApi } from '@/api/v1';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
 import MigrationDialog from '@/components/shared/MigrationDialog.vue';
@@ -253,6 +331,75 @@ const getStoredColor = (key, fallback) => {
 
 const primaryColor = ref(getStoredColor('themePrimary', PurpleTheme.colors.primary));
 const secondaryColor = ref(getStoredColor('themeSecondary', PurpleTheme.colors.secondary));
+
+// ---- auto update state ----
+const autoUpdateEnabled = ref(false);
+const autoUpdateCheckInterval = ref(24);
+const autoUpdateBackupRetention = ref(14);
+const autoUpdateBackupBefore = ref(true);
+const autoUpdateNotify = ref(true);
+const checkingUpdate = ref(false);
+let _autoUpdateSaveTimer = null;
+
+const loadAutoUpdateConfig = async () => {
+    try {
+        const res = await systemConfigApi.runtime();
+        const config = res.data?.data ?? res.data ?? {};
+        const au = config.auto_update || {};
+        autoUpdateEnabled.value = au.enabled ?? false;
+        autoUpdateCheckInterval.value = Math.round((au.check_interval ?? 86400) / 3600);
+        autoUpdateBackupRetention.value = au.backup_retention_days ?? 14;
+        autoUpdateBackupBefore.value = au.auto_backup_before_update ?? true;
+        autoUpdateNotify.value = au.notify_on_new_version ?? true;
+    } catch {
+        // 加载失败，使用默认值
+    }
+};
+
+const debounceSaveAutoUpdateConfig = () => {
+    if (_autoUpdateSaveTimer) clearTimeout(_autoUpdateSaveTimer);
+    _autoUpdateSaveTimer = setTimeout(() => {
+        saveAutoUpdateConfig();
+    }, 800);
+};
+
+const saveAutoUpdateConfig = async () => {
+    try {
+        const res = await systemConfigApi.runtime();
+        const config = res.data?.data ?? res.data ?? {};
+        config.auto_update = {
+            enabled: autoUpdateEnabled.value,
+            check_interval: autoUpdateCheckInterval.value * 3600,
+            backup_retention_days: autoUpdateBackupRetention.value,
+            auto_backup_before_update: autoUpdateBackupBefore.value,
+            notify_on_new_version: autoUpdateNotify.value,
+        };
+        await systemConfigApi.update(config);
+        showToast(tm('autoUpdate.actions.saved'), 'success');
+    } catch {
+        showToast(tm('autoUpdate.actions.saveFailed'), 'error');
+    }
+};
+
+const checkForUpdate = async () => {
+    checkingUpdate.value = true;
+    try {
+        const res = await updatesApi.check();
+        const data = res.data?.data ?? res.data ?? {};
+        if (data.has_new_version) {
+            showToast(
+                `New version available: ${data.version || 'unknown'} (current: ${data.dashboard_version || 'unknown'})`,
+                'info',
+            );
+        } else {
+            showToast('You are running the latest version.', 'success');
+        }
+    } catch (e) {
+        showToast(e?.response?.data?.message || 'Failed to check for updates', 'error');
+    } finally {
+        checkingUpdate.value = false;
+    }
+};
 
 const resolveThemes = () => {
     if (theme?.themes?.value) return theme.themes.value;
@@ -497,5 +644,6 @@ const resetThemeColors = () => {
 
 onMounted(() => {
     loadApiKeys();
+    loadAutoUpdateConfig();
 });
 </script>
