@@ -107,6 +107,7 @@ class WakingCheckStage(Stage):
             if event.message_str.startswith(wake_prefix):
                 if (
                     not event.is_private_chat()
+                    and messages
                     and isinstance(messages[0], At)
                     and str(messages[0].qq) != str(event.get_self_id())
                     and str(messages[0].qq) != "all"
