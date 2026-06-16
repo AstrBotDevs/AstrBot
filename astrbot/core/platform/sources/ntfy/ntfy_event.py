@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 from collections.abc import AsyncGenerator
-from typing import Any, Optional
+from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -15,6 +15,7 @@ from astrbot.api.message_components import (
     Record,
     Video,
 )
+
 from .ntfy_api import NtfyAPIClient
 
 
@@ -33,7 +34,7 @@ class NtfyMessageEvent(AstrMessageEvent):
     async def send(self, message: MessageChain) -> None:
         """Dispatches rich content payloads or raw fallback string configurations."""
         text_payload = ""
-        file_component: Optional[BaseMessageComponent] = None
+        file_component: BaseMessageComponent | None = None
 
         for segment in message.chain:
             if isinstance(segment, Plain):

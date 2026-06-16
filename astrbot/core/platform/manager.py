@@ -194,7 +194,7 @@ class PlatformManager:
                     from .sources.mattermost.mattermost_adapter import (
                         MattermostPlatformAdapter,  # noqa: F401
                     )
-                case "ntfy": 
+                case "ntfy":
                     from .sources.ntfy.ntfy_adapter import (
                         NtfyPlatformAdapter,  # noqa: F401
                     )

@@ -1,16 +1,13 @@
 import asyncio
-import mimetypes
 import time
 import uuid
-from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import (
     AstrBotMessage,
-    Group,
     MessageMember,
     MessageType,
     Platform,
@@ -107,7 +104,7 @@ class NtfyPlatformAdapter(Platform):
             topic=topic,
             access_token=access_token if access_token else None,
         )
-        self._listener_task: Optional[asyncio.Task] = None
+        self._listener_task: asyncio.Task | None = None
 
     async def send_by_session(
         self,

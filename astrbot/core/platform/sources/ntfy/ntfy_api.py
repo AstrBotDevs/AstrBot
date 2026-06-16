@@ -1,7 +1,7 @@
-import asyncio
 import json
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import unquote
+
 import aiohttp
 
 from astrbot.api import logger
@@ -13,13 +13,13 @@ class NtfyAPIClient:
         *,
         server_url: str,
         topic: str,
-        access_token: Optional[str] = None,
+        access_token: str | None = None,
         timeout_seconds: int = 30,
     ) -> None:
         self.server_url = server_url.strip().rstrip("/")
         self.topic = topic.strip()
         self.timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
 
         self.headers = {}
         if access_token:
@@ -63,10 +63,10 @@ class NtfyAPIClient:
         self,
         message: str,
         *,
-        title: Optional[str] = "AstrBot",
-        tags: Optional[list[str]] = None,
-        click_url: Optional[str] = None,
-        actions: Optional[list[dict[str, Any]]] = None,
+        title: str | None = "AstrBot",
+        tags: list[str] | None = None,
+        click_url: str | None = None,
+        actions: list[dict[str, Any]] | None = None,
     ) -> bool:
         """Sends a standard text notification payload."""
         headers = {**self.headers}
@@ -103,7 +103,7 @@ class NtfyAPIClient:
         self,
         file_bytes: bytes,
         filename: str,
-        message: Optional[str] = None,
+        message: str | None = None,
     ) -> bool:
         """Uploads a rich attachment asset via PUT binary stream."""
         headers = {
