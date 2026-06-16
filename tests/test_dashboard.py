@@ -1321,6 +1321,54 @@ async def test_sandbox_dashboard_screenshot_bypasses_lease_for_monitoring(
 
 
 @pytest.mark.asyncio
+async def test_sandbox_dashboard_hides_internal_service_errors(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FailingSandboxService:
+        def list_sandboxes(self):
+            from astrbot.dashboard.services.sandbox import SandboxServiceError
+
+            raise SandboxServiceError(
+                "Failed to list sandboxes: Traceback secret /tmp/private.py"
+            )
+
+    monkeypatch.setattr(app._app.state.services, "sandbox", FailingSandboxService())
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/sandbox", headers=authenticated_header)
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert data["message"] == "Sandbox operation failed."
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_keeps_user_error_messages(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FailingSandboxService:
+        def list_sandboxes(self):
+            from astrbot.dashboard.services.sandbox import SandboxServiceError
+
+            raise SandboxServiceError("provider_id is required", log_traceback=False)
+
+    monkeypatch.setattr(app._app.state.services, "sandbox", FailingSandboxService())
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/sandbox", headers=authenticated_header)
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert data["message"] == "provider_id is required"
+
+
+@pytest.mark.asyncio
 async def test_auth_login_secure_cookie_override(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,

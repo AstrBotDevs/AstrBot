@@ -43,6 +43,8 @@ async def _run(operation):
         result = await run_maybe_async(operation)
         return ok(result)
     except SandboxServiceError as exc:
+        if exc.log_traceback:
+            return error("Sandbox operation failed.")
         return error(exc.public_message)
 
 
