@@ -415,3 +415,15 @@ class LogManager:
             backup_count=3,
             trace=True,
         )
+
+    @classmethod
+    async def shutdown(cls) -> None:
+        """Flush and remove loguru sinks during process shutdown."""
+        try:
+            await _loguru.complete()
+        finally:
+            cls._remove_sink(cls._trace_sink_id)
+            cls._trace_sink_id = None
+            cls._remove_sink(cls._file_sink_id)
+            cls._file_sink_id = None
+            cls._configured = False
