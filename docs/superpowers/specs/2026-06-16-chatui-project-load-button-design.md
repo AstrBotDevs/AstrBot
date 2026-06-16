@@ -100,6 +100,8 @@ spcode 的 `/project load <directory>` 要求用户**手动键入完整绝对路
 
 ### 4.1 ChatInput 内部新增部分（伪代码）
 
+> **关键设计决策（v3 修订）**：**条件渲染封装在组件内部**。ChatInput **不** import 任何 helper，只 import 组件本身并始终渲染。`ProjectLoadMenuItem.vue` 的根 `<v-list-item>` 自带 `v-if="isProjectLoadAvailable(props.commands)"`，由组件内部决定是否显示菜单项。这样 `<script setup>` 下 helper 不需要 export（符合 §2 #6「inline-first」决策），组件自包含、可独立测试/复用。
+
 在 `+` 菜单（`StyledMenu`）内，于「上传文件」与 `<ConfigSelector />` 之间插入：
 
 ```vue
@@ -107,14 +109,13 @@ spcode 的 `/project load <directory>` 要求用户**手动键入完整绝对路
   <!-- 现有：上传文件 -->
   <v-list-item @click="triggerImageInput">...</v-list-item>
 
-  <!-- 新增：spcode 项目加载（条件渲染）
-       ProjectLoadMenuItem 内部用 <v-list-item> 渲染菜单条目:
-         prepend icon = mdi-folder-open-outline
-         title       = tm("spcodeProjectLoad.menuItem")
+  <!-- 新增:始终渲染组件,条件渲染封装在 ProjectLoadMenuItem 内部
+       (根 <v-list-item v-if="isProjectLoadAvailable(props.commands)">)
+       prepend icon = mdi-folder-open-outline
+       title       = tm("spcodeProjectLoad.menuItem")
        与上方"上传文件"项的 <v-list-item class="styled-menu-item" rounded="md" @click="...">
-       风格保持一致；icon 选用 open 状态以暗示"打开一个目录"而非新建。 -->
+       风格保持一致;icon 选用 open 状态以暗示"打开一个目录"而非新建。 -->
   <ProjectLoadMenuItem
-    v-if="isProjectLoadAvailable(allCommands)"
     :commands="allCommands"
     :wake-prefixes="wakePrefixes"
     @submit="handleProjectLoadSubmit"
@@ -316,6 +317,10 @@ ChatInput mount
 
 > **i18n key 命名决策**：保留 `spcodeProjectLoad`（plugin-machine-name 风格）。理由：(1) 显式表明与 spcode 插件的耦合，未来改名时 grep 友好；(2) 与 `commandSuggestion` / `project` / `todo` 等现有命名风格不冲突。
 
+> **i18n key 解析路径**：`useModuleI18n("features/chat")` 将 `tm("spcodeProjectLoad.menuItem")` 解析为 `features.chat.spcodeProjectLoad.menuItem`，落在 `dashboard/src/i18n/locales/<locale>/features/chat.json` 顶层，与 `project` / `commandSuggestion` / `batch` / `todo` / `connection` 等并列。
+
+> **类型来源**：helper 用 `import type { CommandItem } from "@/components/extension/componentPanel/types"`（`CommandType = 'command' | 'group' | 'sub_command'` 是字面量联合类型）。**不**重新定义 `CommandInfo` 接口（避免与项目类型来源分叉）。
+
 ---
 
 ## 7. 验证方案
@@ -386,6 +391,7 @@ pnpm lint
 - Chat.vue：`dashboard/src/components/chat/Chat.vue`（`sendCurrentMessage` 在 1218-1275 行；`newSession` 在 633 行导入）
 - `useMessages.sendMessageStream`：`dashboard/src/composables/useMessages.ts:331-371`（signature: `{ sessionId, messageId, parts, transport, ... }`）
 - `useMessages.MessagePart`：`dashboard/src/composables/useMessages.ts:7-30`（`{ type, text?, ... }`）
+- `CommandItem` / `CommandType` 类型：`dashboard/src/components/extension/componentPanel/types.ts`（`CommandType = 'command' | 'group' | 'sub_command'`）
 - spcode `/project load` 实现：`F:\github\astrbot_plugin_spcode_toolkit\main.py:1099-1178`
 - spcode `metadata.yaml`：`F:\github\astrbot_plugin_spcode_toolkit\metadata.yaml:1`（`name: astrbot_plugin_spcode_toolkit`）
 - `commandApi.list()`：`dashboard/src/api/v1.ts:894-903` + 后端 `astrbot/dashboard/api/extensions.py:89-95`
