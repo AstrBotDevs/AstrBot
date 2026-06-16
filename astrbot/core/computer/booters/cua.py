@@ -75,12 +75,14 @@ def _maybe_model_dump(value: Any) -> dict[str, Any]:
         return value
     if is_dataclass(value) and not isinstance(value, type):
         return asdict(value)
-    if hasattr(value, "model_dump"):
-        dumped = value.model_dump()
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump()
         if isinstance(dumped, dict):
             return dumped
-    if hasattr(value, "dict"):
-        dumped = value.dict()
+    dict_attr = getattr(value, "dict", None)
+    if callable(dict_attr):
+        dumped = dict_attr()
         if isinstance(dumped, dict):
             return dumped
     attr_payload = {
@@ -134,6 +136,11 @@ def _normalize_process_result(raw: Any) -> ProcessResult:
         exit_code = payload.get("returncode")
     if exit_code is None:
         exit_code = payload.get("return_code")
+    if exit_code is not None:
+        try:
+            exit_code = int(exit_code)
+        except Exception:
+            exit_code = None
     if exit_code is None:
         exit_code = 0 if not stderr else 1
     success = bool(payload.get("success", not stderr and exit_code in (0, None)))

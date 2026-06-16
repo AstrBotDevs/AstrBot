@@ -55,7 +55,7 @@ class PluginUpdator(RepoZipUpdator):
                 f"Downloading plugin update archive for {plugin.name}: {download_url}"
             )
             await self._download_file(download_url, plugin_path + ".zip")
-        else:
+        elif repo_url:
             await self.download_from_repo_url(plugin_path, repo_url, proxy=proxy)
 
         try:

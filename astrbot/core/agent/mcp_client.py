@@ -347,11 +347,9 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
         properties = normalized.get("properties")
         if isinstance(properties, dict):
-            original_properties = (
-                node.get("properties")
-                if isinstance(node.get("properties"), dict)
-                else {}
-            )
+            original_properties = node.get("properties")
+            if not isinstance(original_properties, dict):
+                original_properties = {}
             required = normalized.get("required")
             required_list = required[:] if isinstance(required, list) else []
 

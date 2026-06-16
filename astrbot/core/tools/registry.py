@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
-from typing import Any, TypeVar
+from typing import Any, TypeVar, overload
 
 from astrbot.core.agent.tool import FunctionTool
 
@@ -211,6 +211,22 @@ def _resolve_builtin_tool_name(tool_cls: type[FunctionTool]) -> str:
     raise ValueError(
         f"Builtin tool class {tool_cls.__module__}.{tool_cls.__name__} does not define a valid name.",
     )
+
+
+@overload
+def builtin_tool(
+    tool_cls: None = None,
+    *,
+    config: dict[str, Any] | None = None,
+) -> Callable[[TFunctionTool], TFunctionTool]: ...
+
+
+@overload
+def builtin_tool(
+    tool_cls: TFunctionTool,
+    *,
+    config: dict[str, Any] | None = None,
+) -> TFunctionTool: ...
 
 
 def builtin_tool(

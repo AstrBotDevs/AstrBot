@@ -560,7 +560,7 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     update(PlatformMessageHistory)
-                    .where(PlatformMessageHistory.id == message_id)
+                    .where(col(PlatformMessageHistory.id) == message_id)
                     .values(**values)
                 )
 
@@ -571,7 +571,7 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     delete(PlatformMessageHistory).where(
-                        PlatformMessageHistory.id == message_id
+                        col(PlatformMessageHistory.id) == message_id
                     )
                 )
 
@@ -678,7 +678,7 @@ class SQLiteDatabase(BaseDatabase):
             )
             if creator is not None:
                 query = query.where(WebChatThread.creator == creator)
-            query = query.order_by(WebChatThread.created_at)
+            query = query.order_by(col(WebChatThread.created_at))
             result = await session.execute(query)
             return list(result.scalars().all())
 
@@ -708,7 +708,9 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 await session.execute(
-                    delete(WebChatThread).where(WebChatThread.thread_id == thread_id)
+                    delete(WebChatThread).where(
+                        col(WebChatThread.thread_id) == thread_id
+                    )
                 )
 
     async def delete_webchat_threads_by_parent_session(
