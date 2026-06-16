@@ -115,8 +115,8 @@ DEFAULT_CONFIG = {
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
-        "real_nickname_display": False,
-        "real_nickname_only": False,
+        "account_nickname_display": False,
+        "account_nickname_only": False,
         "group_name_display": False,
         "datetime_system_prompt": True,
         "default_personality": "default",
@@ -2806,10 +2806,10 @@ CONFIG_METADATA_2 = {
                     "identifier": {
                         "type": "bool",
                     },
-                    "real_nickname_display": {
+                    "account_nickname_display": {
                         "type": "bool",
                     },
-                    "real_nickname_only": {
+                    "account_nickname_only": {
                         "type": "bool",
                     },
                     "group_name_display": {
@@ -3667,21 +3667,21 @@ CONFIG_METADATA_3 = {
                         "type": "bool",
                         "hint": "启用后，会在提示词前包含用户 ID 信息。",
                     },
-                    "provider_settings.real_nickname_display": {
-                        "description": "追加用户真实昵称",
+                    "provider_settings.account_nickname_display": {
+                        "description": "追加用户账号昵称",
                         "type": "bool",
-                        "hint": "启用后，会在支持的平台上向模型额外提供用户真实昵称。",
+                        "hint": "启用后，会在支持的平台上向模型额外提供用户账号昵称。",
                         "condition": {
                             "provider_settings.identifier": True,
                         },
                     },
-                    "provider_settings.real_nickname_only": {
-                        "description": "仅使用真实昵称",
+                    "provider_settings.account_nickname_only": {
+                        "description": "仅使用账号昵称",
                         "type": "bool",
-                        "hint": "启用后，模型将只看到用户真实昵称，不再看到群昵称。取不到真实昵称时会回退到原昵称。",
+                        "hint": "启用后，模型将只看到用户账号昵称，不再看到群昵称。取不到账号昵称时会回退到原昵称。",
                         "condition": {
                             "provider_settings.identifier": True,
-                            "provider_settings.real_nickname_display": True,
+                            "provider_settings.account_nickname_display": True,
                         },
                     },
                     "provider_settings.group_name_display": {

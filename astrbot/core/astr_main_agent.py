@@ -169,20 +169,9 @@ def _format_metadata(prefix: str, metadata: dict[str, object]) -> str:
     return f"{prefix}: {metadata_json}"
 
 
-def _get_real_sender_nickname(event: AstrMessageEvent) -> str | None:
-    raw_message = getattr(event.message_obj, "raw_message", None)
-    sender = getattr(raw_message, "sender", None)
-    if sender is None and isinstance(raw_message, dict):
-        sender = raw_message.get("sender")
-    if isinstance(sender, dict):
-        nickname = sender.get("nickname")
-        if nickname:
-            return str(nickname)
-    else:
-        nickname = getattr(sender, "nickname", None)
-        if nickname:
-            return str(nickname)
-    return None
+def _get_account_nickname(event: AstrMessageEvent) -> str | None:
+    sender = getattr(event.message_obj, "sender", None)
+    return getattr(sender, "account_nickname", None)
 
 
 @dataclass(slots=True)
@@ -914,23 +903,23 @@ def _append_system_reminders(
     if cfg.get("identifier"):
         user_id = event.message_obj.sender.user_id
         display_nickname = event.message_obj.sender.nickname
-        real_nickname_display_enabled = bool(cfg.get("real_nickname_display"))
-        real_nickname_only_enabled = bool(cfg.get("real_nickname_only"))
+        account_nickname_display_enabled = bool(cfg.get("account_nickname_display"))
+        account_nickname_only_enabled = bool(cfg.get("account_nickname_only"))
         resolved_nickname = _sanitize_metadata_value(display_nickname)
-        append_real_nickname = None
-        if real_nickname_display_enabled:
-            real_nickname = _sanitize_optional_metadata_value(
-                _get_real_sender_nickname(event)
+        append_account_nickname = None
+        if account_nickname_display_enabled:
+            account_nickname = _sanitize_optional_metadata_value(
+                _get_account_nickname(event)
             )
-            if real_nickname is not None:
-                if real_nickname_only_enabled:
-                    resolved_nickname = real_nickname
-                elif real_nickname != resolved_nickname:
-                    append_real_nickname = real_nickname
+            if account_nickname is not None:
+                if account_nickname_only_enabled:
+                    resolved_nickname = account_nickname
+                elif account_nickname != resolved_nickname:
+                    append_account_nickname = account_nickname
 
         user_metadata = {"user_id": user_id, "nickname": resolved_nickname}
-        if append_real_nickname is not None:
-            user_metadata["real_nickname"] = append_real_nickname
+        if append_account_nickname is not None:
+            user_metadata["account_nickname"] = append_account_nickname
         system_parts.append(_format_metadata("User metadata", user_metadata))
 
     if cfg.get("group_name_display") and event.message_obj.group_id:

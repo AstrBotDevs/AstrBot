@@ -25,6 +25,16 @@ class TestMessageMember:
         assert member.user_id == "user123"
         assert member.nickname == "TestUser"
 
+    def test_message_member_creation_with_account_nickname(self):
+        """Test creating a MessageMember with account nickname."""
+        member = MessageMember(
+            user_id="user123", nickname="TestUser", account_nickname="AccountNick"
+        )
+
+        assert member.user_id == "user123"
+        assert member.nickname == "TestUser"
+        assert member.account_nickname == "AccountNick"
+
     def test_message_member_str_with_nickname(self):
         """Test __str__ method with nickname."""
         member = MessageMember(user_id="user123", nickname="TestUser")

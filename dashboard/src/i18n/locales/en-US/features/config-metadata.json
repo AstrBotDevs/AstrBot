@@ -297,13 +297,13 @@
           "description": "User Identification",
           "hint": "When enabled, user ID information will be included in the prompt."
         },
-        "real_nickname_display": {
-          "description": "Append User Real Nickname",
-          "hint": "When enabled, the user's real nickname will be additionally provided to the model on supported platforms."
+        "account_nickname_display": {
+          "description": "Append User Account Nickname",
+          "hint": "When enabled, the user's account nickname will be additionally provided to the model on supported platforms."
         },
-        "real_nickname_only": {
-          "description": "Use Real Nickname Only",
-          "hint": "When enabled, the model will only see the user's real nickname instead of the group nickname. Falls back to the original nickname when unavailable."
+        "account_nickname_only": {
+          "description": "Use Account Nickname Only",
+          "hint": "When enabled, the model will only see the user's account nickname instead of the group nickname. Falls back to the original nickname when unavailable."
         },
         "group_name_display": {
           "description": "Display Group Name",
