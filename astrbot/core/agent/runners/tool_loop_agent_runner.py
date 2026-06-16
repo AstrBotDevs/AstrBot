@@ -5,7 +5,6 @@ import time
 import traceback
 import typing as T
 import uuid
-from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -1404,7 +1403,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_tool_executor_results(
         self,
-        executor: AsyncIterator[ToolExecutorResultT],
+        executor: T.AsyncGenerator[ToolExecutorResultT, None],
     ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
         async def _next_executor_result() -> ToolExecutorResultT:
             return await anext(executor)

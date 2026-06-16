@@ -33,7 +33,6 @@ import {
   type LoginRequest,
   type ListConversationsData,
   type McpServerConfig,
-  type MigrationRequest,
   type ModelScopeSyncRequest,
   type PipInstallRequest,
   type PluginVersionSupportRequest,
@@ -95,7 +94,6 @@ export interface ProviderEmbeddingDimensionData {
 export interface VersionData {
   version?: string;
   dashboard_version?: string;
-  need_migration?: boolean;
   change_pwd_hint?: boolean;
   md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
@@ -573,9 +571,6 @@ export const updatesApi = {
     return typed<OpenConfig>(
       openApiV1.installPipPackage({ body: payload }),
     );
-  },
-  runMigrations(payload?: MigrationRequest) {
-    return typed<OpenConfig>(openApiV1.runMigrations({ body: payload }));
   },
 };
 

@@ -1,7 +1,7 @@
 <template>
   <v-dialog v-model="isOpen" max-width="400">
     <v-card>
-      <v-card-title class="text-h6">{{ title }}</v-card-title>
+      <v-card-title class="text-h3 pl-6 pt-4">{{ title }}</v-card-title>
       <v-card-text>{{ message }}</v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
