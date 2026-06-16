@@ -197,6 +197,13 @@
               </v-list-item-title>
             </v-list-item>
 
+            <!-- spcode project load (component encapsulates its own conditional render) -->
+            <ProjectLoadMenuItem
+              :commands="allCommands"
+              :wake-prefixes="wakePrefixes"
+              @submit="handleProjectLoadSubmit"
+            />
+
             <!-- Config Selector in Menu -->
             <ConfigSelector
               :session-id="sessionId || null"
@@ -327,6 +334,7 @@ import ConfigSelector from "./ConfigSelector.vue";
 import ProviderModelMenu from "./ProviderModelMenu.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import CommandSuggestion from "./CommandSuggestion.vue";
+import ProjectLoadMenuItem from "./ProjectLoadMenuItem.vue";
 import type { Session } from "@/composables/useSessions";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
@@ -758,6 +766,20 @@ async function fetchCommands() {
   } finally {
     commandSuggestionLoading.value = false;
   }
+}
+
+/**
+ * Handle a spcode project-load submission: write the constructed command
+ * text into the prompt and re-emit the existing `send` event.
+ *
+ * This relies on Vue 3's synchronous reactivity: assigning to
+ * `localPrompt.value` triggers the `update:prompt` emit on the same
+ * tick, so the subsequent `emit("send")` sees the updated value in
+ * `Chat.vue:sendCurrentMessage` -> `draft.value`.
+ */
+function handleProjectLoadSubmit(text: string): void {
+  localPrompt.value = text;
+  emit("send");
 }
 
 function handleCompositionStart() {
