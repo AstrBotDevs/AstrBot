@@ -1322,9 +1322,9 @@ export const skillApi = {
   list(params?: { enabled?: boolean; source?: string }) {
     return typed<any>(openApiV1.listSkills({ query: params }));
   },
-  uploadBatch(formData: FormData) {
+  uploadBatch(files: File[]) {
     return typed<any>(
-      openApiV1.uploadSkillsBatch({ body: generatedFormData(formData) }),
+      openApiV1.uploadSkillsBatch({ body: { files } }),
     );
   },
   setEnabled(skillName: string, enabled: boolean) {
