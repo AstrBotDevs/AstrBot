@@ -247,5 +247,18 @@
     "exit": "Exit",
     "partialFailure": "{failed} of {total} conversations failed to delete",
     "requestFailed": "Failed to delete conversations. Please try again."
+  },
+  "spcodeProjectLoad": {
+    "menuItem": "Load Project Directory",
+    "dialog": {
+      "title": "Load Project Directory",
+      "pathLabel": "Project Path",
+      "pathPlaceholder": "e.g. /Users/me/projects/my-app",
+      "pathHint": "Hint: wrap paths with spaces in double quotes",
+      "historyLabel": "Recent",
+      "historyEmpty": "No history",
+      "submit": "Load",
+      "cancel": "Cancel"
+    }
   }
 }

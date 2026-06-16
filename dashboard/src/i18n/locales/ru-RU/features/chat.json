@@ -237,5 +237,18 @@
   "errors": {
     "sendMessageFailed": "Ошибка отправки сообщения, попробуйте еще раз",
     "createSessionFailed": "Ошибка создания сессии, обновите страницу"
+  },
+  "spcodeProjectLoad": {
+    "menuItem": "Загрузить каталог проекта",
+    "dialog": {
+      "title": "Загрузить каталог проекта",
+      "pathLabel": "Путь к проекту",
+      "pathPlaceholder": "напр. /Users/me/projects/my-app",
+      "pathHint": "Подсказка: пути с пробелами оборачивайте в двойные кавычки",
+      "historyLabel": "Недавние",
+      "historyEmpty": "История пуста",
+      "submit": "Загрузить",
+      "cancel": "Отмена"
+    }
   }
 }

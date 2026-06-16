@@ -247,5 +247,18 @@
     "exit": "退出",
     "partialFailure": "{total} 个对话中有 {failed} 个删除失败",
     "requestFailed": "删除对话失败，请重试。"
+  },
+  "spcodeProjectLoad": {
+    "menuItem": "加载项目目录",
+    "dialog": {
+      "title": "加载项目目录",
+      "pathLabel": "项目路径",
+      "pathPlaceholder": "例如 /Users/me/projects/my-app",
+      "pathHint": "提示：含空格的路径请用英文双引号包裹",
+      "historyLabel": "最近使用",
+      "historyEmpty": "暂无历史路径",
+      "submit": "加载",
+      "cancel": "取消"
+    }
   }
 }
