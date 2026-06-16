@@ -1049,10 +1049,8 @@ function addToolFromCombobox() {
 
 async function loadAvailableTools() {
   try {
-    // 复用 src/api/v1.ts 中的 subagentApi.availableTools() 封装,
-    // 避免直接 import axios(也便于 SDK 类型检查覆盖这里)。
     const res = await subagentApi.availableTools()
-    if (res.data?.status === 'ok') {
+    if (res.data.status === 'ok') {
       availableTools.value = res.data.data
     }
   } catch (e) {
