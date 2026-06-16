@@ -541,7 +541,7 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "ntfy_server_url": "https:ntfy.sh",
                         "ntfy_topic": "",
-                        "ntfy_access_token": ""
+                        "ntfy_access_token": "",
                     },
                     # "WebChat": {
                     #     "id": "webchat",
