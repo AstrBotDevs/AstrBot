@@ -664,7 +664,9 @@ async def test_cua_write_file_shell_fallback_chunks_large_payloads():
 
     command = sandbox.shell.commands[0][0]
     payload = command.split("<<'EOF'\n", 1)[1].rsplit("\nEOF", 1)[0]
-    assert len(payload.splitlines()) > 1
+    lines = payload.splitlines()
+    assert len(lines) > 1
+    assert max(len(line) for line in lines) <= 60_000
 
 
 @pytest.mark.asyncio
@@ -1417,6 +1419,37 @@ async def test_cua_available_returns_false_when_shell_health_fails():
     )
 
     assert await booter.available() is False
+
+
+@pytest.mark.asyncio
+async def test_cua_available_propagates_cancellation():
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    class CancellingShell:
+        async def run(self, command: str, **kwargs):
+            raise asyncio.CancelledError
+
+    sandbox = FakeSandbox()
+    sandbox.shell = CancellingShell()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await booter.available()
 
 
 @pytest.mark.asyncio

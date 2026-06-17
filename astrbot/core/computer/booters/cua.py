@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import inspect
 import shlex
@@ -894,6 +895,8 @@ class CuaBooter(ComputerBooter):
             return False
         try:
             result = await self._runtime.shell.exec("echo _astrbot_cua_ok_", timeout=10)
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
             logger.debug("[Computer] CUA sandbox health check failed: %s", exc)
             return False
