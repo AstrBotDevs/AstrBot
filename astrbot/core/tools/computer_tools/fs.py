@@ -71,6 +71,8 @@ _IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def _remote_basename(path: str) -> str:
+    # Sandbox paths may come from POSIX or Windows runtimes; normalize separators
+    # without interpreting the path against the host filesystem.
     return path.replace("\\", "/").rstrip("/").split("/")[-1]
 
 

@@ -60,16 +60,13 @@ async def _write_base64_via_shell(
         "path.write_bytes(base64.b64decode(sys.stdin.read()))"
     )
     chunk_size = 60_000
-    stdin_parts = [
-        f"cat <<'EOF'\n{encoded[index : index + chunk_size]}\nEOF"
+    encoded_lines = "\n".join(
+        encoded[index : index + chunk_size]
         for index in range(0, len(encoded), chunk_size)
-    ] or ["cat <<'EOF'\n\nEOF"]
-    stdin_command = "\n".join(stdin_parts)
+    )
     return await shell.exec(
-        "{ "
-        f"{stdin_command}"
-        "\n} | "
-        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)}"
+        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)} <<'EOF'\n"
+        f"{encoded_lines}\nEOF"
     )
 
 
@@ -900,6 +897,6 @@ class CuaBooter(ComputerBooter):
         except Exception as exc:
             logger.debug("[Computer] CUA sandbox health check failed: %s", exc)
             return False
-        if result.get("success") is False or result.get("stderr"):
+        if result.get("exit_code") not in (0, None):
             return False
         return "_astrbot_cua_ok_" in str(result.get("stdout", ""))

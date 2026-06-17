@@ -102,6 +102,40 @@ async def test_sandbox_file_download_handles_windows_remote_filename(
     assert sent_file.name == "report.txt"
 
 
+@pytest.mark.asyncio
+async def test_sandbox_file_download_strips_trailing_remote_slash(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        fs_tools,
+        "get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    booter = SimpleNamespace(download_file=AsyncMock())
+
+    async def _fake_get_booter(_ctx, _umo):
+        return booter
+
+    monkeypatch.setattr(fs_tools, "get_booter", _fake_get_booter)
+
+    context = _make_sandbox_context()
+    result = await fs_tools.FileDownloadTool().call(
+        context,
+        remote_path="reports/export/",
+        also_send_to_user=True,
+    )
+
+    assert "export" in result
+    sent_chain = context.context.event.send.await_args.args[0]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "export"
+
+
 def _setup_local_fs_tools(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
