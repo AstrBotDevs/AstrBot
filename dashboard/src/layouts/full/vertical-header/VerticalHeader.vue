@@ -738,20 +738,20 @@ async function switchVersion(targetVersion: string) {
     })
     .then((res) => {
       updateStatus.value = res.data.message || "";
-      updateProgress.value = {
-        ...updateProgress.value,
-        status:
-          res.data.status === "ok" ? "success" : updateProgress.value.status,
-        message: res.data.message || "",
-        overall_percent:
-          res.data.status === "ok" ? 100 : updateProgress.value.overall_percent,
-      };
-      if (res.data.status === "ok") {
-        waitForAstrBotRestart(initialStartTime);
+      if (res.data.status === "error") {
+        stopUpdateProgressPolling();
+        updateProgress.value = {
+          ...updateProgress.value,
+          status: "error",
+          message:
+            res.data.message ||
+            t("core.header.updateDialog.progress.failed"),
+        };
       }
     })
     .catch((err) => {
       console.log(err);
+      stopUpdateProgressPolling();
       updateStatus.value = err;
       updateProgress.value = {
         ...updateProgress.value,
@@ -764,7 +764,6 @@ async function switchVersion(targetVersion: string) {
     })
     .finally(() => {
       installLoading.value = false;
-      stopUpdateProgressPolling();
     });
 }
 

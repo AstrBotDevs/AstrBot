@@ -73,6 +73,33 @@ def _assert_cookie_samesite_strict(cookie_header: str) -> None:
     assert "samesite=strict" in cookie_header.lower()
 
 
+async def _wait_for_update_progress(
+    test_client,
+    authenticated_header: dict,
+    progress_id: str,
+) -> dict:
+    """Wait until a dashboard update task reaches a terminal status.
+
+    Args:
+        test_client: Quart/FastAPI adapter test client.
+        authenticated_header: Headers for authenticated dashboard requests.
+        progress_id: Update progress id to poll.
+
+    Returns:
+        The progress response payload.
+    """
+    for _ in range(100):
+        response = await test_client.get(
+            f"/api/update/progress?id={progress_id}",
+            headers=authenticated_header,
+        )
+        data = await response.get_json()
+        if data["data"].get("status") in {"success", "error"}:
+            return data
+        await asyncio.sleep(0.01)
+    pytest.fail(f"Update task did not finish: {progress_id}")
+
+
 @pytest.fixture
 def registered_plugin_page(core_lifecycle_td: AstrBotCoreLifecycle, monkeypatch):
     plugin_root = (
@@ -2633,6 +2660,13 @@ async def test_do_update(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
+    assert data["data"]["id"] == "test-progress"
+
+    progress_data = await _wait_for_update_progress(
+        test_client,
+        authenticated_header,
+        "test-progress",
+    )
     assert os.path.exists(release_path)
     assert calls[:4] == [
         "download-dashboard",
@@ -2641,11 +2675,6 @@ async def test_do_update(
         "apply-dashboard",
     ]
 
-    progress_response = await test_client.get(
-        "/api/update/progress?id=test-progress",
-        headers=authenticated_header,
-    )
-    progress_data = await progress_response.get_json()
     assert progress_data["status"] == "ok"
     assert progress_data["data"]["status"] == "success"
     assert progress_data["data"]["overall_percent"] == 100
@@ -2707,7 +2736,13 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
     data = await response.get_json()
 
     assert response.status_code == 200
-    assert data["status"] == "error"
+    assert data["status"] == "ok"
+    progress_data = await _wait_for_update_progress(
+        test_client,
+        authenticated_header,
+        "atomic-fail",
+    )
+    assert progress_data["data"]["status"] == "error"
     assert calls == ["download-dashboard", "download-core"]
 
 
@@ -2769,7 +2804,13 @@ async def test_do_update_does_not_apply_files_when_package_verification_fails(
     data = await response.get_json()
 
     assert response.status_code == 200
-    assert data["status"] == "error"
+    assert data["status"] == "ok"
+    progress_data = await _wait_for_update_progress(
+        test_client,
+        authenticated_header,
+        "invalid-zip",
+    )
+    assert progress_data["data"]["status"] == "error"
     assert calls == ["download-dashboard", "download-core"]
 
 
@@ -2812,15 +2853,14 @@ async def test_do_update_hides_internal_error_message_in_response_and_progress(
     data = await response.get_json()
 
     assert response.status_code == 200
-    assert data["status"] == "error"
-    assert data["message"] == "An internal error has occurred."
+    assert data["status"] == "ok"
     assert "secret stack trace" not in str(data)
 
-    progress_response = await test_client.get(
-        "/api/update/progress?id=failed-progress",
-        headers=authenticated_header,
+    progress_data = await _wait_for_update_progress(
+        test_client,
+        authenticated_header,
+        "failed-progress",
     )
-    progress_data = await progress_response.get_json()
 
     assert progress_data["status"] == "ok"
     assert progress_data["data"]["status"] == "error"

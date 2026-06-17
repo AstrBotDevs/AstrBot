@@ -48,6 +48,16 @@
     "waiting": "Waiting for AstrBot to restart...",
     "maxRetriesReached": "Maximum retry attempts reached, please check manually."
   },
+  "upgradeRecovery": {
+    "title": "Upgrade Needs Restart",
+    "description": "The WebUI has been updated to {dashboardVersion}, but AstrBot Core is still {coreVersion}. This usually means the restart flow was interrupted by refreshing the page during upgrade.",
+    "hint": "Restart the backend to finish the upgrade. This page will reload automatically after AstrBot is back.",
+    "restartButton": "Restart Backend",
+    "laterButton": "Later",
+    "restarting": "Requesting backend restart...",
+    "waiting": "Restart requested. Waiting for the backend to recover...",
+    "failed": "Restart request failed. Please restart AstrBot manually."
+  },
   "readme": {
     "title": "Extension Documentation",
     "buttons": {

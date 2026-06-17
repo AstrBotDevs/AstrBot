@@ -92,6 +92,7 @@ class UpdateService:
         self.demo_mode = demo_mode
         self.clear_site_data_headers = clear_site_data_headers
         self.update_progress: dict[str, dict] = {}
+        self._update_tasks: dict[str, asyncio.Task] = {}
 
     def get_update_progress(self, progress_id: str) -> UpdateServiceResult:
         if not progress_id:
@@ -156,7 +157,43 @@ class UpdateService:
         if proxy:
             proxy = proxy.removesuffix("/")
 
+        existing_task = self._update_tasks.get(progress_id)
+        if existing_task and not existing_task.done():
+            return UpdateServiceResult(
+                data={"id": progress_id, "status": "running"},
+                message="更新任务正在进行中。",
+                headers=self.clear_site_data_headers,
+            )
+
         self._init_update_progress(progress_id, version)
+        task = asyncio.create_task(
+            self._run_update_project(progress_id, version, latest, reboot, proxy)
+        )
+        self._update_tasks[progress_id] = task
+        task.add_done_callback(lambda _task: self._update_tasks.pop(progress_id, None))
+        return UpdateServiceResult(
+            data={"id": progress_id, "status": "running"},
+            message="更新任务已开始。",
+            headers=self.clear_site_data_headers,
+        )
+
+    async def _run_update_project(
+        self,
+        progress_id: str,
+        version: str,
+        latest: bool,
+        reboot: bool,
+        proxy: str | None,
+    ) -> None:
+        """Run the long core update outside the request lifecycle.
+
+        Args:
+            progress_id: Progress record id reported to the frontend.
+            version: Target version without the latest sentinel.
+            latest: Whether to install the latest release.
+            reboot: Whether to restart AstrBot after applying files.
+            proxy: Optional GitHub proxy URL.
+        """
         update_temp_dir = Path(get_astrbot_system_tmp_path()) / "updates"
         update_temp_dir.mkdir(parents=True, exist_ok=True)
         update_token = uuid.uuid4().hex
@@ -308,10 +345,16 @@ class UpdateService:
                     "overall_percent": 100,
                 },
             )
-            return UpdateServiceResult(
-                message=message,
-                headers=self.clear_site_data_headers,
+            logger.info(message)
+        except asyncio.CancelledError:
+            self.update_progress[progress_id].update(
+                {
+                    "status": "error",
+                    "message": "更新任务已取消。",
+                },
             )
+            logger.warning(f"Update task was cancelled: {progress_id}")
+            raise
         except Exception as exc:
             self.update_progress[progress_id].update(
                 {
@@ -320,7 +363,7 @@ class UpdateService:
                 },
             )
             logger.error(f"/api/update_project: {traceback.format_exc()}")
-            raise UpdateServiceError(exc.__str__()) from exc
+            logger.debug(f"Update task failed: {exc!s}")
         finally:
             for zip_path in (dashboard_zip_path, core_zip_path):
                 try:

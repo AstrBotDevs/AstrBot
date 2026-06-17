@@ -1,6 +1,7 @@
 <template>
   <RouterView></RouterView>
   <WaitingForRestart ref="globalWaitingRef" />
+  <UpgradeRecoveryDialog />
 
   <!-- 全局唯一 snackbar -->
   <v-snackbar v-if="toastStore.current" v-model="snackbarShow" :color="toastStore.current.color"
@@ -18,6 +19,7 @@ import { RouterView } from 'vue-router';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useToastStore } from '@/stores/toast'
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue'
+import UpgradeRecoveryDialog from '@/components/shared/UpgradeRecoveryDialog.vue'
 
 const toastStore = useToastStore()
 const globalWaitingRef = ref(null)
