@@ -616,7 +616,7 @@ class QQOfficialPlatformAdapter(Platform):
                 abm.group_id = message.group_openid
                 bot_mentions = [
                     mention
-                    for mention in message.mentions
+                    for mention in (getattr(message, "mentions", None) or [])
                     if getattr(mention, "is_you", False) is True
                     and getattr(mention, "id", None) is not None
                 ]
