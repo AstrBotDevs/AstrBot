@@ -2,10 +2,12 @@ import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 import * as openApiV1 from './generated/openapi-v1';
 import {
+  type BackupChunkUploadRequest,
   client as openApiV1Client,
   type BackupExportRequest,
   type BackupRenameRequest,
   type BackupUploadInitRequest,
+  type BackupUploadRequest,
   type BackupUploadSessionRequest,
   type BotConfigRequest,
   type BotRegistrationRequest,
@@ -187,7 +189,21 @@ function generatedQuery<T extends object>(
   return params as (T & Record<string, unknown>) | undefined;
 }
 
-function generatedFormData(formData: FormData) {
+function generatedFormData(formData: FormData | Record<string, unknown>) {
+  if (typeof FormData !== 'undefined' && formData instanceof FormData) {
+    const body: Record<string, unknown> = {};
+    formData.forEach((value, key) => {
+      const existing = body[key];
+      if (existing === undefined) {
+        body[key] = value;
+      } else if (Array.isArray(existing)) {
+        existing.push(value);
+      } else {
+        body[key] = [existing, value];
+      }
+    });
+    return body as any;
+  }
   return formData as any;
 }
 
@@ -586,7 +602,7 @@ export const backupApi = {
       openApiV1.getBackupProgress({ path: { task_id: taskId } }),
     );
   },
-  upload(formData: FormData) {
+  upload(formData: FormData | BackupUploadRequest) {
     return typed<any>(
       openApiV1.uploadBackup({ body: generatedFormData(formData) }),
     );
@@ -594,7 +610,7 @@ export const backupApi = {
   initUpload(payload: BackupUploadInitRequest) {
     return typed<any>(openApiV1.initBackupUpload({ body: payload }));
   },
-  uploadChunk(formData: FormData) {
+  uploadChunk(formData: FormData | BackupChunkUploadRequest) {
     return typed<any>(
       openApiV1.uploadBackupChunk({ body: generatedFormData(formData) }),
     );

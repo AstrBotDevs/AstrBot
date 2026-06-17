@@ -574,12 +574,11 @@ const uploadChunksInParallel = async (file, totalChunks, currentUploadId, curren
         const end = Math.min(start + currentChunkSize, file.size)
         const chunk = file.slice(start, end)
 
-        const formData = new FormData()
-        formData.append('upload_id', currentUploadId)
-        formData.append('chunk_index', chunkIndex.toString())
-        formData.append('chunk', chunk)
-
-        const response = await backupApi.uploadChunk(formData)
+        const response = await backupApi.uploadChunk({
+            upload_id: currentUploadId,
+            chunk_index: chunkIndex,
+            chunk
+        })
 
         if (response.data.status !== 'ok') {
             throw new Error(response.data.message)
