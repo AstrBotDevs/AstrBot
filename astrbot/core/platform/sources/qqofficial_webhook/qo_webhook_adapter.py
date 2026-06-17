@@ -13,7 +13,10 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
-from ..qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter
+from ..qqofficial.qqofficial_platform_adapter import (
+    QQOfficialPlatformAdapter,
+    _ensure_group_message_create_parser,
+)
 from .qo_webhook_event import QQOfficialWebhookMessageEvent
 from .qo_webhook_server import QQOfficialWebhook
 
@@ -29,6 +32,19 @@ class botClient(Client):
 
     # 收到群消息
     async def on_group_at_message_create(
+        self, message: botpy.message.GroupMessage
+    ) -> None:
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+            message,
+            MessageType.GROUP_MESSAGE,
+            force_group_mention=True,
+        )
+        abm.group_id = cast(str, message.group_openid)
+        abm.session_id = abm.group_id
+        self.platform.remember_session_scene(abm.session_id, "group")
+        self._commit(abm)
+
+    async def on_group_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
@@ -103,9 +119,11 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             timeout=20,
         )
         self.client.set_platform(self)
+        _ensure_group_message_create_parser()
         self.webhook_helper = None
         self._session_last_message_id: dict[str, str] = {}
         self._session_scene: dict[str, str] = {}
+        self._allow_group_proactive_send = False
 
     async def send_by_session(
         self,
