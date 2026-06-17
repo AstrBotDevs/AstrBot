@@ -123,7 +123,7 @@ class QQOfficialWebhookPlatformAdapter(Platform):
         self.webhook_helper = None
         self._session_last_message_id: dict[str, str] = {}
         self._session_scene: dict[str, str] = {}
-        self._allow_group_proactive_send = False
+        self._allow_group_proactive_send = True
 
     async def send_by_session(
         self,

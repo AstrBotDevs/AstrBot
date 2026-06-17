@@ -1045,7 +1045,9 @@ export default {
       return this.selectedPlatformConfig?.type === "dingtalk";
     },
     isQqOfficialPlatform() {
-      return this.selectedPlatformConfig?.type === "qq_official";
+      return ["qq_official", "qq_official_webhook"].includes(
+        this.selectedPlatformConfig?.type,
+      );
     },
   },
   watch: {

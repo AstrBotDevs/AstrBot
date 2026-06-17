@@ -77,6 +77,13 @@ const REGISTRATION_ACTIONS = {
     successKey: 'registrationAction.qqOfficial.created',
     statusKeyPrefix: 'registrationAction.qqOfficial.status',
   },
+  qq_official_webhook: {
+    icon: 'mdi-qrcode',
+    titleKey: 'registrationAction.qqOfficial.title',
+    scanTitleKey: 'registrationAction.qqOfficial.scanTitle',
+    successKey: 'registrationAction.qqOfficial.created',
+    statusKeyPrefix: 'registrationAction.qqOfficial.status',
+  },
 };
 
 export default {

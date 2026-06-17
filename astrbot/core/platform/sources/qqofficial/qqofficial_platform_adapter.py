@@ -413,7 +413,7 @@ class QQOfficialPlatformAdapter(Platform):
         sent_message_id = self._extract_message_id(ret)
         if sent_message_id:
             self.remember_session_message_id(session.session_id, sent_message_id)
-        await super().send_by_session(session, message_chain)
+        await Platform.send_by_session(self, session, message_chain)
 
     def remember_session_message_id(self, session_id: str, message_id: str) -> None:
         if not session_id or not message_id:

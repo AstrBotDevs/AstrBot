@@ -255,7 +255,7 @@ async def test_ws_group_send_by_session_with_cached_msg_id_still_omits_msg_id():
 
 
 @pytest.mark.asyncio
-async def test_webhook_group_send_by_session_without_cached_msg_id_skips_send():
+async def test_webhook_group_send_by_session_without_cached_msg_id_omits_msg_id():
     adapter = QQOfficialWebhookPlatformAdapter(
         {
             "id": "qq-official-webhook-test",
@@ -276,7 +276,13 @@ async def test_webhook_group_send_by_session_without_cached_msg_id_skips_send():
         MessageChain(chain=[Plain("webhook proactive hello")]),
     )
 
-    adapter.client.api.post_group_message.assert_not_awaited()
+    adapter.client.api.post_group_message.assert_awaited_once()
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["group_openid"] == "group-1"
+    assert kwargs["content"] == "webhook proactive hello"
+    assert "msg_id" not in kwargs
+    assert "msg_seq" in kwargs
+    assert adapter._session_last_message_id["group-1"] == "sent-1"
 
 
 def test_qqofficial_ws_is_not_excluded_from_segmented_reply():

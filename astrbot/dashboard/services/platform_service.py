@@ -99,7 +99,7 @@ class PlatformService:
                 )
             if platform_type == "dingtalk":
                 return await self._handle_dingtalk_registration(action, payload)
-            if platform_type == "qq_official":
+            if platform_type in {"qq_official", "qq_official_webhook"}:
                 return await self._handle_qqofficial_registration(
                     action,
                     payload,
