@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 300 icons */
+/* Auto-generated MDI subset – 304 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -804,6 +804,10 @@
   content: "\F0375";
 }
 
+.mdi-minus-circle::before {
+  content: "\F0376";
+}
+
 .mdi-monitor-dashboard::before {
   content: "\F0A07";
 }
@@ -910,6 +914,10 @@
 
 .mdi-plus::before {
   content: "\F0415";
+}
+
+.mdi-plus-circle::before {
+  content: "\F0417";
 }
 
 .mdi-pound::before {
@@ -1048,6 +1056,10 @@
   content: "\F062C";
 }
 
+.mdi-source-pull::before {
+  content: "\F04C2";
+}
+
 .mdi-square-edit-outline::before {
   content: "\F090C";
 }
@@ -1086,6 +1098,10 @@
 
 .mdi-subdirectory-arrow-right::before {
   content: "\F060D";
+}
+
+.mdi-swap-horizontal::before {
+  content: "\F04E1";
 }
 
 .mdi-sync::before {

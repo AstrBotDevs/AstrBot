@@ -43,7 +43,13 @@ const iconInfo = computed(() => ICON_MAP[props.file.status])
       >mdi-chevron-down</v-icon>
     </button>
     <div v-if="expanded" class="git-diff-file-body">
-      <v-alert v-if="file.isBinary" type="info" density="compact" variant="tonal">
+      <v-alert
+        v-if="file.isBinary"
+        type="info"
+        density="compact"
+        variant="tonal"
+        class="git-diff-binary-alert"
+      >
         {{ tm('spcodeProjectLoad.diffSidebar.binaryFile') }}
       </v-alert>
       <DiffPreview
@@ -61,7 +67,12 @@ const iconInfo = computed(() => ICON_MAP[props.file.status])
 </template>
 
 <style scoped>
-.git-diff-file-item { border-bottom: 1px solid rgba(0, 0, 0, 0.08); }
+.git-diff-file-item {
+  /* Dark mode flips to a translucent white so the divider remains
+     visible against the dark surface. Tied to the `isDark` prop that
+     Chat.vue already passes down. */
+  border-bottom: 1px solid v-bind('isDark ? "rgba(255, 255, 255, 0.18)" : "rgba(0, 0, 0, 0.08)"');
+}
 .git-diff-file-row {
   display: flex; align-items: center; gap: 8px;
   width: 100%; padding: 8px 12px;
@@ -82,4 +93,5 @@ const iconInfo = computed(() => ICON_MAP[props.file.status])
 .git-diff-file-no-content {
   padding: 12px; text-align: center; color: rgba(0, 0, 0, 0.45); font-size: 12px;
 }
+.git-diff-binary-alert { font-size: 13px; }
 </style>
