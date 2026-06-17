@@ -416,7 +416,7 @@ export default {
             personaIdRules: [
                 v => !!v || this.tm('validation.required'),
                 v => (v && v.length >= 1) || this.tm('validation.minLength', { min: 1 }),
-                v => !this.existingPersonaIds.includes(v) || this.tm('validation.personaIdExists'),
+                v => this.editingPersona?.persona_id === v || !this.existingPersonaIds.includes(v) || this.tm('validation.personaIdExists'),
             ],
             systemPromptRules: [
                 v => !!v || this.tm('validation.required'),
