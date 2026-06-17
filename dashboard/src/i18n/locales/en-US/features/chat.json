@@ -254,13 +254,18 @@
       "title": "Load Project Directory",
       "pathLabel": "Project Path",
       "pathPlaceholder": "e.g. /Users/me/projects/my-app",
-      "pathHint": "Hint: wrap paths with spaces in double quotes",
       "historyLabel": "Recent",
       "historyEmpty": "No history",
       "submit": "Load",
-            "cancel": "Cancel",
-            "unloadButton": "Unload current directory",
-            "removeFromHistory": "Remove from history"
+      "cancel": "Cancel",
+      "unloadButton": "Unload current project",
+      "removeFromHistory": "Remove this history"
+    },
+    "indicator": {
+      "loadedLabel": "Project loaded",
+      "unloadAction": "Unload",
+      "loadedAtPrefix": "Loaded at",
+      "noProject": "No project loaded"
     }
   }
 }

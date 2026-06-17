@@ -164,6 +164,23 @@ interface UseMessagesOptions {
   currentSessionId: Ref<string>;
   onSessionsChanged?: () => Promise<void> | void;
   onStreamUpdate?: (sessionId: string) => void;
+  /**
+   * Fired exactly once when a streaming response for a given session
+   * ends — either because the server closed the stream normally, an
+   * error terminated it, the user pressed stop, or the regenerate
+   * path completed. Fires for both SSE and WebSocket transports.
+   *
+   * This is the canonical "bot just finished talking" signal. It is
+   * the right hook for refetching authoritative state that the bot's
+   * response may have mutated (for example the spcode project
+   * status). Distinct from :attr:`onSessionsChanged` which also
+   * fires for session-list mutations unrelated to any specific
+   * stream; ``onStreamEnd`` is a pure stream-lifecycle event.
+   *
+   * Args:
+   *   sessionId: The session whose stream just ended.
+   */
+  onStreamEnd?: (sessionId: string) => void;
 }
 
 export function useMessages(options: UseMessagesOptions) {
@@ -499,6 +516,7 @@ export function useMessages(options: UseMessagesOptions) {
     } finally {
       delete activeConnections[sessionId];
       await options.onSessionsChanged?.();
+      options.onStreamEnd?.(sessionId);
     }
   }
 
@@ -607,6 +625,7 @@ export function useMessages(options: UseMessagesOptions) {
       .finally(async () => {
         delete activeConnections[sessionId];
         await options.onSessionsChanged?.();
+        options.onStreamEnd?.(sessionId);
       });
   }
 
@@ -688,6 +707,7 @@ export function useMessages(options: UseMessagesOptions) {
       }
       delete activeConnections[sessionId];
       await options.onSessionsChanged?.();
+      options.onStreamEnd?.(sessionId);
     };
     return ws;
   }
@@ -764,6 +784,7 @@ export function useMessages(options: UseMessagesOptions) {
     connection.completed = true;
     delete activeConnections[sessionId];
     await options.onSessionsChanged?.();
+    options.onStreamEnd?.(sessionId);
   }
 
   function closeTrackedWebSocket(ws: WebSocket) {

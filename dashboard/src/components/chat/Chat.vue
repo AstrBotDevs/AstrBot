@@ -575,6 +575,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
 import { isAxiosError } from "axios";
 import { chatApi } from "@/api/v1";
+import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ProjectDialog, {
   type ProjectFormData,
@@ -622,6 +623,12 @@ const { lgAndUp } = useDisplay();
 const customizer = useCustomizerStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
+
+// Spcode project state is shared via a module-level ref in the
+// composable; just grab a handle so the chat-stream watcher below can
+// apply updates and so the refresh-on-session-change handler can call
+// the plugin's HTTP API.
+const spcodeStatus = useSpcodeProjectStatus();
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
 const { languageOptions, currentLanguage, switchLanguage, locale } =
@@ -925,6 +932,25 @@ const {
       scrollToBottom();
     }
   },
+  // Refresh the spcode "currently loaded project" chip every time a
+  // bot response finishes, so commands like `/project load <dir>` or
+  // `/project unload` show their effect on the chip immediately
+  // without forcing the user to refresh the page.
+  //
+  // The previous design parsed bot text for hidden JSON markers or
+  // plain-text patterns; that was abandoned because some markdown
+  // renderers leaked the marker into the chat. We now let the bot
+  // respond with pure prose and re-fetch the authoritative state from
+  // the plugin's HTTP endpoint after every response.
+  //
+  // Filtered to the active session: if the user navigates away while
+  // a stream is in flight, the new session's state is already covered
+  // by the `currSessionId` watcher above.
+  onStreamEnd: (sessionId) => {
+    if (sessionId === currSessionId.value) {
+      void spcodeStatus.refresh();
+    }
+  },
 });
 
 const transportMode = ref<TransportMode>(
@@ -1028,6 +1054,26 @@ watch(activeMessages, () => {
     scrollToBottom();
   }
 });
+
+// Re-fetch the spcode status when the active session changes. Each
+// session has its own loaded project so the chip must refresh.
+//
+// This is the only code path that updates the chip from chat activity:
+// the dashboard deliberately does NOT parse bot message text for
+// status markers. Status is always pulled via the plugin's HTTP
+// endpoint (`spcode/project-status`) so the bot's `/project *`
+// responses are free to be pure prose without hidden side channels.
+watch(
+  currSessionId,
+  async (next) => {
+    if (!next) {
+      spcodeStatus.reset();
+      return;
+    }
+    await spcodeStatus.refresh();
+  },
+  { immediate: true },
+);
 
 function getRouteSessionId() {
   const raw = route.params.conversationId;

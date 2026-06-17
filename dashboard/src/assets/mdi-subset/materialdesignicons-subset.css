@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 279 icons */
+/* Auto-generated MDI subset – 300 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -136,6 +136,10 @@
   content: "\F00E4";
 }
 
+.mdi-bullhorn-variant::before {
+  content: "\F196E";
+}
+
 .mdi-cached::before {
   content: "\F00E8";
 }
@@ -224,12 +228,20 @@
   content: "\F0765";
 }
 
+.mdi-circle-medium::before {
+  content: "\F09DE";
+}
+
 .mdi-circle-outline::before {
   content: "\F0766";
 }
 
 .mdi-circle-small::before {
   content: "\F09DF";
+}
+
+.mdi-clipboard-text-outline::before {
+  content: "\F0A38";
 }
 
 .mdi-clock-outline::before {
@@ -332,12 +344,20 @@
   content: "\F01BE";
 }
 
+.mdi-cursor-text::before {
+  content: "\F05E7";
+}
+
 .mdi-database::before {
   content: "\F01BC";
 }
 
 .mdi-database-cog::before {
   content: "\F164B";
+}
+
+.mdi-database-cog-outline::before {
+  content: "\F164C";
 }
 
 .mdi-database-off::before {
@@ -382,6 +402,10 @@
 
 .mdi-download-outline::before {
   content: "\F0B8F";
+}
+
+.mdi-drag-horizontal-variant::before {
+  content: "\F12F0";
 }
 
 .mdi-emoticon::before {
@@ -496,6 +520,10 @@
   content: "\F024B";
 }
 
+.mdi-folder-check-outline::before {
+  content: "\F197F";
+}
+
 .mdi-folder-move::before {
   content: "\F0252";
 }
@@ -520,12 +548,20 @@
   content: "\F0257";
 }
 
+.mdi-folder-remove-outline::before {
+  content: "\F0B9E";
+}
+
 .mdi-folder-zip-outline::before {
   content: "\F07B9";
 }
 
 .mdi-format-list-bulleted::before {
   content: "\F0279";
+}
+
+.mdi-format-list-checks::before {
+  content: "\F0756";
 }
 
 .mdi-frequently-asked-questions::before {
@@ -552,6 +588,10 @@
   content: "\F0D7C";
 }
 
+.mdi-graph-outline::before {
+  content: "\F104A";
+}
+
 .mdi-hand-heart::before {
   content: "\F10F1";
 }
@@ -570,6 +610,10 @@
 
 .mdi-help-circle-outline::before {
   content: "\F0625";
+}
+
+.mdi-history::before {
+  content: "\F02DA";
 }
 
 .mdi-home::before {
@@ -616,6 +660,10 @@
   content: "\F030B";
 }
 
+.mdi-keyboard-outline::before {
+  content: "\F097B";
+}
+
 .mdi-label::before {
   content: "\F0315";
 }
@@ -658,6 +706,10 @@
 
 .mdi-layers-outline::before {
   content: "\F09FE";
+}
+
+.mdi-lightbulb-on-outline::before {
+  content: "\F06E9";
 }
 
 .mdi-lightbulb-outline::before {
@@ -732,6 +784,10 @@
   content: "\F0369";
 }
 
+.mdi-message-text-outline::before {
+  content: "\F036A";
+}
+
 .mdi-microphone::before {
   content: "\F036C";
 }
@@ -790,6 +846,10 @@
 
 .mdi-package-variant-closed::before {
   content: "\F03D7";
+}
+
+.mdi-package-variant-remove::before {
+  content: "\F19D9";
 }
 
 .mdi-page-first::before {
@@ -858,6 +918,10 @@
 
 .mdi-progress-check::before {
   content: "\F0995";
+}
+
+.mdi-progress-clock::before {
+  content: "\F0996";
 }
 
 .mdi-progress-download::before {
@@ -956,6 +1020,10 @@
   content: "\F0CCC";
 }
 
+.mdi-shield-search::before {
+  content: "\F0D9A";
+}
+
 .mdi-shuffle-variant::before {
   content: "\F049F";
 }
@@ -1008,6 +1076,10 @@
   content: "\F0666";
 }
 
+.mdi-stop-circle-outline::before {
+  content: "\F0667";
+}
+
 .mdi-store::before {
   content: "\F04DC";
 }
@@ -1026,6 +1098,10 @@
 
 .mdi-text-box::before {
   content: "\F021A";
+}
+
+.mdi-text-box-check-outline::before {
+  content: "\F0EA7";
 }
 
 .mdi-text-box-outline::before {
@@ -1086,6 +1162,14 @@
 
 .mdi-upload::before {
   content: "\F0552";
+}
+
+.mdi-upload-outline::before {
+  content: "\F0E07";
+}
+
+.mdi-vector-difference::before {
+  content: "\F055A";
 }
 
 .mdi-vector-intersection::before {

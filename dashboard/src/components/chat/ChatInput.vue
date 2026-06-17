@@ -7,6 +7,12 @@
     @drop.prevent="handleDrop"
   >
     <div
+      v-if="showSpcodeIndicator"
+      class="input-area__status-row"
+    >
+      <SpcodeProjectIndicator @open-load-dialog="openLoadDialog" />
+    </div>
+    <div
       class="input-container"
       :style="{
         width: '85%',
@@ -197,11 +203,16 @@
               </v-list-item-title>
             </v-list-item>
 
-            <!-- spcode project load (component encapsulates its own conditional render) -->
+            <!--
+              spcode project load trigger (lives inside the + menu's
+              popover slot, which is mounted lazily). It only emits
+              "open"; the dialog itself is mounted at the ChatInput
+              level in <ProjectLoadDialog/> below so it survives the
+              menu's lifecycle and is reachable from the chip too.
+            -->
             <ProjectLoadMenuItem
               :commands="allCommands"
-              :wake-prefixes="wakePrefixes"
-              @submit="handleProjectLoadSubmit"
+              @open="openProjectLoadDialog"
             />
 
             <!-- Config Selector in Menu -->
@@ -312,6 +323,20 @@
         </div>
       </div>
     </div>
+
+    <!--
+      The spcode project-load dialog. Mounted at the ChatInput level
+      (NOT inside the + menu's popover slot) so it survives the
+      menu's lazy-mount lifecycle. The chip in the status row and the
+      + menu's trigger both call this dialog's `openLoadDialog()` to
+      show the same UI. `v-dialog` teleports its content to <body>,
+      so the DOM placement here is purely for component lifetime.
+    -->
+    <ProjectLoadDialog
+      ref="projectLoadDialogRef"
+      :wake-prefixes="wakePrefixes"
+      @submit="handleProjectLoadSubmit"
+    />
   </div>
 </template>
 
@@ -335,6 +360,10 @@ import ProviderModelMenu from "./ProviderModelMenu.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import CommandSuggestion from "./CommandSuggestion.vue";
 import ProjectLoadMenuItem from "./ProjectLoadMenuItem.vue";
+import ProjectLoadDialog from "./ProjectLoadDialog.vue";
+import SpcodeProjectIndicator from "./SpcodeProjectIndicator.vue";
+import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
+import { useSpcodeProjectLoad } from "@/composables/useSpcodeProjectLoad";
 import type { Session } from "@/composables/useSessions";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
@@ -414,6 +443,29 @@ const allCommands = ref<CommandItem[]>([]);
 const showCommandSuggestion = ref(false);
 const selectedCommandIndex = ref(0);
 const commandSuggestionLoading = ref(false);
+
+// Template ref to the spcode project-load dialog. The dialog is
+// mounted at the ChatInput level (outside any popover) so this ref
+// is always populated as soon as `showSpcodeIndicator` is true. The
+// chip's click handler and the + menu's trigger both call its
+// exposed `openLoadDialog()` to surface the same dialog.
+const projectLoadDialogRef = ref<{
+  openLoadDialog: () => void;
+  closeLoadDialog: () => void;
+} | null>(null);
+
+// Unified visibility gate for the spcode project-load entry points —
+// the "加载项目" chip in this component AND the "+" popover menu's
+// "加载项目目录" item (in :class:`ProjectLoadMenuItem`) — read from
+// the same composable so the two can never disagree. The gate is the
+// AND of:
+//   1. the spcode plugin is currently enabled (`activated === true`),
+//   2. at least one `/project*` command is registered.
+// See :func:`useSpcodeProjectLoad` for the full rationale.
+const { isProjectLoadAvailable, refreshPluginState } = useSpcodeProjectLoad(
+  allCommands,
+);
+const showSpcodeIndicator = isProjectLoadAvailable;
 const wakePrefixes = ref<string[]>(["/"]);
 const currentConfigId = ref((props.configId as string) || "default");
 
@@ -776,6 +828,51 @@ async function fetchCommands() {
 }
 
 /**
+ * Best-effort detection of `/project load|unload` at the start of
+ * `text`, used to update the spcode chip *before* the bot's response
+ * arrives. The path parser is intentionally lenient — the
+ * authoritative state is re-fetched via ``onStreamEnd`` in Chat.vue
+ * once the bot's response completes, so any drift between the
+ * optimistic value and the server's truth is corrected within a
+ * few hundred milliseconds.
+ *
+ * Path-extraction rules (mirrors ProjectLoadDialog.buildLoadCommand):
+ *   - Wake prefix is any single non-space token at the start
+ *     (`/`, `!`, etc., or whatever the user's wakePrefixes say).
+ *   - After `project load` we take the rest of the line, trimmed.
+ *   - If the rest is wrapped in double quotes (the dialog auto-quotes
+ *     whitespace-containing paths), the quotes are stripped.
+ *
+ * Args:
+ *   text: The exact command string submitted to the chat.
+ */
+function applyOptimisticProjectStatus(text: string): void {
+  const trimmed = text.trim();
+  // load: <prefix>project load <path...>
+  const loadMatch = trimmed.match(
+    /^\S+\s+project\s+load\s+(\S[\s\S]*)$/,
+  );
+  if (loadMatch) {
+    let path = loadMatch[1].trim();
+    if (
+      path.length >= 2 &&
+      path.startsWith('"') &&
+      path.endsWith('"')
+    ) {
+      path = path.slice(1, -1);
+    }
+    if (path) {
+      spcodeStatus.setLoaded(path);
+    }
+    return;
+  }
+  // unload: <prefix>project unload (optionally followed by an arg)
+  if (/^\S+\s+project\s+unload(?:\s|$)/.test(trimmed)) {
+    spcodeStatus.setUnloaded();
+  }
+}
+
+/**
  * Handle a spcode project-load submission: write the constructed command
  * text into the prompt and re-emit the existing `send` event.
  *
@@ -783,8 +880,15 @@ async function fetchCommands() {
  * `localPrompt.value` triggers the `update:prompt` emit on the same
  * tick, so the subsequent `emit("send")` sees the updated value in
  * `Chat.vue:sendCurrentMessage` -> `draft.value`.
+ *
+ * Before dispatching the command, the spcode chip is updated
+ * optimistically (see :func:`applyOptimisticProjectStatus`) so the
+ * user sees an instant flip. The authoritative HTTP refresh fires
+ * from ``Chat.vue:onStreamEnd`` once the bot's response finishes,
+ * which corrects any drift (e.g. when the load fails on the backend).
  */
 function handleProjectLoadSubmit(text: string): void {
+  applyOptimisticProjectStatus(text);
   localPrompt.value = text;
   emit("send");
 }
@@ -925,6 +1029,45 @@ function focusInput() {
   inputField.value.focus();
 }
 
+/**
+ * SpcodeProjectIndicator "open load dialog" handler. The chip is a
+ * shortcut for the `+` menu's "加载项目目录" entry — both should
+ * surface the same dialog (owned by ``ProjectLoadDialog``), so we
+ * delegate to that component's exposed ``openLoadDialog()`` method.
+ *
+ * Defensive: the dialog is always mounted at the ChatInput level
+ * (sibling of the input area), so under normal flows the ref is set.
+ * If for some reason it is not, we fall back to focusing the textarea.
+ */
+function openLoadDialog(): void {
+  if (projectLoadDialogRef.value) {
+    projectLoadDialogRef.value.openLoadDialog();
+    return;
+  }
+  focusInput();
+}
+
+/**
+ * ``+`` menu's "加载项目目录" trigger handler. The menu item lives
+ * inside the ``+`` popover's lazy-mounted slot, so it can only emit
+ * upward; the dialog it points to is the same ``ProjectLoadDialog``
+ * the chip uses, reached via the shared template ref.
+ */
+function openProjectLoadDialog(): void {
+  openLoadDialog();
+}
+
+// Pull the spcode status API into scope. The watcher fires an initial
+// status fetch once the unified visibility gate (plugin enabled AND
+// /project* command present) flips to true. Same shape as before, just
+// reading from the unified composable.
+const spcodeStatus = useSpcodeProjectStatus();
+watch(showSpcodeIndicator, async (visible) => {
+  if (visible) {
+    await spcodeStatus.refresh();
+  }
+}, { immediate: false });
+
 onMounted(() => {
   if (inputField.value) {
     inputField.value.addEventListener("paste", handlePaste);
@@ -932,6 +1075,12 @@ onMounted(() => {
   document.addEventListener("keyup", handleKeyUp);
   // 预加载指令列表
   fetchCommands();
+  // 预加载 spcode 插件启用状态。`useSpcodeProjectLoad` 是单例,
+  // 这里先 fetch 一次以便 onMounted 后 chip / 菜单的可见性判断
+  // 不会因为插件状态尚未拉取而误判为"未启用"。后续 onMounted
+  // 触发的 fetchCommands() 拿到 commands 列表后,两个判断
+  // (activated + hasProjectTreeCommand) 都已经 ready。
+  void refreshPluginState();
 });
 
 onBeforeUnmount(() => {
@@ -955,6 +1104,14 @@ defineExpose({
   position: relative;
   border-top: 1px solid var(--v-theme-border);
   flex-shrink: 0;
+}
+.input-area__status-row {
+  align-items: center;
+  display: flex;
+  margin: 0 auto 6px;
+  max-width: 900px;
+  min-height: 28px;
+  width: 85%;
 }
 
 .input-neutral-btn {

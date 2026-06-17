@@ -244,13 +244,18 @@
       "title": "Загрузить каталог проекта",
       "pathLabel": "Путь к проекту",
       "pathPlaceholder": "напр. /Users/me/projects/my-app",
-      "pathHint": "Подсказка: пути с пробелами оборачивайте в двойные кавычки",
       "historyLabel": "Недавние",
       "historyEmpty": "История пуста",
       "submit": "Загрузить",
-            "cancel": "Отмена",
-            "unloadButton": "Выгрузить текущий каталог",
-            "removeFromHistory": "Удалить из истории"
+      "cancel": "Отмена",
+      "unloadButton": "Выгрузить текущий проект",
+      "removeFromHistory": "Удалить из истории"
+    },
+    "indicator": {
+      "loadedLabel": "Проект загружен",
+      "unloadAction": "Выгрузить",
+      "loadedAtPrefix": "Загружен",
+      "noProject": "Проект не загружен"
     }
   }
 }
