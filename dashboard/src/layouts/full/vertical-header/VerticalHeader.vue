@@ -60,6 +60,7 @@ let restartCompleted = ref(false);
 let restartReloadCountdown = ref(3);
 let restartReloadTimer: ReturnType<typeof setInterval> | null = null;
 const RESTART_FEEDBACK_DELAY_SECONDS = 3;
+const RESTART_START_TIME_POLL_INTERVAL_MS = 2000;
 type DownloadStageStatus = "pending" | "running" | "done" | "error";
 type DownloadStage = {
   status: DownloadStageStatus;
@@ -606,6 +607,7 @@ function showRestartCompleted() {
   if (restartCompleted.value) {
     return;
   }
+  stopUpdateProgressPolling();
   stopRestartReloadTimer();
   restartWaiting.value = false;
   restartCompleted.value = true;
@@ -626,20 +628,29 @@ function showRestartCompleted() {
   }, 1000);
 }
 
-function waitForAstrBotRestart(initialStartTime: number | string | null) {
-  if (restartWaiting.value || restartCompleted.value) {
+function waitForAstrBotRestart(
+  initialStartTime: number | string | null,
+  showWaiting = true,
+) {
+  if (restartCompleted.value) {
     return;
   }
-  stopRestartPolling();
-  restartWaiting.value = true;
+  if (showWaiting && !restartWaiting.value) {
+    restartWaiting.value = true;
+    restartStartTime.value = initialStartTime;
+    updateProgress.value = {
+      ...updateProgress.value,
+      stage: "restart",
+      status: "success",
+      message: t("core.header.updateDialog.progress.restarting"),
+      overall_percent: 100,
+    };
+  }
+  if (restartPollTimer) {
+    return;
+  }
+
   restartStartTime.value = initialStartTime;
-  updateProgress.value = {
-    ...updateProgress.value,
-    stage: "restart",
-    status: "success",
-    message: t("core.header.updateDialog.progress.restarting"),
-    overall_percent: 100,
-  };
 
   const poll = async () => {
     try {
@@ -657,9 +668,10 @@ function waitForAstrBotRestart(initialStartTime: number | string | null) {
     }
   };
 
+  void poll();
   restartPollTimer = setInterval(() => {
     void poll();
-  }, 1000);
+  }, RESTART_START_TIME_POLL_INTERVAL_MS);
 }
 
 function applyUpdateProgress(payload: UpdateProgress) {
@@ -685,6 +697,9 @@ function applyUpdateProgress(payload: UpdateProgress) {
   }
   if (payload.status === "success" || payload.status === "error") {
     stopUpdateProgressPolling();
+  }
+  if (payload.status === "error") {
+    stopRestartPolling();
   }
   if (payload.status === "success") {
     waitForAstrBotRestart(restartStartTime.value);
@@ -714,7 +729,10 @@ async function switchVersion(targetVersion: string) {
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  let initialStartTime: number | string | null = null;
+  let initialStartTime: number | string | null = commonStore.getStartTime();
+  if (initialStartTime === -1) {
+    initialStartTime = null;
+  }
   updateProgress.value = {
     ...createEmptyUpdateProgress(),
     id: progressId,
@@ -726,12 +744,15 @@ async function switchVersion(targetVersion: string) {
   updateStatus.value = t("core.header.updateDialog.status.switching");
   installLoading.value = true;
 
-  try {
-    initialStartTime = await fetchAstrBotStartTime();
-  } catch (_error) {
-    initialStartTime = commonStore.getStartTime();
+  if (initialStartTime === null) {
+    try {
+      initialStartTime = await fetchAstrBotStartTime();
+    } catch (_error) {
+      initialStartTime = null;
+    }
   }
   restartStartTime.value = initialStartTime;
+  waitForAstrBotRestart(initialStartTime, false);
   startUpdateProgressPolling(progressId);
 
   updatesApi
@@ -744,6 +765,7 @@ async function switchVersion(targetVersion: string) {
       updateStatus.value = res.data.message || "";
       if (res.data.status === "error") {
         stopUpdateProgressPolling();
+        stopRestartPolling();
         updateProgress.value = {
           ...updateProgress.value,
           status: "error",
@@ -756,6 +778,12 @@ async function switchVersion(targetVersion: string) {
     .catch((err) => {
       console.log(err);
       stopUpdateProgressPolling();
+      if (!err?.response && restartPollTimer) {
+        waitForAstrBotRestart(restartStartTime.value);
+        updateStatus.value = t("core.header.updateDialog.progress.restarting");
+        return;
+      }
+      stopRestartPolling();
       updateStatus.value = err;
       updateProgress.value = {
         ...updateProgress.value,

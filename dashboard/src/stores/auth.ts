@@ -104,6 +104,7 @@ export const useAuthStore = defineStore("auth", {
                 detail: {
                   version: versionData.version,
                   dashboard_version: versionData.dashboard_version,
+                  blocking: true,
                 },
               }),
             );
