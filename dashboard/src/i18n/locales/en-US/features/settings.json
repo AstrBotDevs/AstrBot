@@ -132,6 +132,42 @@
       }
     }
   },
+  "autoUpdate": {
+    "title": "Auto Update",
+    "enabled": {
+      "title": "Automatic Updates",
+      "subtitle": "When enabled, AstrBot will automatically download and apply updates when a new version is detected. A backup is created before each update, and the bot will rollback automatically on failure."
+    },
+    "checkInterval": {
+      "title": "Check Interval (hours)",
+      "subtitle": "How often to check for new versions."
+    },
+    "backupRetention": {
+      "title": "Backup Retention (days)",
+      "subtitle": "Update backups older than this will be automatically deleted. The most recent backup is always kept."
+    },
+    "autoBackup": {
+      "title": "Backup Before Update",
+      "subtitle": "Create a full data backup before applying any update."
+    },
+    "notify": {
+      "title": "New Version Notification",
+      "subtitle": "Send a notification to admins via IM platforms when a new version is detected."
+    },
+    "checkNow": "Check Now",
+    "updateNow": "Update Now",
+    "checkForUpdate": {
+      "checking": "Checking for updates...",
+      "latest": "You are running the latest version.",
+      "newVersionAvailable": "A new version is available! (Current version: {version})",
+      "failed": "Failed to check for updates"
+    },
+    "actions": {
+      "save": "Save Settings",
+      "saved": "Saved",
+      "saveFailed": "Save failed"
+    }
+  },
   "sidebar": {
     "title": "Sidebar",
     "customize": {

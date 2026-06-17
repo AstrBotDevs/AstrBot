@@ -132,6 +132,42 @@
       }
     }
   },
+  "autoUpdate": {
+    "title": "自动更新",
+    "enabled": {
+      "title": "启用自动更新",
+      "subtitle": "开启后，AstrBot 会在检测到新版本时自动下载并应用更新。每次更新前会自动备份数据，更新失败时自动回滚。"
+    },
+    "checkInterval": {
+      "title": "检查间隔（小时）",
+      "subtitle": "检查新版本的频率。"
+    },
+    "backupRetention": {
+      "title": "备份保留（天）",
+      "subtitle": "超过此天数的更新备份将被自动清理，始终保留最近一个备份。"
+    },
+    "autoBackup": {
+      "title": "更新前自动备份",
+      "subtitle": "在应用任何更新之前创建完整数据备份。"
+    },
+    "notify": {
+      "title": "新版本通知",
+      "subtitle": "检测到新版本时通过消息平台通知管理员。"
+    },
+    "checkNow": "立即检查",
+    "updateNow": "立即更新",
+    "checkForUpdate": {
+      "checking": "正在检查更新...",
+      "latest": "您正在运行最新版本。",
+      "newVersionAvailable": "发现新版本！（当前版本：{version}）",
+      "failed": "检查更新失败"
+    },
+    "actions": {
+      "save": "保存设置",
+      "saved": "已保存",
+      "saveFailed": "保存失败"
+    }
+  },
   "sidebar": {
     "title": "侧边栏",
     "customize": {

@@ -19,6 +19,7 @@ from asyncio import Queue
 from astrbot.api import logger, sp
 from astrbot.core import LogBroker, LogManager
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
+from astrbot.core.auto_update import AutoUpdateManager
 from astrbot.core.config.default import VERSION
 from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.cron import CronJobManager
@@ -59,6 +60,7 @@ class AstrBotCoreLifecycle:
         self.subagent_orchestrator: SubAgentOrchestrator | None = None
         self.cron_manager: CronJobManager | None = None
         self.temp_dir_cleaner: TempDirCleaner | None = None
+        self.auto_update_manager: AutoUpdateManager | None = None
         self._default_chat_provider_warning_emitted = False
 
         # 设置代理
@@ -236,6 +238,9 @@ class AstrBotCoreLifecycle:
             self.subagent_orchestrator,
         )
 
+        # 把 core_lifecycle 引用暴露给 StarContext，供插件访问
+        self.star_context.core_lifecycle = self
+
         # 初始化插件管理器
         self.plugin_manager = PluginManager(self.star_context, self.astrbot_config)
 
@@ -254,6 +259,9 @@ class AstrBotCoreLifecycle:
 
         # 初始化更新器
         self.astrbot_updator = AstrBotUpdator()
+
+        # 初始化自动更新管理器
+        self.auto_update_manager = AutoUpdateManager(self)
 
         # 初始化事件总线
         self.event_bus = EventBus(
@@ -297,6 +305,14 @@ class AstrBotCoreLifecycle:
                 name="temp_dir_cleaner",
             )
 
+        # 启动自动更新管理器（版本检查 + 备份清理）
+        auto_update_task = None
+        if self.auto_update_manager:
+            auto_update_task = asyncio.create_task(
+                self.auto_update_manager.start_background_tasks(),
+                name="auto_update_manager",
+            )
+
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
         for task in self.star_context._register_tasks:
@@ -307,6 +323,8 @@ class AstrBotCoreLifecycle:
             tasks_.append(cron_task)
         if temp_dir_cleaner_task:
             tasks_.append(temp_dir_cleaner_task)
+        if auto_update_task:
+            tasks_.append(auto_update_task)
         for task in tasks_:
             self.curr_tasks.append(
                 asyncio.create_task(self._task_wrapper(task), name=task.get_name()),
@@ -360,6 +378,9 @@ class AstrBotCoreLifecycle:
         """停止 AstrBot 核心生命周期管理类, 取消所有当前任务并终止各个管理器."""
         if self.temp_dir_cleaner:
             await self.temp_dir_cleaner.stop()
+
+        if self.auto_update_manager:
+            await self.auto_update_manager.stop_background_tasks()
 
         # 请求停止所有正在运行的异步任务
         for task in self.curr_tasks:

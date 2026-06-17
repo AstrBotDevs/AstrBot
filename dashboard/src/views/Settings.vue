@@ -231,6 +231,113 @@
                                     </v-btn>
                                 </div>
                             </div>
+
+                            <hr class="settings-section__divider">
+
+                            <div class="settings-item">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('autoUpdate.enabled.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('autoUpdate.enabled.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-switch
+                                        v-model="autoUpdateEnabled"
+                                        color="primary"
+                                        hide-details
+                                        @update:model-value="saveAutoUpdateConfig"
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="settings-item">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('autoUpdate.checkInterval.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('autoUpdate.checkInterval.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-text-field
+                                        v-model.number="autoUpdateCheckInterval"
+                                        type="number"
+                                        min="1"
+                                        max="720"
+                                        variant="outlined"
+                                        density="compact"
+                                        hide-details
+                                        style="max-width: 120px;"
+                                        suffix="h"
+                                        @update:model-value="debounceSaveAutoUpdateConfig"
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="settings-item">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('autoUpdate.backupRetention.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('autoUpdate.backupRetention.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-text-field
+                                        v-model.number="autoUpdateBackupRetention"
+                                        type="number"
+                                        min="0"
+                                        max="365"
+                                        variant="outlined"
+                                        density="compact"
+                                        hide-details
+                                        style="max-width: 120px;"
+                                        suffix="d"
+                                        @update:model-value="debounceSaveAutoUpdateConfig"
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="settings-item">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('autoUpdate.autoBackup.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('autoUpdate.autoBackup.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-switch
+                                        v-model="autoUpdateBackupBefore"
+                                        color="primary"
+                                        hide-details
+                                        @update:model-value="saveAutoUpdateConfig"
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="settings-item">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('autoUpdate.notify.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('autoUpdate.notify.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-switch
+                                        v-model="autoUpdateNotify"
+                                        color="primary"
+                                        hide-details
+                                        @update:model-value="saveAutoUpdateConfig"
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="settings-item">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('autoUpdate.checkNow') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('autoUpdate.checkForUpdate.checking') }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-btn
+                                        color="secondary"
+                                        variant="tonal"
+                                        :loading="checkingUpdate"
+                                        @click="checkForUpdate"
+                                    >
+                                        <v-icon class="mr-2">mdi-cloud-search</v-icon>
+                                        {{ tm('autoUpdate.checkNow') }}
+                                    </v-btn>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -413,7 +520,7 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { apiKeyApi, systemConfigApi } from '@/api/v1';
+import { apiKeyApi, systemConfigApi, updatesApi } from '@/api/v1';
 import AstrBotConfigV4 from '@/components/shared/AstrBotConfigV4.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ProxySelector from '@/components/shared/ProxySelector.vue';
@@ -442,6 +549,15 @@ const getStoredColor = (key, fallback) => {
 
 const primaryColor = ref(getStoredColor('themePrimary', PurpleTheme.colors.primary));
 const secondaryColor = ref(getStoredColor('themeSecondary', PurpleTheme.colors.secondary));
+
+// ---- auto update state ----
+const autoUpdateEnabled = ref(false);
+const autoUpdateCheckInterval = ref(24);
+const autoUpdateBackupRetention = ref(14);
+const autoUpdateBackupBefore = ref(true);
+const autoUpdateNotify = ref(true);
+const checkingUpdate = ref(false);
+let _autoUpdateSaveTimer = null;
 
 const resolveThemes = () => {
     if (theme?.themes?.value) return theme.themes.value;
@@ -887,6 +1003,66 @@ const restartAstrBot = async () => {
     }
 };
 
+const loadAutoUpdateConfig = async () => {
+    try {
+        const res = await systemConfigApi.runtime();
+        const config = res.data?.data ?? res.data ?? {};
+        const au = config.auto_update || {};
+        autoUpdateEnabled.value = au.enabled ?? false;
+        autoUpdateCheckInterval.value = Math.round((au.check_interval ?? 86400) / 3600);
+        autoUpdateBackupRetention.value = au.backup_retention_days ?? 14;
+        autoUpdateBackupBefore.value = au.auto_backup_before_update ?? true;
+        autoUpdateNotify.value = au.notify_on_new_version ?? true;
+    } catch {
+        // Failed to load, use defaults
+    }
+};
+
+const debounceSaveAutoUpdateConfig = () => {
+    if (_autoUpdateSaveTimer) clearTimeout(_autoUpdateSaveTimer);
+    _autoUpdateSaveTimer = setTimeout(() => {
+        saveAutoUpdateConfig();
+    }, 800);
+};
+
+const saveAutoUpdateConfig = async () => {
+    try {
+        const res = await systemConfigApi.runtime();
+        const config = res.data?.data ?? res.data ?? {};
+        config.auto_update = {
+            enabled: autoUpdateEnabled.value,
+            check_interval: Math.max(1, Number(autoUpdateCheckInterval.value) || 24) * 3600,
+            backup_retention_days: Math.max(0, Number(autoUpdateBackupRetention.value) || 14),
+            auto_backup_before_update: autoUpdateBackupBefore.value,
+            notify_on_new_version: autoUpdateNotify.value,
+        };
+        await systemConfigApi.update(config);
+        showToast(tm('autoUpdate.actions.saved'), 'success');
+    } catch {
+        showToast(tm('autoUpdate.actions.saveFailed'), 'error');
+    }
+};
+
+const checkForUpdate = async () => {
+    checkingUpdate.value = true;
+    try {
+        const res = await updatesApi.check();
+        const data = res.data?.data ?? res.data ?? {};
+        if (data.has_new_version) {
+            showToast(
+                tm('autoUpdate.checkForUpdate.newVersionAvailable').replace('{version}', data.version || 'unknown'),
+                'info',
+            );
+        } else {
+            showToast(tm('autoUpdate.checkForUpdate.latest'), 'success');
+        }
+    } catch (e) {
+        showToast(e?.response?.data?.message || tm('autoUpdate.checkForUpdate.failed'), 'error');
+    } finally {
+        checkingUpdate.value = false;
+    }
+};
+
 const openBackupDialog = () => {
     if (backupDialog.value) {
         backupDialog.value.open();
@@ -902,7 +1078,7 @@ const resetThemeColors = () => {
 };
 
 onMounted(async () => {
-    await Promise.all([loadApiKeys(), loadSystemConfig()]);
+    await Promise.all([loadApiKeys(), loadSystemConfig(), loadAutoUpdateConfig()]);
     const hash = window.location.hash;
     if (hash.includes('settings-appearance')) {
         activeSettingsSection.value = 'appearance';
@@ -1070,6 +1246,12 @@ onUnmounted(() => {
 
 .settings-item:last-child {
     border-bottom: 0;
+}
+
+.settings-section__divider {
+    margin: 8px 16px;
+    border: none;
+    border-top: 1px solid var(--settings-divider);
 }
 
 .settings-item--stack {
