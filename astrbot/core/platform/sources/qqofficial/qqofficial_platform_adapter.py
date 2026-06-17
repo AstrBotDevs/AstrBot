@@ -64,6 +64,7 @@ def _ensure_group_message_create_parser() -> None:
             payload.get("id", None),
             payload.get("d", {}),
         )
+        logger.debug("[QQOfficial] Received group message: %s", group_message)
         self._dispatch("group_message_create", group_message)
 
     setattr(ConnectionState, "parse_group_message_create", parse_group_message_create)
@@ -612,7 +613,10 @@ class QQOfficialPlatformAdapter(Platform):
             botpy.message.C2CMessage,
         ):
             if isinstance(message, botpy.message.GroupMessage):
-                abm.sender = MessageMember(message.author.member_openid, "")
+                abm.sender = MessageMember(
+                    message.author.member_openid,
+                    getattr(message.author, "username", "") or "",
+                )
                 abm.group_id = message.group_openid
                 bot_mentions = [
                     mention
@@ -641,7 +645,10 @@ class QQOfficialPlatformAdapter(Platform):
                     )
                     msg.append(At(qq=abm.self_id, name=mention_name))
             else:
-                abm.sender = MessageMember(message.author.user_openid, "")
+                abm.sender = MessageMember(
+                    message.author.user_openid,
+                    getattr(message.author, "username", "") or "",
+                )
                 abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
                     (message.content or "").strip()
                 )
