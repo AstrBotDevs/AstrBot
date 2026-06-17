@@ -16,6 +16,7 @@ from .cua_defaults import CUA_CONFIG_KEYS, CUA_DEFAULT_CONFIG
 from .shipyard_search_file_util import search_files_via_shell
 
 _POSIX_OS_TYPES = {"linux", "darwin", "macos"}
+_CUA_SANDBOX_HEALTH_PROBE = "_astrbot_cua_ok_"
 
 _CUA_BACKGROUND_LAUNCHER = """
 import subprocess, sys, time
@@ -894,12 +895,14 @@ class CuaBooter(ComputerBooter):
         if self._runtime is None:
             return False
         try:
-            result = await self._runtime.shell.exec("echo _astrbot_cua_ok_", timeout=10)
+            result = await self._runtime.shell.exec(
+                f"echo {_CUA_SANDBOX_HEALTH_PROBE}", timeout=10
+            )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             logger.debug("[Computer] CUA sandbox health check failed: %s", exc)
             return False
-        if result.get("exit_code") not in (0, None):
+        if result.get("exit_code") != 0:
             return False
-        return "_astrbot_cua_ok_" in str(result.get("stdout", ""))
+        return _CUA_SANDBOX_HEALTH_PROBE in str(result.get("stdout", ""))

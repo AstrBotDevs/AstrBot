@@ -8,6 +8,7 @@ import mcp
 import pytest
 
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.computer.booters.cua import CuaShellComponent
 from astrbot.core.config.default import CONFIG_METADATA_3
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
@@ -931,7 +932,6 @@ async def test_cua_upload_file_fallback_rejects_non_posix_os_type(tmp_path):
         CuaFileSystemComponent,
         CuaGUIComponent,
         CuaPythonComponent,
-        CuaShellComponent,
         _CuaRuntime,
     )
 
@@ -962,7 +962,6 @@ async def test_cua_upload_file_prefers_native_files_upload(tmp_path):
         CuaFileSystemComponent,
         CuaGUIComponent,
         CuaPythonComponent,
-        CuaShellComponent,
         _CuaRuntime,
     )
 
@@ -1331,7 +1330,6 @@ async def test_cua_shutdown_clears_cached_components():
         CuaFileSystemComponent,
         CuaGUIComponent,
         CuaPythonComponent,
-        CuaShellComponent,
         _CuaRuntime,
     )
 
@@ -1389,6 +1387,34 @@ async def test_cua_available_checks_shell_health():
 
     assert await booter.available() is True
     assert sandbox.shell.commands[-1][0] == "echo _astrbot_cua_ok_"
+
+
+@pytest.mark.asyncio
+async def test_cua_available_rejects_unknown_health_exit_code():
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        _CuaRuntime,
+    )
+
+    class UnknownExitCodeRuntimeShell:
+        async def exec(self, command: str, **kwargs):
+            return {"stdout": "_astrbot_cua_ok_\n", "stderr": "", "exit_code": None}
+
+    sandbox = FakeSandbox()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=UnknownExitCodeRuntimeShell(),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    assert await booter.available() is False
 
 
 @pytest.mark.asyncio
