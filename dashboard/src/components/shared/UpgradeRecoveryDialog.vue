@@ -52,7 +52,12 @@ import axios, { type AxiosRequestConfig } from 'axios';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
-import type { ApiEnvelope, VersionData } from '@/api/v1';
+import {
+  UPGRADE_RECOVERY_EVENT,
+  UPGRADE_RECOVERY_TOKEN_KEY,
+  type ApiEnvelope,
+  type VersionData,
+} from '@/api/v1';
 import { useI18n } from '@/i18n/composables';
 
 type StartTimeData = {
@@ -108,7 +113,9 @@ function getDismissKey() {
 
 function recoveryRequestConfig(validateStatus = false): AxiosRequestConfig {
   const headers: Record<string, string> = {};
-  const token = localStorage.getItem('token');
+  const token =
+    localStorage.getItem('token') ||
+    sessionStorage.getItem(UPGRADE_RECOVERY_TOKEN_KEY);
   const locale = localStorage.getItem('astrbot-locale');
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -139,6 +146,7 @@ function clearRestartTimer() {
 
 function dismiss() {
   sessionStorage.setItem(getDismissKey(), '1');
+  sessionStorage.removeItem(UPGRADE_RECOVERY_TOKEN_KEY);
   visible.value = false;
 }
 
@@ -154,6 +162,7 @@ function waitForRestart() {
         String(nextStartTime) !== String(initialStartTime.value)
       ) {
         clearRestartTimer();
+        sessionStorage.removeItem(UPGRADE_RECOVERY_TOKEN_KEY);
         window.location.reload();
       }
     } catch (_error) {
@@ -187,6 +196,29 @@ async function restartCore() {
   }
 }
 
+async function showRecoveryDialog(versionData: VersionData) {
+  if (visible.value || restarting.value) {
+    return;
+  }
+  if (!versionsMismatch(versionData.version, versionData.dashboard_version)) {
+    return;
+  }
+
+  coreVersion.value = displayVersion(versionData.version);
+  dashboardVersion.value = displayVersion(versionData.dashboard_version);
+  if (sessionStorage.getItem(getDismissKey())) {
+    return;
+  }
+
+  initialStartTime.value = await fetchLegacyStartTime().catch(() => null);
+  visible.value = true;
+}
+
+function handleRecoveryEvent(event: Event) {
+  const versionData = (event as CustomEvent<VersionData>).detail || {};
+  void showRecoveryDialog(versionData);
+}
+
 async function detectUpgradeMismatch() {
   if (detecting || visible.value || restarting.value) {
     return;
@@ -209,19 +241,7 @@ async function detectUpgradeMismatch() {
       return;
     }
 
-    const versionData = legacyResponse.data?.data || {};
-    if (!versionsMismatch(versionData.version, versionData.dashboard_version)) {
-      return;
-    }
-
-    coreVersion.value = displayVersion(versionData.version);
-    dashboardVersion.value = displayVersion(versionData.dashboard_version);
-    if (sessionStorage.getItem(getDismissKey())) {
-      return;
-    }
-
-    initialStartTime.value = await fetchLegacyStartTime().catch(() => null);
-    visible.value = true;
+    await showRecoveryDialog(legacyResponse.data?.data || {});
   } catch (_error) {
     // This recovery dialog is best-effort and should never block the app.
   } finally {
@@ -230,6 +250,7 @@ async function detectUpgradeMismatch() {
 }
 
 onMounted(() => {
+  window.addEventListener(UPGRADE_RECOVERY_EVENT, handleRecoveryEvent);
   void detectUpgradeMismatch();
 });
 
@@ -241,6 +262,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  window.removeEventListener(UPGRADE_RECOVERY_EVENT, handleRecoveryEvent);
   clearRestartTimer();
 });
 </script>

@@ -66,6 +66,9 @@ export interface ApiEnvelope<T> {
   data: T;
 }
 
+export const UPGRADE_RECOVERY_EVENT = 'astrbot-upgrade-recovery';
+export const UPGRADE_RECOVERY_TOKEN_KEY = 'astrbot-upgrade-recovery-token';
+
 export type OpenConfig = DynamicConfig;
 
 export interface ProviderSchemaData {
@@ -173,7 +176,9 @@ const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
   rerank: 'rerank',
 };
 
-type V1Response<T> = Promise<AxiosResponse<ApiEnvelope<T>>>;
+type V1Response<T> = Promise<
+  AxiosResponse<ApiEnvelope<T>> & { legacyFallback?: boolean }
+>;
 type ListConversationsQuery = NonNullable<ListConversationsData['query']>;
 
 function typed<T>(response: Promise<unknown>): V1Response<T> {
@@ -199,9 +204,27 @@ function withLegacyFallback<T>(
   primary: Promise<unknown>,
   legacy: () => Promise<AxiosResponse<ApiEnvelope<T>>>,
 ): V1Response<T> {
-  return typed<T>(primary).catch((error) => {
+  const legacyRequest = () =>
+    legacy().then((response) => {
+      const legacyResponse = response as AxiosResponse<ApiEnvelope<T>> & {
+        legacyFallback?: boolean;
+      };
+      legacyResponse.legacyFallback = true;
+      return legacyResponse;
+    });
+
+  return typed<T>(primary).then((response) => {
+    const message = response.data?.message || '';
+    if (
+      response.data?.status === 'error' &&
+      message.toLowerCase().includes('missing api key')
+    ) {
+      return legacyRequest();
+    }
+    return response;
+  }).catch((error) => {
     if (isLegacyFallbackError(error)) {
-      return legacy();
+      return legacyRequest();
     }
     throw error;
   });
