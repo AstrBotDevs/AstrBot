@@ -332,6 +332,7 @@
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
+            @open-diff-sidebar="openGitDiffSidebar"
           />
         </section>
       </ProjectView>
@@ -480,6 +481,7 @@
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
             @clear-reply="replyTarget = null"
+            @open-diff-sidebar="openGitDiffSidebar"
           />
         </section>
       </template>
@@ -557,6 +559,10 @@
       :stats="currentTodoSnapshot?.stats"
       :attention-items="currentTodoSnapshot?.attentionItems || []"
     />
+    <GitDiffSidebar
+      v-model="gitDiffSidebarOpen"
+      :is-dark="isDark"
+    />
   </div>
 </template>
 
@@ -589,6 +595,7 @@ import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import TodoSidebar from "@/components/chat/message_list_comps/TodoSidebar.vue";
+import GitDiffSidebar from "@/components/chat/GitDiffSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
   messageBlocks as buildMessageBlocks,
@@ -699,6 +706,7 @@ const activeReasoningTarget = ref<{
 const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
 const todoSidebarOpen = ref(false);
+const gitDiffSidebarOpen = ref(false);
 
 /* ── todo summary bar 拖动 ───────────────────────────
  * 浮窗可拖动,位置持久化到 localStorage。
@@ -1070,6 +1078,12 @@ watch(
       spcodeStatus.reset();
       return;
     }
+    // Close the Git Diff sidebar on session switch: the new session's
+    // project status (if any) is fetched async, but the sidebar would
+    // otherwise keep showing the previous session's diff. Other sidebars
+    // retain their current behavior (the spec's E13 "close together"
+    // wording is inaccurate — only the git-diff sidebar closes here).
+    gitDiffSidebarOpen.value = false;
     await spcodeStatus.refresh();
   },
   { immediate: true },
@@ -1537,8 +1551,24 @@ function openReasoningPanel(payload: {
   activeThread.value = null;
   refsSidebarOpen.value = false;
   selectedRefs.value = null;
+  todoSidebarOpen.value = false;
+  gitDiffSidebarOpen.value = false;
   activeReasoningTarget.value = payload;
   reasoningPanelOpen.value = true;
+}
+
+function openGitDiffSidebar(): void {
+  // Mutual exclusion: close every other sidebar before opening the
+  // Git Diff sidebar. The watch in GitDiffSidebar will also auto-close
+  // the sidebar when the underlying spcode project is unloaded.
+  threadPanelOpen.value = false;
+  activeThread.value = null;
+  reasoningPanelOpen.value = false;
+  activeReasoningTarget.value = null;
+  refsSidebarOpen.value = false;
+  selectedRefs.value = null;
+  todoSidebarOpen.value = false;
+  gitDiffSidebarOpen.value = true;
 }
 
 // 之前基于 reactive 追踪的 parseTodoToolResult / extractLatestTodoSnapshot
