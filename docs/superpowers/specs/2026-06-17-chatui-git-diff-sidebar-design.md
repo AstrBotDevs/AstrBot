@@ -6,7 +6,8 @@
 | 日期 | 2026-06-17 |
 | 作者 | elecvoid243 |
 | 状态 | Draft — 待用户审阅 |
-| 关联插件 | `astrbot_plugin_spcode_toolkit`（路径：`F:\github\astrbot_plugin_spcode_toolkit`） |
+| 关联插件 | `astrbot_plugin_spcode_toolkit`（**源码路径**：`F:\github\astrbot_plugin_spcode_toolkit`，由 AstrBot 加载时复制到 `F:\github\Astrbot\data\plugins\astrbot_plugin_spcode_toolkit`，两者内容以源码为准） |
+| 关联端点 | `GET /plugins/extensions/spcode/git-diff`（handler `handle_get_git_diff`，定义于源码 `main.py:1603`；路由注册于 `main.py:1130-1135`） |
 | 关联代码 | `dashboard/src/components/chat/*`、`dashboard/src/composables/useSpcode*` |
 | 前置 spec | `docs/superpowers/specs/2026-06-16-chatui-project-load-button-design.md`（chip 可见性门控 / 项目状态 composable 的同源设计） |
 
@@ -52,6 +53,7 @@
 - ❌ **不**实现 staged vs unstaged 切换（看 §6.5 未来扩展）
 - ❌ **不**在 sidebar 里直接 commit / revert
 - ❌ **不**做 i18n 之外的国际化（如 RTL、自适应字号）
+- ❌ **不**写 Vitest 单元测试（沿用姊妹 spec §1.4 决定：dashboard 尚未配置 vitest；用 `pnpm typecheck` + `pnpm lint` + 手动验证 §7.2 端到端验收清单）
 
 ---
 
@@ -66,6 +68,8 @@
 | 5 | 按钮视觉风格 | **B**：outlined v-chip + 文字 "Git Diff" + icon `mdi-source-pull` | 与现有「加载项目」chip 视觉对仗；扫一眼即知是同类操作；放 status row 右侧通过 `justify-content: space-between` 自然分隔 |
 | 6 | 单文件 diff 切片策略 | **预切 + 整段切片 + 二进制单独占位** | 收到 response 立即按 `^diff --git /m` 切；每段原样传给 `DiffPreview.extractDiffContent`（其内部跳到 `@@`）；二进制文件（切片含 "Binary files ... differ"）渲染 `v-alert` 占位 |
 | 7 | i18n 键命名 | `spcodeProjectLoad.diffSidebar.*`（中/英/俄三语） | 挂在现有 `spcodeProjectLoad` 根下，与 `dialog.*` / `indicator.*` 同级；英俄翻译由实现者填写 |
+| 8 | 后端 reason 枚举完整覆盖 | 7 个值全 i18n：`feature_disabled` / `no_project_loaded` / `directory_missing` / `not_a_git_repo` / `git_unavailable` / `git_error` / `null` | 与源码 `handle_get_git_diff` 完全对齐（见 `main.py:1640-1705`），不留"未知 reason 兜底"盲区 |
+| 9 | git status 码范围 | `M / A / D / R / C / T` + 兜底 `unknown` | 源码 `_parse_files_changed`（`main.py:1189-1226`）含 T（type-change）；spec 原始版本漏了 T |
 
 ---
 
@@ -74,11 +78,11 @@
 ### 3.1 架构原则
 
 - **零后端改动**：完全复用 spcode 现有 `git-diff` 端点
-- **零 spcode 改动**：通过标准 HTTP endpoint 调用
+- **零 spcode 改动**：通过标准 HTTP endpoint 调用（端点 `GET /spcode/git-diff` 已在源码 `main.py:1130-1135` 注册；本 spec 不修改 spcode 任何代码）
 - **零 `DiffPreview.vue` 改动**：作为子组件复用，原样式零侵入
 - **零 `useSpcodeProjectStatus.ts` 改动**：composable 是单例，由 sidebar 内部读 `status.value.loaded` 做自动关闭
 - **Inline-first**：helpers 写在 composable / 组件文件顶部，不强行抽公共文件
-- **AGENTS.md 遵守**：Google-style docstring、`pathlib` 习惯、ruff format + check、英文注释
+- **AGENTS.md 适用条款**：Google-style docstring（前端用 TSDoc 等价物）、英文注释、conventional commit messages；本 spec 不涉及 Python 故 `pathlib` / `ruff` 不适用
 
 ### 3.2 文件改动清单
 
@@ -92,19 +96,17 @@
 | 新增 | `dashboard/src/components/chat/message_list_comps/GitDiffFileItem.vue` | 新组件 | 单文件行 + 展开 DiffPreview 或二进制占位 |
 | 改动 | `dashboard/src/components/chat/ChatInput.vue` | 修改 | status row 加 `space-between` + 新 chip + 转发 `open-diff-sidebar` 事件 |
 | 改动 | `dashboard/src/components/chat/Chat.vue` | 修改 | 引入 `GitDiffSidebar` + `openGitDiffSidebar()` + 互斥逻辑 + currSessionId watcher |
-| 改动 | `dashboard/src/i18n/locales/zh-CN/features/chat.json` | 修改 | 新增 12 个键 |
-| 改动 | `dashboard/src/i18n/locales/en-US/features/chat.json` | 修改 | 新增 12 个键 |
-| 改动 | `dashboard/src/i18n/locales/ru-RU/features/chat.json` | 修改 | 新增 12 个键 |
-| 新增 | `dashboard/src/composables/parseSpcodeGitDiff.test.ts` | 测试 | 纯函数单测（vitest） |
-| 新增 | `dashboard/src/composables/useSpcodeGitDiff.test.ts` | 测试 | composable 单测（fake timers） |
-| 新增 | `dashboard/src/components/chat/GitDiffChip.test.ts` | 测试 | 组件单测 |
-| 新增 | `dashboard/src/components/chat/GitDiffSidebar.test.ts` | 测试 | 组件单测 |
-| 新增 | `dashboard/src/components/chat/message_list_comps/GitDiffFileItem.test.ts` | 测试 | 组件单测 |
+| 改动 | `dashboard/src/i18n/locales/zh-CN/features/chat.json` | 修改 | 新增 i18n 键（见 §5.1.1，共 16 个） |
+| 改动 | `dashboard/src/i18n/locales/en-US/features/chat.json` | 修改 | 新增 i18n 键 |
+| 改动 | `dashboard/src/i18n/locales/ru-RU/features/chat.json` | 修改 | 新增 i18n 键 |
+
+> **测试文件**：本 spec 沿用姊妹 spec 决定不写 Vitest（dashboard 尚未配置）；改为依赖 `pnpm typecheck` + `pnpm lint` + 手动跑 §7.2 端到端验收清单。
 
 ### 3.3 改动量估算
 
-- 新增代码：~600-700 行（含组件 + composable + 测试）
-- 改动现有代码：~30-40 行（ChatInput + Chat.vue + 3 个 i18n 文件）
+- 新增代码：~500-600 行（3 个组件 + 1 个 composable + 1 个纯函数模块）
+- 改动现有代码：~30-40 行（ChatInput 加 1 个 emit 声明 + 1 个 `<GitDiffChip/>` 节点 + 1 个 emit 转发；Chat.vue 加 import + 1 个 `<GitDiffSidebar/>` + 1 个 `openGitDiffSidebar()` + currSessionId watcher 1 行；3 个 i18n json 各加 ~12 行）
+- ChatInput.vue `defineEmits` 块当前未声明 `open-diff-sidebar`（见 `ChatInput.vue:408-422`），实施时需追加
 - 风险面：3 个新组件 + 1 个 composable；与现有 sidebar 同构，零破坏性
 
 ### 3.4 模块依赖图
@@ -156,7 +158,7 @@ export interface SpcodeGitDiffRawResponse {
 }
 
 // 出参：UI 直接消费
-export type FileStatus = 'M' | 'A' | 'D' | 'R' | 'C' | '?' | 'unknown'
+export type FileStatus = 'M' | 'A' | 'D' | 'R' | 'C' | 'T' | 'unknown'
 
 export interface SpcodeGitDiffFile {
   path: string
@@ -352,7 +354,7 @@ toggle: []
 - **始终显示行**：status icon（按 §4.3 映射）+ path + (+N −N) + chevron
 - **expanded 时显示 body**：
   - `file.isBinary === true` → `v-alert` "二进制文件改动（无文本预览）"
-  - `file.slice` 非 null → `<DiffPreview :content="file.slice" :file-path="file.path" collapsible :is-dark="isDark" />`
+  - `file.slice` 非 null → `<DiffPreview :content="file.slice" :file-path="file.path" :collapsible="true" :is-dark="isDark" />`（显式传值，避免依赖 default 变更）
   - `file.slice === null && !file.isBinary` → "无内容"占位（truncated 边界或解析异常）
 
 #### 4.2.5 status → 图标/颜色映射
@@ -364,7 +366,7 @@ toggle: []
 | `D` | `mdi-minus-circle` | error |
 | `R` | `mdi-rename-box` | warning |
 | `C` | `mdi-content-copy` | info |
-| `?` | `mdi-help-circle` | grey |
+| `T` | `mdi-swap-horizontal` | info |
 | 其它 | `mdi-file-document-edit-outline` | grey |
 
 ---
@@ -377,10 +379,14 @@ toggle: []
 |---|---|---|---|
 | HTTP 4xx/5xx | axios reject 或 `status:"error"` | 居中错误块 + 重试 | 点重试 |
 | HTTP 网络错误 | axios reject | 同上，文案"网络连接失败" | 点重试 |
-| `data.loaded=false` | snapshot.meta.loaded=false | reason → i18n 映射（见下表） | 卸载/重载/切目录 |
-| `reason: "not_a_git_repo"` | 同上 | 当前目录不是 Git 仓库 | git init 或换路径 |
-| `reason: "not_loaded"` | 同上（防御性） | 项目未载入 | 重新载入项目 |
-| 未知 reason | 不在映射表 | 获取改动失败（{reason}） | 点重试或回报 |
+| `data.loaded=false` | snapshot.meta.loaded=false | reason → i18n 映射（见下表） | 按 reason 处理 |
+| `reason: "feature_disabled"` | 同上 | 功能未启用（请检查 spcode 配置 agentsmd_enabled / codegraph_enabled） | 改插件配置 |
+| `reason: "no_project_loaded"` | 同上（防御性；理论上 chip 此时不显示） | 项目未载入 | 重新 `/project load` |
+| `reason: "directory_missing"` | 同上 | 已加载的目录不存在（被删除/移动） | 重新载入或换目录 |
+| `reason: "not_a_git_repo"` | 同上 | 当前目录不是 Git 仓库 | `git init` 或换目录 |
+| `reason: "git_unavailable"` | 同上 | 未检测到 git 可执行文件 | 安装 git 或配 `git_path` |
+| `reason: "git_error"` | 同上 | Git 执行失败（{reason}） | 看 stderr 排查 |
+| 未知 reason | 不在映射表（防御未来扩展） | 获取改动失败（{reason}） | 点重试或回报 |
 | 轮询中途错误 | tick 内 fetch reject | 保留上次 snapshot，底部 banner | 点 banner 重试 |
 | truncated | `meta.truncated === true` | sidebar 顶部黄色 warning 横条 | （无） |
 | `slice=null, isBinary=false` | path 在 files_changed 但 diff 里找不到 | 文件行下"内容已截断或不完整" | （无） |
@@ -390,8 +396,12 @@ toggle: []
 
 ```typescript
 const REASON_I18N_KEYS: Record<string, string> = {
+  feature_disabled: 'spcodeProjectLoad.diffSidebar.error.reason.feature_disabled',
+  no_project_loaded: 'spcodeProjectLoad.diffSidebar.error.reason.no_project_loaded',
+  directory_missing: 'spcodeProjectLoad.diffSidebar.error.reason.directory_missing',
   not_a_git_repo: 'spcodeProjectLoad.diffSidebar.error.reason.not_a_git_repo',
-  not_loaded: 'spcodeProjectLoad.diffSidebar.error.reason.not_loaded',
+  git_unavailable: 'spcodeProjectLoad.diffSidebar.error.reason.git_unavailable',
+  git_error: 'spcodeProjectLoad.diffSidebar.error.reason.git_error',
 }
 
 function localizedReason(reason: string | null, tm: Function): string {
@@ -400,6 +410,28 @@ function localizedReason(reason: string | null, tm: Function): string {
   return key ? tm(key) : tm('spcodeProjectLoad.diffSidebar.error.reason.generic', { reason })
 }
 ```
+
+#### 5.1.1 完整 i18n 键清单（zh-CN / en-US / ru-RU 三语）
+
+| 键 | 中文 | English | Русский |
+|---|---|---|---|
+| `spcodeProjectLoad.diffSidebar.chip` | `Git Diff` | `Git Diff` | `Git Diff` |
+| `spcodeProjectLoad.diffSidebar.chipTooltip` | `查看 Git 改动` | `View Git changes` | `Просмотр изменений Git` |
+| `spcodeProjectLoad.diffSidebar.title` | `项目改动` | `Project changes` | `Изменения проекта` |
+| `spcodeProjectLoad.diffSidebar.refreshTooltip` | `刷新` | `Refresh` | `Обновить` |
+| `spcodeProjectLoad.diffSidebar.loading` | `加载中…` | `Loading…` | `Загрузка…` |
+| `spcodeProjectLoad.diffSidebar.empty` | `暂无文件改动` | `No file changes` | `Нет изменений файлов` |
+| `spcodeProjectLoad.diffSidebar.truncated` | `⚠ diff 已截断（仅显示前 {shown} / {max} 字节，可能不完整）` | `⚠ diff truncated (showing first {shown} / {max} bytes, may be incomplete)` | `⚠ diff обрезан (показано первые {shown} / {max} байт, возможно неполный)` |
+| `spcodeProjectLoad.diffSidebar.binaryFile` | `二进制文件改动（无文本预览）` | `Binary file changed (no text preview)` | `Бинарный файл изменён (без предпросмотра)` |
+| `spcodeProjectLoad.diffSidebar.error.networkTitle` | `网络连接失败` | `Network connection failed` | `Ошибка сетевого подключения` |
+| `spcodeProjectLoad.diffSidebar.error.retry` | `重试` | `Retry` | `Повторить` |
+| `spcodeProjectLoad.diffSidebar.error.reason.feature_disabled` | `功能未启用（请检查 spcode 配置 agentsmd_enabled / codegraph_enabled）` | `Feature disabled (check spcode config agentsmd_enabled / codegraph_enabled)` | `Функция отключена (проверьте spcode config agentsmd_enabled / codegraph_enabled)` |
+| `spcodeProjectLoad.diffSidebar.error.reason.no_project_loaded` | `项目未载入` | `No project loaded` | `Проект не загружен` |
+| `spcodeProjectLoad.diffSidebar.error.reason.directory_missing` | `已加载的目录不存在` | `Loaded directory no longer exists` | `Загруженный каталог больше не существует` |
+| `spcodeProjectLoad.diffSidebar.error.reason.not_a_git_repo` | `当前目录不是 Git 仓库` | `Current directory is not a Git repository` | `Текущий каталог не является репозиторием Git` |
+| `spcodeProjectLoad.diffSidebar.error.reason.git_unavailable` | `未检测到 git 可执行文件` | `Git executable not found` | `Исполняемый файл git не найден` |
+| `spcodeProjectLoad.diffSidebar.error.reason.git_error` | `Git 执行失败（{reason}）` | `Git execution failed ({reason})` | `Ошибка выполнения Git ({reason})` |
+| `spcodeProjectLoad.diffSidebar.error.reason.generic` | `获取改动失败（{reason}）` | `Failed to fetch changes ({reason})` | `Не удалось получить изменения ({reason})` |
 
 ### 5.2 与其它 sidebar 的互斥（Chat.vue）
 
@@ -415,9 +447,11 @@ function openGitDiffSidebar() {
   gitDiffSidebarOpen.value = true
 }
 
-// currSessionId 切换时统一关闭
+// 切换会话时统一关闭所有 secondary panel（沿用 `closeSecondaryPanels()` 模式）
+// 注意：Chat.vue 现有 watcher（line 1066-1074）只刷新 spcode status，
+// 并未调用 `closeSecondaryPanels()`；本 spec 需新增一行关闭 gitDiffSidebarOpen。
+// 至于 `todoSidebarOpen` 是否随会话切换关闭，spec 不强制约束；保持现状行为一致。
 watch(currSessionId, () => {
-  // ... 现有逻辑
   gitDiffSidebarOpen.value = false
 })
 ```
@@ -435,6 +469,9 @@ watch(() => spcodeStatus.status.value.loaded, (loaded) => {
 ### 5.4 轮询期间的"静默替换"
 
 ```typescript
+// composable 实例级别的闭包变量；onBeforeUnmount → dispose() 时翻 false
+let isMounted = true
+
 async function tick(): Promise<void> {
   if (!isMounted) return
   // 不显示 loading：保留旧 state
@@ -445,8 +482,14 @@ async function tick(): Promise<void> {
   } catch (err) {
     if (!isMounted) return
     const prev = state.value.kind === 'ok' ? state.value.snapshot : undefined
-    state.value = { kind: 'error', reason: classify(err), previousSnapshot: prev }
+    state.value = { kind: 'error', reason: classifyError(err), previousSnapshot: prev }
   }
+}
+
+function dispose(): void {
+  isMounted = false
+  stopPolling()
+  if (abortController) abortController.abort()
 }
 ```
 
@@ -510,6 +553,10 @@ async function tick(): Promise<void> {
   │                                  │                       │                          │                          │                              │
   │ 4. /project unload               │                       │                          │                          │                              │
   ├──────────────────────────────────>│                       │                          │                          │                              │
+  │                                  │ applyOptimistic       │                          │                          │                              │
+  │                                  │  ProjectStatus        │                          │                          │                              │
+  │                                  │  .setUnloaded()       │                          │                          │                              │
+  │                                  │  (即时 chip 消失)      │                          │                          │                              │
   │                                  │ send ─────────────────>│ onStreamEnd              │                          │  refresh → loaded=false      │
   │                                  │                       ├─────────────────────────>│ watcher → loaded=false    │                              │
   │                                  │                       │                          │ emit update:modelValue    │                              │
@@ -524,18 +571,16 @@ async function tick(): Promise<void> {
 
 ## 7. 测试与验收
 
-### 7.1 单元测试（Vitest）
+### 7.1 验证策略（沿用姊妹 spec 决定）
 
-| 文件 | 关键 case |
-|---|---|
-| `parseSpcodeGitDiff.test.ts` | (1) 标准 unified diff 多文件 → 切片正确<br>(2) 单文件 → 一个 slice<br>(3) `Binary files` → `isBinary=true, slice=null`<br>(4) `truncated=true, diff=null` → files_changed 仍解析，slice 全 null<br>(5) rename（R）→ path 取 b/ 路径<br>(6) `files_changed` 里有但 diff 里找不到 → slice=null, isBinary=false<br>(7) `data.loaded=false, reason='not_a_git_repo'` → meta.loaded=false, reason 保留 |
-| `useSpcodeGitDiff.test.ts` | (1) refresh 成功 → state=ok<br>(2) refresh 失败 + 有上次数据 → state=error + previousSnapshot<br>(3) refresh 失败 + 无上次数据 → state=error 无 previousSnapshot<br>(4) startPolling(50) 50ms 内多次调只触发一次 timer<br>(5) dispose 后 timer 停 + abort in-flight<br>(6) umo 缺失不发请求 |
-| `GitDiffChip.test.ts` | (1) 默认渲染 chip + tooltip<br>(2) click emit `open-diff-sidebar` |
-| `GitDiffSidebar.test.ts` | (1) v-model=false 不渲染 aside<br>(2) v-model=true 渲染 aside + 立即 refresh + startPolling<br>(3) v-model 翻 false → stopPolling<br>(4) onBeforeUnmount → dispose<br>(5) `spcodeStatus.status.value.loaded` 翻 false → emit update:modelValue(false)<br>(6) 拖拽改变 width<br>(7) 移动端样式切换（视口 <760px） |
-| `GitDiffBodyContent.test.ts` | (1) state=loading → spinner<br>(2) state=error 无 previous → 错误块 + retry emit<br>(3) snapshot.files=[] → 空态<br>(4) snapshot.files>0 → 列表<br>(5) state=error 有 previous → 列表 + 底部 banner + retry emit |
-| `GitDiffFileItem.test.ts` | (1) collapsed → 只显示 row<br>(2) click → emit toggle<br>(3) expanded + 普通 slice → 渲染 DiffPreview<br>(4) expanded + isBinary → v-alert<br>(5) expanded + slice=null, isBinary=false → "无内容"占位<br>(6) status 映射（M/A/D/R/C/?/unknown） |
+dashboard 尚未配置 Vitest（见姊妹 spec `2026-06-16` §1.4）。本 spec 不引入测试框架，依赖：
 
-mock：`pluginExtensionApi` 用 vitest mock；`setInterval`/`clearInterval` 用 fake timers。
+1. **`pnpm typecheck`**（dashboard 已有 TypeScript 严格模式）：所有新文件编译通过
+2. **`pnpm lint`**：ESLint 规则通过
+3. **手动跑 §7.2 端到端验收清单**：覆盖所有关键路径，包括正常态、错误态、边界条件
+4. **手工 visual 验证**：在开发服务器 `pnpm dev` 中逐项核对 UI 表现
+
+实施者若后续决定引入 Vitest，本 spec 涵盖的 case 至少包括：`parseSpcodeGitDiff` 7 类输入（含截断 / 二进制 / rename / path 缺失 / reason 保留）、`useSpcodeGitDiff` 6 类行为（refresh 成功失败 / startPolling 幂等 / dispose / umo 缺失）、`GitDiffSidebar` 7 类生命周期（v-model 切换 / watcher 联动 / 拖拽 / 移动端 / unmount 清理等）、`GitDiffBodyContent` 5 类状态分支、`GitDiffFileItem` 6 类渲染分支。覆盖范围见姊妹 spec `2026-06-16` §1.4 的"N 不写自动化测试，本节是验证清单"惯例。
 
 ### 7.2 端到端验收清单（手工）
 
@@ -560,14 +605,14 @@ mock：`pluginExtensionApi` 用 vitest mock；`setInterval`/`clearInterval` 用 
 
 ```
 1. feat(i18n): add spcodeProjectLoad.diffSidebar keys (zh-CN/en-US/ru-RU)
-2. feat(chatui): add parseSpcodeGitDiff pure function + tests
-3. feat(chatui): add useSpcodeGitDiff composable + tests
-4. feat(chatui): add GitDiffFileItem component + tests
-5. feat(chatui): add GitDiffBodyContent component + tests
-6. feat(chatui): add GitDiffSidebar shell + tests
+2. feat(chatui): add parseSpcodeGitDiff pure function
+3. feat(chatui): add useSpcodeGitDiff composable
+4. feat(chatui): add GitDiffFileItem component
+5. feat(chatui): add GitDiffBodyContent component
+6. feat(chatui): add GitDiffSidebar shell
 7. feat(chatui): add GitDiffChip + wire to ChatInput status row
 8. feat(chatui): wire GitDiffSidebar to Chat.vue with mutual exclusion
-9. chore(chatui): pnpm lint + pnpm typecheck (run ruff format if any .py)
+9. chore(chatui): pnpm lint + pnpm typecheck
 10. docs: update CHANGELOG (按社区规范)
 ```
 
@@ -586,7 +631,10 @@ mock：`pluginExtensionApi` 用 vitest mock；`setInterval`/`clearInterval` 用 
 | 后端端点路径变更 | 集中在 `useSpcodeGitDiff.ts` 一处调用 |
 | chip 与 status 联动偶尔错位 | chip 的 v-if 直接读 `spcodeStatus.status.value.loaded`，与 sidebar 的 watcher 同源 |
 | i18n key 拼错 | 提交前 grep `spcodeProjectLoad\.diffSidebar` 三个 locale json 都覆盖 |
-| Vitest 不在 dashboard 已配置中 | 前置 spec 已说明未配置；本次若不便引入，本 spec 的测试章节标注"按团队后续决定"（见 §1.4 范围声明） |
+| 后端端点契约漂移 | spcode `git-diff` 端点是外部契约（不在本 spec 范围内修改）。如果未来 `handle_get_git_diff` 改动字段，本 spec 的 `SpcodeGitDiffRawResponse` 类型与 `parseSpcodeGitDiff` 会失配。缓解：① `parseSpcodeGitDiff` 内部对未知 reason / 未知 status 码都走兜底分支，不抛错；② 字段访问全部 `?.` / `?? null` 兜底；③ 联调时锁定源码 `main.py` 版本号或 commit hash |
+| i18n key 拼错或缺翻译 | 提交前 grep `spcodeProjectLoad\.diffSidebar` 三个 locale json 都覆盖；CI 跑 `pnpm typecheck` 捕获硬编码字符串 |
+| 端点响应体超过 1MB | `MAX_GIT_DIFF_BYTES=1MB` 由 spcode 端截断（`main.py:1710-1711`），本 spec 已 `truncated` 字段处理截断 UI；极端大仓库单文件 diff 仍可能溢出 `DiffPreview.maxChars`（默认 2000） |
+| `defineEmits` 声明遗漏 | `ChatInput.vue` 当前未声明 `open-diff-sidebar`，本 spec 已在 §3.3 标注需追加 |
 
 ---
 
@@ -604,8 +652,9 @@ mock：`pluginExtensionApi` 用 vitest mock；`setInterval`/`clearInterval` 用 
 
 ## 10. 元数据
 
-- **总文件改动**：3 新增组件 + 1 新增 composable + 1 新增纯函数模块 + 2 处现有文件小幅修改 + 3 个 i18n json + 5 个测试文件
-- **代码行数估算**：新增 ~600-700 行（含测试）；改动 ~30-40 行
+- **总文件改动**：3 新增组件 + 1 新增 composable + 1 新增纯函数模块 + 2 处现有文件小幅修改 + 3 个 i18n json
+- **代码行数估算**：新增 ~500-600 行；改动 ~30-40 行
+- **外部契约依赖**：spcode `GET /spcode/git-diff` 端点（已在源码 `main.py:1130-1135` 注册，本 spec 不修改）
 - **依赖**：零新 npm 依赖（vue 3 / vuetify / i18next 已就绪）
 - **向后兼容**：100%（仅新增；现有组件、composable、API 调用零修改）
 - **配套文档**：本 spec 设计文档 + 前置 spec（chatui-project-load-button）+ 后续 writing-plans 产出的实现计划
