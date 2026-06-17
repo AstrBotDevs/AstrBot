@@ -66,9 +66,9 @@
                   ></v-checkbox>
                 </template>
                 
-                <v-list-item-title>{{ plugin.name }}</v-list-item-title>
+                <v-list-item-title>{{ pluginDisplayName(plugin) }}</v-list-item-title>
                 <v-list-item-subtitle>
-                  {{ plugin.desc || tm('pluginSetSelector.noDescription') }}
+                  {{ pluginDescription(plugin) || tm('pluginSetSelector.noDescription') }}
                   <v-chip v-if="!plugin.activated" size="x-small" color="grey" class="ml-1">
                     {{ tm('pluginSetSelector.notActivated') }}
                   </v-chip>
@@ -103,8 +103,9 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import axios from 'axios'
+import { pluginApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
+import { usePluginI18n } from '@/utils/pluginI18n'
 
 const props = defineProps({
   modelValue: {
@@ -123,12 +124,16 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 const { tm } = useModuleI18n('core.shared')
+const { pluginName, pluginDesc } = usePluginI18n()
 
 const dialog = ref(false)
 const pluginList = ref([])
 const loading = ref(false)
 const selectionMode = ref('custom') // 'all', 'none', 'custom'
 const selectedPlugins = ref([])
+
+const pluginDisplayName = (plugin) => pluginName(plugin) || plugin.name
+const pluginDescription = (plugin) => pluginDesc(plugin)
 
 // 判断是否为"所有插件"模式
 const isAllPlugins = computed(() => {
@@ -165,7 +170,7 @@ async function openDialog() {
 async function loadPlugins() {
   loading.value = true
   try {
-    const response = await axios.get('/api/plugin/get')
+    const response = await pluginApi.list()
     if (response.data.status === 'ok') {
       // 只显示已激活且非系统的插件，并按名称排序
       pluginList.value = (response.data.data || [])

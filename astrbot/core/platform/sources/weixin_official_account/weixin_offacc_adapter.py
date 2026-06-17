@@ -5,7 +5,6 @@ import time
 from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
-import quart
 from requests import Response
 from wechatpy import WeChatClient, create_reply, parse_message
 from wechatpy.crypto import WeChatCrypto
@@ -25,8 +24,9 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import convert_audio_to_wav
+from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .weixin_offacc_event import WeixinOfficialAccountPlatformEvent
@@ -44,7 +44,7 @@ class WeixinOfficialAccountServer:
         config: dict,
         user_buffer: dict[Any, dict[str, Any]],
     ) -> None:
-        self.server = quart.Quart(__name__)
+        self.server = FastAPIWebhookServer("weixin-official-account-webhook")
         self.port = int(cast(int | str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.token = config.get("token")
@@ -73,15 +73,15 @@ class WeixinOfficialAccountServer:
         self.user_buffer: dict[str, dict[str, Any]] = user_buffer  # from_user -> state
         self.active_send_mode = False  # 是否启用主动发送模式，启用后 callback 将直接返回回复内容，无需等待微信回调
 
-    async def verify(self):
+    async def verify(self, request):
         """内部服务器的 GET 验证入口"""
-        return await self.handle_verify(quart.request)
+        return await self.handle_verify(request)
 
     async def handle_verify(self, request) -> str:
         """处理验证请求，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: FastAPI webhook request 对象
 
         Returns:
             验证响应
@@ -105,9 +105,9 @@ class WeixinOfficialAccountServer:
             logger.error("验证请求有效性失败，签名异常，请检查配置。")
             return "err"
 
-    async def callback_command(self):
+    async def callback_command(self, request):
         """内部服务器的 POST 回调入口"""
-        return await self.handle_callback(quart.request)
+        return await self.handle_callback(request)
 
     def _maybe_encrypt(self, xml: str, nonce: str | None, timestamp: str | None) -> str:
         if xml and "<Encrypt>" not in xml and nonce and timestamp:
@@ -129,7 +129,7 @@ class WeixinOfficialAccountServer:
         """处理回调请求，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: FastAPI webhook request 对象
 
         Returns:
             响应内容
@@ -470,11 +470,11 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
                 f.write(resp.content)
 
             try:
-                path_wav = os.path.join(
-                    temp_dir,
-                    f"weixin_offacc_{msg.media_id}.wav",
-                )
-                path_wav = await convert_audio_to_wav(path, path_wav)
+                path_wav = await MediaResolver(
+                    path,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
             except Exception as e:
                 logger.error(
                     f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。",
@@ -507,14 +507,28 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         logger.info(f"abm: {abm}")
         await self.handle_msg(abm)
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        buffer = self.user_buffer.get(message.sender.user_id, None)
+    def create_event(
+        self, message: AstrBotMessage
+    ) -> WeixinOfficialAccountPlatformEvent:
+        """Creates a Weixin Official Account message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Weixin Official Account message event.
+
+        Raises:
+            ValueError: If the message output buffer cannot be resolved.
+        """
+        sender_id = getattr(getattr(message, "sender", None), "user_id", "")
+        buffer = self.user_buffer.get(sender_id, None)
         if buffer is None:
-            logger.critical(
-                f"用户消息未找到缓冲状态，无法处理消息: user={message.sender.user_id} message_id={message.message_id}"
+            raise ValueError(
+                "User message buffer not found: "
+                f"user={sender_id} message_id={message.message_id}"
             )
-            return
-        message_event = WeixinOfficialAccountPlatformEvent(
+        return WeixinOfficialAccountPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
@@ -522,7 +536,12 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             client=self.client,
             message_out=buffer,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        try:
+            self.commit_event(self.create_event(message))
+        except ValueError as e:
+            logger.critical("%s", e)
 
     def get_client(self) -> WeChatClient:
         return self.client

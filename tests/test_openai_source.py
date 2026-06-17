@@ -1,3 +1,6 @@
+import base64
+import builtins
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
@@ -5,9 +8,11 @@ from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
+import astrbot.core.provider.sources.openai_source as openai_source_module
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
 
 
 class _ErrorWithBody(Exception):
@@ -50,6 +55,66 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
         provider_config=provider_config,
         provider_settings={},
     )
+
+
+def test_create_http_client_uses_openai_httpx_module(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_create_proxy_client(
+        provider_label: str,
+        proxy: str | None = None,
+        headers: dict[str, str] | None = None,
+        verify=None,
+        httpx_module=None,
+    ):
+        captured["httpx_module"] = httpx_module
+        return object()
+
+    monkeypatch.setattr(
+        openai_source_module,
+        "create_proxy_client",
+        fake_create_proxy_client,
+    )
+
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    provider._create_http_client({"proxy": ""})
+
+    from openai import _base_client as openai_base_client
+
+    assert captured["httpx_module"] is openai_base_client.httpx
+
+
+def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_create_proxy_client(
+        provider_label: str,
+        proxy: str | None = None,
+        headers: dict[str, str] | None = None,
+        verify=None,
+        httpx_module=None,
+    ):
+        captured["httpx_module"] = httpx_module
+        return object()
+
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "openai" and fromlist:
+            raise ImportError("missing openai._base_client")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(
+        openai_source_module,
+        "create_proxy_client",
+        fake_create_proxy_client,
+    )
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    provider._create_http_client({"proxy": ""})
+
+    assert captured["httpx_module"] is openai_source_module.httpx
 
 
 @pytest.mark.asyncio
@@ -591,19 +656,22 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
     provider = _make_provider()
     try:
 
-        async def fake_download(url: str) -> str:
-            assert url == "https://example.com/quoted.png"
-            return "/tmp/quoted.png"
-
-        def fake_encode(image_path: str, **_kwargs) -> str:
-            assert image_path == "/tmp/quoted.png"
-            return "data:image/png;base64,abcd"
+        async def fake_resolve_media_ref_to_base64_data(
+            media_ref: str,
+            *,
+            media_type: str,
+            strict: bool = False,
+        ) -> ResolvedMediaData:
+            assert media_ref == "https://example.com/quoted.png"
+            assert media_type == "image"
+            assert strict is False
+            return ResolvedMediaData(base64_data="abcd", mime_type="image/png")
 
         monkeypatch.setattr(
-            "astrbot.core.provider.sources.openai_source.download_image_by_url",
-            fake_download,
+            openai_source_module,
+            "resolve_media_ref_to_base64_data",
+            fake_resolve_media_ref_to_base64_data,
         )
-        monkeypatch.setattr(provider, "_encode_image_file_to_data_url", fake_encode)
 
         contexts = [
             {
@@ -715,12 +783,13 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls_with_de
         image_path = tmp_path / "quoted-image.png"
         PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_path)
 
-        async def fake_download(url: str) -> str:
+        async def fake_download(url: str, target_path: str) -> None:
             assert url == "https://example.com/quoted.png"
-            return str(image_path)
+            with open(target_path, "wb") as f:
+                f.write(image_path.read_bytes())
 
         monkeypatch.setattr(
-            "astrbot.core.provider.sources.openai_source.download_image_by_url",
+            "astrbot.core.utils.media_utils.download_file",
             fake_download,
         )
 
@@ -779,37 +848,22 @@ async def test_prepare_chat_payload_materializes_context_file_uri_image_urls(tmp
         await provider.terminate()
 
 
-@pytest.mark.asyncio
-async def test_file_uri_to_path_preserves_windows_drive_letter():
-    provider = _make_provider()
-    try:
-        assert provider._file_uri_to_path("file:///C:/tmp/quoted-image.png") == (
-            "C:/tmp/quoted-image.png"
-        )
-    finally:
-        await provider.terminate()
+def test_file_uri_to_path_preserves_windows_drive_letter():
+    assert file_uri_to_path("file:///C:/tmp/quoted-image.png") == (
+        "C:/tmp/quoted-image.png"
+    )
 
 
-@pytest.mark.asyncio
-async def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
-    provider = _make_provider()
-    try:
-        assert provider._file_uri_to_path("file://C:/tmp/quoted-image.png") == (
-            "C:/tmp/quoted-image.png"
-        )
-    finally:
-        await provider.terminate()
+def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
+    assert file_uri_to_path("file://C:/tmp/quoted-image.png") == (
+        "C:/tmp/quoted-image.png"
+    )
 
 
-@pytest.mark.asyncio
-async def test_file_uri_to_path_preserves_remote_netloc_as_unc_path():
-    provider = _make_provider()
-    try:
-        assert provider._file_uri_to_path("file://server/share/quoted-image.png") == (
-            "//server/share/quoted-image.png"
-        )
-    finally:
-        await provider.terminate()
+def test_file_uri_to_path_preserves_remote_netloc_as_unc_path():
+    assert file_uri_to_path("file://server/share/quoted-image.png") == (
+        "//server/share/quoted-image.png"
+    )
 
 
 @pytest.mark.asyncio
@@ -970,6 +1024,27 @@ async def test_resolve_image_part_supports_base64_scheme():
 
 
 @pytest.mark.asyncio
+async def test_resolve_image_part_preserves_base64_png_mime_type():
+    provider = _make_provider()
+    try:
+        image_buffer = BytesIO()
+        PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(
+            image_buffer,
+            format="PNG",
+        )
+        image_base64 = base64.b64encode(image_buffer.getvalue()).decode("ascii")
+
+        image_part = await provider._resolve_image_part(f"base64://{image_base64}")
+
+        assert image_part == {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+        }
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_materializes_context_localhost_file_uri_image_urls(
     tmp_path,
 ):
@@ -1004,24 +1079,111 @@ async def test_prepare_chat_payload_materializes_context_localhost_file_uri_imag
 
 
 @pytest.mark.asyncio
+async def test_resolve_audio_part_supports_data_audio_uri(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.utils.media_utils.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+    provider = _make_provider()
+    try:
+        audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
+        audio_ref = f"data:audio/wav;base64,{base64.b64encode(audio_bytes).decode()}"
+
+        audio_part = await provider._resolve_audio_part(audio_ref)
+
+        assert audio_part == {
+            "type": "input_audio",
+            "input_audio": {
+                "data": base64.b64encode(audio_bytes).decode("utf-8"),
+                "format": "wav",
+            },
+        }
+        assert not list(tmp_path.iterdir())
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_resolve_audio_part_supports_base64_scheme(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.utils.media_utils.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+    provider = _make_provider()
+    try:
+        audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
+        audio_ref = f"base64://{base64.b64encode(audio_bytes).decode()}"
+
+        audio_part = await provider._resolve_audio_part(audio_ref)
+
+        assert audio_part == {
+            "type": "input_audio",
+            "input_audio": {
+                "data": base64.b64encode(audio_bytes).decode("utf-8"),
+                "format": "wav",
+            },
+        }
+        assert not list(tmp_path.iterdir())
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_audio_preprocess_failure_does_not_log_media_ref(monkeypatch):
+    provider = _make_provider()
+    captured: dict[str, object] = {}
+
+    async def fake_resolve_media_ref_to_base64_data(*args, **kwargs):
+        raise ValueError("boom")
+
+    def fake_warning(message, *args, **kwargs):
+        captured["message"] = message
+        captured["args"] = args
+
+    monkeypatch.setattr(
+        openai_source_module,
+        "resolve_media_ref_to_base64_data",
+        fake_resolve_media_ref_to_base64_data,
+    )
+    monkeypatch.setattr(openai_source_module.logger, "warning", fake_warning)
+
+    try:
+        audio_ref = "data:audio/wav;base64," + "A" * 1000
+
+        assert await provider._resolve_audio_part(audio_ref) is None
+
+        assert captured["message"] == "音频预处理失败，将忽略。错误: %s"
+        assert len(captured["args"]) == 1
+        assert str(captured["args"][0]) == "boom"
+        rendered_log_args = f"{captured['message']} {captured['args']}"
+        assert audio_ref not in rendered_log_args
+        assert "data:audio" not in rendered_log_args
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_keeps_original_context_image_when_materialization_fails(
     monkeypatch,
 ):
     provider = _make_provider()
     try:
 
-        async def fake_download(url: str) -> str:
-            assert url == "https://example.com/expired.png"
-            return "/tmp/not-an-image"
+        async def fake_resolve_media_ref_to_base64_data(
+            media_ref: str,
+            *,
+            media_type: str,
+            strict: bool = False,
+        ) -> None:
+            assert media_ref == "https://example.com/expired.png"
+            assert media_type == "image"
+            assert strict is False
+            return None
 
         monkeypatch.setattr(
-            "astrbot.core.provider.sources.openai_source.download_image_by_url",
-            fake_download,
-        )
-        monkeypatch.setattr(
-            provider,
-            "_encode_image_file_to_data_url",
-            lambda _image_path, **_kwargs: None,
+            openai_source_module,
+            "resolve_media_ref_to_base64_data",
+            fake_resolve_media_ref_to_base64_data,
         )
 
         payloads, _ = await provider._prepare_chat_payload(
@@ -1616,5 +1778,111 @@ async def test_query_does_not_filter_user_or_system_messages(monkeypatch):
         assert messages[0] == {"role": "system", "content": ""}
         assert messages[1] == {"role": "user", "content": ""}
         assert messages[2] == {"role": "user", "content": "hello"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_stream_filters_empty_assistant_message(monkeypatch):
+    """Regression for #7721: streaming path must also filter empty assistant messages.
+
+    Previously only ``_query`` sanitized the payload; ``_query_stream`` forwarded
+    the raw history and strict providers (e.g. DeepSeek Reasoner) returned 400 on
+    the next turn after a tool call whose assistant entry had reasoning only.
+    """
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+
+        async def fake_stream():
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-stream",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "deepseek-reasoner",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            )
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return fake_stream()
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads = {
+            "model": "deepseek-reasoner",
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": ""},  # should be filtered
+                {"role": "user", "content": "world"},
+            ],
+        }
+
+        async for _ in provider._query_stream(payloads=payloads, tools=None):
+            pass
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 2
+        assert messages[0] == {"role": "user", "content": "hello"}
+        assert messages[1] == {"role": "user", "content": "world"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_query_filters_empty_list_content_assistant_message(monkeypatch):
+    """Empty-list content (``content == []``) must also be filtered, not just ``""`` / ``None``."""
+    provider = _make_provider()
+    try:
+        captured_kwargs = {}
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        payloads = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": []},  # should be filtered
+                {"role": "user", "content": "again"},
+            ],
+        }
+
+        await provider._query(payloads=payloads, tools=None)
+
+        messages = captured_kwargs["messages"]
+        assert len(messages) == 2
+        assert messages[0] == {"role": "user", "content": "hi"}
+        assert messages[1] == {"role": "user", "content": "again"}
     finally:
         await provider.terminate()

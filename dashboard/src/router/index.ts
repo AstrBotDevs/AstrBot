@@ -17,7 +17,12 @@ export const router = createRouter({
 interface AuthStore {
   username: string;
   returnUrl: string | null;
-  login(username: string, password: string): Promise<void>;
+  login(
+    username: string,
+    password: string,
+    code?: string,
+    trustDeviceToken?: boolean,
+  ): Promise<void | 'totp_required'>;
   logout(): void;
   has_token(): boolean;
 }
@@ -28,7 +33,7 @@ router.beforeEach(async (to, from, next) => {
     loadingStore.start();
   }
 
-  const publicPages = ['/auth/login'];
+  const publicPages = ['/auth/login', '/auth/setup'];
   const authRequired = !publicPages.includes(to.path);
   const auth: AuthStore = useAuthStore();
 
@@ -41,7 +46,8 @@ router.beforeEach(async (to, from, next) => {
     if (authRequired && !auth.has_token()) {
       auth.returnUrl = to.fullPath;
       return next('/auth/login');
-    } else next();
+    }
+    return next();
   } else {
     next();
   }

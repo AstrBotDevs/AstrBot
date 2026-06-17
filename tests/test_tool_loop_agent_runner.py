@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -13,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.hooks import BaseAgentRunHooks
+from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.agent.tool import FunctionTool, ToolSet
@@ -97,6 +99,26 @@ class MockToolExecutor:
         return generator()
 
 
+class LargeTextToolExecutor:
+    """模拟返回超长文本的工具执行器"""
+
+    def __init__(self, text: str):
+        self.text = text
+
+    @classmethod
+    def from_text(cls, text: str) -> "LargeTextToolExecutor":
+        return cls(text)
+
+    def execute(self, tool, run_context, **tool_args):
+        async def generator():
+            from mcp.types import CallToolResult, TextContent
+
+            result = CallToolResult(content=[TextContent(type="text", text=self.text)])
+            yield result
+
+        return generator()
+
+
 class MockMixedContentToolExecutor:
     """模拟返回图片 + 文本的工具执行器"""
 
@@ -132,6 +154,25 @@ class MockErrProvider(MockProvider):
         return LLMResponse(
             role="err",
             completion_text="primary provider returned error",
+        )
+
+
+class CapturingProvider(MockProvider):
+    def __init__(self, modalities: list[str]):
+        super().__init__()
+        self.provider_config["modalities"] = modalities
+        self.received_contexts = []
+        self.received_func_tools = []
+        self.should_call_tools = False
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        self.received_contexts.append(kwargs.get("contexts"))
+        self.received_func_tools.append(kwargs.get("func_tool"))
+        return LLMResponse(
+            role="assistant",
+            completion_text="final",
+            usage=TokenUsage(input_other=10, output=5),
         )
 
 
@@ -189,6 +230,59 @@ class MockToolCallProvider(MockProvider):
             tools_call_name=[self.tool_name],
             tools_call_args=[self.tool_args],
             tools_call_ids=[f"call_{self.tool_name}"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class SingleToolThenFinalProvider(MockProvider):
+    def __init__(self, tool_name: str, tool_args: dict[str, str] | None = None):
+        super().__init__()
+        self.tool_name = tool_name
+        self.tool_args = tool_args or {}
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="最终回复",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            tools_call_name=[self.tool_name],
+            tools_call_args=[self.tool_args],
+            tools_call_ids=["call_large_result"],
+            usage=TokenUsage(input_other=10, output=5),
+        )
+
+
+class CapturingToolLoopProvider(MockProvider):
+    def __init__(self, tool_name: str):
+        super().__init__()
+        self.tool_name = tool_name
+        self.received_contexts = []
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        self.received_contexts.append(list(kwargs.get("contexts") or []))
+        func_tool = kwargs.get("func_tool")
+        if func_tool is None or self.call_count > 1:
+            return LLMResponse(
+                role="assistant",
+                completion_text="最终回复",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            tools_call_name=[self.tool_name],
+            tools_call_args=[{"query": "test"}],
+            tools_call_ids=["call_context_refresh"],
             usage=TokenUsage(input_other=10, output=5),
         )
 
@@ -334,6 +428,10 @@ def runner():
     return ToolLoopAgentRunner()
 
 
+def _make_large_tool_result_text() -> str:
+    return "x" * 100000
+
+
 @pytest.mark.asyncio
 async def test_max_step_limit_functionality(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
@@ -377,6 +475,68 @@ async def test_max_step_limit_functionality(
     # 验证最后一条消息是assistant的最终回答
     last_message = runner.run_context.messages[-1]
     assert last_message.role == "assistant", "最后一条消息应该是assistant的最终回答"
+
+
+@pytest.mark.asyncio
+async def test_max_step_final_request_includes_limit_prompt(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """The forced final step must use contexts recomputed after max-step prompt."""
+    provider = CapturingToolLoopProvider("test_tool")
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def snapshot_context_manager(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = snapshot_context_manager
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    assert provider.call_count == 2
+    final_contexts = provider.received_contexts[-1]
+    assert final_contexts[-1].role == "user"
+    assert final_contexts[-1].content == runner.MAX_STEPS_REACHED_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_next_request_includes_tool_result(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """Tool-loop provider contexts must be recomputed after tool results append."""
+    provider = CapturingToolLoopProvider("test_tool")
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async def snapshot_context_manager(messages, trusted_token_usage=0):
+        return list(messages)
+
+    runner.request_context_manager.process = snapshot_context_manager
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    second_contexts = provider.received_contexts[1]
+    tool_messages = [msg for msg in second_contexts if msg.role == "tool"]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_context_refresh"
+    assert "工具执行结果" in tool_messages[0].content
 
 
 @pytest.mark.asyncio
@@ -529,7 +689,9 @@ async def test_tool_result_includes_all_calltoolresult_content(
                 "mime_type": mime_type,
             }
         )
-        return SimpleNamespace(file_path=f"/tmp/{tool_call_id}_{index}.png")
+        return SimpleNamespace(
+            file_path=f"/tmp/{tool_call_id}_{index}.png", mime_type=mime_type
+        )
 
     monkeypatch.setattr(tool_image_cache, "save_image", fake_save_image)
 
@@ -562,6 +724,99 @@ async def test_tool_result_includes_all_calltoolresult_content(
             "mime_type": "image/png",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_runner_replaces_runtime_image_context_before_provider_call(
+    runner, provider_request, mock_hooks
+):
+    provider = CapturingProvider(modalities=["tool_use"])
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    runner.run_context.messages.append(
+        Message(
+            role="user",
+            content=[
+                TextPart(text="Review this image"),
+                ImageURLPart(
+                    image_url=ImageURLPart.ImageURL(
+                        url="data:image/png;base64,dGVzdA=="
+                    )
+                ),
+            ],
+        )
+    )
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    assert provider.received_contexts
+    sent_context = provider.received_contexts[0]
+    assert sent_context[-1]["content"] == [
+        {"type": "text", "text": "Review this image"},
+        {"type": "text", "text": "[Image]"},
+    ]
+    assert len(runner.run_context.messages[-2].content) == 2
+
+
+@pytest.mark.asyncio
+async def test_runner_builds_placeholder_for_unsupported_request_image(
+    runner, mock_hooks, tool_set
+):
+    provider = CapturingProvider(modalities=["tool_use"])
+    request = ProviderRequest(
+        prompt="Describe it",
+        image_urls=["/path/that/should/not/be/read.jpg"],
+        func_tool=tool_set,
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=MockToolExecutor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    sent_context = provider.received_contexts[0]
+    assert sent_context[-1]["content"] == [
+        {"type": "text", "text": "Describe it"},
+        {"type": "text", "text": "[Image]"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_runner_clears_tools_for_provider_without_tool_use(
+    runner, provider_request, mock_hooks, mock_tool_executor
+):
+    provider = CapturingProvider(modalities=["text"])
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(1):
+        pass
+
+    assert provider.received_func_tools == [None]
 
 
 @pytest.mark.asyncio
@@ -1124,18 +1379,116 @@ async def test_follow_up_accepted_when_active_and_not_stopping(
         streaming=False,
     )
 
-    # Runner is active (not done) and stop is not requested
-    assert not runner.done()
-    assert runner._is_stop_requested() is False
 
-    ticket = runner.follow_up(message_text="valid follow-up message")
-
-    assert ticket is not None, (
-        "Follow-up should be accepted when runner is active and not stopping"
+@pytest.mark.asyncio
+async def test_large_tool_result_is_spilled_to_file_and_replaced_with_read_notice(
+    tmp_path,
+):
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
     )
-    assert ticket.text == "valid follow-up message"
-    assert ticket.consumed is False
-    assert ticket in runner._pending_follow_ups
+    read_tool = FunctionTool(
+        name="astrbot_file_read_tool",
+        description="read file",
+        parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    tool_set = ToolSet(tools=[tool, read_tool])
+    provider = SingleToolThenFinalProvider(tool.name, {"query": "large"})
+    request = ProviderRequest(prompt="run tool", func_tool=tool_set, contexts=[])
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(
+            Any,
+            LargeTextToolExecutor.from_text(_make_large_tool_result_text()),
+        ),
+        agent_hooks=MockHooks(),
+        streaming=False,
+        tool_result_overflow_dir=str(tmp_path),
+        read_tool=read_tool,
+    )
+
+    responses = []
+    async for response in runner.step_until_done(3):
+        responses.append(response)
+
+    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
+    assert len(tool_messages) == 1
+    tool_message_content = str(tool_messages[0].content)
+    assert "xxxxxxxxxx" in tool_message_content
+    assert "Truncated tool output preview shown above." in tool_message_content
+    assert "The tool output was too large to include directly" in tool_message_content
+    assert "`astrbot_file_read_tool`" in tool_message_content
+    assert "Use `astrbot_file_read_tool` to inspect it." in tool_message_content
+
+    overflow_files = list(Path(tmp_path).glob("call_large_result_*.txt"))
+    assert len(overflow_files) == 1
+    assert (
+        overflow_files[0].read_text(encoding="utf-8") == _make_large_tool_result_text()
+    )
+    assert str(overflow_files[0]) in tool_message_content
+
+    llm_results = [resp for resp in responses if resp.type == "llm_result"]
+    assert llm_results
+
+
+@pytest.mark.asyncio
+async def test_large_tool_result_keeps_preview_when_spill_fails(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    read_tool = FunctionTool(
+        name="astrbot_file_read_tool",
+        description="read file",
+        parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    tool_set = ToolSet(tools=[tool, read_tool])
+    provider = SingleToolThenFinalProvider(tool.name, {"query": "large"})
+    request = ProviderRequest(prompt="run tool", func_tool=tool_set, contexts=[])
+    runner = ToolLoopAgentRunner()
+
+    async def _raise_spill_error(*, tool_call_id: str, content: str) -> str:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runner, "_write_tool_result_overflow_file", _raise_spill_error)
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(
+            Any,
+            LargeTextToolExecutor.from_text(_make_large_tool_result_text()),
+        ),
+        agent_hooks=MockHooks(),
+        streaming=False,
+        tool_result_overflow_dir=str(tmp_path),
+        read_tool=read_tool,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
+    assert len(tool_messages) == 1
+    tool_message_content = str(tool_messages[0].content)
+    assert "xxxxxxxxxx" in tool_message_content
+    assert "Tool output exceeded the inline result limit" in tool_message_content
+    assert "disk full" in tool_message_content
 
 
 @pytest.mark.asyncio

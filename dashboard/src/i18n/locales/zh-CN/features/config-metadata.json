@@ -127,6 +127,10 @@
           "description": "Brave Search API Key",
           "hint": "可添加多个 Key 进行轮询。"
         },
+        "websearch_firecrawl_key": {
+          "description": "Firecrawl API Key",
+          "hint": "可添加多个 Key 进行轮询。"
+        },
         "websearch_baidu_app_builder_key": {
           "description": "百度千帆智能云 APP Builder API Key",
           "hint": "参考:[https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
@@ -154,11 +158,11 @@
     },
     "agent_computer_use": {
       "description": "使用电脑能力",
-      "hint": "让 AstrBot 访问和使用你的电脑或者隔离的沙盒环境，以执行更复杂的任务。详见: [沙盒模式](https://docs.astrbot.app/use/astrbot-agent-sandbox.html), [Skills](https://docs.astrbot.app/use/skills.html)。",
+      "hint": "让 AstrBot 访问和使用本机环境或者隔离的沙盒环境，以执行更复杂的任务。详见: [电脑使用](https://docs.astrbot.app/use/computer.html)。",
       "provider_settings": {
         "computer_use_runtime": {
           "description": "运行环境",
-          "hint": "sandbox 代表在沙箱环境中运行, local 代表在本地环境中运行, none 代表不启用。如果上传了 skills，选择 none 会导致其无法被 Agent 正常使用。"
+          "hint": "允许 Agent 访问的环境。local 为本机环境，sandbox 为沙箱环境，none 为不允许任何环境。"
         },
         "computer_use_require_admin": {
           "description": "需要 AstrBot 管理员权限",
@@ -178,11 +182,35 @@
           },
           "shipyard_neo_profile": {
             "description": "Shipyard Neo Profile",
-            "hint": "Shipyard Neo 沙箱 profile，例如 python-default。"
+            "hint": "Shipyard Neo 沙箱 profile，例如 python-default。留空时自动选择能力更完整的 profile。"
           },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox 存活时间(秒)",
             "hint": "Shipyard Neo 沙箱的生存时间（秒）。"
+          },
+          "cua_image": {
+            "description": "CUA 镜像",
+            "hint": "CUA 沙箱镜像/系统类型，默认 linux。可填写 linux、macos、windows、android，具体取决于 CUA SDK 支持。"
+          },
+          "cua_os_type": {
+            "description": "CUA 操作系统类型",
+            "hint": "CUA 沙箱操作系统类型，默认 linux。"
+          },
+          "cua_idle_timeout": {
+            "description": "CUA 空闲超时(秒)",
+            "hint": "CUA 沙箱空闲超时时间（秒）。大于 0 时，AstrBot 会在会话空闲达到该时长后主动关闭 CUA 沙箱；0 表示禁用。"
+          },
+          "cua_telemetry_enabled": {
+            "description": "CUA 遥测",
+            "hint": "是否允许 CUA SDK 发送遥测数据。默认关闭。"
+          },
+          "cua_local": {
+            "description": "CUA 本地沙箱",
+            "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。"
+          },
+          "cua_api_key": {
+            "description": "CUA API Key",
+            "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。"
           },
           "shipyard_endpoint": {
             "description": "Shipyard API Endpoint",
@@ -220,32 +248,36 @@
       "description": "上下文管理策略",
       "provider_settings": {
         "max_context_length": {
-          "description": "最多携带对话轮数",
-          "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制"
+          "description": "压缩前最多保留对话轮数",
+          "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。"
         },
         "dequeue_context_length": {
-          "description": "丢弃对话轮数",
-          "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数"
+          "description": "轮次超限时一次丢弃轮数",
+          "hint": "当超过\"压缩前最多保留对话轮数\"且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。"
         },
         "context_limit_reached_strategy": {
-          "description": "超出模型上下文窗口时的处理方式",
+          "description": "历史超限或上下文接近上限时的处理方式",
           "labels": [
             "按对话轮数截断",
             "由 LLM 压缩上下文"
           ],
-          "hint": "当按对话轮数截断时，会根据上面\"丢弃对话轮数\"的配置丢弃最旧的 N 轮对话。当由 LLM 压缩上下文时，会使用指定的模型进行上下文压缩。"
+          "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
         },
         "llm_compress_instruction": {
           "description": "上下文压缩提示词",
           "hint": "如果为空则使用默认提示词。"
         },
-        "llm_compress_keep_recent": {
-          "description": "压缩时保留最近对话轮数",
-          "hint": "始终保留的最近 N 轮对话。"
+        "llm_compress_keep_recent_ratio": {
+          "description": "压缩时保留最近上下文比例",
+          "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
         },
         "llm_compress_provider_id": {
           "description": "用于上下文压缩的模型提供商 ID",
-          "hint": "留空时将降级为\"按对话轮数截断\"的策略。"
+          "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为\"按对话轮数截断\"的策略。"
+        },
+        "fallback_max_context_tokens": {
+          "description": "上下文窗口兜底值",
+          "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。"
         }
       }
     },
@@ -281,6 +313,10 @@
         "show_tool_call_result": {
           "description": "输出函数调用返回结果",
           "hint": "仅在启用“输出函数调用状态”时生效，且最多展示 70 个字符。"
+        },
+        "buffer_intermediate_messages": {
+          "description": "合并 Agent 中间消息",
+          "hint": "开启后，非流式模式下多步工具调用过程中产生的中间文本将缓冲，待 Agent 完成后合并为一条回复发送。"
         },
         "sanitize_context_by_modalities": {
           "description": "按模型能力清理历史上下文",
@@ -378,7 +414,7 @@
       },
       "appid": {
         "description": "appid",
-        "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。"
+        "hint": "必填项。当前消息平台的 AppID。如何获取请参考对应平台接入文档。"
       },
       "callback_server_host": {
         "description": "回调服务器主机",
@@ -391,6 +427,10 @@
       "discord_activity_name": {
         "description": "Discord 活动名称",
         "hint": "可选的 Discord 活动名称。留空则不设置活动。"
+      },
+      "discord_allow_bot_messages": {
+        "description": "允许接收机器人消息",
+        "hint": "启用后，AstrBot 将接收来自其他 Discord 机器人的消息。适用于机器人间通信场景（如消息转发）。默认关闭。"
       },
       "discord_command_register": {
         "description": "注册 Discord 指令",
@@ -426,10 +466,6 @@
       "kf_name": {
         "description": "微信客服账号名",
         "hint": "如果填写此项，即代表你将使用企业微信客服，而不是企业微信应用。可在 https://kf.weixin.qq.com/kf/frame#/accounts 获取。"
-      },
-      "lark_bot_name": {
-        "description": "飞书机器人的名字",
-        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。"
       },
       "lark_connection_mode": {
         "description": "订阅方式",
@@ -579,7 +615,7 @@
       },
       "unified_webhook_mode": {
         "description": "统一 Webhook 模式",
-        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。"
+        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/v1/webhooks/platforms/{webhook_uuid}。"
       },
       "webhook_uuid": {
         "description": "Webhook UUID",
@@ -751,7 +787,7 @@
       },
       "disable_builtin_commands": {
         "description": "禁用自带指令",
-        "hint": "禁用所有 AstrBot 自带指令,如 help, provider, model 等"
+        "hint": "禁用所有 AstrBot 自带指令,如 help, sid, new 等"
       }
     },
     "whitelist": {
@@ -1045,7 +1081,29 @@
         "description": "对外可达的回调接口地址",
         "hint": "外部服务可能会通过 AstrBot 生成的回调链接(如文件下载链接)访问 AstrBot 后端。由于 AstrBot 无法自动判断部署环境中对外可达的主机地址(host),因此需要通过此配置项显式指定外部服务如何访问 AstrBot 的地址。如 [http://localhost:6185](http://localhost:6185),[https://example.com](https://example.com) 等。"
       },
+      "disable_metrics": {
+        "description": "禁用匿名使用统计",
+        "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。"
+      },
       "dashboard": {
+        "trust_proxy_headers": {
+          "description": "信任代理请求头获取客户端 IP",
+          "hint": "关闭时忽略 X-Forwarded-For/X-Real-IP，仅使用连接地址。"
+        },
+        "auth_rate_limit": {
+          "enable": {
+            "description": "启用登录验证速率限制",
+            "hint": "关闭后将不对登录、TOTP 等身份验证接口进行速率限制。"
+          },
+          "average_interval": {
+            "description": "验证端点速率限制平均间隔(秒)",
+            "hint": "两次身份验证请求之间的最小平均间隔时间。例如设置为 1.0 表示每秒最多处理 1 个请求。"
+          },
+          "max_burst": {
+            "description": "验证端点速率限制最大突发数",
+            "hint": "允许的瞬时最大突发请求数。例如设置为 3 表示在短时间内最多连续处理 3 个请求。"
+          }
+        },
         "ssl": {
           "enable": {
             "description": "启用 WebUI HTTPS",
@@ -1063,6 +1121,52 @@
             "description": "SSL CA 证书文件路径",
             "hint": "可选。用于指定 CA 证书文件路径。"
           }
+        },
+        "totp": {
+          "enable": {
+            "description": "启用 WebUI TOTP 双因素认证",
+            "hint": "启用后，登录 WebUI 需要额外输入验证码。"
+          },
+          "manage": "管理",
+          "configuration": "TOTP",
+          "statusPending": "需完成设置",
+          "statusEnabled": "已启用",
+          "setupRequiredHint": "TOTP 已开启但尚未完成配置，请点击“管理”完成初始化。",
+          "setupTitle": "设置 TOTP",
+          "setupSubtitle": "请使用认证器应用扫描二维码，然后输入验证码。",
+          "setupConfirm": "验证并继续",
+          "activeSubtitle": "可使用此二维码和密钥添加新的认证器设备。",
+          "rotateTitle": "更换 TOTP 密钥",
+          "rotateSubtitle": "生成新密钥并完成验证后，将替换当前密钥。",
+          "rotate": "更换密钥",
+          "rotateRecovery": "更换恢复码",
+          "rotateConfirm": "确认更换",
+          "rotateCancel": "取消",
+          "rotateCode": "验证码",
+          "rotateCodeHint": "输入认证器应用中的验证码以确认新密钥。",
+          "rotateError": "验证码无效，请重试。",
+          "recoveryTitle": "恢复码",
+          "recoverySubtitle": "恢复码仅展示一次，请在继续前妥善保存。",
+          "recoveryWarning": "若恢复码丢失将无法通过常规途径恢复账户访问权限。",
+          "recoveryAcknowledge": "我已保存恢复码",
+          "recoveryClose": "完成",
+          "disableTitle": "关闭 TOTP",
+          "disableSubtitle": "输入验证码以确认关闭双因素认证。",
+          "disableRecoverySubtitle": "输入恢复码以确认关闭双因素认证。",
+          "disableCode": "验证码",
+          "disableRecoveryCode": "恢复码",
+          "disableConfirm": "确认关闭",
+          "disableCancel": "取消",
+          "disableError": "验证失败，请重试。",
+          "disableUseRecovery": "无法使用TOTP?",
+          "disableUseCode": "使用验证码",
+          "configSaveTitle": "两步验证",
+          "configSaveSubtitle": "输入验证码以更改受保护的配置。",
+          "configSaveRotationHint": "轮换 TOTP 密钥时，轮换前和轮换后的验证码均可用（仅轮换操作中单次允许）。",
+          "configSaveCode": "验证码",
+          "configSaveConfirm": "继续",
+          "configSaveCancel": "取消",
+          "configSaveError": "验证失败，请重试。"
         }
       },
       "timezone": {
@@ -1115,22 +1219,22 @@
         "hint": "仅在使用 qwen3-rerank 模型时生效。建议使用英文撰写。"
       },
       "nvidia_rerank_api_base": {
-          "description": "API Base URL"
+        "description": "API Base URL"
       },
       "nvidia_rerank_api_key": {
-          "description": "API Key"
+        "description": "API Key"
       },
       "nvidia_rerank_model": {
-          "description": "重排序模型名称",
-          "hint": "请参照NVIDIA Docs中模型名称填写。"
+        "description": "重排序模型名称",
+        "hint": "请参照NVIDIA Docs中模型名称填写。"
       },
       "nvidia_rerank_model_endpoint": {
-          "description": "自定义模型端点",
-          "hint": "自定义URL末尾端点，默认为 /reranking"
+        "description": "自定义模型端点",
+        "hint": "自定义URL末尾端点，默认为 /reranking"
       },
       "nvidia_rerank_truncate": {
-          "description": "文本截断策略",
-          "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
+        "description": "文本截断策略",
+        "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
       },
       "launch_model_if_not_running": {
         "description": "模型未运行时自动启动",
@@ -1138,7 +1242,7 @@
       },
       "modalities": {
         "description": "模型能力",
-        "hint": "模型支持的模态。如所填写的模型不支持图像，请取消勾选图像。",
+        "hint": "模型支持的模态及能力。",
         "labels": [
           "文本",
           "图像",
@@ -1147,7 +1251,7 @@
         ]
       },
       "custom_headers": {
-        "description": "自定义添加请求头",
+        "description": "自定义请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
       },
       "ollama_disable_thinking": {
@@ -1156,7 +1260,7 @@
       },
       "custom_extra_body": {
         "description": "自定义请求体参数",
-        "hint": "用于在请求时添加额外的参数，如 temperature、top_p、max_tokens 等。",
+        "hint": "用于在请求时添加额外的参数，如 temperature, top_p, max_tokens, reasoning_effort 等。",
         "template_schema": {
           "temperature": {
             "description": "温度参数",
@@ -1169,8 +1273,8 @@
             "name": "Top-p"
           },
           "max_tokens": {
-            "description": "最大令牌数",
-            "hint": "生成的最大令牌数。",
+            "description": "最大词元（Tokens）数",
+            "hint": "生成的最大词元（Tokens）数。",
             "name": "Max Tokens"
           }
         }
@@ -1488,6 +1592,30 @@
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
       },
+      "elevenlabs-tts-voice-id": {
+        "description": "音色 ID",
+        "hint": "ElevenLabs 音色 ID。可在 https://elevenlabs.io/app/voice-library 浏览并复制音色 ID。默认 'JBFqnCBsd6RMkjVDRZzb'（George）。"
+      },
+      "elevenlabs-tts-output-format": {
+        "description": "输出格式",
+        "hint": "音频输出格式，例如 'mp3_44100_128'、'mp3_22050_32'、'wav_44100'、'opus_48000_128'。不支持裸 PCM/u-law/a-law 格式。默认 'mp3_44100_128'。"
+      },
+      "elevenlabs-tts-stability": {
+        "description": "稳定性",
+        "hint": "音色稳定性，范围 [0, 1]。值越高越稳定，越低越富有表现力。留空则使用服务端默认值。"
+      },
+      "elevenlabs-tts-similarity-boost": {
+        "description": "相似度增强",
+        "hint": "输出与原始音色的接近程度，范围 [0, 1]。留空则使用服务端默认值。"
+      },
+      "elevenlabs-tts-style": {
+        "description": "风格夸张度",
+        "hint": "音色风格的夸张程度，范围 [0, 1]。值越高延迟越大。留空则使用服务端默认值。"
+      },
+      "elevenlabs-tts-use-speaker-boost": {
+        "description": "说话人增强",
+        "hint": "增强与原始说话人的相似度，可能略微增加延迟。"
+      },
       "mimo-tts-voice": {
         "description": "音色",
         "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。"
@@ -1552,7 +1680,7 @@
       },
       "max_context_tokens": {
         "description": "模型上下文窗口大小",
-        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有），也可手动修改。"
+        "hint": "模型最大上下文 Token 大小。如果为 0，则会自动从模型元数据填充（如有）。"
       },
       "dify_api_key": {
         "description": "API Key",
@@ -1600,26 +1728,26 @@
       },
       "deerflow_assistant_id": {
         "description": "Assistant ID",
-        "hint": "LangGraph assistant_id，默认为 lead_agent。"
+        "hint": "DeerFlow 2.0 LangGraph assistant_id，默认为 lead_agent。"
       },
       "deerflow_model_name": {
         "description": "模型名称覆盖",
-        "hint": "可选。覆盖 DeerFlow 默认模型（对应 runtime context 的 model_name）。"
+        "hint": "可选。覆盖 DeerFlow 默认模型（对应运行时 configurable 的 model_name）。"
       },
       "deerflow_thinking_enabled": {
         "description": "启用思考模式"
       },
       "deerflow_plan_mode": {
         "description": "启用计划模式",
-        "hint": "对应 DeerFlow 的 is_plan_mode。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 is_plan_mode。"
       },
       "deerflow_subagent_enabled": {
         "description": "启用子智能体",
-        "hint": "对应 DeerFlow 的 subagent_enabled。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 subagent_enabled。"
       },
       "deerflow_max_concurrent_subagents": {
         "description": "子智能体最大并发数",
-        "hint": "对应 DeerFlow 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
+        "hint": "对应 DeerFlow 2.0 运行时 configurable 的 max_concurrent_subagents。仅在启用子智能体时生效，默认 3。"
       },
       "deerflow_recursion_limit": {
         "description": "递归深度上限",

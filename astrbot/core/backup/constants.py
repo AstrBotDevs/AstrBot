@@ -18,6 +18,7 @@ from astrbot.core.db.po import (
     PlatformStat,
     Preference,
     SessionProjectRelation,
+    WebChatThread,
 )
 from astrbot.core.knowledge_base.models import (
     KBDocument,
@@ -28,6 +29,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_config_path,
     get_astrbot_plugin_data_path,
     get_astrbot_plugin_path,
+    get_astrbot_skills_path,
     get_astrbot_t2i_templates_path,
     get_astrbot_temp_path,
     get_astrbot_webchat_path,
@@ -46,6 +48,7 @@ MAIN_DB_MODELS: dict[str, type[SQLModel]] = {
     "preferences": Preference,
     "platform_message_history": PlatformMessageHistory,
     "platform_sessions": PlatformSession,
+    "webchat_threads": WebChatThread,
     "chatui_projects": ChatUIProject,
     "session_project_relations": SessionProjectRelation,
     "attachments": Attachment,
@@ -76,6 +79,7 @@ def get_backup_directories() -> dict[str, str]:
         "t2i_templates": get_astrbot_t2i_templates_path(),  # T2I 模板
         "webchat": get_astrbot_webchat_path(),  # WebChat 数据
         "temp": get_astrbot_temp_path(),  # 临时文件
+        "skills": get_astrbot_skills_path(),  # Skills
     }
 
 

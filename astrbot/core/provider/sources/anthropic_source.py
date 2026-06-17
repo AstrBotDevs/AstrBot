@@ -1,7 +1,7 @@
 import base64
 import json
 from collections.abc import AsyncGenerator
-from typing import Literal
+from typing import Any, Literal
 
 import anthropic
 import httpx
@@ -16,8 +16,12 @@ from astrbot.core.agent.message import AudioURLPart, ContentPart, ImageURLPart, 
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, TokenUsage
 from astrbot.core.provider.func_tool_manager import ToolSet
-from astrbot.core.utils.io import download_image_by_url
+from astrbot.core.utils.media_utils import (
+    describe_media_ref,
+    resolve_media_ref_to_base64_data,
+)
 from astrbot.core.utils.network_utils import (
+    create_proxy_client,
     is_connection_error,
     log_connection_failure,
 )
@@ -38,7 +42,7 @@ class ProviderAnthropic(Provider):
         stop_reason: str | None = None,
     ) -> None:
         has_text_output = bool((llm_response.completion_text or "").strip())
-        has_reasoning_output = bool(llm_response.reasoning_content.strip())
+        has_reasoning_output = bool((llm_response.reasoning_content or "").strip())
         has_tool_output = bool(llm_response.tools_call_args)
         if has_text_output or has_reasoning_output or has_tool_output:
             return
@@ -103,18 +107,36 @@ class ProviderAnthropic(Provider):
             api_key=self.chosen_api_key,
             timeout=self.timeout,
             base_url=self.base_url,
+            default_headers=self.custom_headers,
             http_client=self._create_http_client(provider_config),
         )
 
     def _create_http_client(self, provider_config: dict) -> httpx.AsyncClient | None:
-        """创建带代理的 HTTP 客户端"""
+        """Create an HTTP client with optional proxy and system SSL trust store.
+
+        The Anthropic SDK validates ``http_client`` with
+        ``isinstance(..., httpx.AsyncClient)`` against its own ``httpx`` import.
+        When multiple ``httpx`` installations are present on ``sys.path``
+        (e.g. bundled Python + system Python), constructing the client from a
+        different ``httpx`` module makes that check fail. We therefore prefer
+        the SDK's own ``httpx`` module when available.
+        """
         proxy = provider_config.get("proxy", "")
-        if proxy:
-            logger.info(f"[Anthropic] 使用代理: {proxy}")
-            return httpx.AsyncClient(proxy=proxy, headers=self.custom_headers)
-        if self.custom_headers:
-            return httpx.AsyncClient(headers=self.custom_headers)
-        return None
+        if not proxy:
+            return None
+        httpx_module: Any = httpx
+        try:
+            from anthropic import _base_client as anthropic_base_client
+
+            httpx_module = getattr(anthropic_base_client, "httpx", httpx)
+        except ImportError:
+            pass
+        return create_proxy_client(
+            "Anthropic",
+            proxy,
+            headers=self.custom_headers,
+            httpx_module=httpx_module,
+        )
 
     def _apply_thinking_config(self, payloads: dict) -> None:
         thinking_type = self.thinking_config.get("type", "")
@@ -196,18 +218,36 @@ class ProviderAnthropic(Provider):
                     },
                 )
             elif message["role"] == "tool":
-                new_messages.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": message["tool_call_id"],
-                                "content": message["content"] or "<empty response>",
-                            },
-                        ],
-                    },
+                tool_result_block = {
+                    "type": "tool_result",
+                    "tool_use_id": message["tool_call_id"],
+                    "content": message["content"] or "<empty response>",
+                }
+                last_message = new_messages[-1] if new_messages else None
+                last_content = (
+                    last_message.get("content")
+                    if isinstance(last_message, dict)
+                    else None
                 )
+
+                if (
+                    last_message is not None
+                    and last_message.get("role") == "user"
+                    and isinstance(last_content, list)
+                    and len(last_content) > 0
+                    and all(
+                        isinstance(block, dict) and block.get("type") == "tool_result"
+                        for block in last_content
+                    )
+                ):
+                    last_content.append(tool_result_block)
+                else:
+                    new_messages.append(
+                        {
+                            "role": "user",
+                            "content": [tool_result_block],
+                        },
+                    )
             elif message["role"] == "user":
                 if isinstance(message.get("content"), list):
                     converted_content = []
@@ -264,12 +304,14 @@ class ProviderAnthropic(Provider):
 
         return system_prompt, new_messages
 
-    def _extract_usage(self, usage: Usage) -> TokenUsage:
+    def _extract_usage(self, usage: Usage | None) -> TokenUsage:
+        if usage is None:
+            return TokenUsage()
         # https://docs.claude.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
         return TokenUsage(
             input_other=usage.input_tokens or 0,
             input_cached=usage.cache_read_input_tokens or 0,
-            output=usage.output_tokens,
+            output=usage.output_tokens or 0,
         )
 
     def _update_usage(self, token_usage: TokenUsage, usage: MessageDeltaUsage) -> None:
@@ -280,20 +322,49 @@ class ProviderAnthropic(Provider):
         if usage.output_tokens is not None:
             token_usage.output = usage.output_tokens
 
+    @staticmethod
+    def _normalize_tool_choice(tool_choice) -> dict:
+        """将 tool_choice 转换为 Anthropic API 要求的格式
+
+        参考: https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools#controlling-claudes-output
+
+        Args:
+            tool_choice: 原始 tool_choice 值，支持 str 或 dict
+
+        Returns:
+            Anthropic API 格式的 tool_choice 字典
+        """
+        if isinstance(tool_choice, dict):
+            return tool_choice
+
+        if tool_choice == "required":
+            # 兼容 OpenAI 命名：required → any
+            return {"type": "any"}
+
+        if tool_choice in ("auto", "any", "none"):
+            return {"type": tool_choice}
+
+        if tool_choice == "tool":
+            # {"type": "tool"} 必须配合 name 字段指定具体工具
+            # 纯字符串 "tool" 无法指定工具名，回退为 auto
+            logger.warning("tool_choice='tool' 无法指定工具名，已回退为 'auto'")
+            return {"type": "auto"}
+
+        logger.warning(f"未知的 tool_choice 值: {tool_choice}，已回退为 'auto'")
+        return {"type": "auto"}
+
     async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
-                payloads["tool_choice"] = {
-                    "type": "any"
-                    if payloads.get("tool_choice") == "required"
-                    else "auto"
-                }
+                payloads["tool_choice"] = self._normalize_tool_choice(
+                    payloads.get("tool_choice", "auto")
+                )
 
         extra_body = self.provider_config.get("custom_extra_body", {})
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 1024
+            payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
 
         try:
@@ -371,11 +442,9 @@ class ProviderAnthropic(Provider):
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
-                payloads["tool_choice"] = {
-                    "type": "any"
-                    if payloads.get("tool_choice") == "required"
-                    else "auto"
-                }
+                payloads["tool_choice"] = self._normalize_tool_choice(
+                    payloads.get("tool_choice", "auto")
+                )
 
         # 用于累积工具调用信息
         tool_use_buffer = {}
@@ -389,7 +458,7 @@ class ProviderAnthropic(Provider):
         reasoning_signature = ""
 
         if "max_tokens" not in payloads:
-            payloads["max_tokens"] = 1024
+            payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
 
         async with self.client.messages.stream(
@@ -531,7 +600,7 @@ class ProviderAnthropic(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
-        tool_choice: Literal["auto", "required"] = "auto",
+        tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -560,8 +629,8 @@ class ProviderAnthropic(Provider):
             if not isinstance(tool_calls_result, list):
                 context_query.extend(tool_calls_result.to_openai_messages())
             else:
-                for tcr in tool_calls_result:
-                    context_query.extend(tcr.to_openai_messages())
+                for tool_call_result in tool_calls_result:
+                    context_query.extend(tool_call_result.to_openai_messages())
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
@@ -573,7 +642,11 @@ class ProviderAnthropic(Provider):
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
-            payloads["system"] = system_prompt
+            payloads["system"] = (
+                [{"type": "text", "text": system_prompt}]
+                if isinstance(system_prompt, str)
+                else system_prompt
+            )
 
         llm_response = None
         try:
@@ -595,7 +668,7 @@ class ProviderAnthropic(Provider):
         tool_calls_result=None,
         model=None,
         extra_user_content_parts=None,
-        tool_choice: Literal["auto", "required"] = "auto",
+        tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
         **kwargs,
     ):
         if contexts is None:
@@ -623,8 +696,8 @@ class ProviderAnthropic(Provider):
             if not isinstance(tool_calls_result, list):
                 context_query.extend(tool_calls_result.to_openai_messages())
             else:
-                for tcr in tool_calls_result:
-                    context_query.extend(tcr.to_openai_messages())
+                for tool_call_result in tool_calls_result:
+                    context_query.extend(tool_call_result.to_openai_messages())
 
         system_prompt, new_messages = self._prepare_payload(context_query)
 
@@ -636,7 +709,11 @@ class ProviderAnthropic(Provider):
 
         # Anthropic has a different way of handling system prompts
         if system_prompt:
-            payloads["system"] = system_prompt
+            payloads["system"] = (
+                [{"type": "text", "text": system_prompt}]
+                if isinstance(system_prompt, str)
+                else system_prompt
+            )
 
         async for llm_response in self._query_stream(payloads, func_tool):
             yield llm_response
@@ -663,29 +740,20 @@ class ProviderAnthropic(Provider):
         """组装上下文，支持文本和图片"""
 
         async def resolve_image_url(image_url: str) -> dict | None:
-            if image_url.startswith("http"):
-                image_path = await download_image_by_url(image_url)
-                image_data, mime_type = await self.encode_image_bs64(image_path)
-            elif image_url.startswith("file:///"):
-                image_path = image_url.replace("file:///", "")
-                image_data, mime_type = await self.encode_image_bs64(image_path)
-            else:
-                image_data, mime_type = await self.encode_image_bs64(image_url)
-
+            image_data = await resolve_media_ref_to_base64_data(
+                image_url,
+                media_type="image",
+            )
             if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                logger.warning("图片预处理结果为空，将忽略。")
                 return None
 
             return {
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "media_type": mime_type,
-                    "data": (
-                        image_data.split("base64,")[1]
-                        if "base64," in image_data
-                        else image_data
-                    ),
+                    "media_type": image_data.mime_type,
+                    "data": image_data.base64_data,
                 },
             }
 
@@ -743,20 +811,16 @@ class ProviderAnthropic(Provider):
 
     async def encode_image_bs64(self, image_url: str) -> tuple[str, str]:
         """将图片转换为 base64，同时检测实际 MIME 类型"""
-        if image_url.startswith("base64://"):
-            raw_base64 = image_url.replace("base64://", "")
-            try:
-                image_bytes = base64.b64decode(raw_base64)
-                mime_type = self._detect_image_mime_type(image_bytes)
-            except Exception:
-                mime_type = "image/jpeg"
-            return f"data:{mime_type};base64,{raw_base64}", mime_type
-        with open(image_url, "rb") as f:
-            image_bytes = f.read()
-            mime_type = self._detect_image_mime_type(image_bytes)
-            image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
-            return f"data:{mime_type};base64,{image_bs64}", mime_type
-        return "", "image/jpeg"
+        image_data = await resolve_media_ref_to_base64_data(
+            image_url,
+            media_type="image",
+            strict=True,
+        )
+        if image_data is None:
+            raise RuntimeError(
+                f"Failed to encode image data: {describe_media_ref(image_url)}"
+            )
+        return image_data.to_data_url(), image_data.mime_type
 
     def get_current_key(self) -> str:
         return self.chosen_api_key

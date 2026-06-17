@@ -363,6 +363,16 @@ class ProviderManager:
                 )
             case "longcat_chat_completion":
                 from .sources.longcat_source import ProviderLongCat as ProviderLongCat
+            case "minimax_token_plan":
+                from .sources.minimax_token_plan_source import (
+                    ProviderMiniMaxTokenPlan as ProviderMiniMaxTokenPlan,
+                )
+            case "xiaomi_chat_completion":
+                from .sources.xiaomi_source import ProviderXiaomi as ProviderXiaomi
+            case "xiaomi_token_plan":
+                from .sources.xiaomi_token_plan_source import (
+                    ProviderXiaomiTokenPlan as ProviderXiaomiTokenPlan,
+                )
             case "zhipu_chat_completion":
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
@@ -457,6 +467,10 @@ class ProviderManager:
                 from .sources.gemini_tts_source import (
                     ProviderGeminiTTSAPI as ProviderGeminiTTSAPI,
                 )
+            case "elevenlabs_tts_api":
+                from .sources.elevenlabs_tts_source import (
+                    ProviderElevenLabsTTSAPI as ProviderElevenLabsTTSAPI,
+                )
             case "openai_embedding":
                 from .sources.openai_embedding_source import (
                     OpenAIEmbeddingProvider as OpenAIEmbeddingProvider,
@@ -464,6 +478,14 @@ class ProviderManager:
             case "gemini_embedding":
                 from .sources.gemini_embedding_source import (
                     GeminiEmbeddingProvider as GeminiEmbeddingProvider,
+                )
+            case "nvidia_embedding":
+                from .sources.nvidia_embedding_source import (
+                    NvidiaEmbeddingProvider as NvidiaEmbeddingProvider,
+                )
+            case "ollama_embedding":
+                from .sources.ollama_embedding_source import (
+                    OllamaEmbeddingProvider as OllamaEmbeddingProvider,
                 )
             case "vllm_rerank":
                 from .sources.vllm_rerank_source import (
@@ -504,6 +526,26 @@ class ProviderManager:
                 merged_config["id"] = pc["id"]
                 pc = merged_config
         return pc
+
+    def get_provider_config_by_id(
+        self,
+        provider_id: str,
+        *,
+        merged: bool = False,
+    ) -> dict | None:
+        """Get a provider config by id.
+
+        Args:
+            provider_id: Provider id to resolve.
+            merged: Whether to merge provider_source config into the provider config.
+        """
+        for provider_config in self.providers_config:
+            if provider_config.get("id") != provider_id:
+                continue
+            if merged:
+                return self.get_merged_provider_config(provider_config)
+            return copy.deepcopy(provider_config)
+        return None
 
     def _resolve_env_key_list(self, provider_config: dict) -> dict:
         keys = provider_config.get("key", [])
@@ -546,7 +588,9 @@ class ProviderManager:
             return
 
         logger.info(
-            f"载入 {provider_config['type']}({provider_config['id']}) 服务提供商 ...",
+            "Loading model %s(%s) ...",
+            provider_config["type"],
+            provider_config["id"],
         )
 
         # 动态导入
@@ -567,7 +611,7 @@ class ProviderManager:
 
         if provider_config["type"] not in provider_cls_map:
             logger.error(
-                f"未找到适用于 {provider_config['type']}({provider_config['id']}) 的提供商适配器，请检查是否已经安装或者名称填写错误。已跳过。",
+                f"Provider adapter not found: {provider_config['type']}({provider_config['id']}). Skipped.",
                 exc_info=True,
             )
             return
@@ -601,7 +645,7 @@ class ProviderManager:
                     ):
                         self.curr_stt_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前语音转文本提供商适配器。",
+                            f"Selected {provider_config['type']}({provider_config['id']}) as default STT provider",
                         )
                     if not self.curr_stt_provider_inst:
                         self.curr_stt_provider_inst = inst
@@ -624,7 +668,7 @@ class ProviderManager:
                     ):
                         self.curr_tts_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前文本转语音提供商适配器。",
+                            f"Selected {provider_config['type']}({provider_config['id']}) as default TTS provider",
                         )
                     if not self.curr_tts_provider_inst:
                         self.curr_tts_provider_inst = inst
@@ -650,7 +694,7 @@ class ProviderManager:
                     ):
                         self.curr_provider_inst = inst
                         logger.info(
-                            f"已选择 {provider_config['type']}({provider_config['id']}) 作为当前提供商适配器。",
+                            f"Selected {provider_config['type']}({provider_config['id']}) as default chat model provider",
                         )
                     if not self.curr_provider_inst:
                         self.curr_provider_inst = inst

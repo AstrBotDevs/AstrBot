@@ -16,6 +16,7 @@ import yaml
 
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
+    get_astrbot_plugin_path,
     get_astrbot_skills_path,
     get_astrbot_temp_path,
 )
@@ -64,7 +65,11 @@ def _is_ignored_zip_entry(name: str) -> bool:
     return parts[0] == "__MACOSX"
 
 
-def _normalize_skill_markdown_path(skill_dir: Path) -> Path | None:
+def _normalize_skill_markdown_path(
+    skill_dir: Path,
+    *,
+    rename_legacy: bool = True,
+) -> Path | None:
     """Return the canonical `SKILL.md` path for a skill directory.
 
     If only legacy `skill.md` exists, it is renamed to `SKILL.md` in-place.
@@ -79,6 +84,8 @@ def _normalize_skill_markdown_path(skill_dir: Path) -> Path | None:
     if "skill.md" not in entries:
         return None
     try:
+        if not rename_legacy:
+            return legacy
         tmp = skill_dir / f".{uuid.uuid4().hex}.tmp_skill_md"
         legacy.rename(tmp)
         tmp.rename(canonical)
@@ -97,6 +104,8 @@ class SkillInfo:
     source_label: str = "local"
     local_exists: bool = True
     sandbox_exists: bool = False
+    plugin_name: str = ""
+    readonly: bool = False
 
 
 def _parse_frontmatter_description(text: str) -> str:
@@ -274,12 +283,59 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
 
 
 class SkillManager:
-    def __init__(self, skills_root: str | None = None) -> None:
+    def __init__(
+        self,
+        skills_root: str | None = None,
+        plugins_root: str | None = None,
+    ) -> None:
         self.skills_root = skills_root or get_astrbot_skills_path()
+        self.plugins_root = plugins_root or get_astrbot_plugin_path()
         data_path = Path(get_astrbot_data_path())
         self.config_path = str(data_path / SKILLS_CONFIG_FILENAME)
         self.sandbox_skills_cache_path = str(data_path / SANDBOX_SKILLS_CACHE_FILENAME)
         os.makedirs(self.skills_root, exist_ok=True)
+
+    def _iter_plugin_skill_dirs(self) -> list[tuple[str, str, Path]]:
+        """Return plugin-provided skill directories as (skill, plugin, dir)."""
+        plugins_root = Path(self.plugins_root)
+        if not plugins_root.is_dir():
+            return []
+
+        result: list[tuple[str, str, Path]] = []
+        for plugin_dir in sorted(plugins_root.iterdir(), key=lambda item: item.name):
+            if not plugin_dir.is_dir():
+                continue
+            plugin_name = plugin_dir.name
+            skills_dir = plugin_dir / "skills"
+            if not skills_dir.is_dir():
+                continue
+
+            direct_skill_md = _normalize_skill_markdown_path(
+                skills_dir,
+                rename_legacy=False,
+            )
+            if direct_skill_md is not None and _SKILL_NAME_RE.match(plugin_name):
+                result.append((plugin_name, plugin_name, skills_dir))
+
+            for skill_dir in sorted(skills_dir.iterdir(), key=lambda item: item.name):
+                if not skill_dir.is_dir():
+                    continue
+                skill_name = skill_dir.name
+                if not _SKILL_NAME_RE.match(skill_name):
+                    continue
+                if (
+                    _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
+                    is None
+                ):
+                    continue
+                result.append((skill_name, plugin_name, skill_dir))
+        return result
+
+    def _get_plugin_skill_dir(self, name: str) -> Path | None:
+        for skill_name, _plugin_name, skill_dir in self._iter_plugin_skill_dirs():
+            if skill_name == name:
+                return skill_dir
+        return None
 
     def _load_config(self) -> dict:
         if not os.path.exists(self.config_path):
@@ -430,6 +486,46 @@ class SkillManager:
                 sandbox_exists=sandbox_exists,
             )
 
+        for skill_name, plugin_name, skill_dir in self._iter_plugin_skill_dirs():
+            if skill_name in skills_by_name:
+                continue
+            skill_md = _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
+            if skill_md is None:
+                continue
+            active = skill_configs.get(skill_name, {}).get("active", True)
+            if skill_name not in skill_configs:
+                skill_configs[skill_name] = {"active": active}
+                modified = True
+            if active_only and not active:
+                continue
+            description = ""
+            try:
+                content = skill_md.read_text(encoding="utf-8")
+                description = _parse_frontmatter_description(content)
+            except Exception:
+                description = ""
+            sandbox_exists = (
+                runtime == "sandbox" and skill_name in sandbox_cached_descriptions
+            )
+            if runtime == "sandbox" and show_sandbox_path:
+                path_str = sandbox_cached_paths.get(
+                    skill_name
+                ) or _default_sandbox_skill_path(skill_name)
+            else:
+                path_str = str(skill_md)
+            skills_by_name[skill_name] = SkillInfo(
+                name=skill_name,
+                description=description,
+                path=path_str.replace("\\", "/"),
+                active=active,
+                source_type="plugin",
+                source_label=plugin_name,
+                local_exists=True,
+                sandbox_exists=sandbox_exists,
+                plugin_name=plugin_name,
+                readonly=True,
+            )
+
         if runtime == "sandbox":
             cache = self._load_sandbox_skills_cache()
             for item in cache.get("skills", []):
@@ -488,6 +584,9 @@ class SkillManager:
                 return True
         return False
 
+    def is_plugin_skill(self, name: str) -> bool:
+        return self._get_plugin_skill_dir(name) is not None
+
     def set_skill_active(self, name: str, active: bool) -> None:
         if self.is_sandbox_only_skill(name):
             raise PermissionError(
@@ -520,6 +619,10 @@ class SkillManager:
         if self.is_sandbox_only_skill(name):
             raise PermissionError(
                 "Sandbox preset skill cannot be deleted from local skill management."
+            )
+        if self.is_plugin_skill(name):
+            raise PermissionError(
+                "Plugin-provided skill cannot be deleted from local skill management."
             )
 
         skill_dir = Path(self.skills_root) / name

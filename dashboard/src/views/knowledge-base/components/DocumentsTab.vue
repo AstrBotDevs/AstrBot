@@ -2,7 +2,7 @@
   <div class="documents-tab">
     <!-- 操作栏 -->
     <div class="action-bar mb-4">
-      <v-btn prepend-icon="mdi-upload" color="primary" variant="elevated" @click="showUploadDialog = true">
+      <v-btn prepend-icon="mdi-upload" color="primary" variant="outlined" @click="showUploadDialog = true">
         {{ t('documents.upload') }}
       </v-btn>
       <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :placeholder="'搜索文档...'" variant="outlined"
@@ -10,7 +10,7 @@
     </div>
 
     <!-- 文档列表 -->
-    <v-card elevation="2">
+    <v-card variant="outlined">
       <v-data-table :headers="headers" :items="documents" :loading="loading" :search="searchQuery" :items-per-page="10">
         <template #item.doc_name="{ item }">
           <div class="d-flex align-center gap-2">
@@ -65,8 +65,6 @@
           <v-btn icon="mdi-close" variant="text" @click="closeUploadDialog" />
         </v-card-title>
 
-        <v-divider />
-
         <v-tabs v-model="uploadMode" grow class="mb-4">
           <v-tab value="file">{{ t('upload.fileUpload') }}</v-tab>
           <v-tab value="url">
@@ -84,12 +82,10 @@
                 @dragover.prevent="isDragging = true" @dragleave="isDragging = false" @click="fileInput?.click()">
                 <v-icon size="64" color="primary">mdi-cloud-upload</v-icon>
                 <p class="mt-4 text-h6">{{ t('upload.dropzone') }}</p>
-                <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}.txt, .md, .pdf,
-                  .docx,
-                  .xls, .xlsx</p>
+                <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
                 <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
                 <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
-                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.xls,.xlsx"
+                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
                   @change="handleFileSelect" />
               </div>
 
@@ -195,8 +191,6 @@
 
         </v-card-text>
 
-        <v-divider />
-
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn variant="text" @click="closeUploadDialog" :disabled="uploading">
@@ -214,14 +208,12 @@
     <v-dialog v-model="showDeleteDialog" max-width="450px">
       <v-card>
         <v-card-title class="pa-4 text-h6">{{ t('documents.delete') }}</v-card-title>
-        <v-divider />
         <v-card-text class="pa-6">
           <p>{{ t('documents.deleteConfirm', { name: deleteTarget?.doc_name || '' }) }}</p>
           <v-alert type="error" variant="tonal" density="compact" class="mt-4">
             {{ t('documents.deleteWarning') }}
           </v-alert>
         </v-card-text>
-        <v-divider />
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn variant="text" @click="showDeleteDialog = false">取消</v-btn>
@@ -246,7 +238,7 @@
 import TavilyKeyDialog from './TavilyKeyDialog.vue'
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
@@ -348,9 +340,7 @@ const headers = [
 const loadDocuments = async () => {
   loading.value = true
   try {
-    const response = await axios.get('/api/kb/document/list', {
-      params: { kb_id: props.kbId }
-    })
+    const response = await knowledgeApi.documents(props.kbId)
     if (response.data.status === 'ok') {
       documents.value = response.data.data.items || []
     }
@@ -369,6 +359,7 @@ const handleFileSelect = (event: Event) => {
     const newFiles = Array.from(target.files)
     addFiles(newFiles)
   }
+  target.value = ''
 }
 
 // 添加文件（检查数量限制）
@@ -432,9 +423,7 @@ const uploadFiles = async () => {
     formData.append('tasks_limit', uploadSettings.value.tasks_limit.toString())
     formData.append('max_retries', uploadSettings.value.max_retries.toString())
 
-    const response = await axios.post('/api/kb/document/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    const response = await knowledgeApi.uploadDocument(props.kbId, formData)
 
     if (response.data.status === 'ok') {
       const result = response.data.data
@@ -511,7 +500,7 @@ const uploadFromUrl = async () => {
     }
 
 
-    const response = await axios.post('/api/kb/document/upload/url', payload)
+    const response = await knowledgeApi.importDocumentFromUrl(props.kbId, payload)
 
     if (response.data.status === 'ok') {
       const result = response.data.data
@@ -563,9 +552,7 @@ const startProgressPolling = (taskId: string) => {
 
   progressPollingInterval.value = window.setInterval(async () => {
     try {
-      const response = await axios.get('/api/kb/document/upload/progress', {
-        params: { task_id: taskId }
-      })
+      const response = await knowledgeApi.task(taskId)
 
       if (response.data.status === 'ok') {
         const data = response.data.data
@@ -692,10 +679,7 @@ const deleteDocument = async () => {
 
   deleting.value = true
   try {
-    const response = await axios.post('/api/kb/document/delete', {
-      doc_id: deleteTarget.value.doc_id,
-      kb_id: props.kbId
-    })
+    const response = await knowledgeApi.deleteDocument(props.kbId, deleteTarget.value.doc_id)
 
     if (response.data.status === 'ok') {
       showSnackbar(t('documents.deleteSuccess'))
@@ -717,6 +701,8 @@ const deleteDocument = async () => {
 const getFileIcon = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'mdi-file-pdf-box'
+  if (type.includes('epub')) return 'mdi-book-open-page-variant'
+  if (type.includes('rst') || type.includes('adoc')) return 'mdi-file-document-outline'
   if (type.includes('md') || type.includes('markdown')) return 'mdi-language-markdown'
   if (type.includes('txt')) return 'mdi-file-document-outline'
   if (type.includes('url')) return 'mdi-link-variant'
@@ -726,6 +712,8 @@ const getFileIcon = (fileType: string) => {
 const getFileColor = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'error'
+  if (type.includes('epub')) return 'warning'
+  if (type.includes('rst') || type.includes('adoc')) return 'success'
   if (type.includes('md')) return 'info'
   if (type.includes('txt')) return 'success'
   if (type.includes('url')) return 'primary'
@@ -758,9 +746,7 @@ const formatDate = (dateStr: string) => {
 // 加载LLM providers
 const loadLlmProviders = async () => {
   try {
-    const response = await axios.get('/api/config/provider/list', {
-      params: { provider_type: 'chat_completion' }
-    })
+    const response = await providerApi.listByProviderType('chat_completion')
     if (response.data.status === 'ok') {
       llmProviders.value = response.data.data
     }
@@ -773,11 +759,9 @@ const loadLlmProviders = async () => {
 const checkTavilyConfig = async () => {
   tavilyConfigStatus.value = 'loading'
   try {
-    const response = await axios.get('/api/config/abconf', {
-      params: { id: 'default' }
-    })
+    const response = await configProfileApi.get('default')
     if (response.data.status === 'ok') {
-      const config = response.data.data.config
+      const config = ((response.data.data as any).config || {}) as any
       const tavilyKeys = config?.provider_settings?.websearch_tavily_key
       if (Array.isArray(tavilyKeys) && tavilyKeys.length > 0 && tavilyKeys.some(key => key.trim() !== '')) {
         tavilyConfigStatus.value = 'configured'

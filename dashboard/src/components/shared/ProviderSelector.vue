@@ -168,7 +168,10 @@
         </v-btn>
       </div>
       <div class="provider-drawer-content">
-        <ProviderPage :default-tab="defaultTab" />
+        <ProviderChatCompletionPanel
+          v-if="defaultTab === 'chat_completion'"
+        />
+        <ProviderPage v-else :default-tab="defaultTab" />
       </div>
     </v-card>
   </v-overlay>
@@ -176,8 +179,9 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import axios from 'axios'
+import { providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
+import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue'
 import ProviderPage from '@/views/ProviderPage.vue'
 
 const props = defineProps({
@@ -259,11 +263,7 @@ async function openDialog() {
 async function loadProviders() {
   loading.value = true
   try {
-    const response = await axios.get('/api/config/provider/list', {
-      params: {
-        provider_type: props.providerType
-      }
-    })
+    const response = await providerApi.listByProviderType(props.providerType)
     if (response.data.status === 'ok') {
       const providers = response.data.data || []
       providerList.value = props.providerSubtype
@@ -425,5 +425,50 @@ function closeProviderDrawer() {
 .provider-drawer-content > * {
   height: 100%;
   overflow: auto;
+}
+
+@media (max-width: 960px) {
+  .provider-drawer-card {
+    width: calc(100dvw - 24px);
+    height: calc(100dvh - 24px);
+    margin: 12px;
+  }
+}
+
+@media (max-width: 600px) {
+  .provider-name-text {
+    max-width: 100%;
+  }
+
+  .provider-drawer-overlay {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .provider-drawer-card {
+    width: 100dvw;
+    height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .provider-drawer-header {
+    padding: 8px 12px;
+  }
+
+  .provider-drawer-content {
+    overflow: auto;
+  }
+
+  :deep(.v-overlay__content) {
+    width: 100dvw;
+    max-width: 100dvw;
+    margin: 0;
+  }
+
+  :deep(.v-dialog > .v-overlay__content) {
+    width: calc(100dvw - 24px);
+    max-width: calc(100dvw - 24px);
+  }
 }
 </style>

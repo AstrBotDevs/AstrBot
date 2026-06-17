@@ -36,6 +36,7 @@ from astrbot.core.star.filter.platform_adapter_type import (
     PlatformAdapterType,
 )
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
+from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..exceptions import ProviderNotFoundError
 from .filter.command import CommandFilter
@@ -48,15 +49,80 @@ logger = logging.getLogger("astrbot")
 if TYPE_CHECKING:
     from astrbot.core.cron.manager import CronJobManager
 
+WebApiHandler = Callable[..., Awaitable[Any]]
+RegisteredWebApi = tuple[str, WebApiHandler, list[str], str]
+_PLUGIN_MODULE_FLAGS = {"builtin_stars", "plugins"}
+
+
+def _split_module_path(module_path: Any) -> list[str]:
+    if not isinstance(module_path, str) or not module_path:
+        return []
+    return module_path.split(".")
+
+
+def _plugin_root_from_module_parts(parts: list[str]) -> tuple[str, str] | None:
+    for index, part in enumerate(parts):
+        if part in _PLUGIN_MODULE_FLAGS and index + 1 < len(parts):
+            return part, parts[index + 1]
+    return None
+
+
+def _plugin_root_from_metadata(metadata: StarMetadata) -> str | None:
+    if metadata.root_dir_name:
+        return metadata.root_dir_name
+
+    root_info = _plugin_root_from_module_parts(_split_module_path(metadata.module_path))
+    return root_info[1] if root_info else None
+
+
+def _registered_plugin_module_path(root_dir_name: str, flag: str | None) -> str | None:
+    for metadata in reversed(star_registry):
+        if not metadata.module_path:
+            continue
+        if _plugin_root_from_metadata(metadata) != root_dir_name:
+            continue
+        if flag and flag not in _split_module_path(metadata.module_path):
+            continue
+        return metadata.module_path
+    return None
+
+
+def _legacy_plugin_module_path(parts: list[str]) -> str:
+    resolved_parts = []
+    for index, part in enumerate(parts):
+        resolved_parts.append(part)
+        if part in _PLUGIN_MODULE_FLAGS and index + 1 < len(parts):
+            resolved_parts.append(parts[index + 1])
+            resolved_parts.append("main")
+            break
+    return ".".join(resolved_parts)
+
+
+def _resolve_tool_handler_module_path(tool: FunctionTool) -> str:
+    module_path = getattr(tool, "__module__", None)
+    module_parts = _split_module_path(module_path)
+    if not module_parts:
+        return module_path if isinstance(module_path, str) else ""
+
+    root_info = _plugin_root_from_module_parts(module_parts)
+    if root_info:
+        flag, root_dir_name = root_info
+        registered_module_path = _registered_plugin_module_path(root_dir_name, flag)
+        return registered_module_path or _legacy_plugin_module_path(module_parts)
+
+    registered_module_path = _registered_plugin_module_path(module_parts[0], "plugins")
+    return registered_module_path or ".".join(module_parts)
+
 
 class PlatformManagerProtocol(Protocol):
     platform_insts: list[Platform]
+    get_insts: Callable[[], list[Platform]]
 
 
 class Context:
     """暴露给插件的接口上下文。"""
 
-    registered_web_apis: list = []
+    registered_web_apis: list[RegisteredWebApi] = []
 
     # 向后兼容的变量
     _register_tasks: list[Awaitable] = []
@@ -232,6 +298,13 @@ class Context:
             for k, v in kwargs.items()
             if k not in ["stream", "agent_hooks", "agent_context"]
         }
+        if request.func_tool and request.func_tool.get_tool("astrbot_file_read_tool"):
+            other_kwargs.setdefault(
+                "tool_result_overflow_dir", get_astrbot_system_tmp_path()
+            )
+            other_kwargs.setdefault(
+                "read_tool", request.func_tool.get_tool("astrbot_file_read_tool")
+            )
 
         await agent_runner.reset(
             provider=prov,
@@ -479,16 +552,7 @@ class Context:
         module_path = ""
         for tool in tools:
             if not module_path:
-                _parts = []
-                module_part = tool.__module__.split(".")
-                flags = ["builtin_stars", "plugins"]
-                for i, part in enumerate(module_part):
-                    _parts.append(part)
-                    if part in flags and i + 1 < len(module_part):
-                        _parts.append(module_part[i + 1])
-                        module_part.append("main")
-                        break
-                tool.handler_module_path = ".".join(_parts)
+                tool.handler_module_path = _resolve_tool_handler_module_path(tool)
                 module_path = tool.handler_module_path
             else:
                 tool.handler_module_path = module_path
@@ -504,8 +568,8 @@ class Context:
     def register_web_api(
         self,
         route: str,
-        view_handler: Awaitable,
-        methods: list,
+        view_handler: WebApiHandler,
+        methods: list[str],
         desc: str,
     ) -> None:
         """注册 Web API。

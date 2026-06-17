@@ -3,7 +3,6 @@
     <v-container fluid class="stats-shell pa-4 pa-md-6">
       <div class="stats-header">
         <div>
-          <div class="eyebrow">{{ t('header.eyebrow') }}</div>
           <h1 class="stats-title">{{ t('header.title') }}</h1>
           <p class="stats-subtitle">{{ t('header.subtitle') }}</p>
         </div>
@@ -205,9 +204,9 @@
 
 <script setup lang="ts">
 import type { ApexOptions } from 'apexcharts'
-import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTheme } from 'vuetify'
+import { statsApi } from '@/api/v1'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 type TokenRange = 1 | 3 | 7
@@ -392,20 +391,12 @@ function aggregateOverflowSeries(series: ProviderTrendItem[]): ProviderTrendItem
 }
 
 async function fetchBaseStats(): Promise<void> {
-  const response = await axios.get('/api/stat/get', {
-    params: {
-      offset_sec: selectedRange.value * 24 * 60 * 60
-    }
-  })
+  const response = await statsApi.get(selectedRange.value * 24 * 60 * 60)
   baseStats.value = response.data.data
 }
 
 async function fetchProviderStats(): Promise<void> {
-  const response = await axios.get('/api/stat/provider-tokens', {
-    params: {
-      days: selectedRange.value
-    }
-  })
+  const response = await statsApi.providerTokens(selectedRange.value)
   providerStats.value = response.data.data
 }
 
@@ -723,30 +714,20 @@ onBeforeUnmount(() => {
   margin-bottom: 24px;
 }
 
-.eyebrow {
-  margin-bottom: 8px;
-  color: var(--stats-subtle);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .stats-title {
   margin: 0;
-  font-size: clamp(34px, 4vw, 46px);
-  line-height: 1.04;
+  font-size: 1.5rem;
+  line-height: 1.2;
   font-weight: 700;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
 }
 
 .stats-subtitle {
-  margin: 10px 0 0;
+  margin: 4px 0 0;
   color: var(--stats-muted);
-  font-size: 15px;
+  font-size: 0.875rem;
 }
 
-.stats-page.is-dark .eyebrow,
 .stats-page.is-dark .stats-subtitle,
 .stats-page.is-dark .metric-label,
 .stats-page.is-dark .section-subtitle,

@@ -2,30 +2,168 @@ import asyncio
 import copy
 import io
 import os
+import re
+import shutil
 import sys
 import uuid
 import zipfile
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
+import pyotp
 import pytest
 import pytest_asyncio
-from quart import Quart
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
-from astrbot.core.star.star import star_registry
+from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
+from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
+    hash_md5_dashboard_password,
+    verify_dashboard_password,
+)
 from astrbot.core.utils.pip_installer import PipInstallError
-from astrbot.dashboard.routes.plugin import PluginRoute
+from astrbot.core.utils.totp import (
+    TOTP_TRUSTED_DEVICE_COOKIE_NAME,
+    generate_recovery_code,
+)
+from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter, jsonify
+from astrbot.dashboard.password_state import (
+    get_dashboard_password_hash,
+    is_password_change_required,
+    is_password_storage_upgraded,
+    set_password_change_required,
+    set_password_storage_upgraded,
+)
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
+from astrbot.dashboard.services.plugin_page_service import PluginPageService
+from astrbot.dashboard.services.plugin_service import PluginService
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
     create_mock_updater_update,
 )
+
+_TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
+PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
+PLUGIN_PAGE_DEMO_PAGE_NAME = "bridge-demo"
+
+
+def _removed_md5_hint_alias_key() -> str:
+    return "le" + "gacy_pwd_hint"
+
+
+def _strip_query(url: str) -> str:
+    parsed = urlsplit(url)
+    return urlunsplit(("", "", parsed.path, "", parsed.fragment))
+
+
+def _assert_cookie_samesite_strict(cookie_header: str) -> None:
+    """Assert that a cookie header carries a strict SameSite attribute.
+
+    Args:
+        cookie_header: The raw Set-Cookie header value to inspect.
+    """
+    assert "samesite=strict" in cookie_header.lower()
+
+
+@pytest.fixture
+def registered_plugin_page(core_lifecycle_td: AstrBotCoreLifecycle, monkeypatch):
+    plugin_root = (
+        Path(core_lifecycle_td.plugin_manager.plugin_store_path) / PLUGIN_PAGE_DEMO_NAME
+    )
+    page_root = plugin_root / "pages" / PLUGIN_PAGE_DEMO_PAGE_NAME
+    i18n_root = plugin_root / ".astrbot-plugin" / "i18n"
+    shared_root = page_root / "shared"
+    images_root = page_root / "images"
+    shared_root.mkdir(parents=True, exist_ok=True)
+    images_root.mkdir(parents=True, exist_ok=True)
+    i18n_root.mkdir(parents=True, exist_ok=True)
+
+    (page_root / "index.html").write_text(
+        """
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Plugin Page Demo</title>
+    <link rel="stylesheet" href="shared/base.css" />
+  </head>
+  <body>
+    <h1>Single plugin Page with internal navigation</h1>
+    <div id="app"></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
+""".strip(),
+        encoding="utf-8",
+    )
+    (page_root / "app.js").write_text(
+        """
+import React from "react";
+import "./shared/common.js";
+
+function renderTabs() {
+  return ["dashboard", "settings"];
+}
+
+window.renderTabs = renderTabs;
+""".strip(),
+        encoding="utf-8",
+    )
+    (shared_root / "common.js").write_text(
+        "window.__pluginCommonLoaded = true;\n", encoding="utf-8"
+    )
+    (shared_root / "base.css").write_text(
+        'body { background-image: url("../images/logo.svg"); }\n',
+        encoding="utf-8",
+    )
+    (images_root / "logo.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n',
+        encoding="utf-8",
+    )
+    (i18n_root / "zh-CN.json").write_text(
+        """
+{
+  "metadata": {
+    "display_name": "插件页面演示"
+  },
+  "pages": {
+    "bridge-demo": {
+      "title": "Bridge 演示页"
+    }
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    plugin = StarMetadata(
+        name=PLUGIN_PAGE_DEMO_NAME,
+        author="AstrBot Test",
+        desc="Plugin Page demo",
+        version="1.0.0",
+        display_name="Plugin Page Demo",
+        root_dir_name=PLUGIN_PAGE_DEMO_NAME,
+        activated=True,
+    )
+
+    monkeypatch.setattr(
+        core_lifecycle_td.plugin_manager.context,
+        "get_all_stars",
+        lambda: [plugin],
+    )
+
+    try:
+        yield plugin
+    finally:
+        shutil.rmtree(plugin_root, ignore_errors=True)
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -36,6 +174,34 @@ async def core_lifecycle_td(tmp_path_factory):
     log_broker = LogBroker()
     core_lifecycle = AstrBotCoreLifecycle(log_broker, db)
     await core_lifecycle.initialize()
+    generated_password = getattr(
+        core_lifecycle.astrbot_config,
+        "_generated_dashboard_password",
+        None,
+    )
+    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
+    if not generated_password:
+        core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
+            hash_dashboard_password(dashboard_password)
+        )
+        core_lifecycle.astrbot_config["dashboard"]["password"] = (
+            hash_md5_dashboard_password(dashboard_password)
+        )
+        await set_password_storage_upgraded(
+            core_lifecycle.db,
+            core_lifecycle.astrbot_config,
+            True,
+        )
+        await set_password_change_required(
+            core_lifecycle.db,
+            core_lifecycle.astrbot_config,
+            False,
+        )
+    object.__setattr__(
+        core_lifecycle,
+        "_dashboard_plain_password",
+        dashboard_password,
+    )
     try:
         yield core_lifecycle
     finally:
@@ -51,22 +217,94 @@ async def core_lifecycle_td(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
-    """Creates a Quart app instance for testing."""
+    """Creates a FastAPIAppAdapter app instance for testing."""
     shutdown_event = asyncio.Event()
     # The db instance is already part of the core_lifecycle_td
     server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+    server.app._dashboard_server = server  # expose for test cleanup
     return server.app
 
 
+def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
+    """Return the login password for hashed and plain dashboard defaults."""
+    generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
+    if generated_password:
+        return generated_password
+    password = core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"]
+    if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
+        return "astrbot"
+    return password
+
+
+def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    tmp_path,
+):
+    data_dir = tmp_path / "data"
+    user_dist = data_dir / "dist"
+    bundled_dist = tmp_path / "bundled-dist"
+    user_dist.mkdir(parents=True)
+    bundled_dist.mkdir()
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        lambda: bundled_dist,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.should_use_bundled_dashboard_dist",
+        lambda *_args, **_kwargs: True,
+    )
+
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+
+    assert server.data_path == str(bundled_dist)
+
+
+async def _set_dashboard_password_change_required(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    required: bool,
+) -> None:
+    await set_password_change_required(
+        core_lifecycle_td.db,
+        core_lifecycle_td.astrbot_config,
+        required,
+    )
+
+
+async def _restore_dashboard_password_state(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    dashboard_config: dict,
+) -> None:
+    core_lifecycle_td.astrbot_config["dashboard"] = dashboard_config
+    await set_password_change_required(
+        core_lifecycle_td.db,
+        core_lifecycle_td.astrbot_config,
+        False,
+    )
+    await set_password_storage_upgraded(
+        core_lifecycle_td.db,
+        core_lifecycle_td.astrbot_config,
+        bool(dashboard_config.get("pbkdf2_password")),
+    )
+
+
 @pytest_asyncio.fixture(scope="module")
-async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
+async def authenticated_header(
+    app: FastAPIAppAdapter, core_lifecycle_td: AstrBotCoreLifecycle
+):
     """Handles login and returns an authenticated header."""
     test_client = app.test_client()
     response = await test_client.post(
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
     data = await response.get_json()
@@ -76,8 +314,14 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
 
 
 @pytest.mark.asyncio
-async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
+async def test_auth_login(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
     """Tests the login functionality with both wrong and correct credentials."""
+    monkeypatch.setitem(app.config, "DASHBOARD_JWT_COOKIE_SECURE", False)
+
     test_client = app.test_client()
     response = await test_client.post(
         "/api/auth/login",
@@ -90,15 +334,1571 @@ async def test_auth_login(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
     data = await response.get_json()
     assert data["status"] == "ok" and "token" in data["data"]
+    set_cookie_headers = response.headers.getlist("Set-Cookie")
+    jwt_cookie_header = next(
+        (value for value in set_cookie_headers if DASHBOARD_JWT_COOKIE_NAME in value),
+        "",
+    )
+    assert jwt_cookie_header
+    assert "HttpOnly" in jwt_cookie_header
+    _assert_cookie_samesite_strict(jwt_cookie_header)
+    assert "Secure" not in jwt_cookie_header
 
 
 @pytest.mark.asyncio
-async def test_get_stat(app: Quart, authenticated_header: dict):
+async def test_auth_login_secure_cookie_override(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setitem(app.config, "DASHBOARD_JWT_COOKIE_SECURE", True)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+            "password": _resolve_dashboard_password(core_lifecycle_td),
+        },
+    )
+    assert response.status_code == 200
+
+    set_cookie_headers = response.headers.getlist("Set-Cookie")
+    jwt_cookie_header = next(
+        (value for value in set_cookie_headers if DASHBOARD_JWT_COOKIE_NAME in value),
+        "",
+    )
+    assert jwt_cookie_header
+    assert "Secure" in jwt_cookie_header
+    _assert_cookie_samesite_strict(jwt_cookie_header)
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_uses_same_bucket_across_paths(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Same client IP shares a rate-limit bucket across different auth endpoints."""
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    app._dashboard_server._rate_limiter_registry.clear()
+    cfg = core_lifecycle_td.astrbot_config["dashboard"]
+    rl_original = cfg.get("auth_rate_limit", {})
+    tp_original = cfg.get("trust_proxy_headers", False)
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
+    cfg["trust_proxy_headers"] = True
+
+    try:
+        client = app.test_client()
+        h = {"X-Forwarded-For": "198.51.100.10"}
+        r1 = await client.post(
+            "/api/auth/login", json={"username": "u", "password": "p"}, headers=h
+        )
+        assert r1.status_code != 429, "first request from IP should not be rate limited"
+
+        r2 = await client.post("/api/auth/totp/setup", json={}, headers=h)
+        assert r2.status_code == 429, (
+            "second request from same IP should be rate limited"
+        )
+    finally:
+        cfg["auth_rate_limit"] = rl_original
+        cfg["trust_proxy_headers"] = tp_original
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_separates_different_client_ips(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Different client IPs have independent rate-limit buckets."""
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    app._dashboard_server._rate_limiter_registry.clear()
+    cfg = core_lifecycle_td.astrbot_config["dashboard"]
+    rl_original = cfg.get("auth_rate_limit", {})
+    tp_original = cfg.get("trust_proxy_headers", False)
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
+    cfg["trust_proxy_headers"] = True
+
+    try:
+        client = app.test_client()
+        r_a = await client.post(
+            "/api/auth/login",
+            json={"username": "u", "password": "p"},
+            headers={"X-Forwarded-For": "198.51.100.10"},
+        )
+        assert r_a.status_code != 429
+
+        r_b = await client.post(
+            "/api/auth/login",
+            json={"username": "u", "password": "p"},
+            headers={"X-Forwarded-For": "198.51.100.10"},
+        )
+        assert r_b.status_code == 429, (
+            "second request from same IP should be rate limited"
+        )
+
+        r_c = await client.post(
+            "/api/auth/login",
+            json={"username": "u", "password": "p"},
+            headers={"X-Forwarded-For": "198.51.100.11"},
+        )
+        assert r_c.status_code != 429, "different IP has its own bucket"
+    finally:
+        cfg["auth_rate_limit"] = rl_original
+        cfg["trust_proxy_headers"] = tp_original
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_applies_to_v1_login(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """The v1 login endpoint uses the same token-bucket limiter as legacy login."""
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    app._dashboard_server._rate_limiter_registry.clear()
+    cfg = core_lifecycle_td.astrbot_config["dashboard"]
+    rl_original = cfg.get("auth_rate_limit", {})
+    tp_original = cfg.get("trust_proxy_headers", False)
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
+    cfg["trust_proxy_headers"] = True
+
+    try:
+        client = app.test_client()
+        headers = {"X-Forwarded-For": "198.51.100.12"}
+        first = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "u", "password": "p"},
+            headers=headers,
+        )
+        assert first.status_code != 429
+
+        second = await client.post(
+            "/api/v1/auth/login",
+            json={"username": "u", "password": "p"},
+            headers=headers,
+        )
+        assert second.status_code == 429, "v1 login should be rate limited"
+    finally:
+        cfg["auth_rate_limit"] = rl_original
+        cfg["trust_proxy_headers"] = tp_original
+
+
+@pytest.mark.asyncio
+async def test_auth_rate_limit_ignores_proxy_headers_by_default(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """When trust_proxy_headers is False, all proxy-spoofed IPs fall back to the connection IP."""
+    monkeypatch.setenv("ASTRBOT_TEST_MODE", "false")
+    app._dashboard_server._rate_limiter_registry.clear()
+    cfg = core_lifecycle_td.astrbot_config["dashboard"]
+    rl_original = cfg.get("auth_rate_limit", {})
+    tp_original = cfg.get("trust_proxy_headers", False)
+    cfg["auth_rate_limit"] = {
+        "enable": True,
+        "average_interval": 3600.0,
+        "max_burst": 1,
+    }
+    cfg["trust_proxy_headers"] = False
+
+    try:
+        client = app.test_client()
+        r1 = await client.post(
+            "/api/auth/login",
+            json={"username": "u", "password": "p"},
+            headers={"X-Forwarded-For": "198.51.100.20"},
+        )
+        assert r1.status_code != 429
+
+        r2 = await client.post(
+            "/api/auth/login",
+            json={"username": "u", "password": "p"},
+            headers={"X-Forwarded-For": "198.51.100.21"},
+        )
+        assert r2.status_code == 429, (
+            "same connection IP, same bucket despite proxy headers"
+        )
+    finally:
+        cfg["auth_rate_limit"] = rl_original
+        cfg["trust_proxy_headers"] = tp_original
+
+
+@pytest.mark.asyncio
+async def test_auth_login_requires_totp_when_enabled_and_not_trusted(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+        data = await response.get_json()
+        assert response.status_code == 401
+        assert data["status"] == "error"
+        assert data["data"]["totp_required"] is True
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_accepts_valid_totp_code(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": pyotp.TOTP(secret).now(),
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert "token" in data["data"]
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_rejects_invalid_totp_code(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        valid_code = pyotp.TOTP(secret).now()
+        invalid_code = str((int(valid_code) + 1) % 1_000_000).zfill(6)
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": invalid_code,
+            },
+        )
+        data = await response.get_json()
+        assert response.status_code == 401
+        assert data["status"] == "error"
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_with_recovery_code_disables_totp(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    recovery_code, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": recovery_code,
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        }
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": pyotp.TOTP(secret).now(),
+                "trust_device_flag": True,
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        set_cookie_headers = response.headers.getlist("Set-Cookie")
+        trusted_cookie_header = next(
+            (
+                value
+                for value in set_cookie_headers
+                if TOTP_TRUSTED_DEVICE_COOKIE_NAME in value
+            ),
+            "",
+        )
+        assert trusted_cookie_header
+        assert "HttpOnly" in trusted_cookie_header
+        _assert_cookie_samesite_strict(trusted_cookie_header)
+        assert "Path=/api/auth" in trusted_cookie_header
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_login_skips_totp_when_trusted_cookie_valid(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        first_login = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": pyotp.TOTP(secret).now(),
+                "trust_device_flag": True,
+            },
+        )
+        first_data = await first_login.get_json()
+        assert first_data["status"] == "ok"
+
+        second_login = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+        second_data = await second_login.get_json()
+        assert second_login.status_code == 200
+        assert second_data["status"] == "ok"
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_config_save_requires_two_factor_for_protected_totp_changes(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        post_config = copy.deepcopy(dict(core_lifecycle_td.astrbot_config))
+        post_config["dashboard"]["totp"] = {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        }
+        response = await test_client.post(
+            "/api/config/astrbot/update",
+            headers=authenticated_header,
+            json={"conf_id": "default", "config": post_config},
+        )
+        data = await response.get_json()
+        assert response.status_code == 401
+        assert data["status"] == "error"
+        assert data["data"]["totp_required"] is True
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_config_save_accepts_totp_code_for_protected_totp_changes(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        post_config = copy.deepcopy(dict(core_lifecycle_td.astrbot_config))
+        post_config["dashboard"]["totp"] = {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        }
+        response = await test_client.post(
+            "/api/config/astrbot/update",
+            headers={
+                **authenticated_header,
+                "X-2FA-Code": pyotp.TOTP(secret).now(),
+            },
+            json={"conf_id": "default", "config": post_config},
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        }
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_config_save_rejects_recovery_code_for_protected_totp_changes(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    recovery_code, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        post_config = copy.deepcopy(dict(core_lifecycle_td.astrbot_config))
+        post_config["dashboard"]["totp"] = {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": recovery_code_hash,
+        }
+        response = await test_client.post(
+            "/api/config/astrbot/update",
+            headers={
+                **authenticated_header,
+                "X-2FA-Code": recovery_code,
+            },
+            json={"conf_id": "default", "config": post_config},
+        )
+        data = await response.get_json()
+        assert response.status_code == 401
+        assert data["status"] == "error"
+        assert data["data"]["totp_required"] is True
+        assert core_lifecycle_td.astrbot_config["dashboard"]["totp"] == {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_auth_totp_setup_with_valid_code_returns_recovery_code(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+    secret = pyotp.random_base32()
+    response = await test_client.post(
+        "/api/auth/totp/setup",
+        headers=authenticated_header,
+        json={"secret": secret, "code": pyotp.TOTP(secret).now()},
+    )
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert isinstance(data["data"]["recovery_code"], str)
+    assert isinstance(data["data"]["recovery_code_hash"], str)
+    assert data["data"]["recovery_code"]
+    assert data["data"]["recovery_code_hash"]
+
+
+@pytest.mark.asyncio
+async def test_md5_dashboard_password_keeps_md5_auth_until_edit(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    md5_password = "AstrbotMd5Pass123"
+    changed_password = "AstrbotChanged123"
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = (
+            hash_md5_dashboard_password(md5_password)
+        )
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
+        await set_password_storage_upgraded(
+            core_lifecycle_td.db,
+            core_lifecycle_td.astrbot_config,
+            False,
+        )
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={"username": "astrbot", "password": md5_password},
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["change_pwd_hint"] is False
+        assert data["data"]["md5_pwd_hint"] is True
+        assert _removed_md5_hint_alias_key() not in data["data"]
+        assert data["data"]["password_upgrade_required"] is True
+
+        response = await test_client.post(
+            "/api/v1/auth/login",
+            json={"username": "astrbot", "password": md5_password},
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["md5_pwd_hint"] is True
+        assert _removed_md5_hint_alias_key() not in data["data"]
+        assert data["data"]["password_upgrade_required"] is True
+
+        response = await test_client.post(
+            "/api/auth/account/edit",
+            json={
+                "password": md5_password,
+                "new_password": "",
+                "confirm_password": "",
+                "new_username": "astrbot-admin",
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "error"
+        assert (
+            await is_password_storage_upgraded(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is False
+        )
+
+        response = await test_client.post(
+            "/api/auth/account/edit",
+            json={
+                "password": md5_password,
+                "new_password": changed_password,
+                "confirm_password": changed_password,
+                "new_username": "astrbot",
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert (
+            await is_password_storage_upgraded(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is True
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
+            changed_password,
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            changed_password,
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_md5_login_failure_includes_upgrade_faq_hint(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    md5_password = "AstrbotMd5Pass123"
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = (
+            hash_md5_dashboard_password(md5_password)
+        )
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
+        await set_password_storage_upgraded(
+            core_lifecycle_td.db,
+            core_lifecycle_td.astrbot_config,
+            False,
+        )
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={"username": "astrbot", "password": "WrongPassword123"},
+        )
+        data = await response.get_json()
+
+        assert data["status"] == "error"
+        assert data["message"].startswith("Incorrect username or password.")
+        assert "用户名或密码错误" in data["message"]
+        assert "https://docs.astrbot.app/en/faq.html" in data["message"]
+        assert "https://docs.astrbot.app/faq.html" in data["message"]
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_password_storage_flag_repairs_after_rollback_clears_pbkdf2(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    md5_password = "AstrbotRollback123"
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["username"] = "astrbot"
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = (
+            hash_md5_dashboard_password(md5_password)
+        )
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
+        await _set_dashboard_password_change_required(core_lifecycle_td, False)
+        await set_password_storage_upgraded(
+            core_lifecycle_td.db,
+            core_lifecycle_td.astrbot_config,
+            True,
+        )
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={"username": "astrbot", "password": md5_password},
+        )
+        data = await response.get_json()
+
+        assert data["status"] == "ok"
+        assert data["data"]["md5_pwd_hint"] is True
+        assert _removed_md5_hint_alias_key() not in data["data"]
+        assert data["data"]["password_upgrade_required"] is True
+        assert (
+            await is_password_storage_upgraded(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is False
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_version_endpoints_use_md5_password_hint(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+):
+    test_client = app.test_client()
+
+    response = await test_client.get(
+        "/api/v1/stats/version",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert data["status"] == "ok"
+    assert "md5_pwd_hint" in data["data"]
+    assert _removed_md5_hint_alias_key() not in data["data"]
+
+    response = await test_client.get(
+        "/api/stat/version",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert data["status"] == "ok"
+    assert "md5_pwd_hint" in data["data"]
+    assert _removed_md5_hint_alias_key() not in data["data"]
+
+
+def test_password_hash_lookup_falls_back_to_md5_when_pbkdf2_missing(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    dashboard_config = copy.deepcopy(core_lifecycle_td.astrbot_config["dashboard"])
+    md5_hash = hash_md5_dashboard_password("AstrbotRollback123")
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["password"] = md5_hash
+        core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"] = ""
+
+        assert (
+            get_dashboard_password_hash(
+                core_lifecycle_td.astrbot_config,
+                upgraded=True,
+            )
+            == md5_hash
+        )
+    finally:
+        core_lifecycle_td.astrbot_config["dashboard"] = dashboard_config
+
+
+@pytest.mark.asyncio
+async def test_generated_password_requires_password_change_until_changed(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    changed_password = "AstrbotChanged123"
+
+    try:
+        await _set_dashboard_password_change_required(core_lifecycle_td, True)
+
+        response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["change_pwd_hint"] is True
+
+        response = await test_client.post(
+            "/api/auth/account/edit",
+            json={
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "new_password": "",
+                "confirm_password": "",
+                "new_username": core_lifecycle_td.astrbot_config["dashboard"][
+                    "username"
+                ],
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "error"
+        assert (
+            await is_password_change_required(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is True
+        )
+
+        response = await test_client.post(
+            "/api/auth/account/edit",
+            json={
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "new_password": changed_password,
+                "confirm_password": changed_password,
+                "new_username": core_lifecycle_td.astrbot_config["dashboard"][
+                    "username"
+                ],
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert (
+            await is_password_change_required(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is False
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_local_setup_can_skip_default_password_auth(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    setup_password = "AstrbotSetup123"
+    setup_username = "astrbot-admin"
+
+    try:
+        monkeypatch.setenv("ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH", "true")
+        core_lifecycle_td.astrbot_config["dashboard"]["host"] = "127.0.0.1"
+        await _set_dashboard_password_change_required(core_lifecycle_td, True)
+
+        response = await test_client.get("/api/auth/setup-status")
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["setup_required"] is True
+        assert data["data"]["skip_default_password_auth"] is True
+
+        response = await test_client.post(
+            "/api/auth/setup",
+            json={
+                "username": setup_username,
+                "password": setup_password,
+                "confirm_password": setup_password,
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["username"] == setup_username
+        assert data["data"]["token"]
+        assert (
+            await is_password_change_required(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is False
+        )
+        assert (
+            core_lifecycle_td.astrbot_config["dashboard"]["username"] == setup_username
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
+            setup_password,
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            setup_password,
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_authenticated_default_password_login_can_complete_setup(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    setup_password = "AstrbotSetup123"
+    setup_username = "astrbot-admin"
+
+    try:
+        await _set_dashboard_password_change_required(core_lifecycle_td, True)
+
+        login_response = await test_client.post(
+            "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+        login_data = await login_response.get_json()
+        assert login_data["status"] == "ok"
+        assert login_data["data"]["change_pwd_hint"] is True
+        token = login_data["data"]["token"]
+
+        response = await test_client.post(
+            "/api/auth/setup-authenticated",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "username": setup_username,
+                "password": setup_password,
+                "confirm_password": setup_password,
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["username"] == setup_username
+        assert (
+            await is_password_change_required(
+                core_lifecycle_td.db,
+                core_lifecycle_td.astrbot_config,
+            )
+            is False
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"],
+            setup_password,
+        )
+        assert verify_dashboard_password(
+            core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            setup_password,
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_setup_skip_requires_local_host(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+
+    try:
+        monkeypatch.setenv("ASTRBOT_DASHBOARD_SKIP_DEFAULT_PASSWORD_AUTH", "true")
+        core_lifecycle_td.astrbot_config["dashboard"]["host"] = "0.0.0.0"
+        await _set_dashboard_password_change_required(core_lifecycle_td, True)
+
+        response = await test_client.get("/api/auth/setup-status")
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["setup_required"] is True
+        assert data["data"]["skip_default_password_auth"] is False
+
+        response = await test_client.post(
+            "/api/auth/setup",
+            json={
+                "username": "astrbot-admin",
+                "password": "AstrbotSetup123",
+                "confirm_password": "AstrbotSetup123",
+            },
+        )
+        data = await response.get_json()
+        assert data["status"] == "error"
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_plugin_web_api_supports_dynamic_route(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    authenticated_header: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls = []
+
+    async def group_detail(name: str):
+        calls.append(name)
+        return jsonify({"name": name})
+
+    monkeypatch.setattr(
+        core_lifecycle_td.star_context,
+        "registered_web_apis",
+        [
+            (
+                f"/{PLUGIN_PAGE_DEMO_NAME}/groups/<name>",
+                group_detail,
+                ["GET"],
+                "Group detail",
+            ),
+        ],
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plug/{PLUGIN_PAGE_DEMO_NAME}/groups/example",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data == {"name": "example"}
+    assert calls == ["example"]
+
+
+def test_plugin_page_content_path_escapes_plugin_name():
+    assert (
+        PluginPageService.build_plugin_page_content_path(
+            "plugin with space", "main page"
+        )
+        == "/api/plugin/page/content/plugin%20with%20space/main%20page/"
+    )
+    assert (
+        PluginPageService.build_plugin_page_content_path(
+            "plugin with space", "main page", "assets/main file.js"
+        )
+        == "/api/plugin/page/content/plugin%20with%20space/main%20page/assets/main%20file.js"
+    )
+
+
+@pytest.mark.asyncio
+async def test_plugin_get_excludes_scanned_pages(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get("/api/plugin/get", headers=authenticated_header)
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    plugin = next(
+        item for item in data["data"] if item["name"] == PLUGIN_PAGE_DEMO_NAME
+    )
+    assert plugin["activated"] is True
+    assert "page" not in plugin
+    assert "pages" in plugin
+    assert isinstance(plugin["pages"], list)
+    assert PLUGIN_PAGE_DEMO_PAGE_NAME in plugin["pages"]
+
+
+@pytest.mark.asyncio
+async def test_plugin_detail_includes_scanned_page_component(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/detail?name={PLUGIN_PAGE_DEMO_NAME}",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+
+    page_components = [
+        component
+        for component in data["data"]["components"]
+        if component["type"] == "page"
+    ]
+    assert page_components == [
+        {
+            "type": "page",
+            "name": PLUGIN_PAGE_DEMO_PAGE_NAME,
+            "title": PLUGIN_PAGE_DEMO_PAGE_NAME,
+            "page_name": PLUGIN_PAGE_DEMO_PAGE_NAME,
+            "i18n_key": f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}",
+            "description": "Plugin Page entry",
+            "plugin_name": PLUGIN_PAGE_DEMO_NAME,
+            "plugin_marketplace_name": PLUGIN_PAGE_DEMO_NAME.replace("_", "-"),
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_entry_returns_signed_content_path(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        (
+            f"/api/plugin/page/entry?name={PLUGIN_PAGE_DEMO_NAME}"
+            f"&page={PLUGIN_PAGE_DEMO_PAGE_NAME}"
+        ),
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "ok"
+    assert data["data"]["name"] == PLUGIN_PAGE_DEMO_PAGE_NAME
+    assert data["data"]["title"] == PLUGIN_PAGE_DEMO_PAGE_NAME
+    assert data["data"]["i18n_key"] == f"pages.{PLUGIN_PAGE_DEMO_PAGE_NAME}"
+    assert data["data"]["content_path"].startswith(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    )
+    assert "asset_token=" in data["data"]["content_path"]
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_content_requires_auth(
+    app: FastAPIAppAdapter,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    )
+    assert response.status_code == 401
+    data = await response.get_json()
+    assert data["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_content_supports_cookie_auth(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    login_response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+            "password": _resolve_dashboard_password(core_lifecycle_td),
+        },
+    )
+    assert login_response.status_code == 200
+
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    )
+    assert response.status_code == 200
+    content = (await response.get_data()).decode("utf-8")
+    assert "Single plugin Page with internal navigation" in content
+    assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert "frame-ancestors 'self'" in response.headers["Content-Security-Policy"]
+    assert "asset_token=" in content
+
+    asset_url_match = re.search(
+        r'src="([^"]+/app\.js[^"]*)"',
+        content,
+    )
+    assert asset_url_match is not None
+    asset_response = await test_client.get(asset_url_match.group(1))
+    assert asset_response.status_code == 200
+    asset_content = (await asset_response.get_data()).decode("utf-8")
+    assert "renderTabs" in asset_content
+    assert 'from "react"' in asset_content
+    assert (
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/shared/common.js"
+        in asset_content
+    )
+    assert "asset_token=" in asset_content
+
+    bridge_url_match = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        content,
+    )
+    assert bridge_url_match is not None
+    bridge_response = await test_client.get(bridge_url_match.group(1))
+    assert bridge_response.status_code == 200
+    bridge_content = (await bridge_response.get_data()).decode("utf-8")
+    assert "AstrBotPluginPage" in bridge_content
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_content_issues_scoped_asset_token(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    authorized_client = app.test_client()
+    response = await authorized_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    html_text = (await response.get_data()).decode("utf-8")
+
+    app_js_url = re.search(
+        r'src="([^"]+/app\.js[^"]*)"',
+        html_text,
+    )
+    bridge_sdk_url = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    css_url = re.search(
+        r'href="([^"]+/base\.css[^"]*)"',
+        html_text,
+    )
+    assert app_js_url is not None
+    assert bridge_sdk_url is not None
+    assert css_url is not None
+    assert "asset_token=" in app_js_url.group(1)
+    assert "asset_token=" in bridge_sdk_url.group(1)
+    assert "asset_token=" in css_url.group(1)
+
+    query = parse_qs(urlsplit(app_js_url.group(1)).query)
+    asset_token = query.get("asset_token", [""])[0]
+    assert asset_token
+
+    anonymous_client = app.test_client()
+    app_js_response = await anonymous_client.get(app_js_url.group(1))
+    assert app_js_response.status_code == 200
+    bridge_response = await anonymous_client.get(bridge_sdk_url.group(1))
+    assert bridge_response.status_code == 200
+    bridge_js = (await bridge_response.get_data()).decode("utf-8")
+    assert "window.AstrBotPluginPage?.__setInitialContext" in bridge_js
+    assert '"locale": "zh-CN"' in bridge_js
+    assert '"displayName": "插件页面演示"' in bridge_js
+    assert '"pageTitle": "Bridge 演示页"' in bridge_js
+    css_response = await anonymous_client.get(css_url.group(1))
+    assert css_response.status_code == 200
+
+    out_of_scope_response = await anonymous_client.get(
+        f"/api/plugin/get?asset_token={asset_token}"
+    )
+    assert out_of_scope_response.status_code == 401
+
+    cross_plugin_response = await anonymous_client.get(
+        f"/api/plugin/page/content/another_plugin/{PLUGIN_PAGE_DEMO_PAGE_NAME}/app.js?asset_token={asset_token}"
+    )
+    assert cross_plugin_response.status_code == 401
+
+    cross_page_response = await anonymous_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/another-page/app.js?asset_token={asset_token}"
+    )
+    assert cross_page_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_bridge_sdk_includes_is_dark_when_theme_param_provided(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    """Bridge SDK initial context should include isDark based on ?theme= query param."""
+    authorized_client = app.test_client()
+    response = await authorized_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    html_text = (await response.get_data()).decode("utf-8")
+    bridge_sdk_url = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    assert bridge_sdk_url is not None
+
+    anonymous_client = app.test_client()
+
+    # theme=dark → isDark: true
+    dark_response = await anonymous_client.get(bridge_sdk_url.group(1) + "&theme=dark")
+    assert dark_response.status_code == 200
+    dark_js = (await dark_response.get_data()).decode("utf-8")
+    assert '"isDark": true' in dark_js
+
+    # theme=light → isDark: false
+    light_response = await anonymous_client.get(
+        bridge_sdk_url.group(1) + "&theme=light"
+    )
+    assert light_response.status_code == 200
+    light_js = (await light_response.get_data()).decode("utf-8")
+    assert '"isDark": false' in light_js
+
+    # no theme param → isDark: false (default)
+    base_response = await anonymous_client.get(bridge_sdk_url.group(1))
+    assert base_response.status_code == 200
+    base_js = (await base_response.get_data()).decode("utf-8")
+    assert '"isDark": false' in base_js
+
+    # invalid theme value → should NOT be treated as dark
+    invalid_response = await anonymous_client.get(
+        bridge_sdk_url.group(1) + "&theme=invalid"
+    )
+    assert invalid_response.status_code == 200
+    invalid_js = (await invalid_response.get_data()).decode("utf-8")
+    assert '"isDark": false' in invalid_js
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_content_propagates_theme_in_rewritten_urls(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    """Theme query param should be propagated through rewritten asset and bridge URLs."""
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+        "?asset_token=&theme=dark",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    html_text = (await response.get_data()).decode("utf-8")
+
+    # Verify theme=dark appears in bridge SDK URL in rewritten HTML
+    bridge_sdk_url_match = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    assert bridge_sdk_url_match is not None
+    bridge_query = parse_qs(urlsplit(bridge_sdk_url_match.group(1)).query)
+    assert bridge_query.get("theme") == ["dark"]
+
+    # Verify theme=dark appears in CSS asset URL in rewritten HTML
+    css_url_match = re.search(
+        r'href="([^"]+/base\.css[^"]*)"',
+        html_text,
+    )
+    assert css_url_match is not None
+    css_query = parse_qs(urlsplit(css_url_match.group(1)).query)
+    assert css_query.get("theme") == ["dark"]
+
+    # Verify data-theme is injected on <html> tag to prevent flash
+    assert 'data-theme="dark"' in html_text
+    # Verify color-scheme meta tag is injected for browser-level default styles
+    assert '<meta name="color-scheme" content="dark">' in html_text
+
+    # theme=light → data-theme="light" on <html> and color-scheme meta
+    light_response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+        "?asset_token=&theme=light",
+        headers=authenticated_header,
+    )
+    assert light_response.status_code == 200
+    light_html = (await light_response.get_data()).decode("utf-8")
+    assert 'data-theme="light"' in light_html
+    assert '<meta name="color-scheme" content="light">' in light_html
+
+    # no theme param → no data-theme or color-scheme meta on <html>
+    no_theme_response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+        "?asset_token=",
+        headers=authenticated_header,
+    )
+    assert no_theme_response.status_code == 200
+    no_theme_html = (await no_theme_response.get_data()).decode("utf-8")
+    assert "data-theme=" not in no_theme_html
+    assert "color-scheme" not in no_theme_html
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_assets_require_dashboard_auth(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    authorized_client = app.test_client()
+    response = await authorized_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 200
+    html_text = (await response.get_data()).decode("utf-8")
+
+    app_js_url = re.search(
+        r'src="([^"]+/app\.js[^"]*)"',
+        html_text,
+    )
+    bridge_sdk_url = re.search(
+        r'src="([^"]+/bridge-sdk\.js[^"]*)"',
+        html_text,
+    )
+    assert app_js_url is not None
+    assert bridge_sdk_url is not None
+
+    anonymous_client = app.test_client()
+    app_js_response = await anonymous_client.get(_strip_query(app_js_url.group(1)))
+    assert app_js_response.status_code == 401
+    bridge_response = await anonymous_client.get(_strip_query(bridge_sdk_url.group(1)))
+    assert bridge_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_plugin_page_content_blocks_path_traversal(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/..%2Fmain.py",
+        headers=authenticated_header,
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_logout_clears_cookie_for_plugin_page(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    registered_plugin_page: StarMetadata,
+):
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+            "password": _resolve_dashboard_password(core_lifecycle_td),
+        },
+    )
+    assert response.status_code == 200
+
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    )
+    assert response.status_code == 200
+    html_text = (await response.get_data()).decode("utf-8")
+    asset_url_match = re.search(r'src="([^"]+/app\.js[^"]*)"', html_text)
+    assert asset_url_match is not None
+
+    logout_response = await test_client.post("/api/auth/logout")
+    assert logout_response.status_code == 200
+    clear_cookie_header = next(
+        (
+            value
+            for value in logout_response.headers.getlist("Set-Cookie")
+            if DASHBOARD_JWT_COOKIE_NAME in value
+        ),
+        "",
+    )
+    assert clear_cookie_header
+    assert f"{DASHBOARD_JWT_COOKIE_NAME}=;" in clear_cookie_header
+    assert "Max-Age=0" in clear_cookie_header
+    _assert_cookie_samesite_strict(clear_cookie_header)
+
+    response = await test_client.get(
+        f"/api/plugin/page/content/{PLUGIN_PAGE_DEMO_NAME}/{PLUGIN_PAGE_DEMO_PAGE_NAME}/"
+    )
+    assert response.status_code == 401
+    asset_response = await test_client.get(_strip_query(asset_url_match.group(1)))
+    assert asset_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_stat(app: FastAPIAppAdapter, authenticated_header: dict):
     test_client = app.test_client()
     response = await test_client.get("/api/stat/get")
     assert response.status_code == 401
@@ -124,6 +1924,12 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
     async def fake_serve(app, config, shutdown_trigger):
         return config
 
+    def capture(messages):
+        def append(message, *args):
+            messages.append(message % args if args else message)
+
+        return append
+
     try:
         core_lifecycle_td.astrbot_config["dashboard"]["ssl"] = {
             "enable": True,
@@ -134,28 +1940,29 @@ async def test_dashboard_ssl_missing_cert_and_key_falls_back_to_http(
         monkeypatch.setattr("astrbot.dashboard.server.serve", fake_serve)
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.warning",
-            lambda message: warning_messages.append(message),
+            capture(warning_messages),
         )
         monkeypatch.setattr(
             "astrbot.dashboard.server.logger.info",
-            lambda message: info_messages.append(message),
+            capture(info_messages),
         )
 
         config = await server.run()
 
         assert getattr(config, "certfile", None) is None
         assert getattr(config, "keyfile", None) is None
-        assert any("cert_file 和 key_file" in message for message in warning_messages)
         assert any(
-            "正在启动 WebUI, 监听地址: http://" in message for message in info_messages
+            "cert_file or key_file is missing" in message
+            for message in warning_messages
         )
+        assert any("Starting WebUI at http://" in message for message in info_messages)
     finally:
         core_lifecycle_td.astrbot_config["dashboard"] = original_dashboard_config
 
 
 @pytest.mark.asyncio
 async def test_subagent_config_accepts_default_persona(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -205,7 +2012,7 @@ async def test_subagent_config_accepts_default_persona(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("payload", [[], "x"])
 async def test_batch_delete_sessions_rejects_non_object_payload(
-    app: Quart, authenticated_header: dict, payload
+    app: FastAPIAppAdapter, authenticated_header: dict, payload
 ):
     test_client = app.test_client()
     response = await test_client.post(
@@ -222,7 +2029,7 @@ async def test_batch_delete_sessions_rejects_non_object_payload(
 
 @pytest.mark.asyncio
 async def test_batch_delete_sessions_masks_internal_error(
-    app: Quart, authenticated_header: dict, monkeypatch
+    app: FastAPIAppAdapter, authenticated_header: dict, monkeypatch
 ):
     test_client = app.test_client()
 
@@ -237,7 +2044,7 @@ async def test_batch_delete_sessions_masks_internal_error(
         raise RuntimeError("secret-internal-error")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.chat.ChatRoute._delete_session_internal",
+        "astrbot.dashboard.services.chat_service.ChatService.delete_session_internal",
         _raise_error,
     )
 
@@ -258,7 +2065,7 @@ async def test_batch_delete_sessions_masks_internal_error(
 
 @pytest.mark.asyncio
 async def test_batch_delete_sessions_uses_batch_lookup(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -307,7 +2114,7 @@ async def test_batch_delete_sessions_uses_batch_lookup(
 
 @pytest.mark.asyncio
 async def test_plugins(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -322,6 +2129,7 @@ async def test_plugins(
     assert data["status"] == "ok"
     for plugin in data["data"]:
         assert "installed_at" in plugin
+        assert "components" not in plugin
         installed_at = plugin["installed_at"]
         if installed_at is None:
             continue
@@ -378,10 +2186,27 @@ async def test_plugins(
         assert response.status_code == 200
         data = await response.get_json()
         assert data["status"] == "ok"
-        assert len(data["data"]) == 1
-        installed_at = data["data"][0]["installed_at"]
+        assert len(data["data"]) >= 1
+        target = next(
+            (item for item in data["data"] if item["name"] == test_plugin_name),
+            None,
+        )
+        assert target is not None
+        assert "components" not in target
+        installed_at = target["installed_at"]
         assert installed_at is not None
         datetime.fromisoformat(installed_at)
+
+        response = await test_client.get(
+            f"/api/plugin/detail?name={test_plugin_name}",
+            headers=authenticated_header,
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["status"] == "ok"
+        assert data["data"]["name"] == test_plugin_name
+        assert "components" in data["data"]
+        assert isinstance(data["data"]["components"], list)
 
         # 验证插件已注册
         exists = any(md.name == test_plugin_name for md in star_registry)
@@ -426,14 +2251,14 @@ async def test_plugins(
 
 @pytest.mark.asyncio
 async def test_plugins_when_installed_at_unresolved(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
 ):
     """Tests plugin payload when installed_at cannot be resolved."""
     test_client = app.test_client()
 
-    monkeypatch.setattr(PluginRoute, "_get_plugin_installed_at", lambda *_args: None)
+    monkeypatch.setattr(PluginService, "get_plugin_installed_at", lambda *_args: None)
 
     response = await test_client.get("/api/plugin/get", headers=authenticated_header)
     assert response.status_code == 200
@@ -447,7 +2272,7 @@ async def test_plugins_when_installed_at_unresolved(
 
 
 @pytest.mark.asyncio
-async def test_commands_api(app: Quart, authenticated_header: dict):
+async def test_commands_api(app: FastAPIAppAdapter, authenticated_header: dict):
     """Tests the command management API endpoints."""
     test_client = app.test_client()
 
@@ -476,7 +2301,7 @@ async def test_commands_api(app: Quart, authenticated_header: dict):
 
 @pytest.mark.asyncio
 async def test_t2i_set_active_template_syncs_all_configs(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -500,7 +2325,7 @@ async def test_t2i_set_active_template_syncs_all_configs(
             "/api/t2i/templates/create",
             json={
                 "name": template_name,
-                "content": "<html><body>{{ content }}</body></html>",
+                "content": "<html><body>{{ text }}</body></html>",
             },
             headers=authenticated_header,
         )
@@ -543,7 +2368,7 @@ async def test_t2i_set_active_template_syncs_all_configs(
 
 @pytest.mark.asyncio
 async def test_t2i_reset_default_template_syncs_all_configs(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -567,7 +2392,7 @@ async def test_t2i_reset_default_template_syncs_all_configs(
             "/api/t2i/templates/create",
             json={
                 "name": template_name,
-                "content": "<html><body>{{ content }} reset</body></html>",
+                "content": "<html><body>{{ text }} reset</body></html>",
             },
             headers=authenticated_header,
         )
@@ -616,7 +2441,7 @@ async def test_t2i_reset_default_template_syncs_all_configs(
 
 @pytest.mark.asyncio
 async def test_t2i_update_active_template_reloads_all_schedulers(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -640,7 +2465,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
             "/api/t2i/templates/create",
             json={
                 "name": template_name,
-                "content": "<html><body>{{ content }} v1</body></html>",
+                "content": "<html><body>{{ text }} v1</body></html>",
             },
             headers=authenticated_header,
         )
@@ -661,7 +2486,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
 
         response = await test_client.put(
             f"/api/t2i/templates/{template_name}",
-            json={"content": "<html><body>{{ content }} v2</body></html>"},
+            json={"content": "<html><body>{{ text }} v2</body></html>"},
             headers=authenticated_header,
         )
         assert response.status_code == 200
@@ -694,7 +2519,7 @@ async def test_t2i_update_active_template_reloads_all_schedulers(
 
 @pytest.mark.asyncio
 async def test_check_update(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -719,7 +2544,7 @@ async def test_check_update(
         mock_check_update,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.get_dashboard_version",
+        "astrbot.dashboard.services.update_service.get_dashboard_version",
         mock_get_dashboard_version,
     )
 
@@ -732,7 +2557,7 @@ async def test_check_update(
 
 @pytest.mark.asyncio
 async def test_do_update(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -743,43 +2568,269 @@ async def test_do_update(
     # Use a temporary path for the mock update to avoid side effects
     temp_release_dir = tmp_path_factory.mktemp("release")
     release_path = temp_release_dir / "astrbot"
+    calls = []
 
-    async def mock_update(*args, **kwargs):
-        """Mocks the update process by creating a directory in the temp path."""
+    async def mock_download_core(*args, **kwargs):
+        calls.append("download-core")
+        callback = kwargs.get("progress_callback")
+        if callback:
+            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
+        zip_path = kwargs["path"]
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("AstrBot-main/README.md", "core")
+        return zip_path
+
+    def mock_apply_core(*args, **kwargs):
+        del args, kwargs
+        calls.append("apply-core")
         os.makedirs(release_path, exist_ok=True)
 
     async def mock_download_dashboard(*args, **kwargs):
-        """Mocks the dashboard download to prevent network access."""
+        calls.append("download-dashboard")
+        callback = kwargs.get("progress_callback")
+        if callback:
+            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
+        with zipfile.ZipFile(kwargs["path"], "w") as zf:
+            zf.writestr("dist/index.html", "dashboard")
         return
+
+    def mock_extract_dashboard(*args, **kwargs):
+        del args, kwargs
+        calls.append("apply-dashboard")
 
     async def mock_pip_install(*args, **kwargs):
         """Mocks pip install to prevent actual installation."""
         return
 
-    monkeypatch.setattr(core_lifecycle_td.astrbot_updator, "update", mock_update)
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.download_dashboard",
+        core_lifecycle_td.astrbot_updator,
+        "download_update_package",
+        mock_download_core,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "apply_update_package",
+        mock_apply_core,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.update_service.download_dashboard",
         mock_download_dashboard,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.pip_installer.install",
+        "astrbot.dashboard.services.update_service.extract_dashboard",
+        mock_extract_dashboard,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.update_service.pip_installer.install",
         mock_pip_install,
     )
 
     response = await test_client.post(
         "/api/update/do",
         headers=authenticated_header,
-        json={"version": "v3.4.0", "reboot": False},
+        json={"version": "v3.4.0", "reboot": False, "progress_id": "test-progress"},
     )
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
     assert os.path.exists(release_path)
+    assert calls[:4] == [
+        "download-dashboard",
+        "download-core",
+        "apply-core",
+        "apply-dashboard",
+    ]
+
+    progress_response = await test_client.get(
+        "/api/update/progress?id=test-progress",
+        headers=authenticated_header,
+    )
+    progress_data = await progress_response.get_json()
+    assert progress_data["status"] == "ok"
+    assert progress_data["data"]["status"] == "success"
+    assert progress_data["data"]["overall_percent"] == 100
 
 
 @pytest.mark.asyncio
-async def test_install_pip_package_returns_pip_install_error_message(
-    app: Quart,
+async def test_do_update_does_not_apply_files_when_core_download_fails(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    calls = []
+
+    async def mock_download_dashboard(*args, **kwargs):
+        calls.append("download-dashboard")
+        callback = kwargs.get("progress_callback")
+        if callback:
+            callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
+
+    async def mock_download_core(*args, **kwargs):
+        del args, kwargs
+        calls.append("download-core")
+        raise RuntimeError("core download failed")
+
+    def mock_apply_core(*args, **kwargs):
+        del args, kwargs
+        calls.append("apply-core")
+
+    def mock_extract_dashboard(*args, **kwargs):
+        del args, kwargs
+        calls.append("apply-dashboard")
+
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "download_update_package",
+        mock_download_core,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "apply_update_package",
+        mock_apply_core,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.update_service.download_dashboard",
+        mock_download_dashboard,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.update_service.extract_dashboard",
+        mock_extract_dashboard,
+    )
+
+    response = await test_client.post(
+        "/api/update/do",
+        headers=authenticated_header,
+        json={"version": "v3.4.0", "reboot": False, "progress_id": "atomic-fail"},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert calls == ["download-dashboard", "download-core"]
+
+
+@pytest.mark.asyncio
+async def test_do_update_does_not_apply_files_when_package_verification_fails(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    calls = []
+
+    async def mock_download_dashboard(*args, **kwargs):
+        del args
+        calls.append("download-dashboard")
+        Path(kwargs["path"]).write_bytes(b"not a zip")
+
+    async def mock_download_core(*args, **kwargs):
+        del args
+        calls.append("download-core")
+        zip_path = kwargs["path"]
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("AstrBot-main/README.md", "core")
+        return zip_path
+
+    def mock_apply_core(*args, **kwargs):
+        del args, kwargs
+        calls.append("apply-core")
+
+    def mock_extract_dashboard(*args, **kwargs):
+        del args, kwargs
+        calls.append("apply-dashboard")
+
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "download_update_package",
+        mock_download_core,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "apply_update_package",
+        mock_apply_core,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.update_service.download_dashboard",
+        mock_download_dashboard,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.update_service.extract_dashboard",
+        mock_extract_dashboard,
+    )
+
+    response = await test_client.post(
+        "/api/update/do",
+        headers=authenticated_header,
+        json={"version": "v3.4.0", "reboot": False, "progress_id": "invalid-zip"},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert calls == ["download-dashboard", "download-core"]
+
+
+def test_extract_dashboard_rejects_zip_path_traversal(tmp_path: Path):
+    from astrbot.core.utils.io import extract_dashboard
+
+    archive_path = tmp_path / "dashboard.zip"
+    extract_path = tmp_path / "data"
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("../evil.txt", "unsafe")
+
+    with pytest.raises(ValueError, match="Unsafe dashboard archive path"):
+        extract_dashboard(archive_path, extract_path)
+
+    assert not (tmp_path / "evil.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_do_update_hides_internal_error_message_in_response_and_progress(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch,
+):
+    test_client = app.test_client()
+
+    async def mock_download_dashboard(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("secret stack trace")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.update_service.download_dashboard",
+        mock_download_dashboard,
+    )
+
+    response = await test_client.post(
+        "/api/update/do",
+        headers=authenticated_header,
+        json={"version": "v3.4.0", "reboot": False, "progress_id": "failed-progress"},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert data["message"] == "An internal error has occurred."
+    assert "secret stack trace" not in str(data)
+
+    progress_response = await test_client.get(
+        "/api/update/progress?id=failed-progress",
+        headers=authenticated_header,
+    )
+    progress_data = await progress_response.get_json()
+
+    assert progress_data["status"] == "ok"
+    assert progress_data["data"]["status"] == "error"
+    assert progress_data["data"]["message"] == "更新失败，请查看服务端日志。"
+    assert "secret stack trace" not in str(progress_data)
+
+
+@pytest.mark.asyncio
+async def test_install_pip_package_returns_generic_error_message(
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
 ):
@@ -790,7 +2841,7 @@ async def test_install_pip_package_returns_pip_install_error_message(
         raise PipInstallError("install failed", code=2)
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.update.pip_installer.install",
+        "astrbot.dashboard.services.update_service.pip_installer.install",
         mock_pip_install,
     )
 
@@ -803,7 +2854,7 @@ async def test_install_pip_package_returns_pip_install_error_message(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "error"
-    assert data["message"] == "install failed"
+    assert data["message"] == "An internal error has occurred."
 
 
 class _FakeNeoSkills:
@@ -867,7 +2918,7 @@ class _FakeNeoBayClient:
 
 @pytest.mark.asyncio
 async def test_neo_skills_routes(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
@@ -898,11 +2949,11 @@ async def test_neo_skills_routes(
         return
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.NeoSkillSyncManager.sync_release",
+        "astrbot.dashboard.services.skills_service.NeoSkillSyncManager.sync_release",
         _fake_sync_release,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
 
@@ -989,7 +3040,7 @@ async def test_neo_skills_routes(
 
 @pytest.mark.asyncio
 async def test_batch_upload_skills_returns_error_when_all_files_invalid(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
 ):
     test_client = app.test_client()
@@ -1014,7 +3065,7 @@ async def test_batch_upload_skills_returns_error_when_all_files_invalid(
 
 @pytest.mark.asyncio
 async def test_batch_upload_skills_accepts_zip_files(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
 ):
@@ -1032,11 +3083,11 @@ async def test_batch_upload_skills_accepts_zip_files(
         return "demo_skill"
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        "astrbot.dashboard.services.skills_service.SkillManager.install_skill_from_zip",
         _fake_install_skill_from_zip,
     )
 
@@ -1067,7 +3118,7 @@ async def test_batch_upload_skills_accepts_zip_files(
 
 @pytest.mark.asyncio
 async def test_batch_upload_skills_accepts_valid_skill_archive(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
     tmp_path,
@@ -1083,7 +3134,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         return
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
@@ -1099,7 +3150,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         lambda: str(temp_dir),
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.get_astrbot_temp_path",
+        "astrbot.dashboard.services.skills_service.get_astrbot_temp_path",
         lambda: str(temp_dir),
     )
 
@@ -1140,7 +3191,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
 
 @pytest.mark.asyncio
 async def test_batch_upload_skills_partial_success(
-    app: Quart,
+    app: FastAPIAppAdapter,
     authenticated_header: dict,
     monkeypatch,
 ):
@@ -1159,11 +3210,11 @@ async def test_batch_upload_skills_partial_success(
         raise RuntimeError("install failed")
 
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.sync_skills_to_active_sandboxes",
+        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
-        "astrbot.dashboard.routes.skills.SkillManager.install_skill_from_zip",
+        "astrbot.dashboard.services.skills_service.SkillManager.install_skill_from_zip",
         _fake_install_skill_from_zip,
     )
 
@@ -1205,3 +3256,102 @@ async def test_batch_upload_skills_partial_success(
     assert data["data"]["failed"] == [
         {"filename": "bad_skill.zip", "error": "install failed"}
     ]
+
+
+@pytest.mark.asyncio
+async def test_skill_file_browser_and_editor_security(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch,
+    tmp_path,
+):
+    async def _fake_sync_skills_to_active_sandboxes():
+        return
+
+    skills_root = tmp_path / "skills"
+    skill_dir = skills_root / "demo_skill"
+    skill_dir.mkdir(parents=True)
+    skill_md = skill_dir / "SKILL.md"
+    skill_md.write_text(
+        "---\ndescription: Demo skill\n---\n# Demo\n",
+        encoding="utf-8",
+    )
+    (skill_dir / "notes.txt").write_text("notes", encoding="utf-8")
+    (skill_dir / "large.md").write_text("x" * (512 * 1024 + 1), encoding="utf-8")
+    (skill_dir / "binary.md").write_bytes(b"\xff\xfe\x00")
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("outside", encoding="utf-8")
+    if hasattr(os, "symlink"):
+        os.symlink(outside_file, skill_dir / "outside-link.txt")
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
+        _fake_sync_skills_to_active_sandboxes,
+    )
+
+    test_client = app.test_client()
+
+    list_response = await test_client.get(
+        "/api/skills/files?name=demo_skill",
+        headers=authenticated_header,
+    )
+    list_data = await list_response.get_json()
+    assert list_data["status"] == "ok"
+    listed_paths = {item["path"] for item in list_data["data"]["entries"]}
+    assert "SKILL.md" in listed_paths
+    assert "outside-link.txt" not in listed_paths
+
+    read_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=SKILL.md",
+        headers=authenticated_header,
+    )
+    read_data = await read_response.get_json()
+    assert read_data["status"] == "ok"
+    assert "# Demo" in read_data["data"]["content"]
+
+    update_response = await test_client.post(
+        "/api/skills/file",
+        json={
+            "name": "demo_skill",
+            "path": "SKILL.md",
+            "content": "# Updated\n",
+        },
+        headers=authenticated_header,
+    )
+    update_data = await update_response.get_json()
+    assert update_data["status"] == "ok"
+    assert skill_md.read_text(encoding="utf-8") == "# Updated\n"
+
+    traversal_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=../outside.txt",
+        headers=authenticated_header,
+    )
+    traversal_data = await traversal_response.get_json()
+    assert traversal_data["status"] == "error"
+
+    symlink_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=outside-link.txt",
+        headers=authenticated_header,
+    )
+    symlink_data = await symlink_response.get_json()
+    assert symlink_data["status"] == "error"
+
+    large_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=large.md",
+        headers=authenticated_header,
+    )
+    large_data = await large_response.get_json()
+    assert large_data["status"] == "error"
+    assert large_data["message"] == "File is too large"
+
+    binary_response = await test_client.get(
+        "/api/skills/file?name=demo_skill&path=binary.md",
+        headers=authenticated_header,
+    )
+    binary_data = await binary_response.get_json()
+    assert binary_data["status"] == "error"
+    assert binary_data["message"] == "File is not valid UTF-8 text"

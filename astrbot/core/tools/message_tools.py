@@ -2,6 +2,7 @@ import json
 import os
 import shlex
 import uuid
+from pathlib import Path
 
 from pydantic import Field
 from pydantic.dataclasses import dataclass
@@ -14,8 +15,55 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.tools.computer_tools.util import (
+    check_admin_permission,
+    is_local_runtime,
+    workspace_root,
+)
 from astrbot.core.tools.registry import builtin_tool
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_system_tmp_path,
+    get_astrbot_temp_path,
+)
+
+
+def _file_send_allowed_roots(umo: str | None) -> tuple[Path, ...]:
+    roots = []
+    if umo:
+        roots.append(workspace_root(umo))
+    roots.extend(
+        [
+            Path(get_astrbot_temp_path()).resolve(strict=False),
+            Path(get_astrbot_system_tmp_path()).resolve(strict=False),
+        ]
+    )
+    return tuple(roots)
+
+
+def _is_path_within(path: Path, roots: tuple[Path, ...]) -> bool:
+    return any(path == root or path.is_relative_to(root) for root in roots)
+
+
+def _is_restricted_local_env(context: ContextWrapper[AstrAgentContext]) -> bool:
+    if not is_local_runtime(context):
+        return False
+    cfg = context.context.context.get_config(
+        umo=context.context.event.unified_msg_origin
+    )
+    provider_settings = cfg.get("provider_settings", {})
+    require_admin = provider_settings.get("computer_use_require_admin", True)
+    return require_admin and context.context.event.role != "admin"
+
+
+def _can_send_local_file(
+    context: ContextWrapper[AstrAgentContext],
+    local_path: Path,
+) -> bool:
+    umo = context.context.event.unified_msg_origin
+    allowed_roots = _file_send_allowed_roots(umo)
+    if _is_path_within(local_path, allowed_roots):
+        return True
+    return is_local_runtime(context) and not _is_restricted_local_env(context)
 
 
 @builtin_tool
@@ -26,7 +74,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         "Send message to the user. "
         "Supports various message types including `plain`, `image`, `record`, `video`, `file`, and `mention_user`. "
         "Use this tool to send media files (`image`, `record`, `video`, `file`), "
-        "or when you need to proactively message the user(such as cron job). For normal text replies, you can output directly."
+        "or when you need to proactively message the user(such as cron job). For other normal text replies, you can output directly and no need to use this tool."
     )
     parameters: dict = Field(
         default_factory=lambda: {
@@ -67,7 +115,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 },
                 "session": {
                     "type": "string",
-                    "description": "Optional. Target session string. Defaults to current session.",
+                    "description": (
+                        "Optional. Leave empty for the current session. "
+                        "Use 'platform_id:message_type:session_id' to target another session."
+                    ),
                 },
             },
             "required": ["messages"],
@@ -75,10 +126,44 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
     )
 
     async def _resolve_path_from_sandbox(
-        self, context: ContextWrapper[AstrAgentContext], path: str
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        path: str,
+        *,
+        component_type: str = "file",
     ) -> tuple[str, bool]:
-        if os.path.exists(path):
-            return path, False
+        path = str(path).strip()
+        if not path:
+            raise FileNotFoundError(f"{component_type} path is empty")
+
+        # Relative host paths are resolved only inside the user's workspace.
+        if not os.path.isabs(path):
+            unified_msg_origin = context.context.event.unified_msg_origin
+            if unified_msg_origin:
+                try:
+                    ws_path = workspace_root(unified_msg_origin)
+                    ws_candidate = (ws_path / path).resolve(strict=False)
+                    if ws_candidate.is_file() and ws_candidate.is_relative_to(ws_path):
+                        return str(ws_candidate), False
+                except Exception:
+                    pass
+        else:
+            local_candidate = Path(path).expanduser().resolve(strict=False)
+            if local_candidate.is_file():
+                if _can_send_local_file(context, local_candidate):
+                    return str(local_candidate), False
+                if is_local_runtime(context):
+                    allowed = ", ".join(
+                        str(root)
+                        for root in _file_send_allowed_roots(
+                            context.context.event.unified_msg_origin
+                        )
+                    )
+                    raise PermissionError(
+                        "Local file send is restricted for this user. "
+                        f"Allowed directories: {allowed}. "
+                        f"Blocked path: {local_candidate}."
+                    )
 
         try:
             sb = await get_booter(
@@ -97,13 +182,23 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return local_path, True
         except Exception as exc:
             logger.warning(f"Failed to check/download file from sandbox: {exc}")
+            raise
 
-        return path, False
+        raise FileNotFoundError(f"{component_type} path does not exist: {path}")
 
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
-        session = kwargs.get("session") or context.context.event.unified_msg_origin
+        # Security: only AstrBot admins can send messages to other sessions.
+        # Non-admin users are always restricted to their own session.
+        # See https://github.com/AstrBotDevs/AstrBot/issues/7822
+        current_session = context.context.event.unified_msg_origin
+        session = kwargs.get("session") or current_session
+        if session != current_session:
+            if permission_error := check_admin_permission(
+                context, "Send message to another session"
+            ):
+                return permission_error
         messages = kwargs.get("messages")
         if not isinstance(messages, list) or not messages:
             return "error: messages parameter is empty or invalid."
@@ -128,7 +223,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     url = msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context, path, component_type="image"
                         )
                         components.append(Comp.Image.fromFileSystem(path=local_path))
                     elif url:
@@ -140,7 +235,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     url = msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context, path, component_type="record"
                         )
                         components.append(Comp.Record.fromFileSystem(path=local_path))
                     elif url:
@@ -152,7 +247,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     url = msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context, path, component_type="video"
                         )
                         components.append(Comp.Video.fromFileSystem(path=local_path))
                     elif url:
@@ -170,7 +265,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     )
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path
+                            context, path, component_type="file"
                         )
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:
@@ -186,6 +281,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     return (
                         f"error: unsupported message type '{msg_type}' at index {idx}."
                     )
+            except FileNotFoundError as exc:
+                return f"error: {exc}"
+            except PermissionError as exc:
+                return f"error: {exc}"
             except Exception as exc:
                 return f"error: failed to build messages[{idx}] component: {exc}"
 
@@ -195,8 +294,27 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 if isinstance(session, str)
                 else session
             )
-        except Exception as exc:
-            return f"error: invalid session: {exc}"
+        except Exception:
+            # LLM 在 cron 等主动场景下可能只传 session_id（如 oc_xxx），
+            # 而不是完整的三段式 platform_id:message_type:session_id。
+            # 此时用 current_session 的前两段补全。
+            # 注意：这里的session是传入的session参数，实际上是用户输入的session_id
+            # current_session才是完整的三段式session字符串。
+            # 仅当传入字符串不含 ':'（明显是裸 session_id）时才用 current_session 补全，
+            # 避免 LLM 传了带 ':' 但格式错误的目标 session 被错误修复。
+            # issue: https://github.com/AstrBotDevs/AstrBot/issues/7907
+            if isinstance(session, str) and current_session and ":" not in session:
+                try:
+                    cur = MessageSession.from_str(current_session)
+                    target_session = MessageSession(
+                        platform_name=cur.platform_id,
+                        message_type=cur.message_type,
+                        session_id=session,
+                    )
+                except Exception:
+                    return f"error: invalid session: {session}"
+            else:
+                return f"error: invalid session: {session}"
 
         await context.context.context.send_message(
             target_session,

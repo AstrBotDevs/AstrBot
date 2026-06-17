@@ -2,12 +2,21 @@ import enum
 import json
 import logging
 import os
+import tempfile
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.auth_password import (
+    generate_dashboard_password,
+    hash_dashboard_password,
+    hash_md5_dashboard_password,
+    validate_dashboard_password,
+)
 
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
+DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
+DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_RESET_DASHBOARD_PASSWORD"
 logger = logging.getLogger("astrbot")
 
 
@@ -46,9 +55,9 @@ class AstrBotConfig(dict):
 
         if not self.check_exist():
             """不存在时载入默认配置"""
-            with open(config_path, "w", encoding="utf-8-sig") as f:
-                json.dump(default_config, f, indent=4, ensure_ascii=False)
-                object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
+            self.update(default_config)
+            self.save_config(indent=4)
+            object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
 
         with open(config_path, encoding="utf-8-sig") as f:
             conf_str = f.read()
@@ -56,14 +65,76 @@ class AstrBotConfig(dict):
             if conf_str.startswith("\ufeff"):
                 conf_str = conf_str[1:]
             conf = json.loads(conf_str)
-
+        dashboard_conf = conf.get("dashboard")
+        stored_dashboard_password_change_required = bool(
+            isinstance(dashboard_conf, dict)
+            and dashboard_conf.get("password_change_required", False)
+        )
+        if stored_dashboard_password_change_required:
+            object.__setattr__(
+                self,
+                "_dashboard_password_change_required_from_config",
+                True,
+            )
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
+        reset_dashboard_password = self._consume_reset_dashboard_password_flag()
+        if reset_dashboard_password and "dashboard" in conf:
+            self._reset_generated_dashboard_password(conf)
+            has_new = True
+        elif (
+            "dashboard" in conf
+            and isinstance(conf["dashboard"], dict)
+            and not conf["dashboard"].get("pbkdf2_password")
+            and not conf["dashboard"].get("password")
+        ):
+            self._reset_generated_dashboard_password(conf)
+            has_new = True
+        elif (
+            "dashboard" in conf
+            and isinstance(conf["dashboard"], dict)
+            and stored_dashboard_password_change_required
+            and conf["dashboard"].get("pbkdf2_password")
+        ):
+            self._reset_generated_dashboard_password(conf)
+            has_new = True
         self.update(conf)
         if has_new:
             self.save_config()
 
         self.update(conf)
+
+    def _reset_generated_dashboard_password(self, conf: dict) -> None:
+        generated_password = self._resolve_initial_dashboard_password()
+        conf["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
+            generated_password
+        )
+        conf["dashboard"]["password"] = hash_md5_dashboard_password(generated_password)
+        conf["dashboard"]["password_storage_upgraded"] = True
+        conf["dashboard"]["password_change_required"] = True
+        object.__setattr__(
+            self,
+            "_generated_dashboard_password",
+            generated_password,
+        )
+        object.__setattr__(
+            self,
+            "_generated_dashboard_password_change_required",
+            True,
+        )
+
+    @staticmethod
+    def _consume_reset_dashboard_password_flag() -> bool:
+        raw_value = os.environ.pop(DASHBOARD_RESET_PASSWORD_ENV, "")
+        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _resolve_initial_dashboard_password() -> str:
+        env_password = os.environ.get(DASHBOARD_INITIAL_PASSWORD_ENV)
+        if env_password is None:
+            return generate_dashboard_password()
+        validate_dashboard_password(env_password)
+        return env_password
 
     def _config_schema_to_default_config(self, schema: dict) -> dict:
         """将 Schema 转换成 Config"""
@@ -104,7 +175,7 @@ class AstrBotConfig(dict):
             if key not in conf:
                 # 配置项不存在，插入默认值
                 path_ = path + "." + key if path else key
-                logger.info(f"检查到配置项 {path_} 不存在，已插入默认值 {value}")
+                logger.info("Config key missing; added default.")
                 new_conf[key] = value
                 has_new = True
             elif conf[key] is None:
@@ -134,15 +205,15 @@ class AstrBotConfig(dict):
         for key in list(conf.keys()):
             if key not in refer_conf:
                 path_ = path + "." + key if path else key
-                logger.info(f"检查到配置项 {path_} 不存在，将从当前配置中删除")
+                logger.info("Config key removed: %s", path_)
                 has_new = True
 
         # 顺序不一致也算作变更
         if list(conf.keys()) != list(new_conf.keys()):
             if path:
-                logger.info(f"检查到配置项 {path} 的子项顺序不一致，已重新排序")
+                logger.info("Config key order fixed: %s", path)
             else:
-                logger.info("检查到配置项顺序不一致，已重新排序")
+                logger.info("Config key order fixed")
             has_new = True
 
         # 更新原始配置
@@ -151,15 +222,33 @@ class AstrBotConfig(dict):
 
         return has_new
 
-    def save_config(self, replace_config: dict | None = None) -> None:
+    def save_config(
+        self, replace_config: dict | None = None, *, indent: int = 2
+    ) -> None:
         """将配置写入文件
 
         如果传入 replace_config，则将配置替换为 replace_config
         """
         if replace_config:
             self.update(replace_config)
-        with open(self.config_path, "w", encoding="utf-8-sig") as f:
-            json.dump(self, f, indent=2, ensure_ascii=False)
+        directory = os.path.dirname(os.path.abspath(self.config_path)) or "."
+        fd, temp_path = tempfile.mkstemp(
+            dir=directory,
+            prefix=f".{os.path.basename(self.config_path)}.",
+            suffix=".tmp",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8-sig") as f:
+                json.dump(self, f, indent=indent, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, self.config_path)
+        except Exception:
+            try:
+                os.unlink(temp_path)
+            except FileNotFoundError:
+                pass
+            raise
 
     def __getattr__(self, item):
         try:

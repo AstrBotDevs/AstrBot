@@ -10,6 +10,7 @@ import aiofiles
 
 from astrbot.core import logger
 from astrbot.core.db.vec_db.base import BaseVecDB
+from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.provider.provider import (
     EmbeddingProvider,
@@ -20,6 +21,7 @@ from astrbot.core.provider.provider import (
 )
 
 from .chunking.base import BaseChunker
+from .chunking.markdown import MarkdownChunker
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
@@ -106,6 +108,10 @@ Text chunk to process:
         f"  - Failed to process chunk after {max_retries + 1} attempts. Using original text."
     )
     return [chunk]
+
+
+def _compact_chunks(chunks: list[str]) -> list[str]:
+    return [chunk.strip() for chunk in chunks if chunk and chunk.strip()]
 
 
 class KBHelper:
@@ -248,7 +254,7 @@ class KBHelper:
 
             if pre_chunked_text is not None:
                 # 如果提供了预分块文本，直接使用
-                chunks_text = pre_chunked_text
+                chunks_text = _compact_chunks(pre_chunked_text)
                 file_size = sum(len(chunk) for chunk in chunks_text)
                 logger.info(f"使用预分块文本进行上传，共 {len(chunks_text)} 个块。")
             else:
@@ -264,10 +270,31 @@ class KBHelper:
                 if progress_callback:
                     await progress_callback("parsing", 0, 100)
 
-                parser = await select_parser(f".{file_type}")
-                parse_result = await parser.parse(file_content, file_name)
+                try:
+                    parser = await select_parser(f".{file_type}")
+                    parse_result = await parser.parse(file_content, file_name)
+                except KnowledgeBaseUploadError:
+                    raise
+                except Exception as exc:
+                    raise KnowledgeBaseUploadError(
+                        stage="parsing",
+                        user_message=(
+                            "文档解析失败：无法读取或解析上传文件。"
+                            "请确认文件格式受支持且文件内容未损坏。"
+                        ),
+                        details={"file_name": file_name},
+                    ) from exc
                 text_content = parse_result.text
                 media_items = parse_result.media
+                if not text_content or not text_content.strip():
+                    raise KnowledgeBaseUploadError(
+                        stage="parsing",
+                        user_message=(
+                            "文档解析失败：未能从文件中提取可索引文本。"
+                            "该文件可能是扫描件、纯图片 PDF，或格式暂不受支持。"
+                        ),
+                        details={"file_name": file_name},
+                    )
 
                 if progress_callback:
                     await progress_callback("parsing", 100, 100)
@@ -288,11 +315,53 @@ class KBHelper:
                 if progress_callback:
                     await progress_callback("chunking", 0, 100)
 
-                chunks_text = await self.chunker.chunk(
-                    text_content,
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
-                )
+                try:
+                    # 根据文件类型选择分块器：Markdown 文件使用结构感知分块
+                    effective_chunker = self.chunker
+                    file_ext = Path(file_name).suffix.lower() if file_name else ""
+                    if file_ext in (".md", ".markdown", ".mkd", ".mdx"):
+                        effective_chunker = MarkdownChunker(
+                            chunk_size=chunk_size,
+                            chunk_overlap=chunk_overlap,
+                        )
+                        logger.info(
+                            f"检测到 Markdown 文件 '{file_name}'，使用 MarkdownChunker 进行结构化分块"
+                        )
+
+                    chunks_text = await effective_chunker.chunk(
+                        text_content,
+                        chunk_size=chunk_size,
+                        chunk_overlap=chunk_overlap,
+                    )
+                    chunks_text = _compact_chunks(chunks_text)
+                except KnowledgeBaseUploadError:
+                    raise
+                except Exception as exc:
+                    raise KnowledgeBaseUploadError(
+                        stage="chunking",
+                        user_message=(
+                            "分块失败：文档内容在切分文本块时发生错误。"
+                            "请稍后重试，或调整分块参数后再次上传。"
+                        ),
+                        details={"file_name": file_name},
+                    ) from exc
+
+            if not chunks_text or not any(chunk.strip() for chunk in chunks_text):
+                if pre_chunked_text is not None:
+                    raise KnowledgeBaseUploadError(
+                        stage="validation",
+                        user_message=("预分块文本为空，未提供任何可索引文本块。"),
+                        details={"file_name": file_name},
+                    )
+                else:
+                    raise KnowledgeBaseUploadError(
+                        stage="chunking",
+                        user_message=(
+                            "分块失败：文档内容为空，未生成任何可索引文本块。"
+                        ),
+                        details={"file_name": file_name},
+                    )
+
             contents = []
             metadatas = []
             for idx, chunk_text in enumerate(chunks_text):
@@ -313,14 +382,23 @@ class KBHelper:
                 if progress_callback:
                     await progress_callback("embedding", current, total)
 
-            await self.vec_db.insert_batch(
-                contents=contents,
-                metadatas=metadatas,
-                batch_size=batch_size,
-                tasks_limit=tasks_limit,
-                max_retries=max_retries,
-                progress_callback=embedding_progress_callback,
-            )
+            try:
+                await self.vec_db.insert_batch(
+                    contents=contents,
+                    metadatas=metadatas,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
+                    progress_callback=embedding_progress_callback,
+                )
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                raise KnowledgeBaseUploadError(
+                    stage="storage",
+                    user_message=("存储失败：文本块已生成，但写入知识库索引时出错。"),
+                    details={"file_name": file_name},
+                ) from exc
 
             # 保存文档的元数据
             doc = KBDocument(
@@ -334,22 +412,47 @@ class KBHelper:
                 chunk_count=len(chunks_text),
                 media_count=0,
             )
-            async with self.kb_db.get_db() as session:
-                async with session.begin():
-                    session.add(doc)
-                    for media in saved_media:
-                        session.add(media)
-                    await session.commit()
+            try:
+                async with self.kb_db.get_db() as session:
+                    async with session.begin():
+                        session.add(doc)
+                        for media in saved_media:
+                            session.add(media)
+                        await session.commit()
 
-                await session.refresh(doc)
+                    await session.refresh(doc)
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                raise KnowledgeBaseUploadError(
+                    stage="metadata",
+                    user_message=(
+                        "元数据保存失败：文本块已写入知识库，但文档记录保存失败。"
+                    ),
+                    details={"file_name": file_name, "doc_id": doc_id},
+                ) from exc
 
             vec_db: FaissVecDB = self.vec_db  # type: ignore
-            await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
-            await self.refresh_kb()
-            await self.refresh_document(doc_id)
+            try:
+                await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
+                await self.refresh_kb()
+                await self.refresh_document(doc_id)
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                raise KnowledgeBaseUploadError(
+                    stage="metadata",
+                    user_message=(
+                        "元数据更新失败：文档已上传，但知识库统计信息刷新失败。"
+                    ),
+                    details={"file_name": file_name, "doc_id": doc_id},
+                ) from exc
             return doc
         except Exception as e:
-            logger.error(f"上传文档失败: {e}")
+            if isinstance(e, KnowledgeBaseUploadError):
+                logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
+            else:
+                logger.error(f"上传文档失败: {e}", exc_info=True)
             # if file_path.exists():
             #     file_path.unlink()
 
@@ -360,7 +463,7 @@ class KBHelper:
                 except Exception as me:
                     logger.warning(f"清理多媒体文件失败 {media_path}: {me}")
 
-            raise e
+            raise
 
     async def list_documents(
         self,
@@ -642,6 +745,8 @@ class KBHelper:
                     final_chunks.append(initial_chunks[i])
                 elif isinstance(result, list):
                     final_chunks.extend(result)
+
+            final_chunks = _compact_chunks(final_chunks)
 
             logger.info(
                 f"文本修复完成: {len(initial_chunks)} 个原始块 -> {len(final_chunks)} 个最终块。"

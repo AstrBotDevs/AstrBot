@@ -3,14 +3,22 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from quart import Quart
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.exceptions import KnowledgeBaseUploadError
 from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
+from astrbot.core.utils.auth_password import (
+    hash_dashboard_password,
+    hash_md5_dashboard_password,
+)
+from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.services.knowledge_base_service import KnowledgeBaseService
+
+_TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -44,6 +52,24 @@ async def core_lifecycle_td(tmp_path_factory):
 
     # kb_manager.get_kb.return_value = kb_helper # Removed this line as it's handled above
     core_lifecycle.kb_manager = kb_manager
+    generated_password = getattr(
+        core_lifecycle.astrbot_config,
+        "_generated_dashboard_password",
+        None,
+    )
+    dashboard_password = generated_password or _TEST_DASHBOARD_PASSWORD
+    if not generated_password:
+        core_lifecycle.astrbot_config["dashboard"]["pbkdf2_password"] = (
+            hash_dashboard_password(dashboard_password)
+        )
+        core_lifecycle.astrbot_config["dashboard"]["password"] = (
+            hash_md5_dashboard_password(dashboard_password)
+        )
+    object.__setattr__(
+        core_lifecycle,
+        "_dashboard_plain_password",
+        dashboard_password,
+    )
 
     try:
         yield core_lifecycle
@@ -58,21 +84,33 @@ async def core_lifecycle_td(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
-    """Creates a Quart app instance for testing."""
+    """Creates a FastAPIAppAdapter app instance for testing."""
     shutdown_event = asyncio.Event()
     server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
     return server.app
 
 
+def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
+    generated_password = getattr(core_lifecycle_td, "_dashboard_plain_password", None)
+    if generated_password:
+        return generated_password
+    password = core_lifecycle_td.astrbot_config["dashboard"]["pbkdf2_password"]
+    if isinstance(password, str) and password.startswith("pbkdf2_sha256$"):
+        return "astrbot"
+    return password
+
+
 @pytest_asyncio.fixture(scope="module")
-async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
+async def authenticated_header(
+    app: FastAPIAppAdapter, core_lifecycle_td: AstrBotCoreLifecycle
+):
     """Handles login and returns an authenticated header."""
     test_client = app.test_client()
     response = await test_client.post(
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
-            "password": core_lifecycle_td.astrbot_config["dashboard"]["password"],
+            "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
     data = await response.get_json()
@@ -83,10 +121,15 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
 
 @pytest.mark.asyncio
 async def test_import_documents(
-    app: Quart, authenticated_header: dict, core_lifecycle_td: AstrBotCoreLifecycle
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     """Tests the import documents functionality."""
     test_client = app.test_client()
+    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper.upload_document.reset_mock()
+    kb_helper.upload_document.side_effect = None
 
     # Test data
     import_data = {
@@ -129,7 +172,6 @@ async def test_import_documents(
     assert result["failed_count"] == 0
 
     # Verify kb_helper.upload_document was called correctly
-    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
     assert kb_helper.upload_document.call_count == 2
 
     # Check first call arguments
@@ -147,7 +189,51 @@ async def test_import_documents(
 
 
 @pytest.mark.asyncio
-async def test_import_documents_invalid_input(app: Quart, authenticated_header: dict):
+async def test_import_documents_returns_friendly_failure_message(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    kb_helper = await core_lifecycle_td.kb_manager.get_kb("test_kb_id")
+    kb_helper.upload_document.reset_mock()
+    kb_helper.upload_document.side_effect = KnowledgeBaseUploadError(
+        stage="embedding",
+        user_message=(
+            "向量化失败：嵌入模型返回的向量数量与文本分块数量不一致（期望 2，实际 1）。"
+        ),
+        details={"expected_contents": 2, "actual_vectors": 1},
+    )
+
+    service = KnowledgeBaseService.__new__(KnowledgeBaseService)
+    service.upload_progress = {}
+    service.upload_tasks = {}
+
+    await KnowledgeBaseService.background_import_task(
+        service,
+        task_id="task-1",
+        kb_helper=kb_helper,
+        documents=[{"file_name": "broken.txt", "chunks": ["chunk1", "chunk2"]}],
+        batch_size=32,
+        tasks_limit=3,
+        max_retries=3,
+    )
+
+    assert service.upload_tasks["task-1"]["status"] == "completed"
+    result = service.upload_tasks["task-1"]["result"]
+    assert result["success_count"] == 0
+    assert result["failed_count"] == 1
+    assert result["failed"][0]["file_name"] == "broken.txt"
+    assert result["failed"][0]["error"].startswith("broken.txt:")
+    assert "向量化失败" in result["failed"][0]["error"]
+    assert "期望 2，实际 1" in result["failed"][0]["error"]
+    assert "not same nb of vectors as ids" not in result["failed"][0]["error"]
+    assert kb_helper.upload_document.await_count == 1
+
+    kb_helper.upload_document.side_effect = None
+
+
+@pytest.mark.asyncio
+async def test_import_documents_invalid_input(
+    app: FastAPIAppAdapter, authenticated_header: dict
+):
     """Tests import documents with invalid input."""
     test_client = app.test_client()
 

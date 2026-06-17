@@ -1,8 +1,7 @@
 <template>
   <div class="settings-tab">
-    <v-card elevation="2">
+    <v-card variant="outlined">
       <v-card-title class="pa-4">{{ t('settings.title') }}</v-card-title>
-      <v-divider />
 
       <v-card-text class="pa-6">
         <v-form ref="formRef">
@@ -104,8 +103,6 @@
         </v-form>
       </v-card-text>
 
-      <v-divider />
-
       <v-card-actions class="pa-4">
         <v-spacer />
         <v-btn
@@ -162,7 +159,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
-import axios from 'axios'
+import { knowledgeApi, providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
@@ -225,9 +222,7 @@ watch(() => props.kb, (kb) => {
 // 加载提供商列表
 const loadProviders = async () => {
   try {
-    const response = await axios.get('/api/config/provider/list', {
-      params: { provider_type: 'embedding,rerank' }
-    })
+    const response = await providerApi.listByProviderType('embedding,rerank')
     if (response.data.status === 'ok') {
       embeddingProviders.value = response.data.data.filter(
         (p: any) => p.provider_type === 'embedding'
@@ -275,8 +270,7 @@ const saveSettings = async () => {
 
   saving.value = true
   try {
-    const response = await axios.post('/api/kb/update', {
-      kb_id: props.kb.kb_id,
+    const response = await knowledgeApi.update(props.kb.kb_id, {
       chunk_size: formData.value.chunk_size,
       chunk_overlap: formData.value.chunk_overlap,
       top_k_dense: formData.value.top_k_dense,

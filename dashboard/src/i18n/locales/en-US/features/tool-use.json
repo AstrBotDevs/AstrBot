@@ -12,6 +12,7 @@
   },
   "mcpServers": {
     "title": "MCP Servers",
+    "description": "Manage MCP servers",
     "buttons": {
       "refresh": "Refresh",
       "add": "Add Server",
@@ -38,6 +39,9 @@
     "description": "Function Description",
     "parameters": "Parameter List",
     "noParameters": "This tool has no parameters",
+    "filter": {
+      "showBuiltin": "Show builtin tools"
+    },
     "table": {
       "paramName": "Parameter Name",
       "type": "Type",
@@ -46,7 +50,26 @@
       "origin": "Origin",
       "originName": "Origin Name",
       "readonly": "Read-only",
+      "permission": "Permission",
+      "permissionAdmin": "Admin",
+      "permissionMember": "All Users",
+      "permissionEveryone": "All Users",
+      "permissionBuiltin": "System Builtin",
       "actions": "Actions"
+    },
+    "configTags": {
+      "tooltipTitle": "This tool is enabled in config file {config} because:",
+      "conditions": {
+        "truthy": "{key} is enabled",
+        "equals": "{key} = {expected}",
+        "in": "{key} matched {expected}",
+        "fallback": "{key} is currently {actual}"
+      }
+    },
+    "summary": {
+      "total": "Total",
+      "active": "Active",
+      "inactive": "Inactive"
     }
   },
   "marketplace": {
@@ -86,7 +109,8 @@
         "sync": "Sync"
       },
       "tips": {
-        "timeoutConfig": "Please configure tool call timeout separately in the configuration page"
+        "timeoutConfig": "Please configure tool call timeout separately in the configuration page",
+        "transportRecommendation": "Prefer Streamable HTTP or SSE mode. Stdio mode starts a local process on the AstrBot host and should only be used for trusted MCP servers."
       }
     },
     "serverDetail": {
@@ -156,6 +180,9 @@
     "toggleToolSuccess": "Tool status toggled successfully!",
     "toggleToolReadonly": "Builtin tools are read-only and cannot be enabled or disabled.",
     "toggleToolError": "Failed to toggle tool status: {error}",
+    "updateToolPermissionSuccess": "Permission for {name} updated",
+    "updateToolPermissionFailed": "Failed to update tool permission",
+    "updateToolPermissionBuiltin": "Builtin tools do not support per-tool permission configuration.",
     "testError": "Test connection failed: {error}"
   }
 }

@@ -9,6 +9,10 @@ from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.star.context import Context
 from astrbot.core.tools.registry import builtin_tool
 
+_KNOWLEDGE_BASE_TOOL_CONFIG = {
+    "kb_agentic_mode": True,
+}
+
 
 def check_all_kb(kb_list: list[KBHelper | None]) -> bool:
     """检查是否所有的知识库都为空"""
@@ -83,7 +87,7 @@ async def retrieve_knowledge_base(
     return None
 
 
-@builtin_tool
+@builtin_tool(config=_KNOWLEDGE_BASE_TOOL_CONFIG)
 @dataclass
 class KnowledgeBaseQueryTool(FunctionTool[AstrAgentContext]):
     name: str = "astr_kb_search"

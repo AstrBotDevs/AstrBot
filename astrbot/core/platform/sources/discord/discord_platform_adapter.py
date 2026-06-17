@@ -9,7 +9,7 @@ from discord.channel import DMChannel
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import File, Image, Plain
+from astrbot.api.message_components import File, Image, Plain, Record
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -23,6 +23,7 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
@@ -99,14 +100,7 @@ class DiscordPlatformAdapter(Platform):
         message_obj.session_id = session.session_id
         message_obj.message = message_chain.chain
 
-        # 创建临时事件对象来发送消息
-        temp_event = DiscordPlatformEvent(
-            message_str=message_chain.get_plain_text(),
-            message_obj=message_obj,
-            platform_meta=self.meta(),
-            session_id=session.session_id,
-            client=self.client,
-        )
+        temp_event = self.create_event(message_obj)
         await temp_event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
@@ -142,7 +136,8 @@ class DiscordPlatformAdapter(Platform):
             return
 
         proxy = self.config.get("discord_proxy") or None
-        self.client = DiscordBotClient(token, proxy)
+        allow_bot_messages = bool(self.config.get("discord_allow_bot_messages"))
+        self.client = DiscordBotClient(token, proxy, allow_bot_messages)
         self.client.on_message_received = on_received
 
         async def callback() -> None:
@@ -247,6 +242,12 @@ class DiscordPlatformAdapter(Platform):
                     message_chain.append(
                         Image(file=attachment.url, filename=attachment.filename),
                     )
+                elif attachment.content_type and attachment.content_type.startswith(
+                    "audio/",
+                ):
+                    message_chain.append(
+                        Record(file=attachment.url, url=attachment.url),
+                    )
                 else:
                     message_chain.append(
                         File(name=attachment.filename, url=attachment.url),
@@ -261,11 +262,34 @@ class DiscordPlatformAdapter(Platform):
     async def convert_message(self, data: dict) -> AstrBotMessage:
         """将平台消息转换成 AstrBotMessage"""
         # 由于 on_interaction 已被禁用，我们只处理普通消息
-        return self._convert_message_to_abm(data)
+        abm = self._convert_message_to_abm(data)
+        for component in abm.message:
+            if isinstance(component, Record):
+                audio_ref = component.url or component.file
+                if audio_ref:
+                    path_wav = await MediaResolver(
+                        audio_ref,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_path(target_format="wav")
+                    component.file = path_wav
+                    component.url = path_wav
+                    component.path = path_wav
+        return abm
 
-    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
-        """处理消息"""
-        message_event = DiscordPlatformEvent(
+    def create_event(
+        self, message: AstrBotMessage, followup_webhook=None
+    ) -> DiscordPlatformEvent:
+        """Creates a Discord message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+            followup_webhook: Optional slash-command follow-up webhook.
+
+        Returns:
+            Created Discord message event.
+        """
+        return DiscordPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
@@ -273,6 +297,10 @@ class DiscordPlatformAdapter(Platform):
             client=self.client,
             interaction_followup_webhook=followup_webhook,
         )
+
+    async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
+        """处理消息"""
+        message_event = self.create_event(message, followup_webhook)
 
         if self.client.user is None:
             logger.error(
@@ -426,8 +454,22 @@ class DiscordPlatformAdapter(Platform):
 
         # 使用 Pycord 的方法同步指令
         # 注意：这可能需要一些时间，并且有频率限制
-        await self.client.sync_commands()
-        logger.info("[Discord] Command synchronization completed.")
+        try:
+            await self.client.sync_commands()
+            logger.info("[Discord] Command synchronization completed.")
+        except discord.HTTPException as e:
+            if self._is_daily_command_quota_error(e):
+                logger.warning(
+                    "[Discord] Daily application command create quota reached "
+                    "(30034); command sync skipped. Existing commands should "
+                    "continue to work until the quota resets.",
+                )
+                return
+            logger.warning(f"[Discord] Sync commands failed: {e}")
+
+    @staticmethod
+    def _is_daily_command_quota_error(error: discord.HTTPException) -> bool:
+        return getattr(error, "code", None) == 30034
 
     def _create_dynamic_callback(self, cmd_name: str):
         """为每个指令动态创建一个异步回调函数"""
@@ -435,6 +477,21 @@ class DiscordPlatformAdapter(Platform):
         async def dynamic_callback(
             ctx: discord.ApplicationContext, params: str | None = None
         ) -> None:
+            # 1. 嘗試立即响应，防止超时 (移到最前面)
+            followup_webhook = None
+            try:
+                # 設定 2.5 秒超時，避免卡死整個 event loop
+                await asyncio.wait_for(ctx.defer(), timeout=2.5)
+                followup_webhook = ctx.followup
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"[Discord] Defer command '{cmd_name}' timeout. Network might be too slow."
+                )
+                return
+            except Exception as e:
+                logger.warning(f"[Discord] Failed to defer command '{cmd_name}': {e}")
+                return
+
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] Callback triggered: {cmd_name}")
             logger.debug(f"[Discord] Callback context: {ctx}")
@@ -448,14 +505,6 @@ class DiscordPlatformAdapter(Platform):
                 f"Raw params: '{params}'. "
                 f"Built command string: '{message_str_for_filter}'",
             )
-
-            # 尝试立即响应，防止超时
-            followup_webhook = None
-            try:
-                await ctx.defer()
-                followup_webhook = ctx.followup
-            except Exception as e:
-                logger.warning(f"[Discord] Failed to defer command '{cmd_name}': {e}")
 
             # 2. 构建 AstrBotMessage
             channel = ctx.channel

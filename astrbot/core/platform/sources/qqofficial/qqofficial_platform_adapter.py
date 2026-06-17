@@ -5,7 +5,6 @@ import logging
 import os
 import random
 import time
-import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -27,8 +26,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file
+from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
 from .qqofficial_message_event import QQOfficialMessageEvent
@@ -117,15 +115,7 @@ class botClient(Client):
 
     def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
-        self.platform.commit_event(
-            QQOfficialMessageEvent(
-                abm.message_str,
-                abm,
-                self.platform.meta(),
-                abm.session_id,
-                self.platform.client,
-            ),
-        )
+        self.platform.commit_event(self.platform.create_event(abm))
 
     async def bot_connect(self, session) -> None:
         logger.info("[QQOfficial] Websocket session starting.")
@@ -203,6 +193,14 @@ class QQOfficialPlatformAdapter(Platform):
         session: MessageSesion,
         message_chain: MessageChain,
     ) -> None:
+        message_chains = QQOfficialMessageEvent._split_message_chain_by_media(
+            message_chain
+        )
+        if len(message_chains) > 1:
+            for split_message_chain in message_chains:
+                await self._send_by_session_common(session, split_message_chain)
+            return
+
         (
             plain_text,
             image_base64,
@@ -222,8 +220,9 @@ class QQOfficialPlatformAdapter(Platform):
         ):
             return
 
+        # 私聊主动推送不需要 msg_id，见 https://github.com/AstrBotDevs/AstrBot/issues/7904
         msg_id = self._session_last_message_id.get(session.session_id)
-        if not msg_id:
+        if not msg_id and session.message_type != MessageType.FRIEND_MESSAGE:
             logger.warning(
                 "[QQOfficial] No cached msg_id for session: %s, skip send_by_session",
                 session.session_id,
@@ -382,6 +381,23 @@ class QQOfficialPlatformAdapter(Platform):
             support_proactive_message=True,
         )
 
+    def create_event(self, message: AstrBotMessage) -> QQOfficialMessageEvent:
+        """Creates a QQ Official message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created QQ Official message event.
+        """
+        return QQOfficialMessageEvent(
+            message.message_str,
+            message,
+            self.meta(),
+            message.session_id,
+            self.client,
+        )
+
     @staticmethod
     def _normalize_attachment_url(url: str | None) -> str:
         if not url:
@@ -395,15 +411,15 @@ class QQOfficialPlatformAdapter(Platform):
         url: str,
         filename: str,
     ) -> Record:
-        temp_dir = Path(get_astrbot_temp_path())
-        temp_dir.mkdir(parents=True, exist_ok=True)
-
         ext = Path(filename).suffix.lower()
         source_ext = ext or ".audio"
-        source_path = temp_dir / f"qqofficial_{uuid.uuid4().hex}{source_ext}"
-        await download_file(url, str(source_path))
+        path_wav = await MediaResolver(
+            url,
+            media_type="audio",
+            default_suffix=source_ext,
+        ).to_path(target_format="wav")
 
-        return Record(file=str(source_path), url=str(source_path))
+        return Record(file=path_wav, url=path_wav)
 
     @staticmethod
     async def _append_attachments(

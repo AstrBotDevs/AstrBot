@@ -1,15 +1,19 @@
 <template>
   <v-dialog v-model="dialog" max-width="1400px" persistent scrollable>
     <template v-slot:activator="{ props }">
-      <v-btn
-        v-bind="props"
-        variant="outlined"
-        color="primary"
-        size="small"
-        :loading="loading"
-      >
-        {{ tm('t2iTemplateEditor.buttonText') }}
-      </v-btn>
+      <div class="t2i-template-editor-trigger">
+        <v-btn
+          v-bind="props"
+          variant="tonal"
+          color="primary"
+          size="small"
+          class="t2i-template-editor-button"
+          :loading="loading"
+        >
+          <v-icon class="mr-2">mdi-code-tags</v-icon>
+          {{ tm('t2iTemplateEditor.buttonText') }}
+        </v-btn>
+      </div>
     </template>
     
     <v-card class="t2i-template-editor">
@@ -180,6 +184,7 @@
             </v-btn>
             <v-btn
               color="primary"
+              variant="tonal"
               @click="promptApplyAndClose"
               :loading="saveLoading"
               :disabled="isCreatingNew || !selectedTemplate"
@@ -201,7 +206,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="resetDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="warning" @click="confirmReset" :loading="resetLoading">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
+          <v-btn color="warning" variant="tonal" @click="confirmReset" :loading="resetLoading">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -216,7 +221,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="deleteDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="error" @click="confirmDelete" :loading="saveLoading">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
+          <v-btn color="error" variant="tonal" @click="confirmDelete" :loading="saveLoading">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -231,7 +236,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="applyAndCloseDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="primary" @click="confirmApplyAndClose" :loading="saveLoading">{{ t('core.common.confirm') }}</v-btn>
+          <v-btn color="primary" variant="tonal" @click="confirmApplyAndClose" :loading="saveLoading">{{ t('core.common.confirm') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -243,10 +248,12 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
-import axios from 'axios'
+import { useToast } from '@/utils/toast'
+import { statsApi, t2iApi } from '@/api/v1'
 
 const { t } = useI18n()
 const { tm } = useModuleI18n('core.shared')
+const toast = useToast()
 
 // --- 响应式数据 ---
 const dialog = ref(false)
@@ -286,7 +293,7 @@ const editorOptions = {
 const previewVersion = ref('v4.0.0')
 const syncPreviewVersion = async () => {
   try {
-    const res = await axios.get('/api/stat/version')
+    const res = await statsApi.version()
     const rawVersion = res?.data?.data?.version || res?.data?.version
     if (rawVersion) {
       previewVersion.value = rawVersion.startsWith('v') ? rawVersion : `v${rawVersion}`
@@ -298,17 +305,82 @@ const syncPreviewVersion = async () => {
 
 const previewData = computed(() => ({
   text: tm('t2iTemplateEditor.previewText') || '这是一个示例文本，用于预览模板效果。\n\n这里可以包含多行文本，支持换行和各种格式。',
-  version: previewVersion.value 
+  version: previewVersion.value
 }))
+
+const injectShikiRuntime = (content) => {
+  if (content.includes('astrbot-t2i-shiki-runtime')) {
+    return content
+  }
+
+  const runtimeScript = getShikiRuntimeScript()
+  const headClose = content.search(/<\/head\s*>/i)
+  if (headClose >= 0) {
+    return `${content.slice(0, headClose)}  ${runtimeScript}\n${content.slice(headClose)}`
+  }
+
+  return `${runtimeScript}\n${content}`
+}
+
+const getShikiRuntimeScript = () => '<script id="astrbot-t2i-shiki-runtime" src="/t2i/shiki_runtime.iife.js"></scr' + 'ipt>'
+
+const hasMarkdownSource = (content) => /<[^>]+\bid=["']markdown-source["']/i.test(content)
+
+const insertMarkdownSource = (content) => {
+  const sourceElement = '  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>\n'
+  const markedScript = content.search(/^[ \t]*<script\s+src=["']https:\/\/cdn\.jsdelivr\.net\/npm\/marked\/marked\.min\.js["']><\/script>[ \t]*\r?\n?/im)
+  if (markedScript >= 0) {
+    return `${content.slice(0, markedScript)}${sourceElement}${content.slice(markedScript)}`
+  }
+
+  const bodyClose = content.search(/<\/body\s*>/i)
+  if (bodyClose >= 0) {
+    return `${content.slice(0, bodyClose)}${sourceElement}${content.slice(bodyClose)}`
+  }
+
+  return `${sourceElement}${content}`
+}
+
+const normalizeMarkdownSource = (content) => {
+  let normalized = content.replace(
+    /<script\s+id=["']markdown-source["']\s+type=["']text\/plain["']>\s*\{\{\s*text\s*\|\s*safe\s*\}\}\s*<\/script>/gi,
+    '<textarea id="markdown-source" hidden>{{ text | safe }}</textarea>'
+  )
+
+  normalized = normalized.replace(
+    /decodeBase64Utf8\("\{\{\s*text_base64\s*\}\}"\)/g,
+    'document.getElementById("markdown-source").value'
+  )
+  normalized = normalized.replace(
+    /document\.getElementById\(["']markdown-source["']\)\.textContent/g,
+    'document.getElementById("markdown-source").value'
+  )
+
+  if (/\{\{\s*text_base64\s*\}\}/.test(normalized) && !hasMarkdownSource(normalized)) {
+    normalized = insertMarkdownSource(normalized)
+  }
+
+  return normalized
+}
 
 const previewContent = computed(() => {
   try {
-    let content = templateContent.value
-    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, previewData.value.text)
-    content = content.replace(/\{\{\s*version\s*\}\}/g, previewData.value.version)
-    return content
+    let content = normalizeMarkdownSource(templateContent.value)
+    content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, () => previewData.value.text)
+    content = content.replace(/\{\{\s*version\s*\}\}/g, () => previewData.value.version)
+    let usedExistingShikiPlaceholder = false
+    content = content.replace(/<script\b[^>]*>\s*\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}\s*<\/script>/gi, () => {
+      usedExistingShikiPlaceholder = true
+      return getShikiRuntimeScript()
+    })
+    content = content.replace(/\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}/g, () => {
+      usedExistingShikiPlaceholder = true
+      return getShikiRuntimeScript()
+    })
+    return usedExistingShikiPlaceholder ? content : injectShikiRuntime(content)
   } catch (error) {
-    return `<div style="color: red; padding: 20px;">模板渲染错误: ${error.message}</div>`
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return `<div style="color: red; padding: 20px;">模板渲染错误: ${errorMessage}</div>`
   }
 })
 
@@ -317,8 +389,8 @@ const loadInitialData = async () => {
   loading.value = true
   try {
     const [listRes, activeRes] = await Promise.all([
-      axios.get('/api/t2i/templates'),
-      axios.get('/api/t2i/templates/active')
+      t2iApi.listTemplates(),
+      t2iApi.getActiveTemplate()
     ])
 
     if (listRes.data.status === 'ok') {
@@ -349,7 +421,7 @@ const loadTemplateContent = async (name) => {
   if (!name) return
   previewLoading.value = true
   try {
-    const response = await axios.get(`/api/t2i/templates/${name}`)
+    const response = await t2iApi.getTemplate(name)
     if (response.data.status === 'ok') {
       templateContent.value = response.data.data.content
     } else {
@@ -368,7 +440,7 @@ const saveTemplate = async () => {
     if (isCreatingNew.value) {
       // --- 创建新模板 ---
       if (!editingName.value) return
-      const response = await axios.post('/api/t2i/templates/create', {
+      const response = await t2iApi.createTemplate({
         name: editingName.value,
         content: templateContent.value
       })
@@ -378,13 +450,12 @@ const saveTemplate = async () => {
     } else {
       // --- 更新现有模板 ---
       if (!selectedTemplate.value) return
-      await axios.put(`/api/t2i/templates/${selectedTemplate.value}`, {
-        content: templateContent.value
-      })
+      await t2iApi.updateTemplate(selectedTemplate.value, templateContent.value)
     }
   } catch (error) {
-    console.error('保存模板失败:', error)
-    // 可以在此添加错误提示
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error('保存模板失败:', msg)
+    toast.error(msg)
   } finally {
     saveLoading.value = false
   }
@@ -393,10 +464,12 @@ const saveTemplate = async () => {
 const setActiveTemplate = async (name) => {
   applyLoading.value = true
   try {
-    await axios.post('/api/t2i/templates/set_active', { name })
+    await t2iApi.setActiveTemplate(name)
     activeTemplate.value = name
   } catch (error) {
-    console.error(`应用模板 '${name}' 失败:`, error)
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error(`应用模板 '${name}' 失败:`, msg)
+    toast.error(msg)
   } finally {
     applyLoading.value = false
   }
@@ -407,7 +480,7 @@ const confirmDelete = async () => {
   saveLoading.value = true
   try {
     const nameToDelete = selectedTemplate.value
-    await axios.delete(`/api/t2i/templates/${nameToDelete}`)
+    await t2iApi.deleteTemplate(nameToDelete)
     deleteDialog.value = false
 
     // 如果删除的是当前活动模板，则将活动模板重置为base
@@ -417,7 +490,9 @@ const confirmDelete = async () => {
     await loadInitialData()
     selectedTemplate.value = 'base'
   } catch (error) {
-    console.error(`删除模板 '${selectedTemplate.value}' 失败:`, error)
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error(`删除模板失败:`, msg)
+    toast.error(msg)
   } finally {
     saveLoading.value = false
   }
@@ -426,7 +501,7 @@ const confirmDelete = async () => {
 const confirmReset = async () => {
   resetLoading.value = true
   try {
-    await axios.post('/api/t2i/templates/reset_default')
+    await t2iApi.resetDefaultTemplate()
     resetDialog.value = false
     if (selectedTemplate.value === 'base') {
       await loadTemplateContent('base')
@@ -435,7 +510,9 @@ const confirmReset = async () => {
         await setActiveTemplate('base')
     }
   } catch (error) {
-    console.error('重置模板失败:', error)
+    const msg = error?.response?.data?.message || error?.message || String(error)
+    console.error('重置模板失败:', msg)
+    toast.error(msg)
   } finally {
     resetLoading.value = false
   }
@@ -530,6 +607,19 @@ defineExpose({
 </script>
 
 <style scoped>
+.t2i-template-editor-trigger {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.t2i-template-editor-button {
+  min-height: 36px;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
 .preview-container {
   background-color: #f5f5f5;
   position: relative;

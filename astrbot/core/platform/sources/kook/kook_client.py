@@ -1,18 +1,16 @@
 import asyncio
-import base64
-import os
 import random
 import time
+import traceback
 import zlib
-from pathlib import Path
 
-import aiofiles
 import aiohttp
 import pydantic
 import websockets
 
 from astrbot import logger
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .kook_config import KookConfig
 from .kook_types import (
@@ -59,11 +57,17 @@ class KookClient:
 
     @property
     def bot_nickname(self):
+        """机器人昵称"""
         return self._bot_nickname
 
     @property
     def bot_username(self):
+        """机器人名称"""
         return self._bot_username
+
+    @property
+    def http_client(self):
+        return self._http_client
 
     async def get_bot_info(self) -> None:
         """获取机器人账号信息"""
@@ -151,7 +155,6 @@ class KookClient:
             gateway_url = await self.get_gateway_url(
                 resume=resume, sn=self.last_sn, session_id=self.session_id
             )
-            await self.get_bot_info()
 
             if not gateway_url:
                 return False
@@ -215,8 +218,8 @@ class KookClient:
                 except websockets.exceptions.ConnectionClosed:
                     logger.warning("[KOOK] WebSocket连接已关闭")
                     break
-                except Exception as e:
-                    logger.error(f"[KOOK] 消息处理异常: {e}")
+                except Exception:
+                    logger.error(f"[KOOK] 消息处理异常: {traceback.format_exc()}")
                     break
 
         except Exception as e:
@@ -236,11 +239,15 @@ class KookClient:
                 await self.event_callback(data)
 
             case KookMessageSignal.HELLO:
-                assert isinstance(data, KookHelloEventData)
+                assert isinstance(data, KookHelloEventData), (
+                    f"期望 data 为 {KookHelloEventData.__name__}, 实际为 {type(data).__name__}，"
+                )
                 await self._handle_hello(data)
 
             case KookMessageSignal.RESUME_ACK:
-                assert isinstance(data, KookResumeAckEventData)
+                assert isinstance(data, KookResumeAckEventData), (
+                    f"期望 data 为 {KookResumeAckEventData.__name__}, 实际为 {type(data).__name__}，"
+                )
                 await self._handle_resume_ack(data)
 
             case KookMessageSignal.PONG:
@@ -367,8 +374,8 @@ class KookClient:
             "type": kook_message_type,
         }
         if reply_message_id:
-            payload["quote"] = reply_message_id
-            payload["reply_msg_id"] = reply_message_id
+            payload["quote"] = str(reply_message_id)
+            payload["reply_msg_id"] = str(reply_message_id)
 
         try:
             async with self._http_client.post(url, json=payload) as resp:
@@ -398,38 +405,12 @@ class KookClient:
         if not file_url:
             return ""
 
-        bytes_data: bytes | None = None
-        filename = "unknown"
         if file_url.startswith(("http://", "https://")):
-            filename = file_url.split("/")[-1]
             return file_url
 
-        if file_url.startswith("base64:///"):
-            # b64decode的时候得开头留一个'/'的, 不然会报错
-            b64_str = file_url.removeprefix("base64://")
-            bytes_data = base64.b64decode(b64_str)
-
-        elif file_url.startswith("file://") or os.path.exists(file_url):
-            file_url = file_url.removeprefix("file:///")
-            file_url = file_url.removeprefix("file://")
-
-            try:
-                target_path = Path(file_url).resolve()
-            except Exception as exp:
-                logger.error(f'[KOOK] 获取文件 "{file_url}" 绝对路径失败: "{exp}"')
-                raise FileNotFoundError(
-                    f'获取文件 "{file_url}" 绝对路径失败: "{exp}"'
-                ) from exp
-
-            if not target_path.is_file():
-                raise FileNotFoundError(f"文件不存在: {target_path.name}")
-
-            filename = target_path.name
-            async with aiofiles.open(target_path, "rb") as f:
-                bytes_data = await f.read()
-
-        else:
-            raise ValueError(f'[KOOK] 不支持的文件资源类型: "{file_url}"')
+        async with MediaResolver(file_url).as_path() as media_file:
+            bytes_data = media_file.read_bytes()
+            filename = media_file.path.name
 
         data = aiohttp.FormData()
         data.add_field("file", bytes_data, filename=filename)

@@ -1,7 +1,7 @@
 <template>
     <v-menu v-model="menuOpen" :close-on-content-click="false" location="top" @update:model-value="handleMenuToggle">
         <template v-slot:activator="{ props: menuProps }">
-            <v-chip v-bind="menuProps" class="text-none provider-chip" variant="tonal" :size="chipSize">
+            <v-chip v-bind="menuProps" class="text-none provider-chip" variant="outlined" size="small">
                 <v-icon start size="14">mdi-creation</v-icon>
                 <span v-if="selectedProviderId">
                     {{ selectedProviderId }}
@@ -64,8 +64,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useDisplay } from 'vuetify';
-import axios from 'axios';
+import { providerApi } from '@/api/v1';
 
 interface ModelMetadata {
     modalities?: { input?: string[] };
@@ -81,14 +80,10 @@ interface ProviderConfig {
     enable?: boolean;
 }
 
-const { mobile } = useDisplay();
-
 const providerConfigs = ref<ProviderConfig[]>([]);
 const selectedProviderId = ref('');
 const searchQuery = ref('');
 const menuOpen = ref(false);
-
-const chipSize = computed(() => mobile.value ? 'x-small' : 'small');
 
 const filteredProviders = computed(() => {
     if (!searchQuery.value) {
@@ -115,12 +110,10 @@ function saveToStorage() {
 }
 
 function loadProviderConfigs() {
-    axios.get('/api/config/provider/list', {
-        params: { provider_type: 'chat_completion' }
-    }).then(response => {
+    providerApi.listByProviderType('chat_completion').then(response => {
         if (response.data.status === 'ok') {
             // 过滤掉 enable 为 false 的配置
-            providerConfigs.value = (response.data.data || []).filter(
+            providerConfigs.value = ((response.data.data || []) as unknown as ProviderConfig[]).filter(
                 (p: ProviderConfig) => p.enable !== false
             );
         }
@@ -180,6 +173,16 @@ defineExpose({
 <style scoped>
 .provider-chip {
     cursor: pointer;
+    height: 36px !important;
+    min-height: 36px !important;
+    border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
+    background: transparent !important;
+    color: rgba(var(--v-theme-on-surface), 0.78) !important;
+}
+
+.provider-chip:hover {
+    border-color: rgba(var(--v-theme-on-surface), 0.34) !important;
+    background: rgba(var(--v-theme-on-surface), 0.04) !important;
 }
 
 .provider-menu-card {
@@ -228,5 +231,12 @@ defineExpose({
     text-align: center;
     padding: 16px;
     opacity: 0.6;
+}
+
+@media (max-width: 768px) {
+    .provider-chip {
+        height: 32px !important;
+        min-height: 32px !important;
+    }
 }
 </style>

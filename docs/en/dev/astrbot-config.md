@@ -116,7 +116,7 @@ The default AstrBot configuration is as follows:
     "dashboard": {
         "enable": True,
         "username": "astrbot",
-        "password": "77b90590a8945a7d36c963981a307dc9",
+        "password": "<your_password_md5>",
         "jwt_secret": "",
         "host": "0.0.0.0",
         "port": 6185,
@@ -492,11 +492,11 @@ List of addresses that bypass the proxy. E.g., `["localhost", "127.0.0.1"]`.
 
 AstrBot WebUI configuration.
 
-Please do not change the `password` value arbitrarily. It is an `md5` encoded password. Change the password in the control panel.
+Please do not change the `password` value arbitrarily. It is an `md5` encoded password generated from the random initial password. Check the startup logs for that initial password on first run, then change it in the control panel.
 
 - `enable`: Whether to enable the AstrBot WebUI. Default is `true`.
-- `username`: Username for the AstrBot WebUI. Default is `astrbot`.
-- `password`: Password for the AstrBot WebUI. Default is the `md5` encoded value of `astrbot`. Do not modify directly unless you know what you are doing.
+- `username`: Username for the AstrBot WebUI.
+- `password`: Password for the AstrBot WebUI. It is initialized from a random password generated on first startup (logged at startup). Do not modify directly unless you know what you are doing.
 - `jwt_secret`: JWT secret key. AstrBot generates this randomly at initialization. Do not modify unless you know what you are doing.
 - `host`: Address the AstrBot WebUI listens on. Default is `0.0.0.0`.
 - `port`: Port the AstrBot WebUI listens on. Default is `6185`.

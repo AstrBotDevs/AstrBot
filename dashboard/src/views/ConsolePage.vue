@@ -1,26 +1,20 @@
 <script setup>
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
 import { useModuleI18n } from '@/i18n/composables';
-import axios from 'axios';
+import { updatesApi } from '@/api/v1';
+import { useToast } from '@/utils/toast';
 
 const { tm } = useModuleI18n('features/console');
 </script>
 
 <template>
-  <div style="height: 100%;">
-    <div
-      style="background-color: var(--v-theme-surface); padding: 8px; padding-left: 16px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-direction: row; align-items: center; justify-content: space-between;">
+  <div class="console-page">
+    <div class="console-header">
       <div>
-        <h4>{{ tm('title') }}</h4>
-        <v-alert
-          type="info"
-          variant="tonal"
-          density="compact"
-          class="mt-2"
-          style="max-width: 600px;"
-        >
+        <h1 class="text-h2 mb-1">{{ tm('title') }}</h1>
+        <p class="text-body-2 text-medium-emphasis mb-0">
           {{ tm('debugHint.text') }}
-        </v-alert>
+        </p>
       </div>
       <div class="d-flex align-center">
         <v-switch
@@ -28,6 +22,7 @@ const { tm } = useModuleI18n('features/console');
           :label="autoScrollEnabled ? tm('autoScroll.enabled') : tm('autoScroll.disabled')"
           hide-details
           density="compact"
+          inset
           color="primary"
           style="margin-right: 16px;"
         ></v-switch>
@@ -43,10 +38,6 @@ const { tm } = useModuleI18n('features/console');
               <v-text-field v-model="pipInstallPayload.package" :label="tm('pipInstall.packageLabel')" variant="outlined"></v-text-field>
               <v-text-field v-model="pipInstallPayload.mirror" :label="tm('pipInstall.mirrorLabel')" variant="outlined"></v-text-field>
               <small>{{ tm('pipInstall.mirrorHint') }}</small>
-              <div>
-                <small>{{ status }}</small>
-              </div>
-              
             </v-card-text>
             <v-card-actions>
               <v-spacer></v-spacer>
@@ -58,7 +49,7 @@ const { tm } = useModuleI18n('features/console');
         </v-dialog>
       </div>
     </div>
-    <ConsoleDisplayer ref="consoleDisplayer" style="height: calc(100vh - 220px); " />
+    <ConsoleDisplayer ref="consoleDisplayer" class="console-display" />
   </div>
 </template>
 <script>
@@ -69,18 +60,23 @@ export default {
   },
   data() {
     return {
-      autoScrollEnabled: true,
+      autoScrollEnabled: localStorage.getItem('console_auto_scroll') !== 'false',
       pipDialog: false,
       pipInstallPayload: {
         package: '',
         mirror: ''
       },
-      loading: false,
-      status: ''
+      loading: false
+    }
+  },
+  mounted() {
+    if (this.$refs.consoleDisplayer) {
+      this.$refs.consoleDisplayer.autoScroll = this.autoScrollEnabled;
     }
   },
   watch: {
     autoScrollEnabled(val) {
+      localStorage.setItem('console_auto_scroll', val);
       if (this.$refs.consoleDisplayer) {
         this.$refs.consoleDisplayer.autoScroll = val;
       }
@@ -88,17 +84,19 @@ export default {
   },
   methods: {
     pipInstall() {
+      const toast = useToast();
       this.loading = true;
-      axios.post('/api/update/pip-install', this.pipInstallPayload)
+      updatesApi.installPip(this.pipInstallPayload)
         .then(res => {
-          this.status = res.data.message;
-          setTimeout(() => {
-            this.status = '';
+          if (res.data.status === 'ok') {
+            toast.success(res.data.message || tm('pipInstall.installSuccess'));
             this.pipDialog = false;
-          }, 2000);
+          } else {
+            toast.error(res.data.message || tm('pipInstall.installFailed'));
+          }
         })
         .catch(err => {
-          this.status = err.response.data.message;
+          toast.error(err.response?.data?.message || tm('pipInstall.requestFailed'));
         }).finally(() => {
           this.loading = false;
         });
@@ -108,7 +106,27 @@ export default {
 
 </script>
 
-<style>
+<style scoped>
+.console-page {
+  height: 100%;
+  margin: 0 auto;
+  max-width: 1400px;
+  padding: 24px;
+  width: 100%;
+}
+
+.console-header {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.console-display {
+  height: calc(100vh - 190px);
+  width: 100%;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -121,5 +139,16 @@ export default {
 
 .fade-in {
   animation: fadeIn 0.2s ease-in-out;
+}
+
+@media (max-width: 768px) {
+  .console-page {
+    padding: 16px;
+  }
+
+  .console-header {
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 </style>

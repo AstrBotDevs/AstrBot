@@ -1,5 +1,5 @@
 <template>
-  <v-card class="item-card hover-elevation" style="padding: 4px;" elevation="0">
+  <v-card class="item-card hover-elevation" style="padding: 4px;" :variant="variant" elevation="0">
     <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
       <span class="text-h2 text-truncate" :title="getItemTitle()">{{ getItemTitle() }}</span>
       <v-tooltip location="top">
@@ -116,6 +116,10 @@ export default {
     disableDelete: {
       type: Boolean,
       default: false
+    },
+    variant: {
+      type: String,
+      default: undefined
     }
   },
   emits: ['toggle-enabled', 'delete', 'edit', 'copy'],
@@ -135,9 +139,10 @@ export default {
 
 <style scoped>
 .item-card {
+  background: rgb(var(--v-theme-surface));
   position: relative;
   border-radius: 18px;
-  transition: all 0.3s ease;
+  transition: background-color 0.16s ease, transform 0.3s ease;
   overflow: hidden;
   min-height: 220px;
   height: 100%;
@@ -147,6 +152,7 @@ export default {
 }
 
 .hover-elevation:hover {
+  background: rgba(var(--v-theme-on-surface), 0.04);
   transform: translateY(-2px);
 }
 

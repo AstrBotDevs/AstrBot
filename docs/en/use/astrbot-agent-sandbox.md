@@ -328,7 +328,7 @@ If you choose `Shipyard Neo`, the main configuration items are:
   - If AstrBot can access Bay's `credentials.json`, you may leave it empty and let AstrBot auto-discover it
 - `Shipyard Neo Profile`
   - For example `python-default` or `browser-python`
-  - If not explicitly specified, AstrBot will try to choose a profile with richer capabilities, preferring one that includes the `browser` capability, and fall back to `python-default` if needed
+  - If left empty, AstrBot will try to choose a profile with richer capabilities, preferring one that includes the `browser` capability, and fall back to `python-default` if needed
 - `Shipyard Neo Sandbox TTL`
   - The upper lifetime limit of the sandbox, defaulting to 3600 seconds (1 hour)
 
