@@ -37,6 +37,14 @@ Then configure QQ groups, private chat QQ accounts, and QQ channels as needed.
 
 ![image](https://files.astrbot.app/docs/source/images/qqofficial/image-1.png)
 
+## Recommended Group Chat Settings
+
+In mobile QQ group settings, open the bot settings page. We recommend setting `Messages the bot can access` to `All group messages`, and enabling `Allow the bot to proactively speak in the group`.
+
+With this configuration, the bot can receive full group messages and proactively push messages to the group, such as scheduled task notifications and plugin notifications.
+
+![QQ Official Bot recommended group chat settings](/qqofficial-group-recommended-config.png)
+
 ## Get `appid` and `secret`
 
 After adding the bot where you need it, open `Development -> Development Settings`, then copy `appid` and `secret`.

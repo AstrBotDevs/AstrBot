@@ -40,6 +40,14 @@
 
 ![image](https://files.astrbot.app/docs/source/images/qqofficial/image-1.png)
 
+## 推荐群聊配置
+
+在手机 QQ 的群聊设置中打开机器人设置，推荐将 `机器人可获取的群聊消息范围` 设置为 `获取群内全部消息`，并开启 `机器人主动在群聊内发言`。
+
+这样机器人可以接收群聊全量消息，也可以在群聊中主动推送消息，例如定时任务推送、插件主动通知等。
+
+![QQ 官方机器人推荐群聊配置](/qqofficial-group-recommended-config.png)
+
 ## 获取 appid、secret
 
 添加机器人到你想用的地方后。
