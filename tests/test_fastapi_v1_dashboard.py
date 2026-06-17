@@ -473,7 +473,7 @@ class FakePersonaManager:
     async def update_persona(self, persona_id: str, **kwargs) -> None:
         persona = self.personas[persona_id]
         for key, value in kwargs.items():
-            if value is not None:
+            if key in ("tools", "skills", "custom_error_message") or value is not None:
                 setattr(persona, key, value)
 
     async def delete_persona(self, persona_id: str) -> None:
@@ -2474,6 +2474,29 @@ async def test_v1_safe_persona_routes_accept_slash_ids(
     assert delete_response.status_code == 200
     assert delete_response.json()["data"] == {"message": "人格删除成功"}
     assert persona_id not in persona_mgr.personas
+
+
+@pytest.mark.asyncio
+async def test_v1_persona_by_id_update_preserves_explicit_null_tools_and_skills(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    persona_id = "persona/foo"
+    headers = _jwt_headers()
+    persona = fake_core_lifecycle.persona_mgr.personas[persona_id]
+    persona.tools = ["tool-a"]
+    persona.skills = ["skill-a"]
+
+    response = await asgi_client.put(
+        "/api/v1/personas/by-id",
+        json={"persona_id": persona_id, "tools": None, "skills": None},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"message": "人格更新成功"}
+    assert persona.tools is None
+    assert persona.skills is None
 
 
 @pytest.mark.asyncio

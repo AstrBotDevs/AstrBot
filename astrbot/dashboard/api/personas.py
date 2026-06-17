@@ -45,7 +45,15 @@ async def _json_or_empty(request: Request) -> dict[str, Any]:
 
 
 def _model_dict(payload) -> dict[str, Any]:
-    return payload.model_dump(exclude_none=True)
+    """Serialize a request model while preserving explicit null updates.
+
+    Args:
+        payload: Pydantic request model.
+
+    Returns:
+        Request data without fields omitted by the caller.
+    """
+    return payload.model_dump(exclude_unset=True)
 
 
 def _raise_persona_error(exc: PersonaServiceError | ValueError) -> None:

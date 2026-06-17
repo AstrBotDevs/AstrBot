@@ -40,8 +40,12 @@ class PersonaService:
 
     async def create_persona(self, data: object) -> dict:
         payload = self._payload(data)
-        persona_id = str(payload.get("persona_id", "")).strip()
-        system_prompt = str(payload.get("system_prompt", "")).strip()
+        raw_persona_id = payload.get("persona_id")
+        raw_system_prompt = payload.get("system_prompt")
+        persona_id = str(raw_persona_id).strip() if raw_persona_id is not None else ""
+        system_prompt = (
+            str(raw_system_prompt).strip() if raw_system_prompt is not None else ""
+        )
         begin_dialogs = payload.get("begin_dialogs", [])
         tools = payload.get("tools")
         skills = payload.get("skills")
