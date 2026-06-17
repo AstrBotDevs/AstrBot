@@ -55,10 +55,21 @@ async def _write_base64_via_shell(
     encoded = base64.b64encode(data).decode("ascii")
     decoder = (
         "import base64,pathlib,sys; "
-        "pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode(sys.stdin.read()))"
+        "path=pathlib.Path(sys.argv[1]); "
+        "path.parent.mkdir(parents=True, exist_ok=True); "
+        "path.write_bytes(base64.b64decode(sys.stdin.read()))"
     )
+    chunk_size = 60_000
+    stdin_parts = [
+        f"cat <<'EOF'\n{encoded[index : index + chunk_size]}\nEOF"
+        for index in range(0, len(encoded), chunk_size)
+    ] or ["cat <<'EOF'\n\nEOF"]
+    stdin_command = "\n".join(stdin_parts)
     return await shell.exec(
-        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)} <<'EOF'\n{encoded}\nEOF"
+        "{ "
+        f"{stdin_command}"
+        "\n} | "
+        f"python3 -c {shlex.quote(decoder)} {shlex.quote(path)}"
     )
 
 

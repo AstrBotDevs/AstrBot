@@ -641,6 +641,32 @@ async def test_cua_write_file_shell_fallback_uses_python_base64_decoder():
 
 
 @pytest.mark.asyncio
+async def test_cua_write_file_shell_fallback_creates_parent_directory():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = FakeSandbox()
+    delattr(sandbox, "filesystem")
+
+    await CuaFileSystemComponent(sandbox).write_file("reports/summary.txt", "hello")
+
+    command = sandbox.shell.commands[0][0]
+    assert "path.parent.mkdir(parents=True, exist_ok=True)" in command
+
+
+@pytest.mark.asyncio
+async def test_cua_write_file_shell_fallback_chunks_large_payloads():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = FakeSandbox()
+    delattr(sandbox, "filesystem")
+
+    await CuaFileSystemComponent(sandbox).write_file("large.txt", "x" * 100_000)
+
+    command = sandbox.shell.commands[0][0]
+    assert command.count("cat <<'EOF'") > 1
+
+
+@pytest.mark.asyncio
 async def test_cua_create_file_reports_mode_as_informational():
     from astrbot.core.computer.booters.cua import CuaFileSystemComponent
 
