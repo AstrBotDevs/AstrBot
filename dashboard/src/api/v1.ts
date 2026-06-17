@@ -180,7 +180,7 @@ function typed<T>(response: Promise<unknown>): V1Response<T> {
   return response as unknown as V1Response<T>;
 }
 
-function isLegacyFallbackError(error: unknown): boolean {
+export function isLegacyFallbackError(error: unknown): boolean {
   const axiosError = error as {
     response?: { status?: number; data?: { message?: string } | string };
     message?: string;
@@ -556,25 +556,40 @@ export const providerApi = {
 
 export const authApi = {
   login(payload: LoginRequest) {
-    return httpClient.post<ApiEnvelope<any>>('/api/auth/login', payload);
+    return withLegacyFallback<any>(openApiV1.login({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<any>>('/api/auth/login', payload),
+    );
   },
   logout() {
-    return httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/logout');
+    return withLegacyFallback<OpenConfig>(openApiV1.logout(), () =>
+      httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/logout'),
+    );
   },
   setupStatus() {
-    return httpClient.get<ApiEnvelope<any>>('/api/auth/setup-status');
+    return withLegacyFallback<any>(openApiV1.getAuthSetupStatus(), () =>
+      httpClient.get<ApiEnvelope<any>>('/api/auth/setup-status'),
+    );
   },
   setup(payload: SetupAuthRequest) {
-    return httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/setup', payload);
+    return withLegacyFallback<OpenConfig>(openApiV1.setupAuth({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/setup', payload),
+    );
   },
   setupTotp(payload?: TotpSetupRequest) {
-    return httpClient.post<ApiEnvelope<any>>('/api/auth/totp/setup', payload);
+    return withLegacyFallback<any>(openApiV1.setupTotp({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<any>>('/api/auth/totp/setup', payload),
+    );
   },
   recoverTotp() {
-    return httpClient.post<ApiEnvelope<any>>('/api/auth/totp/recovery');
+    return withLegacyFallback<any>(openApiV1.recoverTotp(), () =>
+      httpClient.post<ApiEnvelope<any>>('/api/auth/totp/recovery'),
+    );
   },
   updateAccount(payload: UpdateAccountRequest) {
-    return httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/account/edit', payload);
+    return withLegacyFallback<OpenConfig>(
+      openApiV1.updateAuthAccount({ body: payload }),
+      () => httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/account/edit', payload),
+    );
   },
 };
 

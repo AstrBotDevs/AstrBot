@@ -17,7 +17,7 @@ import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
-import { authApi, statsApi, updatesApi } from "@/api/v1";
+import { authApi, isLegacyFallbackError, statsApi, updatesApi } from "@/api/v1";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 
 enableKatex();
@@ -479,6 +479,10 @@ function checkUpdate() {
         : res.data.data.dashboard_has_new_version;
     })
     .catch((err) => {
+      if (isLegacyFallbackError(err)) {
+        console.log(err);
+        return;
+      }
       if (err.response && err.response.status == 401) {
         console.log("401");
         const authStore = useAuthStore();

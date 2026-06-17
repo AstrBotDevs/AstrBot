@@ -48,10 +48,11 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import axios, { type AxiosRequestConfig } from 'axios';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 
 import type { ApiEnvelope, VersionData } from '@/api/v1';
-import { httpClient } from '@/api/http';
 import { useI18n } from '@/i18n/composables';
 
 type StartTimeData = {
@@ -59,6 +60,7 @@ type StartTimeData = {
 };
 
 const { t } = useI18n();
+const route = useRoute();
 
 const visible = ref(false);
 const restarting = ref(false);
@@ -68,6 +70,8 @@ const dashboardVersion = ref('');
 const initialStartTime = ref<number | string | null>(null);
 
 let restartTimer: ReturnType<typeof setInterval> | null = null;
+let detecting = false;
+const recoveryClient = axios.create();
 
 function normalizeVersion(version?: string | null) {
   return (version || '').trim().replace(/^v/i, '');
@@ -102,9 +106,26 @@ function getDismissKey() {
   return `astrbot-upgrade-recovery-dismissed:${coreVersion.value}:${dashboardVersion.value}`;
 }
 
+function recoveryRequestConfig(validateStatus = false): AxiosRequestConfig {
+  const headers: Record<string, string> = {};
+  const token = localStorage.getItem('token');
+  const locale = localStorage.getItem('astrbot-locale');
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  if (locale) {
+    headers['Accept-Language'] = locale;
+  }
+  return {
+    headers,
+    ...(validateStatus ? { validateStatus: () => true } : {}),
+  };
+}
+
 async function fetchLegacyStartTime() {
-  const response = await httpClient.get<ApiEnvelope<StartTimeData>>(
+  const response = await recoveryClient.get<ApiEnvelope<StartTimeData>>(
     '/api/stat/start-time',
+    recoveryRequestConfig(),
   );
   return response.data?.data?.start_time ?? null;
 }
@@ -153,7 +174,11 @@ async function restartCore() {
   try {
     initialStartTime.value =
       initialStartTime.value ?? (await fetchLegacyStartTime());
-    await httpClient.post<ApiEnvelope<unknown>>('/api/stat/restart-core');
+    await recoveryClient.post<ApiEnvelope<unknown>>(
+      '/api/stat/restart-core',
+      undefined,
+      recoveryRequestConfig(),
+    );
     statusMessage.value = t('core.common.upgradeRecovery.waiting');
     waitForRestart();
   } catch (_error) {
@@ -163,18 +188,22 @@ async function restartCore() {
 }
 
 async function detectUpgradeMismatch() {
+  if (detecting || visible.value || restarting.value) {
+    return;
+  }
+  detecting = true;
   try {
-    const v1Response = await httpClient.get<ApiEnvelope<unknown>>(
+    const v1Response = await recoveryClient.get<ApiEnvelope<unknown>>(
       '/api/v1/auth/setup-status',
-      { validateStatus: () => true },
+      recoveryRequestConfig(true),
     );
     if (!isMissingApiKeyResponse(v1Response)) {
       return;
     }
 
-    const legacyResponse = await httpClient.get<ApiEnvelope<VersionData>>(
+    const legacyResponse = await recoveryClient.get<ApiEnvelope<VersionData>>(
       '/api/stat/version',
-      { validateStatus: () => true },
+      recoveryRequestConfig(true),
     );
     if (legacyResponse.status === 401 || legacyResponse.status >= 400) {
       return;
@@ -195,12 +224,21 @@ async function detectUpgradeMismatch() {
     visible.value = true;
   } catch (_error) {
     // This recovery dialog is best-effort and should never block the app.
+  } finally {
+    detecting = false;
   }
 }
 
 onMounted(() => {
   void detectUpgradeMismatch();
 });
+
+watch(
+  () => route.fullPath,
+  () => {
+    void detectUpgradeMismatch();
+  },
+);
 
 onBeforeUnmount(() => {
   clearRestartTimer();
