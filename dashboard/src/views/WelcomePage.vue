@@ -329,7 +329,7 @@ const greetingText = computed(() => {
 });
 
 async function loadPlatformConfigBase() {
-  const res = await systemConfigApi.get();
+  const res = await systemConfigApi.runtime();
   const payload = (res.data.data || {}) as any;
   platformMetadata.value = payload.metadata || {};
   platformConfigData.value = payload.config || {};
