@@ -142,6 +142,7 @@
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="dingtalkCreationMode === 'scan'"
+                        @created="handlePlatformRegistrationCreated"
                         @success="showSuccess"
                         @error="showError"
                       />
@@ -149,6 +150,61 @@
 
                     <div
                       v-else-if="dingtalkCreationMode === 'manual'"
+                      class="mt-2"
+                    >
+                      <div class="platform-action-row">
+                        <v-btn
+                          color="info"
+                          variant="tonal"
+                          @click="openTutorial"
+                          class="mt-2"
+                        >
+                          <v-icon start>mdi-book-open-variant</v-icon>
+                          {{ tm("dialog.viewTutorial") }}
+                        </v-btn>
+                      </div>
+                      <AstrBotConfig
+                        :iterable="selectedPlatformConfig"
+                        :metadata="metadata['platform_group']?.metadata"
+                        metadataKey="platform"
+                      />
+                    </div>
+                  </div>
+
+                  <div v-else-if="isQqOfficialPlatform">
+                    <div class="creation-mode-title mt-4 mb-1">
+                      {{ tm("registrationAction.mode.title") }}
+                    </div>
+                    <v-radio-group
+                      v-model="qqOfficialCreationMode"
+                      class="creation-mode-group"
+                      hide-details
+                    >
+                      <v-radio
+                        value="scan"
+                        :label="tm('registrationAction.mode.scan')"
+                      ></v-radio>
+                      <v-radio
+                        value="manual"
+                        :label="tm('registrationAction.mode.manual')"
+                      ></v-radio>
+                    </v-radio-group>
+
+                    <div
+                      v-if="qqOfficialCreationMode === 'scan'"
+                      class="registration-inline mt-3"
+                    >
+                      <PlatformRegistrationAction
+                        :platform-config="selectedPlatformConfig"
+                        :active="qqOfficialCreationMode === 'scan'"
+                        @created="handlePlatformRegistrationCreated"
+                        @success="showSuccess"
+                        @error="showError"
+                      />
+                    </div>
+
+                    <div
+                      v-else-if="qqOfficialCreationMode === 'manual'"
                       class="mt-2"
                     >
                       <div class="platform-action-row">
@@ -777,6 +833,7 @@ export default {
       selectedPlatformConfig: null,
       larkCreationMode: "",
       dingtalkCreationMode: "",
+      qqOfficialCreationMode: "",
 
       aBConfigRadioVal: "0",
       selectedAbConfId: "default",
@@ -878,6 +935,19 @@ export default {
         }
       }
 
+      if (this.isQqOfficialPlatform && !this.qqOfficialCreationMode) {
+        return false;
+      }
+
+      if (this.isQqOfficialPlatform && this.qqOfficialCreationMode === "scan") {
+        if (
+          !this.selectedPlatformConfig?.appid ||
+          !this.selectedPlatformConfig?.secret
+        ) {
+          return false;
+        }
+      }
+
       if (
         this.isWeixinOcPlatform &&
         !this.selectedPlatformConfig?.weixin_oc_token
@@ -974,6 +1044,9 @@ export default {
     isDingtalkPlatform() {
       return this.selectedPlatformConfig?.type === "dingtalk";
     },
+    isQqOfficialPlatform() {
+      return this.selectedPlatformConfig?.type === "qq_official";
+    },
   },
   watch: {
     selectedPlatformType(newType) {
@@ -983,10 +1056,12 @@ export default {
         );
         this.larkCreationMode = "";
         this.dingtalkCreationMode = "";
+        this.qqOfficialCreationMode = "";
       } else {
         this.selectedPlatformConfig = null;
         this.larkCreationMode = "";
         this.dingtalkCreationMode = "";
+        this.qqOfficialCreationMode = "";
       }
     },
     selectedAbConfId(newConfigId) {
@@ -1073,6 +1148,7 @@ export default {
       this.selectedPlatformConfig = null;
       this.larkCreationMode = "";
       this.dingtalkCreationMode = "";
+      this.qqOfficialCreationMode = "";
 
       this.aBConfigRadioVal = "0";
       this.selectedAbConfId = "default";

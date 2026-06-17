@@ -287,13 +287,7 @@ class WecomPlatformAdapter(Platform):
         message_obj.message_id = uuid.uuid4().hex
         message_obj.raw_message = {"_proactive_send": True}
 
-        event = WecomPlatformEvent(
-            message_str=message_obj.message_str,
-            message_obj=message_obj,
-            platform_meta=self.meta(),
-            session_id=message_obj.session_id,
-            client=self.client,
-        )
+        event = self.create_event(message_obj)
         await event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
@@ -516,15 +510,25 @@ class WecomPlatformAdapter(Platform):
             return
         await self.handle_msg(abm)
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = WecomPlatformEvent(
+    def create_event(self, message: AstrBotMessage) -> WecomPlatformEvent:
+        """Creates a WeCom message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created WeCom message event.
+        """
+        return WecomPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     def get_client(self) -> WeChatClient:
         return self.client

@@ -90,10 +90,6 @@ class PipInstallRequest(OpenModel):
     mirror: str | None = None
 
 
-class MigrationRequest(OpenModel):
-    platform_id_map: dict[str, Any] | None = None
-
-
 class ChatProjectRequest(OpenModel):
     project_id: str | None = None
     title: str | None = None

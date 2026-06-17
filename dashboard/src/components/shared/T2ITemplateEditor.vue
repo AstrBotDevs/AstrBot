@@ -1,15 +1,19 @@
 <template>
   <v-dialog v-model="dialog" max-width="1400px" persistent scrollable>
     <template v-slot:activator="{ props }">
-      <v-btn
-        v-bind="props"
-        variant="outlined"
-        color="primary"
-        size="small"
-        :loading="loading"
-      >
-        {{ tm('t2iTemplateEditor.buttonText') }}
-      </v-btn>
+      <div class="t2i-template-editor-trigger">
+        <v-btn
+          v-bind="props"
+          variant="tonal"
+          color="primary"
+          size="small"
+          class="t2i-template-editor-button"
+          :loading="loading"
+        >
+          <v-icon class="mr-2">mdi-code-tags</v-icon>
+          {{ tm('t2iTemplateEditor.buttonText') }}
+        </v-btn>
+      </div>
     </template>
     
     <v-card class="t2i-template-editor">
@@ -180,6 +184,7 @@
             </v-btn>
             <v-btn
               color="primary"
+              variant="tonal"
               @click="promptApplyAndClose"
               :loading="saveLoading"
               :disabled="isCreatingNew || !selectedTemplate"
@@ -201,7 +206,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="resetDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="warning" @click="confirmReset" :loading="resetLoading">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
+          <v-btn color="warning" variant="tonal" @click="confirmReset" :loading="resetLoading">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -216,7 +221,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="deleteDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="error" @click="confirmDelete" :loading="saveLoading">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
+          <v-btn color="error" variant="tonal" @click="confirmDelete" :loading="saveLoading">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -231,7 +236,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="applyAndCloseDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="primary" @click="confirmApplyAndClose" :loading="saveLoading">{{ t('core.common.confirm') }}</v-btn>
+          <v-btn color="primary" variant="tonal" @click="confirmApplyAndClose" :loading="saveLoading">{{ t('core.common.confirm') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -602,6 +607,19 @@ defineExpose({
 </script>
 
 <style scoped>
+.t2i-template-editor-trigger {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.t2i-template-editor-button {
+  min-height: 36px;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
 .preview-container {
   background-color: #f5f5f5;
   position: relative;

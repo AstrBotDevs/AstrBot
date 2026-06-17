@@ -266,6 +266,19 @@ class _PermissionGuardedTool(FunctionTool):
         if call_override is not None and call_override is not FunctionTool.call:
             return await self._wrapped.call(context, **kwargs)
 
+        run = getattr(self._wrapped, "run", None)
+        if run is not None:
+            event = context.context.event
+            result = run(event, **kwargs)
+            if _inspect.isasyncgen(result):
+                last: Any = None
+                async for item in result:
+                    last = item
+                return last
+            if _inspect.isawaitable(result):
+                return await result
+            return result
+
         return "error: tool has no callable handler"
 
 

@@ -255,6 +255,27 @@ async def test_guarded_tool_delegates_to_wrapped_call():
 
 
 @pytest.mark.asyncio
+async def test_guarded_tool_delegates_to_wrapped_run():
+    _clear_tool_permissions()
+    mgr = FunctionToolManager()
+
+    class RunnableTool(FunctionTool):
+        async def run(self, event, **kwargs):
+            return f"from run(): {event.get_sender_id()} {kwargs['value']}"
+
+    wrapped = RunnableTool(
+        name="has_run",
+        description="desc",
+        parameters={},
+    )
+    guarded = _PermissionGuardedTool(wrapped, mgr)
+    context = _make_context(sender_id="runner")
+
+    result = await guarded.call(context, value="ok")
+    assert result == "from run(): runner ok"
+
+
+@pytest.mark.asyncio
 async def test_guarded_tool_handles_async_generator_handler():
     _clear_tool_permissions()
     mgr = FunctionToolManager()

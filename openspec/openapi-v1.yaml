@@ -4485,22 +4485,6 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/migrations:
-    post:
-      tags: [Updates]
-      summary: Run pending migrations
-      operationId: runMigrations
-      x-astrbot-scope: system
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MigrationRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
   /api/v1/cron/jobs:
     get:
       tags: [Cron]
@@ -5982,14 +5966,6 @@ components:
         mirror:
           type: string
       additionalProperties: false
-
-    MigrationRequest:
-      type: object
-      properties:
-        platform_id_map:
-          type: object
-          additionalProperties: true
-      additionalProperties: true
 
     GhproxyTestRequest:
       type: object
