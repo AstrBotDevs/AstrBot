@@ -11,6 +11,10 @@
       class="input-area__status-row"
     >
       <SpcodeProjectIndicator @open-load-dialog="openLoadDialog" />
+      <GitDiffChip
+        v-if="spcodeStatus.status.value.loaded"
+        @open-diff-sidebar="emit('open-diff-sidebar')"
+      />
     </div>
     <div
       class="input-container"
@@ -362,6 +366,7 @@ import CommandSuggestion from "./CommandSuggestion.vue";
 import ProjectLoadMenuItem from "./ProjectLoadMenuItem.vue";
 import ProjectLoadDialog from "./ProjectLoadDialog.vue";
 import SpcodeProjectIndicator from "./SpcodeProjectIndicator.vue";
+import GitDiffChip from "./GitDiffChip.vue";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useSpcodeProjectLoad } from "@/composables/useSpcodeProjectLoad";
 import type { Session } from "@/composables/useSessions";
@@ -419,6 +424,7 @@ const emit = defineEmits<{
   fileSelect: [files: FileList];
   clearReply: [];
   openLiveMode: [];
+  "open-diff-sidebar": [];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -1108,6 +1114,7 @@ defineExpose({
 .input-area__status-row {
   align-items: center;
   display: flex;
+  justify-content: space-between;
   margin: 0 auto 6px;
   max-width: 900px;
   min-height: 28px;
