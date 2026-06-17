@@ -1,4 +1,5 @@
 import base64
+from types import SimpleNamespace
 
 import pytest
 from Crypto.Cipher import AES
@@ -11,6 +12,8 @@ from astrbot.core.platform.sources.qqofficial.login_registration import (
     generate_qqofficial_bind_key,
     qqofficial_login_result,
 )
+from astrbot.dashboard.services import platform_service
+from astrbot.dashboard.services.platform_service import PlatformService
 
 
 def test_generate_qqofficial_bind_key_returns_base64_aes_key():
@@ -69,3 +72,40 @@ def test_decrypt_qqofficial_secret_rejects_invalid_payload():
 
     with pytest.raises(ValueError):
         decrypt_qqofficial_secret("invalid", bind_key)
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_webhook_registration_reuses_qr_binding(monkeypatch):
+    async def fake_request_qqofficial_login_qr(platform_config: dict):
+        assert platform_config["type"] == "qq_official_webhook"
+        return SimpleNamespace(
+            task_id="task-1",
+            bind_key="bind-key",
+            qrcode="qr-content",
+            interval=3,
+        )
+
+    monkeypatch.setattr(
+        platform_service,
+        "request_qqofficial_login_qr",
+        fake_request_qqofficial_login_qr,
+    )
+    service = PlatformService.__new__(PlatformService)
+
+    result = await service.handle_platform_registration(
+        "qq_official_webhook",
+        {
+            "action": "start",
+            "platform_config": {"type": "qq_official_webhook"},
+        },
+    )
+
+    assert result == {
+        "status": "pending",
+        "registration_code": "task-1",
+        "task_id": "task-1",
+        "bind_key": "bind-key",
+        "qrcode": "qr-content",
+        "qrcode_img_content": "qr-content",
+        "interval": 3,
+    }
