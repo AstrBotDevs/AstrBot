@@ -50,7 +50,7 @@
 - ❌ **不**在客户端做 git 解析（diff 字符串来自后端，前端只切片）
 - ❌ **不**实现多项目同时 diff（umo 单值）
 - ❌ **不**实现文件级过滤、搜索、commit history
-- ❌ **不**实现 staged vs unstaged 切换（看 §6.5 未来扩展）
+- ❌ **不**实现 staged vs unstaged 切换（看 §9 未来扩展）
 - ❌ **不**在 sidebar 里直接 commit / revert
 - ❌ **不**做 i18n 之外的国际化（如 RTL、自适应字号）
 - ❌ **不**写 Vitest 单元测试（沿用姊妹 spec §1.4 决定：dashboard 尚未配置 vitest；用 `pnpm typecheck` + `pnpm lint` + 手动验证 §7.2 端到端验收清单）
@@ -96,7 +96,7 @@
 | 新增 | `dashboard/src/components/chat/message_list_comps/GitDiffFileItem.vue` | 新组件 | 单文件行 + 展开 DiffPreview 或二进制占位 |
 | 改动 | `dashboard/src/components/chat/ChatInput.vue` | 修改 | status row 加 `space-between` + 新 chip + 转发 `open-diff-sidebar` 事件 |
 | 改动 | `dashboard/src/components/chat/Chat.vue` | 修改 | 引入 `GitDiffSidebar` + `openGitDiffSidebar()` + 互斥逻辑 + currSessionId watcher |
-| 改动 | `dashboard/src/i18n/locales/zh-CN/features/chat.json` | 修改 | 新增 i18n 键（见 §5.1.1，共 16 个） |
+| 改动 | `dashboard/src/i18n/locales/zh-CN/features/chat.json` | 修改 | 新增 i18n 键（见 §5.1.1，共 17 个） |
 | 改动 | `dashboard/src/i18n/locales/en-US/features/chat.json` | 修改 | 新增 i18n 键 |
 | 改动 | `dashboard/src/i18n/locales/ru-RU/features/chat.json` | 修改 | 新增 i18n 键 |
 
@@ -105,7 +105,7 @@
 ### 3.3 改动量估算
 
 - 新增代码：~500-600 行（3 个组件 + 1 个 composable + 1 个纯函数模块）
-- 改动现有代码：~30-40 行（ChatInput 加 1 个 emit 声明 + 1 个 `<GitDiffChip/>` 节点 + 1 个 emit 转发；Chat.vue 加 import + 1 个 `<GitDiffSidebar/>` + 1 个 `openGitDiffSidebar()` + currSessionId watcher 1 行；3 个 i18n json 各加 ~12 行）
+- 改动现有代码：~30-40 行（ChatInput 加 1 个 emit 声明 + 1 个 `<GitDiffChip/>` 节点 + 1 个 emit 转发；Chat.vue 加 import + 1 个 `<GitDiffSidebar/>` + 1 个 `openGitDiffSidebar()` + currSessionId watcher 1 行；3 个 i18n json 各加 ~17 行）
 - ChatInput.vue `defineEmits` 块当前未声明 `open-diff-sidebar`（见 `ChatInput.vue:408-422`），实施时需追加
 - 风险面：3 个新组件 + 1 个 composable；与现有 sidebar 同构，零破坏性
 
@@ -351,7 +351,7 @@ toggle: []
 
 渲染：
 
-- **始终显示行**：status icon（按 §4.3 映射）+ path + (+N −N) + chevron
+- **始终显示行**：status icon（按 §4.2.5 映射）+ path + (+N −N) + chevron
 - **expanded 时显示 body**：
   - `file.isBinary === true` → `v-alert` "二进制文件改动（无文本预览）"
   - `file.slice` 非 null → `<DiffPreview :content="file.slice" :file-path="file.path" :collapsible="true" :is-dark="isDark" />`（显式传值，避免依赖 default 变更）
@@ -464,7 +464,9 @@ watch(() => spcodeStatus.status.value.loaded, (loaded) => {
 })
 ```
 
-链路：用户 `/project unload` → spcode plugin 更新 → `useSpcodeProjectStatus.refresh()`（由 Chat.vue 的 `currSessionId` watcher 或 ChatInput 的 `showSpcodeIndicator` watcher 触发）→ `status.loaded` 翻 false → 上面 watcher 触发 → sidebar 关闭 → onBeforeUnmount → dispose。
+链路：用户 `/project unload` → spcode plugin 更新 `loaded_projects` → ChatInput 检测到 `/project unload` 关键字调 `applyOptimistic()` 把 `ProjectStatus` 设为 unloaded（即时 chip 消失）→ `send` 触发 SSE 流 → `Chat.vue onStreamEnd` 调 `useSpcodeProjectStatus.refresh()` → 后端 `/spcode/project-status` 返回 loaded=false → `status.loaded` 翻 false → 上面 watcher 触发 → sidebar 关闭 → onBeforeUnmount → dispose。
+
+> 关键：`applyOptimistic` / `setUnloaded` 由姊妹 spec `2026-06-16-chatui-project-load-button-design.md` 定义；本 spec 不重复定义，仅按依赖使用。
 
 ### 5.4 轮询期间的"静默替换"
 
@@ -630,7 +632,7 @@ dashboard 尚未配置 Vitest（见姊妹 spec `2026-06-16` §1.4）。本 spec 
 | 卸载时 setInterval 没清理 | `onBeforeUnmount` 调 `dispose()`，composable 内部 stopPolling + abort |
 | 后端端点路径变更 | 集中在 `useSpcodeGitDiff.ts` 一处调用 |
 | chip 与 status 联动偶尔错位 | chip 的 v-if 直接读 `spcodeStatus.status.value.loaded`，与 sidebar 的 watcher 同源 |
-| i18n key 拼错 | 提交前 grep `spcodeProjectLoad\.diffSidebar` 三个 locale json 都覆盖 |
+| i18n key 命名拼错 | 提交前 grep `spcodeProjectLoad\.diffSidebar` 三个 locale json 都覆盖 |
 | 后端端点契约漂移 | spcode `git-diff` 端点是外部契约（不在本 spec 范围内修改）。如果未来 `handle_get_git_diff` 改动字段，本 spec 的 `SpcodeGitDiffRawResponse` 类型与 `parseSpcodeGitDiff` 会失配。缓解：① `parseSpcodeGitDiff` 内部对未知 reason / 未知 status 码都走兜底分支，不抛错；② 字段访问全部 `?.` / `?? null` 兜底；③ 联调时锁定源码 `main.py` 版本号或 commit hash |
 | i18n key 拼错或缺翻译 | 提交前 grep `spcodeProjectLoad\.diffSidebar` 三个 locale json 都覆盖；CI 跑 `pnpm typecheck` 捕获硬编码字符串 |
 | 端点响应体超过 1MB | `MAX_GIT_DIFF_BYTES=1MB` 由 spcode 端截断（`main.py:1710-1711`），本 spec 已 `truncated` 字段处理截断 UI；极端大仓库单文件 diff 仍可能溢出 `DiffPreview.maxChars`（默认 2000） |
