@@ -266,6 +266,31 @@
       "unloadAction": "Unload",
       "loadedAtPrefix": "Loaded at",
       "noProject": "No project loaded"
+    },
+    "diffSidebar": {
+      "chip": "Git Diff",
+      "chipTooltip": "View Git changes",
+      "title": "Project changes",
+      "refreshTooltip": "Refresh",
+      "loading": "Loading…",
+      "empty": "No file changes",
+      "truncated": "⚠ diff truncated (showing first {shown} / {max} bytes, may be incomplete)",
+      "binaryFile": "Binary file changed (no text preview)",
+      "noContent": "Content truncated or incomplete",
+      "error": {
+        "networkTitle": "Network connection failed",
+        "loadFailedTitle": "Failed to load changes",
+        "retry": "Retry",
+        "reason": {
+          "feature_disabled": "Feature disabled (check spcode config agentsmd_enabled / codegraph_enabled)",
+          "no_project_loaded": "No project loaded",
+          "directory_missing": "Loaded directory no longer exists",
+          "not_a_git_repo": "Current directory is not a Git repository",
+          "git_unavailable": "Git executable not found",
+          "git_error": "Git execution failed ({reason})",
+          "generic": "Failed to fetch changes ({reason})"
+        }
+      }
     }
   }
 }

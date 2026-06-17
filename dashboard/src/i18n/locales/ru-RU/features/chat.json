@@ -256,6 +256,31 @@
       "unloadAction": "Выгрузить",
       "loadedAtPrefix": "Загружен",
       "noProject": "Проект не загружен"
+    },
+    "diffSidebar": {
+      "chip": "Git Diff",
+      "chipTooltip": "Просмотр изменений Git",
+      "title": "Изменения проекта",
+      "refreshTooltip": "Обновить",
+      "loading": "Загрузка…",
+      "empty": "Нет изменений файлов",
+      "truncated": "⚠ diff обрезан (показано первые {shown} / {max} байт, возможно неполный)",
+      "binaryFile": "Бинарный файл изменён (без предпросмотра)",
+      "noContent": "Содержимое обрезано или неполное",
+      "error": {
+        "networkTitle": "Ошибка сетевого подключения",
+        "loadFailedTitle": "Не удалось получить изменения",
+        "retry": "Повторить",
+        "reason": {
+          "feature_disabled": "Функция отключена (проверьте spcode config agentsmd_enabled / codegraph_enabled)",
+          "no_project_loaded": "Проект не загружен",
+          "directory_missing": "Загруженный каталог больше не существует",
+          "not_a_git_repo": "Текущий каталог не является репозиторием Git",
+          "git_unavailable": "Исполняемый файл git не найден",
+          "git_error": "Ошибка выполнения Git ({reason})",
+          "generic": "Не удалось получить изменения ({reason})"
+        }
+      }
     }
   }
 }

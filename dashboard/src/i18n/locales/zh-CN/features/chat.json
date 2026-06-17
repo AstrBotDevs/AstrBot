@@ -266,6 +266,31 @@
       "unloadAction": "卸载",
       "loadedAtPrefix": "加载于",
       "noProject": "未加载项目"
+    },
+    "diffSidebar": {
+      "chip": "Git Diff",
+      "chipTooltip": "查看 Git 改动",
+      "title": "项目改动",
+      "refreshTooltip": "刷新",
+      "loading": "加载中…",
+      "empty": "暂无文件改动",
+      "truncated": "⚠ diff 已截断（仅显示前 {shown} / {max} 字节，可能不完整）",
+      "binaryFile": "二进制文件改动（无文本预览）",
+      "noContent": "内容已截断或不完整",
+      "error": {
+        "networkTitle": "网络连接失败",
+        "loadFailedTitle": "无法获取改动",
+        "retry": "重试",
+        "reason": {
+          "feature_disabled": "功能未启用（请检查 spcode 配置 agentsmd_enabled / codegraph_enabled）",
+          "no_project_loaded": "项目未载入",
+          "directory_missing": "已加载的目录不存在",
+          "not_a_git_repo": "当前目录不是 Git 仓库",
+          "git_unavailable": "未检测到 git 可执行文件",
+          "git_error": "Git 执行失败（{reason}）",
+          "generic": "获取改动失败（{reason}）"
+        }
+      }
     }
   }
 }
