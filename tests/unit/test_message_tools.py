@@ -235,3 +235,97 @@ async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch):
 
     assert "Message sent to session" in result
     ctx.context.context.send_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_message_downloads_windows_sandbox_file_with_original_name(
+    tmp_path, monkeypatch
+):
+    """Windows sandbox paths keep their basename when sent as files."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(runtime="sandbox")
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    async def _exec(_command):
+        return {"content": "_&exists_"}
+
+    async def _download_file(_remote_path, local_path):
+        assert local_path.endswith("report.txt")
+        assert "\\" not in local_path
+        with open(local_path, "w", encoding="utf-8") as file:
+            file.write("report")
+
+    booter = SimpleNamespace(
+        shell=SimpleNamespace(exec=AsyncMock(side_effect=_exec)),
+        download_file=AsyncMock(side_effect=_download_file),
+    )
+
+    async def mock_get_booter(*args, **kwargs):
+        del args, kwargs
+        return booter
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_booter",
+        mock_get_booter,
+    )
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": r"C:\Users\AstrBot\report.txt"}],
+    )
+
+    assert "Message sent to session" in result
+    sent_chain = ctx.context.context.send_message.await_args.args[1]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "report.txt"
+
+
+@pytest.mark.asyncio
+async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
+    tmp_path, monkeypatch
+):
+    tool = SendMessageToUserTool()
+    ctx = _make_context(runtime="sandbox")
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    async def _exec(_command):
+        return {"content": "_&exists_"}
+
+    async def _download_file(_remote_path, local_path):
+        assert local_path.endswith("export")
+        with open(local_path, "w", encoding="utf-8") as file:
+            file.write("export")
+
+    booter = SimpleNamespace(
+        shell=SimpleNamespace(exec=AsyncMock(side_effect=_exec)),
+        download_file=AsyncMock(side_effect=_download_file),
+    )
+
+    async def mock_get_booter(*args, **kwargs):
+        del args, kwargs
+        return booter
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_booter",
+        mock_get_booter,
+    )
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": "reports/export/"}],
+    )
+
+    assert "Message sent to session" in result
+    sent_chain = ctx.context.context.send_message.await_args.args[1]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "export"

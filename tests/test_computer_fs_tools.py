@@ -5,6 +5,7 @@ import io
 import zipfile
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from mcp.types import CallToolResult, ImageContent
@@ -39,6 +40,100 @@ def _make_context(
     )
     astr_ctx = SimpleNamespace(context=config_holder, event=event)
     return ContextWrapper(context=astr_ctx)
+
+
+def _make_sandbox_context(
+    *,
+    role: str = "admin",
+    umo: str = "qq:friend:user-1",
+):
+    config_holder = SimpleNamespace(
+        get_config=lambda umo=None: {
+            "provider_settings": {
+                "computer_use_require_admin": True,
+                "computer_use_runtime": "sandbox",
+            }
+        }
+    )
+    event = SimpleNamespace(
+        role=role,
+        unified_msg_origin=umo,
+        send=AsyncMock(),
+    )
+    astr_ctx = SimpleNamespace(context=config_holder, event=event)
+    return ContextWrapper(context=astr_ctx)
+
+
+@pytest.mark.asyncio
+async def test_sandbox_file_download_handles_windows_remote_filename(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        fs_tools,
+        "get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    async def _download_file(_remote_path, local_path):
+        assert local_path.endswith("report.txt")
+        assert "\\" not in local_path
+
+    booter = SimpleNamespace(download_file=AsyncMock(side_effect=_download_file))
+
+    async def _fake_get_booter(_ctx, _umo):
+        return booter
+
+    monkeypatch.setattr(fs_tools, "get_booter", _fake_get_booter)
+
+    context = _make_sandbox_context()
+    result = await fs_tools.FileDownloadTool().call(
+        context,
+        remote_path=r"C:\Users\AstrBot\report.txt",
+        also_send_to_user=True,
+    )
+
+    assert "report.txt" in result
+    sent_chain = context.context.event.send.await_args.args[0]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "report.txt"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_file_download_strips_trailing_remote_slash(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        fs_tools,
+        "get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    booter = SimpleNamespace(download_file=AsyncMock())
+
+    async def _fake_get_booter(_ctx, _umo):
+        return booter
+
+    monkeypatch.setattr(fs_tools, "get_booter", _fake_get_booter)
+
+    context = _make_sandbox_context()
+    result = await fs_tools.FileDownloadTool().call(
+        context,
+        remote_path="reports/export/",
+        also_send_to_user=True,
+    )
+
+    assert "export" in result
+    sent_chain = context.context.event.send.await_args.args[0]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "export"
 
 
 def _setup_local_fs_tools(
