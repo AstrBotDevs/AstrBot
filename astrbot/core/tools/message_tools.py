@@ -15,6 +15,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.tools.computer_tools.fs import _remote_basename
 from astrbot.core.tools.computer_tools.util import (
     check_admin_permission,
     is_local_runtime,
@@ -173,7 +174,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             quoted_path = shlex.quote(path)
             result = await sb.shell.exec(f"test -f {quoted_path} && echo '_&exists_'")
             if "_&exists_" in json.dumps(result):
-                name = os.path.basename(path)
+                name = _remote_basename(path) or os.path.basename(path)
                 local_path = os.path.join(
                     get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
                 )
@@ -259,7 +260,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     url = msg.get("url")
                     name = (
                         msg.get("text")
-                        or (os.path.basename(path) if path else "")
+                        or (_remote_basename(path) if path else "")
                         or (os.path.basename(url) if url else "")
                         or "file"
                     )
