@@ -270,7 +270,7 @@ class QQOfficialPlatformAdapter(Platform):
         ):
             return
 
-        # 私聊主动推送不需要 msg_id，见 https://github.com/AstrBotDevs/AstrBot/issues/7904
+        # 主动推送不需要 msg_id，见 https://github.com/AstrBotDevs/AstrBot/issues/7904
         msg_id = self._session_last_message_id.get(session.session_id)
         scene = self._session_scene.get(session.session_id)
         allow_group_proactive_send = (
