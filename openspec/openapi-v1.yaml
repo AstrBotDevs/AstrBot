@@ -32,6 +32,7 @@ tags:
   - name: Plugins
   - name: Plugin Sources
   - name: Plugin Pages
+  - name: Plugin Preferences
   - name: Commands
   - name: Tools
   - name: MCP
@@ -2247,6 +2248,38 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/preferences/pinned:
+    get:
+      tags: [Plugin Preferences]
+      summary: Get pinned extension names
+      operationId: getPinnedExtensions
+      x-astrbot-scope: plugin
+      responses:
+        "200":
+          description: Pinned extension preference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginPinnedExtensionsEnvelope"
+    put:
+      tags: [Plugin Preferences]
+      summary: Update pinned extension names
+      operationId: updatePinnedExtensions
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginPinnedExtensionsRequest"
+      responses:
+        "200":
+          description: Pinned extension preference
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PluginPinnedExtensionsEnvelope"
 
   /api/v1/plugins/install/github:
     post:
@@ -5483,6 +5516,35 @@ components:
           type: string
           format: uri
       additionalProperties: false
+
+    PluginPinnedExtensionsRequest:
+      type: object
+      properties:
+        pinned_extensions:
+          type: array
+          items: {}
+      additionalProperties: false
+
+    PluginPinnedExtensionsData:
+      type: object
+      required: [pinned_extensions, preference_exists]
+      properties:
+        pinned_extensions:
+          type: array
+          items:
+            type: string
+        preference_exists:
+          type: boolean
+      additionalProperties: false
+
+    PluginPinnedExtensionsEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              $ref: "#/components/schemas/PluginPinnedExtensionsData"
 
     CommandPatchRequest:
       type: object

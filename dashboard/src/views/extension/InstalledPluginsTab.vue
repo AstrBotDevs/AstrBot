@@ -1,11 +1,14 @@
 <script setup>
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
+import { pluginPreferencesApi } from "@/api/v1";
 import { normalizeTextInput } from "@/utils/inputValue";
 import {
   readPinnedExtensions,
   writePinnedExtensions,
+  normalizePinnedExtensions,
 } from "./extensionPreferenceStorage.mjs";
-import { computed, ref, watch } from "vue";
+import { resolvePinnedExtensionNames } from "./pluginPinnedPreferenceSync.mjs";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 
 const props = defineProps({
   state: {
@@ -165,6 +168,12 @@ const openPluginWebui = (extension) => {
 };
 
 const pinnedExtensionNames = ref(readPinnedExtensions());
+let pinnedPreferenceVersion = 0;
+let savedPinnedPreferenceVersion = 0;
+let saveTimer = null;
+let saveInFlight = false;
+let pendingPinnedPreferenceSave = false;
+const SAVE_DEBOUNCE_MS = 300;
 
 const pinnedExtensionOrder = computed(() => {
   const order = new Map();
@@ -191,13 +200,109 @@ const sortedInstalledPlugins = computed(() => {
   });
 });
 
-watch(
-  pinnedExtensionNames,
-  (names) => {
-    writePinnedExtensions(names);
-  },
-  { deep: true },
-);
+const applyPinnedExtensionNames = (names, { markSaved = false } = {}) => {
+  const normalizedNames = normalizePinnedExtensions(names);
+  pinnedPreferenceVersion += 1;
+  pinnedExtensionNames.value = normalizedNames;
+  writePinnedExtensions(normalizedNames);
+  if (markSaved) {
+    savedPinnedPreferenceVersion = pinnedPreferenceVersion;
+  }
+  return pinnedPreferenceVersion;
+};
+
+const persistPinnedExtensions = async () => {
+  if (saveInFlight) {
+    pendingPinnedPreferenceSave = true;
+    return false;
+  }
+
+  const version = pinnedPreferenceVersion;
+  if (version <= savedPinnedPreferenceVersion) {
+    return true;
+  }
+
+  const names = normalizePinnedExtensions(pinnedExtensionNames.value);
+  saveInFlight = true;
+  try {
+    await pluginPreferencesApi.updatePinnedExtensions(names);
+    if (version !== pinnedPreferenceVersion) {
+      pendingPinnedPreferenceSave = true;
+      return false;
+    }
+    savedPinnedPreferenceVersion = version;
+    return true;
+  } catch (error) {
+    console.warn("保存插件置顶偏好失败", error);
+    return false;
+  } finally {
+    saveInFlight = false;
+    if (pendingPinnedPreferenceSave) {
+      pendingPinnedPreferenceSave = false;
+      schedulePersistPinnedExtensions(0);
+    }
+  }
+};
+
+const schedulePersistPinnedExtensions = (delay = SAVE_DEBOUNCE_MS) => {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+  }
+  saveTimer = setTimeout(async () => {
+    saveTimer = null;
+    await persistPinnedExtensions();
+  }, delay);
+};
+
+const hydratePinnedPreferences = async () => {
+  const hydrateStartVersion = pinnedPreferenceVersion;
+  try {
+    const response = await pluginPreferencesApi.getPinnedExtensions();
+    const remoteData = response?.data?.data ?? {};
+    const remoteNames = normalizePinnedExtensions(
+      remoteData?.pinned_extensions,
+    );
+    const localNames = pinnedExtensionNames.value;
+    const resolution = resolvePinnedExtensionNames({
+      localNames,
+      remoteNames,
+      preferenceExists: remoteData?.preference_exists,
+    });
+
+    if (pinnedPreferenceVersion !== hydrateStartVersion) {
+      return;
+    }
+
+    applyPinnedExtensionNames(resolution.names, {
+      markSaved: !resolution.shouldMigrate,
+    });
+
+    if (resolution.shouldMigrate && resolution.migrateNames) {
+      const migrationVersion = pinnedPreferenceVersion;
+      const migrated = await persistPinnedExtensions();
+      if (
+        !migrated &&
+        pinnedPreferenceVersion === migrationVersion &&
+        migrationVersion > savedPinnedPreferenceVersion
+      ) {
+        schedulePersistPinnedExtensions(1000);
+      }
+    }
+  } catch (error) {
+    console.warn("加载插件置顶偏好失败，继续使用本地缓存", error);
+  }
+};
+
+onMounted(hydratePinnedPreferences);
+
+onUnmounted(() => {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+
+  void persistPinnedExtensions();
+});
 
 const isPinnedExtension = (extension) => {
   const name = extension?.name;
@@ -212,7 +317,8 @@ const togglePinnedExtension = (extension) => {
   if (next.length === pinnedExtensionNames.value.length) {
     next.unshift(name);
   }
-  pinnedExtensionNames.value = next;
+  applyPinnedExtensionNames(next);
+  schedulePersistPinnedExtensions();
 };
 </script>
 
