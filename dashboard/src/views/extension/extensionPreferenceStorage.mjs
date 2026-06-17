@@ -40,7 +40,7 @@ const getStorageForWrite = (storageOverride) => {
   }
 };
 
-const normalizePinnedExtensions = (value) => {
+export const normalizePinnedExtensions = (value) => {
   if (!Array.isArray(value)) {
     return [];
   }

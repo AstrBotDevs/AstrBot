@@ -33,6 +33,9 @@ from astrbot.dashboard.services.open_api_service import OpenApiService
 from astrbot.dashboard.services.persona_service import PersonaService
 from astrbot.dashboard.services.platform_service import PlatformService
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
+from astrbot.dashboard.services.plugin_preference_service import (
+    PluginPreferenceService,
+)
 from astrbot.dashboard.services.plugin_service import PluginService
 from astrbot.dashboard.services.session_management_service import (
     SessionManagementService,
@@ -123,6 +126,7 @@ def create_dashboard_asgi_app(
         providers=ProviderConfigService(core_lifecycle),
         personas=PersonaService(core_lifecycle),
         plugins=PluginService(core_lifecycle, core_lifecycle.plugin_manager),
+        plugin_preferences=PluginPreferenceService(db),
         plugin_pages=PluginPageService(
             core_lifecycle.plugin_manager,
             core_lifecycle=core_lifecycle,

@@ -66,6 +66,11 @@ export interface ApiEnvelope<T> {
   data: T;
 }
 
+export interface PluginPinnedExtensionsData {
+  pinned_extensions: string[];
+  preference_exists: boolean;
+}
+
 export const UPGRADE_RECOVERY_EVENT = 'astrbot-upgrade-recovery';
 export const UPGRADE_RECOVERY_TOKEN_KEY = 'astrbot-upgrade-recovery-token';
 
@@ -1292,6 +1297,20 @@ export const pluginApi = {
       openApiV1.getPluginPageById({
         query: { plugin_id: pluginId, page_name: pageName },
       }) as any,
+    );
+  },
+};
+
+export const pluginPreferencesApi = {
+  getPinnedExtensions() {
+    return apiV1Client.get<ApiEnvelope<PluginPinnedExtensionsData>>(
+      '/plugins/preferences/pinned',
+    );
+  },
+  updatePinnedExtensions(names: unknown[]) {
+    return apiV1Client.put<ApiEnvelope<PluginPinnedExtensionsData>>(
+      '/plugins/preferences/pinned',
+      { pinned_extensions: names },
     );
   },
 };

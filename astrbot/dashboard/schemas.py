@@ -534,6 +534,10 @@ class PluginUninstallRequest(OpenModel):
     delete_data: bool | None = None
 
 
+class PluginPinnedExtensionsRequest(OpenModel):
+    pinned_extensions: list[Any] | None = None
+
+
 class PluginConfigFileDeleteRequest(OpenModel):
     path: str | None = None
     file: str | None = None

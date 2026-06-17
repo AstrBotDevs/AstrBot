@@ -78,6 +78,36 @@ class FakeDb:
         self.touched_key_ids: list[str] = []
         self.umo_ids = ["webchat:FriendMessage:webchat!user!session-1"]
         self.preferences: list[object] = []
+        self._preferences: dict[tuple[str, str, str], object] = {}
+        self.raise_on_get_preference = False
+        self.raise_on_insert_preference = False
+
+    async def get_preference(self, scope: str, scope_id: str, key: str):
+        if self.raise_on_get_preference:
+            raise RuntimeError("preference database unavailable")
+        return self._preferences.get((scope, scope_id, key))
+
+    async def insert_preference_or_update(
+        self, scope: str, scope_id: str, key: str, value: dict
+    ):
+        from types import SimpleNamespace
+
+        if self.raise_on_insert_preference:
+            raise RuntimeError("preference database unavailable")
+
+        pref = self._preferences.get((scope, scope_id, key))
+        if pref is not None:
+            pref.value = value
+        else:
+            pref = SimpleNamespace(
+                scope=scope,
+                scope_id=scope_id,
+                key=key,
+                value=value,
+            )
+            self._preferences[(scope, scope_id, key)] = pref
+            self.preferences.append(pref)
+        return pref
 
     async def get_active_api_key_by_hash(self, key_hash: str) -> FakeApiKey | None:
         return self.api_keys.get(key_hash)
@@ -2548,3 +2578,188 @@ async def test_v1_platform_webhook_is_public_route(
         "method": "POST",
         "payload": {"challenge": "ping"},
     }
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_preferences_pinned_initial_empty(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.get(
+        "/api/v1/plugins/preferences/pinned",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["data"] == {
+        "pinned_extensions": [],
+        "preference_exists": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_preferences_pinned_put_normalizes_and_gets(
+    asgi_client: httpx.AsyncClient,
+):
+    headers = _jwt_headers()
+
+    put_response = await asgi_client.put(
+        "/api/v1/plugins/preferences/pinned",
+        json={"pinned_extensions": ["alpha", "beta", "alpha", "", None]},
+        headers=headers,
+    )
+
+    assert put_response.status_code == 200
+    put_data = put_response.json()
+    assert put_data["status"] == "ok"
+    assert put_data["data"] == {
+        "pinned_extensions": ["alpha", "beta"],
+        "preference_exists": True,
+    }
+
+    get_response = await asgi_client.get(
+        "/api/v1/plugins/preferences/pinned",
+        headers=headers,
+    )
+
+    assert get_response.status_code == 200
+    get_data = get_response.json()
+    assert get_data["status"] == "ok"
+    assert get_data["data"] == {
+        "pinned_extensions": ["alpha", "beta"],
+        "preference_exists": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_preferences_pinned_distinguishes_existing_empty(
+    asgi_client: httpx.AsyncClient,
+):
+    headers = _jwt_headers()
+
+    put_response = await asgi_client.put(
+        "/api/v1/plugins/preferences/pinned",
+        json={"pinned_extensions": []},
+        headers=headers,
+    )
+    get_response = await asgi_client.get(
+        "/api/v1/plugins/preferences/pinned",
+        headers=headers,
+    )
+
+    assert put_response.status_code == 200
+    assert put_response.json()["data"] == {
+        "pinned_extensions": [],
+        "preference_exists": True,
+    }
+    assert get_response.status_code == 200
+    assert get_response.json()["data"] == {
+        "pinned_extensions": [],
+        "preference_exists": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_preferences_pinned_get_db_error_is_not_empty(
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+):
+    fake_db.raise_on_get_preference = True
+
+    response = await asgi_client.get(
+        "/api/v1/plugins/preferences/pinned",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 500
+    data = response.json()
+    assert data["status"] == "error"
+    assert data["message"] == "加载插件置顶偏好失败"
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_preferences_pinned_put_db_error_is_not_success(
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+):
+    fake_db.raise_on_insert_preference = True
+
+    response = await asgi_client.put(
+        "/api/v1/plugins/preferences/pinned",
+        json={"pinned_extensions": ["alpha"]},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 500
+    data = response.json()
+    assert data["status"] == "error"
+    assert data["message"] == "保存插件置顶偏好失败"
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_preferences_pinned_requires_auth(
+    asgi_client: httpx.AsyncClient,
+):
+    get_response = await asgi_client.get("/api/v1/plugins/preferences/pinned")
+    put_response = await asgi_client.put(
+        "/api/v1/plugins/preferences/pinned",
+        json={"pinned_extensions": ["alpha"]},
+    )
+
+    assert get_response.status_code == 401
+    assert put_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_preferences_pinned_accepts_plugin_api_key(
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+):
+    raw_key = "abk_plugin_preferences_plugin"
+    fake_db.add_api_key(raw_key, scopes=["plugin"])
+    headers = {"X-API-Key": raw_key}
+
+    put_response = await asgi_client.put(
+        "/api/v1/plugins/preferences/pinned",
+        json={"pinned_extensions": ["alpha", "beta"]},
+        headers=headers,
+    )
+    get_response = await asgi_client.get(
+        "/api/v1/plugins/preferences/pinned",
+        headers=headers,
+    )
+
+    assert put_response.status_code == 200
+    assert put_response.json()["data"] == {
+        "pinned_extensions": ["alpha", "beta"],
+        "preference_exists": True,
+    }
+    assert get_response.status_code == 200
+    assert get_response.json()["data"] == {
+        "pinned_extensions": ["alpha", "beta"],
+        "preference_exists": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_preferences_pinned_rejects_non_plugin_api_key(
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+):
+    raw_key = "abk_plugin_preferences_bot"
+    fake_db.add_api_key(raw_key, scopes=["bot"])
+    headers = {"X-API-Key": raw_key}
+
+    put_response = await asgi_client.put(
+        "/api/v1/plugins/preferences/pinned",
+        json={"pinned_extensions": ["alpha"]},
+        headers=headers,
+    )
+    get_response = await asgi_client.get(
+        "/api/v1/plugins/preferences/pinned",
+        headers=headers,
+    )
+
+    assert put_response.status_code == 403
+    assert get_response.status_code == 403

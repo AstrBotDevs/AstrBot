@@ -459,6 +459,19 @@ export type PluginGithubInstallRequest = {
     ignore_version_check?: boolean;
 };
 
+export type PluginPinnedExtensionsData = {
+    pinned_extensions: Array<(string)>;
+    preference_exists: boolean;
+};
+
+export type PluginPinnedExtensionsEnvelope = SuccessEnvelope & {
+    data: PluginPinnedExtensionsData;
+};
+
+export type PluginPinnedExtensionsRequest = {
+    pinned_extensions?: Array<unknown>;
+};
+
 export type PluginSourceRequest = {
     id?: string;
     name?: string;
@@ -1922,6 +1935,18 @@ export type ReloadFailedPluginData = {
 export type ReloadFailedPluginResponse = (SuccessEnvelope);
 
 export type ReloadFailedPluginError = unknown;
+
+export type GetPinnedExtensionsResponse = (PluginPinnedExtensionsEnvelope);
+
+export type GetPinnedExtensionsError = unknown;
+
+export type UpdatePinnedExtensionsData = {
+    body: PluginPinnedExtensionsRequest;
+};
+
+export type UpdatePinnedExtensionsResponse = (PluginPinnedExtensionsEnvelope);
+
+export type UpdatePinnedExtensionsError = unknown;
 
 export type InstallPluginFromGithubData = {
     body: PluginGithubInstallRequest;
