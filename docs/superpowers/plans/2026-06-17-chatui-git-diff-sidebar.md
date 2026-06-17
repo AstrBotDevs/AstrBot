@@ -63,7 +63,7 @@
 
 ## Chunk 1: Data Layer (i18n keys + parser + composable)
 
-### Task 1: Add 17 i18n keys to all three locales
+### Task 1: Add 19 i18n keys to all three locales
 
 **Files:**
 - Modify: `dashboard/src/i18n/locales/zh-CN/features/chat.json`
@@ -71,7 +71,7 @@
 - Modify: `dashboard/src/i18n/locales/ru-RU/features/chat.json`
 
 **Context:**
-- The 17 keys are listed verbatim in spec §5.1.1. Copy the table values into the existing `spcodeProjectLoad` object in each JSON.
+- The 19 keys (17 from spec §5.1.1 + 2 from Chunk 2 advisory: `noContent`, `loadFailedTitle`) are listed in Step 1.2 (Chinese) / Step 1.3 (English) / Step 1.4 (Russian). Copy the table values into the existing `spcodeProjectLoad` object in each JSON.
 - Each locale JSON follows the existing flat dot-path convention. Use 2-space indentation, no trailing commas, ensure JSON is valid.
 - The three locales must contain **the same set of keys** to avoid `tm()` falling back to key name at runtime.
 
@@ -1330,12 +1330,13 @@ git commit -m "feat(chatui): mount GitDiffSidebar in Chat.vue with mutual exclus
 ### Task 10: Final lint + typecheck + CHANGELOG
 
 **Files:**
-- Create: `astrbot/changelogs/2026-06-17-chatui-git-diff-sidebar.md` (or whatever the project convention is — check `astrbot/changelogs/` for examples)
+- Create or Modify: `astrbot/changelogs/v<VERSION>.md` (project convention: per-version filenames, Chinese headers; see Step 10.3 for discovery)
 
 **Context:**
-- The spec lists 10 commits in §7.3. Tasks 1-9 produced 9 commits (1-9). Task 10 is the cleanup / final commit.
-- `pnpm lint` and `pnpm typecheck` should already pass after each task. This task confirms end-to-end.
+- The spec lists 10 commits in §7.3. Tasks 1-9 produced 9 commits (1-9). Task 10 is the cleanup phase, producing 2 more commits (CHANGELOG + plan inclusion) for an 11-commit total (see Final Verification commit list).
+- `pnpm lint` and `pnpm typecheck` should already pass after each task. Step 10.6 re-runs them end-to-end after the plan is committed.
 - CHANGELOG entry summarizes the user-facing change.
+- If Step 10.6 fails after commits 10-11 are already on the branch, fix the issue and either amend (`git commit --amend`) or add a `fix(chatui): ...` commit — choose based on whether the failure is in earlier-task code (amend/fixup) or in the new files (separate commit).
 
 - [ ] **Step 10.1: Full project typecheck and lint**
 
