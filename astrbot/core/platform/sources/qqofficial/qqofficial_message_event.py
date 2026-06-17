@@ -65,6 +65,14 @@ _qqofficial_retry = retry(
     reraise=True,
 )
 
+_QQOFFICIAL_SEND_API_ERRORS = (
+    botpy.errors.ForbiddenError,
+    botpy.errors.MethodNotAllowedError,
+    botpy.errors.NotFoundError,
+    botpy.errors.SequenceNumberError,
+    botpy.errors.ServerError,
+)
+
 
 class QQOfficialMessageEvent(AstrMessageEvent):
     MARKDOWN_NOT_ALLOWED_ERROR = "不允许发送原生 markdown"
@@ -482,7 +490,21 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     ):
         try:
             return await send_func(payload)
-        except botpy.errors.ServerError as err:
+        except _QQOFFICIAL_SEND_API_ERRORS as err:
+            logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
+            if payload.get("msg_id"):
+                fallback_payload = payload.copy()
+                try:
+                    ret = await send_func(fallback_payload)
+                    logger.info("[QQOfficial] 使用主动发送接口发送成功。")
+                    return ret
+                except _QQOFFICIAL_SEND_API_ERRORS as fallback_err:
+                    err = fallback_err
+                    payload = fallback_payload
+
+            if not isinstance(err, botpy.errors.ServerError):
+                raise
+
             # QQ 流式 markdown 分片校验：内容必须以换行结尾。
             # 某些边界场景服务端仍可能判定失败，这里做一次修正重试。
             if stream and self.STREAM_MARKDOWN_NEWLINE_ERROR in str(err):
@@ -649,6 +671,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     ) -> message.Message | None:
         payload = locals()
         payload.pop("self", None)
+        if payload.get("msg_id") is None:
+            payload.pop("msg_id", None)
         # QQ API does not accept stream.id=None; remove it when not yet assigned
         if "stream" in payload and payload["stream"] is not None:
             stream_data = dict(payload["stream"])

@@ -138,7 +138,7 @@ class RespondStage(Stage):
             return False
 
         if event.get_platform_name() in [
-            "qq_official",
+            "qq_official_webhook",
             "weixin_official_account",
             "dingtalk",
         ]:
