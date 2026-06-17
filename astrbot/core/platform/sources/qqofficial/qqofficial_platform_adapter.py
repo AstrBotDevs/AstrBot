@@ -13,6 +13,7 @@ import botpy
 import botpy.message
 from botpy import Client
 from botpy.gateway import BotWebSocket
+from botpy.types.message import MarkdownPayload
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -188,6 +189,13 @@ class QQOfficialPlatformAdapter(Platform):
     ) -> None:
         await self._send_by_session_common(session, message_chain)
 
+    @staticmethod
+    def _normalize_media_payload(
+        payload: dict[str, Any], plain_text: str | None
+    ) -> None:
+        payload.pop("markdown", None)
+        payload["content"] = plain_text or None
+
     async def _send_by_session_common(
         self,
         session: MessageSesion,
@@ -229,7 +237,10 @@ class QQOfficialPlatformAdapter(Platform):
             )
             return
 
-        payload: dict[str, Any] = {"content": plain_text, "msg_id": msg_id}
+        payload: dict[str, Any] = {"msg_type": 2, "msg_id": msg_id}
+        if plain_text:
+            payload["markdown"] = MarkdownPayload(content=plain_text)
+
         ret: Any = None
         send_helper = SimpleNamespace(bot=self.client)
 
@@ -279,6 +290,8 @@ class QQOfficialPlatformAdapter(Platform):
                         payload["media"] = media
                         payload["msg_type"] = 7
                         payload.pop("msg_id", None)
+                if payload.get("msg_type") == 7:
+                    self._normalize_media_payload(payload, plain_text)
                 ret = await self.client.api.post_group_message(
                     group_openid=session.session_id,
                     **payload,
@@ -286,14 +299,16 @@ class QQOfficialPlatformAdapter(Platform):
             else:
                 if image_path:
                     payload["file_image"] = image_path
+                # Guild channel send API does not accept the QQ v2 msg_type field.
+                payload.pop("msg_type", None)
                 ret = await self.client.api.post_message(
                     channel_id=session.session_id,
                     **payload,
                 )
 
         elif session.message_type == MessageType.FRIEND_MESSAGE:
-            # 参考 https://bot.q.qq.com/wiki/develop/pythonsdk/api/message/post_message.html
-            # msg_id 缺失时认为是主动推送，而似乎至少在私聊上主动推送是没有被限制的，这里直接移除 msg_id 可以避免越权或 msg_id 不可用的bug
+            # When msg_id is absent, the API treats this as a proactive push.
+            # C2C proactive push is unrestricted; drops msg_id to avoid permission errors.
             payload.pop("msg_id", None)
             payload["msg_seq"] = random.randint(1, 10000)
             if image_base64:
@@ -336,6 +351,9 @@ class QQOfficialPlatformAdapter(Platform):
                 if media:
                     payload["media"] = media
                     payload["msg_type"] = 7
+
+            if payload.get("msg_type") == 7:
+                self._normalize_media_payload(payload, plain_text)
 
             ret = await QQOfficialMessageEvent.post_c2c_message(
                 send_helper,  # type: ignore
