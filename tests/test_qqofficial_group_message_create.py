@@ -1,4 +1,5 @@
 import asyncio
+import re
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -10,6 +11,12 @@ from botpy import ConnectionSession
 
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, Plain
+from astrbot.core.message.message_event_result import (
+    MessageEventResult,
+    ResultContentType,
+)
+from astrbot.core.pipeline.respond.stage import RespondStage
+from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
@@ -270,3 +277,96 @@ async def test_webhook_group_send_by_session_without_cached_msg_id_skips_send():
     )
 
     adapter.client.api.post_group_message.assert_not_awaited()
+
+
+def test_qqofficial_ws_is_not_excluded_from_segmented_reply():
+    stage = RespondStage()
+    stage.enable_seg = True
+    stage.only_llm_result = False
+    result = MessageEventResult(chain=[Plain("hello")])
+
+    event = SimpleNamespace(
+        get_result=lambda: result,
+        get_platform_name=lambda: "qq_official",
+    )
+
+    assert stage.is_seg_reply_required(cast(Any, event)) is True
+
+
+def test_qqofficial_webhook_remains_excluded_from_segmented_reply():
+    stage = RespondStage()
+    stage.enable_seg = True
+    stage.only_llm_result = False
+    result = MessageEventResult(chain=[Plain("hello")])
+
+    event = SimpleNamespace(
+        get_result=lambda: result,
+        get_platform_name=lambda: "qq_official_webhook",
+    )
+
+    assert stage.is_seg_reply_required(cast(Any, event)) is False
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_segments_qqofficial_ws_plain_result():
+    stage = ResultDecorateStage()
+    stage.reply_prefix = ""
+    stage.content_safe_check_reply = False
+    stage.enable_segmented_reply = True
+    stage.only_llm_result = False
+    stage.words_count_threshold = 100
+    stage.split_mode = "words"
+    stage.split_words = ["。"]
+    stage.split_words_pattern = re.compile(r"(.*?(。)|.+$)", re.DOTALL)
+    stage.content_cleanup_rule = ""
+    stage.show_reasoning = False
+    stage.tts_trigger_probability = 0
+    stage.reply_with_mention = False
+    stage.reply_with_quote = False
+    stage.forward_threshold = 1000
+    setattr(
+        stage,
+        "ctx",
+        SimpleNamespace(
+            plugin_manager=SimpleNamespace(
+                context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
+            ),
+            astrbot_config={
+                "provider_tts_settings": {
+                    "enable": False,
+                    "use_file_service": False,
+                    "dual_output": False,
+                },
+                "callback_api_base": "",
+                "t2i": False,
+            },
+        ),
+    )
+    result = MessageEventResult(
+        chain=[Plain("第一段。第二段。")],
+        result_content_type=ResultContentType.LLM_RESULT,
+    )
+
+    event = SimpleNamespace(
+        plugins_name=None,
+        unified_msg_origin="qq_official:GroupMessage:group-1",
+        get_result=lambda: result,
+        get_platform_name=lambda: "qq_official",
+        is_stopped=lambda: False,
+        get_extra=lambda *_args, **_kwargs: None,
+    )
+
+    processed = stage.process(cast(Any, event))
+    if hasattr(processed, "__aiter__"):
+        async for _ in cast(Any, processed):
+            pass
+    else:
+        yielded = await cast(Any, processed)
+        if yielded is not None:
+            async for _ in cast(Any, yielded):
+                pass
+
+    assert [comp.text for comp in result.chain if isinstance(comp, Plain)] == [
+        "第一段",
+        "第二段",
+    ]
