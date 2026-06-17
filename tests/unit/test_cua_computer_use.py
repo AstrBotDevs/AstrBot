@@ -1356,6 +1356,68 @@ async def test_cua_shutdown_clears_cached_components():
     assert booter._runtime is None
 
 
+@pytest.mark.asyncio
+async def test_cua_available_checks_shell_health():
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    class HealthShell(FakeShell):
+        async def run(self, command: str, **kwargs):
+            self.commands.append((command, kwargs))
+            return {"stdout": "_astrbot_cua_ok_\n", "stderr": "", "exit_code": 0}
+
+    sandbox = FakeSandbox()
+    sandbox.shell = HealthShell()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    assert await booter.available() is True
+    assert sandbox.shell.commands[-1][0] == "echo _astrbot_cua_ok_"
+
+
+@pytest.mark.asyncio
+async def test_cua_available_returns_false_when_shell_health_fails():
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    class DisconnectedShell:
+        async def run(self, command: str, **kwargs):
+            raise RuntimeError("server disconnected")
+
+    sandbox = FakeSandbox()
+    sandbox.shell = DisconnectedShell()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    assert await booter.available() is False
+
+
 def test_cua_tools_are_registered_as_builtin_tools():
     from astrbot.core.tools.computer_tools.cua import (
         CuaKeyboardTypeTool,

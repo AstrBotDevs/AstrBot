@@ -893,4 +893,13 @@ class CuaBooter(ComputerBooter):
         Path(local_path).write_bytes(base64.b64decode(result.get("stdout", "")))
 
     async def available(self) -> bool:
-        return self._runtime is not None
+        if self._runtime is None:
+            return False
+        try:
+            result = await self._runtime.shell.exec("echo _astrbot_cua_ok_", timeout=10)
+        except Exception as exc:
+            logger.debug("[Computer] CUA sandbox health check failed: %s", exc)
+            return False
+        if result.get("success") is False or result.get("stderr"):
+            return False
+        return "_astrbot_cua_ok_" in str(result.get("stdout", ""))
