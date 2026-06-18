@@ -45,6 +45,7 @@
     "viewRepo": "Repository",
     "openPages": "Pages",
     "openPage": "Open",
+    "openWebui": "Open Plugin UI",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
@@ -66,7 +67,7 @@
     "loading": "Loading...",
     "installed": "Installed",
     "unknown": "Unknown",
-    "incompatible": "Incompatible"
+    "unsupported": "Unsupported"
   },
   "tooltips": {
     "enable": "Click to Enable",
@@ -106,6 +107,7 @@
     "docsEmpty": "No documentation",
     "changelogTitle": "Changelog",
     "changelogEmpty": "No changelog",
+    "subCommandsCount": "{count} sub-commands",
     "handlerGroups": {
       "page": "Pages",
       "skill": "Skills",
@@ -227,8 +229,8 @@
       "confirm": "Continue",
       "cancel": "Cancel"
     },
-    "versionCompatibility": {
-      "title": "Version Compatibility Warning",
+    "versionSupport": {
+      "title": "Version Support Warning",
       "message": "This plugin declares an AstrBot version range that does not match your current version. You can ignore this warning and continue installation, but it may not work correctly.",
       "confirm": "Ignore Warning and Install",
       "cancel": "Cancel Installation"

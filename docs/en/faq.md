@@ -4,7 +4,7 @@
 
 ### Encountering 404 Error When Opening the Dashboard
 
-Download `dist.zip` from the [release](https://github.com/AstrBotDevs/AstrBot/releases) page, extract it, and move it to `AstrBot/data`. If it still doesn't work, try restarting your computer (based on community feedback).
+Download `AstrBot-vxxxxx-dashboard.zip` from the [release](https://github.com/AstrBotDevs/AstrBot/releases) page, extract it, and move it to `AstrBot/data`. If it still doesn't work, try restarting your computer (based on community feedback).
 
 ### First Login Account and Random Password
 
@@ -69,6 +69,19 @@ The segment should look like:
 ```
 
 After restart, AstrBot will automatically generate a random password with the fixed username `astrbot`; check the startup logs.
+
+### Correct Password Cannot Log In After Upgrading AstrBot
+
+If you are sure the dashboard password is correct but still cannot log in after upgrading AstrBot, the old WebUI static files may be incompatible with the newer backend.
+
+Solution:
+
+1. Stop AstrBot.
+2. Delete the `dist` folder under AstrBot's `data` directory: `AstrBot/data/dist`.
+3. Restart AstrBot.
+4. Access the dashboard in your browser. Press `Ctrl+Shift+R` or `Ctrl+F5` (or `Cmd+Shift+R` on macOS) to force refresh the page.
+
+After restart, AstrBot will reload or download WebUI files that match the current version.
 
 ## Bot Core Related
 

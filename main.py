@@ -9,6 +9,28 @@ import runtime_bootstrap
 
 runtime_bootstrap.initialize_runtime_bootstrap()
 
+DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_RESET_DASHBOARD_PASSWORD"
+
+
+def _apply_startup_env_flags(argv: list[str]) -> None:
+    """Apply startup flags that must take effect before core imports.
+
+    Args:
+        argv: Command-line arguments excluding the executable name.
+    """
+
+    if "-h" in argv or "--help" in argv:
+        return
+
+    startup_parser = argparse.ArgumentParser(add_help=False)
+    startup_parser.add_argument("--reset-password", action="store_true")
+    startup_args, _ = startup_parser.parse_known_args(argv)
+    if startup_args.reset_password:
+        os.environ[DASHBOARD_RESET_PASSWORD_ENV] = "1"
+
+
+_apply_startup_env_flags(sys.argv[1:])
+
 from astrbot.core import LogBroker, LogManager, db_helper, logger  # noqa: E402
 from astrbot.core.config.default import VERSION  # noqa: E402
 from astrbot.core.initial_loader import InitialLoader  # noqa: E402
@@ -23,8 +45,11 @@ from astrbot.core.utils.astrbot_path import (  # noqa: E402
 )
 from astrbot.core.utils.io import (  # noqa: E402
     download_dashboard,
+    get_bundled_dashboard_dist_path,
     get_dashboard_version,
+    should_use_bundled_dashboard_dist,
 )
+from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime  # noqa: E402
 
 # 将父目录添加到 sys.path
 sys.path.append(Path(__file__).parent.as_posix())
@@ -50,7 +75,7 @@ def check_env() -> None:
         sys.path.insert(0, astrbot_root)
 
     site_packages_path = get_astrbot_site_packages_path()
-    if site_packages_path not in sys.path:
+    if not is_packaged_desktop_runtime() and site_packages_path not in sys.path:
         sys.path.append(site_packages_path)
 
     os.makedirs(get_astrbot_config_path(), exist_ok=True)
@@ -77,6 +102,13 @@ async def check_dashboard_files(webui_dir: str | None = None):
     data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
     if os.path.exists(data_dist_path):
         v = await get_dashboard_version()
+        if should_use_bundled_dashboard_dist(data_dist_path, VERSION):
+            bundled_dist = get_bundled_dashboard_dist_path()
+            logger.info(
+                "Using bundled WebUI because data/dist is older than core version v%s.",
+                VERSION,
+            )
+            return str(bundled_dist)
         if v is not None:
             # 存在文件
             if v == f"v{VERSION}":
@@ -130,6 +162,14 @@ if __name__ == "__main__":
         type=str,
         help="Specify the directory path for WebUI static files",
         default=None,
+    )
+    parser.add_argument(
+        "--reset-password",
+        action="store_true",
+        help=(
+            "Reset the dashboard initial password on startup and print it in "
+            "startup logs"
+        ),
     )
     args = parser.parse_args()
 

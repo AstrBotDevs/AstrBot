@@ -85,7 +85,7 @@
                 <p class="text-caption text-medium-emphasis mt-2">{{ t('upload.supportedFormats') }}</p>
                 <p class="text-caption text-medium-emphasis">{{ t('upload.maxSize') }}</p>
                 <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
-                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.pdf,.docx,.epub,.xls,.xlsx"
+                <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
                   @change="handleFileSelect" />
               </div>
 
@@ -238,7 +238,7 @@
 import TavilyKeyDialog from './TavilyKeyDialog.vue'
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
@@ -340,9 +340,7 @@ const headers = [
 const loadDocuments = async () => {
   loading.value = true
   try {
-    const response = await axios.get('/api/kb/document/list', {
-      params: { kb_id: props.kbId }
-    })
+    const response = await knowledgeApi.documents(props.kbId)
     if (response.data.status === 'ok') {
       documents.value = response.data.data.items || []
     }
@@ -425,7 +423,7 @@ const uploadFiles = async () => {
     formData.append('tasks_limit', uploadSettings.value.tasks_limit.toString())
     formData.append('max_retries', uploadSettings.value.max_retries.toString())
 
-    const response = await axios.post('/api/kb/document/upload', formData)
+    const response = await knowledgeApi.uploadDocument(props.kbId, formData)
 
     if (response.data.status === 'ok') {
       const result = response.data.data
@@ -502,7 +500,7 @@ const uploadFromUrl = async () => {
     }
 
 
-    const response = await axios.post('/api/kb/document/upload/url', payload)
+    const response = await knowledgeApi.importDocumentFromUrl(props.kbId, payload)
 
     if (response.data.status === 'ok') {
       const result = response.data.data
@@ -554,9 +552,7 @@ const startProgressPolling = (taskId: string) => {
 
   progressPollingInterval.value = window.setInterval(async () => {
     try {
-      const response = await axios.get('/api/kb/document/upload/progress', {
-        params: { task_id: taskId }
-      })
+      const response = await knowledgeApi.task(taskId)
 
       if (response.data.status === 'ok') {
         const data = response.data.data
@@ -683,10 +679,7 @@ const deleteDocument = async () => {
 
   deleting.value = true
   try {
-    const response = await axios.post('/api/kb/document/delete', {
-      doc_id: deleteTarget.value.doc_id,
-      kb_id: props.kbId
-    })
+    const response = await knowledgeApi.deleteDocument(props.kbId, deleteTarget.value.doc_id)
 
     if (response.data.status === 'ok') {
       showSnackbar(t('documents.deleteSuccess'))
@@ -709,6 +702,7 @@ const getFileIcon = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'mdi-file-pdf-box'
   if (type.includes('epub')) return 'mdi-book-open-page-variant'
+  if (type.includes('rst') || type.includes('adoc')) return 'mdi-file-document-outline'
   if (type.includes('md') || type.includes('markdown')) return 'mdi-language-markdown'
   if (type.includes('txt')) return 'mdi-file-document-outline'
   if (type.includes('url')) return 'mdi-link-variant'
@@ -719,6 +713,7 @@ const getFileColor = (fileType: string) => {
   const type = fileType?.toLowerCase() || ''
   if (type.includes('pdf')) return 'error'
   if (type.includes('epub')) return 'warning'
+  if (type.includes('rst') || type.includes('adoc')) return 'success'
   if (type.includes('md')) return 'info'
   if (type.includes('txt')) return 'success'
   if (type.includes('url')) return 'primary'
@@ -751,9 +746,7 @@ const formatDate = (dateStr: string) => {
 // 加载LLM providers
 const loadLlmProviders = async () => {
   try {
-    const response = await axios.get('/api/config/provider/list', {
-      params: { provider_type: 'chat_completion' }
-    })
+    const response = await providerApi.listByProviderType('chat_completion')
     if (response.data.status === 'ok') {
       llmProviders.value = response.data.data
     }
@@ -766,11 +759,9 @@ const loadLlmProviders = async () => {
 const checkTavilyConfig = async () => {
   tavilyConfigStatus.value = 'loading'
   try {
-    const response = await axios.get('/api/config/abconf', {
-      params: { id: 'default' }
-    })
+    const response = await configProfileApi.get('default')
     if (response.data.status === 'ok') {
-      const config = response.data.data.config
+      const config = ((response.data.data as any).config || {}) as any
       const tavilyKeys = config?.provider_settings?.websearch_tavily_key
       if (Array.isArray(tavilyKeys) && tavilyKeys.length > 0 && tavilyKeys.some(key => key.trim() !== '')) {
         tavilyConfigStatus.value = 'configured'

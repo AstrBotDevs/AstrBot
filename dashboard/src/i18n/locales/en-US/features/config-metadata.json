@@ -180,7 +180,7 @@
           },
           "shipyard_neo_profile": {
             "description": "Shipyard Neo Profile",
-            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default."
+            "hint": "Sandbox profile for Shipyard Neo, e.g. python-default. Leave empty to auto-select the most capable profile."
           },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox TTL",
@@ -247,31 +247,31 @@
       "provider_settings": {
         "max_context_length": {
           "description": "Max Turns Before Compression",
-          "hint": "Limits history turns before any compression strategy is applied; -1 means no turn-based limit"
+          "hint": "Persistent conversation history is truncated or LLM-compressed by the strategy below only after it exceeds this many turns. Request-time contexts are also constrained by this value before sending. -1 means no turn-based limit."
         },
         "dequeue_context_length": {
           "description": "Turns to Discard When Limit Exceeded",
-          "hint": "Number of old conversation turns to discard at once when the turn limit is exceeded; also used as fallback when compression is unavailable"
+          "hint": "When history exceeds 'Max Turns Before Compression' and LLM compression is unavailable, discard this many oldest turns at once. Request-time truncation also reuses this value."
         },
         "context_limit_reached_strategy": {
-          "description": "Handling When Context Approaches Model Limit",
+          "description": "Handling for History Limits or Context Window Pressure",
           "labels": [
             "Truncate by Turns",
             "Compress by LLM"
           ],
-          "hint": "This strategy only triggers after turn-based limiting, when context tokens approach the model's window limit. When 'Truncate by Turns' is selected, the oldest N conversation turns will be discarded based on the 'Turns to Discard When Limit Exceeded' setting above. When 'Compress by LLM' is selected, the specified model will be used for context compression."
+          "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
         },
         "llm_compress_instruction": {
           "description": "Context Compression Instruction",
           "hint": "If empty, the default prompt will be used."
         },
-        "llm_compress_keep_recent": {
-          "description": "Keep Recent Turns When Compressing",
-          "hint": "Always keep the most recent N turns of conversation when compressing context."
+        "llm_compress_keep_recent_ratio": {
+          "description": "Recent Context Token Ratio to Keep",
+          "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
         },
         "llm_compress_provider_id": {
           "description": "Model Provider ID for Context Compression",
-          "hint": "When left empty, will fall back to the 'Truncate by Turns' strategy."
+          "hint": "When left empty, the current chat model will be used for compression. If the model is unavailable or compression fails, AstrBot falls back to the 'Truncate by Turns' strategy."
         },
         "fallback_max_context_tokens": {
           "description": "Fallback context window size",
@@ -465,10 +465,6 @@
         "description": "WeChat Customer Service Account Name",
         "hint": "Optional. Customer service account name (not ID). Get it at https://kf.weixin.qq.com/kf/frame#/accounts"
       },
-      "lark_bot_name": {
-        "description": "Lark Bot Name",
-        "hint": "Must be correct; otherwise @ mentions will not wake the bot and only prefix wake will work."
-      },
       "lark_connection_mode": {
         "description": "Subscription Mode",
         "labels": [
@@ -617,7 +613,7 @@
       },
       "unified_webhook_mode": {
         "description": "Unified Webhook Mode",
-        "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/platform/webhook/{webhook_uuid}."
+        "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/v1/webhooks/platforms/{webhook_uuid}."
       },
       "webhook_uuid": {
         "description": "Webhook UUID",
@@ -789,7 +785,7 @@
       },
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
-        "hint": "Disable all built-in AstrBot commands such as help, provider, model, etc."
+        "hint": "Disable all built-in AstrBot commands such as help, sid, new, etc."
       }
     },
     "whitelist": {
@@ -1088,6 +1084,24 @@
         "hint": "When disabled, AstrBot will not upload anonymous usage statistics."
       },
       "dashboard": {
+        "trust_proxy_headers": {
+          "description": "Trust Proxy Headers for Client IP",
+          "hint": "When disabled, ignore X-Forwarded-For/X-Real-IP and use the connection address only."
+        },
+        "auth_rate_limit": {
+          "enable": {
+            "description": "Enable Login Rate Limiting",
+            "hint": "When disabled, authentication endpoints (login, TOTP, etc.) will not be rate-limited."
+          },
+          "average_interval": {
+            "description": "Endpoint Rate Limit Average Interval (seconds)",
+            "hint": "Minimum average interval between authentication requests. For example, 1.0 means at most 1 request per second."
+          },
+          "max_burst": {
+            "description": "Endpoint Rate Limit Max Burst",
+            "hint": "Maximum number of consecutive burst requests allowed. For example, 3 allows up to 3 requests in a short burst."
+          }
+        },
         "ssl": {
           "enable": {
             "description": "Enable WebUI HTTPS",
@@ -1105,6 +1119,52 @@
             "description": "SSL CA Certificate File Path",
             "hint": "Optional. Path to CA certificate file."
           }
+        },
+        "totp": {
+          "enable": {
+            "description": "Enable WebUI TOTP",
+            "hint": "When enabled, a TOTP code is required during dashboard login."
+          },
+          "manage": "Manage",
+          "configuration": "TOTP",
+          "statusPending": "Setup required",
+          "statusEnabled": "Enabled",
+          "setupRequiredHint": "TOTP is enabled but not yet configured. Click Manage to complete setup.",
+          "setupTitle": "Set up TOTP",
+          "setupSubtitle": "Scan this QR code in your authenticator app, then enter a verification code.",
+          "setupConfirm": "Verify and continue",
+          "activeSubtitle": "Use this QR code or secret to add another authenticator device.",
+          "rotateTitle": "Rotate TOTP Secret",
+          "rotateSubtitle": "Generate a new secret, then enter a code from your authenticator to confirm the replacement.",
+          "rotate": "Rotate",
+          "rotateRecovery": "Rotate Recovery Code",
+          "rotateConfirm": "Confirm Rotation",
+          "rotateCancel": "Cancel",
+          "rotateCode": "Verification Code",
+          "rotateCodeHint": "Enter the code from your authenticator app to confirm the new key.",
+          "rotateError": "Invalid code, please try again.",
+          "recoveryTitle": "Recovery Codes",
+          "recoverySubtitle": "This recovery code is shown once. Save it before continuing.",
+          "recoveryWarning": "If lost, account access cannot be restored through normal means.",
+          "recoveryAcknowledge": "I have saved my recovery codes",
+          "recoveryClose": "Done",
+          "disableTitle": "Disable TOTP",
+          "disableSubtitle": "Enter a verification code to disable two-factor authentication.",
+          "disableRecoverySubtitle": "Enter a recovery code to disable two-factor authentication.",
+          "disableCode": "Verification Code",
+          "disableRecoveryCode": "Recovery Code",
+          "disableConfirm": "Disable",
+          "disableCancel": "Cancel",
+          "disableError": "Verification failed. Please try again.",
+          "disableUseRecovery": "Can't use TOTP?",
+          "disableUseCode": "Use verification code",
+          "configSaveTitle": "Two-Factor Verification",
+          "configSaveSubtitle": "Enter a verification code to change protected configuration.",
+          "configSaveRotationHint": "When rotating TOTP keys, both the old and new verification codes are accepted (allowed once per rotation operation).",
+          "configSaveCode": "Verification Code",
+          "configSaveConfirm": "Continue",
+          "configSaveCancel": "Cancel",
+          "configSaveError": "Verification failed. Please try again."
         }
       },
       "timezone": {
@@ -1320,7 +1380,7 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "If testing fails, try adding /v1 at the end to be compatible with some OpenAI API versions."
+        "hint": "If testing fails, try adding /v1 at the end for some OpenAI API versions."
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."
@@ -1529,6 +1589,30 @@
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
+      },
+      "elevenlabs-tts-voice-id": {
+        "description": "Voice ID",
+        "hint": "ElevenLabs voice ID. Browse and copy voice IDs at https://elevenlabs.io/app/voice-library. Default 'JBFqnCBsd6RMkjVDRZzb' (George)."
+      },
+      "elevenlabs-tts-output-format": {
+        "description": "Output format",
+        "hint": "Audio output format, e.g. 'mp3_44100_128', 'mp3_22050_32', 'wav_44100', or 'opus_48000_128'. Raw PCM/u-law/a-law formats are not supported. Default 'mp3_44100_128'."
+      },
+      "elevenlabs-tts-stability": {
+        "description": "Stability",
+        "hint": "Voice stability, range [0, 1]. Higher is more consistent, lower is more expressive. Leave empty to use the server default."
+      },
+      "elevenlabs-tts-similarity-boost": {
+        "description": "Similarity boost",
+        "hint": "How closely the output matches the original voice, range [0, 1]. Leave empty to use the server default."
+      },
+      "elevenlabs-tts-style": {
+        "description": "Style exaggeration",
+        "hint": "Style exaggeration of the voice, range [0, 1]. Higher values increase latency. Leave empty to use the server default."
+      },
+      "elevenlabs-tts-use-speaker-boost": {
+        "description": "Speaker boost",
+        "hint": "Boost similarity to the original speaker. May slightly increase latency."
       },
       "mimo-tts-voice": {
         "description": "Voice",

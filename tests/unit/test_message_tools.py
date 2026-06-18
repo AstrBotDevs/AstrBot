@@ -12,9 +12,15 @@ def _make_context(
     current_session="feishu:GroupMessage:oc_xxx",
     role="admin",
     require_admin=True,
+    runtime="local",
 ):
     """Build a minimal ContextWrapper for SendMessageToUserTool."""
-    cfg = {"provider_settings": {"computer_use_require_admin": require_admin}}
+    cfg = {
+        "provider_settings": {
+            "computer_use_require_admin": require_admin,
+            "computer_use_runtime": runtime,
+        }
+    }
     return SimpleNamespace(
         context=SimpleNamespace(
             event=SimpleNamespace(
@@ -161,3 +167,165 @@ async def test_send_message_missing_image_path_stops_before_send(tmp_path, monke
 
     assert "error: failed to build messages[1] component: sandbox unavailable" in result
     ctx.context.context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_non_admin_cannot_send_arbitrary_local_absolute_file(tmp_path):
+    """Non-admin users cannot send host files outside the allowed local roots."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(role="member", require_admin=True)
+    secret_path = tmp_path / "secret.txt"
+    secret_path.write_text("secret", encoding="utf-8")
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": str(secret_path)}],
+    )
+
+    assert "error: Local file send is restricted for this user" in result
+    assert str(secret_path) in result
+    ctx.context.context.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_non_admin_can_send_workspace_file(tmp_path, monkeypatch):
+    """Non-admin users can send files inside their per-session workspace."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(
+        current_session="feishu:GroupMessage:oc_workspace",
+        role="member",
+        require_admin=True,
+    )
+    workspace_root = tmp_path / "workspaces"
+    workspace_file = workspace_root / "feishu_GroupMessage_oc_workspace" / "result.txt"
+    workspace_file.parent.mkdir(parents=True)
+    workspace_file.write_text("result", encoding="utf-8")
+    monkeypatch.setattr(
+        "astrbot.core.tools.computer_tools.util.get_astrbot_workspaces_path",
+        lambda: str(workspace_root),
+    )
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": "result.txt"}],
+    )
+
+    assert "Message sent to session" in result
+    ctx.context.context.send_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch):
+    """Non-admin users can send generated files under AstrBot temp."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(role="member", require_admin=True)
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir()
+    output_path = temp_root / "output.txt"
+    output_path.write_text("output", encoding="utf-8")
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": str(output_path)}],
+    )
+
+    assert "Message sent to session" in result
+    ctx.context.context.send_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_message_downloads_windows_sandbox_file_with_original_name(
+    tmp_path, monkeypatch
+):
+    """Windows sandbox paths keep their basename when sent as files."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(runtime="sandbox")
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    async def _exec(_command):
+        return {"content": "_&exists_"}
+
+    async def _download_file(_remote_path, local_path):
+        assert local_path.endswith("report.txt")
+        assert "\\" not in local_path
+        with open(local_path, "w", encoding="utf-8") as file:
+            file.write("report")
+
+    booter = SimpleNamespace(
+        shell=SimpleNamespace(exec=AsyncMock(side_effect=_exec)),
+        download_file=AsyncMock(side_effect=_download_file),
+    )
+
+    async def mock_get_booter(*args, **kwargs):
+        del args, kwargs
+        return booter
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_booter",
+        mock_get_booter,
+    )
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": r"C:\Users\AstrBot\report.txt"}],
+    )
+
+    assert "Message sent to session" in result
+    sent_chain = ctx.context.context.send_message.await_args.args[1]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "report.txt"
+
+
+@pytest.mark.asyncio
+async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
+    tmp_path, monkeypatch
+):
+    tool = SendMessageToUserTool()
+    ctx = _make_context(runtime="sandbox")
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    async def _exec(_command):
+        return {"content": "_&exists_"}
+
+    async def _download_file(_remote_path, local_path):
+        assert local_path.endswith("export")
+        with open(local_path, "w", encoding="utf-8") as file:
+            file.write("export")
+
+    booter = SimpleNamespace(
+        shell=SimpleNamespace(exec=AsyncMock(side_effect=_exec)),
+        download_file=AsyncMock(side_effect=_download_file),
+    )
+
+    async def mock_get_booter(*args, **kwargs):
+        del args, kwargs
+        return booter
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_booter",
+        mock_get_booter,
+    )
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": "reports/export/"}],
+    )
+
+    assert "Message sent to session" in result
+    sent_chain = ctx.context.context.send_message.await_args.args[1]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "export"

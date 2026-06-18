@@ -59,6 +59,7 @@
                         :refs="messageRefs(msg)"
                         :is-dark="isDark"
                         :custom-html-tags="customMarkdownTags"
+                        :is-streaming="isMessageStreaming(msg, msgIndex)"
                       />
 
                       <button
@@ -182,7 +183,7 @@ import {
   reactive,
   ref,
 } from "vue";
-import axios from "axios";
+import { chatApi, configRouteApi, fileApi } from "@/api/v1";
 import { setCustomComponents } from "markstream-vue";
 import "markstream-vue/index.css";
 import ChatInput from "@/components/chat/ChatInput.vue";
@@ -285,7 +286,7 @@ async function ensureSession() {
   if (currSessionId.value) return currSessionId.value;
   initializing.value = true;
   try {
-    const response = await axios.get("/api/chat/new_session");
+    const response = await chatApi.createSession();
     const session = response.data?.data as Session;
     currSessionId.value = session.session_id;
     currentSession.value = session;
@@ -299,10 +300,7 @@ async function ensureSession() {
 async function bindConfigToSession(sessionId: string) {
   const confId = props.configId || "default";
   const umo = buildWebchatUmoDetails(sessionId, false).umo;
-  await axios.post("/api/config/umo_abconf_route/update", {
-    umo,
-    conf_id: confId,
-  });
+  await configRouteApi.upsert(umo, { config_id: confId });
 }
 
 async function sendCurrentMessage() {
@@ -317,6 +315,7 @@ async function sendCurrentMessage() {
   draft.value = "";
   clearStaged({ revokeUrls: false });
   scrollToBottom();
+  await focusChatInput();
 
   sendMessageStream({
     sessionId,
@@ -393,6 +392,13 @@ function scrollToBottom() {
   });
 }
 
+async function focusChatInput() {
+  await nextTick();
+  window.requestAnimationFrame(() => {
+    inputRef.value?.focusInput();
+  });
+}
+
 function messageRefs(message: ChatRecord) {
   const refs = messageContent(message).refs;
   if (refs && typeof refs === "object" && Array.isArray(refs.used)) {
@@ -404,12 +410,8 @@ function messageRefs(message: ChatRecord) {
 function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
-  if (part.attachment_id)
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
-  if (part.filename)
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  if (part.attachment_id) return fileApi.contentUrl(part.attachment_id);
+  if (part.filename) return fileApi.byNameUrl(part.filename);
   return "";
 }
 

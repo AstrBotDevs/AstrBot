@@ -26,9 +26,11 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
+from .bot_info import request_lark_bot_info
 from .lark_event import LarkMessageEvent
 from .server import LarkWebhookServer
 
@@ -48,13 +50,11 @@ class LarkPlatformAdapter(Platform):
         self.appid = platform_config["app_id"]
         self.appsecret = platform_config["app_secret"]
         self.domain = platform_config.get("domain", lark.FEISHU_DOMAIN)
-        self.bot_name = platform_config.get("lark_bot_name", "astrbot")
+        self.bot_name = "astrbot"
+        self.bot_open_id = ""
 
         # socket or webhook
         self.connection_mode = platform_config.get("lark_connection_mode", "socket")
-
-        if not self.bot_name:
-            logger.warning("未设置飞书机器人名称，@ 机器人可能得不到回复。")
 
         # 初始化 WebSocket 长连接相关配置
         async def on_msg_event_recv(event: lark.im.v1.P2ImMessageReceiveV1) -> None:
@@ -312,7 +312,12 @@ class LarkPlatformAdapter(Platform):
                 default_suffix=".opus",
             )
             if file_path:
-                components.append(Comp.Record(file=file_path, url=file_path))
+                path_wav = await MediaResolver(
+                    file_path,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                components.append(Comp.Record(file=path_wav, url=path_wav))
             return components
 
         if message_type == "media":
@@ -517,7 +522,7 @@ class LarkPlatformAdapter(Platform):
         )
         if message.chat_type == "group":
             abm.group_id = message.chat_id
-        abm.self_id = self.bot_name
+        abm.self_id = self.bot_open_id or self.bot_name
         abm.message_str = ""
 
         at_list = {}
@@ -534,9 +539,10 @@ class LarkPlatformAdapter(Platform):
                 open_id = m.id.open_id if m.id.open_id else ""
                 at_list[m.key] = Comp.At(qq=open_id, name=m.name)
 
-                if m.name == self.bot_name:
-                    if m.id.open_id is not None:
-                        abm.self_id = m.id.open_id
+                if (self.bot_open_id and open_id == self.bot_open_id) or (
+                    m.name == self.bot_name
+                ):
+                    abm.self_id = open_id or self.bot_open_id or self.bot_name
 
         if message.content is None:
             logger.warning("[Lark] 消息内容为空")
@@ -587,16 +593,25 @@ class LarkPlatformAdapter(Platform):
 
         await self.handle_msg(abm)
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        event = LarkMessageEvent(
-            message_str=abm.message_str,
-            message_obj=abm,
+    def create_event(self, message: AstrBotMessage) -> LarkMessageEvent:
+        """Creates a Lark message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Lark message event.
+        """
+        return LarkMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
             platform_meta=self.meta(),
-            session_id=abm.session_id,
+            session_id=message.session_id,
             bot=self.lark_api,
         )
 
-        self._event_queue.put_nowait(event)
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(abm))
 
     async def handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件
@@ -621,6 +636,11 @@ class LarkPlatformAdapter(Platform):
             logger.error(f"[Lark Webhook] 处理事件失败: {e}", exc_info=True)
 
     async def run(self) -> None:
+        try:
+            await self._refresh_bot_info()
+        except Exception as e:
+            logger.error(f"[Lark] 启动时获取机器人信息失败: {e}", exc_info=True)
+
         if self.connection_mode == "webhook":
             # Webhook 模式
             if self.webhook_server is None:
@@ -642,6 +662,17 @@ class LarkPlatformAdapter(Platform):
             return {"error": "Webhook server not initialized"}, 500
 
         return await self.webhook_server.handle_callback(request)
+
+    async def _refresh_bot_info(self) -> None:
+        bot_info = await request_lark_bot_info(
+            domain=self.domain,
+            app_id=self.appid,
+            app_secret=self.appsecret,
+        )
+        if bot_info.app_name:
+            self.bot_name = bot_info.app_name
+        if bot_info.open_id:
+            self.bot_open_id = bot_info.open_id
 
     async def terminate(self) -> None:
         if self.connection_mode == "socket":

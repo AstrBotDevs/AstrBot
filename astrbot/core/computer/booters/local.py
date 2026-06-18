@@ -143,13 +143,16 @@ class LocalPythonComponent(PythonComponent):
         kernel_id: str | None = None,
         timeout: int = 30,
         silent: bool = False,
+        cwd: str | None = None,
     ) -> dict[str, Any]:
         def _run() -> dict[str, Any]:
             try:
+                working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
                 result = subprocess.run(
                     [os.environ.get("PYTHON", sys.executable), "-c", code],
                     timeout=timeout,
                     capture_output=True,
+                    cwd=working_dir,
                 )
                 stdout = "" if silent else _decode_shell_output(result.stdout)
                 stderr = (
