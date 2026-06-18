@@ -41,6 +41,7 @@ from astrbot.core.utils.network_utils import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
+from .request_retry import retry_provider_request
 
 
 @register_provider_adapter(
@@ -420,7 +421,10 @@ class ProviderOpenAIOfficial(Provider):
     async def get_models(self):
         try:
             models_str = []
-            models = await self.client.models.list()
+            models = await retry_provider_request(
+                "OpenAI",
+                lambda: self.client.models.list(),
+            )
             models = sorted(models.data, key=lambda x: x.id)
             for model in models:
                 models_str.append(model.id)
@@ -496,10 +500,14 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
-        completion = await self.client.chat.completions.create(
-            **payloads,
-            stream=False,
-            extra_body=extra_body,
+        completion = await retry_provider_request(
+            "OpenAI",
+            lambda: self.client.chat.completions.create(
+                **payloads,
+                stream=False,
+                extra_body=extra_body,
+            ),
+            retry_rate_limits=False,
         )
 
         if not isinstance(completion, ChatCompletion):
@@ -548,11 +556,15 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
-        stream = await self.client.chat.completions.create(
-            **payloads,
-            stream=True,
-            extra_body=extra_body,
-            stream_options={"include_usage": True},
+        stream = await retry_provider_request(
+            "OpenAI",
+            lambda: self.client.chat.completions.create(
+                **payloads,
+                stream=True,
+                extra_body=extra_body,
+                stream_options={"include_usage": True},
+            ),
+            retry_rate_limits=False,
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
