@@ -277,6 +277,11 @@
       "truncated": "⚠ diff truncated (showing first {shown} / {max} bytes, may be incomplete)",
       "binaryFile": "Binary file changed (no text preview)",
       "noContent": "Content truncated or incomplete",
+      "worktreeTabs": {
+        "ariaLabel": "Select worktree to view diff",
+        "mainBadge": "main",
+        "detachedBadge": "detached"
+      },
       "error": {
         "networkTitle": "Network connection failed",
         "loadFailedTitle": "Failed to load changes",

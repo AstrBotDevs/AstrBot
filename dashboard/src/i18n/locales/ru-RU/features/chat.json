@@ -267,6 +267,11 @@
       "truncated": "⚠ diff обрезан (показано первые {shown} / {max} байт, возможно неполный)",
       "binaryFile": "Бинарный файл изменён (без предпросмотра)",
       "noContent": "Содержимое обрезано или неполное",
+      "worktreeTabs": {
+        "ariaLabel": "Выберите worktree для просмотра diff",
+        "mainBadge": "главный",
+        "detachedBadge": "отсоединён"
+      },
       "error": {
         "networkTitle": "Ошибка сетевого подключения",
         "loadFailedTitle": "Не удалось получить изменения",

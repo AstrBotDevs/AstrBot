@@ -277,6 +277,11 @@
       "truncated": "⚠ diff 已截断（仅显示前 {shown} / {max} 字节，可能不完整）",
       "binaryFile": "二进制文件改动（无文本预览）",
       "noContent": "内容已截断或不完整",
+      "worktreeTabs": {
+        "ariaLabel": "选择 worktree 查看 diff",
+        "mainBadge": "主",
+        "detachedBadge": "游离"
+      },
       "error": {
         "networkTitle": "网络连接失败",
         "loadFailedTitle": "无法获取改动",
