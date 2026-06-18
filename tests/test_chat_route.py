@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from astrbot.dashboard.routes.chat import _poll_webchat_stream_result
+from astrbot.dashboard.services.chat_service import poll_webchat_stream_result
 
 
 class _QueueThatRaises:
@@ -23,7 +23,7 @@ class _QueueWithResult:
 
 @pytest.mark.asyncio
 async def test_poll_webchat_stream_result_breaks_on_cancelled_error():
-    result, should_break = await _poll_webchat_stream_result(
+    result, should_break = await poll_webchat_stream_result(
         _QueueThatRaises(asyncio.CancelledError()),
         "alice",
     )
@@ -34,7 +34,7 @@ async def test_poll_webchat_stream_result_breaks_on_cancelled_error():
 
 @pytest.mark.asyncio
 async def test_poll_webchat_stream_result_continues_on_generic_exception():
-    result, should_break = await _poll_webchat_stream_result(
+    result, should_break = await poll_webchat_stream_result(
         _QueueThatRaises(RuntimeError("boom")),
         "alice",
     )
@@ -47,7 +47,7 @@ async def test_poll_webchat_stream_result_continues_on_generic_exception():
 async def test_poll_webchat_stream_result_returns_queue_payload():
     payload = {"type": "end", "data": ""}
 
-    result, should_break = await _poll_webchat_stream_result(
+    result, should_break = await poll_webchat_stream_result(
         _QueueWithResult(payload),
         "alice",
     )

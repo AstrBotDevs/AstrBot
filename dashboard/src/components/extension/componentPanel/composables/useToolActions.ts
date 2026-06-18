@@ -2,7 +2,7 @@
  * Tool actions composable
  */
 import { ref, computed, type Ref } from 'vue';
-import axios from 'axios';
+import { toolApi } from '@/api/v1';
 import { normalizeTextInput } from '@/utils/inputValue';
 import type { ToolItem, ToolSummary } from '../types';
 
@@ -59,10 +59,7 @@ export function useToolActions(
     const previous = tool.active;
     tool.active = !tool.active;
     try {
-      const res = await axios.post('/api/tools/toggle-tool', {
-        name: tool.name,
-        activate: tool.active,
-      });
+      const res = await toolApi.setEnabled(tool.name, tool.active);
       if (res.data.status === 'ok') {
         toast(res.data.message || successMessage);
       } else {
@@ -95,10 +92,7 @@ export function useToolActions(
       return;
     }
     try {
-      const res = await axios.post('/api/tools/permission', {
-        name: tool.name,
-        permission,
-      });
+      const res = await toolApi.setPermission(tool.name, permission);
       if (res.data.status === 'ok') {
         tool.permission = permission;
         tool.permission_configured = true;

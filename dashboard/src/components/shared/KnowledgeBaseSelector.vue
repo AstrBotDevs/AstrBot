@@ -94,7 +94,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import axios from 'axios'
+import { knowledgeApi } from '@/api/v1'
 import { useRouter } from 'vue-router'
 import { useModuleI18n } from '@/i18n/composables'
 
@@ -136,11 +136,9 @@ async function openDialog() {
 async function loadKnowledgeBases() {
   loading.value = true
   try {
-    const response = await axios.get('/api/kb/list', {
-      params: {
-        page: 1,
-        page_size: 100
-      }
+    const response = await knowledgeApi.list({
+      page: 1,
+      page_size: 100
     })
     
     if (response.data.status === 'ok') {

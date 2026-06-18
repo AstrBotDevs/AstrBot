@@ -34,7 +34,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import axios from 'axios'
+import { configProfileApi } from '@/api/v1'
 
 const props = defineProps<{
   modelValue: boolean
@@ -70,15 +70,13 @@ const saveKey = async () => {
   saving.value = true
   try {
     // 1. 获取当前配置
-    const configResponse = await axios.get('/api/config/abconf', {
-      params: { id: 'default' }
-    })
+    const configResponse = await configProfileApi.get('default')
 
     if (configResponse.data.status !== 'ok') {
       throw new Error('获取当前配置失败')
     }
 
-    const currentConfig = configResponse.data.data.config
+    const currentConfig = ((configResponse.data.data as any).config || {}) as any
 
     // 2. 更新配置
     if (!currentConfig.provider_settings) {
@@ -89,10 +87,7 @@ const saveKey = async () => {
     currentConfig.provider_settings.websearch_provider = 'tavily'
 
     // 3. 保存整个配置
-    const saveResponse = await axios.post('/api/config/astrbot/update', {
-      conf_id: 'default',
-      config: currentConfig
-    })
+    const saveResponse = await configProfileApi.update('default', currentConfig)
 
     if (saveResponse.data.status === 'ok') {
       emit('success')

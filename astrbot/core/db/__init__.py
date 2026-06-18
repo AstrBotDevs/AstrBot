@@ -27,6 +27,7 @@ from astrbot.core.db.po import (
     UmoAlias,
     WebChatThread,
 )
+from astrbot.core.sentinels import NOT_GIVEN
 
 
 @dataclass
@@ -444,11 +445,23 @@ class BaseDatabase(abc.ABC):
         persona_id: str,
         system_prompt: str | None = None,
         begin_dialogs: list[str] | None = None,
-        tools: list[str] | None = None,
-        skills: list[str] | None = None,
-        custom_error_message: str | None = None,
+        tools: list[str] | None | object = NOT_GIVEN,
+        skills: list[str] | None | object = NOT_GIVEN,
+        custom_error_message: str | None | object = NOT_GIVEN,
     ) -> Persona | None:
-        """Update a persona's system prompt or begin dialogs."""
+        """Update a persona record.
+
+        Args:
+            persona_id: Persona ID to update.
+            system_prompt: Optional replacement system prompt.
+            begin_dialogs: Optional replacement begin dialogs.
+            tools: Tool names, None for all tools, or NOT_GIVEN to leave unchanged.
+            skills: Skill names, None for all skills, or NOT_GIVEN to leave unchanged.
+            custom_error_message: Custom fallback message, None to clear, or NOT_GIVEN to leave unchanged.
+
+        Returns:
+            Updated persona, or None when no fields were updated.
+        """
         ...
 
     @abc.abstractmethod

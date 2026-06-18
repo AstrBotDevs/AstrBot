@@ -186,7 +186,6 @@ class ResultDecorateStage(Stage):
 
         # 流式输出不执行下面的逻辑
         if is_stream:
-            logger.info("流式输出已启用，跳过结果装饰阶段")
             return
 
         # 需要再获取一次。插件可能直接对 chain 进行了替换。
@@ -204,7 +203,7 @@ class ResultDecorateStage(Stage):
 
             # 分段回复
             if self.enable_segmented_reply and event.get_platform_name() not in [
-                "qq_official",
+                "qq_official_webhook",
                 "weixin_official_account",
                 "dingtalk",
             ]:
@@ -308,6 +307,8 @@ class ResultDecorateStage(Stage):
                                 )
                                 new_chain.append(comp)
                                 continue
+
+                            event.track_temporary_local_file(audio_path)
 
                             use_file_service = self.ctx.astrbot_config[
                                 "provider_tts_settings"

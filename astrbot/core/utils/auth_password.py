@@ -10,7 +10,7 @@ _PBKDF2_ITERATIONS = 600_000
 _PBKDF2_SALT_BYTES = 16
 _PBKDF2_ALGORITHM = "pbkdf2_sha256"
 _PBKDF2_FORMAT = f"{_PBKDF2_ALGORITHM}$"
-_LEGACY_MD5_LENGTH = 32
+_MD5_HASH_LENGTH = 32
 _DASHBOARD_PASSWORD_MIN_LENGTH = 8
 _GENERATED_DASHBOARD_PASSWORD_LENGTH = 24
 DEFAULT_DASHBOARD_PASSWORD = "astrbot"
@@ -47,8 +47,8 @@ def hash_dashboard_password(raw_password: str) -> str:
     return f"{_PBKDF2_FORMAT}{_PBKDF2_ITERATIONS}${salt}${digest}"
 
 
-def hash_legacy_dashboard_password(raw_password: str) -> str:
-    """Return legacy MD5 hash for downgrade compatibility only."""
+def hash_md5_dashboard_password(raw_password: str) -> str:
+    """Return the MD5 dashboard password hash kept for stored config fallback."""
     if not isinstance(raw_password, str) or raw_password == "":
         raise ValueError("Password cannot be empty")
     return hashlib.md5(raw_password.encode("utf-8")).hexdigest()
@@ -71,10 +71,10 @@ def validate_dashboard_password(raw_password: str) -> None:
         raise ValueError("Password must include at least one digit")
 
 
-def _is_legacy_md5_hash(stored: str) -> bool:
+def _is_md5_hash(stored: str) -> bool:
     return (
         isinstance(stored, str)
-        and len(stored) == _LEGACY_MD5_LENGTH
+        and len(stored) == _MD5_HASH_LENGTH
         and all(c in "0123456789abcdefABCDEF" for c in stored)
     )
 
@@ -84,13 +84,13 @@ def _is_pbkdf2_hash(stored: str) -> bool:
 
 
 def verify_dashboard_password(stored_hash: str, candidate_password: str) -> bool:
-    """Verify password against legacy md5 or new PBKDF2-SHA256 format."""
+    """Verify password against MD5 or PBKDF2-SHA256 storage."""
     if not isinstance(stored_hash, str) or not isinstance(candidate_password, str):
         return False
 
-    if _is_legacy_md5_hash(stored_hash):
-        # Keep compatibility with existing MD5-based deployments while requiring
-        # the real plaintext password, not the stored MD5 value itself.
+    if _is_md5_hash(stored_hash):
+        # Support existing MD5-based deployments while requiring the real
+        # plaintext password, not the stored MD5 value itself.
         candidate_md5 = hashlib.md5(candidate_password.encode("utf-8")).hexdigest()
         return hmac.compare_digest(stored_hash.lower(), candidate_md5.lower())
 
@@ -121,6 +121,6 @@ def is_default_dashboard_password(stored_hash: str) -> bool:
     return verify_dashboard_password(stored_hash, DEFAULT_DASHBOARD_PASSWORD)
 
 
-def is_legacy_dashboard_password(stored_hash: str) -> bool:
-    """Check whether the password is still stored with legacy MD5."""
-    return _is_legacy_md5_hash(stored_hash)
+def is_md5_dashboard_password(stored_hash: str) -> bool:
+    """Check whether the password is still stored as MD5."""
+    return _is_md5_hash(stored_hash)

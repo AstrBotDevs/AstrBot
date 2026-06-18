@@ -10,7 +10,12 @@ from unittest import mock
 import pytest
 
 from astrbot.core.utils.io import should_use_bundled_dashboard_dist
-from main import check_dashboard_files, check_env
+from main import (
+    DASHBOARD_RESET_PASSWORD_ENV,
+    _apply_startup_env_flags,
+    check_dashboard_files,
+    check_env,
+)
 
 
 class _version_info:
@@ -60,6 +65,30 @@ def test_check_env(monkeypatch):
     monkeypatch.setattr(sys, "version_info", version_info_wrong)
     with pytest.raises(SystemExit):
         check_env()
+
+
+def test_apply_startup_env_flags_sets_reset_password_env(monkeypatch):
+    monkeypatch.delenv(DASHBOARD_RESET_PASSWORD_ENV, raising=False)
+
+    _apply_startup_env_flags(["--webui-dir", "/tmp/webui", "--reset-password"])
+
+    assert os.environ[DASHBOARD_RESET_PASSWORD_ENV] == "1"
+
+
+def test_apply_startup_env_flags_ignores_unrelated_args(monkeypatch):
+    monkeypatch.delenv(DASHBOARD_RESET_PASSWORD_ENV, raising=False)
+
+    _apply_startup_env_flags(["--webui-dir", "/tmp/webui"])
+
+    assert DASHBOARD_RESET_PASSWORD_ENV not in os.environ
+
+
+def test_apply_startup_env_flags_does_not_reset_for_help(monkeypatch):
+    monkeypatch.delenv(DASHBOARD_RESET_PASSWORD_ENV, raising=False)
+
+    _apply_startup_env_flags(["--reset-password", "--help"])
+
+    assert DASHBOARD_RESET_PASSWORD_ENV not in os.environ
 
 
 def test_check_env_appends_user_site_packages_after_runtime_paths(monkeypatch):
@@ -180,7 +209,6 @@ async def test_check_dashboard_files_exists_but_version_mismatch(monkeypatch):
     with mock.patch(
         "main.get_dashboard_version", mock.AsyncMock(return_value="v0.0.1")
     ):
-
         with mock.patch("main.logger.warning") as mock_logger_warning:
             await check_dashboard_files()
             mock_logger_warning.assert_called_once()
