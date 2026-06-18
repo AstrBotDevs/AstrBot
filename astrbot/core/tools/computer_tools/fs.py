@@ -70,6 +70,12 @@ _SANDBOX_RUNTIME_TOOL_CONFIG = {
 _IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
+def _remote_basename(path: str) -> str:
+    # Sandbox paths may come from POSIX or Windows runtimes; normalize separators
+    # without interpreting the path against the host filesystem.
+    return path.replace("\\", "/").rstrip("/").split("/")[-1]
+
+
 def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> list[str]:
     """Labels for the allowed directories in a local(not sandbox) and restricted(not admin) environment"""
     normalized_umo = normalize_umo_for_workspace(umo)
@@ -772,7 +778,7 @@ class FileDownloadTool(FunctionTool):
             context.context.event.unified_msg_origin,
         )
         try:
-            name = os.path.basename(remote_path)
+            name = _remote_basename(remote_path) or os.path.basename(remote_path)
 
             local_path = os.path.join(
                 get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
@@ -784,7 +790,7 @@ class FileDownloadTool(FunctionTool):
 
             if also_send_to_user:
                 try:
-                    name = os.path.basename(local_path)
+                    name = _remote_basename(remote_path) or os.path.basename(local_path)
                     if Path(local_path).suffix.lower() in _IMAGE_FILE_SUFFIXES:
                         message_component = Image.fromFileSystem(local_path)
                         sent_as = "image"
