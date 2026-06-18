@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 import zipfile
 from types import SimpleNamespace
 from typing import Any
@@ -194,6 +195,13 @@ def _make_large_text() -> str:
     return "".join(f"line-{index:05d}-{'x' * 48}\n" for index in range(6000))
 
 
+def _make_hardlink_or_skip(source, link) -> None:
+    try:
+        os.link(source, link)
+    except (AttributeError, OSError) as exc:
+        pytest.skip(f"hard links are unavailable on this filesystem: {exc}")
+
+
 def _make_epub_bytes(*, chapter_count: int = 1) -> bytes:
     manifest_items = [
         '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>'
@@ -361,6 +369,36 @@ async def test_restricted_local_member_cannot_write_plugin_provided_skill(
     assert "Write access is restricted for this user." in result
     assert "data/plugins/*/skills" not in result
     assert plugin_skill.read_text(encoding="utf-8") == "# Demo Skill\n"
+
+
+@pytest.mark.asyncio
+async def test_restricted_local_member_rejects_workspace_hardlink_alias(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_file = outside_dir / "secret.txt"
+    outside_file.write_text("outside-secret\n", encoding="utf-8")
+    hardlink_path = workspace / "linked.txt"
+    _make_hardlink_or_skip(outside_file, hardlink_path)
+
+    read_result = await fs_tools.FileReadTool().call(
+        _make_context(role="member"),
+        path="linked.txt",
+    )
+    write_result = await fs_tools.FileWriteTool().call(
+        _make_context(role="member"),
+        path="linked.txt",
+        content="changed\n",
+    )
+
+    assert "multiple hard links" in read_result
+    assert "may alias content outside allowed directories" in read_result
+    assert "multiple hard links" in write_result
+    assert "may alias content outside allowed directories" in write_result
+    assert outside_file.read_text(encoding="utf-8") == "outside-secret\n"
 
 
 def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():
