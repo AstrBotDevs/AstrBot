@@ -192,10 +192,11 @@ export const useExtensionPage = () => {
 
   // 批量选择相关
   const selectedPluginNames = ref(new Set());
-  const selectModeActive = ref(false);
   const batchUninstallConfirmDialog = ref(false);
 
+  // Derive selection state from selectedPluginNames to avoid manual sync bugs
   const selectedCount = computed(() => selectedPluginNames.value.size);
+  const selectModeActive = computed(() => selectedCount.value > 0);
 
   const selectableInstalledPlugins = computed(() =>
     filteredPlugins.value.filter((plugin) => !plugin?.reserved),
@@ -206,6 +207,14 @@ export const useExtensionPage = () => {
     return selectable.length > 0 && selectedPluginNames.value.size === selectable.length;
   });
 
+  const setSelectedPlugins = (names) => {
+    selectedPluginNames.value = new Set(names);
+  };
+
+  const clearSelection = () => {
+    setSelectedPlugins([]);
+  };
+
   const toggleSelectPlugin = (pluginName) => {
     if (!pluginName) return;
     // Never allow selecting reserved (system) plugins
@@ -215,90 +224,70 @@ export const useExtensionPage = () => {
     const next = new Set(selectedPluginNames.value);
     if (next.has(pluginName)) {
       next.delete(pluginName);
-      if (next.size === 0) {
-        selectModeActive.value = false;
-      }
     } else {
       next.add(pluginName);
-      selectModeActive.value = true;
     }
     selectedPluginNames.value = next;
   };
 
   const toggleSelectAll = () => {
     if (isAllSelected.value) {
-      selectedPluginNames.value = new Set();
-      selectModeActive.value = false;
+      clearSelection();
     } else {
-      selectedPluginNames.value = new Set(
-        selectableInstalledPlugins.value.map((p) => p.name),
-      );
-      selectModeActive.value = true;
+      setSelectedPlugins(selectableInstalledPlugins.value.map((p) => p.name));
     }
   };
 
-  const clearSelection = () => {
-    selectedPluginNames.value = new Set();
-    selectModeActive.value = false;
-  };
-
-  const batchEnable = async () => {
+  // Shared helper for batch operations (enable, disable, uninstall)
+  const runBatchAction = async ({ filterFn, action, emptyMessageKey, partialMessageKey, successMessageKey }) => {
     const targets = filteredPlugins.value.filter(
-      (p) => selectedPluginNames.value.has(p.name) && !p.activated,
+      (p) => selectedPluginNames.value.has(p.name) && filterFn(p),
     );
     if (targets.length === 0) {
-      toast(tm("batch.noDisabledPlugins"), "info");
+      if (emptyMessageKey) {
+        toast(tm(emptyMessageKey), "info");
+      }
       return;
     }
     let successCount = 0;
     let failCount = 0;
     for (const ext of targets) {
       try {
-        await pluginOn(ext);
+        await action(ext);
         successCount += 1;
-      } catch {
+      } catch (e) {
+        console.error(`Batch action failed for ${ext.name}:`, e);
         failCount += 1;
       }
     }
     clearSelection();
     if (failCount > 0) {
       toast(
-        tm("batch.enablePartial", { success: successCount, failed: failCount }),
+        tm(partialMessageKey, { success: successCount, failed: failCount }),
         "warning",
       );
     } else {
-      toast(tm("batch.enableSuccess", { count: successCount }), "success");
+      toast(tm(successMessageKey, { count: successCount }), "success");
     }
   };
 
-  const batchDisable = async () => {
-    const targets = filteredPlugins.value.filter(
-      (p) => selectedPluginNames.value.has(p.name) && p.activated,
-    );
-    if (targets.length === 0) {
-      toast(tm("batch.noEnabledPlugins"), "info");
-      return;
-    }
-    let successCount = 0;
-    let failCount = 0;
-    for (const ext of targets) {
-      try {
-        await pluginOff(ext);
-        successCount += 1;
-      } catch {
-        failCount += 1;
-      }
-    }
-    clearSelection();
-    if (failCount > 0) {
-      toast(
-        tm("batch.disablePartial", { success: successCount, failed: failCount }),
-        "warning",
-      );
-    } else {
-      toast(tm("batch.disableSuccess", { count: successCount }), "success");
-    }
-  };
+  const batchEnable = async () =>
+    runBatchAction({
+      filterFn: (p) => !p.activated,
+      action: (p) => pluginOn(p),
+      emptyMessageKey: "batch.noDisabledPlugins",
+      partialMessageKey: "batch.enablePartial",
+      successMessageKey: "batch.enableSuccess",
+    });
+
+  const batchDisable = async () =>
+    runBatchAction({
+      filterFn: (p) => p.activated,
+      action: (p) => pluginOff(p),
+      emptyMessageKey: "batch.noEnabledPlugins",
+      partialMessageKey: "batch.disablePartial",
+      successMessageKey: "batch.disableSuccess",
+    });
 
   const requestBatchUninstall = () => {
     const targets = filteredPlugins.value.filter(
@@ -313,33 +302,17 @@ export const useExtensionPage = () => {
 
   const executeBatchUninstall = async () => {
     batchUninstallConfirmDialog.value = false;
-    const targets = filteredPlugins.value.filter(
-      (p) => selectedPluginNames.value.has(p.name),
-    );
-    if (targets.length === 0) return;
-    let successCount = 0;
-    let failCount = 0;
-    for (const ext of targets) {
-      try {
-        await uninstallExtension(ext.name, {
+    await runBatchAction({
+      filterFn: () => true,
+      action: (p) =>
+        uninstallExtension(p.name, {
           deleteConfig: false,
           deleteData: false,
-        });
-        successCount += 1;
-      } catch (e) {
-        console.error(`Batch uninstall failed for ${ext.name}:`, e);
-        failCount += 1;
-      }
-    }
-    clearSelection();
-    if (failCount > 0) {
-      toast(
-        tm("batch.uninstallPartial", { success: successCount, failed: failCount }),
-        "warning",
-      );
-    } else {
-      toast(tm("batch.uninstallSuccess", { count: successCount }), "success");
-    }
+        }),
+      emptyMessageKey: "",
+      partialMessageKey: "batch.uninstallPartial",
+      successMessageKey: "batch.uninstallSuccess",
+    });
   };
 
   const cancelBatchUninstall = () => {

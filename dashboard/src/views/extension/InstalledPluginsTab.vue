@@ -203,7 +203,10 @@ const sortedInstalledPlugins = computed(() => {
   const order = pinnedExtensionOrder.value;
   let plugins = [...filteredPlugins.value];
 
-  // Apply user-selected sort (pinned items stay on top regardless)
+  // Apply user-selected sort first, then pin-sort as a stable override.
+  // Pinned items always stay on top; the user sort determines order within
+  // non-pinned items (all of which have pin-order Infinity, so sort() treats
+  // them as equal and preserves the previous user-sort ordering).
   if (sortInstalledBy.value === "name") {
     plugins.sort((a, b) => {
       const r = (a?.name || "").localeCompare(b?.name || "");
