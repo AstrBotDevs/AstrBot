@@ -377,6 +377,42 @@ class TestShipyardBooter:
     """Tests for ShipyardBooter."""
 
     @pytest.mark.asyncio
+    async def test_shipyard_shell_unwraps_bay_exec_response(self):
+        """Bay exec responses keep shell output under the data field."""
+        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
+
+        raw_shell = AsyncMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": True,
+                "data": {
+                    "success": True,
+                    "return_code": 0,
+                    "stdout": "hello_from_shipyard_bay\n/workspace\n",
+                    "stderr": "",
+                    "pid": 16,
+                    "process_id": None,
+                    "error": None,
+                },
+                "error": None,
+            }
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec(
+            "echo hello_from_shipyard_bay && pwd"
+        )
+
+        assert result == {
+            "stdout": "hello_from_shipyard_bay\n/workspace\n",
+            "stderr": "",
+            "exit_code": 0,
+            "success": True,
+            "execution_id": None,
+            "execution_time_ms": None,
+            "command": None,
+        }
+
+    @pytest.mark.asyncio
     async def test_shipyard_booter_init(self):
         """Test ShipyardBooter initialization."""
         with patch("astrbot.core.computer.booters.shipyard.ShipyardClient"):
