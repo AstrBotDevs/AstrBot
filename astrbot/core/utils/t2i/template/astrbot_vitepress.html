@@ -416,20 +416,27 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.7/dist/purify.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
-  <textarea id="markdown-source" hidden>{{ text | safe }}</textarea>
+  <script id="markdown-source" type="application/json">{{ text | tojson }}</script>
   <script>
     (function () {
       const contentElement = document.getElementById("content");
-      const source = document.getElementById("markdown-source").value;
+      const sourceNode = document.getElementById("markdown-source");
+      const source = JSON.parse(sourceNode.textContent || '""');
 
       marked.setOptions({
         gfm: true,
         breaks: false,
       });
 
-      contentElement.innerHTML = marked.parse(source);
+      const renderedHtml = marked.parse(source);
+      if (window.DOMPurify) {
+        contentElement.innerHTML = window.DOMPurify.sanitize(renderedHtml);
+      } else {
+        contentElement.textContent = source;
+      }
 
       assignHeadingIds(contentElement);
       enhanceCodeBlocks(contentElement);

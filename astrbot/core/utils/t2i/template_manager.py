@@ -10,6 +10,25 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_p
 logger = logging.getLogger("astrbot")
 
 _ALLOWED_VARS = frozenset({"text", "version", "shiki_runtime"})
+_DOMPURIFY_SCRIPT = (
+    '<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.7/dist/purify.min.js">'
+    "</script>"
+)
+_MARKED_SCRIPT = (
+    '<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>'
+)
+_UNSAFE_TEXT_SAFE_FILTER = re.compile(r"\{\{\s*text\s*\|\s*safe\s*\}\}")
+_DIRECT_MARKED_RENDER = re.compile(
+    r"(?P<indent>[ \t]*)contentElement\.innerHTML\s*=\s*marked\.parse\(source\);"
+)
+_MARKDOWN_SOURCE_TEXTAREA = re.compile(
+    r'<textarea\s+id="markdown-source"\s+hidden>\s*'
+    r"\{\{\s*text\s*\|\s*(?:safe|e|escape)\s*\}\}"
+    r"\s*</textarea>"
+)
+_MARKDOWN_SOURCE_VALUE_READ = re.compile(
+    r'(?P<indent>[ \t]*)const\s+source\s*=\s*document\.getElementById\("markdown-source"\)\.value;'
+)
 
 _SSTI_BLACKLIST: list[tuple[str, re.Pattern]] = [
     (
@@ -30,7 +49,55 @@ _SSTI_BLACKLIST: list[tuple[str, re.Pattern]] = [
 _VAR_RE = re.compile(r"\{\{\s*(\w+)\s*(\|[^}]*)?\}\}")
 
 
+def harden_t2i_template_content(content: str) -> str:
+    """Patch legacy T2I template sinks that render user text as trusted HTML."""
+    hardened = _UNSAFE_TEXT_SAFE_FILTER.sub("{{ text | e }}", content)
+    hardened = _MARKDOWN_SOURCE_TEXTAREA.sub(
+        '<script id="markdown-source" type="application/json">{{ text | tojson }}</script>',
+        hardened,
+    )
+
+    def _replace_source_value_read(match: re.Match) -> str:
+        indent = match.group("indent")
+        return (
+            f'{indent}const sourceNode = document.getElementById("markdown-source");\n'
+            f"{indent}const source = JSON.parse(sourceNode.textContent || '\"\"');"
+        )
+
+    hardened = _MARKDOWN_SOURCE_VALUE_READ.sub(_replace_source_value_read, hardened)
+
+    def _sanitize_marked_render(match: re.Match) -> str:
+        indent = match.group("indent")
+        return (
+            f"{indent}const renderedHtml = marked.parse(source);\n"
+            f"{indent}if (window.DOMPurify) {{\n"
+            f"{indent}  contentElement.innerHTML = window.DOMPurify.sanitize(renderedHtml);\n"
+            f"{indent}}} else {{\n"
+            f"{indent}  contentElement.textContent = source;\n"
+            f"{indent}}}"
+        )
+
+    if "window.DOMPurify.sanitize" not in hardened:
+        hardened = _DIRECT_MARKED_RENDER.sub(_sanitize_marked_render, hardened)
+
+    if (
+        "window.DOMPurify.sanitize" in hardened
+        and "purify.min.js" not in hardened
+        and _MARKED_SCRIPT in hardened
+    ):
+        hardened = hardened.replace(
+            _MARKED_SCRIPT,
+            f"{_MARKED_SCRIPT}\n  {_DOMPURIFY_SCRIPT}",
+            1,
+        )
+
+    return hardened
+
+
 def validate_template_content(content: str, *, strict: bool = False) -> None:
+    if _UNSAFE_TEXT_SAFE_FILTER.search(content):
+        logger.warning("SSTI validation blocked template: unsafe text|safe filter")
+        raise ValueError("Template renders text with the unsafe safe filter.")
     for label, pattern in _SSTI_BLACKLIST:
         if pattern.search(content):
             logger.warning(f"SSTI validation blocked template: matched rule [{label}]")
@@ -85,6 +152,22 @@ class TemplateManager:
     def _initialize_user_templates(self) -> None:
         """如果用户目录下缺少核心模板，则进行复制。"""
         self._copy_core_templates(overwrite=False)
+        self._harden_core_user_templates()
+
+    def _harden_core_user_templates(self) -> None:
+        """Patch copied core templates from older releases without overwriting users."""
+        for filename in self.CORE_TEMPLATES:
+            path = os.path.join(self.user_template_dir, filename)
+            if not os.path.exists(path):
+                continue
+
+            content = self._read_file(path)
+            hardened = harden_t2i_template_content(content)
+            if hardened == content:
+                continue
+
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(hardened)
 
     def _get_user_template_path(self, name: str) -> str:
         """获取用户模板的完整路径，防止路径遍历漏洞。"""

@@ -10,7 +10,10 @@ import aiohttp
 from astrbot.core.config import VERSION
 from astrbot.core.utils.http_ssl import build_tls_connector
 from astrbot.core.utils.io import download_image_by_url
-from astrbot.core.utils.t2i.template_manager import TemplateManager
+from astrbot.core.utils.t2i.template_manager import (
+    TemplateManager,
+    harden_t2i_template_content,
+)
 
 from . import RenderStrategy
 
@@ -225,6 +228,7 @@ class NetworkRenderStrategy(RenderStrategy):
     @staticmethod
     def _prepare_template_sync(tmpl_str: str, tmpl_data: dict) -> tuple[str, dict]:
         """在线程池中执行的同步模板预处理（避免阻塞事件循环）"""
+        tmpl_str = harden_t2i_template_content(tmpl_str)
         if SHIKI_RUNTIME_TEMPLATE_PATTERN.search(tmpl_str):
             tmpl_data = {"shiki_runtime": get_shiki_runtime()} | tmpl_data
         tmpl_str = inject_shiki_runtime(tmpl_str)
