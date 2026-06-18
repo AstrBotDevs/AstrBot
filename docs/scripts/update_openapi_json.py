@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SPEC = REPO_ROOT / "openspec" / "openapi-v1.yaml"
 DEFAULT_OUTPUT = REPO_ROOT / "docs" / "public" / "openapi.json"
 PUBLIC_OPEN_API_TAGS = {
+    "Open API",
     "System Config",
     "Config Profiles",
     "Bot Config Routes",
@@ -20,6 +21,7 @@ PUBLIC_OPEN_API_TAGS = {
     "Providers",
     "Chat",
     "IM",
+    "Files",
     "Plugins",
     "Plugin Sources",
     "Plugin Pages",

@@ -1,9 +1,11 @@
 import asyncio
+import io
 import uuid
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -145,7 +147,13 @@ async def test_api_key_scope_and_revoke(
 
     denied_res = await test_client.post(
         "/api/v1/file",
-        data={},
+        files={
+            "file": FileStorage(
+                stream=io.BytesIO(b"scope denied"),
+                filename="denied.txt",
+                content_type="text/plain",
+            ),
+        },
         headers={"X-API-Key": raw_key},
     )
     assert denied_res.status_code == 403
@@ -787,7 +795,7 @@ async def test_open_api_key_scope_normalization(
 
 
 @pytest.mark.asyncio
-async def test_file_scope_is_not_available_for_developer_api_key(
+async def test_file_scope_is_available_for_developer_api_key(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
 ):
@@ -799,6 +807,25 @@ async def test_file_scope_is_not_available_for_developer_api_key(
     )
     create_data = await create_res.get_json()
 
-    assert create_res.status_code == 400
-    assert create_data["status"] == "error"
-    assert create_data["message"] == "Invalid scopes: file"
+    assert create_res.status_code == 200
+    assert create_data["status"] == "ok"
+    assert set(create_data["data"]["scopes"]) == {"file"}
+
+    upload_res = await test_client.post(
+        "/api/v1/file",
+        files={
+            "file": FileStorage(
+                stream=io.BytesIO(b"hello from api key"),
+                filename="api-key-upload.txt",
+                content_type="text/plain",
+            ),
+        },
+        headers={"X-API-Key": create_data["data"]["api_key"]},
+    )
+    upload_data = await upload_res.get_json()
+
+    assert upload_res.status_code == 200
+    assert upload_data["status"] == "ok"
+    assert upload_data["data"]["filename"] == "api-key-upload.txt"
+    assert upload_data["data"]["type"] == "file"
+    assert upload_data["data"]["attachment_id"]
