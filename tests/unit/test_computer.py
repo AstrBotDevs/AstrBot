@@ -413,6 +413,38 @@ class TestShipyardBooter:
         }
 
     @pytest.mark.asyncio
+    async def test_shipyard_shell_keeps_flat_exec_response_compatible(self):
+        """Flat shell responses remain compatible with ShipyardShellWrapper."""
+        from astrbot.core.computer.booters.shipyard import ShipyardShellWrapper
+
+        raw_shell = AsyncMock()
+        raw_shell.exec = AsyncMock(
+            return_value={
+                "success": True,
+                "stdout": "hello_from_legacy_shell\n/workspace\n",
+                "stderr": "",
+                "exit_code": 0,
+                "execution_id": "exec-legacy",
+                "execution_time_ms": 45,
+                "command": "echo hello_from_legacy_shell && pwd",
+            }
+        )
+
+        result = await ShipyardShellWrapper(raw_shell).exec(
+            "echo hello_from_legacy_shell && pwd"
+        )
+
+        assert result == {
+            "stdout": "hello_from_legacy_shell\n/workspace\n",
+            "stderr": "",
+            "exit_code": 0,
+            "success": True,
+            "execution_id": "exec-legacy",
+            "execution_time_ms": 45,
+            "command": "echo hello_from_legacy_shell && pwd",
+        }
+
+    @pytest.mark.asyncio
     async def test_shipyard_booter_init(self):
         """Test ShipyardBooter initialization."""
         with patch("astrbot.core.computer.booters.shipyard.ShipyardClient"):

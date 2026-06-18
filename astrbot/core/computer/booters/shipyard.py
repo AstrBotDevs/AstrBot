@@ -67,14 +67,8 @@ class ShipyardShellWrapper:
                 {key: value for key, value in data.items() if value is not None}
             )
 
-        stdout = payload.get("output")
-        if not stdout and payload.get("stdout") is not None:
-            stdout = payload.get("stdout")
-        stdout = stdout or ""
-        stderr = payload.get("error")
-        if not stderr and payload.get("stderr") is not None:
-            stderr = payload.get("stderr")
-        stderr = stderr or ""
+        stdout = payload.get("output") or payload.get("stdout") or ""
+        stderr = payload.get("error") or payload.get("stderr") or ""
         exit_code = payload.get("exit_code")
         if exit_code is None:
             exit_code = payload.get("return_code")
