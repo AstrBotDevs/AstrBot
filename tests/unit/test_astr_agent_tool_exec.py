@@ -3,9 +3,16 @@ from types import SimpleNamespace
 import mcp
 import pytest
 
+from astrbot.core.agent.agent import Agent
+from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
+from astrbot.core.provider.func_tool_manager import (
+    FunctionToolManager,
+    _PermissionGuardedTool,
+)
 
 
 class _DummyEvent:
@@ -27,6 +34,32 @@ def _build_run_context(message_components: list[object] | None = None):
     event = _DummyEvent(message_components=message_components)
     ctx = SimpleNamespace(event=event, context=SimpleNamespace())
     return ContextWrapper(context=ctx)
+
+
+def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
+    mgr = FunctionToolManager()
+    plugin_tool = FunctionTool(
+        name="admin_only_mcp",
+        description="admin tool",
+        parameters={"type": "object", "properties": {}},
+    )
+    handoff = HandoffTool(Agent(name="child"))
+    mgr.func_list = [plugin_tool, handoff]
+
+    event = _DummyEvent()
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_runtime": "none"}
+        },
+        get_llm_tool_manager=lambda: mgr,
+    )
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    toolset = FunctionToolExecutor._build_handoff_toolset(run_context, tools=None)
+
+    assert toolset is not None
+    assert isinstance(toolset.get_tool("admin_only_mcp"), _PermissionGuardedTool)
+    assert toolset.get_tool("transfer_to_child") is None
 
 
 @pytest.mark.asyncio
