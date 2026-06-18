@@ -2,7 +2,7 @@
 // Date: 2026-06-18
 // Spec: docs/superpowers/specs/2026-06-18-git-worktree-switcher-design.md §3.3
 
-import { ref, type Ref } from 'vue'
+import { ref, watch, type Ref } from 'vue'
 import { pluginExtensionApi } from '@/api/v1'
 import { useSpcodeProjectStatus } from '@/composables/useSpcodeProjectStatus'
 import {
@@ -85,6 +85,38 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
       }
     }
   }
+
+  // Bug fix (2026-06-18): setLoaded() in useSpcodeProjectStatus does NOT
+  // set `umo` (it only optimistically flips `loaded` and `directory`).
+  // The authoritative umo arrives later via spcodeStatus.refresh() —
+  // typically fired from Chat.vue's onStreamEnd after the bot processes
+  // the /project load command. If the user opens GitDiffSidebar before
+  // that refresh, our onMounted() call hits `umo = null` and short-circuits
+  // (no network request is made). Without a watcher, the worktree list
+  // would never load. Watch the module-level status ref and re-fetch as
+  // soon as umo becomes available; the same hook also covers project
+  // switches (directory change) so the tabs refresh on `/project load`.
+  watch(
+    () => spcodeStatus.status.value.umo,
+    (newUmo, oldUmo) => {
+      if (!isMounted) return
+      if (newUmo && newUmo !== oldUmo) {
+        void refresh()
+      }
+    },
+  )
+  watch(
+    () => spcodeStatus.status.value.directory,
+    (newDir, oldDir) => {
+      if (!isMounted) return
+      // Skip the very first assignment (handled by the umo watcher) and
+      // skip empty transitions. Only re-fetch when the directory actually
+      // changes from one non-null value to another.
+      if (newDir && newDir !== oldDir && spcodeStatus.status.value.umo) {
+        void refresh()
+      }
+    },
+  )
 
   function dispose(): void {
     isMounted = false

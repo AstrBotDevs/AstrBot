@@ -1,8 +1,3 @@
-// Author: elecvoid243
-// Date: 2026-06-17 (updated 2026-06-18 for worktree switcher)
-// Spec:
-//   - docs/superpowers/specs/2026-06-17-chatui-git-diff-sidebar-design.md §4.1.2
-//   - docs/superpowers/specs/2026-06-18-git-worktree-switcher-design.md §3.2
 
 import { ref, toValue, watch, type Ref, type MaybeRef } from 'vue'
 import { pluginExtensionApi } from '@/api/v1'
@@ -40,15 +35,8 @@ export function useSpcodeGitDiff(
 
   async function refresh(): Promise<void> {
     if (!isMounted) return
-    // Per-instance contract: each useSpcodeGitDiff() call owns its own closure
-    // (isMounted, abortController, pollTimer). The Chunk 2 GitDiffSidebar
-    // instantiates this once per <mount> and calls dispose() in onBeforeUnmount.
-    // Do NOT export a module-level singleton; the composable is per-component.
     const umo = spcodeStatus.status.value.umo
     if (!umo) {
-      // Note: spec §4.1.2 originally listed 'not_loaded', but i18n key list
-      // (spec §5.1.1) only has 'no_project_loaded'. Use the i18n-covered
-      // value to keep the UI renderable.
       const prev = state.value.kind === 'ok' ? state.value.snapshot : undefined
       state.value = { kind: 'error', reason: 'no_project_loaded', previousSnapshot: prev }
       return
@@ -58,10 +46,6 @@ export function useSpcodeGitDiff(
     const isFirst = state.value.kind !== 'ok'
     if (isFirst) state.value = { kind: 'loading' }
     try {
-      // pluginExtensionApi.get<T>() auto-wraps in ApiEnvelope<T>, so T is
-      // the inner data shape (matches useSpcodeProjectStatus.ts:45 pattern).
-      // worktree is read fresh on every refresh (spec §3.2) so polling
-      // always polls the currently active worktree.
       const worktree = toValue(worktreeRef)
       const resp = await pluginExtensionApi.get<SpcodeGitDiffRawResponse>(
         'spcode/git-diff',
@@ -103,16 +87,31 @@ export function useSpcodeGitDiff(
     }
   }
 
-  // Spec §3.2: when worktreeRef changes, auto-refresh to fetch the new
-  // worktree's diff. flush: 'post' coalesces same-tick updates. We do NOT
-  // pass `immediate: true` because the parent's umo watcher triggers the
-  // first refresh; the worktree watcher should only react to *changes*.
   watch(
     () => toValue(worktreeRef),
     () => {
       if (isMounted) void refresh()
     },
     { flush: 'post' },
+  )
+
+  watch(
+    () => spcodeStatus.status.value.umo,
+    (newUmo, oldUmo) => {
+      if (!isMounted) return
+      if (newUmo && newUmo !== oldUmo) {
+        void refresh()
+      }
+    },
+  )
+  watch(
+    () => spcodeStatus.status.value.directory,
+    (newDir, oldDir) => {
+      if (!isMounted) return
+      if (newDir && newDir !== oldDir && spcodeStatus.status.value.umo) {
+        void refresh()
+      }
+    },
   )
 
   function dispose(): void {

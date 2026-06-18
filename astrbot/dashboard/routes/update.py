@@ -10,6 +10,7 @@
     自动剥掉末级路径再拼 "/announcement"。
   - 默认配置连官方 API（无 /announcement）时返回 404，前端静默隐藏公告条。
 """
+
 import asyncio
 import traceback
 import uuid
@@ -184,11 +185,7 @@ class UpdateRoute(Route):
             ):
                 # 透传状态码语义: 404 表示"无公告", 前端据此隐藏公告条.
                 if response.status == 404:
-                    return (
-                        Response()
-                        .error("当前没有公告")
-                        .__dict__
-                    ), 404
+                    return (Response().error("当前没有公告").__dict__), 404
                 if response.status >= 400:
                     detail = await response.text()
                     logger.warning(
@@ -202,18 +199,10 @@ class UpdateRoute(Route):
                 payload = await response.json(content_type=None)
         except aiohttp.ClientError as e:
             logger.warning(f"连接更新服务器失败 ({upstream_url}): {e!s}")
-            return (
-                Response()
-                .error(f"无法连接更新服务器: {e!s}")
-                .__dict__
-            ), 502
+            return (Response().error(f"无法连接更新服务器: {e!s}").__dict__), 502
         except (ValueError, asyncio.TimeoutError) as e:
             logger.warning(f"获取公告响应解析失败: {e!s}")
-            return (
-                Response()
-                .error(f"获取公告失败: {e!s}")
-                .__dict__
-            ), 502
+            return (Response().error(f"获取公告失败: {e!s}").__dict__), 502
 
         return Response().ok(payload).__dict__
 
