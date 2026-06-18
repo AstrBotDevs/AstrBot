@@ -11,15 +11,19 @@
  * 旧条目 `todo_list` 保留以兼容老会话历史记录中的工具名。
  *
  * Author: ui_spcode_foundation
- * Date: 2026-06-07 (revised 2026-06-14)
+ * Date: 2026-06-07 (revised 2026-06-14, fixed 2026-06-18)
  */
 export const SPCODE_ICONS: Record<string, string> = {
     code_check: "mdi-shield-check-outline",
     code_index: "mdi-database-cog-outline",
     code_explore: "mdi-graph-outline",
     es_search: "mdi-file-search-outline",
-    file_remove: "mdi-trash-can-outline",
-    file_diff: "mdi-vector-difference",
+    // 必须使用后端注册的全名(`main.py` 中 FileRemoveTool.name /
+    // FileDiffTool.name),否则 SPCODE_TOOL_NAMES 集合里没有它们,
+    // ToolResultView.isSpcodeTool 检查会失败,结果回退到
+    // `<pre class="result-raw">` 原始 JSON,看不到样式化结果卡。
+    astrbot_file_remove: "mdi-trash-can-outline",
+    astrbot_file_compare: "mdi-vector-difference",
     // 拆分的 4 个 todo 工具共享同一图标
     todo_create: "mdi-format-list-checks",
     todo_query: "mdi-format-list-checks",

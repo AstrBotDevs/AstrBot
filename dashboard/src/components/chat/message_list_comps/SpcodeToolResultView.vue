@@ -5,11 +5,6 @@
     <EsSearchResult v-else-if="toolName === 'es_search'" :data="parsedData" :args="args" />
     <FileRemoveResult v-else-if="toolName === 'astrbot_file_remove'" :data="parsedData" />
     <FileDiffResult v-else-if="toolName === 'astrbot_file_compare'" :data="parsedData" :args="args" />
-    <!--
-      v2.2.0: 旧的 todo_list 工具被拆分为 todo_create / todo_query / todo_modify / todo_clear 4 个工具。
-      全部路由到 TodoListResult,由它根据 toolName + args.mode 决定渲染哪种结果。
-      旧 `todo_list` 保留以兼容老会话历史。
-    -->
     <TodoListResult
       v-else-if="isTodoTool"
       :data="parsedData"
@@ -31,8 +26,6 @@ import TodoListResult from "./spcode_tools/TodoListResult.vue";
 
 /**
  * spcode_toolkit 工具的渲染分发入口。
- * v2.2.0 起共 11 个工具(7 原有 + 4 拆分的 todo_*);todo_list 老条目保留兼容。
- * 由 ToolResultView.vue 在 fallback 之前调用。
  */
 const props = defineProps<{
     toolName: string;
