@@ -130,6 +130,8 @@ Notes:
 
 `POST /api/v1/chat` additionally requires `username`, with optional `session_id` (a UUID is auto-generated if omitted).
 
+`username` is a caller-declared WebChat identity. It is used as the message sender and session owner in the message pipeline, including sender-ID-based command permission checks. Treat API keys with the `chat` scope as trusted backend credentials. If you expose chat access to end users, proxy requests through your own service and map each external user to an allowed `username`; do not let clients submit administrator IDs or other reserved sender IDs directly.
+
 ```json
 {
   "username": "alice",
