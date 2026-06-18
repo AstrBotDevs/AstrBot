@@ -12,9 +12,8 @@ from astrbot.core.utils.media_utils import (
     describe_media_ref,
     ensure_jpeg,
     ensure_wav,
-    file_uri_to_path,
-    is_file_uri,
 )
+from astrbot.core.utils.path_util import path_Mapping
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage
@@ -79,19 +78,10 @@ class PreProcessStage(Stage):
 
             for idx, component in enumerate(message_chain):
                 if isinstance(component, Record | Image) and component.url:
-                    for mapping in mappings:
-                        from_, to_ = mapping.split(":")
-                        from_ = from_.removesuffix("/")
-                        to_ = to_.removesuffix("/")
-
-                        url = (
-                            file_uri_to_path(component.url)
-                            if is_file_uri(component.url)
-                            else component.url
-                        )
-                        if url.startswith(from_):
-                            component.url = url.replace(from_, to_, 1)
-                            logger.debug(f"路径映射: {url} -> {component.url}")
+                    # Delegate to path_Mapping so Windows drive-letter rules
+                    # (e.g. "C:/a:D:/b") and malformed rules are handled instead
+                    # of crashing on a bare ":" split, matching the respond stage.
+                    component.url = path_Mapping(mappings, component.url)
                     message_chain[idx] = component
 
         # Normalize provider-facing media early so downstream code sees local files.

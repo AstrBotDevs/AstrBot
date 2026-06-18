@@ -100,3 +100,26 @@ async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
     image = event.get_messages()[0]
     assert isinstance(image, Image)
     assert image.file == image.path == image.url == str(target_image)
+
+
+@pytest.mark.asyncio
+async def test_preprocess_path_mapping_tolerates_multi_colon_rules(tmp_path):
+    from PIL import Image as PILImage
+
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    source_image = source_root / "photo.jpg"
+    PILImage.new("RGB", (2, 2), (255, 0, 0)).save(source_image)
+    event = FakeEvent([Image(file="", url=source_image.as_uri())])
+    stage = PreProcessStage()
+    stage.config = {}
+    # Windows drive-letter rules carry extra ":" (e.g. "C:/a:D:/b"); a bare
+    # ":" split would raise "too many values to unpack". The stage must tolerate
+    # such rules instead of crashing the whole pipeline.
+    stage.platform_settings = {"path_mapping": ["C:/remote:D:/local"]}
+    stage.stt_settings = {"enable": False}
+
+    await stage.process(event)
+
+    image = event.get_messages()[0]
+    assert isinstance(image, Image)
