@@ -238,8 +238,10 @@ export const useExtensionPage = () => {
     }
   };
 
-  // Shared helper for batch operations (enable, disable, uninstall)
-  const runBatchAction = async ({ filterFn, action, emptyMessageKey, partialMessageKey, successMessageKey }) => {
+  // Shared helper for batch operations.
+  // Calls raw API methods directly to avoid the side-effects of wrapper functions
+  // (toast flooding, redundant getExtensions/checkAndPromptConflicts calls per item).
+  const runBatchAction = async ({ filterFn, apiCall, emptyMessageKey, partialMessageKey, successMessageKey }) => {
     const targets = filteredPlugins.value.filter(
       (p) => selectedPluginNames.value.has(p.name) && filterFn(p),
     );
@@ -253,13 +255,20 @@ export const useExtensionPage = () => {
     let failCount = 0;
     for (const ext of targets) {
       try {
-        await action(ext);
-        successCount += 1;
+        const res = await apiCall(ext);
+        if (res.data?.status === "ok") {
+          successCount += 1;
+        } else {
+          console.error(`Batch action failed for ${ext.name}:`, res.data?.message);
+          failCount += 1;
+        }
       } catch (e) {
         console.error(`Batch action failed for ${ext.name}:`, e);
         failCount += 1;
       }
     }
+    // Single refresh after all operations complete
+    await getExtensions({ withLoading: false });
     clearSelection();
     if (failCount > 0) {
       toast(
@@ -274,7 +283,7 @@ export const useExtensionPage = () => {
   const batchEnable = async () =>
     runBatchAction({
       filterFn: (p) => !p.activated,
-      action: (p) => pluginOn(p),
+      apiCall: (p) => pluginApi.setEnabled(p.name, true),
       emptyMessageKey: "batch.noDisabledPlugins",
       partialMessageKey: "batch.enablePartial",
       successMessageKey: "batch.enableSuccess",
@@ -283,7 +292,7 @@ export const useExtensionPage = () => {
   const batchDisable = async () =>
     runBatchAction({
       filterFn: (p) => p.activated,
-      action: (p) => pluginOff(p),
+      apiCall: (p) => pluginApi.setEnabled(p.name, false),
       emptyMessageKey: "batch.noEnabledPlugins",
       partialMessageKey: "batch.disablePartial",
       successMessageKey: "batch.disableSuccess",
@@ -304,11 +313,7 @@ export const useExtensionPage = () => {
     batchUninstallConfirmDialog.value = false;
     await runBatchAction({
       filterFn: () => true,
-      action: (p) =>
-        uninstallExtension(p.name, {
-          deleteConfig: false,
-          deleteData: false,
-        }),
+      apiCall: (p) => pluginApi.uninstall(p.name, { delete_config: false, delete_data: false }),
       emptyMessageKey: "",
       partialMessageKey: "batch.uninstallPartial",
       successMessageKey: "batch.uninstallSuccess",

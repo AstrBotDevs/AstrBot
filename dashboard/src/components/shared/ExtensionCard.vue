@@ -33,6 +33,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selectionMode: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // 定义要发送到父组件的事件
@@ -174,10 +178,11 @@ const openWebui = () => {
           : '#ffffffdd',
     }"
   >
-    <!-- 选择模式下的复选框覆盖层 -->
+    <!-- 选择模式下的复选框覆盖层：悬停时或选中/选择模式下可见 -->
     <div
       v-if="selectable && !extension.reserved"
       class="extension-select-overlay"
+      :class="{ 'show-overlay': selected || selectionMode }"
       @click.stop="$emit('toggle-select')"
     >
       <v-checkbox
@@ -186,7 +191,7 @@ const openWebui = () => {
         color="primary"
         hide-details
         class="extension-select-checkbox"
-        @click.stop="$emit('toggle-select')"
+        style="pointer-events: none"
       />
     </div>
 
@@ -447,6 +452,13 @@ const openWebui = () => {
   left: 0;
   z-index: 10;
   padding: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.extension-card:hover .extension-select-overlay,
+.extension-select-overlay.show-overlay {
+  opacity: 1;
 }
 
 .extension-select-checkbox {

@@ -490,7 +490,8 @@ const togglePinnedExtension = (extension) => {
             <ExtensionCard
               :extension="extension"
               :is-pinned="isPinnedExtension(extension)"
-              :selectable="selectModeActive"
+              selectable
+              :selection-mode="selectModeActive"
               :selected="selectedPluginNames.has(extension.name)"
               class="rounded-lg"
               style="background-color: rgb(var(--v-theme-mcpCardBg))"
