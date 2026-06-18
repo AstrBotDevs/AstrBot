@@ -1548,9 +1548,9 @@ async def build_main_agent(
         )
 
     if persona_allowed_tools is not None and req.func_tool:
-        for tool in list(req.func_tool):
-            if tool.name not in persona_allowed_tools:
-                req.func_tool.remove_tool(tool.name)
+        req.func_tool.tools = [
+            tool for tool in req.func_tool.tools if tool.name in persona_allowed_tools
+        ]
 
     fallback_providers = _get_fallback_chat_providers(
         provider, plugin_context, config.provider_settings
