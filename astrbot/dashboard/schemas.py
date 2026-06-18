@@ -183,7 +183,15 @@ class OpenApiChatRequest(OpenModel):
     message: Any = None
     session_id: str | None = None
     conversation_id: str | None = None
-    username: str | None = None
+    username: str | None = Field(
+        default=None,
+        description=(
+            "Caller-declared WebChat sender/session owner. This value is used "
+            "as the message sender identity and may participate in "
+            "sender-ID-based permission checks; trusted integrations should "
+            "validate or map it before accepting end-user input."
+        ),
+    )
     config_id: str | None = None
     config_name: str | None = None
     platform_id: str | None = None

@@ -131,6 +131,8 @@ X-API-Key: abk_xxx
 
 `POST /api/v1/chat` 额外需要 `username`，可选 `session_id`（不传会自动创建 UUID）。
 
+`username` 是调用方声明的 WebChat 用户标识，会作为本次消息的 sender 和会话 owner 进入消息管道，并参与基于 sender ID 的指令权限判断。因此，带有 `chat` scope 的 API Key 应仅发放给可信后端服务。如果需要面向终端用户开放，请在自己的服务端将外部用户映射到受控的 `username`，不要允许客户端直接传入管理员 ID 或其他保留 sender ID。
+
 ```json
 {
   "username": "alice",
