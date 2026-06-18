@@ -426,6 +426,27 @@
     "goToManage": "Go to Manage",
     "later": "Later"
   },
+  "batch": {
+    "selected": "{count} plugin(s) selected",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "clearSelection": "Clear Selection",
+    "enable": "Batch Enable",
+    "disable": "Batch Disable",
+    "uninstall": "Batch Uninstall",
+    "noEnabledPlugins": "No enabled plugins to disable",
+    "noDisabledPlugins": "No disabled plugins to enable",
+    "enableSuccess": "Successfully enabled {count} plugin(s)",
+    "enablePartial": "{success} enabled, {failed} failed",
+    "disableSuccess": "Successfully disabled {count} plugin(s)",
+    "disablePartial": "{success} disabled, {failed} failed",
+    "uninstallSuccess": "Successfully uninstalled {count} plugin(s)",
+    "uninstallPartial": "{success} uninstalled, {failed} failed",
+    "noPluginsToUninstall": "No plugins selected to uninstall",
+    "uninstallConfirmTitle": "Confirm Batch Uninstall",
+    "uninstallConfirmMessage": "Are you sure you want to uninstall {count} selected plugin(s)? This action cannot be undone.",
+    "uninstallConfirm": "Confirm Uninstall"
+  },
   "pluginChangelog": {
     "menuTitle": "View Changelog"
   }

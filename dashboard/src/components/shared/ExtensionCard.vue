@@ -25,6 +25,14 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  selectable: {
+    type: Boolean,
+    default: false,
+  },
+  selected: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // 定义要发送到父组件的事件
@@ -39,6 +47,7 @@ const emit = defineEmits([
   "view-changelog",
   "toggle-pin",
   "open-webui",
+  "toggle-select",
 ]);
 
 const hasPages = computed(() => {
@@ -165,6 +174,22 @@ const openWebui = () => {
           : '#ffffffdd',
     }"
   >
+    <!-- 选择模式下的复选框覆盖层 -->
+    <div
+      v-if="selectable && !extension.reserved"
+      class="extension-select-overlay"
+      @click.stop="$emit('toggle-select')"
+    >
+      <v-checkbox
+        :model-value="selected"
+        density="compact"
+        color="primary"
+        hide-details
+        class="extension-select-checkbox"
+        @click.stop="$emit('toggle-select')"
+      />
+    </div>
+
     <v-card-text class="extension-card-text">
       <div class="extension-content-row">
         <div class="extension-image-container">
@@ -416,6 +441,20 @@ const openWebui = () => {
 </template>
 
 <style scoped>
+.extension-select-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  padding: 4px;
+}
+
+.extension-select-checkbox {
+  background: rgba(var(--v-theme-surface), 0.92);
+  border-radius: 6px;
+  padding: 2px;
+}
+
 .extension-card-text {
   padding: 12px 14px 8px;
   width: 100%;

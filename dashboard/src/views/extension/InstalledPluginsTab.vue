@@ -1,4 +1,5 @@
 <script setup>
+import PluginSortControl from "@/components/extension/PluginSortControl.vue";
 import ExtensionCard from "@/components/shared/ExtensionCard.vue";
 import { normalizeTextInput } from "@/utils/inputValue";
 import {
@@ -73,6 +74,8 @@ const {
   refreshingMarket,
   sortBy,
   sortOrder,
+  sortInstalledBy,
+  sortInstalledOrder,
   randomPluginNames,
   normalizeStr,
   toPinyinText,
@@ -141,6 +144,20 @@ const {
   refreshPluginMarket,
   handleLocaleChange,
   searchDebounceTimer,
+  selectedPluginNames,
+  selectModeActive,
+  selectedCount,
+  selectableInstalledPlugins,
+  isAllSelected,
+  toggleSelectPlugin,
+  toggleSelectAll,
+  clearSelection,
+  batchEnable,
+  batchDisable,
+  requestBatchUninstall,
+  executeBatchUninstall,
+  cancelBatchUninstall,
+  batchUninstallConfirmDialog,
 } = props.state;
 
 const openPluginDetail = (extension) => {
@@ -166,6 +183,14 @@ const openPluginWebui = (extension) => {
 
 const pinnedExtensionNames = ref(readPinnedExtensions());
 
+const installedSortItems = computed(() => [
+  { title: tm("sort.default"), value: "default" },
+  { title: tm("sort.name"), value: "name" },
+  { title: tm("sort.author"), value: "author" },
+  { title: tm("sort.updated"), value: "updated" },
+  { title: tm("sort.updateStatus"), value: "updateStatus" },
+]);
+
 const pinnedExtensionOrder = computed(() => {
   const order = new Map();
   pinnedExtensionNames.value.forEach((name, index) => {
@@ -176,7 +201,37 @@ const pinnedExtensionOrder = computed(() => {
 
 const sortedInstalledPlugins = computed(() => {
   const order = pinnedExtensionOrder.value;
-  return [...filteredPlugins.value].sort((a, b) => {
+  let plugins = [...filteredPlugins.value];
+
+  // Apply user-selected sort (pinned items stay on top regardless)
+  if (sortInstalledBy.value === "name") {
+    plugins.sort((a, b) => {
+      const r = (a?.name || "").localeCompare(b?.name || "");
+      return sortInstalledOrder.value === "desc" ? -r : r;
+    });
+  } else if (sortInstalledBy.value === "author") {
+    plugins.sort((a, b) => {
+      const r = ((a?.author || "").toLowerCase()).localeCompare(
+        (b?.author || "").toLowerCase(),
+      );
+      return sortInstalledOrder.value === "desc" ? -r : r;
+    });
+  } else if (sortInstalledBy.value === "updated") {
+    plugins.sort((a, b) => {
+      const da = a?.updated_at ? new Date(a.updated_at).getTime() : 0;
+      const db = b?.updated_at ? new Date(b.updated_at).getTime() : 0;
+      return sortInstalledOrder.value === "desc" ? db - da : da - db;
+    });
+  } else if (sortInstalledBy.value === "updateStatus") {
+    plugins.sort((a, b) => {
+      const ua = a?.has_update ? 1 : 0;
+      const ub = b?.has_update ? 1 : 0;
+      return sortInstalledOrder.value === "desc" ? ub - ua : ua - ub;
+    });
+  }
+
+  // Pinned items always stay on top, respecting their pinned order
+  return plugins.sort((a, b) => {
     const aIndex = order.has(a?.name)
       ? order.get(a.name)
       : Number.POSITIVE_INFINITY;
@@ -237,6 +292,16 @@ const togglePinnedExtension = (extension) => {
             style="min-width: 220px; max-width: 340px"
           >
           </v-text-field>
+          <PluginSortControl
+            v-model="sortInstalledBy"
+            :items="installedSortItems"
+            :label="tm('sort.by')"
+            :order="sortInstalledOrder"
+            :ascending-label="tm('sort.ascending')"
+            :descending-label="tm('sort.descending')"
+            :show-order="sortInstalledBy !== 'default'"
+            @update:order="sortInstalledOrder = $event"
+          />
         </div>
       </div>
     </div>
@@ -315,6 +380,88 @@ const togglePinnedExtension = (extension) => {
       </v-card-text>
     </v-card>
 
+    <!-- 批量操作工具栏 -->
+    <v-slide-y-transition>
+      <v-card
+        v-if="selectedCount > 0"
+        class="mb-4 rounded-lg"
+        color="primary"
+        variant="tonal"
+      >
+        <v-card-text class="d-flex align-center flex-wrap py-3" style="gap: 8px">
+          <span class="text-body-1 font-weight-medium mr-2">
+            {{ tm("batch.selected", { count: selectedCount }) }}
+          </span>
+          <v-btn
+            size="small"
+            variant="text"
+            @click="toggleSelectAll"
+          >
+            {{ isAllSelected ? tm("batch.deselectAll") : tm("batch.selectAll") }}
+          </v-btn>
+          <v-divider vertical class="mx-1" />
+          <v-btn
+            size="small"
+            color="success"
+            variant="tonal"
+            prepend-icon="mdi-check-circle"
+            @click="batchEnable"
+          >
+            {{ tm("batch.enable") }}
+          </v-btn>
+          <v-btn
+            size="small"
+            color="warning"
+            variant="tonal"
+            prepend-icon="mdi-cancel"
+            @click="batchDisable"
+          >
+            {{ tm("batch.disable") }}
+          </v-btn>
+          <v-btn
+            size="small"
+            color="error"
+            variant="tonal"
+            prepend-icon="mdi-delete"
+            @click="requestBatchUninstall"
+          >
+            {{ tm("batch.uninstall") }}
+          </v-btn>
+          <v-spacer />
+          <v-btn
+            size="small"
+            variant="text"
+            @click="clearSelection"
+          >
+            {{ tm("batch.clearSelection") }}
+          </v-btn>
+        </v-card-text>
+      </v-card>
+    </v-slide-y-transition>
+
+    <!-- 批量卸载确认对话框 -->
+    <v-dialog v-model="batchUninstallConfirmDialog" max-width="500px">
+      <v-card>
+        <v-card-title class="bg-error text-white py-3">
+          <v-icon color="white" class="me-2">mdi-alert</v-icon>
+          <span>{{ tm("batch.uninstallConfirmTitle") }}</span>
+        </v-card-title>
+        <v-card-text class="py-4">
+          <p>{{ tm("batch.uninstallConfirmMessage", { count: selectedCount }) }}</p>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" @click="cancelBatchUninstall">
+            {{ tm("buttons.cancel") }}
+          </v-btn>
+          <v-btn color="error" @click="executeBatchUninstall">
+            {{ tm("batch.uninstallConfirm") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-fade-transition hide-on-leave>
       <div>
         <v-row v-if="sortedInstalledPlugins.length === 0" class="text-center">
@@ -340,10 +487,17 @@ const togglePinnedExtension = (extension) => {
             <ExtensionCard
               :extension="extension"
               :is-pinned="isPinnedExtension(extension)"
+              :selectable="selectModeActive"
+              :selected="selectedPluginNames.has(extension.name)"
               class="rounded-lg"
               style="background-color: rgb(var(--v-theme-mcpCardBg))"
-              @click="openPluginDetail(extension)"
+              @click="
+                selectModeActive
+                  ? toggleSelectPlugin(extension.name)
+                  : openPluginDetail(extension)
+              "
               @toggle-pin="togglePinnedExtension(extension)"
+              @toggle-select="toggleSelectPlugin(extension.name)"
               @configure="openExtensionConfig(extension.name)"
               @uninstall="
                 (ext, options) => uninstallExtension(ext.name, options)
