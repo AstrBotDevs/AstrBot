@@ -353,17 +353,24 @@ class SkillManager:
         if not workspace_root:
             return []
 
-        skills_root = Path(workspace_root) / WORKSPACE_SKILLS_ROOT
+        raw_workspace_root = Path(workspace_root)
+        skills_root = raw_workspace_root / WORKSPACE_SKILLS_ROOT
         if not skills_root.is_dir():
             return []
 
         try:
+            resolved_workspace_root = raw_workspace_root.resolve(strict=True)
             resolved_skills_root = skills_root.resolve(strict=True)
+            if not resolved_skills_root.is_relative_to(resolved_workspace_root):
+                return []
+            skill_dirs = sorted(
+                resolved_skills_root.iterdir(), key=lambda item: item.name
+            )
         except OSError:
             return []
 
         skills: list[SkillInfo] = []
-        for skill_dir in sorted(skills_root.iterdir(), key=lambda item: item.name):
+        for skill_dir in skill_dirs:
             if not skill_dir.is_dir():
                 continue
             skill_name = skill_dir.name

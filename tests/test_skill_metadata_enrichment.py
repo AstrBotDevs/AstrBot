@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from astrbot.core.skills.skill_manager import (
     SkillInfo,
     SkillManager,
@@ -526,10 +528,7 @@ def test_list_workspace_skills_reads_frontmatter_with_limit(tmp_path: Path):
     skill_dir = workspace_root / "skills" / "large-skill"
     skill_dir.mkdir(parents=True)
     skill_dir.joinpath("SKILL.md").write_text(
-        "---\n"
-        "description: Large workspace skill.\n"
-        "---\n"
-        + ("x" * (128 * 1024)),
+        "---\ndescription: Large workspace skill.\n---\n" + ("x" * (128 * 1024)),
         encoding="utf-8",
     )
 
@@ -538,6 +537,36 @@ def test_list_workspace_skills_reads_frontmatter_with_limit(tmp_path: Path):
 
     assert len(skills) == 1
     assert skills[0].description == "Large workspace skill."
+
+
+def test_list_workspace_skills_rejects_symlinked_root_outside_workspace(
+    tmp_path: Path,
+):
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    workspace_root = tmp_path / "workspace"
+    external_root = tmp_path / "external-skills"
+    skills_root.mkdir(parents=True, exist_ok=True)
+    plugins_root.mkdir(parents=True, exist_ok=True)
+    workspace_root.mkdir(parents=True, exist_ok=True)
+
+    external_skill = external_root / "external-skill"
+    external_skill.mkdir(parents=True)
+    external_skill.joinpath("SKILL.md").write_text(
+        "---\ndescription: Outside workspace.\n---\n",
+        encoding="utf-8",
+    )
+    try:
+        workspace_root.joinpath("skills").symlink_to(
+            external_root,
+            target_is_directory=True,
+        )
+    except OSError as exc:
+        pytest.skip(f"Directory symlinks are unavailable: {exc}")
+
+    mgr = SkillManager(skills_root=str(skills_root), plugins_root=str(plugins_root))
+
+    assert mgr.list_workspace_skills(workspace_root) == []
 
 
 def test_list_skills_includes_plugin_provided_skills(monkeypatch, tmp_path: Path):
