@@ -1023,6 +1023,7 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert "/api/v1/conversations" in spec["paths"]
     assert "/api/v1/mcp/servers" in spec["paths"]
     assert "/api/v1/skills" in spec["paths"]
+    assert "/api/v1/file" in spec["paths"]
 
 
 def test_static_openapi_v1_paths_include_api_version():
@@ -1139,6 +1140,12 @@ async def test_v1_openapi_uses_pydantic_request_bodies(
     assert system_config_update["requestBody"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/ConfigContentRequest")
+
+    open_api_file_upload = spec["paths"]["/api/v1/file"]["post"]
+    assert open_api_file_upload["requestBody"]["content"]["multipart/form-data"][
+        "schema"
+    ]["$ref"].endswith("/Body_uploadOpenApiFile")
+    assert open_api_file_upload["x-astrbot-scope"] == "file"
 
 
 @pytest.mark.asyncio

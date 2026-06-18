@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, plugin, mcp, skill. The config scope also grants bot and provider access.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, file, plugin, mcp, skill. The config scope also grants bot and provider access.\n"
   },
   "servers": [
     {
@@ -17,6 +17,9 @@
     }
   ],
   "tags": [
+    {
+      "name": "Open API"
+    },
     {
       "name": "System Config"
     },
@@ -40,6 +43,9 @@
     },
     {
       "name": "IM"
+    },
+    {
+      "name": "Files"
     },
     {
       "name": "Plugins"
@@ -2220,6 +2226,214 @@
         "responses": {
           "200": {
             "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/files": {
+      "post": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Upload a file",
+        "operationId": "uploadFile",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/FileUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/file": {
+      "post": {
+        "tags": [
+          "Open API"
+        ],
+        "summary": "Upload a file",
+        "operationId": "uploadOpenApiFile",
+        "x-astrbot-scope": "file",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/FileUploadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Open API"
+        ],
+        "summary": "Download an uploaded file by attachment ID",
+        "operationId": "downloadOpenApiFile",
+        "x-astrbot-scope": "file",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AttachmentIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File content or an error envelope",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/content": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Get an uploaded file by stored filename",
+        "operationId": "getFileByName",
+        "x-astrbot-scope": "file",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File bytes or an error envelope",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/tokens/{file_token}": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Get a tokenized public file",
+        "operationId": "getTokenFile",
+        "x-astrbot-scope": "file",
+        "parameters": [
+          {
+            "name": "file_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tokenized file bytes or an error envelope",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/{attachment_id}": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Get attachment metadata",
+        "operationId": "getAttachment",
+        "x-astrbot-scope": "file",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AttachmentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Delete an attachment",
+        "operationId": "deleteAttachment",
+        "x-astrbot-scope": "file",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AttachmentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/files/{attachment_id}/content": {
+      "get": {
+        "tags": [
+          "Files"
+        ],
+        "summary": "Download attachment content",
+        "operationId": "downloadAttachment",
+        "x-astrbot-scope": "file",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AttachmentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File content",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
           }
         }
       }
@@ -5376,6 +5590,22 @@
       }
     },
     "parameters": {
+      "AttachmentId": {
+        "name": "attachment_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "AttachmentIdQuery": {
+        "name": "attachment_id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "BotId": {
         "name": "bot_id",
         "in": "path",
@@ -5960,6 +6190,18 @@
           }
         },
         "additionalProperties": false
+      },
+      "FileUploadRequest": {
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          }
+        }
       },
       "PluginUpdateRequest": {
         "type": "object",
