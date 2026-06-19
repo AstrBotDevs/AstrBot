@@ -461,6 +461,10 @@ async def download_dashboard(
                 show_progress=True,
                 progress_callback=progress_callback,
             )
+            if not zipfile.is_zipfile(zip_path):
+                raise RuntimeError(
+                    "Downloaded dashboard package is not a valid ZIP file"
+                )
         except BaseException as _:
             if latest:
                 # Resolve latest release tag from GitHub API to construct correct asset URL
@@ -488,6 +492,10 @@ async def download_dashboard(
                 show_progress=True,
                 progress_callback=progress_callback,
             )
+            if not zipfile.is_zipfile(zip_path):
+                raise RuntimeError(
+                    "Downloaded dashboard package is not a valid ZIP file"
+                )
     else:
         url = f"https://github.com/AstrBotDevs/astrbot-release-harbour/releases/download/release-{version}/dist.zip"
         logger.info(f"Downloading AstrBot WebUI from {url}")
@@ -499,6 +507,8 @@ async def download_dashboard(
             show_progress=True,
             progress_callback=progress_callback,
         )
+        if not zipfile.is_zipfile(zip_path):
+            raise RuntimeError("Downloaded dashboard package is not a valid ZIP file")
     if extract:
         extract_dashboard(zip_path, extract_path)
 
