@@ -50,6 +50,7 @@ from astrbot.core.utils.io import (  # noqa: E402
     get_dashboard_dist_version,
     is_dashboard_dist_compatible,
     is_dashboard_version_compatible,
+    remove_dir,
     should_use_bundled_dashboard_dist,
 )
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime  # noqa: E402
@@ -124,7 +125,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
                 VERSION,
             )
             try:
-                shutil.rmtree(data_dist_path)
+                remove_dir(str(data_dist_path))
                 shutil.copytree(bundled_dist, data_dist_path)
                 return str(data_dist_path)
             except Exception as e:
