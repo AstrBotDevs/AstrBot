@@ -618,7 +618,6 @@ class ProviderGoogleGenAI(Provider):
                         contents=cast(types.ContentListUnion, conversation),
                         config=config,
                     ),
-                    retry_rate_limits=False,
                     max_attempts=request_max_retries,
                 )
                 logger.debug(f"genai result: {result}")
@@ -711,7 +710,6 @@ class ProviderGoogleGenAI(Provider):
                         contents=cast(types.ContentListUnion, conversation),
                         config=config,
                     ),
-                    retry_rate_limits=False,
                     max_attempts=request_max_retries,
                 )
                 break

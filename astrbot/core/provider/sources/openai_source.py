@@ -513,7 +513,6 @@ class ProviderOpenAIOfficial(Provider):
                 stream=False,
                 extra_body=extra_body,
             ),
-            retry_rate_limits=False,
             max_attempts=request_max_retries,
         )
 
@@ -573,7 +572,6 @@ class ProviderOpenAIOfficial(Provider):
                 extra_body=extra_body,
                 stream_options={"include_usage": True},
             ),
-            retry_rate_limits=False,
             max_attempts=request_max_retries,
         )
 
