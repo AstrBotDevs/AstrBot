@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="visible" max-width="520">
+  <v-dialog v-model="visible" max-width="520" :persistent="blockingRecovery || restarting">
     <v-card>
       <v-card-title class="upgrade-recovery-title">
         <span>{{ t('core.common.upgradeRecovery.title') }}</span>
@@ -30,7 +30,7 @@
 
       <v-card-actions>
         <v-spacer />
-        <v-btn variant="text" :disabled="restarting" @click="dismiss">
+        <v-btn v-if="!blockingRecovery" variant="text" :disabled="restarting" @click="dismiss">
           {{ t('core.common.upgradeRecovery.laterButton') }}
         </v-btn>
         <v-btn
@@ -52,11 +52,20 @@ import axios, { type AxiosRequestConfig } from 'axios';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
-import type { ApiEnvelope, VersionData } from '@/api/v1';
+import {
+  UPGRADE_RECOVERY_EVENT,
+  UPGRADE_RECOVERY_TOKEN_KEY,
+  type ApiEnvelope,
+  type VersionData,
+} from '@/api/v1';
 import { useI18n } from '@/i18n/composables';
 
 type StartTimeData = {
   start_time?: number | string | null;
+};
+
+type RecoveryEventDetail = VersionData & {
+  blocking?: boolean;
 };
 
 const { t } = useI18n();
@@ -64,6 +73,7 @@ const route = useRoute();
 
 const visible = ref(false);
 const restarting = ref(false);
+const blockingRecovery = ref(false);
 const statusMessage = ref('');
 const coreVersion = ref('');
 const dashboardVersion = ref('');
@@ -108,7 +118,9 @@ function getDismissKey() {
 
 function recoveryRequestConfig(validateStatus = false): AxiosRequestConfig {
   const headers: Record<string, string> = {};
-  const token = localStorage.getItem('token');
+  const token =
+    localStorage.getItem('token') ||
+    sessionStorage.getItem(UPGRADE_RECOVERY_TOKEN_KEY);
   const locale = localStorage.getItem('astrbot-locale');
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -139,6 +151,8 @@ function clearRestartTimer() {
 
 function dismiss() {
   sessionStorage.setItem(getDismissKey(), '1');
+  sessionStorage.removeItem(UPGRADE_RECOVERY_TOKEN_KEY);
+  blockingRecovery.value = false;
   visible.value = false;
 }
 
@@ -154,6 +168,7 @@ function waitForRestart() {
         String(nextStartTime) !== String(initialStartTime.value)
       ) {
         clearRestartTimer();
+        sessionStorage.removeItem(UPGRADE_RECOVERY_TOKEN_KEY);
         window.location.reload();
       }
     } catch (_error) {
@@ -187,6 +202,30 @@ async function restartCore() {
   }
 }
 
+async function showRecoveryDialog(versionData: VersionData, blocking = false) {
+  if (visible.value || restarting.value) {
+    return;
+  }
+  if (!versionsMismatch(versionData.version, versionData.dashboard_version)) {
+    return;
+  }
+
+  coreVersion.value = displayVersion(versionData.version);
+  dashboardVersion.value = displayVersion(versionData.dashboard_version);
+  if (!blocking && sessionStorage.getItem(getDismissKey())) {
+    return;
+  }
+
+  blockingRecovery.value = blocking;
+  initialStartTime.value = await fetchLegacyStartTime().catch(() => null);
+  visible.value = true;
+}
+
+function handleRecoveryEvent(event: Event) {
+  const versionData = (event as CustomEvent<RecoveryEventDetail>).detail || {};
+  void showRecoveryDialog(versionData, !!versionData.blocking);
+}
+
 async function detectUpgradeMismatch() {
   if (detecting || visible.value || restarting.value) {
     return;
@@ -209,19 +248,7 @@ async function detectUpgradeMismatch() {
       return;
     }
 
-    const versionData = legacyResponse.data?.data || {};
-    if (!versionsMismatch(versionData.version, versionData.dashboard_version)) {
-      return;
-    }
-
-    coreVersion.value = displayVersion(versionData.version);
-    dashboardVersion.value = displayVersion(versionData.dashboard_version);
-    if (sessionStorage.getItem(getDismissKey())) {
-      return;
-    }
-
-    initialStartTime.value = await fetchLegacyStartTime().catch(() => null);
-    visible.value = true;
+    await showRecoveryDialog(legacyResponse.data?.data || {});
   } catch (_error) {
     // This recovery dialog is best-effort and should never block the app.
   } finally {
@@ -230,6 +257,7 @@ async function detectUpgradeMismatch() {
 }
 
 onMounted(() => {
+  window.addEventListener(UPGRADE_RECOVERY_EVENT, handleRecoveryEvent);
   void detectUpgradeMismatch();
 });
 
@@ -241,6 +269,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  window.removeEventListener(UPGRADE_RECOVERY_EVENT, handleRecoveryEvent);
   clearRestartTimer();
 });
 </script>

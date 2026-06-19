@@ -45,6 +45,10 @@
           "description": "Fallback chat model IDs",
           "hint": "When the primary chat model request fails, fallback to these chat models in order."
         },
+        "request_max_retries": {
+          "description": "Request Max Retries",
+          "hint": "Maximum attempts for a single model request when retryable errors occur."
+        },
         "default_image_caption_provider_id": {
           "description": "Default Image Caption Model",
           "hint": "Leave empty to disable; useful for non-multimodal models"

@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import psutil
@@ -25,6 +26,52 @@ class AstrBotUpdator(RepoZipUpdator):
         self.MAIN_PATH = get_astrbot_path()
         self._update_config = UpdateConfig()
         self.ASTRBOT_RELEASE_API = self._update_config.get_core_release_api_url()
+        self.CORE_PACKAGE_BASE_URL = (
+            "https://astrbot-registry.soulter.top/download/astrbot-core"
+        )
+
+    def _build_core_package_url(self, version: str | None) -> str | None:
+        """Build the hosted core package URL for a release tag.
+
+        Args:
+            version: Release tag, such as ``v4.26.0``.
+
+        Returns:
+            Public package URL, or None when hosted package download is disabled.
+        """
+
+        if not version or not str(version).startswith("v"):
+            return None
+
+        base_url = os.environ.get(
+            "ASTRBOT_CORE_PACKAGE_BASE_URL",
+            self.CORE_PACKAGE_BASE_URL,
+        ).strip()
+        if not base_url:
+            return None
+        return f"{base_url.rstrip('/')}/{version}/source.zip"
+
+
+    def _build_core_package_url(self, version: str | None) -> str | None:
+        """Build the hosted core package URL for a release tag.
+
+        Args:
+            version: Release tag, such as ``v4.26.0``.
+
+        Returns:
+            Public package URL, or None when hosted package download is disabled.
+        """
+
+        if not version or not str(version).startswith("v"):
+            return None
+
+        base_url = os.environ.get(
+            "ASTRBOT_CORE_PACKAGE_BASE_URL",
+            self.CORE_PACKAGE_BASE_URL,
+        ).strip()
+        if not base_url:
+            return None
+        return f"{base_url.rstrip('/')}/{version}/source.zip"
 
     def terminate_child_processes(self) -> None:
         """终止当前进程的所有子进程
@@ -213,24 +260,12 @@ class AstrBotUpdator(RepoZipUpdator):
         else:
             if len(str(version)) != 40:
                 raise Exception("commit hash 长度不正确，应为 40")
-            file_url = self._update_config.get_github_archive_url(version)
-
-        # 如果 zipball_url 是相对路径（自建服务器可能返回），补全为绝对 URL
-        if file_url.startswith("/"):
-            from urllib.parse import urlparse
-
-            parsed = urlparse(self.ASTRBOT_RELEASE_API)
-            base_url = f"{parsed.scheme}://{parsed.netloc}"
-            file_url = f"{base_url}{file_url}"
-            logger.info(f"检测到相对路径 zipball_url，已补全为: {file_url}")
-
+            file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/{version}.zip"
         logger.info(f"准备更新至指定版本的 AstrBot Core: {version}")
 
-        # 使用传入的 proxy 或配置中的 proxy
-        effective_proxy = proxy or self._update_config.get_effective_proxy_url()
-        if effective_proxy:
-            effective_proxy = effective_proxy.removesuffix("/")
-            file_url = f"{effective_proxy}/{file_url}"
+        if proxy:
+            proxy = proxy.removesuffix("/")
+            file_url = f"{proxy}/{file_url}"
 
         zip_path = Path(path)
         ensure_dir(zip_path.parent)

@@ -1,11 +1,39 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
+import re
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
+from pathlib import Path
 
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.toml_parser import read_pyproject_project_version
 
-VERSION = "4.26.0-beta.6"
+try:
+    import tomllib
+except ModuleNotFoundError:
+    # <= Python 3.10 compatibility
+    tomllib = None
+
+try:
+    pyproject_path = Path(__file__).resolve().parents[3] / "pyproject.toml"
+    if tomllib is None:
+        VERSION = read_pyproject_project_version(pyproject_path)
+    else:
+        with pyproject_path.open("rb") as f:
+            VERSION = tomllib.load(f)["project"]["version"]
+except (FileNotFoundError, IndexError, KeyError, TypeError, ValueError):
+    try:
+        VERSION = package_version("astrbot")  # PEP 440 version style, e.g. 1.2.3a4
+        match = re.match(r"^(\d+(?:\.\d+)*)(a|b|rc)(\d+)$", VERSION)
+        if match:
+            release, prerelease, number = match.groups()
+            prerelease = {"a": "alpha", "b": "beta", "rc": "rc"}[prerelease]
+            VERSION = f"{release}-{prerelease}.{number}"
+    except PackageNotFoundError:
+        VERSION = "0.0.0"
+
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -101,6 +129,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "default_provider_id": "",
         "fallback_chat_models": [],
+        "request_max_retries": 5,
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
@@ -2850,6 +2879,9 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                     },
+                    "request_max_retries": {
+                        "type": "int",
+                    },
                     "wake_prefix": {
                         "type": "string",
                     },
@@ -3219,6 +3251,11 @@ CONFIG_METADATA_3 = {
                         "items": {"type": "string"},
                         "_special": "select_providers",
                         "hint": "主聊天模型请求失败时，按顺序切换到这些模型。",
+                    },
+                    "provider_settings.request_max_retries": {
+                        "description": "请求最大重试次数",
+                        "type": "int",
+                        "hint": "单次模型请求遇到可重试错误时的最大尝试次数。",
                     },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",
