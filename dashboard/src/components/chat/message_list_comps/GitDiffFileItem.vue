@@ -91,7 +91,8 @@ const iconInfo = computed(() => ICON_MAP[props.file.status])
 .git-diff-file-chevron.expanded { transform: rotate(180deg); }
 .git-diff-file-body { padding: 0 12px 12px; }
 .git-diff-file-no-content {
-  padding: 12px; text-align: center; color: rgba(0, 0, 0, 0.45); font-size: 12px;
+  /* Themed muted text — stays readable in both light and dark modes. */
+  padding: 12px; text-align: center; color: rgba(var(--v-theme-on-surface), 0.45); font-size: 12px;
 }
 .git-diff-binary-alert { font-size: 13px; }
 </style>

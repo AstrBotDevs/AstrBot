@@ -296,6 +296,13 @@
           "generic": "Failed to fetch changes ({reason})"
         }
       }
+    },
+    "planModeChip": {
+      "activeLabel": "Current mode: Plan",
+      "inactiveLabel": "Current mode: Build",
+      "activeTooltip": "Plan mode is on for this session. Click to turn it off.",
+      "activeTooltipMulti": "Plan mode is on for this session ({count} build turns). Click to turn it off.",
+      "inactiveTooltip": "Build mode for this session. Click to turn Plan mode on."
     }
   }
 }

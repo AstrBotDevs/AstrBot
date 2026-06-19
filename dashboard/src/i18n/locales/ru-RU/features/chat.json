@@ -286,6 +286,13 @@
           "generic": "Не удалось получить изменения ({reason})"
         }
       }
+    },
+    "planModeChip": {
+      "activeLabel": "Текущий режим: Plan",
+      "inactiveLabel": "Текущий режим: Build",
+      "activeTooltip": "Для этой беседы включён режим Plan. Нажмите, чтобы выключить.",
+      "activeTooltipMulti": "Для этой беседы включён режим Plan ({count} шагов сборки). Нажмите, чтобы выключить.",
+      "inactiveTooltip": "Для этой беседы режим Build. Нажмите, чтобы включить Plan."
     }
   }
 }

@@ -7,15 +7,30 @@
     @drop.prevent="handleDrop"
   >
     <div
-      v-if="showSpcodeIndicator"
-      class="input-area__status-row"
-    >
-      <SpcodeProjectIndicator @open-load-dialog="openLoadDialog" />
-      <GitDiffChip
-        v-if="spcodeStatus.status.value.loaded"
-        @open-diff-sidebar="emit('open-diff-sidebar')"
-      />
-    </div>
+          v-if="showSpcodeIndicator"
+          class="input-area__status-row"
+        >
+          <SpcodeProjectIndicator @open-load-dialog="openLoadDialog" />
+          <!--
+            Right-side group: keeps the plan-mode chip visually adjacent to
+            the git-diff chip regardless of which of the two is shown.
+            Without this wrapper, .input-area__status-row's
+            ``justify-content: space-between`` distributes the three chips
+            (project / plan / git-diff) across the full row width, so
+            enabling the git-diff chip pushes the plan chip into the
+            middle of the row.
+          -->
+          <div class="input-area__status-row__right">
+            <SpcodePlanModeChip
+              v-if="showPlanModeChip"
+              @toggle="handlePlanModeToggle"
+            />
+            <GitDiffChip
+              v-if="spcodeStatus.status.value.loaded"
+              @open-diff-sidebar="emit('open-diff-sidebar')"
+            />
+          </div>
+        </div>
     <div
       class="input-container"
       :style="{
@@ -357,6 +372,7 @@ import { useDisplay } from "vuetify";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
+import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
 import { commandApi } from "@/api/v1";
 import type { CommandItem } from "@/components/extension/componentPanel/types";
 import ConfigSelector from "./ConfigSelector.vue";
@@ -366,9 +382,12 @@ import CommandSuggestion from "./CommandSuggestion.vue";
 import ProjectLoadMenuItem from "./ProjectLoadMenuItem.vue";
 import ProjectLoadDialog from "./ProjectLoadDialog.vue";
 import SpcodeProjectIndicator from "./SpcodeProjectIndicator.vue";
+import SpcodePlanModeChip from "./SpcodePlanModeChip.vue";
 import GitDiffChip from "./GitDiffChip.vue";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useSpcodeProjectLoad } from "@/composables/useSpcodeProjectLoad";
+import { useSpcodePlanMode } from "@/composables/useSpcodePlanMode";
+import { useSpcodePlanModeLoad } from "@/composables/useSpcodePlanModeLoad";
 import type { Session } from "@/composables/useSessions";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
@@ -472,6 +491,22 @@ const { isProjectLoadAvailable, refreshPluginState } = useSpcodeProjectLoad(
   allCommands,
 );
 const showSpcodeIndicator = isProjectLoadAvailable;
+
+// Visibility gate for the plan/build chip (next to the project
+// indicator). Mirrors the project-load gate: spcode plugin enabled
+// AND both /plan and /build commands registered. The chip is a
+// toggle, so we require BOTH commands to avoid showing a chip that
+// can only move the user into a state with no in-app way out.
+const { isPlanModeChipAvailable } = useSpcodePlanModeLoad(allCommands);
+const showPlanModeChip = isPlanModeChipAvailable;
+
+// Singleton state for the chip's per-umo plan/build flag. We expose
+// it here so the toggle handler can both read the current state (to
+// decide which command to inject) and optimistically flip it for
+// instant feedback. The authoritative refresh runs from Chat.vue's
+// `currSessionId` watcher so the chip converges with the bot's
+// response on every session switch.
+const spcodePlanMode = useSpcodePlanMode();
 const wakePrefixes = ref<string[]>(["/"]);
 const currentConfigId = ref((props.configId as string) || "default");
 
@@ -899,6 +934,51 @@ function handleProjectLoadSubmit(text: string): void {
   emit("send");
 }
 
+/**
+ * Handle a click on the plan/build chip.
+ *
+ * The chip is a one-click toggle: we inject ``/plan`` or ``/build``
+ * into the prompt AND immediately dispatch it as a chat message.
+ * This mirrors the existing ``handleProjectLoadSubmit`` flow (set
+ * the prompt via Vue's synchronous reactivity, then ``emit("send")``);
+ * the parent ``Chat.vue``'s ``sendCurrentMessage`` handler picks up
+ * the freshly propagated ``draft.value`` and starts the stream.
+ *
+ * Auto-sending is appropriate here because the chip is itself a
+ * toggle affordance — clicking it is unambiguous intent to flip
+ * state, and asking the user to confirm by pressing Enter would
+ * double the interactions for a one-bit operation.
+ *
+ * The optimistic ``setActive`` flip happens here so the chip color
+ * updates immediately. The authoritative refresh fires from
+ * ``Chat.vue``'s session watcher and stream-end hook, which corrects
+ * any drift if the backend rejects the command.
+ *
+ * Args:
+ *   none (the chip emits ``toggle`` with no payload; we read the
+ *   current state via the singleton composable).
+ */
+function handlePlanModeToggle(): void {
+  // Read current state and decide which command to inject. We
+  // intentionally do NOT short-circuit on `active === null` —
+  // unknown umo is treated as build (the chip will display "Build")
+  // and clicking it dispatches /plan, which matches what the user
+  // sees on the chip.
+  const isPlan = spcodePlanMode.status.value.active === true;
+  const cmd = isPlan ? "/build" : "/plan";
+  // Optimistic flip: chip will turn warning/green the moment the
+  // localPrompt setter runs (next tick) instead of waiting for the
+  // bot's response.
+  spcodePlanMode.setActive(!isPlan);
+  // Set localPrompt first. The `update:prompt` emit propagates the
+  // new text to Chat.vue's `draft.value` synchronously thanks to
+  // Vue 3 reactivity, so the subsequent `emit("send")` sees the
+  // updated value in `sendCurrentMessage` → `draft.value` →
+  // `sendMessageStream({ ... prompt })`.
+  localPrompt.value = cmd;
+  emit("send");
+}
+
 function handleCompositionStart() {
   isComposing.value = true;
   lastCompositionEndAt.value = null;
@@ -1074,6 +1154,35 @@ watch(showSpcodeIndicator, async (visible) => {
   }
 }, { immediate: false });
 
+// Pull initial plan/build state when the chip becomes visible.
+// The Chat.vue watcher covers the session-switch refresh, but on
+// the very first paint we still need a value to render the chip
+// in the correct color. Same immediate-false pattern as above to
+// avoid racing the plugin state fetch.
+//
+// CRITICAL: refresh() must receive the full unified_msg_origin (umo)
+// string the backend keys its per-session state on, not the raw
+// webchat conversation id. The backend's webchat adapter sets
+// `abm.session_id = f"webchat!{username}!{cid}"`, so the umo that
+// lands in spcode's `_plan_mode` dict is
+// `webchat:FriendMessage:webchat!<username>!<conversation_id>`.
+// Passing the bare conversation id here would make the backend
+// look up a key that does not exist and return active=False,
+// which would clobber the chip's optimistic state right after
+// every /plan toggle.
+watch(showPlanModeChip, async (visible) => {
+  if (!visible) return;
+  if (!props.currentSession) {
+    await spcodePlanMode.refresh();
+    return;
+  }
+  const umo = buildWebchatUmoDetails(
+    props.currentSession.session_id,
+    Boolean(props.currentSession.is_group),
+  ).umo;
+  await spcodePlanMode.refresh(umo);
+}, { immediate: false });
+
 onMounted(() => {
   if (inputField.value) {
     inputField.value.addEventListener("paste", handlePaste);
@@ -1119,6 +1228,22 @@ defineExpose({
   max-width: 900px;
   min-height: 28px;
   width: 85%;
+}
+
+/*
+ * Right-side cluster for the plan-mode and git-diff chips. The parent
+ * row uses ``space-between`` to push the project indicator to the far
+ * left, so this sub-row sits on the far right. Wrapping the two
+ * secondary chips together guarantees they always render adjacent to
+ * each other regardless of which one is currently visible — without
+ * the wrapper, toggling the git-diff chip on/off would re-distribute
+ * the row's leftover space and slide the plan chip between the
+ * project indicator and the right edge.
+ */
+.input-area__status-row__right {
+  align-items: center;
+  display: flex;
+  gap: 8px;
 }
 
 .input-neutral-btn {

@@ -101,9 +101,11 @@ const files = computed(() => {
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 12px; padding: 32px 16px; min-height: 200px;
 }
-.git-diff-center-text { color: rgba(0, 0, 0, 0.6); font-size: 14px; }
+/* Use themed muted text so empty/loading/error states stay readable
+   in both light and dark modes. */
+.git-diff-center-text { color: rgba(var(--v-theme-on-surface), 0.6); font-size: 14px; }
 .git-diff-error-title { font-weight: 600; font-size: 15px; }
-.git-diff-error-detail { color: rgba(0, 0, 0, 0.6); font-size: 13px; text-align: center; }
+.git-diff-error-detail { color: rgba(var(--v-theme-on-surface), 0.6); font-size: 13px; text-align: center; }
 .git-diff-banner-error {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; padding: 8px 12px; margin: 8px 12px;

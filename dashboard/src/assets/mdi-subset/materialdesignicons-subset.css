@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 304 icons */
+/* Auto-generated MDI subset – 306 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -238,6 +238,10 @@
 
 .mdi-circle-small::before {
   content: "\F09DF";
+}
+
+.mdi-clipboard-list-outline::before {
+  content: "\F10D5";
 }
 
 .mdi-clipboard-text-outline::before {
@@ -590,6 +594,10 @@
 
 .mdi-graph-outline::before {
   content: "\F104A";
+}
+
+.mdi-hammer-wrench::before {
+  content: "\F1323";
 }
 
 .mdi-hand-heart::before {
