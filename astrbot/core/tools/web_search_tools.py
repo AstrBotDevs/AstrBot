@@ -74,6 +74,8 @@ class _KeyRotator:
             )
 
         async with self.lock:
+            # 防止运行时热更新减少 key 列表导致 index 越界
+            self.index = self.index % len(keys)
             key = keys[self.index]
             self.index = (self.index + 1) % len(keys)
             return key
