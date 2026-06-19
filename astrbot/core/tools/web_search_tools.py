@@ -54,12 +54,19 @@ class SearchResult:
 
 @std_dataclass
 class _KeyRotator:
+    """API Key 轮询器，多协程安全的 Round-Robin 实现
+
+    每次调用 get() 返回当前的 Key 并将索引推进到下一个，
+    配合搜索函数中的 failover 循环可实现失败自动切换。
+    """
+
     setting_name: str
     provider_name: str
     index: int = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def get(self, provider_settings: dict) -> str:
+        """获取当前轮到的 Key 并推进索引（取模循环）"""
         keys = provider_settings.get(self.setting_name, [])
         if not keys:
             raise ValueError(
@@ -71,6 +78,13 @@ class _KeyRotator:
             self.index = (self.index + 1) % len(keys)
             return key
 
+
+# 遇到以下 HTTP 状态码时，尝试切换到下一个 API Key 重试
+# 401 - Unauthorized（Key 无效或已过期）
+# 403 - Forbidden（Key 被禁用）
+# 429 - Rate Limited（请求限流）
+# 432 - Tavily Quota Exceeded（额度耗尽）
+_RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 403, 429, 432})
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
@@ -143,193 +157,298 @@ async def _tavily_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
-    header = {
-        "Authorization": f"Bearer {tavily_key}",
-        "Content-Type": "application/json",
-    }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
-            "https://api.tavily.com/search",
-            json=payload,
-            headers=header,
-        ) as response:
-            if response.status != 200:
+    """调用 Tavily Search API，支持多 Key 失败自动切换"""
+    keys = provider_settings.get("websearch_tavily_key", [])
+    if not keys:
+        raise ValueError("Error: Tavily API key is not configured in AstrBot.")
+
+    # 遍历所有 Key：遇到可重试状态码（额度耗尽/限流/Key 失效）时自动换下一个 Key
+    # 不可重试的错误（如 5xx 服务端错误）立即抛出，不做无意义切换
+    last_error = None
+    for _ in range(len(keys)):
+        tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
+        header = {
+            "Authorization": f"Bearer {tavily_key}",
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.tavily.com/search",
+                json=payload,
+                headers=header,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return [
+                        SearchResult(
+                            title=item.get("title"),
+                            url=item.get("url"),
+                            snippet=item.get("content"),
+                            favicon=item.get("favicon"),
+                        )
+                        for item in data.get("results", [])
+                    ]
                 reason = await response.text()
+                # 可重试错误：记录并继续尝试下一个 Key
+                if response.status in _RETRYABLE_HTTP_STATUSES:
+                    last_error = Exception(
+                        f"Tavily web search failed: {reason}, status: {response.status}",
+                    )
+                    continue
+                # 不可重试错误：直接抛出
                 raise Exception(
                     f"Tavily web search failed: {reason}, status: {response.status}",
                 )
-            data = await response.json()
-            return [
-                SearchResult(
-                    title=item.get("title"),
-                    url=item.get("url"),
-                    snippet=item.get("content"),
-                    favicon=item.get("favicon"),
-                )
-                for item in data.get("results", [])
-            ]
+
+    # 所有 Key 均已尝试且全部失败
+    if last_error is not None:
+        raise last_error
+    raise Exception("Tavily web search failed with all configured keys.")
 
 
 async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
-    tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
-    header = {
-        "Authorization": f"Bearer {tavily_key}",
-        "Content-Type": "application/json",
-    }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
-            "https://api.tavily.com/extract",
-            json=payload,
-            headers=header,
-        ) as response:
-            if response.status != 200:
+    """调用 Tavily Extract API，支持多 Key 失败自动切换"""
+    keys = provider_settings.get("websearch_tavily_key", [])
+    if not keys:
+        raise ValueError("Error: Tavily API key is not configured in AstrBot.")
+
+    last_error = None
+    for _ in range(len(keys)):
+        tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
+        header = {
+            "Authorization": f"Bearer {tavily_key}",
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.tavily.com/extract",
+                json=payload,
+                headers=header,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    results: list[dict] = data.get("results", [])
+                    if not results:
+                        raise ValueError(
+                            "Error: Tavily web searcher does not return any results."
+                        )
+                    return results
                 reason = await response.text()
+                # 可重试错误：记录并继续尝试下一个 Key
+                if response.status in _RETRYABLE_HTTP_STATUSES:
+                    last_error = Exception(
+                        f"Tavily web search failed: {reason}, status: {response.status}",
+                    )
+                    continue
                 raise Exception(
                     f"Tavily web search failed: {reason}, status: {response.status}",
                 )
-            data = await response.json()
-            results: list[dict] = data.get("results", [])
-            if not results:
-                raise ValueError(
-                    "Error: Tavily web searcher does not return any results."
-                )
-            return results
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("Tavily web extract failed with all configured keys.")
 
 
 async def _bocha_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    bocha_key = await _BOCHA_KEY_ROTATOR.get(provider_settings)
-    header = {
-        "Authorization": f"Bearer {bocha_key}",
-        "Content-Type": "application/json",
-        # Explicitly disable brotli encoding to avoid aiohttp >= 3.13.3 brotli
-        # decompression incompatibility (TypeError: process() takes exactly 1 argument).
-        # See: https://github.com/aio-libs/aiohttp/issues/11898
-        "Accept-Encoding": "gzip, deflate",
-    }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
-            "https://api.bochaai.com/v1/web-search",
-            json=payload,
-            headers=header,
-        ) as response:
-            if response.status != 200:
+    """调用 BoCha Search API，支持多 Key 失败自动切换"""
+    keys = provider_settings.get("websearch_bocha_key", [])
+    if not keys:
+        raise ValueError("Error: BoCha API key is not configured in AstrBot.")
+
+    last_error = None
+    for _ in range(len(keys)):
+        bocha_key = await _BOCHA_KEY_ROTATOR.get(provider_settings)
+        header = {
+            "Authorization": f"Bearer {bocha_key}",
+            "Content-Type": "application/json",
+            # 显式禁用 brotli 编码，避免 aiohttp >= 3.13.3 的解压缩兼容性问题
+            # 参见: https://github.com/aio-libs/aiohttp/issues/11898
+            "Accept-Encoding": "gzip, deflate",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.bochaai.com/v1/web-search",
+                json=payload,
+                headers=header,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    rows = data["data"]["webPages"]["value"]
+                    return [
+                        SearchResult(
+                            title=item.get("name"),
+                            url=item.get("url"),
+                            snippet=item.get("snippet"),
+                            favicon=item.get("siteIcon"),
+                        )
+                        for item in rows
+                    ]
                 reason = await response.text()
+                # 可重试错误：记录并继续尝试下一个 Key
+                if response.status in _RETRYABLE_HTTP_STATUSES:
+                    last_error = Exception(
+                        f"BoCha web search failed: {reason}, status: {response.status}",
+                    )
+                    continue
                 raise Exception(
                     f"BoCha web search failed: {reason}, status: {response.status}",
                 )
-            data = await response.json()
-            rows = data["data"]["webPages"]["value"]
-            return [
-                SearchResult(
-                    title=item.get("name"),
-                    url=item.get("url"),
-                    snippet=item.get("snippet"),
-                    favicon=item.get("siteIcon"),
-                )
-                for item in rows
-            ]
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("BoCha web search failed with all configured keys.")
 
 
 async def _brave_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    brave_key = await _BRAVE_KEY_ROTATOR.get(provider_settings)
-    header = {
-        "Accept": "application/json",
-        "X-Subscription-Token": brave_key,
-    }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.get(
-            "https://api.search.brave.com/res/v1/web/search",
-            params=payload,
-            headers=header,
-        ) as response:
-            if response.status != 200:
+    """调用 Brave Search API，支持多 Key 失败自动切换"""
+    keys = provider_settings.get("websearch_brave_key", [])
+    if not keys:
+        raise ValueError("Error: Brave API key is not configured in AstrBot.")
+
+    last_error = None
+    for _ in range(len(keys)):
+        brave_key = await _BRAVE_KEY_ROTATOR.get(provider_settings)
+        header = {
+            "Accept": "application/json",
+            "X-Subscription-Token": brave_key,
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.get(
+                "https://api.search.brave.com/res/v1/web/search",
+                params=payload,
+                headers=header,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    rows = data.get("web", {}).get("results", [])
+                    return [
+                        SearchResult(
+                            title=item.get("title", ""),
+                            url=item.get("url", ""),
+                            snippet=item.get("description", ""),
+                        )
+                        for item in rows
+                    ]
                 reason = await response.text()
+                # 可重试错误：记录并继续尝试下一个 Key
+                if response.status in _RETRYABLE_HTTP_STATUSES:
+                    last_error = Exception(
+                        f"Brave web search failed: {reason}, status: {response.status}",
+                    )
+                    continue
                 raise Exception(
                     f"Brave web search failed: {reason}, status: {response.status}",
                 )
-            data = await response.json()
-            rows = data.get("web", {}).get("results", [])
-            return [
-                SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    snippet=item.get("description", ""),
-                )
-                for item in rows
-            ]
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("Brave web search failed with all configured keys.")
 
 
 async def _firecrawl_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
-    header = {
-        "Authorization": f"Bearer {firecrawl_key}",
-        "Content-Type": "application/json",
-    }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
-            "https://api.firecrawl.dev/v2/search",
-            json=payload,
-            headers=header,
-        ) as response:
-            if response.status != 200:
+    """调用 Firecrawl Search API，支持多 Key 失败自动切换"""
+    keys = provider_settings.get("websearch_firecrawl_key", [])
+    if not keys:
+        raise ValueError("Error: Firecrawl API key is not configured in AstrBot.")
+
+    last_error = None
+    for _ in range(len(keys)):
+        firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
+        header = {
+            "Authorization": f"Bearer {firecrawl_key}",
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.firecrawl.dev/v2/search",
+                json=payload,
+                headers=header,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    rows = data.get("data", [])
+                    if isinstance(rows, dict):
+                        rows = rows.get("web", [])
+                    return [
+                        SearchResult(
+                            title=item.get("title", ""),
+                            url=item.get("url", ""),
+                            snippet=(
+                                item.get("description")
+                                or item.get("snippet")
+                                or item.get("markdown")
+                                or ""
+                            ),
+                        )
+                        for item in rows
+                        if item.get("url")
+                    ]
                 reason = await response.text()
+                # 可重试错误：记录并继续尝试下一个 Key
+                if response.status in _RETRYABLE_HTTP_STATUSES:
+                    last_error = Exception(
+                        f"Firecrawl web search failed: {reason}, status: {response.status}",
+                    )
+                    continue
                 raise Exception(
                     f"Firecrawl web search failed: {reason}, status: {response.status}",
                 )
-            data = await response.json()
-            rows = data.get("data", [])
-            if isinstance(rows, dict):
-                rows = rows.get("web", [])
-            return [
-                SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    snippet=(
-                        item.get("description")
-                        or item.get("snippet")
-                        or item.get("markdown")
-                        or ""
-                    ),
-                )
-                for item in rows
-                if item.get("url")
-            ]
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("Firecrawl web search failed with all configured keys.")
 
 
 async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
-    firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
-    header = {
-        "Authorization": f"Bearer {firecrawl_key}",
-        "Content-Type": "application/json",
-    }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
-            "https://api.firecrawl.dev/v2/scrape",
-            json=payload,
-            headers=header,
-        ) as response:
-            if response.status != 200:
+    """调用 Firecrawl Scrape API，支持多 Key 失败自动切换"""
+    keys = provider_settings.get("websearch_firecrawl_key", [])
+    if not keys:
+        raise ValueError("Error: Firecrawl API key is not configured in AstrBot.")
+
+    last_error = None
+    for _ in range(len(keys)):
+        firecrawl_key = await _FIRECRAWL_KEY_ROTATOR.get(provider_settings)
+        header = {
+            "Authorization": f"Bearer {firecrawl_key}",
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.firecrawl.dev/v2/scrape",
+                json=payload,
+                headers=header,
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    result = data.get("data", {})
+                    if not result:
+                        raise ValueError(
+                            "Error: Firecrawl web scraper does not return any results."
+                        )
+                    return result
                 reason = await response.text()
+                # 可重试错误：记录并继续尝试下一个 Key
+                if response.status in _RETRYABLE_HTTP_STATUSES:
+                    last_error = Exception(
+                        f"Firecrawl web scraper failed: {reason}, status: {response.status}",
+                    )
+                    continue
                 raise Exception(
                     f"Firecrawl web scraper failed: {reason}, status: {response.status}",
                 )
-            data = await response.json()
-            result = data.get("data", {})
-            if not result:
-                raise ValueError(
-                    "Error: Firecrawl web scraper does not return any results."
-                )
-            return result
+
+    if last_error is not None:
+        raise last_error
+    raise Exception("Firecrawl web scraper failed with all configured keys.")
 
 
 async def _baidu_search(
