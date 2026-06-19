@@ -19,8 +19,32 @@ Open the AstrBot admin panel, navigate to the `Plugins` page, and find `Skills`.
 You can upload Skills with the following requirements:
 
 1. The upload must be a `.zip` archive.
-2. **After extraction, it must contain a single Skill folder. The folder name will be used as the identifier for the Skill in AstrBot—please name it using English characters.**
-3. The Skill folder must include a file named `SKILL.md`, and its contents should preferably follow the Anthropic Skills specification. You can refer to Anthropic's documentation: https://code.claude.com/docs/en/skills
+2. After extraction, it can contain one or more Skill folders. Each folder name is used as the Skill identifier in AstrBot. Use English letters, numbers, dots, underscores, or hyphens.
+3. Each Skill folder must include a file named exactly `SKILL.md`. The filename is case-sensitive. Its contents should preferably follow the Anthropic Skills specification. You can refer to Anthropic's documentation: https://code.claude.com/docs/en/skills
+
+## Skill Sources and Priority
+
+AstrBot can discover Skills from several places:
+
+- **Local Skills**: uploaded from the WebUI or placed under `data/skills/<skill_name>/SKILL.md`. These appear in the WebUI Skills management page.
+- **Plugin-provided Skills**: plugins can bundle Skills in their own `skills/` directory. They appear in the WebUI, but are managed by the plugin, so they cannot be deleted or edited from the Local Skills page.
+- **Sandbox preset Skills**: when the sandbox runtime is used, AstrBot reads Skills discovered inside the sandbox and provides them to the Agent.
+- **Workspace Skills**: Skills under the current session workspace, at `skills/<skill_name>/SKILL.md`. They are currently injected only in local runtime, where the path is usually `data/workspaces/{normalized_umo}/skills/<skill_name>/SKILL.md`.
+
+Workspace Skills are **request-scoped**. In local runtime, when AstrBot builds a request, it checks the current session workspace for a `skills/` directory and appends valid Skills to that request's Skill inventory. They are not shown in the WebUI Skills management page yet, and they are not written to the global Skills configuration.
+
+If a persona is configured to select specific Skills, that list filters only local, plugin-provided, and sandbox Skills. Workspace Skills are still discovered and injected as part of the current request. Workspace Skills are disabled only when the persona is explicitly configured to use no Skills.
+
+When multiple sources contain a Skill with the same name, request-time priority is:
+
+1. If the current persona is explicitly configured to use no Skills, no Skills are injected, including Workspace Skills.
+2. If the current persona selects a specific Skill list, that list does not filter Workspace Skills.
+3. The current session's Workspace Skill has the highest priority. If it has the same name as a local, plugin, or sandbox Skill, it overrides that Skill for the current request only.
+4. Local Skills take priority over plugin-provided Skills and sandbox-only Skills.
+5. Plugin-provided Skills take priority over sandbox-only Skills.
+6. Sandbox-only Skills are injected only when there is no local, plugin, or workspace Skill with the same name.
+
+If a local Skill has been synced into the sandbox, AstrBot treats it as the same Skill. In sandbox runtime, the request will prefer the path that is readable inside the sandbox. Workspace Skills are not automatically synced into the sandbox yet.
 
 ## Using Skills in AstrBot
 

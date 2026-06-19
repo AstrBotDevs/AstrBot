@@ -494,14 +494,26 @@ async def _ensure_persona_and_skills(
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
     skills = _filter_skills_for_current_config(skills, cfg)
+    workspace_skills = (
+        skill_manager.list_workspace_skills(
+            _get_workspace_path_for_umo(event.unified_msg_origin)
+        )
+        if runtime == "local"
+        else []
+    )
 
-    if skills:
+    if skills or workspace_skills:
         if persona and persona.get("skills") is not None:
             if not persona["skills"]:
                 skills = []
             else:
                 allowed = set(persona["skills"])
                 skills = [skill for skill in skills if skill.name in allowed]
+        if workspace_skills and (not persona or persona.get("skills") != []):
+            skills_by_name = {skill.name: skill for skill in skills}
+            for skill in workspace_skills:
+                skills_by_name[skill.name] = skill
+            skills = [skills_by_name[name] for name in sorted(skills_by_name)]
         if skills:
             req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
             if runtime == "none":
