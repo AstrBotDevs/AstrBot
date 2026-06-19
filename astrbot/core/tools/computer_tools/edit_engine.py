@@ -503,11 +503,19 @@ def _adjust_replacement_indent(
     - If the match starts mid-line (after non-whitespace content), NO lines
       are adjusted — the user wrote absolute indentation and the first line
       inherits the prefix context.
+    - If ``old_string`` and ``new_string`` have different first-nonempty-line
+      indents, no adjustment is applied. The caller is signaling it
+      explicitly chose the indentation, so we trust it. This is what the
+      fuzzy replacers (``LineTrimmedReplacer``,
+      ``IndentationFlexibleReplacer``, etc.) implicitly rely on: they
+      strip away the indent difference to find the match, but the LLM's
+      ``new`` is still expected to land at its explicit on-disk indent.
 
     For exact matches (old_string == matched_block and both span the full
     line), delta is zero and this is a no-op.
     """
     old_indent = _first_nonempty_line_indent(old_string)
+    new_indent = _first_nonempty_line_indent(new_string)
 
     # Compute effective file indent from the actual line context when available.
     # This handles substring matches where matched_block doesn't include
@@ -537,6 +545,16 @@ def _adjust_replacement_indent(
         file_indent = _first_nonempty_line_indent(matched_block)
 
     if file_indent == old_indent:
+        return new_string
+
+    # When the LLM gives ``old`` and ``new`` with different first-nonempty-line
+    # indents, that is a deliberate signal that it thought about indentation
+    # (e.g. stripped-form ``old`` so fuzzy matchers can find the block, but a
+    # properly-indented ``new`` reflecting the final on-disk appearance). Apply
+    # the file's indent delta on top of such a ``new`` and the LLM's predicted
+    # content gets shifted (or doubled), drifting every edit. Trust the
+    # explicit value and leave ``new`` untouched.
+    if old_indent != new_indent:
         return new_string
 
     # Determine indent character from the file's indentation
