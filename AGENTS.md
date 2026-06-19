@@ -51,6 +51,12 @@ ruff check .
 6. For path handling, use `pathlib.Path` instead of string paths, and use `astrbot.core.utils.path_utils` to get the AstrBot data and temp directory.
 7. When backend API routes, request/response schemas, or OpenAPI definitions change, regenerate the frontend API client by running `cd dashboard && pnpm generate:api`.
 
+### KISS and First Principles
+
+Follow the KISS principle and reason from first principles during development. Start by identifying the real problem, required behavior, and smallest useful change before adding code. Do not pile on features, configuration switches, abstractions, dependencies, or compatibility layers unless they directly solve the current problem and have clear evidence of need.
+
+Prefer the simplest implementation that is correct, maintainable, and consistent with the existing codebase. If a broader design seems attractive, reduce it to the essential behavior needed now and leave optional expansion for a later, explicit requirement.
+
 ### No Unnecessary Helpers
 
 Prioritize inline implementation over abstraction. Avoid over-engineering and do not create helper functions unless absolutely necessary.
@@ -94,7 +100,34 @@ def calculate_metrics(user_id: int, force_refresh: bool = False) -> dict:
 
 ## Release versions
 
-1. Replace current version name to specific version name.
-2. Write changelog in `changelogs/`, you can refer to the full commit messages between the latest tag to the latest commit.
-3. Make and push a commit into master branch with message format like: `chore: bump version to 4.25.0`
-4. Create a tag and push the tag. For example: `git tag v4.25.0 && git push origin v4.25.0`
+Use a short-lived `release/*` branch for each release. The release branch is the stabilization area for version bumps, changelog updates, release-blocking fixes, and final validation only. Do not add unrelated features or broad refactors to a release branch.
+
+Prepare a release from a clean worktree with:
+
+```bash
+uv run python scripts/prepare_release.py 4.25.0
+```
+
+The script updates `pyproject.toml`, creates `changelogs/v4.25.0.md`, runs the required Python checks, and prints the remaining steps. Use these flags when needed:
+
+```bash
+uv run python scripts/prepare_release.py 4.25.0 --generate-api-client
+uv run python scripts/prepare_release.py 4.25.0 --dashboard-build
+uv run python scripts/prepare_release.py 4.25.0 --commit --push
+```
+
+Open a PR from `release/4.25.0` to `master`. The PR title must use the conventional commit format, for example `chore: bump version to 4.25.0`. After the release PR is merged, create and push the tag from the updated `master` branch so the tag points to the exact code that was merged:
+
+```bash
+git checkout master
+git pull --ff-only origin master
+git tag v4.25.0
+git push origin v4.25.0
+```
+
+For one-off release candidate branches, delete the release branch after the tag is pushed and verified. For maintained release lines, use a branch such as `release/4.25` and keep it until that line reaches EOL.
+
+```bash
+git branch -d release/4.25.0
+git push origin --delete release/4.25.0
+```
