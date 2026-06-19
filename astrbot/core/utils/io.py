@@ -491,11 +491,11 @@ async def get_dashboard_version():
         data/dist version when no compatible bundled WebUI is available.
     """
 
+    from astrbot.core.config.default import VERSION
+
     # First check user data directory (manually updated / downloaded dashboard).
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")
     if os.path.exists(dist_dir):
-        from astrbot.core.config.default import VERSION
-
         user_version = get_dashboard_dist_version(dist_dir)
         if is_dashboard_dist_compatible(dist_dir, VERSION):
             return user_version

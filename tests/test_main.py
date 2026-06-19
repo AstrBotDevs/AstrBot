@@ -9,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-from astrbot.core.utils.io import should_use_bundled_dashboard_dist
+from astrbot.core.utils.io import get_dashboard_version, should_use_bundled_dashboard_dist
 from main import (
     DASHBOARD_RESET_PASSWORD_ENV,
     _apply_startup_env_flags,
@@ -320,6 +320,30 @@ def test_should_use_bundled_dashboard_dist_when_data_version_file_is_missing(tmp
         return_value=bundled_dist,
     ):
         assert should_use_bundled_dashboard_dist(user_dist, "4.24.4") is True
+
+
+@pytest.mark.asyncio
+async def test_get_dashboard_version_uses_bundled_dist_when_data_dist_is_missing(
+    tmp_path,
+):
+    """Tests bundled WebUI version lookup when data/dist is absent."""
+    from main import VERSION
+
+    data_dir = tmp_path / "data"
+    bundled_dist = tmp_path / "bundled-dist"
+    (bundled_dist / "assets").mkdir(parents=True)
+    (bundled_dist / "assets" / "version").write_text(f"v{VERSION}", encoding="utf-8")
+    (bundled_dist / "index.html").write_text("bundled", encoding="utf-8")
+
+    with mock.patch(
+        "astrbot.core.utils.io.get_astrbot_data_path",
+        return_value=str(data_dir),
+    ):
+        with mock.patch(
+            "astrbot.core.utils.io.get_bundled_dashboard_dist_path",
+            return_value=bundled_dist,
+        ):
+            assert await get_dashboard_version() == f"v{VERSION}"
 
 
 @pytest.mark.asyncio
