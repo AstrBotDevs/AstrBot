@@ -220,7 +220,7 @@ async def test_text_chat_wraps_string_system_prompt_as_list(monkeypatch):
 
     captured_payloads: dict[str, object] = {}
 
-    async def fake_query(payloads, tools):
+    async def fake_query(payloads, tools, *, request_max_retries=None):
         captured_payloads.update(payloads)
         return LLMResponse(role="assistant", completion_text="ok")
 
@@ -247,7 +247,7 @@ async def test_text_chat_passes_through_list_system_prompt(monkeypatch):
 
     captured_payloads: dict[str, object] = {}
 
-    async def fake_query(payloads, tools):
+    async def fake_query(payloads, tools, *, request_max_retries=None):
         captured_payloads.update(payloads)
         return LLMResponse(role="assistant", completion_text="ok")
 
