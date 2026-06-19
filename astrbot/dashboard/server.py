@@ -203,10 +203,19 @@ class AstrBotDashboard:
             ) or is_dashboard_dist_compatible(bundled_dist, VERSION):
                 self.data_path = str(bundled_dist)
                 logger.info("Using bundled dashboard dist: %s", self.data_path)
+            elif (
+                os.path.exists(user_dist) and (Path(user_dist) / "index.html").is_file()
+            ):
+                logger.warning(
+                    "Using existing data/dist as a fallback even though WebUI version mismatches core: %s, expected v%s. "
+                    "Some dashboard features may not work until the matching WebUI is available.",
+                    user_version,
+                    VERSION,
+                )
+                self.data_path = os.path.abspath(user_dist)
             elif os.path.exists(user_dist):
                 logger.warning(
-                    "Ignoring data/dist because WebUI version mismatches core: %s, expected v%s.",
-                    user_version,
+                    "Ignoring data/dist because WebUI files are incomplete for core v%s.",
                     VERSION,
                 )
                 self.data_path = None

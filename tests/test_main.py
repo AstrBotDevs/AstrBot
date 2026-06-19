@@ -247,6 +247,44 @@ async def test_check_dashboard_files_exists_but_version_mismatch_downloads(tmp_p
 
 
 @pytest.mark.asyncio
+async def test_check_dashboard_files_falls_back_to_stale_dist_when_download_fails(
+    tmp_path,
+):
+    """Tests stale dashboard fallback when the matching WebUI cannot be downloaded."""
+    from main import VERSION
+
+    data_dir = tmp_path / "data"
+    data_dist = data_dir / "dist"
+    bundled_dist = tmp_path / "bundled-dist"
+    (data_dist / "assets").mkdir(parents=True)
+    (data_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
+    (data_dist / "index.html").write_text("stale", encoding="utf-8")
+
+    with mock.patch("main.get_astrbot_data_path", return_value=str(data_dir)):
+        with mock.patch(
+            "main.get_bundled_dashboard_dist_path",
+            return_value=bundled_dist,
+        ):
+            with mock.patch(
+                "main.download_dashboard",
+                side_effect=RuntimeError("missing dashboard asset"),
+            ) as mock_download:
+                with mock.patch("main.logger.warning") as mock_logger_warning:
+                    result = await check_dashboard_files()
+
+    assert result == str(data_dist)
+    mock_download.assert_called_once_with(
+        version=f"v{VERSION}",
+        latest=False,
+        allow_insecure_ssl_fallback=False,
+    )
+    assert any(
+        "Falling back to existing data/dist WebUI" in call.args[0]
+        for call in mock_logger_warning.call_args_list
+    )
+
+
+@pytest.mark.asyncio
 async def test_check_dashboard_files_downloads_when_matching_dist_is_incomplete(
     tmp_path,
 ):

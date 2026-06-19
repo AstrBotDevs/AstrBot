@@ -294,7 +294,34 @@ def test_dashboard_uses_bundled_dist_when_data_dist_is_stale(
     assert server.data_path == str(bundled_dist)
 
 
-def test_dashboard_ignores_mismatched_data_dist_without_bundled(
+def test_dashboard_falls_back_to_mismatched_data_dist_without_bundled(
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    tmp_path,
+):
+    data_dir = tmp_path / "data"
+    user_dist = data_dir / "dist"
+    bundled_dist = tmp_path / "bundled-dist"
+    (user_dist / "assets").mkdir(parents=True)
+    (user_dist / "assets" / "version").write_text("v0.0.1", encoding="utf-8")
+    (user_dist / "index.html").write_text("stale", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.server.get_bundled_dashboard_dist_path",
+        lambda: bundled_dist,
+    )
+
+    shutdown_event = asyncio.Event()
+    server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
+
+    assert server.data_path == str(user_dist)
+
+
+def test_dashboard_ignores_incomplete_mismatched_data_dist_without_bundled(
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
     tmp_path,
