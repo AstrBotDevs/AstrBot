@@ -162,7 +162,6 @@ const performRetrieval = async () => {
   try {
     const response = await knowledgeApi.retrieve(props.kbId, {
       query: query.value,
-      kb_names: [props.kbName],
       top_k: topK.value,
       debug: debugMode.value
     })

@@ -33,7 +33,8 @@
     "rerankProviderInfo": "提供商: {id}",
     "cancel": "取消",
     "submit": "创建",
-    "nameRequired": "请输入知识库名称"
+    "nameRequired": "请输入知识库名称",
+    "embeddingModelRequired": "请选择嵌入模型"
   },
   "edit": {
     "title": "编辑知识库",

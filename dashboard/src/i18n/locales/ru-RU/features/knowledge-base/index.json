@@ -33,7 +33,8 @@
         "rerankProviderInfo": "Провайдер: {id}",
         "cancel": "Отмена",
         "submit": "Создать",
-        "nameRequired": "Введите название базы знаний"
+        "nameRequired": "Введите название базы знаний",
+        "embeddingModelRequired": "Выберите embedding модель"
     },
     "edit": {
         "title": "Редактирование",

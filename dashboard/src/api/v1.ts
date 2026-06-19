@@ -32,6 +32,10 @@ import {
   type DynamicConfig,
   type EnabledPatch,
   type GhproxyTestRequest,
+  type KnowledgeBaseCreateRequest,
+  type KnowledgeBaseRequest,
+  type KnowledgeDocumentUrlImportRequest,
+  type KnowledgeRetrieveRequest,
   type LoginRequest,
   type ListConversationsData,
   type McpServerConfig,
@@ -1345,16 +1349,16 @@ export const knowledgeApi = {
       openApiV1.getKnowledgeBase({ path: { kb_id: kbId } }),
     );
   },
-  create(config: OpenConfig) {
+  create(config: KnowledgeBaseCreateRequest) {
     return typed<OpenConfig>(
-      openApiV1.createKnowledgeBase({ body: config as any }),
+      openApiV1.createKnowledgeBase({ body: config }),
     );
   },
-  update(kbId: string, config: OpenConfig) {
+  update(kbId: string, config: KnowledgeBaseRequest) {
     return typed<OpenConfig>(
       openApiV1.updateKnowledgeBase({
         path: { kb_id: kbId },
-        body: config as any,
+        body: config,
       }),
     );
   },
@@ -1379,11 +1383,11 @@ export const knowledgeApi = {
       }),
     );
   },
-  importDocumentFromUrl(kbId: string, payload: OpenConfig) {
+  importDocumentFromUrl(kbId: string, payload: KnowledgeDocumentUrlImportRequest) {
     return typed<any>(
       openApiV1.importKnowledgeDocumentFromUrl({
         path: { kb_id: kbId },
-        body: payload as any,
+        body: payload,
       }),
     );
   },
@@ -1425,11 +1429,11 @@ export const knowledgeApi = {
       }),
     );
   },
-  retrieve(kbId: string, payload: OpenConfig) {
+  retrieve(kbId: string, payload: KnowledgeRetrieveRequest) {
     return typed<any>(
       openApiV1.retrieveKnowledgeBase({
         path: { kb_id: kbId },
-        body: payload as any,
+        body: payload,
       }),
     );
   },

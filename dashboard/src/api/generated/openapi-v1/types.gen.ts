@@ -86,6 +86,9 @@ export type ChatProjectRequest = {
 };
 
 export type ChatRequest = {
+    /**
+     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     */
     username?: string;
     session_id?: string;
     /**
@@ -252,34 +255,54 @@ export type JsonSchema = {
     [key: string]: unknown;
 };
 
+export type KnowledgeBaseCreateRequest = KnowledgeBaseRequest & {
+    kb_name: string;
+    embedding_provider_id: string;
+};
+
 export type KnowledgeBaseRequest = {
-    name: string;
+    kb_name?: string;
     description?: string;
-    embedding_provider_id?: string;
-    rerank_provider_id?: string;
-    chunking?: DynamicConfig;
-    metadata?: DynamicConfig;
+    emoji?: string;
+    embedding_provider_id?: (string) | null;
+    rerank_provider_id?: (string) | null;
+    chunk_size?: number;
+    chunk_overlap?: number;
+    top_k_dense?: number;
+    top_k_sparse?: number;
+    top_m_final?: number;
 };
 
 export type KnowledgeDocumentImportRequest = {
-    paths: Array<(string)>;
-    parser?: string;
+    documents: Array<{
+        file_name: string;
+        chunks: Array<(string)>;
+        [key: string]: unknown | string;
+    }>;
+    batch_size?: number;
+    tasks_limit?: number;
+    max_retries?: number;
 };
 
 export type KnowledgeDocumentUploadRequest = {
     file: (Blob | File);
-    parser?: string;
 };
 
 export type KnowledgeDocumentUrlImportRequest = {
     url: string;
-    parser?: string;
+    chunk_size?: number;
+    chunk_overlap?: number;
+    batch_size?: number;
+    tasks_limit?: number;
+    max_retries?: number;
+    enable_cleaning?: boolean;
+    cleaning_provider_id?: (string) | null;
 };
 
 export type KnowledgeRetrieveRequest = {
     query: string;
     top_k?: number;
-    score_threshold?: number;
+    debug?: boolean;
 };
 
 export type LoginRequest = {
@@ -2566,7 +2589,7 @@ export type ListKnowledgeBasesResponse = (SuccessEnvelope);
 export type ListKnowledgeBasesError = unknown;
 
 export type CreateKnowledgeBaseData = {
-    body: KnowledgeBaseRequest;
+    body: KnowledgeBaseCreateRequest;
 };
 
 export type CreateKnowledgeBaseResponse = (SuccessEnvelope);

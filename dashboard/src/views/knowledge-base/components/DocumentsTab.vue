@@ -480,7 +480,6 @@ const uploadFromUrl = async () => {
 
   try {
     const payload: any = {
-      kb_id: props.kbId,
       url: uploadUrl.value,
       batch_size: uploadSettings.value.batch_size,
       tasks_limit: uploadSettings.value.tasks_limit,

@@ -33,7 +33,8 @@
     "rerankProviderInfo": "Provider: {id}",
     "cancel": "Cancel",
     "submit": "Create",
-    "nameRequired": "Please enter knowledge base name"
+    "nameRequired": "Please enter knowledge base name",
+    "embeddingModelRequired": "Please select an embedding model"
   },
   "edit": {
     "title": "Edit Knowledge Base",

@@ -3347,7 +3347,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/KnowledgeBaseRequest"
+              $ref: "#/components/schemas/KnowledgeBaseCreateRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5613,21 +5613,40 @@ components:
 
     KnowledgeBaseRequest:
       type: object
-      required: [name]
       properties:
-        name:
+        kb_name:
           type: string
         description:
           type: string
+        emoji:
+          type: string
         embedding_provider_id:
-          type: string
+          type: [string, "null"]
         rerank_provider_id:
-          type: string
-        chunking:
-          $ref: "#/components/schemas/DynamicConfig"
-        metadata:
-          $ref: "#/components/schemas/DynamicConfig"
+          type: [string, "null"]
+        chunk_size:
+          type: integer
+        chunk_overlap:
+          type: integer
+        top_k_dense:
+          type: integer
+        top_k_sparse:
+          type: integer
+        top_m_final:
+          type: integer
       additionalProperties: false
+
+    KnowledgeBaseCreateRequest:
+      allOf:
+        - $ref: "#/components/schemas/KnowledgeBaseRequest"
+        - type: object
+          required: [kb_name, embedding_provider_id]
+          properties:
+            kb_name:
+              type: string
+            embedding_provider_id:
+              type: string
+          additionalProperties: false
 
     KnowledgeDocumentUploadRequest:
       type: object
@@ -5636,19 +5655,30 @@ components:
         file:
           type: string
           format: binary
-        parser:
-          type: string
 
     KnowledgeDocumentImportRequest:
       type: object
-      required: [paths]
+      required: [documents]
       properties:
-        paths:
+        documents:
           type: array
           items:
-            type: string
-        parser:
-          type: string
+            type: object
+            required: [file_name, chunks]
+            properties:
+              file_name:
+                type: string
+              chunks:
+                type: array
+                items:
+                  type: string
+            additionalProperties: true
+        batch_size:
+          type: integer
+        tasks_limit:
+          type: integer
+        max_retries:
+          type: integer
       additionalProperties: false
 
     KnowledgeDocumentUrlImportRequest:
@@ -5658,8 +5688,20 @@ components:
         url:
           type: string
           format: uri
-        parser:
-          type: string
+        chunk_size:
+          type: integer
+        chunk_overlap:
+          type: integer
+        batch_size:
+          type: integer
+        tasks_limit:
+          type: integer
+        max_retries:
+          type: integer
+        enable_cleaning:
+          type: boolean
+        cleaning_provider_id:
+          type: [string, "null"]
       additionalProperties: false
 
     KnowledgeRetrieveRequest:
@@ -5671,8 +5713,8 @@ components:
         top_k:
           type: integer
           default: 5
-        score_threshold:
-          type: number
+        debug:
+          type: boolean
       additionalProperties: false
 
     PersonaRequest:
