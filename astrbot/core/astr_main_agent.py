@@ -278,10 +278,11 @@ async def _apply_kb(
             )
             if not kb_result:
                 return
-            if req.system_prompt is not None:
-                req.system_prompt += (
-                    f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
-                )
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=f"[Related Knowledge Base Results]:\n{kb_result}",
+                ).mark_as_temp()
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while retrieving knowledge base: %s", exc)
     else:
