@@ -491,6 +491,37 @@ async def test_keenable_search_uses_api_key_header_and_falls_back_to_description
 
 
 @pytest.mark.asyncio
+async def test_keenable_search_without_key_uses_public_endpoint(monkeypatch):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={"results": [{"title": "AstrBot", "url": "https://example.com"}]},
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._keenable_search({}, {"query": "AstrBot"})
+
+    assert session.posted == {
+        "url": "https://api.keenable.ai/v1/search/public",
+        "json": {"query": "AstrBot"},
+        "headers": {
+            "X-Keenable-Title": "astrbot",
+            "Content-Type": "application/json",
+        },
+    }
+    assert "X-API-Key" not in session.posted["headers"]
+    assert results == [
+        tools.SearchResult(title="AstrBot", url="https://example.com", snippet="")
+    ]
+
+
+@pytest.mark.asyncio
 async def test_keenable_search_handles_null_results_and_items(monkeypatch):
     session = _FakeKeenableSession(
         _FakeFirecrawlResponse(status=200, json_data={"results": None})
@@ -588,6 +619,31 @@ async def test_keenable_fetch_uses_get_with_api_key_header(monkeypatch):
         "url": "https://api.keenable.ai/v1/fetch",
         "params": {"url": "https://example.com"},
         "headers": {"X-API-Key": "keenable-key", "X-Keenable-Title": "astrbot"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_keenable_fetch_without_key_uses_public_endpoint(monkeypatch):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={"url": "https://example.com", "content": "# Example"},
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    result = await tools._keenable_fetch({}, {"url": "https://example.com"})
+
+    assert result == {"url": "https://example.com", "content": "# Example"}
+    assert session.got == {
+        "url": "https://api.keenable.ai/v1/fetch/public",
+        "params": {"url": "https://example.com"},
+        "headers": {"X-Keenable-Title": "astrbot"},
     }
 
 

@@ -135,7 +135,7 @@
                 },
                 "websearch_keenable_key": {
                     "description": "API-ключ Keenable",
-                    "hint": "Можно добавить несколько ключей для ротации. Получить ключ: [https://keenable.ai](https://keenable.ai)."
+                    "hint": "Необязательно. Keenable работает без ключа на бесплатном тарифе (1000 запросов в час); добавьте один или несколько ключей, чтобы снять ограничение. Получить ключ: [https://keenable.ai](https://keenable.ai)."
                 },
                 "web_search_link": {
                     "description": "Показывать ссылки на источники"

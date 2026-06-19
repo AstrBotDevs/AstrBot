@@ -65,17 +65,23 @@ class _KeyRotator:
     index: int = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-    async def get(self, provider_settings: dict) -> str:
+    async def get_optional(self, provider_settings: dict) -> str:
         keys = provider_settings.get(self.setting_name, [])
         if not keys:
-            raise ValueError(
-                f"Error: {self.provider_name} API key is not configured in AstrBot."
-            )
+            return ""
 
         async with self.lock:
             key = keys[self.index]
             self.index = (self.index + 1) % len(keys)
             return key
+
+    async def get(self, provider_settings: dict) -> str:
+        key = await self.get_optional(provider_settings)
+        if not key:
+            raise ValueError(
+                f"Error: {self.provider_name} API key is not configured in AstrBot."
+            )
+        return key
 
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
@@ -382,15 +388,21 @@ async def _keenable_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    api_key = await _KEENABLE_KEY_ROTATOR.get(provider_settings)
+    api_key = await _KEENABLE_KEY_ROTATOR.get_optional(provider_settings)
     header = {
-        "X-API-Key": api_key,
         "X-Keenable-Title": "astrbot",
         "Content-Type": "application/json",
     }
+    # Without a key the token-less /public endpoint serves the free tier
+    # (1000 req/hour); a key removes the limit on the authenticated endpoint.
+    url = "https://api.keenable.ai/v1/search"
+    if api_key:
+        header["X-API-Key"] = api_key
+    else:
+        url += "/public"
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.post(
-            "https://api.keenable.ai/v1/search",
+            url,
             json=payload,
             headers=header,
         ) as response:
@@ -412,11 +424,16 @@ async def _keenable_search(
 
 
 async def _keenable_fetch(provider_settings: dict, params: dict) -> dict:
-    api_key = await _KEENABLE_KEY_ROTATOR.get(provider_settings)
-    header = {"X-API-Key": api_key, "X-Keenable-Title": "astrbot"}
+    api_key = await _KEENABLE_KEY_ROTATOR.get_optional(provider_settings)
+    header = {"X-Keenable-Title": "astrbot"}
+    url = "https://api.keenable.ai/v1/fetch"
+    if api_key:
+        header["X-API-Key"] = api_key
+    else:
+        url += "/public"
     async with aiohttp.ClientSession(trust_env=True) as session:
         async with session.get(
-            "https://api.keenable.ai/v1/fetch",
+            url,
             params=params,
             headers=header,
         ) as response:
@@ -906,9 +923,6 @@ class KeenableWebSearchTool(FunctionTool[AstrAgentContext]):
 
     async def call(self, context, **kwargs) -> ToolExecResult:
         _, provider_settings, _ = _get_runtime(context)
-        if not provider_settings.get("websearch_keenable_key", []):
-            return "Error: Keenable API key is not configured in AstrBot."
-
         payload = {"query": kwargs["query"]}
         for key in (
             "site",
@@ -953,9 +967,6 @@ class KeenableExtractWebPageTool(FunctionTool[AstrAgentContext]):
 
     async def call(self, context, **kwargs) -> ToolExecResult:
         _, provider_settings, _ = _get_runtime(context)
-        if not provider_settings.get("websearch_keenable_key", []):
-            return "Error: Keenable API key is not configured in AstrBot."
-
         url = str(kwargs.get("url", "")).strip()
         if not url:
             return "Error: url must be a non-empty string."

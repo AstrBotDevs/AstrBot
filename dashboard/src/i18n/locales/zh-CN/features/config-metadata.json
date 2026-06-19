@@ -137,7 +137,7 @@
         },
         "websearch_keenable_key": {
           "description": "Keenable API Key",
-          "hint": "可添加多个 Key 进行轮询。获取地址:[https://keenable.ai](https://keenable.ai)"
+          "hint": "可选。Keenable 免费额度无需 Key（每小时 1000 次请求）；添加一个或多个 Key 可解除该限制。获取地址:[https://keenable.ai](https://keenable.ai)"
         },
         "web_search_link": {
           "description": "显示来源引用"
