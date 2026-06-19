@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import mimetypes
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -46,7 +47,10 @@ from astrbot.core.utils.astrbot_path import (  # noqa: E402
 from astrbot.core.utils.io import (  # noqa: E402
     download_dashboard,
     get_bundled_dashboard_dist_path,
-    get_dashboard_version,
+    get_dashboard_dist_version,
+    is_dashboard_dist_compatible,
+    is_dashboard_version_compatible,
+    remove_dir,
     should_use_bundled_dashboard_dist,
 )
 from astrbot.core.utils.runtime_env import is_packaged_desktop_runtime  # noqa: E402
@@ -91,7 +95,15 @@ def check_env() -> None:
 
 
 async def check_dashboard_files(webui_dir: str | None = None):
-    """下载管理面板文件"""
+    """Resolve and repair dashboard static files for startup.
+
+    Args:
+        webui_dir: Optional explicit WebUI directory path from CLI.
+
+    Returns:
+        The directory path to serve, or None when no usable WebUI can be prepared.
+    """
+
     # 指定webui目录
     if webui_dir:
         if os.path.exists(webui_dir):
@@ -99,40 +111,81 @@ async def check_dashboard_files(webui_dir: str | None = None):
             return webui_dir
         logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
 
-    data_dist_path = os.path.join(get_astrbot_data_path(), "dist")
-    if os.path.exists(data_dist_path):
-        v = await get_dashboard_version()
+    data_dist_path = Path(get_astrbot_data_path()) / "dist"
+    bundled_dist = get_bundled_dashboard_dist_path()
+    if data_dist_path.exists():
+        v = get_dashboard_dist_version(data_dist_path)
+        if is_dashboard_dist_compatible(data_dist_path, VERSION):
+            logger.info("WebUI is up to date.")
+            return str(data_dist_path)
+
         if should_use_bundled_dashboard_dist(data_dist_path, VERSION):
-            bundled_dist = get_bundled_dashboard_dist_path()
             logger.info(
-                "Using bundled WebUI because data/dist is older than core version v%s.",
+                "Replacing data/dist with bundled WebUI because its version does not match core version v%s.",
                 VERSION,
             )
-            return str(bundled_dist)
-        if v is not None:
-            # 存在文件
-            if v == f"v{VERSION}":
-                logger.info("WebUI is up to date.")
-            else:
+            try:
+                remove_dir(str(data_dist_path))
+                shutil.copytree(bundled_dist, data_dist_path)
+                return str(data_dist_path)
+            except Exception as e:
                 logger.warning(
-                    "WebUI version mismatch: %s, expected v%s.",
-                    v,
-                    VERSION,
+                    "Failed to replace data/dist with bundled WebUI: %s. Using bundled WebUI directly.",
+                    e,
                 )
-        return data_dist_path
+                return str(bundled_dist)
+
+        if is_dashboard_version_compatible(v, VERSION):
+            logger.warning(
+                "WebUI files are incomplete for v%s. Re-downloading WebUI.",
+                VERSION,
+            )
+        elif v is not None:
+            logger.warning(
+                "WebUI version mismatch: %s, expected v%s. Re-downloading WebUI.",
+                v,
+                VERSION,
+            )
+        else:
+            logger.warning(
+                "WebUI version file is missing. Re-downloading WebUI v%s.",
+                VERSION,
+            )
+
+        try:
+            await download_dashboard(
+                version=f"v{VERSION}",
+                latest=False,
+                allow_insecure_ssl_fallback=False,
+            )
+        except Exception as e:
+            logger.critical(f"下载管理面板文件失败: {e}。")
+            return None
+        logger.info("管理面板下载完成。")
+        return str(data_dist_path)
+
+    if is_dashboard_dist_compatible(bundled_dist, VERSION):
+        logger.info(
+            "Using bundled WebUI v%s.", get_dashboard_dist_version(bundled_dist)
+        )
+        return str(bundled_dist)
 
     logger.info(
         "Downloading WebUI. If it fails, download dist.zip from https://github.com/AstrBotDevs/AstrBot/releases/latest and extract dist to data/.",
     )
 
     try:
-        await download_dashboard(version=f"v{VERSION}", latest=False)
+        await download_dashboard(
+            version=f"v{VERSION}",
+            latest=False,
+            allow_insecure_ssl_fallback=False,
+        )
     except Exception as e:
         logger.critical(f"下载管理面板文件失败: {e}。")
         return None
 
     logger.info("管理面板下载完成。")
-    return data_dist_path
+    return str(data_dist_path)
 
 
 async def main_async(webui_dir_arg: str | None) -> None:

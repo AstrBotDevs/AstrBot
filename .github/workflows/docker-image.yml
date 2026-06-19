@@ -46,14 +46,21 @@ jobs:
 
       - name: Build Dashboard
         run: |
+          dashboard_version=$(python3 - <<'PY'
+          import tomllib
+          with open("pyproject.toml", "rb") as f:
+              print("v" + tomllib.load(f)["project"]["version"])
+          PY
+          )
           cd dashboard
           npm install
           npm run build
           mkdir -p dist/assets
-          echo $(git rev-parse HEAD) > dist/assets/version
+          echo "$dashboard_version" > dist/assets/version
           cd ..
-          mkdir -p data
-          cp -r dashboard/dist data/
+          mkdir -p astrbot/dashboard
+          rm -rf astrbot/dashboard/dist
+          cp -r dashboard/dist astrbot/dashboard/dist
 
       - name: Determine test image tags
         id: test-meta
@@ -157,10 +164,11 @@ jobs:
           npm install
           npm run build
           mkdir -p dist/assets
-          echo $(git rev-parse HEAD) > dist/assets/version
+          echo "${{ steps.release-meta.outputs.version }}" > dist/assets/version
           cd ..
-          mkdir -p data
-          cp -r dashboard/dist data/
+          mkdir -p astrbot/dashboard
+          rm -rf astrbot/dashboard/dist
+          cp -r dashboard/dist astrbot/dashboard/dist
 
       - name: Set QEMU
         uses: docker/setup-qemu-action@v4.1.0

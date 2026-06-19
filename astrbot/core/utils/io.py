@@ -183,8 +183,22 @@ async def download_file(
     path: str,
     show_progress: bool = False,
     progress_callback=None,
+    allow_insecure_ssl_fallback: bool = True,
 ) -> None:
-    """从指定 url 下载文件到指定路径 path"""
+    """Download a remote file to a local path.
+
+    Args:
+        url: Remote URL to download.
+        path: Local destination path.
+        show_progress: Whether to print progress to stdout.
+        progress_callback: Optional callback for progress payloads.
+        allow_insecure_ssl_fallback: Whether certificate failures may retry with
+            TLS certificate verification disabled.
+
+    Returns:
+        None.
+    """
+
     try:
         ssl_context = ssl.create_default_context(
             cafile=certifi.where(),
@@ -259,6 +273,8 @@ async def download_file(
                     },
                 )
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
+        if not allow_insecure_ssl_fallback:
+            raise
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
             f"SSL certificate verification failed for {_safe_url_for_log(url)}. "
@@ -355,10 +371,22 @@ def get_local_ip_addresses():
     return network_ips
 
 
-def _read_dashboard_dist_version(dist_dir: str | Path) -> str | None:
+def get_dashboard_dist_version(dist_dir: str | Path) -> str | None:
+    """Read the WebUI version from a dashboard dist directory.
+
+    Args:
+        dist_dir: Dashboard dist directory path.
+
+    Returns:
+        The version string from assets/version, or None when unavailable.
+    """
+
     version_file = Path(dist_dir) / "assets" / "version"
-    if version_file.exists():
-        return version_file.read_text(encoding="utf-8").strip()
+    try:
+        if version_file.exists():
+            return version_file.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.warning("Failed to read WebUI version from %s: %s", version_file, exc)
     return None
 
 
@@ -380,42 +408,106 @@ def _normalize_dashboard_version(version: str) -> str:
     return version
 
 
-def should_use_bundled_dashboard_dist(
-    user_dist: str | Path, current_version: str
+def is_dashboard_version_compatible(
+    dashboard_version: str | None, current_version: str
 ) -> bool:
-    user_version = _read_dashboard_dist_version(user_dist)
-    bundled_dist = get_bundled_dashboard_dist_path()
-    if user_version is None or not bundled_dist.exists():
+    """Check whether a WebUI version matches the current core version.
+
+    Args:
+        dashboard_version: Version read from the WebUI assets/version file.
+        current_version: Current AstrBot core version.
+
+    Returns:
+        True when both versions are valid SemVer values and compare equal.
+    """
+
+    if dashboard_version is None:
         return False
     try:
         return (
             VersionComparator.compare_version(
+                _normalize_dashboard_version(dashboard_version),
                 _normalize_dashboard_version(current_version),
-                _normalize_dashboard_version(user_version),
             )
-            > 0
+            == 0
         )
     except (TypeError, ValueError):
         return False
 
 
+def is_dashboard_dist_compatible(dist_dir: str | Path, current_version: str) -> bool:
+    """Check whether a WebUI dist is complete and matches the core version.
+
+    Args:
+        dist_dir: Dashboard dist directory path.
+        current_version: Current AstrBot core version.
+
+    Returns:
+        True when the dist has an index file and a compatible assets/version.
+    """
+
+    dist_path = Path(dist_dir)
+    return (dist_path / "index.html").is_file() and is_dashboard_version_compatible(
+        get_dashboard_dist_version(dist_path),
+        current_version,
+    )
+
+
+def should_use_bundled_dashboard_dist(
+    user_dist: str | Path, current_version: str
+) -> bool:
+    """Decide whether bundled WebUI should replace a user data dist.
+
+    Args:
+        user_dist: Runtime dashboard dist directory under data/.
+        current_version: Current AstrBot core version.
+
+    Returns:
+        True when user_dist exists but is missing or mismatched against the
+        current core version, and bundled WebUI matches the current core version.
+    """
+
+    user_dist = Path(user_dist)
+    user_version = get_dashboard_dist_version(user_dist)
+    bundled_dist = get_bundled_dashboard_dist_path()
+    if not user_dist.exists() or not is_dashboard_dist_compatible(
+        bundled_dist,
+        current_version,
+    ):
+        return False
+    if user_version is None or not (user_dist / "index.html").is_file():
+        return True
+    try:
+        return not is_dashboard_version_compatible(user_version, current_version)
+    except (TypeError, ValueError):
+        return False
+
+
 async def get_dashboard_version():
+    """Return the effective WebUI version for the current runtime.
+
+    Returns:
+        The matching data/dist version, matching bundled version, or the raw
+        data/dist version when no compatible bundled WebUI is available.
+    """
+
+    from astrbot.core.config.default import VERSION
+
     # First check user data directory (manually updated / downloaded dashboard).
     dist_dir = os.path.join(get_astrbot_data_path(), "dist")
     if os.path.exists(dist_dir):
-        from astrbot.core.config.default import VERSION
+        user_version = get_dashboard_dist_version(dist_dir)
+        if is_dashboard_dist_compatible(dist_dir, VERSION):
+            return user_version
 
-        if should_use_bundled_dashboard_dist(dist_dir, VERSION):
-            bundled_version = _read_dashboard_dist_version(
-                get_bundled_dashboard_dist_path()
-            )
-            if bundled_version is not None:
-                return bundled_version
-        return _read_dashboard_dist_version(dist_dir)
+        bundled = get_bundled_dashboard_dist_path()
+        if is_dashboard_dist_compatible(bundled, VERSION):
+            return get_dashboard_dist_version(bundled)
+        return user_version
 
     bundled = get_bundled_dashboard_dist_path()
-    if bundled.exists():
-        return _read_dashboard_dist_version(bundled)
+    if is_dashboard_dist_compatible(bundled, VERSION):
+        return get_dashboard_dist_version(bundled)
     return None
 
 
@@ -427,6 +519,7 @@ async def download_dashboard(
     proxy: str | None = None,
     progress_callback=None,
     extract: bool = True,
+    allow_insecure_ssl_fallback: bool = True,
 ) -> None:
     """Download dashboard assets and optionally extract them.
 
@@ -438,6 +531,8 @@ async def download_dashboard(
         proxy: Optional download proxy prefix.
         progress_callback: Optional callback for download progress payloads.
         extract: Whether to extract the archive after download.
+        allow_insecure_ssl_fallback: Whether certificate failures may retry with
+            TLS certificate verification disabled.
 
     Returns:
         None.
@@ -460,6 +555,7 @@ async def download_dashboard(
                 str(zip_path),
                 show_progress=True,
                 progress_callback=progress_callback,
+                allow_insecure_ssl_fallback=allow_insecure_ssl_fallback,
             )
             if not zipfile.is_zipfile(zip_path):
                 raise RuntimeError(
@@ -491,6 +587,7 @@ async def download_dashboard(
                 str(zip_path),
                 show_progress=True,
                 progress_callback=progress_callback,
+                allow_insecure_ssl_fallback=allow_insecure_ssl_fallback,
             )
             if not zipfile.is_zipfile(zip_path):
                 raise RuntimeError(
@@ -506,6 +603,7 @@ async def download_dashboard(
             str(zip_path),
             show_progress=True,
             progress_callback=progress_callback,
+            allow_insecure_ssl_fallback=allow_insecure_ssl_fallback,
         )
         if not zipfile.is_zipfile(zip_path):
             raise RuntimeError("Downloaded dashboard package is not a valid ZIP file")
