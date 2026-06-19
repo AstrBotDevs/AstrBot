@@ -3,6 +3,7 @@ import posixpath
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 import certifi
 import httpx
@@ -353,7 +354,8 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_fails(
 
     async def fake_download_file(url: str, path: str, progress_callback=None):  # noqa: ARG001
         calls.append(url)
-        if url.startswith("https://cdn.example"):
+        parsed = urlparse(url)
+        if parsed.scheme == "https" and parsed.hostname == "cdn.example":
             raise RuntimeError("404")
         Path(path).write_bytes(b"github-core")
 
