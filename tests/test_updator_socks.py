@@ -12,6 +12,7 @@ import pytest
 
 from astrbot.core.star.updator import PluginUpdator
 from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.utils import io as io_utils
 from astrbot.core.zip_updator import RepoZipUpdator
 
 
@@ -424,6 +425,47 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_is_not_zip(
     assert calls == [
         "https://cdn.example/core/v99.0.0/source.zip",
         "https://github.example/archive.zip",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_download_dashboard_falls_back_when_hosted_package_is_not_zip(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    async def fake_download_file(
+        url: str,
+        path: str,
+        show_progress: bool = False,  # noqa: ARG001
+        progress_callback=None,  # noqa: ARG001
+    ) -> None:
+        calls.append(url)
+        parsed = urlparse(url)
+        if (
+            parsed.scheme == "https"
+            and parsed.hostname == "astrbot-registry.soulter.top"
+        ):
+            Path(path).write_bytes(b"not a zip")
+            return
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("dist/index.html", "dashboard")
+
+    monkeypatch.setattr(io_utils, "download_file", fake_download_file)
+
+    zip_path = tmp_path / "dashboard.zip"
+    await io_utils.download_dashboard(
+        path=str(zip_path),
+        latest=False,
+        version="v99.0.0",
+        extract=False,
+    )
+
+    assert zipfile.is_zipfile(zip_path)
+    assert calls == [
+        "https://astrbot-registry.soulter.top/download/astrbot-dashboard/v99.0.0/dist.zip",
+        "https://github.com/AstrBotDevs/AstrBot/releases/download/v99.0.0/AstrBot-v99.0.0-dashboard.zip",
     ]
 
 
