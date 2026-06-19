@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import mcp
 import pytest
 
+from astrbot.core import astr_agent_tool_exec
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
@@ -180,6 +181,45 @@ async def test_execute_skips_permission_check_for_real_builtin_tool(
 
     assert calls == []
     assert results[0].content[0].text == "stubbed-output"
+
+
+@pytest.mark.asyncio
+async def test_execute_falls_back_to_global_llm_tools_when_ctx_lacks_manager(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Covers the llm_tools fallback when ctx has no get_llm_tool_manager."""
+    calls = []
+
+    async def _recording_check(name, ctx):
+        calls.append(name)
+        return f"error: Permission denied for {name}"
+
+    fake_global_manager = SimpleNamespace(check_tool_permission=_recording_check)
+    monkeypatch.setattr(astr_agent_tool_exec, "llm_tools", fake_global_manager)
+
+    event = _DummyEvent()
+    ctx = SimpleNamespace()  # no get_llm_tool_manager
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=ctx))
+
+    called = False
+
+    async def handler(ctx, **kw):
+        nonlocal called
+        called = True
+        return "should not run"
+
+    tool = FunctionTool(
+        name="plugin_tool",
+        description="d",
+        parameters={"type": "object", "properties": {}},
+        handler=handler,
+    )
+
+    results = [r async for r in FunctionToolExecutor.execute(tool, run_context)]
+
+    assert calls == ["plugin_tool"]
+    assert not called
+    assert "Permission denied" in results[0].content[0].text
 
 
 @pytest.mark.asyncio
