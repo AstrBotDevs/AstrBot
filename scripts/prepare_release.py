@@ -121,15 +121,10 @@ def latest_tag() -> str:
     Returns:
         The latest tag name, or an empty string when the repository has no tags.
     """
-    result = subprocess.run(
-        ["git", "describe", "--tags", "--abbrev=0"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
+    try:
+        return git(["describe", "--tags", "--abbrev=0"], capture_output=True)
+    except ReleaseError:
         return ""
-    return result.stdout.strip()
 
 
 def release_commits(tag: str) -> list[str]:
@@ -174,8 +169,14 @@ def update_pyproject_version(version: str) -> Path:
         if stripped.startswith("[") and stripped.endswith("]"):
             in_project_section = stripped == "[project]"
             continue
-        if not in_project_section or not stripped.startswith("version"):
+        if not in_project_section:
             continue
+
+        key, separator, _raw_value = stripped.partition("=")
+        if key.strip() != "version":
+            continue
+        if not separator:
+            raise ReleaseError("Unsupported pyproject.toml project.version format")
 
         match = re.match(
             r"^(\s*version\s*=\s*)([\"'])(.*?)(\2)(\s*(?:#.*)?)(\n?)$",
@@ -209,6 +210,7 @@ def write_changelog(version: str, commits: list[str]) -> Path:
     if changelog_path.exists():
         raise ReleaseError(f"Changelog already exists: {changelog_path}")
 
+    changelog_path.parent.mkdir(parents=True, exist_ok=True)
     entries = [f"- {commit}" for commit in commits] or ["- "]
     changelog_path.write_text(
         "\n".join(
@@ -270,7 +272,7 @@ def run_validation(args: argparse.Namespace) -> None:
         run_command(["pnpm", "generate:api"], cwd=REPO_ROOT / "dashboard")
 
     if not args.skip_checks:
-        run_command(["uv", "run", "ruff", "format", "."])
+        run_command(["uv", "run", "ruff", "format", "--check", "."])
         run_command(["uv", "run", "ruff", "check", "."])
 
     if args.dashboard_build:

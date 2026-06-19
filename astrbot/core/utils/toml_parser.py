@@ -3,6 +3,75 @@
 from pathlib import Path
 
 
+def _read_quoted_value(value: str, field_name: str) -> tuple[str, str]:
+    """Read one quoted TOML string value and return its tail.
+
+    Args:
+        value: Raw value text that starts with a quoted string.
+        field_name: Field name used in error messages.
+
+    Returns:
+        A tuple containing the unquoted string and the remaining text.
+
+    Raises:
+        ValueError: The value is not a supported quoted string.
+    """
+    value = value.strip()
+    if len(value) < 2 or value[0] not in ("'", '"'):
+        raise ValueError(f"Unsupported {field_name} value")
+
+    quote = value[0]
+    end_index = value.find(quote, 1)
+    if end_index == -1:
+        raise ValueError(f"Unterminated {field_name} string")
+
+    result = value[1:end_index]
+    if not result:
+        raise ValueError(f"Empty {field_name} value")
+    return result, value[end_index + 1 :].strip()
+
+
+def _read_dependency_array(raw_value: str) -> list[str]:
+    """Read a simple inline TOML string array.
+
+    Args:
+        raw_value: Raw dependency array text, including the surrounding brackets.
+
+    Returns:
+        Parsed dependency strings.
+
+    Raises:
+        ValueError: The array is missing brackets or contains unsupported entries.
+    """
+    value = raw_value.strip()
+    if not value.startswith("["):
+        raise ValueError("Unsupported project.dependencies value")
+
+    dependencies = []
+    value = value[1:].strip()
+    while value:
+        if value.startswith("]"):
+            tail = value[1:].strip()
+            if tail and not tail.startswith("#"):
+                raise ValueError("Unsupported content after project.dependencies")
+            return dependencies
+
+        dependency, tail = _read_quoted_value(value, "project.dependencies entry")
+        dependencies.append(dependency)
+
+        if tail.startswith(","):
+            value = tail[1:].strip()
+            continue
+        if tail.startswith("]"):
+            value = tail
+            continue
+        if tail:
+            raise ValueError("Unsupported content after project.dependencies entry")
+        raise ValueError("Unterminated project.dependencies array")
+
+    raise ValueError("Unterminated project.dependencies array")
+
+
 def read_pyproject_project_version(pyproject_path: Path) -> str:
     """Read the project version from a pyproject.toml file.
 
@@ -35,22 +104,9 @@ def read_pyproject_project_version(pyproject_path: Path) -> str:
         if not separator:
             raise ValueError("Missing value separator for project.version")
 
-        value = raw_value.strip()
-        if len(value) < 2 or value[0] not in ("'", '"'):
-            raise ValueError("Unsupported project.version value")
-
-        quote = value[0]
-        end_index = value.find(quote, 1)
-        if end_index == -1:
-            raise ValueError("Unterminated project.version string")
-
-        tail = value[end_index + 1 :].strip()
+        version, tail = _read_quoted_value(raw_value, "project.version")
         if tail and not tail.startswith("#"):
             raise ValueError("Unsupported content after project.version")
-
-        version = value[1:end_index]
-        if not version:
-            raise ValueError("Empty project.version value")
         return version
 
     raise ValueError("Missing project.version")
@@ -85,24 +141,21 @@ def read_pyproject_project_dependencies(pyproject_path: Path) -> list[str]:
                     raise ValueError("Unsupported content after project.dependencies")
                 return dependencies
 
-            value = line.rstrip(",").strip()
-            if len(value) < 2 or value[0] not in ("'", '"'):
-                raise ValueError("Unsupported project.dependencies entry")
-
-            quote = value[0]
-            end_index = value.find(quote, 1)
-            if end_index == -1:
-                raise ValueError("Unterminated project.dependencies entry")
-
-            tail = value[end_index + 1 :].strip()
+            dependency, tail = _read_quoted_value(
+                line,
+                "project.dependencies entry",
+            )
             if tail.startswith(","):
                 tail = tail[1:].strip()
+            if tail.startswith("]"):
+                tail = tail[1:].strip()
+                dependencies.append(dependency)
+                if tail and not tail.startswith("#"):
+                    raise ValueError("Unsupported content after project.dependencies")
+                return dependencies
             if tail and not tail.startswith("#"):
                 raise ValueError("Unsupported content after project.dependencies entry")
 
-            dependency = value[1:end_index]
-            if not dependency:
-                raise ValueError("Empty project.dependencies entry")
             dependencies.append(dependency)
             continue
 
@@ -116,9 +169,15 @@ def read_pyproject_project_dependencies(pyproject_path: Path) -> list[str]:
         key, separator, raw_value = line.partition("=")
         if key.strip() != "dependencies":
             continue
-        if not separator or raw_value.strip() != "[":
+        if not separator:
             raise ValueError("Unsupported project.dependencies value")
-        in_dependencies_array = True
+        raw_value = raw_value.strip()
+        if raw_value == "[" or raw_value.startswith("[ #"):
+            in_dependencies_array = True
+            continue
+        if raw_value.startswith("["):
+            return _read_dependency_array(raw_value)
+        raise ValueError("Unsupported project.dependencies value")
 
     if in_dependencies_array:
         raise ValueError("Unterminated project.dependencies array")
