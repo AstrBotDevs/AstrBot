@@ -1,11 +1,39 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
+import re
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
+from pathlib import Path
 
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.toml_parser import read_pyproject_project_version
 
-VERSION = "4.26.0-beta.8"
+try:
+    import tomllib
+except ModuleNotFoundError:
+    # <= Python 3.10 compatibility
+    tomllib = None
+
+try:
+    pyproject_path = Path(__file__).resolve().parents[3] / "pyproject.toml"
+    if tomllib is None:
+        VERSION = read_pyproject_project_version(pyproject_path)
+    else:
+        with pyproject_path.open("rb") as f:
+            VERSION = tomllib.load(f)["project"]["version"]
+except (FileNotFoundError, IndexError, KeyError, TypeError, ValueError):
+    try:
+        VERSION = package_version("astrbot")  # PEP 440 version style, e.g. 1.2.3a4
+        match = re.match(r"^(\d+(?:\.\d+)*)(a|b|rc)(\d+)$", VERSION)
+        if match:
+            release, prerelease, number = match.groups()
+            prerelease = {"a": "alpha", "b": "beta", "rc": "rc"}[prerelease]
+            VERSION = f"{release}-{prerelease}.{number}"
+    except PackageNotFoundError:
+        VERSION = "0.0.0"
+
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
