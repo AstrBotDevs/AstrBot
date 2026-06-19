@@ -210,78 +210,6 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"{e!s}"
 
 
-class _PermissionGuardedTool(FunctionTool):
-    """Transparent proxy that checks per-tool permissions before delegating.
-
-    Only wraps non-builtin tools. Builtin tools are added to the tool set
-    without wrapping, so their existing hardcoded permission logic
-    (``check_admin_permission`` / ``_is_restricted_env``) is unaffected.
-
-    The ``handler`` field is intentionally kept ``None`` so that
-    ``FunctionToolExecutor._execute_local`` falls through to the
-    ``is_override_call`` branch and invokes our ``call()`` instead of
-    calling the raw handler directly.  This ensures the permission
-    check runs for *every* invocation path.
-    """
-
-    def __init__(
-        self,
-        tool: FunctionTool,
-        manager: FunctionToolManager,
-    ) -> None:
-        # Do NOT pass handler to the parent — keep self.handler = None
-        # so the tool executor always routes through our call().
-        super().__init__(
-            name=tool.name,
-            description=tool.description,
-            parameters=getattr(tool, "parameters", {}),
-        )
-        self._wrapped = tool
-        self._mgr = manager
-        # Mirror mutable state from the underlying tool
-        self.active = getattr(tool, "active", True)
-        self.handler_module_path = getattr(tool, "handler_module_path", None)
-
-    async def call(self, context: Any, **kwargs: Any) -> Any:
-        import inspect as _inspect
-
-        error = self._mgr._check_tool_permission(self.name, context)
-        if error is not None:
-            return error
-
-        # Delegate to handler first (plugin tools).
-        if self._wrapped.handler is not None:
-            result = self._wrapped.handler(context, **kwargs)
-            if _inspect.isasyncgen(result):
-                last: Any = None
-                async for item in result:
-                    last = item
-                return last
-            if _inspect.isawaitable(result):
-                return await result
-            return result
-
-        # Fall back to overridden call() on subclasses (e.g. MCPTool).
-        call_override = getattr(type(self._wrapped), "call", None)
-        if call_override is not None and call_override is not FunctionTool.call:
-            return await self._wrapped.call(context, **kwargs)
-
-        run = getattr(self._wrapped, "run", None)
-        if run is not None:
-            event = context.context.event
-            result = run(event, **kwargs)
-            if _inspect.isasyncgen(result):
-                last: Any = None
-                async for item in result:
-                    last = item
-                return last
-            if _inspect.isawaitable(result):
-                return await result
-            return result
-
-        return "error: tool has no callable handler"
-
-
 class FunctionToolManager:
     def __init__(self) -> None:
         self.func_list: list[FuncTool] = []
@@ -453,7 +381,7 @@ class FunctionToolManager:
         Builtin tools are never routed through this method."""
         return "member"
 
-    def _check_tool_permission(
+    async def check_tool_permission(
         self,
         tool_name: str,
         context: Any,
@@ -463,11 +391,13 @@ class FunctionToolManager:
         Only non-builtin tools are guarded. Permission is resolved from
         ``tool_permissions`` in SharedPreferences (``_default`` key). When
         no explicit entry exists the tool inherits the fallback
-        ``_default_permission``."""
+        ``_default_permission``.
+
+        Called from ``FunctionToolExecutor.execute()`` — that's the single
+        enforcement point now, not toolset construction.
+        """
         try:
-            perms_raw = sp.get(
-                "tool_permissions", {}, scope="global", scope_id="global"
-            )
+            perms_raw = await sp.get_async("global", "global", "tool_permissions", {})
         except Exception:
             perms_raw = {}
         defaults = perms_raw.get("_default", {}) if isinstance(perms_raw, dict) else {}
@@ -501,13 +431,13 @@ class FunctionToolManager:
         因此，后加载的 inactive 工具不会覆盖已激活的工具；
         同时，MCP 工具在需要时仍可覆盖被禁用的内置工具。
 
-        Non-builtin tools are wrapped with ``_PermissionGuardedTool`` so that
-        every invocation checks the per-tool permission configured via the
-        dashboard.
+        Per-tool permissions are now enforced in
+        ``FunctionToolExecutor.execute()``, not here — tools are returned
+        unwrapped.
         """
         tool_set = ToolSet()
         for tool in self.func_list:
-            tool_set.add_tool(_PermissionGuardedTool(tool, self))
+            tool_set.add_tool(tool)
         return tool_set
 
     @staticmethod
