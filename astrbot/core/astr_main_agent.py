@@ -261,6 +261,20 @@ async def _get_session_conv(
     return conversation
 
 
+def _wrap_system_block(name: str, content: str | None) -> str:
+    """Wrap a system prompt fragment with clear XML-like boundaries.
+
+    This keeps persona, skills, runtime, and tool-use instructions visually
+    separated even though the provider receives them as one system prompt.
+    """
+    if not content:
+        return ""
+    content = str(content).strip()
+    if not content:
+        return ""
+    return f"\n<{name}>\n{content}\n</{name}>\n"
+
+
 async def _apply_kb(
     event: AstrMessageEvent,
     req: ProviderRequest,
@@ -279,8 +293,9 @@ async def _apply_kb(
             if not kb_result:
                 return
             if req.system_prompt is not None:
-                req.system_prompt += (
-                    f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
+                req.system_prompt += _wrap_system_block(
+                    "related_knowledge_base_results",
+                    kb_result,
                 )
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while retrieving knowledge base: %s", exc)
@@ -382,12 +397,13 @@ def _apply_workspace_extra_prompt(
     if not extra_prompt:
         return
 
-    req.system_prompt = (
-        f"{req.system_prompt or ''}\n"
-        "[Workspace Extra Prompt]\n"
-        "The following instructions are loaded from the current workspace "
-        "`EXTRA_PROMPT.md` file.\n"
-        f"{extra_prompt}\n"
+    req.system_prompt = (req.system_prompt or "") + _wrap_system_block(
+        "workspace_extra_prompt",
+        (
+            "The following instructions are loaded from the current workspace "
+            "`EXTRA_PROMPT.md` file.\n"
+            f"{extra_prompt}"
+        ),
     )
 
 
@@ -401,7 +417,11 @@ def _apply_local_env_tools(req: ProviderRequest, plugin_context: Context) -> Non
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
     req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    req.system_prompt = f"{req.system_prompt or ''}\n{_build_local_mode_prompt()}\n"
+    req.system_prompt = f"{req.system_prompt or ''}"
+    req.system_prompt += _wrap_system_block(
+        "runtime_environment",
+        _build_local_mode_prompt(),
+    )
 
 
 def _build_local_mode_prompt() -> str:
@@ -483,11 +503,17 @@ async def _ensure_persona_and_skills(
     if persona:
         # Inject persona system prompt
         if prompt := persona["prompt"]:
-            req.system_prompt += f"\n# Persona Instructions\n\n{prompt}\n"
+            req.system_prompt += _wrap_system_block(
+                "persona_instructions",
+                prompt,
+            )
         if begin_dialogs := copy.deepcopy(persona.get("_begin_dialogs_processed")):
             req.contexts[:0] = begin_dialogs
     elif use_webchat_special_default:
-        req.system_prompt += CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT
+        req.system_prompt += _wrap_system_block(
+            "persona_instructions",
+            CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
+        )
 
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "local")
@@ -515,12 +541,18 @@ async def _ensure_persona_and_skills(
                 skills_by_name[skill.name] = skill
             skills = [skills_by_name[name] for name in sorted(skills_by_name)]
         if skills:
-            req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
+            req.system_prompt += _wrap_system_block(
+                "available_skills",
+                build_skills_prompt(skills),
+            )
             if runtime == "none":
-                req.system_prompt += (
-                    "User has not enabled the Computer Use feature. "
-                    "You cannot use shell or Python to perform skills. "
-                    "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
+                req.system_prompt += _wrap_system_block(
+                    "computer_use_disabled_notice",
+                    (
+                        "User has not enabled the Computer Use feature. "
+                        "You cannot use shell or Python to perform skills. "
+                        "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
+                    ),
                 )
     tmgr = plugin_context.get_llm_tool_manager()
 
@@ -604,7 +636,10 @@ async def _ensure_persona_and_skills(
             .get("router_system_prompt", "")
         ).strip()
         if router_prompt:
-            req.system_prompt += f"\n{router_prompt}\n"
+            req.system_prompt += _wrap_system_block(
+                "subagent_routing_instructions",
+                router_prompt,
+            )
     try:
         event.trace.record(
             "sel_persona",
@@ -1070,7 +1105,13 @@ async def _handle_webchat(
 
 def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -> None:
     if config.safety_mode_strategy == "system_prompt":
-        req.system_prompt = f"{LLM_SAFETY_MODE_SYSTEM_PROMPT}\n\n{req.system_prompt}"
+        req.system_prompt = (
+            _wrap_system_block(
+                "safety_instructions",
+                LLM_SAFETY_MODE_SYSTEM_PROMPT,
+            ).lstrip()
+            + f"\n{req.system_prompt or ''}"
+        )
     else:
         logger.warning(
             "Unsupported llm_safety_mode strategy: %s.",
@@ -1109,23 +1150,27 @@ def _apply_sandbox_tools(
     if booter == "shipyard_neo":
         # Neo-specific path rule: filesystem tools operate relative to sandbox
         # workspace root. Do not prepend "/workspace".
-        req.system_prompt += (
-            "\n[Shipyard Neo File Path Rule]\n"
-            "When using sandbox filesystem tools (upload/download/read/write/list/delete), "
-            "always pass paths relative to the sandbox workspace root. "
-            "Example: use `baidu_homepage.png` instead of `/workspace/baidu_homepage.png`.\n"
+        req.system_prompt += _wrap_system_block(
+            "shipyard_neo_file_path_rule",
+            (
+                "When using sandbox filesystem tools (upload/download/read/write/list/delete), "
+                "always pass paths relative to the sandbox workspace root. "
+                "Example: use `baidu_homepage.png` instead of `/workspace/baidu_homepage.png`."
+            ),
         )
 
-        req.system_prompt += (
-            "\n[Neo Skill Lifecycle Workflow]\n"
-            "When user asks to create/update a reusable skill in Neo mode, use lifecycle tools instead of directly writing local skill folders.\n"
-            "Preferred sequence:\n"
-            "1) Use `astrbot_create_skill_payload` to store canonical payload content and get `payload_ref`.\n"
-            "2) Use `astrbot_create_skill_candidate` with `skill_key` + `source_execution_ids` (and optional `payload_ref`) to create a candidate.\n"
-            "3) Use `astrbot_promote_skill_candidate` to release: `stage=canary` for trial; `stage=stable` for production.\n"
-            "For stable release, set `sync_to_local=true` to sync `payload.skill_markdown` into local `SKILL.md`.\n"
-            "Do not treat ad-hoc generated files as reusable Neo skills unless they are captured via payload/candidate/release.\n"
-            "To update an existing skill, create a new payload/candidate and promote a new release version; avoid patching old local folders directly.\n"
+        req.system_prompt += _wrap_system_block(
+            "neo_skill_lifecycle_workflow",
+            (
+                "When user asks to create/update a reusable skill in Neo mode, use lifecycle tools instead of directly writing local skill folders.\n"
+                "Preferred sequence:\n"
+                "1) Use `astrbot_create_skill_payload` to store canonical payload content and get `payload_ref`.\n"
+                "2) Use `astrbot_create_skill_candidate` with `skill_key` + `source_execution_ids` (and optional `payload_ref`) to create a candidate.\n"
+                "3) Use `astrbot_promote_skill_candidate` to release: `stage=canary` for trial; `stage=stable` for production.\n"
+                "For stable release, set `sync_to_local=true` to sync `payload.skill_markdown` into local `SKILL.md`.\n"
+                "Do not treat ad-hoc generated files as reusable Neo skills unless they are captured via payload/candidate/release.\n"
+                "To update an existing skill, create a new payload/candidate and promote a new release version; avoid patching old local folders directly."
+            ),
         )
 
         # Determine sandbox capabilities from an already-booted session.
@@ -1159,22 +1204,28 @@ def _apply_sandbox_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
 
     if booter == "cua":
-        req.system_prompt += (
-            "\n[CUA Desktop Control]\n"
-            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
-            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
-            "After each visible step, call `astrbot_cua_screenshot` with "
-            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
-            "monitor progress. When typing, inspect the screenshot first and confirm "
-            "the target field is focused and empty or safe to append to. Use "
-            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
-            "for text input; use text=`\\n` for Enter.\n"
+        req.system_prompt += _wrap_system_block(
+            "cua_desktop_control_instructions",
+            (
+                "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
+                'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
+                "After each visible step, call `astrbot_cua_screenshot` with "
+                "`send_to_user=true` and `return_image_to_llm=true` so the user can "
+                "monitor progress. When typing, inspect the screenshot first and confirm "
+                "the target field is focused and empty or safe to append to. Use "
+                "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
+                "for text input; use text=`\\n` for Enter."
+            ),
         )
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
 
-    req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
+    req.system_prompt = f"{req.system_prompt or ''}"
+    req.system_prompt += _wrap_system_block(
+        "sandbox_mode_instructions",
+        SANDBOX_MODE_PROMPT,
+    )
 
 
 def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:
@@ -1597,18 +1648,27 @@ async def build_main_agent(
         )
 
         if config.computer_use_runtime == "local":
-            tool_prompt += (
-                f"\nCurrent workspace you can use: "
-                f"`{_get_workspace_path_for_umo(event.unified_msg_origin)}`\n"
-                "Unless the user explicitly specifies a different directory, "
-                "perform all file-related operations in this workspace.\n"
+            req.system_prompt = (req.system_prompt or "") + _wrap_system_block(
+                "workspace_runtime_rule",
+                (
+                    f"Current workspace you can use: "
+                    f"`{_get_workspace_path_for_umo(event.unified_msg_origin)}`\n"
+                    "Unless the user explicitly specifies a different directory, "
+                    "perform all file-related operations in this workspace."
+                ),
             )
 
-        req.system_prompt += f"\n{tool_prompt}\n"
+        req.system_prompt = (req.system_prompt or "") + _wrap_system_block(
+            "tool_use_instructions",
+            tool_prompt,
+        )
 
     action_type = event.get_extra("action_type")
     if action_type == "live":
-        req.system_prompt += f"\n{LIVE_MODE_SYSTEM_PROMPT}\n"
+        req.system_prompt = (req.system_prompt or "") + _wrap_system_block(
+            "live_mode_instructions",
+            LIVE_MODE_SYSTEM_PROMPT,
+        )
 
     _apply_web_search_citation_prompt(event, req)
 

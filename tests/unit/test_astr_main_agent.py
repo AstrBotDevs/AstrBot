@@ -377,8 +377,9 @@ class TestApplyKb:
         ):
             await module._apply_kb(mock_event, req, mock_context, config)
 
-        assert "[Related Knowledge Base Results]:" in req.system_prompt
+        assert "<related_knowledge_base_results>" in req.system_prompt
         assert "KB result" in req.system_prompt
+        assert "</related_knowledge_base_results>" in req.system_prompt
 
     @pytest.mark.asyncio
     async def test_apply_kb_with_agentic_mode(self, mock_event, mock_context):
@@ -2239,7 +2240,9 @@ class TestApplyLlmSafetyMode:
 
         module._apply_llm_safety_mode(config, req)
 
-        assert req.system_prompt.startswith("You are running in Safe Mode")
+        assert req.system_prompt.startswith("<safety_instructions>")
+        assert "You are running in Safe Mode" in req.system_prompt
+        assert "</safety_instructions>" in req.system_prompt
         assert "My custom prompt" in req.system_prompt
 
     def test_apply_llm_safety_mode_with_none_system_prompt(self):
