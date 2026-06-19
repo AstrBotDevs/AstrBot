@@ -1,6 +1,10 @@
+from types import SimpleNamespace
+
+import httpx
 import pytest
 
 from astrbot.core.exceptions import EmptyModelOutputError
+import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
@@ -27,3 +31,35 @@ def test_gemini_reasoning_only_output_is_allowed():
         response_id="resp_reasoning",
         finish_reason="STOP",
     )
+
+
+@pytest.mark.asyncio
+async def test_gemini_get_models_retries_transient_request_error(monkeypatch):
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
+
+    class FakeModels:
+        def __init__(self):
+            self.calls = 0
+
+        async def list(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise httpx.ConnectError("temporary connection failure")
+            return [
+                SimpleNamespace(
+                    name="models/gemini-a",
+                    supported_actions=["generateContent"],
+                ),
+                SimpleNamespace(
+                    name="models/gemini-b",
+                    supported_actions=["embedContent"],
+                ),
+            ]
+
+    models = FakeModels()
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+    provider.client = SimpleNamespace(models=models)
+
+    assert await provider.get_models() == ["gemini-a"]
+    assert models.calls == 2

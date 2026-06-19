@@ -3,13 +3,16 @@ import builtins
 from io import BytesIO
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
+import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
@@ -115,6 +118,57 @@ def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
     provider._create_http_client({"proxy": ""})
 
     assert captured["httpx_module"] is openai_source_module.httpx
+
+
+@pytest.mark.asyncio
+async def test_get_models_retries_transient_request_error(monkeypatch):
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
+
+    class FakeModels:
+        def __init__(self):
+            self.calls = 0
+
+        async def list(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise httpx.ConnectError("temporary connection failure")
+            return SimpleNamespace(
+                data=[
+                    SimpleNamespace(id="gpt-b"),
+                    SimpleNamespace(id="gpt-a"),
+                ]
+            )
+
+    models = FakeModels()
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    provider.client = SimpleNamespace(models=models)
+
+    assert await provider.get_models() == ["gpt-a", "gpt-b"]
+    assert models.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_text_chat_passes_request_max_retries_to_query():
+    captured: dict[str, object] = {}
+
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    provider.api_keys = ["test-key"]
+    provider.client = SimpleNamespace(api_key=None)
+
+    async def fake_prepare_chat_payload(*args, **kwargs):
+        return {"messages": [], "model": "gpt-4o-mini"}, []
+
+    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+        captured["request_max_retries"] = request_max_retries
+        return LLMResponse(role="assistant", completion_text="ok")
+
+    provider._prepare_chat_payload = fake_prepare_chat_payload
+    provider._query = fake_query
+
+    await provider.text_chat(prompt="hello", request_max_retries=2)
+
+    assert captured["request_max_retries"] == 2
 
 
 @pytest.mark.asyncio

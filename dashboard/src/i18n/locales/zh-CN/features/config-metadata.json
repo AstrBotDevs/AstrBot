@@ -45,6 +45,10 @@
           "description": "回退对话模型列表",
           "hint": "主对话模型请求失败时，按顺序切换到这些对话模型。"
         },
+        "request_max_retries": {
+          "description": "请求最大重试次数",
+          "hint": "单次模型请求遇到可重试错误时的最大尝试次数。"
+        },
         "default_image_caption_provider_id": {
           "description": "默认图片转述模型",
           "hint": "留空代表不使用,可用于非多模态模型"
