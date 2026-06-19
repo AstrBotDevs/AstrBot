@@ -1,5 +1,6 @@
 import ntpath
 import posixpath
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -313,7 +314,8 @@ async def test_astrbot_updator_prefers_hosted_core_package(
 
     async def fake_download_file(url: str, path: str, progress_callback=None):  # noqa: ARG001
         calls.append(url)
-        Path(path).write_bytes(b"hosted-core")
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("AstrBot-v99.0.0/README.md", "hosted-core")
 
     monkeypatch.setattr(updator, "fetch_release_info", fake_fetch_release_info)
     monkeypatch.setattr(updator, "_download_file", fake_download_file)
@@ -325,7 +327,7 @@ async def test_astrbot_updator_prefers_hosted_core_package(
     )
 
     assert zip_path == tmp_path / "core.zip"
-    assert zip_path.read_bytes() == b"hosted-core"
+    assert zipfile.is_zipfile(zip_path)
     assert calls == ["https://cdn.example/core/v99.0.0/source.zip"]
 
 
@@ -370,6 +372,55 @@ async def test_astrbot_updator_falls_back_when_hosted_core_package_fails(
 
     assert zip_path == tmp_path / "core.zip"
     assert zip_path.read_bytes() == b"github-core"
+    assert calls == [
+        "https://cdn.example/core/v99.0.0/source.zip",
+        "https://github.example/archive.zip",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_astrbot_updator_falls_back_when_hosted_core_package_is_not_zip(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("ASTRBOT_CLI", raising=False)
+    monkeypatch.delenv("ASTRBOT_LAUNCHER", raising=False)
+    monkeypatch.setenv("ASTRBOT_CORE_PACKAGE_BASE_URL", "https://cdn.example/core")
+
+    updator = AstrBotUpdator()
+    calls: list[str] = []
+
+    async def fake_fetch_release_info(url: str, latest: bool = True):  # noqa: ARG001
+        return [
+            {
+                "version": "AstrBot v99.0.0",
+                "published_at": "2026-06-19T00:00:00Z",
+                "body": "hosted core package",
+                "tag_name": "v99.0.0",
+                "zipball_url": "https://github.example/archive.zip",
+            }
+        ]
+
+    async def fake_download_file(url: str, path: str, progress_callback=None):  # noqa: ARG001
+        calls.append(url)
+        parsed = urlparse(url)
+        if parsed.scheme == "https" and parsed.hostname == "cdn.example":
+            Path(path).write_bytes(b"not a zip")
+            return
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("AstrBot-v99.0.0/README.md", "github-core")
+
+    monkeypatch.setattr(updator, "fetch_release_info", fake_fetch_release_info)
+    monkeypatch.setattr(updator, "_download_file", fake_download_file)
+
+    zip_path = await updator.download_update_package(
+        latest=False,
+        version="v99.0.0",
+        path=tmp_path / "core.zip",
+    )
+
+    assert zip_path == tmp_path / "core.zip"
+    assert zipfile.is_zipfile(zip_path)
     assert calls == [
         "https://cdn.example/core/v99.0.0/source.zip",
         "https://github.example/archive.zip",

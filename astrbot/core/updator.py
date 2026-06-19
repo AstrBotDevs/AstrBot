@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import psutil
@@ -258,6 +259,10 @@ class AstrBotUpdator(RepoZipUpdator):
                     str(zip_path),
                     progress_callback=progress_callback,
                 )
+                if not zipfile.is_zipfile(zip_path):
+                    raise RuntimeError(
+                        "Downloaded hosted package is not a valid ZIP file"
+                    )
                 return zip_path
             except Exception as exc:
                 logger.warning(
