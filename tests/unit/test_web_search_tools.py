@@ -418,7 +418,7 @@ class _TavilyResponse:
         return self.textData
 
 
-@pytest.fixture(autouse=False)
+@pytest.fixture(autouse=True)
 def _resetKeyRotators():
     """重置所有 KeyRotator 的索引，避免测试间状态干扰"""
     tools._TAVILY_KEY_ROTATOR.index = 0
@@ -438,12 +438,20 @@ def _resetKeyRotators():
 
 
 @pytest.mark.asyncio
+async def test_tavily_search_raises_value_error_when_no_key_configured():
+    """未配置 Tavily API Key 时，应抛出 ValueError"""
+    with pytest.raises(
+        ValueError,
+        match="Error: Tavily API key is not configured in AstrBot.",
+    ):
+        await tools._tavily_search({}, {"query": "test"})
+
+
+@pytest.mark.asyncio
 async def test_tavily_search_key_failover_on_quota_exceeded_432(
     monkeypatch,
 ):
     """第一个 key 返回 432（额度耗尽），应自动切换到第二个 key 并成功"""
-    tools._TAVILY_KEY_ROTATOR.index = 0
-
     session = _CycleSession(
         [
             _TavilyResponse(
@@ -482,8 +490,6 @@ async def test_tavily_search_key_failover_on_rate_limited_429(
     monkeypatch,
 ):
     """第一个 key 返回 429（限流），应自动切换到第二个 key 并成功"""
-    tools._TAVILY_KEY_ROTATOR.index = 0
-
     session = _CycleSession(
         [
             _TavilyResponse(
@@ -521,8 +527,6 @@ async def test_tavily_search_fails_when_all_keys_exhausted_8886(
     monkeypatch,
 ):
     """所有 key 都失败时，应该抛出最后一个错误"""
-    tools._TAVILY_KEY_ROTATOR.index = 0
-
     # 两个响应都返回 432
     session = _CycleSession(
         [
@@ -559,8 +563,6 @@ async def test_tavily_search_does_not_failover_on_server_error_500(
     monkeypatch,
 ):
     """非 key 相关错误（500）不应触发 key 切换，应直接抛出"""
-    tools._TAVILY_KEY_ROTATOR.index = 0
-
     session = _CycleSession(
         [
             _TavilyResponse(
