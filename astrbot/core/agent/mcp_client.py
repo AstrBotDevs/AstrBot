@@ -9,6 +9,7 @@ from datetime import timedelta
 from pathlib import Path, PureWindowsPath
 from typing import Any, Generic
 
+import httpx
 from tenacity import (
     before_sleep_log,
     retry,
@@ -102,12 +103,22 @@ except (ModuleNotFoundError, ImportError):
         "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
     )
 
+streamable_http_client_legacy = None
+streamable_http_client = None
+
 try:
-    from mcp.client.streamable_http import streamablehttp_client
-except (ModuleNotFoundError, ImportError):
-    logger.warning(
-        "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
+    from mcp.client.streamable_http import (
+        streamablehttp_client as streamable_http_client_legacy,
     )
+except (ModuleNotFoundError, ImportError):
+    try:
+        from mcp.client.streamable_http import (
+            streamable_http_client as streamable_http_client,
+        )
+    except (ModuleNotFoundError, ImportError):
+        logger.warning(
+            "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
+        )
 
 
 def _prepare_config(config: dict) -> dict:
@@ -459,17 +470,38 @@ class MCPClient:
                     ),
                 )
             else:
-                timeout = timedelta(seconds=cfg.get("timeout", 30))
-                sse_read_timeout = timedelta(
-                    seconds=cfg.get("sse_read_timeout", 60 * 5),
-                )
-                self._streams_context = streamablehttp_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=timeout,
-                    sse_read_timeout=sse_read_timeout,
-                    terminate_on_close=cfg.get("terminate_on_close", True),
-                )
+                timeout_seconds = cfg.get("timeout", 30)
+                sse_read_timeout_seconds = cfg.get("sse_read_timeout", 60 * 5)
+                if streamable_http_client_legacy:
+                    timeout = timedelta(seconds=timeout_seconds)
+                    sse_read_timeout = timedelta(seconds=sse_read_timeout_seconds)
+                    self._streams_context = streamable_http_client_legacy(
+                        url=cfg["url"],
+                        headers=cfg.get("headers", {}),
+                        timeout=timeout,
+                        sse_read_timeout=sse_read_timeout,
+                        terminate_on_close=cfg.get("terminate_on_close", True),
+                    )
+                elif streamable_http_client:
+                    http_client = await self.exit_stack.enter_async_context(
+                        httpx.AsyncClient(
+                            headers=cfg.get("headers", {}),
+                            timeout=httpx.Timeout(
+                                timeout_seconds,
+                                read=sse_read_timeout_seconds,
+                            ),
+                            follow_redirects=True,
+                        ),
+                    )
+                    self._streams_context = streamable_http_client(
+                        url=cfg["url"],
+                        http_client=http_client,
+                        terminate_on_close=cfg.get("terminate_on_close", True),
+                    )
+                else:
+                    raise RuntimeError(
+                        "Streamable HTTP transport is not available in the installed MCP library version."
+                    )
                 read_s, write_s, _ = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
