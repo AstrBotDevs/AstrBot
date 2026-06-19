@@ -296,6 +296,13 @@
           "generic": "获取改动失败（{reason}）"
         }
       }
+    },
+    "planModeChip": {
+      "activeLabel": "当前模式：Plan",
+      "inactiveLabel": "当前模式：Build",
+      "activeTooltip": "当前会话已开启 Plan 模式，点击关闭",
+      "activeTooltipMulti": "当前会话已开启 Plan 模式，共 {count} 次构建，点击关闭",
+      "inactiveTooltip": "当前会话为 Build 模式，点击开启 Plan"
     }
   }
 }

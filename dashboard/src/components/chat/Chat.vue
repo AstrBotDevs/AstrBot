@@ -582,6 +582,7 @@ import { useDisplay } from "vuetify";
 import { isAxiosError } from "axios";
 import { chatApi } from "@/api/v1";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
+import { useSpcodePlanMode } from "@/composables/useSpcodePlanMode";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ProjectDialog, {
   type ProjectFormData,
@@ -597,6 +598,7 @@ import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import TodoSidebar from "@/components/chat/message_list_comps/TodoSidebar.vue";
 import GitDiffSidebar from "@/components/chat/GitDiffSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
+import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
 import {
   messageBlocks as buildMessageBlocks,
   useMessages,
@@ -636,6 +638,9 @@ const { tm } = useModuleI18n("features/chat");
 // apply updates and so the refresh-on-session-change handler can call
 // the plugin's HTTP API.
 const spcodeStatus = useSpcodeProjectStatus();
+// Plan/build mode singleton. Mirrors the spcodeStatus lifecycle so
+// both chips stay in sync across session switches and stream-ends.
+const spcodePlanMode = useSpcodePlanMode();
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
 const { languageOptions, currentLanguage, switchLanguage, locale } =
@@ -957,6 +962,13 @@ const {
   onStreamEnd: (sessionId) => {
     if (sessionId === currSessionId.value) {
       void spcodeStatus.refresh();
+      // Plan/build has the same race: an `/plan` or `/build`
+      // response is processed during stream-end, so the chip needs
+      // to be refreshed in lockstep to stay in sync with the bot's
+      // state of record. We re-query with the FULL unified_msg_origin
+      // (not the bare session id) so the backend's `_plan_mode[umo]`
+      // lookup actually hits the key the bot just wrote.
+      void spcodePlanMode.refresh(resolveCurrentUmo(currSessionId.value));
     }
   },
 });
@@ -1076,6 +1088,11 @@ watch(
   async (next) => {
     if (!next) {
       spcodeStatus.reset();
+      // Plan/build is strictly per-umo; clearing the session wipes
+      // its associated plan state too. We pass null so the backend
+      // returns the default build status (active=false), which the
+      // chip displays correctly until the next session is selected.
+      spcodePlanMode.reset();
       return;
     }
     // Close the Git Diff sidebar on session switch: the new session's
@@ -1085,9 +1102,64 @@ watch(
     // wording is inaccurate — only the git-diff sidebar closes here).
     gitDiffSidebarOpen.value = false;
     await spcodeStatus.refresh();
+    // Same lifecycle for plan/build: the chip is per-umo, so it
+    // MUST be re-fetched on every session switch. We do not
+    // optimistically carry over the previous session's flag because
+    // plan/build is intentionally NOT shared between sessions (a
+    // user might want plan mode in one project while building in
+    // another).
+    //
+    // CRITICAL: refresh() requires the full unified_msg_origin string
+    // the backend keys per-session state on, NOT the bare session id
+    // (webchat conversation id). See :func:`resolveCurrentUmo` for the
+    // exact format.
+    await spcodePlanMode.refresh(resolveCurrentUmo(next));
   },
   { immediate: true },
 );
+
+/**
+ * Build the unified message origin (umo) string for a session id,
+ * matching the format the backend uses to key its per-session state
+ * (e.g. spcode's ``_plan_mode[umo]`` dict).
+ *
+ * Why this exists:
+ *   - The backend's webchat adapter sets
+ *     ``abm.session_id = f"webchat!{username}!{cid}"``, so the umo
+ *     that ``MessageSession.__str__()`` produces is
+ *     ``webchat:{FriendMessage|GroupMessage}:webchat!{user}!{cid}``.
+ *   - The frontend's ``currentSession.session_id`` is the bare
+ *     ``cid`` (the conversation id), not the full umo.
+ *   - Passing the bare cid to ``spcodePlanMode.refresh()`` makes the
+ *     backend's ``_plan_mode.get(bareCid, False)`` always miss, so
+ *     ``active`` comes back ``False`` regardless of what /plan did.
+ *     That is why the chip flashed plan-active for a frame then
+ *     snapped back to build mode after every toggle.
+ *
+ * Returns the full umo, or ``null`` if the session is unknown (the
+ * refresh caller treats ``null`` as "no umo → backend returns
+ * build-state", which is the correct fallback for an unmapped
+ * session).
+ */
+function resolveCurrentUmo(sessionId: string): string | null {
+  if (!sessionId) return null;
+  const session =
+    sessions.value.find((s) => s.session_id === sessionId) ||
+    projectSessions.value.find((s) => s.session_id === sessionId);
+  if (!session) return null;
+  const platformId = session.platform_id || "webchat";
+  if (platformId === "webchat") {
+    return buildWebchatUmoDetails(
+      sessionId,
+      Boolean(session.is_group),
+    ).umo;
+  }
+  // Generic fallback for non-webchat platforms: trust the platform's
+  // own session_id format. message_type falls back to FriendMessage
+  // when is_group is missing or zero.
+  const messageType = session.is_group ? "GroupMessage" : "FriendMessage";
+  return `${platformId}:${messageType}:${sessionId}`;
+}
 
 function getRouteSessionId() {
   const raw = route.params.conversationId;
