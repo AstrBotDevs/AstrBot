@@ -1,3 +1,3 @@
-from .core.log import LogManager
+import logging
 
-logger = LogManager.GetLogger(log_name="astrbot")
+logger = logging.getLogger("astrbot")

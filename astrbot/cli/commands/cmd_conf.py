@@ -1,15 +1,10 @@
 import json
+import os
 import zoneinfo
 from collections.abc import Callable
 from typing import Any
 
 import click
-
-from astrbot.core.utils.auth_password import (
-    hash_dashboard_password,
-    hash_md5_dashboard_password,
-    validate_dashboard_password,
-)
 
 from ..utils import check_astrbot_root, get_astrbot_root
 
@@ -44,6 +39,8 @@ def _validate_dashboard_username(value: str) -> str:
 
 def _validate_dashboard_password(value: str) -> str:
     """Validate Dashboard password"""
+    from astrbot.core.utils.auth_password import validate_dashboard_password
+
     try:
         validate_dashboard_password(value)
     except ValueError as e:
@@ -89,6 +86,7 @@ def _load_config() -> dict[str, Any]:
         raise click.ClickException(
             f"{root} is not a valid AstrBot root directory. Use 'astrbot init' to initialize",
         )
+    os.environ["ASTRBOT_ROOT"] = str(root)
 
     config_path = root / "data" / "cmd_config.json"
     if not config_path.exists():
@@ -107,7 +105,8 @@ def _load_config() -> dict[str, Any]:
 
 def _save_config(config: dict[str, Any]) -> None:
     """Save config file"""
-    config_path = get_astrbot_root() / "data" / "cmd_config.json"
+    root = get_astrbot_root()
+    config_path = root / "data" / "cmd_config.json"
 
     config_path.write_text(
         json.dumps(config, ensure_ascii=False, indent=2),
@@ -139,6 +138,11 @@ def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
 
 def _set_dashboard_password(config: dict[str, Any], raw_password: str) -> None:
     """Set dashboard password hashes and clear password migration flags."""
+    from astrbot.core.utils.auth_password import (
+        hash_dashboard_password,
+        hash_md5_dashboard_password,
+    )
+
     _set_nested_item(
         config,
         "dashboard.pbkdf2_password",

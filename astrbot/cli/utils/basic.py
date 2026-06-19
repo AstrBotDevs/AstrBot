@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import click
@@ -7,7 +8,14 @@ _BUNDLED_DIST = Path(__file__).parent.parent.parent / "dashboard" / "dist"
 
 
 def check_astrbot_root(path: str | Path) -> bool:
-    """Check if the path is an AstrBot root directory"""
+    """Check whether a path is an AstrBot root directory.
+
+    Args:
+        path: Directory path to inspect.
+
+    Returns:
+        Whether the directory contains the AstrBot root marker.
+    """
     if not isinstance(path, Path):
         path = Path(path)
     if not path.exists() or not path.is_dir():
@@ -18,8 +26,24 @@ def check_astrbot_root(path: str | Path) -> bool:
 
 
 def get_astrbot_root() -> Path:
-    """Get the AstrBot root directory path"""
-    return Path.cwd()
+    """Get the AstrBot root directory path.
+
+    Returns:
+        The explicit root, current local root, default user root, or current
+        directory when no initialized root exists.
+    """
+    if root := os.environ.get("ASTRBOT_ROOT"):
+        return Path(root).expanduser().resolve()
+
+    current_root = Path.cwd().resolve()
+    if check_astrbot_root(current_root):
+        return current_root
+
+    user_root = (Path.home() / ".astrbot").resolve()
+    if check_astrbot_root(user_root):
+        return user_root
+
+    return current_root
 
 
 async def check_dashboard(astrbot_root: Path) -> None:

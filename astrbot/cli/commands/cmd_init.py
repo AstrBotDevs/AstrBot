@@ -21,17 +21,16 @@ def _initialize_config_from_env(astrbot_root: Path) -> None:
 
 
 async def initialize_astrbot(astrbot_root: Path) -> None:
-    """Execute AstrBot initialization logic"""
+    """Execute AstrBot initialization logic.
+
+    Args:
+        astrbot_root: Runtime root directory to initialize.
+    """
     dot_astrbot = astrbot_root / ".astrbot"
 
     if not dot_astrbot.exists():
-        if click.confirm(
-            f"Install AstrBot to this directory? {astrbot_root}",
-            default=True,
-            abort=True,
-        ):
-            dot_astrbot.touch()
-            click.echo(f"Created {dot_astrbot}")
+        dot_astrbot.touch()
+        click.echo(f"Created {dot_astrbot}")
 
     paths = {
         "data": astrbot_root / "data",
@@ -41,8 +40,9 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
     }
 
     for name, path in paths.items():
+        path_exists = path.exists()
         path.mkdir(parents=True, exist_ok=True)
-        click.echo(f"{'Created' if not path.exists() else 'Directory exists'}: {path}")
+        click.echo(f"{'Directory exists' if path_exists else 'Created'}: {path}")
 
     _initialize_config_from_env(astrbot_root)
 
@@ -53,7 +53,25 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
 def init() -> None:
     """Initialize AstrBot"""
     click.echo("Initializing AstrBot...")
-    astrbot_root = get_astrbot_root()
+    if os.environ.get("ASTRBOT_ROOT"):
+        astrbot_root = get_astrbot_root()
+        click.echo(f"Using ASTRBOT_ROOT: {astrbot_root}")
+    else:
+        user_root = (Path.home() / ".astrbot").resolve()
+        current_root = Path.cwd().resolve()
+        click.echo("Choose AstrBot runtime directory:")
+        click.echo(f"1. {user_root} (recommended)")
+        click.echo(f"2. Current directory: {current_root}")
+        choice = click.prompt(
+            "Select",
+            type=click.Choice(["1", "2"]),
+            default="1",
+            show_choices=False,
+        )
+        astrbot_root = user_root if choice == "1" else current_root
+
+    astrbot_root.mkdir(parents=True, exist_ok=True)
+    os.environ["ASTRBOT_ROOT"] = str(astrbot_root)
     lock_file = astrbot_root / "astrbot.lock"
     lock = FileLock(lock_file, timeout=5)
 
@@ -65,6 +83,8 @@ def init() -> None:
         raise click.ClickException(
             "Cannot acquire lock file. Please check if another instance is running"
         )
+    except click.Abort:
+        raise
 
     except Exception as e:
         raise click.ClickException(f"Initialization failed: {e!s}")
