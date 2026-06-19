@@ -205,13 +205,42 @@ class ImMessageRequest(OpenModel):
 
 
 class KnowledgeBaseRequest(OpenModel):
-    kb_id: str | None = None
-    name: str | None = None
+    kb_name: str | None = None
     description: str | None = None
+    emoji: str | None = None
     embedding_provider_id: str | None = None
     rerank_provider_id: str | None = None
     chunk_size: int | None = None
     chunk_overlap: int | None = None
+    top_k_dense: int | None = None
+    top_k_sparse: int | None = None
+    top_m_final: int | None = None
+
+    def canonical_payload(self) -> dict[str, Any]:
+        """Return the service-facing knowledge base payload.
+
+        Returns:
+            Dictionary accepted by KnowledgeBaseService.
+        """
+        field_names = {
+            "kb_name",
+            "description",
+            "emoji",
+            "embedding_provider_id",
+            "rerank_provider_id",
+            "chunk_size",
+            "chunk_overlap",
+            "top_k_dense",
+            "top_k_sparse",
+            "top_m_final",
+        }
+        data = self.model_dump(
+            include=self.model_fields_set & field_names,
+        )
+        legacy_name = getattr(self, "name", None)
+        if self.kb_name is None and legacy_name is not None:
+            data["kb_name"] = legacy_name
+        return data
 
 
 class KnowledgeBaseImportRequest(OpenModel):
@@ -220,22 +249,69 @@ class KnowledgeBaseImportRequest(OpenModel):
     tasks_limit: int | None = None
     max_retries: int | None = None
 
+    def canonical_payload(self) -> dict[str, Any]:
+        """Return the service-facing document import payload.
+
+        Returns:
+            Dictionary accepted by KnowledgeBaseService.import_documents.
+        """
+        return self.model_dump(
+            exclude_none=True,
+            include={"documents", "batch_size", "tasks_limit", "max_retries"},
+        )
+
 
 class KnowledgeBaseUrlImportRequest(OpenModel):
     url: str | None = None
-    urls: list[str] | None = None
     chunk_size: int | None = None
     chunk_overlap: int | None = None
     batch_size: int | None = None
     tasks_limit: int | None = None
     max_retries: int | None = None
+    enable_cleaning: bool | None = None
+    cleaning_provider_id: str | None = None
+
+    def canonical_payload(self) -> dict[str, Any]:
+        """Return the service-facing URL import payload.
+
+        Returns:
+            Dictionary accepted by KnowledgeBaseService.upload_document_from_url.
+        """
+        return self.model_dump(
+            exclude_none=True,
+            include={
+                "url",
+                "chunk_size",
+                "chunk_overlap",
+                "batch_size",
+                "tasks_limit",
+                "max_retries",
+                "enable_cleaning",
+                "cleaning_provider_id",
+            },
+        )
 
 
 class KnowledgeBaseRetrieveRequest(OpenModel):
     query: str | None = None
     top_k: int | None = None
-    threshold: float | None = None
-    rerank: bool | None = None
+    debug: bool | None = None
+
+    def canonical_payload(self, *, kb_name: str) -> dict[str, Any]:
+        """Return the service-facing retrieve payload.
+
+        Args:
+            kb_name: Knowledge base name resolved from the route path.
+
+        Returns:
+            Dictionary accepted by KnowledgeBaseService.retrieve.
+        """
+        data = self.model_dump(
+            exclude_none=True,
+            include={"query", "top_k", "debug"},
+        )
+        data["kb_names"] = [kb_name]
+        return data
 
 
 class ToolEnabledRequest(BaseModel):
