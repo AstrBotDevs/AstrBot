@@ -8,6 +8,7 @@ import pytest
 
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.mcp_client import MCPTool
+from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Plain, Reply, Video
@@ -377,8 +378,18 @@ class TestApplyKb:
         ):
             await module._apply_kb(mock_event, req, mock_context, config)
 
-        assert "[Related Knowledge Base Results]:" in req.system_prompt
-        assert "KB result" in req.system_prompt
+        assert req.system_prompt == "System prompt"
+        assert len(req.extra_user_content_parts) == 1
+        kb_part = req.extra_user_content_parts[0]
+        assert kb_part.text == "[Related Knowledge Base Results]:\nKB result"
+
+        message = Message.model_validate(await req.assemble_context())
+        assert isinstance(message.content, list)
+        assert message.content[0].text == "test question"
+        assert message.content[1].text == "[Related Knowledge Base Results]:\nKB result"
+        assert dump_messages_with_checkpoints([message]) == [
+            {"role": "user", "content": [{"type": "text", "text": "test question"}]}
+        ]
 
     @pytest.mark.asyncio
     async def test_apply_kb_with_agentic_mode(self, mock_event, mock_context):
