@@ -101,6 +101,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "default_provider_id": "",
         "fallback_chat_models": [],
+        "request_max_retries": 5,
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
@@ -2808,6 +2809,9 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                     },
+                    "request_max_retries": {
+                        "type": "int",
+                    },
                     "wake_prefix": {
                         "type": "string",
                     },
@@ -3166,6 +3170,11 @@ CONFIG_METADATA_3 = {
                         "items": {"type": "string"},
                         "_special": "select_providers",
                         "hint": "主聊天模型请求失败时，按顺序切换到这些模型。",
+                    },
+                    "provider_settings.request_max_retries": {
+                        "description": "请求最大重试次数",
+                        "type": "int",
+                        "hint": "单次模型请求遇到可重试错误时的最大尝试次数。",
                     },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",

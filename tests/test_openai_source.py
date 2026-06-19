@@ -12,6 +12,7 @@ from PIL import Image as PILImage
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
@@ -145,6 +146,29 @@ async def test_get_models_retries_transient_request_error(monkeypatch):
 
     assert await provider.get_models() == ["gpt-a", "gpt-b"]
     assert models.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_text_chat_passes_request_max_retries_to_query():
+    captured: dict[str, object] = {}
+
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    provider.api_keys = ["test-key"]
+    provider.client = SimpleNamespace(api_key=None)
+
+    async def fake_prepare_chat_payload(*args, **kwargs):
+        return {"messages": [], "model": "gpt-4o-mini"}, []
+
+    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+        captured["request_max_retries"] = request_max_retries
+        return LLMResponse(role="assistant", completion_text="ok")
+
+    provider._prepare_chat_payload = fake_prepare_chat_payload
+    provider._query = fake_query
+
+    await provider.text_chat(prompt="hello", request_max_retries=2)
+
+    assert captured["request_max_retries"] == 2
 
 
 @pytest.mark.asyncio

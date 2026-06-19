@@ -224,6 +224,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
+        request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
         **kwargs: T.Any,
@@ -237,6 +238,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.truncate_turns = truncate_turns
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
+        self.request_max_retries = request_max_retries
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
@@ -463,6 +465,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
             "abort_signal": self._abort_signal,
+            "request_max_retries": self.request_max_retries,
         }
         if include_model:
             # For primary provider we keep explicit model selection if provided.
@@ -1305,6 +1308,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     extra_user_content_parts=self.req.extra_user_content_parts,
                     # tool_choice="required",
                     abort_signal=self._abort_signal,
+                    request_max_retries=self.request_max_retries,
                 )
                 if requery_resp:
                     llm_resp = requery_resp
@@ -1331,6 +1335,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         extra_user_content_parts=self.req.extra_user_content_parts,
                         # tool_choice="required",
                         abort_signal=self._abort_signal,
+                        request_max_retries=self.request_max_retries,
                     )
                     if repair_resp:
                         llm_resp = repair_resp

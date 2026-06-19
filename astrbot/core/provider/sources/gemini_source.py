@@ -578,7 +578,13 @@ class ProviderGoogleGenAI(Provider):
             )
         return chain_result
 
-    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+    ) -> LLMResponse:
         """非流式请求 Gemini API"""
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
@@ -613,6 +619,7 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     retry_rate_limits=False,
+                    max_attempts=request_max_retries,
                 )
                 logger.debug(f"genai result: {result}")
 
@@ -677,6 +684,8 @@ class ProviderGoogleGenAI(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         system_instruction = next(
@@ -703,6 +712,7 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     retry_rate_limits=False,
+                    max_attempts=request_max_retries,
                 )
                 break
             except APIError as e:
@@ -818,6 +828,7 @@ class ProviderGoogleGenAI(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -859,7 +870,11 @@ class ProviderGoogleGenAI(Provider):
 
         for _ in range(retry):
             try:
-                return await self._query(payloads, func_tool)
+                return await self._query(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                )
             except APIError as e:
                 if await self._handle_api_error(e, keys):
                     continue
@@ -880,6 +895,7 @@ class ProviderGoogleGenAI(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
@@ -921,7 +937,11 @@ class ProviderGoogleGenAI(Provider):
 
         for _ in range(retry):
             try:
-                async for response in self._query_stream(payloads, func_tool):
+                async for response in self._query_stream(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                ):
                     yield response
                 break
             except APIError as e:

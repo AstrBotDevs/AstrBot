@@ -354,7 +354,13 @@ class ProviderAnthropic(Provider):
         logger.warning(f"未知的 tool_choice 值: {tool_choice}，已回退为 'auto'")
         return {"type": "auto"}
 
-    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+    ) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
@@ -374,6 +380,7 @@ class ProviderAnthropic(Provider):
                 lambda: self.client.messages.create(
                     **payloads, stream=False, extra_body=extra_body
                 ),
+                max_attempts=request_max_retries,
             )
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
@@ -442,6 +449,8 @@ class ProviderAnthropic(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -468,6 +477,7 @@ class ProviderAnthropic(Provider):
         async with retry_provider_request_context(
             "Anthropic",
             lambda: self.client.messages.stream(**payloads, extra_body=extra_body),
+            max_attempts=request_max_retries,
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
@@ -606,6 +616,7 @@ class ProviderAnthropic(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -655,7 +666,11 @@ class ProviderAnthropic(Provider):
 
         llm_response = None
         try:
-            llm_response = await self._query(payloads, func_tool)
+            llm_response = await self._query(
+                payloads,
+                func_tool,
+                request_max_retries=request_max_retries,
+            )
         except Exception as e:
             raise e
 
@@ -674,6 +689,7 @@ class ProviderAnthropic(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ):
         if contexts is None:
@@ -720,7 +736,11 @@ class ProviderAnthropic(Provider):
                 else system_prompt
             )
 
-        async for llm_response in self._query_stream(payloads, func_tool):
+        async for llm_response in self._query_stream(
+            payloads,
+            func_tool,
+            request_max_retries=request_max_retries,
+        ):
             yield llm_response
 
     def _detect_image_mime_type(self, data: bytes) -> str:
