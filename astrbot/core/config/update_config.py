@@ -19,10 +19,11 @@ logger = logging.getLogger("astrbot")
 
 UPDATE_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "update_config.json")
 
-# 环境变量名映射
+# Environment variable name mapping.
 ENV_VAR_MAP = {
     "core_update.release_api_url": "ASTRBOT_CORE_RELEASE_API_URL",
     "core_update.github_archive_url_template": "ASTRBOT_GITHUB_ARCHIVE_URL",
+    "core_update.package_base_url": "ASTRBOT_CORE_PACKAGE_BASE_URL",
     "dashboard_update.registry_url_template": "ASTRBOT_DASHBOARD_REGISTRY_URL",
     "dashboard_update.github_release_api_url": "ASTRBOT_DASHBOARD_GITHUB_RELEASE_API_URL",
     "dashboard_update.github_release_download_url_template": "ASTRBOT_DASHBOARD_GITHUB_RELEASE_DOWNLOAD_URL",
@@ -36,6 +37,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "core_update": {
         "release_api_url": "https://api.soulter.top/releases",
         "github_archive_url_template": "https://github.com/AstrBotDevs/AstrBot/archive/{version}.zip",
+        "package_base_url": "https://astrbot-registry.soulter.top/download/astrbot-core",
     },
     "dashboard_update": {
         "registry_url_template": "https://astrbot-registry.soulter.top/download/astrbot-dashboard/{version}/dist.zip",
@@ -167,6 +169,21 @@ class UpdateConfig(dict):
             DEFAULT_CONFIG["core_update"]["github_archive_url_template"],
         )
         return template.format(version=version)
+
+    def get_core_package_base_url(self) -> str:
+        """Get the base URL prefix for hosted core package downloads.
+
+        The final download URL is built as
+        ``f"{base_url.rstrip('/')}/{version}/source.zip"``.
+
+        Returns:
+            Base URL string. Empty string when the hosted package download
+            is disabled via configuration.
+        """
+        return self._get_value(
+            "core_update.package_base_url",
+            DEFAULT_CONFIG["core_update"]["package_base_url"],
+        )
 
     # --- Dashboard Update URLs ---
 

@@ -26,9 +26,6 @@ class AstrBotUpdator(RepoZipUpdator):
         self.MAIN_PATH = get_astrbot_path()
         self._update_config = UpdateConfig()
         self.ASTRBOT_RELEASE_API = self._update_config.get_core_release_api_url()
-        self.CORE_PACKAGE_BASE_URL = (
-            "https://astrbot-registry.soulter.top/download/astrbot-core"
-        )
 
     def _build_core_package_url(self, version: str | None) -> str | None:
         """Build the hosted core package URL for a release tag.
@@ -37,38 +34,12 @@ class AstrBotUpdator(RepoZipUpdator):
             version: Release tag, such as ``v4.26.0``.
 
         Returns:
-            Public package URL, or None when hosted package download is disabled.
+            Public package URL, or None when hosted package download is
+            disabled (empty template) or the version is not a release tag.
         """
-
         if not version or not str(version).startswith("v"):
             return None
-
-        base_url = os.environ.get(
-            "ASTRBOT_CORE_PACKAGE_BASE_URL",
-            self.CORE_PACKAGE_BASE_URL,
-        ).strip()
-        if not base_url:
-            return None
-        return f"{base_url.rstrip('/')}/{version}/source.zip"
-
-
-    def _build_core_package_url(self, version: str | None) -> str | None:
-        """Build the hosted core package URL for a release tag.
-
-        Args:
-            version: Release tag, such as ``v4.26.0``.
-
-        Returns:
-            Public package URL, or None when hosted package download is disabled.
-        """
-
-        if not version or not str(version).startswith("v"):
-            return None
-
-        base_url = os.environ.get(
-            "ASTRBOT_CORE_PACKAGE_BASE_URL",
-            self.CORE_PACKAGE_BASE_URL,
-        ).strip()
+        base_url = self._update_config.get_core_package_base_url().strip()
         if not base_url:
             return None
         return f"{base_url.rstrip('/')}/{version}/source.zip"
