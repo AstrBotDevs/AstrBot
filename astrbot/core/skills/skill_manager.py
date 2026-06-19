@@ -398,14 +398,14 @@ class SkillManager:
                 with resolved_skill_md.open(encoding="utf-8") as f:
                     content = f.read(WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS)
                 description = _parse_frontmatter_description(content)
-            except Exception:
+            except (OSError, UnicodeError):
                 description = ""
 
             skills.append(
                 SkillInfo(
                     name=skill_name,
                     description=description,
-                    path=str(resolved_skill_md).replace("\\", "/"),
+                    path=resolved_skill_md.as_posix(),
                     active=True,
                     source_type="workspace",
                     source_label="workspace",

@@ -818,9 +818,8 @@ class TestEnsurePersonaAndSkills:
             encoding="utf-8",
         )
 
-        workspace_root = (
-            workspaces_dir
-            / module.normalize_umo_for_workspace(mock_event.unified_msg_origin)
+        workspace_root = workspaces_dir / module.normalize_umo_for_workspace(
+            mock_event.unified_msg_origin
         )
         workspace_skill_dir = workspace_root / "skills" / "workspace-skill"
         workspace_skill_dir.mkdir(parents=True)
@@ -849,8 +848,11 @@ class TestEnsurePersonaAndSkills:
 
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id=None)
+        runtime_config = {"computer_use_runtime": "local"}
 
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+        await module._ensure_persona_and_skills(
+            req, runtime_config, mock_context, mock_event
+        )
 
         assert "**workspace-skill**" in req.system_prompt
         assert "Workspace scoped skill." in req.system_prompt
@@ -876,9 +878,8 @@ class TestEnsurePersonaAndSkills:
         for path in (data_dir, global_skills_dir, plugins_dir):
             path.mkdir(parents=True, exist_ok=True)
 
-        workspace_root = (
-            workspaces_dir
-            / module.normalize_umo_for_workspace(mock_event.unified_msg_origin)
+        workspace_root = workspaces_dir / module.normalize_umo_for_workspace(
+            mock_event.unified_msg_origin
         )
         workspace_skill_dir = workspace_root / "skills" / "workspace-skill"
         workspace_skill_dir.mkdir(parents=True)
@@ -933,9 +934,8 @@ class TestEnsurePersonaAndSkills:
         for path in (data_dir, global_skills_dir, plugins_dir):
             path.mkdir(parents=True, exist_ok=True)
 
-        workspace_root = (
-            workspaces_dir
-            / module.normalize_umo_for_workspace(mock_event.unified_msg_origin)
+        workspace_root = workspaces_dir / module.normalize_umo_for_workspace(
+            mock_event.unified_msg_origin
         )
         workspace_skill_dir = workspace_root / "skills" / "workspace-skill"
         workspace_skill_dir.mkdir(parents=True)
