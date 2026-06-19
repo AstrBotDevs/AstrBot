@@ -160,6 +160,14 @@ async def check_dashboard_files(webui_dir: str | None = None):
             )
         except Exception as e:
             logger.critical(f"下载管理面板文件失败: {e}。")
+            if (data_dist_path / "index.html").is_file():
+                logger.warning(
+                    "Falling back to existing data/dist WebUI %s even though core expects v%s. "
+                    "Some dashboard features may not work until the matching WebUI is available.",
+                    v or "unknown",
+                    VERSION,
+                )
+                return str(data_dist_path)
             return None
         logger.info("管理面板下载完成。")
         return str(data_dist_path)
