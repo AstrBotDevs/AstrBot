@@ -22,7 +22,9 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import (
     get_bundled_dashboard_dist_path,
+    get_dashboard_dist_version,
     get_local_ip_addresses,
+    is_dashboard_dist_compatible,
     should_use_bundled_dashboard_dist,
 )
 from astrbot.dashboard.asgi_runtime import (
@@ -182,21 +184,32 @@ class AstrBotDashboard:
 
         # Path priority:
         # 1. Explicit webui_dir argument
-        # 2. data/dist/ (user-installed / manually updated dashboard)
-        # 3. astrbot/dashboard/dist/ (bundled with the wheel)
+        # 2. data/dist/ when it matches the core version
+        # 3. astrbot/dashboard/dist/ when it matches the core version
         if webui_dir and os.path.exists(webui_dir):
             self.data_path = os.path.abspath(webui_dir)
         else:
             user_dist = os.path.join(get_astrbot_data_path(), "dist")
             bundled_dist = get_bundled_dashboard_dist_path()
-            if os.path.exists(user_dist) and not should_use_bundled_dashboard_dist(
+            user_version = get_dashboard_dist_version(user_dist)
+            if os.path.exists(user_dist) and is_dashboard_dist_compatible(
                 user_dist,
                 VERSION,
             ):
                 self.data_path = os.path.abspath(user_dist)
-            elif bundled_dist.exists():
+            elif should_use_bundled_dashboard_dist(
+                user_dist,
+                VERSION,
+            ) or is_dashboard_dist_compatible(bundled_dist, VERSION):
                 self.data_path = str(bundled_dist)
                 logger.info("Using bundled dashboard dist: %s", self.data_path)
+            elif os.path.exists(user_dist):
+                logger.warning(
+                    "Ignoring data/dist because WebUI version mismatches core: %s, expected v%s.",
+                    user_version,
+                    VERSION,
+                )
+                self.data_path = None
             else:
                 # Fall back to expected user path (will fail gracefully later)
                 self.data_path = os.path.abspath(user_dist)
@@ -545,7 +558,7 @@ class AstrBotDashboard:
 
             raise Exception(f"端口 {port} 已被占用")
 
-        if (Path(self.data_path) / "index.html").is_file():
+        if self.data_path and (Path(self.data_path) / "index.html").is_file():
             webui_status = "WebUI is ready"
         else:
             webui_status = (
