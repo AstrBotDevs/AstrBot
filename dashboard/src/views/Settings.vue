@@ -482,7 +482,7 @@ const apiKeys = ref([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref('');
 const newApiKeyExpiresInDays = ref(30);
-const newApiKeyScopes = ref(['bot', 'provider', 'im', 'config', 'chat']);
+const newApiKeyScopes = ref(['bot', 'provider', 'im', 'config', 'chat', 'file']);
 const createdApiKeyPlaintext = ref('');
 const systemConfigData = ref({});
 const systemConfigMetadata = ref({});
@@ -513,6 +513,7 @@ const availableScopes = [
     { value: 'im', label: 'im' },
     { value: 'config', label: 'config' },
     { value: 'chat', label: 'chat' },
+    { value: 'file', label: 'file' },
     { value: 'plugin', label: 'plugin' },
     { value: 'mcp', label: 'mcp' },
     { value: 'skill', label: 'skill' }

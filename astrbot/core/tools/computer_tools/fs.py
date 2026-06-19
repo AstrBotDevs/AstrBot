@@ -34,6 +34,7 @@ Local path resolution rule:
 """
 
 import os
+import stat
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -71,6 +72,8 @@ _IMAGE_FILE_SUFFIXES = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def _remote_basename(path: str) -> str:
+    # Sandbox paths may come from POSIX or Windows runtimes; normalize separators
+    # without interpreting the path against the host filesystem.
     return path.replace("\\", "/").rstrip("/").split("/")[-1]
 
 
@@ -180,6 +183,25 @@ def _is_path_within_allowed_roots(
     )
 
 
+def _reject_multi_link_file(path: str) -> None:
+    try:
+        path_stat = os.stat(path)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise PermissionError(
+            "Access denied: unable to inspect restricted path link count. "
+            f"Blocked path: {path}."
+        ) from exc
+
+    if stat.S_ISREG(path_stat.st_mode) and path_stat.st_nlink > 1:
+        raise PermissionError(
+            "Access denied: file has multiple hard links and may alias content "
+            "outside allowed directories. "
+            f"Link count: {path_stat.st_nlink}. Blocked path: {path}."
+        )
+
+
 def _normalize_rw_path(
     path: str,
     *,
@@ -206,6 +228,8 @@ def _normalize_rw_path(
             f"{access} access is restricted for this user. "
             f"Allowed directories: {allowed}. Blocked path: {normalized_path}."
         )
+    if restricted:
+        _reject_multi_link_file(normalized_path)
     return normalized_path
 
 
@@ -600,6 +624,8 @@ class GrepTool(FunctionTool):
                     "Read access is restricted for this user. "
                     f"Allowed directories: {allowed}. Blocked paths: {blocked}."
                 )
+            for path in normalized:
+                _reject_multi_link_file(path)
 
         return normalized
 

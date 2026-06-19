@@ -191,7 +191,7 @@ export type ConversationRef = {
 
 export type CreateApiKeyRequest = {
     name: string;
-    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'plugin' | 'mcp' | 'skill')>;
+    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'file' | 'plugin' | 'mcp' | 'skill')>;
     expires_at?: string;
     expires_in_days?: number;
 };
@@ -339,6 +339,8 @@ export type NeoReleaseActionRequest = {
 };
 
 export type ParameterAttachmentId = string;
+
+export type ParameterAttachmentIdQuery = string;
 
 export type ParameterBotId = string;
 
@@ -1495,6 +1497,24 @@ export type UploadFileData = {
 export type UploadFileResponse = (SuccessEnvelope);
 
 export type UploadFileError = unknown;
+
+export type UploadOpenApiFileData = {
+    body: FileUploadRequest;
+};
+
+export type UploadOpenApiFileResponse = (SuccessEnvelope);
+
+export type UploadOpenApiFileError = unknown;
+
+export type DownloadOpenApiFileData = {
+    query: {
+        attachment_id: string;
+    };
+};
+
+export type DownloadOpenApiFileResponse = ((Blob | File));
+
+export type DownloadOpenApiFileError = unknown;
 
 export type GetFileByNameData = {
     query: {

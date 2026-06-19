@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import psutil
@@ -23,6 +24,30 @@ class AstrBotUpdator(RepoZipUpdator):
         super().__init__(repo_mirror, verify=verify)
         self.MAIN_PATH = get_astrbot_path()
         self.ASTRBOT_RELEASE_API = "https://api.soulter.top/releases"
+        self.CORE_PACKAGE_BASE_URL = (
+            "https://astrbot-registry.soulter.top/download/astrbot-core"
+        )
+
+    def _build_core_package_url(self, version: str | None) -> str | None:
+        """Build the hosted core package URL for a release tag.
+
+        Args:
+            version: Release tag, such as ``v4.26.0``.
+
+        Returns:
+            Public package URL, or None when hosted package download is disabled.
+        """
+
+        if not version or not str(version).startswith("v"):
+            return None
+
+        base_url = os.environ.get(
+            "ASTRBOT_CORE_PACKAGE_BASE_URL",
+            self.CORE_PACKAGE_BASE_URL,
+        ).strip()
+        if not base_url:
+            return None
+        return f"{base_url.rstrip('/')}/{version}/source.zip"
 
     def terminate_child_processes(self) -> None:
         """终止当前进程的所有子进程
@@ -196,15 +221,18 @@ class AstrBotUpdator(RepoZipUpdator):
                 "Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot."
             )  # 避免版本管理混乱
 
+        target_version = None
         if latest:
             latest_version = update_data[0]["tag_name"]
             if self.compare_version(VERSION, latest_version) >= 0:
                 raise Exception("当前已经是最新版本。")
+            target_version = latest_version
             file_url = update_data[0]["zipball_url"]
         elif str(version).startswith("v"):
             # 更新到指定版本
             for data in update_data:
                 if data["tag_name"] == version:
+                    target_version = data["tag_name"]
                     file_url = data["zipball_url"]
             if not file_url:
                 raise Exception(f"未找到版本号为 {version} 的更新文件。")
@@ -220,6 +248,28 @@ class AstrBotUpdator(RepoZipUpdator):
 
         zip_path = Path(path)
         ensure_dir(zip_path.parent)
+        hosted_package_url = self._build_core_package_url(target_version)
+        if hosted_package_url:
+            try:
+                logger.info(
+                    f"优先从托管存储下载 AstrBot Core 更新包: {hosted_package_url}"
+                )
+                await self._download_file(
+                    hosted_package_url,
+                    str(zip_path),
+                    progress_callback=progress_callback,
+                )
+                if not zipfile.is_zipfile(zip_path):
+                    raise RuntimeError(
+                        "Downloaded hosted package is not a valid ZIP file"
+                    )
+                return zip_path
+            except Exception as exc:
+                logger.warning(
+                    f"从托管存储下载 AstrBot Core 更新包失败: {exc}，"
+                    "将回退到当前更新源。"
+                )
+
         await self._download_file(
             file_url,
             str(zip_path),

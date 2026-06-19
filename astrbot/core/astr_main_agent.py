@@ -474,10 +474,10 @@ async def _ensure_persona_and_skills(
     cfg: dict,
     plugin_context: Context,
     event: AstrMessageEvent,
-) -> None:
+) -> set[str] | None:
     """Ensure persona and skills are applied to the request's system prompt or user prompt."""
     if not req.conversation:
-        return
+        return None
 
     (
         persona_id,
@@ -518,14 +518,26 @@ async def _ensure_persona_and_skills(
         provider_id=current_provider,
     )
     skills = _filter_skills_for_current_config(skills, cfg)
+    workspace_skills = (
+        skill_manager.list_workspace_skills(
+            _get_workspace_path_for_umo(event.unified_msg_origin)
+        )
+        if runtime == "local"
+        else []
+    )
 
-    if skills:
+    if skills or workspace_skills:
         if persona and persona.get("skills") is not None:
             if not persona["skills"]:
                 skills = []
             else:
                 allowed = set(persona["skills"])
                 skills = [skill for skill in skills if skill.name in allowed]
+        if workspace_skills and (not persona or persona.get("skills") != []):
+            skills_by_name = {skill.name: skill for skill in skills}
+            for skill in workspace_skills:
+                skills_by_name[skill.name] = skill
+            skills = [skills_by_name[name] for name in sorted(skills_by_name)]
         if skills:
             req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
             if runtime == "none":
@@ -545,6 +557,7 @@ async def _ensure_persona_and_skills(
 
     # inject toolset in the persona
     if (persona and persona.get("tools") is None) or not persona:
+        persona_allowed_tools = None
         persona_toolset = tmgr.get_full_tool_set()
         persona_toolset = _filter_tools_for_current_config(
             persona_toolset, cfg, session_id
@@ -553,6 +566,7 @@ async def _ensure_persona_and_skills(
             if not tool.active:
                 persona_toolset.remove_tool(tool.name)
     else:
+        persona_allowed_tools = {str(tool_name) for tool_name in persona["tools"]}
         persona_toolset = ToolSet()
         if persona["tools"]:
             for tool_name in persona["tools"]:
@@ -640,6 +654,7 @@ async def _ensure_persona_and_skills(
         )
     except Exception:
         pass
+    return persona_allowed_tools
 
 
 async def _request_img_caption(
@@ -972,12 +987,13 @@ async def _decorate_llm_request(
     plugin_context: Context,
     config: MainAgentBuildConfig,
     provider: Provider | None = None,
-) -> None:
+) -> set[str] | None:
     cfg = config.provider_settings or plugin_context.get_config(
         umo=event.unified_msg_origin
     ).get("provider_settings", {})
 
     _apply_prompt_prefix(req, cfg)
+    persona_allowed_tools = None
 
     main_provider_supports_image = provider is not None and _provider_supports_modality(
         provider, "image"
@@ -986,7 +1002,9 @@ async def _decorate_llm_request(
     quote_images_already_captioned = False
 
     if req.conversation:
-        await _ensure_persona_and_skills(req, cfg, plugin_context, event)
+        persona_allowed_tools = await _ensure_persona_and_skills(
+            req, cfg, plugin_context, event
+        )
 
         if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
@@ -1015,6 +1033,7 @@ async def _decorate_llm_request(
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
     _apply_workspace_extra_prompt(event, req)
+    return persona_allowed_tools
 
 
 def _plugin_tool_fix(
@@ -1489,7 +1508,9 @@ async def build_main_agent(
         else:
             return None
 
-    await _decorate_llm_request(event, req, plugin_context, config, provider=provider)
+    persona_allowed_tools = await _decorate_llm_request(
+        event, req, plugin_context, config, provider=provider
+    )
 
     await _apply_kb(event, req, plugin_context, config)
 
@@ -1524,6 +1545,11 @@ async def build_main_agent(
                 SendMessageToUserTool
             )
         )
+
+    if persona_allowed_tools is not None and req.func_tool:
+        req.func_tool.tools = [
+            tool for tool in req.func_tool.tools if tool.name in persona_allowed_tools
+        ]
 
     fallback_providers = _get_fallback_chat_providers(
         provider, plugin_context, config.provider_settings
