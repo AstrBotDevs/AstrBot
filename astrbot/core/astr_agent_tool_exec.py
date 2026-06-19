@@ -45,10 +45,21 @@ from astrbot.core.tools.computer_tools import (
     PythonTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.registry import get_builtin_tool_name
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+
+
+def _is_builtin_tool_instance(tool: FunctionTool) -> bool:
+    """True if tool is a real instance of a registered builtin tool class.
+
+    Checked by type, not name — an MCP/plugin tool can legally share a
+    builtin tool's name to override it, so a name-based check would skip
+    the permission check below for the wrong tool.
+    """
+    return get_builtin_tool_name(type(tool)) is not None
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
@@ -149,7 +160,19 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 yield r
             return
 
-        elif isinstance(tool, MCPTool):
+        if not _is_builtin_tool_instance(tool):
+            ctx = run_context.context.context
+            tool_mgr = (
+                ctx.get_llm_tool_manager()
+                if hasattr(ctx, "get_llm_tool_manager")
+                else llm_tools
+            )
+            if error := await tool_mgr.check_tool_permission(tool.name, run_context):
+                text_content = mcp.types.TextContent(type="text", text=error)
+                yield mcp.types.CallToolResult(content=[text_content])
+                return
+
+        if isinstance(tool, MCPTool):
             async for r in cls._execute_mcp(tool, run_context, **tool_args):
                 yield r
             return
@@ -266,13 +289,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # "all tools", including runtime computer-use tools.
         if tools is None:
             toolset = ToolSet()
-            handoff_names = {
-                tool.name
-                for tool in tool_mgr.func_list
-                if isinstance(tool, HandoffTool)
-            }
-            for registered_tool in tool_mgr.get_full_tool_set():
-                if registered_tool.name in handoff_names:
+            for registered_tool in tool_mgr.func_list:
+                if isinstance(registered_tool, HandoffTool):
                     continue
                 if registered_tool.active:
                     toolset.add_tool(registered_tool)
