@@ -474,6 +474,88 @@ def _first_nonempty_line_indent(text: str) -> str:
     return ""
 
 
+def _common_leading_whitespace(text: str) -> str:
+    """Get the common leading whitespace shared by all non-empty lines.
+
+    Args:
+        text: Text block to inspect.
+
+    Returns:
+        The exact whitespace prefix shared by every non-empty line.
+    """
+    indents = [
+        _get_leading_whitespace(line) for line in text.split("\n") if line.strip()
+    ]
+    if not indents:
+        return ""
+
+    common = indents[0]
+    for indent in indents[1:]:
+        while common and not indent.startswith(common):
+            common = common[:-1]
+        if not common:
+            break
+    return common
+
+
+def _strip_common_indent(text: str, indent: str) -> str:
+    """Remove an exact common indentation prefix from non-empty lines.
+
+    Args:
+        text: Text block to adjust.
+        indent: Exact indentation prefix to remove.
+
+    Returns:
+        Text with the prefix removed from lines that have it.
+    """
+    if not indent:
+        return text
+
+    lines = text.split("\n")
+    stripped: list[str] = []
+    for line in lines:
+        if line.strip() and line.startswith(indent):
+            stripped.append(line[len(indent) :])
+        else:
+            stripped.append(line)
+    return "\n".join(stripped)
+
+
+def _indent_style(indent: str) -> Literal["", "spaces", "tabs", "mixed"]:
+    """Classify an indentation prefix by whitespace style.
+
+    Args:
+        indent: Indentation prefix to classify.
+
+    Returns:
+        One of empty, spaces, tabs, or mixed.
+    """
+    if not indent:
+        return ""
+    has_spaces = " " in indent
+    has_tabs = "\t" in indent
+    if has_spaces and has_tabs:
+        return "mixed"
+    if has_tabs:
+        return "tabs"
+    return "spaces"
+
+
+def _indent_styles_conflict(left: str, right: str) -> bool:
+    """Return whether two concrete indentation prefixes are unsafe to reconcile.
+
+    Args:
+        left: First indentation prefix.
+        right: Second indentation prefix.
+
+    Returns:
+        True when both prefixes are present and use incompatible styles.
+    """
+    left_style = _indent_style(left)
+    right_style = _indent_style(right)
+    return bool(left_style and right_style and left_style != right_style)
+
+
 def _adjust_replacement_indent(
     new_string: str,
     old_string: str,
@@ -481,116 +563,97 @@ def _adjust_replacement_indent(
     content: str = "",
     match_idx: int = -1,
 ) -> str:
+    """Adjust new_string's indentation using the actual match shape.
+
+    Whole-line and whole-block matches are rebuilt from the matched block's
+    common indentation. Substring matches that begin after a whitespace-only
+    prefix keep the first line at the insertion point and add the existing file
+    prefix to subsequent lines. True mid-line matches are left unchanged.
+
+    Args:
+        new_string: Replacement text provided by the caller.
+        old_string: Search text provided by the caller.
+        matched_block: Exact block found in the file.
+        content: Full file content, used to inspect match position.
+        match_idx: Start offset of matched_block in content.
+
+    Returns:
+        Replacement text adjusted for the current match position.
+
+    Raises:
+        ValueError: If a fuzzy match would require reconciling incompatible
+            indentation styles such as tabs versus spaces.
     """
-    Adjust new_string's indentation to preserve the file's indent level.
+    if not content or match_idx < 0:
+        return new_string
 
-    When a fuzzy replacer (e.g. LineTrimmedReplacer, IndentationFlexibleReplacer)
-    matches a block whose indentation differs from old_string, this function
-    computes the indent delta and applies it to every non-empty line of
-    new_string so the replacement preserves the file's original indentation.
+    line_start = content.rfind("\n", 0, match_idx) + 1
+    prefix = content[line_start:match_idx]
 
-    When *content* and *match_idx* are provided, the effective indent is
-    computed from the actual line in the file rather than from matched_block
-    alone. This correctly handles substring matches (e.g. SimpleReplacer
-    matching ``"print(x)"`` inside ``"                print(x)"``).
+    # Avoid guessing inside expressions or other true mid-line edits.
+    if prefix.strip():
+        return new_string
 
-    Indent adjustment rules:
-    - If the match starts at the beginning of a line (match_idx == line_start),
-      all lines of new_string get the indent delta applied.
-    - If the match starts after a whitespace-only prefix (at the content
-      boundary of an indented line), the first line is NOT adjusted —
-      the content prefix already provides the indent. Lines 2+ get adjusted.
-    - If the match starts mid-line (after non-whitespace content), NO lines
-      are adjusted — the user wrote absolute indentation and the first line
-      inherits the prefix context.
-    - If ``old_string`` and ``new_string`` have different first-nonempty-line
-      indents, no adjustment is applied. The caller is signaling it
-      explicitly chose the indentation, so we trust it. This is what the
-      fuzzy replacers (``LineTrimmedReplacer``,
-      ``IndentationFlexibleReplacer``, etc.) implicitly rely on: they
-      strip away the indent difference to find the match, but the LLM's
-      ``new`` is still expected to land at its explicit on-disk indent.
-
-    For exact matches (old_string == matched_block and both span the full
-    line), delta is zero and this is a no-op.
-    """
-    old_indent = _first_nonempty_line_indent(old_string)
-    new_indent = _first_nonempty_line_indent(new_string)
-
-    # Compute effective file indent from the actual line context when available.
-    # This handles substring matches where matched_block doesn't include
-    # the line's leading whitespace.
-    match_starts_at_line_beginning = True
-    adjust_subsequent_lines = True
-    if content and match_idx >= 0:
-        line_start = content.rfind("\n", 0, match_idx) + 1
-        effective_line = content[line_start:]
-        file_indent = _get_leading_whitespace(effective_line)
-        if match_idx == line_start:
-            # Match starts at the very beginning of the line
-            match_starts_at_line_beginning = True
-            adjust_subsequent_lines = True
-        else:
-            prefix = content[line_start:match_idx]
-            match_starts_at_line_beginning = False
-            if prefix.strip() == "":
-                # Match starts after whitespace-only prefix (content boundary)
-                # First line inherits prefix; subsequent lines get adjusted
-                adjust_subsequent_lines = True
+    if match_idx != line_start:
+        # Substring match starting after a whitespace-only prefix. Two shapes
+        # reach here and must be handled together:
+        #   (a) under-indented search block that landed mid-whitespace — prefix
+        #       is a strict *prefix* of the full line indent (e.g. file uses 12
+        #       spaces, oldString only carries 8, so find() hits at offset 4);
+        #   (b) genuine in-content match with no own indent — prefix already
+        #       equals the full line indent (e.g. oldString == "foo" in "    foo").
+        # The previous code used prefix itself as the target, which is correct
+        # for (b) but collapses indentation for (a) (and any multi-line case).
+        # Rebuild onto the file's FULL line indent instead. The first line will
+        # be prefixed with `prefix` at the splice site, so it only needs the
+        # portion of full_indent that prefix has not already supplied.
+        full_indent = _get_leading_whitespace(content[line_start:])
+        first_line_indent = (
+            full_indent[len(prefix) :]
+            if full_indent.startswith(prefix)
+            else full_indent
+        )
+        replacement_indent = _common_leading_whitespace(new_string)
+        relative_new = _strip_common_indent(new_string, replacement_indent)
+        lines = relative_new.split("\n")
+        adjusted: list[str] = []
+        for i, line in enumerate(lines):
+            if not line.strip():
+                adjusted.append(line)
+            elif i == 0:
+                adjusted.append(first_line_indent + line)
             else:
-                # Match starts after non-whitespace (truly mid-line)
-                # User wrote absolute indentation; no adjustment needed
-                adjust_subsequent_lines = False
-    else:
-        file_indent = _first_nonempty_line_indent(matched_block)
+                adjusted.append(full_indent + line)
+        return "\n".join(adjusted)
 
-    if file_indent == old_indent:
+    target_indent = _common_leading_whitespace(matched_block)
+    source_indent = _common_leading_whitespace(old_string)
+    replacement_indent = _common_leading_whitespace(new_string)
+
+    # Trust the caller's indentation only when the search block already
+    # matches the file's indentation exactly (precise baseline); otherwise
+    # rebuild new_string from the file's target indentation below.
+    if target_indent == source_indent:
         return new_string
 
-    # When the LLM gives ``old`` and ``new`` with different first-nonempty-line
-    # indents, that is a deliberate signal that it thought about indentation
-    # (e.g. stripped-form ``old`` so fuzzy matchers can find the block, but a
-    # properly-indented ``new`` reflecting the final on-disk appearance). Apply
-    # the file's indent delta on top of such a ``new`` and the LLM's predicted
-    # content gets shifted (or doubled), drifting every edit. Trust the
-    # explicit value and leave ``new`` untouched.
-    if old_indent != new_indent:
-        return new_string
+    if _indent_styles_conflict(target_indent, source_indent):
+        raise ValueError(
+            "Matched oldString, but indentation uses incompatible tab/space "
+            "styles. Provide old and new with exact file indentation."
+        )
 
-    # Determine indent character from the file's indentation
-    indent_char = " "
-    if file_indent:
-        indent_char = file_indent[0]
-    elif old_indent:
-        indent_char = old_indent[0]
-
-    delta = len(file_indent) - len(old_indent)
-
-    new_lines = new_string.split("\n")
+    # Rebuild new_string from the file's target indentation. Strip the
+    # caller's own common indentation first (self-consistent, derived from
+    # new_string rather than the possibly-wrong old_string) so a new_string
+    # whose indent drifts below source_indent is not left under-indented.
+    relative_new = _strip_common_indent(new_string, replacement_indent)
+    lines = relative_new.split("\n")
     adjusted: list[str] = []
-    for i, line in enumerate(new_lines):
-        if not line.strip():
-            # Empty or whitespace-only line: keep as-is
-            adjusted.append(line)
-        elif i == 0 and not match_starts_at_line_beginning:
-            # First line and match is not at line start: don't adjust.
-            # The content prefix already provides the indent context.
-            adjusted.append(line)
-        elif i > 0 and not adjust_subsequent_lines:
-            # Subsequent lines in a truly mid-line match: don't adjust.
-            # User wrote absolute indentation.
-            adjusted.append(line)
-        elif delta > 0:
-            # Need to add indentation to match file's deeper indent level
-            adjusted.append(indent_char * delta + line)
-        elif delta < 0:
-            # Need to remove indentation (file is less indented than old_string)
-            current_indent = _get_leading_whitespace(line)
-            remove = min(-delta, len(current_indent))
-            adjusted.append(line[remove:])
+    for line in lines:
+        if line.strip():
+            adjusted.append(target_indent + line)
         else:
             adjusted.append(line)
-
     return "\n".join(adjusted)
 
 
@@ -676,9 +739,11 @@ def robust_replace(
             )
             return content[:idx] + adjusted_new + content[idx + len(match) :], 1
 
-        # Multiple matches found in single-replacement mode: continue to next replacer
-        # to try a more specific strategy
-        continue
+        raise ValueError(
+            "Found multiple matches for oldString. Provide more surrounding context "
+            "to make the match unique, or use replace_all=True to change every "
+            "instance."
+        )
 
     if not_found:
         raise ValueError(
