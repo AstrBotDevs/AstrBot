@@ -131,8 +131,12 @@ class LocalShellComponent(ShellComponent):
             except subprocess.TimeoutExpired:
                 if sys.platform == "win32":
                     try:
-                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=5,
+                        )
                     except Exception:
                         pass
                 else:
