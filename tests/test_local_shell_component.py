@@ -7,19 +7,26 @@ from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import LocalShellComponent
 
 
-class _FakeCompletedProcess:
+class _FakePopen:
     def __init__(self, stdout: bytes, stderr: bytes = b"", returncode: int = 0):
-        self.stdout = stdout
-        self.stderr = stderr
+        self._stdout = stdout
+        self._stderr = stderr
         self.returncode = returncode
+        self.pid = 12345
+
+    def communicate(self, timeout=None):
+        return self._stdout, self._stderr
+
+    def wait(self, timeout=None):
+        pass
 
 
 def test_local_shell_component_decodes_utf8_output(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
-        return _FakeCompletedProcess(stdout="技能内容".encode())
+        return _FakePopen(stdout="技能内容".encode())
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
 
     result = asyncio.run(LocalShellComponent().exec("dummy"))
 
@@ -33,9 +40,9 @@ def test_local_shell_component_prefers_utf8_before_windows_locale(
 ):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
-        return _FakeCompletedProcess(stdout="技能内容".encode())
+        return _FakePopen(stdout="技能内容".encode())
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
     monkeypatch.setattr(
         local_booter.locale,
@@ -53,9 +60,9 @@ def test_local_shell_component_prefers_utf8_before_windows_locale(
 def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
-        return _FakeCompletedProcess(stdout="微博热搜".encode("gbk"))
+        return _FakePopen(stdout="微博热搜".encode("gbk"))
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
     monkeypatch.setattr(
         local_booter.locale,
@@ -73,9 +80,9 @@ def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
 def test_local_shell_component_falls_back_to_utf8_replace(monkeypatch):
     def fake_run(*args, **kwargs):
         _ = args, kwargs
-        return _FakeCompletedProcess(stdout=b"\xffabc")
+        return _FakePopen(stdout=b"\xffabc")
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(subprocess, "Popen", fake_run)
     monkeypatch.setattr(local_booter.os, "name", "posix", raising=False)
     monkeypatch.setattr(
         local_booter.locale,
