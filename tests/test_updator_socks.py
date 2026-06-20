@@ -440,6 +440,7 @@ async def test_download_dashboard_falls_back_when_hosted_package_is_not_zip(
         path: str,
         show_progress: bool = False,  # noqa: ARG001
         progress_callback=None,  # noqa: ARG001
+        allow_insecure_ssl_fallback: bool = True,  # noqa: ARG001
     ) -> None:
         calls.append(url)
         parsed = urlparse(url)
