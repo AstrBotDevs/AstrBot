@@ -14,7 +14,70 @@ import { useSpcodeWorktrees } from "@/composables/useSpcodeWorktrees";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useModuleI18n } from "@/i18n/composables";
 import GitDiffBodyContent from "@/components/chat/message_list_comps/GitDiffBodyContent.vue";
+import FileBrowserView from "@/components/chat/message_list_comps/FileBrowserView.vue";
 const { tm } = useModuleI18n("features/chat");
+
+// ── localStorage persistence (spec 2026-06-20 §5.1 + §6) ────────────
+// Persists 4 view-state keys across page reloads. Values are loaded
+// once at component creation and saved on every change (most are
+// flush:"post" watchers; currentPath uses a 300ms debounce per spec
+// §2 decision #9 to avoid thrashing during fast navigation).
+//
+// Validation rules: invalid persisted values are silently replaced
+// with the spec-defined default. We never throw — localStorage may
+// be disabled (private browsing) or the value may have been written
+// by an older app version.
+const STORAGE_KEYS = {
+  viewMode: "astrbot.spcode.gitDiffSidebar.viewMode",
+  fileBrowserCurrentPath: "astrbot.spcode.gitDiffSidebar.fileBrowserCurrentPath",
+  selectedWorktree: "astrbot.spcode.gitDiffSidebar.selectedWorktree",
+  selectedScope: "astrbot.spcode.gitDiffSidebar.selectedScope",
+} as const;
+
+function safeGetItem(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function safeSetItem(key: string, value: string): void {
+  try { localStorage.setItem(key, value); } catch { /* no-op */ }
+}
+
+function loadViewMode(): "files" | "diff" {
+  const v = safeGetItem(STORAGE_KEYS.viewMode);
+  return v === "files" || v === "diff" ? v : "files";
+}
+function loadFileBrowserCurrentPath(): string {
+  return safeGetItem(STORAGE_KEYS.fileBrowserCurrentPath) ?? "";
+}
+function loadSelectedScope(): GitDiffScope {
+  const v = safeGetItem(STORAGE_KEYS.selectedScope);
+  if (v === "unstaged" || v === "staged" || v === "all") return v;
+  return DEFAULT_SCOPE;
+}
+
+// Debounced writer for currentPath (spec §5.1 lines 1273-1280).
+// Avoids localStorage thrashing when the user clicks through
+// directories rapidly.
+let persistCurrentPathTimer: ReturnType<typeof setTimeout> | null = null;
+function persistCurrentPath(path: string): void {
+  if (persistCurrentPathTimer) clearTimeout(persistCurrentPathTimer);
+  persistCurrentPathTimer = setTimeout(() => {
+    safeSetItem(STORAGE_KEYS.fileBrowserCurrentPath, path);
+  }, 300);
+}
+
+// Cross-root validator (spec §5.1 lines 1300-1310). Returns the input
+// if it's inside the root, else the root. Used to reset stale paths
+// after project / worktree switches.
+function validateCurrentPath(persisted: string | null, root: string | null): string {
+  if (!root) return "";
+  if (!persisted) return root;
+  const normPersisted = persisted.replace(/\\/g, "/");
+  const normRoot = root.replace(/\\/g, "/").replace(/\/$/, "");
+  if (normPersisted === normRoot || normPersisted.startsWith(normRoot + "/")) {
+    return persisted;
+  }
+  return root;
+}
 const props = defineProps<{
   modelValue: boolean;
   isDark?: boolean;
@@ -62,6 +125,27 @@ const SCOPE_OPTIONS: ReadonlyArray<ScopeOption> = [
 // null = use primary (main) worktree. This ref is passed to
 // useSpcodeGitDiff which auto-refreshes on changes.
 const selectedWorktree = ref<string | null>(null);
+
+// ── View-mode tab (spec 2026-06-20 §5.1 + §5.2) ─────────────────────
+// "files" shows <FileBrowserView>; "diff" shows <GitDiffBodyContent>.
+// Default: "files" per spec §2 decision #10 (the more general view;
+// first-time users likely want to "see what's in the project").
+const viewMode = ref<"files" | "diff">(loadViewMode());
+const fileBrowserCurrentPath = ref<string>(loadFileBrowserCurrentPath());
+
+// Hydrate selectedScope from localStorage (validated; fall back to default).
+const _persistedScope = loadSelectedScope();
+if (_persistedScope !== DEFAULT_SCOPE) selectedScope.value = _persistedScope;
+
+// Hydrate selectedWorktree from localStorage. We store the literal
+// string "null" for null (workaround: localStorage.getItem returns
+// null for both "missing" and "stored null"). Validation against the
+// worktree list happens in the worktree-list watcher below.
+const _persistedWorktree = safeGetItem(STORAGE_KEYS.selectedWorktree);
+if (_persistedWorktree !== null && _persistedWorktree !== "null") {
+  selectedWorktree.value = _persistedWorktree;
+}
+
 const worktreesComposable = useSpcodeWorktrees();
 const worktreeList = computed(() => {
   const s = worktreesComposable.state.value;
@@ -73,6 +157,74 @@ const hasMultipleWorktrees = computed(() => worktreeList.value.length > 1);
 // selectedWorktree is null). Lets the main tab stay highlighted.
 const mainWorktreePath = computed(
   () => worktreeList.value.find((w) => w.isMain)?.path ?? null,
+);
+
+// Persist viewMode / selectedScope / selectedWorktree on every change.
+// fileBrowserCurrentPath uses persistCurrentPath (300ms debounce).
+watch(viewMode, (v) => safeSetItem(STORAGE_KEYS.viewMode, v), { flush: "post" });
+watch(
+  selectedScope,
+  (v) => safeSetItem(STORAGE_KEYS.selectedScope, v),
+  { flush: "post" },
+);
+watch(
+  selectedWorktree,
+  (v) => safeSetItem(
+    STORAGE_KEYS.selectedWorktree,
+    v === null ? "null" : v,
+  ),
+  { flush: "post" },
+);
+
+// When the worktree list first loads, validate the persisted worktree
+// AND cross-validate the persisted currentPath against the new root.
+// This is the only place where fileBrowserCurrentPath is overwritten
+// during initial hydration; thereafter the user is in control.
+watch(
+  () => worktreesComposable.state.value,
+  (s) => {
+    if (s.kind !== "ok") return;
+    const wtList = s.snapshot.worktrees;
+    // Validate selectedWorktree
+    if (selectedWorktree.value && !wtList.some((w) => w.path === selectedWorktree.value)) {
+      selectedWorktree.value = null;
+    }
+    // Validate currentPath against the (possibly new) root
+    const root = selectedWorktree.value
+      ?? wtList.find((w) => w.isMain)?.path
+      ?? null;
+    const validated = validateCurrentPath(fileBrowserCurrentPath.value, root);
+    if (fileBrowserCurrentPath.value !== validated) {
+      fileBrowserCurrentPath.value = validated;
+    }
+  },
+  { immediate: true },
+);
+
+// When selectedWorktree changes, reset currentPath to the new root.
+// This fires for BOTH manual worktree switches and project switches
+// (which reset selectedWorktree to null via the directory watcher
+// further below). Per spec §5.1: "reset currentPath regardless of
+// current viewMode" — we don't want stale paths leaking into a
+// different worktree.
+watch(
+  selectedWorktree,
+  (newVal) => {
+    const root = newVal ?? mainWorktreePath.value;
+    if (root && fileBrowserCurrentPath.value !== root) {
+      fileBrowserCurrentPath.value = root;
+      persistCurrentPath(root);
+    }
+  },
+);
+
+// Persist currentPath (debounced 300ms, spec §5.1 line 1357-1361).
+// Empty path is skipped — we don't want to overwrite a valid persisted
+// value with an empty string during the brief interval before the
+// worktree-list watcher fires.
+watch(
+  fileBrowserCurrentPath,
+  (newPath) => { if (newPath) persistCurrentPath(newPath); },
 );
 
 const composable = useSpcodeGitDiff(selectedWorktree, selectedScope);
@@ -201,6 +353,13 @@ function onScopeChange(scope: GitDiffScope): void {
   pendingScope.value = scope;
 }
 
+// Spec 2026-06-20 §4.3: user clicked a breadcrumb or entry → update
+// currentPath. The composable inside FileBrowserView re-fetches
+// automatically when this ref changes.
+function onFileBrowserNavigate(path: string): void {
+  fileBrowserCurrentPath.value = path;
+}
+
 onBeforeUnmount(() => {
   onMouseUp();
   composable.dispose();
@@ -285,6 +444,12 @@ const truncatedMax = computed(() => {
     return s.previousSnapshot.meta.maxBytes;
   return 0;
 });
+
+// Root path for FileBrowserView: the active worktree (or main if none).
+// We pass this to FileBrowserView so it can render the breadcrumb.
+const currentRoot = computed<string | null>(() => {
+  return selectedWorktree.value ?? mainWorktreePath.value;
+});
 </script>
 
 <template>
@@ -300,9 +465,15 @@ const truncatedMax = computed(() => {
       <div class="git-diff-sidebar-header">
         <div class="git-diff-sidebar-title-wrap">
           <span class="git-diff-sidebar-title">
-            {{ tm("spcodeProjectLoad.diffSidebar.title") }}
+            {{ viewMode === "files"
+              ? tm("spcodeProjectLoad.fileBrowser.title")
+              : tm("spcodeProjectLoad.diffSidebar.title") }}
           </span>
-          <v-tooltip v-if="directoryPath" location="bottom" :open-delay="200">
+          <v-tooltip
+            v-if="viewMode === 'diff' && directoryPath"
+            location="bottom"
+            :open-delay="200"
+          >
             <template #activator="{ props: tipProps }">
               <v-icon
                 v-bind="tipProps"
@@ -334,49 +505,45 @@ const truncatedMax = computed(() => {
           />
         </div>
       </div>
-      <!-- Scope bar (spec 2026-06-20 §2.1): 3-pill segmented control
-           for `unstaged` / `staged` / `all`. Always visible, but
-           disabled when no project is loaded. -->
+
+      <!-- View-mode tab (spec 2026-06-20 §5.2): Files / Diff.
+           aria-label is hardcoded (per advisory R2) to avoid adding
+           a 31st i18n key — the visible button text already conveys
+           the purpose for sighted users. -->
       <div
-        class="git-diff-sidebar-scope"
+        class="git-diff-sidebar-view-tabs"
         role="tablist"
-        :aria-label="tm('spcodeProjectLoad.diffSidebar.scopeBar.ariaLabel')"
+        aria-label="Switch view"
       >
-        <div class="git-diff-sidebar-scope-pills">
-          <button
-            v-for="opt in SCOPE_OPTIONS"
-            :key="opt.value"
-            type="button"
-            role="tab"
-            :aria-selected="selectedScope === opt.value"
-            :aria-label="tm(opt.labelKey)"
-            :class="[
-              'git-diff-sidebar-scope-pill',
-              `is-${opt.value}`,
-              { 'is-active': selectedScope === opt.value },
-            ]"
-            :disabled="
-              !isProjectLoaded || (isScopeLoading && pendingScope !== opt.value)
-            "
-            @click="onScopeChange(opt.value)"
-          >
-            <v-icon size="14" class="git-diff-sidebar-scope-pill-icon">
-              {{ opt.icon }}
-            </v-icon>
-            <span class="git-diff-sidebar-scope-pill-text">
-              {{ tm(opt.labelKey) }}
-            </span>
-            <v-progress-circular
-              v-if="isScopeLoading && pendingScope === opt.value"
-              indeterminate
-              :size="12"
-              :width="2"
-              class="git-diff-sidebar-scope-pill-spinner"
-            />
-          </button>
-        </div>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="viewMode === 'files'"
+          :class="[
+            'git-diff-sidebar-view-tab',
+            { 'is-active': viewMode === 'files' },
+          ]"
+          @click="viewMode = 'files'"
+        >
+          <v-icon size="14">mdi-folder-outline</v-icon>
+          <span>{{ tm("spcodeProjectLoad.fileBrowser.viewMode.files") }}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="viewMode === 'diff'"
+          :class="[
+            'git-diff-sidebar-view-tab',
+            { 'is-active': viewMode === 'diff' },
+          ]"
+          @click="viewMode = 'diff'"
+        >
+          <v-icon size="14">mdi-source-pull</v-icon>
+          <span>{{ tm("spcodeProjectLoad.fileBrowser.viewMode.diff") }}</span>
+        </button>
       </div>
-      <!-- Worktree tabs (spec 2026-06-18 §3.4): render only when ≥2 worktrees. -->
+
+      <!-- Worktree tabs (visible in BOTH views, spec 2026-06-20 §5.3) -->
       <div
         v-if="hasMultipleWorktrees"
         class="git-diff-sidebar-tabs"
@@ -415,16 +582,69 @@ const truncatedMax = computed(() => {
           }}</span>
         </button>
       </div>
-      <div v-if="isTruncated" class="git-diff-sidebar-warning">
-        {{
-          tm("spcodeProjectLoad.diffSidebar.truncated", {
-            shown: truncatedShown,
-            max: truncatedMax,
-          })
-        }}
-      </div>
+
+      <!-- Diff-only sub-UI: scope bar + truncation warning -->
+      <template v-if="viewMode === 'diff'">
+        <div
+          class="git-diff-sidebar-scope"
+          role="tablist"
+          :aria-label="tm('spcodeProjectLoad.diffSidebar.scopeBar.ariaLabel')"
+        >
+          <div class="git-diff-sidebar-scope-pills">
+            <button
+              v-for="opt in SCOPE_OPTIONS"
+              :key="opt.value"
+              type="button"
+              role="tab"
+              :aria-selected="selectedScope === opt.value"
+              :aria-label="tm(opt.labelKey)"
+              :class="[
+                'git-diff-sidebar-scope-pill',
+                `is-${opt.value}`,
+                { 'is-active': selectedScope === opt.value },
+              ]"
+              :disabled="
+                !isProjectLoaded || (isScopeLoading && pendingScope !== opt.value)
+              "
+              @click="onScopeChange(opt.value)"
+            >
+              <v-icon size="14" class="git-diff-sidebar-scope-pill-icon">
+                {{ opt.icon }}
+              </v-icon>
+              <span class="git-diff-sidebar-scope-pill-text">
+                {{ tm(opt.labelKey) }}
+              </span>
+              <v-progress-circular
+                v-if="isScopeLoading && pendingScope === opt.value"
+                indeterminate
+                :size="12"
+                :width="2"
+                class="git-diff-sidebar-scope-pill-spinner"
+              />
+            </button>
+          </div>
+        </div>
+        <div v-if="isTruncated" class="git-diff-sidebar-warning">
+          {{
+            tm("spcodeProjectLoad.diffSidebar.truncated", {
+              shown: truncatedShown,
+              max: truncatedMax,
+            })
+          }}
+        </div>
+      </template>
+
+      <!-- Body: Files view OR Diff view -->
       <div class="git-diff-sidebar-body">
+        <FileBrowserView
+          v-if="viewMode === 'files'"
+          :current-path="fileBrowserCurrentPath"
+          :is-dark="!!isDark"
+          :root-path="currentRoot"
+          @navigate="onFileBrowserNavigate"
+        />
         <GitDiffBodyContent
+          v-else
           :state="composable.state.value"
           :expanded="expandedSet"
           :is-dark="!!isDark"
@@ -509,6 +729,39 @@ const truncatedMax = computed(() => {
 .git-diff-sidebar-actions {
   display: flex;
   gap: 4px;
+}
+
+/* ── View-mode tab (spec 2026-06-20 §5.2) ──────────────────── */
+
+.git-diff-sidebar-view-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 14px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+.git-diff-sidebar-view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+.git-diff-sidebar-view-tab:hover {
+  color: rgba(var(--v-theme-on-surface), 0.85);
+}
+.git-diff-sidebar-view-tab.is-active {
+  color: rgb(var(--v-theme-primary));
+  border-bottom-color: rgb(var(--v-theme-primary));
 }
 
 /* ── Scope bar (spec 2026-06-20 §2.1) ──────────────────────── */
