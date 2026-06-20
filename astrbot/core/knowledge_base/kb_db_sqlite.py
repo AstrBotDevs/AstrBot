@@ -167,6 +167,46 @@ class KBSQLiteDatabase:
 
                 await session.commit()
 
+    async def migrate_to_v2(self) -> None:
+        """Run knowledge base database v2 migration.
+
+        Adds the table knowledge base columns to existing databases that were
+        created before the table feature. SQLite does not support
+        ``ADD COLUMN IF NOT EXISTS``, so existing columns are checked via
+        ``PRAGMA table_info`` before issuing ``ALTER TABLE`` statements.
+        """
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                kb_columns = {
+                    row[1]
+                    for row in (
+                        await session.execute(
+                            text("PRAGMA table_info(knowledge_bases)")
+                        )
+                    ).fetchall()
+                }
+                if "kb_type" not in kb_columns:
+                    await session.execute(
+                        text(
+                            "ALTER TABLE knowledge_bases "
+                            "ADD COLUMN kb_type VARCHAR(20) NOT NULL DEFAULT 'text'",
+                        ),
+                    )
+
+                doc_columns = {
+                    row[1]
+                    for row in (
+                        await session.execute(text("PRAGMA table_info(kb_documents)"))
+                    ).fetchall()
+                }
+                if "table_schema" not in doc_columns:
+                    await session.execute(
+                        text("ALTER TABLE kb_documents ADD COLUMN table_schema TEXT"),
+                    )
+
+                await session.commit()
+
     async def close(self) -> None:
         """关闭数据库连接"""
         await self.engine.dispose()

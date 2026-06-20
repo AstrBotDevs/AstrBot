@@ -3468,6 +3468,42 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/knowledge-bases/{kb_id}/documents/preview-table:
+    post:
+      tags: [Knowledge Base]
+      summary: Preview a table file headers and sample rows
+      operationId: previewKnowledgeTable
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/KnowledgeTablePreviewRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/knowledge-bases/{kb_id}/documents/import-table:
+    post:
+      tags: [Knowledge Base]
+      summary: Import a table file with column configuration
+      operationId: importKnowledgeTable
+      x-astrbot-scope: kb
+      parameters:
+        - $ref: "#/components/parameters/KbId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/KnowledgeTableImportRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/knowledge-bases/{kb_id}/documents/{document_id}:
     get:
       tags: [Knowledge Base]
@@ -5619,6 +5655,10 @@ components:
           type: string
         description:
           type: string
+        kb_type:
+          type: string
+          enum: [text, table]
+          default: text
         embedding_provider_id:
           type: string
         rerank_provider_id:
@@ -5674,6 +5714,43 @@ components:
         score_threshold:
           type: number
       additionalProperties: false
+
+    KnowledgeTablePreviewRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+        header_row:
+          type: integer
+          default: 0
+        preview_rows:
+          type: integer
+          default: 20
+
+    KnowledgeTableImportRequest:
+      type: object
+      required: [file, columns_config]
+      properties:
+        file:
+          type: string
+          format: binary
+        columns_config:
+          type: string
+          description: JSON string array of column configuration objects.
+        header_row:
+          type: integer
+          default: 0
+        batch_size:
+          type: integer
+          default: 32
+        tasks_limit:
+          type: integer
+          default: 3
+        max_retries:
+          type: integer
+          default: 3
 
     PersonaRequest:
       type: object

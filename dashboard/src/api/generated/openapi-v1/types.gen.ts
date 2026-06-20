@@ -86,6 +86,9 @@ export type ChatProjectRequest = {
 };
 
 export type ChatRequest = {
+    /**
+     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     */
     username?: string;
     session_id?: string;
     /**
@@ -255,11 +258,14 @@ export type JsonSchema = {
 export type KnowledgeBaseRequest = {
     name: string;
     description?: string;
+    kb_type?: 'text' | 'table';
     embedding_provider_id?: string;
     rerank_provider_id?: string;
     chunking?: DynamicConfig;
     metadata?: DynamicConfig;
 };
+
+export type kb_type = 'text' | 'table';
 
 export type KnowledgeDocumentImportRequest = {
     paths: Array<(string)>;
@@ -280,6 +286,24 @@ export type KnowledgeRetrieveRequest = {
     query: string;
     top_k?: number;
     score_threshold?: number;
+};
+
+export type KnowledgeTableImportRequest = {
+    file: (Blob | File);
+    /**
+     * JSON string array of column configuration objects.
+     */
+    columns_config: string;
+    header_row?: number;
+    batch_size?: number;
+    tasks_limit?: number;
+    max_retries?: number;
+};
+
+export type KnowledgeTablePreviewRequest = {
+    file: (Blob | File);
+    header_row?: number;
+    preview_rows?: number;
 };
 
 export type LoginRequest = {
@@ -2660,6 +2684,28 @@ export type ImportKnowledgeDocumentFromUrlData = {
 export type ImportKnowledgeDocumentFromUrlResponse = (SuccessEnvelope);
 
 export type ImportKnowledgeDocumentFromUrlError = unknown;
+
+export type PreviewKnowledgeTableData = {
+    body: KnowledgeTablePreviewRequest;
+    path: {
+        kb_id: string;
+    };
+};
+
+export type PreviewKnowledgeTableResponse = (SuccessEnvelope);
+
+export type PreviewKnowledgeTableError = unknown;
+
+export type ImportKnowledgeTableData = {
+    body: KnowledgeTableImportRequest;
+    path: {
+        kb_id: string;
+    };
+};
+
+export type ImportKnowledgeTableResponse = (SuccessEnvelope);
+
+export type ImportKnowledgeTableError = unknown;
 
 export type GetKnowledgeDocumentData = {
     path: {

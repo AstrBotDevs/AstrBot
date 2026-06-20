@@ -205,6 +205,42 @@ async def upload_knowledge_base_document(
     return await _run(_operation, prefix="上传文档失败")
 
 
+@router.post("/knowledge-bases/{kb_id}/documents/preview-table")
+async def preview_knowledge_base_table(
+    kb_id: str,
+    request: Request,
+    _auth: AuthContext = Depends(require_kb_scope),
+    service: KnowledgeBaseService = Depends(get_service),
+):
+    async def _operation():
+        form_data, files = await multipart_parts(request, extra_form={"kb_id": kb_id})
+        return await service.preview_table(
+            content_type=request.headers.get("content-type"),
+            form_data=form_data,
+            files=files,
+        )
+
+    return await _run(_operation, prefix="表格预览失败")
+
+
+@router.post("/knowledge-bases/{kb_id}/documents/import-table")
+async def import_knowledge_base_table(
+    kb_id: str,
+    request: Request,
+    _auth: AuthContext = Depends(require_kb_scope),
+    service: KnowledgeBaseService = Depends(get_service),
+):
+    async def _operation():
+        form_data, files = await multipart_parts(request, extra_form={"kb_id": kb_id})
+        return await service.import_table(
+            content_type=request.headers.get("content-type"),
+            form_data=form_data,
+            files=files,
+        )
+
+    return await _run(_operation, prefix="表格导入失败")
+
+
 @router.post("/knowledge-bases/{kb_id}/documents/import")
 async def import_knowledge_base_documents(
     kb_id: str,
