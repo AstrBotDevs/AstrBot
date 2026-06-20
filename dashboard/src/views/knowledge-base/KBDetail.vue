@@ -64,6 +64,16 @@
 
                     <v-list-item>
                       <template #prepend>
+                        <v-icon>{{ kb.kb_type === 'table' ? 'mdi-table' : 'mdi-text-box-outline' }}</v-icon>
+                      </template>
+                      <v-list-item-title>{{ t('overview.type') }}</v-list-item-title>
+                      <v-list-item-subtitle>
+                        {{ kb.kb_type === 'table' ? t('overview.typeTable') : t('overview.typeText') }}
+                      </v-list-item-subtitle>
+                    </v-list-item>
+
+                    <v-list-item>
+                      <template #prepend>
                         <v-icon>mdi-calendar-plus</v-icon>
                       </template>
                       <v-list-item-title>{{ t('overview.createdAt') }}</v-list-item-title>

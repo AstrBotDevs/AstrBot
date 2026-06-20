@@ -59,6 +59,7 @@ class KnowledgeBaseManager:
         self.kb_db = KBSQLiteDatabase(DB_PATH.as_posix())
         await self.kb_db.initialize()
         await self.kb_db.migrate_to_v1()
+        await self.kb_db.migrate_to_v2()
         logger.info(f"KnowledgeBase database initialized: {DB_PATH}")
 
     async def load_kbs(self) -> None:
@@ -94,6 +95,7 @@ class KnowledgeBaseManager:
         top_k_dense: int | None = None,
         top_k_sparse: int | None = None,
         top_m_final: int | None = None,
+        kb_type: str | None = None,
     ) -> KBHelper:
         """创建新的知识库实例"""
         if embedding_provider_id is None:
@@ -102,6 +104,7 @@ class KnowledgeBaseManager:
             kb_name=kb_name,
             description=description,
             emoji=emoji or "📚",
+            kb_type=kb_type or "text",
             embedding_provider_id=embedding_provider_id,
             rerank_provider_id=rerank_provider_id,
             chunk_size=chunk_size if chunk_size is not None else 512,

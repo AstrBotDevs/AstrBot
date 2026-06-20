@@ -31,6 +31,9 @@ class KnowledgeBase(BaseKBModel, table=True):
     kb_name: str = Field(max_length=100, nullable=False)
     description: str | None = Field(default=None, sa_type=Text)
     emoji: str | None = Field(default="📚", max_length=10)
+    # Knowledge base type: "text" (unstructured documents) or "table"
+    # (structured row-level data, Coze-like table knowledge base).
+    kb_type: str = Field(default="text", max_length=20, nullable=False)
     embedding_provider_id: str | None = Field(default=None, max_length=100)
     rerank_provider_id: str | None = Field(default=None, max_length=100)
     # 分块配置参数
@@ -81,6 +84,9 @@ class KBDocument(BaseKBModel, table=True):
     file_type: str = Field(max_length=20, nullable=False)
     file_size: int = Field(nullable=False)
     file_path: str = Field(max_length=512, nullable=False)
+    # JSON column configuration for table documents (None for text documents).
+    # Stores the per-document column schema chosen during table preprocessing.
+    table_schema: str | None = Field(default=None, sa_type=Text)
     chunk_count: int = Field(default=0, nullable=False)
     media_count: int = Field(default=0, nullable=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
