@@ -282,6 +282,14 @@
         "mainBadge": "主",
         "detachedBadge": "游离"
       },
+      "scopeBar": {
+        "ariaLabel": "选择 diff 范围"
+      },
+      "scope": {
+        "unstaged": "未暂存",
+        "staged": "已暂存",
+        "all": "全部 (与 HEAD)"
+      },
       "error": {
         "networkTitle": "网络连接失败",
         "loadFailedTitle": "无法获取改动",

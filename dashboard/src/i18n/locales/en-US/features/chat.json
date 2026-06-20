@@ -282,6 +282,14 @@
         "mainBadge": "main",
         "detachedBadge": "detached"
       },
+      "scopeBar": {
+        "ariaLabel": "Select diff scope"
+      },
+      "scope": {
+        "unstaged": "Unstaged",
+        "staged": "Staged",
+        "all": "All (vs HEAD)"
+      },
       "error": {
         "networkTitle": "Network connection failed",
         "loadFailedTitle": "Failed to load changes",

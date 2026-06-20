@@ -272,6 +272,14 @@
         "mainBadge": "главный",
         "detachedBadge": "отсоединён"
       },
+      "scopeBar": {
+        "ariaLabel": "Выберите область diff"
+      },
+      "scope": {
+        "unstaged": "Не подготовлено",
+        "staged": "Подготовлено",
+        "all": "Всё (с HEAD)"
+      },
       "error": {
         "networkTitle": "Ошибка сетевого подключения",
         "loadFailedTitle": "Не удалось получить изменения",
