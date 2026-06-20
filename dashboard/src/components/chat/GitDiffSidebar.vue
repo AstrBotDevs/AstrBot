@@ -364,6 +364,10 @@ onBeforeUnmount(() => {
   onMouseUp();
   composable.dispose();
   worktreesComposable.dispose();
+  if (persistCurrentPathTimer) {
+    clearTimeout(persistCurrentPathTimer);
+    persistCurrentPathTimer = null;
+  }
 });
 
 function toggleFile(path: string): void {
