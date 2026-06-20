@@ -1,0 +1,341 @@
+<!-- Author: elecvoid243, 2026-06-20
+     Spec: docs/superpowers/specs/2026-06-20-git-diff-sidebar-file-browser-design.md §4.5 -->
+<script setup lang="ts">
+import { computed, ref, onMounted, watch } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { ensureShikiLanguages, renderShikiCode, escapeHtml } from "@/utils/shiki";
+import type { FileBrowserFetchState } from "@/composables/useSpcodeFileBrowser";
+
+const props = defineProps<{
+  state: FileBrowserFetchState;
+  isDark: boolean;
+}>();
+const emit = defineEmits<{
+  (e: "navigate-target", resolvedPath: string): void;
+  (e: "retry"): void;
+}>();
+const { tm } = useModuleI18n("features/chat");
+
+/**
+ * Resolve a symlink target string (which may be relative) against the
+ * symlink's parent directory. Mirrors POSIX symlink semantics:
+ * - Absolute target: use as-is
+ * - Relative target: join with parent dir of the symlink
+ *
+ * The backend does NOT resolve symlinks (per file-browser spec §3.5.4);
+ * if the user wants to view the resolved content, we manually re-issue
+ * the request with the resolved path so the backend re-classifies it.
+ */
+function resolveTargetPath(symlinkPath: string, target: string): string {
+  const isWindows = symlinkPath.includes("\\");
+  const sep = isWindows ? "\\" : "/";
+  if (target.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(target)) {
+    return target;  // Absolute path
+  }
+  const lastSep = Math.max(symlinkPath.lastIndexOf("/"), symlinkPath.lastIndexOf("\\"));
+  const parentDir = lastSep >= 0 ? symlinkPath.slice(0, lastSep) : symlinkPath;
+  return parentDir + sep + target;
+}
+
+// Mirror of detectLanguage in ToolResultView.vue (line 160-165) to ensure
+// consistent language detection between the tool result view and this preview.
+const EXT_TO_LANG: Record<string, string> = {
+  ".py": "python",
+  ".js": "javascript",
+  ".mjs": "javascript",
+  ".cjs": "javascript",
+  ".ts": "typescript",
+  ".tsx": "tsx",
+  ".jsx": "jsx",
+  ".vue": "vue",
+  ".json": "json",
+  ".yaml": "yaml",
+  ".yml": "yaml",
+  ".sh": "bash",
+  ".bash": "bash",
+  ".zsh": "bash",
+  ".css": "css",
+  ".html": "html",
+  ".htm": "html",
+  ".xml": "xml",
+  ".svg": "xml",
+  ".md": "markdown",
+  ".sql": "sql",
+  ".java": "java",
+  ".ini": "ini",
+  ".diff": "diff",
+  ".patch": "diff",
+  ".ps1": "powershell",
+  ".dockerfile": "dockerfile",
+  ".txt": "text",
+  ".c": "c",
+  ".h": "c",
+  ".cpp": "cpp",
+  ".cc": "cpp",
+  ".cxx": "cpp",
+  ".hpp": "cpp",
+  ".c++": "cpp",
+  ".go": "go",
+  ".rs": "rust",
+};
+
+function detectLanguage(filePath: string): string {
+  const m = filePath.match(/\.([\w]+)$/i);
+  if (!m) return "text";
+  const key = "." + m[1].toLowerCase();
+  return EXT_TO_LANG[key] || "text";
+}
+
+const shikiHighlighter = ref<any>(null);
+const shikiReady = ref(false);
+
+onMounted(async () => {
+  // Pattern mirrored verbatim from ToolResultView.vue:289 — do NOT
+  // pass an array arg to ensureShikiLanguages (it takes zero args
+  // and silently ignores any). Assign the returned highlighter so
+  // the !shikiHighlighter.value guard in highlightedHtml is satisfied.
+  try {
+    shikiHighlighter.value = await ensureShikiLanguages();
+    shikiReady.value = true;
+  } catch (err) {
+    console.error("Shiki init failed:", err);
+  }
+});
+
+const highlightedHtml = computed(() => {
+  if (props.state.kind !== "file") return "";
+  const snapshot = props.state.snapshot;
+  if (snapshot.content === null) return "";
+  if (!shikiReady.value || !shikiHighlighter.value) {
+    return `<pre><code>${escapeHtml(snapshot.content)}</code></pre>`;
+  }
+  try {
+    // renderShikiCode signature: (highlighter, code, language, colorMode)
+    // colorMode="auto" enables dual-theme (light/dark) auto-switching.
+    return renderShikiCode(
+      shikiHighlighter.value,
+      snapshot.content,
+      detectLanguage(snapshot.meta.path),
+      "auto",
+    );
+  } catch (err) {
+    console.error("Shiki render failed:", err);
+    return `<pre><code>${escapeHtml(snapshot.content)}</code></pre>`;
+  }
+});
+
+const copyButtonText = ref<string>("");
+watch(highlightedHtml, () => {
+  copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copy");
+});
+
+async function copyContent(): Promise<void> {
+  if (props.state.kind !== "file" || !props.state.snapshot.content) return;
+  if (!navigator.clipboard) return;  // HTTP insecure context fallback
+  try {
+    await navigator.clipboard.writeText(props.state.snapshot.content);
+    copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copySuccess");
+    setTimeout(() => {
+      copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copy");
+    }, 2000);
+  } catch {
+    // Silent: user can manually select
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+function formatMtime(mtime: number | null): string {
+  if (!mtime) return "—";
+  return new Date(mtime * 1000).toLocaleString();
+}
+
+// Map the composable's reason codes to localized messages.
+const REASON_I18N_KEYS: Record<string, string> = {
+  path_not_found: "spcodeProjectLoad.fileBrowser.error.pathNotFound",
+  permission_denied: "spcodeProjectLoad.fileBrowser.error.permissionDenied",
+  special_file: "spcodeProjectLoad.fileBrowser.error.specialFile",
+};
+
+function localizedReason(reason: string): string {
+  const key = REASON_I18N_KEYS[reason];
+  if (key) return tm(key);
+  if (reason === "network") {
+    return tm("spcodeProjectLoad.fileBrowser.error.network");
+  }
+  return tm("spcodeProjectLoad.fileBrowser.error.unknown", { reason });
+}
+</script>
+
+<template>
+  <div class="file-browser-preview">
+    <!-- 加载中 -->
+    <div v-if="state.kind === 'idle' || state.kind === 'loading'" class="preview-center">
+      <v-progress-circular indeterminate color="primary" :size="32" />
+      <span>{{ tm("spcodeProjectLoad.fileBrowser.loading") }}</span>
+    </div>
+
+    <!-- 错误(真错误:path_not_found / permission_denied / special_file / network / unknown) -->
+    <div v-else-if="state.kind === 'error'" class="preview-center">
+      <v-icon size="32" color="error">mdi-alert-circle-outline</v-icon>
+      <div class="preview-error-title">{{ tm("spcodeProjectLoad.fileBrowser.error.loadFailedTitle") }}</div>
+      <div class="preview-error-detail">{{ localizedReason(state.reason) }}</div>
+      <v-btn
+        size="small"
+        color="primary"
+        variant="tonal"
+        prepend-icon="mdi-refresh"
+        @click="emit('retry')"
+      >
+        {{ tm("spcodeProjectLoad.fileBrowser.error.retry") }}
+      </v-btn>
+    </div>
+
+    <!-- 目录状态:左栏已经显示列表,右栏只显示提示 -->
+    <div v-else-if="state.kind === 'directory'" class="preview-center">
+      <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
+      <span class="preview-hint">{{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}</span>
+    </div>
+
+    <!-- symlink 状态 -->
+    <div v-else-if="state.kind === 'symlink'" class="preview-center">
+      <v-icon size="32" color="info">mdi-link-variant</v-icon>
+      <div class="preview-symlink-info">
+        <div class="preview-symlink-target-label">→ {{ state.snapshot.meta.target }}</div>
+        <div v-if="!state.snapshot.meta.targetExists" class="preview-symlink-dangling">
+          {{ tm("spcodeProjectLoad.fileBrowser.entryType.dangling") }}
+        </div>
+      </div>
+      <v-btn
+        v-if="state.snapshot.meta.targetExists"
+        size="small"
+        variant="tonal"
+        prepend-icon="mdi-arrow-right"
+        @click="emit('navigate-target', resolveTargetPath(state.snapshot.meta.path, state.snapshot.meta.target))"
+      >
+        {{ tm("spcodeProjectLoad.fileBrowser.preview.goToTarget") }}
+      </v-btn>
+    </div>
+
+    <!-- 文件 -->
+    <div v-else-if="state.kind === 'file'" class="preview-file">
+      <!-- 元信息头 -->
+      <div class="preview-file-meta">
+        <span class="preview-file-path" :title="state.snapshot.meta.path">{{ state.snapshot.meta.name }}</span>
+        <span class="preview-file-size">{{ formatBytes(state.snapshot.meta.size) }}</span>
+        <span class="preview-file-mtime">{{ formatMtime(state.snapshot.meta.mtime) }}</span>
+        <v-btn
+          v-if="state.snapshot.content"
+          size="x-small"
+          variant="text"
+          prepend-icon="mdi-content-copy"
+          @click="copyContent"
+        >
+          {{ copyButtonText }}
+        </v-btn>
+      </div>
+
+      <!-- 二进制文件 -->
+      <div v-if="state.snapshot.meta.isBinary === true" class="preview-binary">
+        <v-icon size="32" color="grey">mdi-file-question-outline</v-icon>
+        <span>{{ tm("spcodeProjectLoad.fileBrowser.preview.binary") }}</span>
+      </div>
+
+      <!-- 过大文件 -->
+      <div v-else-if="state.snapshot.content === null" class="preview-binary">
+        <v-icon size="32" color="grey">mdi-file-alert-outline</v-icon>
+        <span>{{ tm("spcodeProjectLoad.fileBrowser.preview.tooLarge", { size: formatBytes(state.snapshot.meta.size) }) }}</span>
+      </div>
+
+      <!-- 文本内容(Shiki 高亮) -->
+      <pre v-else class="preview-file-content" v-html="highlightedHtml" />
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.file-browser-preview {
+  flex: 1 1 60%;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+.preview-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 32px 16px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 13px;
+  text-align: center;
+}
+.preview-hint { color: rgba(var(--v-theme-on-surface), 0.5); font-size: 12.5px; }
+.preview-error-title { color: rgba(var(--v-theme-error), 1); font-weight: 500; font-size: 14px; }
+.preview-error-detail { color: rgba(var(--v-theme-on-surface), 0.7); font-size: 12.5px; max-width: 320px; }
+
+.preview-file {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.preview-file-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  font-size: 11.5px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  background: rgba(var(--v-theme-surface), 0.4);
+}
+.preview-file-path {
+  flex: 1;
+  font-family: ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-file-size, .preview-file-mtime {
+  font-variant-numeric: tabular-nums;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+}
+.preview-file-content {
+  flex: 1;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  background: transparent !important;
+}
+.preview-binary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 13px;
+}
+.preview-symlink-info {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  text-align: center;
+}
+.preview-symlink-target-label { color: rgb(var(--v-theme-info)); }
+.preview-symlink-dangling {
+  color: rgb(248, 81, 73);
+  font-size: 12px;
+  margin-top: 6px;
+}
+</style>

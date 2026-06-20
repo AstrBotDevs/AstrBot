@@ -267,6 +267,41 @@
       "loadedAtPrefix": "加载于",
       "noProject": "未加载项目"
     },
+    "fileBrowser": {
+      "title": "工作区浏览",
+      "viewMode": {
+        "files": "工作区",
+        "diff": "Git Diff"
+      },
+      "breadcrumbRoot": "项目根",
+      "loading": "加载中…",
+      "empty": "空目录",
+      "placeholder": "请先加载项目",
+      "truncated": "⚠ 列表已截断,仅显示前 1000 项",
+      "entryType": {
+        "directory": "文件夹",
+        "file": "文件",
+        "symlink": "符号链接",
+        "dangling": "悬空链接"
+      },
+      "preview": {
+        "selectFromLeft": "从左侧选择文件以预览",
+        "binary": "二进制文件,无法预览",
+        "tooLarge": "文件过大 ({size}),无法预览",
+        "copy": "复制",
+        "copySuccess": "已复制",
+        "goToTarget": "前往目标"
+      },
+      "error": {
+        "loadFailedTitle": "无法加载",
+        "pathNotFound": "路径不存在",
+        "permissionDenied": "权限不足",
+        "specialFile": "特殊文件类型,无法预览",
+        "network": "网络连接失败",
+        "unknown": "加载失败 ({reason})",
+        "retry": "重试"
+      }
+    },
     "diffSidebar": {
       "chip": "Git Diff",
       "chipTooltip": "查看 Git 改动",
