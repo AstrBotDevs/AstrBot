@@ -418,10 +418,11 @@ class ProviderSourceRequest(OpenModel):
             self.config
             or self.model_dump(exclude={"source_id", "config"}, exclude_none=True)
         )
-        if fallback_id:
-            config["id"] = fallback_id
-        elif self.id and "id" not in config:
-            config["id"] = self.id
+        if "id" not in config or not config.get("id"):
+            if self.id:
+                config["id"] = self.id
+            elif fallback_id:
+                config["id"] = fallback_id
         return config
 
 
