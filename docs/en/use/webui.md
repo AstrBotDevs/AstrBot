@@ -119,3 +119,6 @@ Modify the `port` in the `dashboard` configuration in the data/cmd_config.json f
 ## Forgot Password
 
 Modify the `password` in the `dashboard` configuration in the data/cmd_config.json file and delete the entire password key-value pair.
+
+> [!TIP]
+> For more details, see [FAQ - Forgot Dashboard Password](/en/faq.md#forgot-dashboard-password).

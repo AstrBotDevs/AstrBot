@@ -18,6 +18,8 @@ AstrBot 的指令通过插件机制注册。为了保持主程序轻量，当前
 - `/reset`：重置当前会话的 LLM 上下文。
 - `/stop`：停止当前会话中正在运行的 Agent 任务。
 - `/new`：创建并切换到一个新对话。
+- `/stats`：查看当前会话的 Token 用量统计。
+- `/provider`：查看或切换 LLM Provider。该指令需要管理员权限。
 - `/dashboard_update`：更新 AstrBot WebUI。该指令需要管理员权限。
 - `/set`：设置当前会话变量，常用于 Dify、Coze、DashScope 等 Agent 执行器的输入变量。
 - `/unset`：移除当前会话变量。
@@ -95,6 +97,45 @@ AstrBot 的指令通过插件机制注册。为了保持主程序轻量，当前
 对于第三方 Agent Runner，例如 `dify`、`coze`、`dashscope`、`deerflow`，`/stop` 会直接停止当前会话中登记的运行任务。
 
 如果当前会话没有正在运行的任务，AstrBot 会提示当前会话没有运行中的任务。
+
+### `/stats`
+
+`/stats` 用于查看当前会话的 Token 用量统计。
+
+它从数据库中查询当前对话的所有 Provider 调用记录，汇总并展示：
+
+- 总 Token 用量（输入 Token + 输出 Token）。
+- 输入 Token（缓存命中），即被提供商缓存并跳过计费的输入 Token。
+- 输入 Token（其他），即未被缓存、正常计费的输入 Token。
+- 输出 Token，即模型生成的输出 Token。
+
+如果当前不在任何对话中，AstrBot 会提示先使用 `/new` 创建对话。
+
+### `/provider`
+
+`/provider` 用于查看或切换当前 UMO 使用的 Provider（LLM / TTS / STT）。
+
+**查看 Provider 列表：**
+
+不带参数时，`/provider` 会列出所有已配置的 Provider，按 LLM、TTS、STT 分类展示。每个 Provider 旁会显示：
+
+- 序号，用于后续切换。
+- Provider ID 和当前使用的模型（LLM 类型）。
+- 可达性标记：`✅` 表示连接正常，`❌` 表示连接失败（附带错误码）。
+- 当前正在使用的 Provider 末尾会标注 `(当前使用)`。
+
+> [!NOTE]
+> 可达性检测需要在 WebUI 的 `配置 -> 普通配置 -> AI 配置` 中，展开底部的「更多配置」，开启「提供商可达性检测」后才会生效。关闭后不显示可达性标记，列表加载更快。
+
+**切换 Provider：**
+
+使用 `/provider <序号>` 可以将当前会话的 LLM Provider 切换为列表中对应序号的 Provider。
+
+- `/provider <序号>`：切换到指定序号的 LLM Provider。
+- `/provider tts <序号>`：切换到指定序号的 TTS Provider。
+- `/provider stt <序号>`：切换到指定序号的 STT Provider。
+
+该指令需要管理员权限。
 
 ## 内置指令扩展
 
