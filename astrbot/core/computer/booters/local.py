@@ -130,9 +130,11 @@ class LocalShellComponent(ShellComponent):
                 stdout, stderr = proc.communicate(timeout=timeout or 300)
             except subprocess.TimeoutExpired:
                 if sys.platform == "win32":
-                    import subprocess as _sp
-                    _sp.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                           capture_output=True, timeout=5)
+                    try:
+                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                    except Exception:
+                        pass
                 else:
                     proc.kill()
                 proc.wait()
