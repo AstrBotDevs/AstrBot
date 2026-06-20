@@ -362,7 +362,12 @@ export type FileBrowserFetchState =
 
 export interface UseSpcodeFileBrowser {
   state: Ref<FileBrowserFetchState>;
-  refresh: (path: string) => Promise<void>;
+  /**
+   * Refresh with explicit path. If `path` is omitted, uses the current
+   * value of `pathRef`. The parameter is optional in the implementation
+   * to support both auto-watch refresh and manual re-fetch use cases.
+   */
+  refresh: (path?: string) => Promise<void>;
   dispose: () => void;
 }
 
@@ -461,7 +466,7 @@ function classifyError(err: unknown): string {
 
 ### 4.3 `FileBrowserView.vue` 主组件
 
-> **设计决策**:工作树状态(`worktreeList` / `mainWorktreePath` / `selectedWorktree`)由父组件 `GitDiffSidebar.vue` 拥有并向下传递 props,**避免**重复实例化 `useSpcodeWorktrees()`(否则会触发重复的 mount 拉取 + 第二个 dispose 路径)。`useSpcodeProjectStatus` 是模块级单例,本组件可直接调用。
+> **设计决策**:工作树状态由父组件 `GitDiffSidebar.vue` 拥有并通过 `rootPath` prop 传递(避免重复实例化 `useSpcodeWorktrees()`);本组件不直接接收 `worktrees` 数组,因为面包屑只需要根路径,不需要完整列表。`useSpcodeProjectStatus` 是模块级单例,本组件可直接调用。
 
 ```vue
 <!-- Author: elecvoid243, 2026-06-20
@@ -474,15 +479,12 @@ import { useSpcodeFileBrowser } from "@/composables/useSpcodeFileBrowser";
 import FileBrowserBreadcrumb from "./FileBrowserBreadcrumb.vue";
 import FileBrowserEntryList from "./FileBrowserEntryList.vue";
 import FileBrowserFilePreview from "./FileBrowserFilePreview.vue";
-import type { SpcodeGitWorktree } from "@/composables/parseSpcodeWorktrees";
 
 const props = defineProps<{
   currentPath: string;
   isDark?: boolean;
   /** 当前 worktree 根路径(由父组件计算:selectedWorktree ?? mainWorktreePath);null = 项目未加载 */
   rootPath: string | null;
-  /** 工作树列表(从父组件传入;此组件不调用 useSpcodeWorktrees) */
-  worktrees: SpcodeGitWorktree[];
 }>();
 const emit = defineEmits<{ (e: "navigate", path: string): void }>();
 
@@ -527,6 +529,7 @@ const fileBrowserComposable = useSpcodeFileBrowser(
           :state="fileBrowserComposable.state.value"
           :is-dark="!!isDark"
           @navigate-target="(p) => emit('navigate', p)"
+          @retry="() => fileBrowserComposable.refresh()"
         />
       </div>
     </template>
@@ -565,21 +568,23 @@ const fileBrowserComposable = useSpcodeFileBrowser(
 
 /* Mobile: stack the two panes vertically (see §9.6 acceptance test).
    The outer GitDiffSidebar is already fullscreen on < 760px (mobile
-   rule inherited), so we just collapse the flex direction here. */
+   rule inherited), so we just collapse the flex direction here.
+   NOTE: entry-list and preview classes live in child components'
+   <style scoped> blocks — use :deep() to reach into them. */
 @media (max-width: 760px) {
   .file-browser-body {
     flex-direction: column;
-  }
-  .file-browser-entry-list {
-    flex: 0 0 auto;
-    max-height: 40vh;
-    min-width: 0;
   }
   .file-browser-divider {
     width: auto;
     height: 1px;
   }
-  .file-browser-preview {
+  :deep(.file-browser-entry-list) {
+    flex: 0 0 auto;
+    max-height: 40vh;
+    min-width: 0;
+  }
+  :deep(.file-browser-preview) {
     flex: 1 1 auto;
   }
 }
@@ -755,6 +760,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "navigate-target", resolvedPath: string): void;
+  (e: "retry"): void;
 }>();
 const { tm } = useModuleI18n("features/chat");
 
@@ -913,13 +919,29 @@ function localizedReason(reason: string): string {
       <span>{{ tm("spcodeProjectLoad.fileBrowser.loading") }}</span>
     </div>
 
-    <!-- 错误 -->
+    <!-- 错误:reasons handled here are the three "true errors" (path_not_found /
+         permission_denied / special_file) plus network/unknown. For partial
+         results (file_too_large / binary_file / directory_listing_truncated)
+         the state is still a snapshot kind, so they're handled in their
+         respective branches above.
+         The retry button re-issues the current path fetch via the parent's
+         composable; the parent (FileBrowserView) wires the click handler
+         because it owns the composable instance. -->
     <div v-else-if="state.kind === 'error'" class="preview-center">
       <v-icon size="32" color="error">mdi-alert-circle-outline</v-icon>
       <div class="preview-error-title">{{ tm("spcodeProjectLoad.fileBrowser.error.loadFailedTitle") }}</div>
       <div class="preview-error-detail">
         {{ localizedReason(state.reason) }}
       </div>
+      <v-btn
+        size="small"
+        color="primary"
+        variant="tonal"
+        :prepend-icon="'mdi-refresh'"
+        @click="emit('retry')"
+      >
+        {{ tm("spcodeProjectLoad.fileBrowser.error.retry") }}
+      </v-btn>
     </div>
 
     <!-- 目录状态(左栏负责列表渲染,右栏只显示提示) -->
@@ -1316,11 +1338,14 @@ watch(
 );
 
 // When selectedWorktree changes: reset currentPath to new root
-// (matches the Diff view's behavior of resetting scope on worktree change).
+// regardless of current viewMode. Rationale: if the user is in Diff view
+// and switches worktree, the Files view's currentPath must be updated too
+// (otherwise switching back to Files shows a stale path that may no
+// longer exist, triggering path_not_found). Matches the Diff view's
+// behavior of resetting scope on worktree change.
 watch(
   selectedWorktree,
   (newVal) => {
-    if (viewMode.value !== "files") return;
     const root = newVal ?? mainWorktreePath.value;
     if (root && fileBrowserCurrentPath.value !== root) {
       fileBrowserCurrentPath.value = root;
@@ -1375,6 +1400,7 @@ watch(
     v-if="viewMode === 'files'"
     :current-path="fileBrowserCurrentPath"
     :is-dark="isDark"
+    :root-path="currentWorktreeRoot"
     @navigate="(p) => (fileBrowserCurrentPath = p)"
   />
   <GitDiffBodyContent
@@ -1503,7 +1529,8 @@ onBeforeUnmount(() => {
         "permissionDenied": "权限不足",
         "specialFile": "特殊文件类型,无法预览",
         "network": "网络连接失败",
-        "unknown": "加载失败 ({reason})"
+        "unknown": "加载失败 ({reason})",
+        "retry": "重试"
       }
     }
   }
@@ -1545,7 +1572,8 @@ onBeforeUnmount(() => {
         "permissionDenied": "Permission denied",
         "specialFile": "Special file type, preview unavailable",
         "network": "Network error",
-        "unknown": "Load failed ({reason})"
+        "unknown": "Load failed ({reason})",
+        "retry": "Retry"
       }
     }
   }
@@ -1587,7 +1615,8 @@ onBeforeUnmount(() => {
         "permissionDenied": "Доступ запрещён",
         "specialFile": "Специальный тип файла, предпросмотр недоступен",
         "network": "Ошибка сети",
-        "unknown": "Ошибка загрузки ({reason})"
+        "unknown": "Ошибка загрузки ({reason})",
+        "retry": "Повторить"
       }
     }
   }
