@@ -257,6 +257,41 @@
       "loadedAtPrefix": "Загружен",
       "noProject": "Проект не загружен"
     },
+    "fileBrowser": {
+      "title": "Обзор рабочей области",
+      "viewMode": {
+        "files": "Файлы",
+        "diff": "Git Diff"
+      },
+      "breadcrumbRoot": "Корень проекта",
+      "loading": "Загрузка…",
+      "empty": "Пустая директория",
+      "placeholder": "Сначала загрузите проект",
+      "truncated": "⚠ Список обрезан, показаны первые 1000 элементов",
+      "entryType": {
+        "directory": "Папка",
+        "file": "Файл",
+        "symlink": "Символическая ссылка",
+        "dangling": "Битая ссылка"
+      },
+      "preview": {
+        "selectFromLeft": "Выберите файл слева для предпросмотра",
+        "binary": "Двоичный файл, предпросмотр недоступен",
+        "tooLarge": "Файл слишком большой ({size}), предпросмотр недоступен",
+        "copy": "Копировать",
+        "copySuccess": "Скопировано",
+        "goToTarget": "Перейти к цели"
+      },
+      "error": {
+        "loadFailedTitle": "Не удалось загрузить",
+        "pathNotFound": "Путь не найден",
+        "permissionDenied": "Доступ запрещён",
+        "specialFile": "Специальный тип файла, предпросмотр недоступен",
+        "network": "Ошибка сети",
+        "unknown": "Ошибка загрузки ({reason})",
+        "retry": "Повторить"
+      }
+    },
     "diffSidebar": {
       "chip": "Git Diff",
       "chipTooltip": "Просмотр изменений Git",
