@@ -282,7 +282,8 @@
         "directory": "文件夹",
         "file": "文件",
         "symlink": "符号链接",
-        "dangling": "悬空链接"
+        "dangling": "目标不存在",
+        "backToParent": "返回上级目录 ({name})"
       },
       "preview": {
         "selectFromLeft": "从左侧选择文件以预览",

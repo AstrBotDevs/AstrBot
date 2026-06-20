@@ -258,8 +258,12 @@ function localizedReason(reason: string): string {
 
 <style scoped>
 .file-browser-preview {
-  flex: 1 1 60%;
+  /* Width is now driven by FileBrowserView's draggable divider
+     (sets `width` via inline style on .file-browser-pane-right, which
+     this root element inherits as its wrapping class). */
+  flex: 1 1 auto;
   min-width: 0;
+  height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;

@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 306 icons */
+/* Auto-generated MDI subset – 307 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -446,6 +446,10 @@
 
 .mdi-file::before {
   content: "\F0214";
+}
+
+.mdi-file-alert-outline::before {
+  content: "\F0A4C";
 }
 
 .mdi-file-chart::before {

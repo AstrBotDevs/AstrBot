@@ -282,7 +282,8 @@
         "directory": "Folder",
         "file": "File",
         "symlink": "Symbolic link",
-        "dangling": "Dangling link"
+        "dangling": "Target missing",
+        "backToParent": "Back to parent ({name})"
       },
       "preview": {
         "selectFromLeft": "Select a file from the left to preview",
