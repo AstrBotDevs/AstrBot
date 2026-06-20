@@ -305,8 +305,11 @@ async def retrieve_knowledge_base(
 ):
     async def _operation():
         kb = await service.get_kb(kb_id)
+        kb_name = kb.get("kb_name") if isinstance(kb, dict) else None
+        if not kb_name:
+            raise KnowledgeBaseServiceError("知识库不存在")
         return await service.retrieve(
-            payload.canonical_payload(kb_name=kb["kb_name"]),
+            payload.canonical_payload(kb_name=kb_name),
         )
 
     return await _run(

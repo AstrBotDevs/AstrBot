@@ -153,7 +153,7 @@
             <v-select v-model="formData.embedding_provider_id" :items="embeddingProviders"
               :item-title="item => item.embedding_model || item.id" :item-value="'id'"
               :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null"
-              :rules="[v => editingKB || !!v || t('create.embeddingModelRequired')]" required
+              :rules="[v => editingKB !== null || !!v || t('create.embeddingModelRequired')]" required
               hint="嵌入模型选择后无法修改，如需更换请创建新的知识库。" persistent-hint>
               <template #item="{ props, item }">
                 <v-list-item v-bind="props">

@@ -222,23 +222,23 @@ class KnowledgeBaseRequest(OpenModel):
         Returns:
             Dictionary accepted by KnowledgeBaseService.
         """
-        field_names = {
-            "kb_name",
-            "description",
-            "emoji",
-            "embedding_provider_id",
-            "rerank_provider_id",
-            "chunk_size",
-            "chunk_overlap",
-            "top_k_dense",
-            "top_k_sparse",
-            "top_m_final",
-        }
         data = self.model_dump(
-            include=self.model_fields_set & field_names,
+            exclude_unset=True,
+            include={
+                "kb_name",
+                "description",
+                "emoji",
+                "embedding_provider_id",
+                "rerank_provider_id",
+                "chunk_size",
+                "chunk_overlap",
+                "top_k_dense",
+                "top_k_sparse",
+                "top_m_final",
+            },
         )
         legacy_name = getattr(self, "name", None)
-        if self.kb_name is None and legacy_name is not None:
+        if data.get("kb_name") is None and legacy_name is not None:
             data["kb_name"] = legacy_name
         return data
 

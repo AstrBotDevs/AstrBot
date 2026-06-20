@@ -314,6 +314,12 @@ def test_knowledge_base_request_preserves_explicit_null_updates():
     assert payload == {"rerank_provider_id": None}
 
 
+def test_knowledge_base_request_omits_unset_none_fields():
+    payload = KnowledgeBaseRequest(kb_name="Docs").canonical_payload()
+
+    assert payload == {"kb_name": "Docs"}
+
+
 def test_knowledge_base_request_uses_legacy_name_as_input_alias():
     payload = KnowledgeBaseRequest(name="Legacy Name").canonical_payload()
 
@@ -359,3 +365,21 @@ async def test_retrieve_route_resolves_path_kb_id_to_canonical_kb_names():
             "kb_names": ["Route KB"],
         }
     )
+
+
+@pytest.mark.asyncio
+async def test_retrieve_route_requires_resolved_kb_name():
+    service = MagicMock()
+    service.get_kb = AsyncMock(return_value={})
+    service.retrieve = AsyncMock()
+
+    response = await retrieve_knowledge_base(
+        "route-kb-id",
+        KnowledgeBaseRetrieveRequest(query="hello"),
+        _auth=object(),
+        service=service,
+    )
+
+    assert response["status"] == "error"
+    assert response["message"] == "知识库不存在"
+    service.retrieve.assert_not_awaited()

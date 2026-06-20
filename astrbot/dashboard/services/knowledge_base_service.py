@@ -399,32 +399,20 @@ class KnowledgeBaseService:
             "top_k_sparse",
             "top_m_final",
         ]
-        if all(key not in payload for key in update_keys):
+        provided_updates = {key: payload[key] for key in update_keys if key in payload}
+        if not provided_updates:
             raise KnowledgeBaseServiceError("至少需要提供一个更新字段")
 
         current_kb = await self.get_kb_manager().get_kb(kb_id)
         if not current_kb:
             raise KnowledgeBaseServiceError("知识库不存在")
         current = current_kb.kb
+        update_data = {key: getattr(current, key) for key in update_keys}
+        update_data.update(provided_updates)
 
         kb_helper = await self.get_kb_manager().update_kb(
             kb_id=kb_id,
-            kb_name=payload.get("kb_name", current.kb_name),
-            description=payload.get("description", current.description),
-            emoji=payload.get("emoji", current.emoji),
-            embedding_provider_id=payload.get(
-                "embedding_provider_id",
-                current.embedding_provider_id,
-            ),
-            rerank_provider_id=payload.get(
-                "rerank_provider_id",
-                current.rerank_provider_id,
-            ),
-            chunk_size=payload.get("chunk_size", current.chunk_size),
-            chunk_overlap=payload.get("chunk_overlap", current.chunk_overlap),
-            top_k_dense=payload.get("top_k_dense", current.top_k_dense),
-            top_k_sparse=payload.get("top_k_sparse", current.top_k_sparse),
-            top_m_final=payload.get("top_m_final", current.top_m_final),
+            **update_data,
         )
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
