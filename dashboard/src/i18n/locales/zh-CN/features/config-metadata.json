@@ -1388,6 +1388,9 @@
       "openai_embedding": {
         "hint": "如果测试不通过，可以尝试添加 /v1 在末尾以兼容部分 OpenAI API 版本。"
       },
+      "bailian_embedding": {
+        "hint": "阿里云百炼 Embedding 使用兼容 OpenAI 的 API 格式。API Key 从 https://bailian.console.aliyun.com/?tab=model#/api-key 获取。嵌入模型推荐 text-embedding-v4（1024 维），批次上限 10。"
+      },
       "gemini_embedding": {
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"
       },

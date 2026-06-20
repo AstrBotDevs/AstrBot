@@ -1386,6 +1386,9 @@
       "openai_embedding": {
         "hint": "If testing fails, try adding /v1 at the end for some OpenAI API versions."
       },
+      "bailian_embedding": {
+        "hint": "Alibaba Cloud Bailian Embedding uses OpenAI-compatible API format. Get your API Key from https://bailian.console.aliyun.com/?tab=model#/api-key. The recommended embedding model is text-embedding-v4 (1024 dimensions), with a batch limit of 10."
+      },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."
       },
