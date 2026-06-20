@@ -1549,6 +1549,11 @@ class PluginManager:
 
             await self._unbind_plugin(plugin_name, plugin.module_path)
 
+            plugin_module_prefix = plugin.module_path.rsplit(".", 1)[0]
+            plugin_dir = os.path.join(ppath, root_dir_name)
+            await self._cancel_plugin_tasks(plugin_module_prefix)
+            self._release_plugin_font_handles(plugin, plugin_dir)
+
             # 删除插件文件夹
             try:
                 remove_dir(os.path.join(ppath, root_dir_name))
@@ -1563,6 +1568,73 @@ class PluginManager:
                 delete_config=delete_config,
                 delete_data=delete_data,
             )
+
+    async def _cancel_plugin_tasks(self, plugin_module_prefix: str) -> None:
+        """取消并等待属于指定插件模块的所有 asyncio tasks。"""
+        plugin_tasks = []
+        for task in asyncio.all_tasks():
+            if task.done():
+                continue
+            coro = task.get_coro()
+            frame = getattr(coro, "cr_frame", None)
+            if frame is None:
+                continue
+            mod_name = frame.f_globals.get("__name__", "")
+            if mod_name == plugin_module_prefix or mod_name.startswith(
+                plugin_module_prefix + "."
+            ):
+                plugin_tasks.append(task)
+
+        if not plugin_tasks:
+            return
+
+        logger.debug(
+            f"取消插件 {plugin_module_prefix} 的 {len(plugin_tasks)} 个 asyncio tasks"
+        )
+        for task in plugin_tasks:
+            task.cancel()
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*plugin_tasks, return_exceptions=True),
+                timeout=5.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"插件 {plugin_module_prefix} 的部分 tasks 在 5 秒内未能取消，"
+                "可能导致文件句柄未释放。"
+            )
+        await asyncio.sleep(0)
+
+    def _release_plugin_font_handles(self, plugin, plugin_dir: str) -> None:
+        """释放插件目录下字体文件的句柄，确保删除目录前文件不被占用。"""
+        import gc
+
+        from PIL import ImageFont
+
+        plugin.star_cls = None
+        plugin.module = None
+        plugin.star_cls_type = None
+
+        plugin_dir_norm = os.path.normcase(os.path.normpath(plugin_dir))
+        self_locals_id = id(locals())
+        for obj in gc.get_objects():
+            if not isinstance(obj, ImageFont.FreeTypeFont):
+                continue
+            font_path = getattr(obj, "path", None)
+            if not isinstance(font_path, str):
+                continue
+            if not os.path.normcase(os.path.normpath(font_path)).startswith(
+                plugin_dir_norm + os.sep
+            ):
+                continue
+            logger.debug(f"释放字体句柄: {font_path}")
+            for referrer in gc.get_referrers(obj):
+                if not isinstance(referrer, dict) or id(referrer) == self_locals_id:
+                    continue
+                for k in [k for k, v in referrer.items() if v is obj]:
+                    referrer[k] = None
+
+        gc.collect()
 
     async def uninstall_failed_plugin(
         self,
