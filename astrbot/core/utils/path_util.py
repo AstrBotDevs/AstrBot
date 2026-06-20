@@ -54,10 +54,11 @@ def path_Mapping(mappings, srcPath: str) -> str:
                 has_replaced_processed = False
                 if srcPath.startswith("."):
                     # 相对路径处理。如果是相对路径，可能是Linux路径，也可能是Windows路径
-                    sign = srcPath[1]
+                    # 映射目标可能短到只是 "." 或 ".."，此时没有后续字符，按需取以免越界
+                    sign = srcPath[1] if len(srcPath) > 1 else ""
                     # 处理两个点的情况
                     if sign == ".":
-                        sign = srcPath[2]
+                        sign = srcPath[2] if len(srcPath) > 2 else ""
                     if sign == "/":
                         srcPath = srcPath.replace("\\", "/")
                         has_replaced_processed = True
