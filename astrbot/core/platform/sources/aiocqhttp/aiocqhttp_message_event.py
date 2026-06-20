@@ -3,7 +3,9 @@ import re
 from collections.abc import AsyncGenerator
 
 from aiocqhttp import CQHttp, Event
+from aiocqhttp.exceptions import ApiNotAvailable
 
+from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import (
     At,
@@ -103,23 +105,37 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         if isinstance(event, Event) and event.get("self_id"):
             routing_params["self_id"] = event["self_id"]
 
-        if is_group and isinstance(session_id_int, int):
-            await bot.send_group_msg(
-                group_id=session_id_int,
-                message=messages,
-                **routing_params,
-            )
-        elif not is_group and isinstance(session_id_int, int):
-            await bot.send_private_msg(
-                user_id=session_id_int,
-                message=messages,
-                **routing_params,
-            )
-        elif isinstance(event, Event):  # 最后兜底
-            await bot.send(event=event, message=messages)
-        else:
-            raise ValueError(
-                f"无法发送消息：缺少有效的数字 session_id({session_id}) 或 event({event})",
+        try:
+            if is_group and isinstance(session_id_int, int):
+                await bot.send_group_msg(
+                    group_id=session_id_int,
+                    message=messages,
+                    **routing_params,
+                )
+            elif not is_group and isinstance(session_id_int, int):
+                await bot.send_private_msg(
+                    user_id=session_id_int,
+                    message=messages,
+                    **routing_params,
+                )
+            elif isinstance(event, Event):  # 最后兜底
+                await bot.send(event=event, message=messages, **routing_params)
+            else:
+                raise ValueError(
+                    f"无法发送消息：缺少有效的数字 session_id({session_id}) 或 event({event})",
+                )
+        except ApiNotAvailable:
+            if isinstance(event, Event) and isinstance(session_id_int, int):
+                try:
+                    await bot.send(event=event, message=messages, **routing_params)
+                    return
+                except ApiNotAvailable:
+                    pass
+            logger.warning(
+                "aiocqhttp API unavailable, message skipped. "
+                "Please check that the OneBot reverse WebSocket API connection is active. "
+                f"self_id={routing_params.get('self_id')}, "
+                f"session_id={session_id}, is_group={is_group}"
             )
 
     @classmethod
