@@ -2,87 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from astrbot.core.utils.toml_parser import (
-    read_pyproject_project_dependencies,
-    read_pyproject_project_version,
-)
-
-
-def test_read_pyproject_project_version_reads_project_section(tmp_path: Path) -> None:
-    pyproject_path = tmp_path / "pyproject.toml"
-    pyproject_path.write_text(
-        "\n".join(
-            [
-                'version = "ignored"',
-                "[project]",
-                'name = "AstrBot"',
-                'version = "1.2.3-beta.4" # release version',
-                "[tool.example]",
-                'version = "ignored-again"',
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    assert read_pyproject_project_version(pyproject_path) == "1.2.3-beta.4"
-
-
-@pytest.mark.parametrize(
-    ("version_line", "expected"),
-    [
-        ('version = "1.2.3"', "1.2.3"),
-        ("version='1.2.3-beta.4'", "1.2.3-beta.4"),
-        ('   version  =  "1.2.3-rc.1"   ', "1.2.3-rc.1"),
-    ],
-)
-def test_read_pyproject_project_version_accepts_simple_variants(
-    tmp_path: Path,
-    version_line: str,
-    expected: str,
-) -> None:
-    pyproject_path = tmp_path / "pyproject.toml"
-    pyproject_path.write_text(
-        "\n".join(
-            [
-                "[project]",
-                'name = "AstrBot"',
-                version_line,
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    assert read_pyproject_project_version(pyproject_path) == expected
-
-
-@pytest.mark.parametrize(
-    ("version_line", "message"),
-    [
-        ("version", "Missing value separator for project.version"),
-        ('version = "1.2.3', "Unterminated project.version string"),
-        ('version = "1.2.3" extra', "Unsupported content after project.version"),
-        ('version = ""', "Empty project.version value"),
-    ],
-)
-def test_read_pyproject_project_version_rejects_invalid_values(
-    tmp_path: Path,
-    version_line: str,
-    message: str,
-) -> None:
-    pyproject_path = tmp_path / "pyproject.toml"
-    pyproject_path.write_text(
-        "\n".join(
-            [
-                "[project]",
-                'name = "AstrBot"',
-                version_line,
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match=message):
-        read_pyproject_project_version(pyproject_path)
+from astrbot.core.utils.toml_parser import read_pyproject_project_dependencies
 
 
 def test_read_pyproject_project_dependencies_reads_multiline_array(
@@ -174,11 +94,3 @@ def test_read_pyproject_project_dependencies_rejects_invalid_values(
 
     with pytest.raises(ValueError, match=message):
         read_pyproject_project_dependencies(pyproject_path)
-
-
-def test_read_pyproject_project_version_raises_when_missing(tmp_path: Path) -> None:
-    pyproject_path = tmp_path / "pyproject.toml"
-    pyproject_path.write_text('[project]\nname = "AstrBot"\n', encoding="utf-8")
-
-    with pytest.raises(ValueError, match="Missing project.version"):
-        read_pyproject_project_version(pyproject_path)

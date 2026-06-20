@@ -72,46 +72,6 @@ def _read_dependency_array(raw_value: str) -> list[str]:
     raise ValueError("Unterminated project.dependencies array")
 
 
-def read_pyproject_project_version(pyproject_path: Path) -> str:
-    """Read the project version from a pyproject.toml file.
-
-    Args:
-        pyproject_path: Path to the pyproject.toml file.
-
-    Returns:
-        The value of the project.version field.
-
-    Raises:
-        FileNotFoundError: The pyproject.toml file does not exist.
-        ValueError: The project.version field is missing or unsupported.
-    """
-    in_project_section = False
-    for raw_line in pyproject_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-
-        if line.startswith("[") and line.endswith("]"):
-            in_project_section = line == "[project]"
-            continue
-
-        if not in_project_section:
-            continue
-
-        key, separator, raw_value = line.partition("=")
-        if key.strip() != "version":
-            continue
-        if not separator:
-            raise ValueError("Missing value separator for project.version")
-
-        version, tail = _read_quoted_value(raw_value, "project.version")
-        if tail and not tail.startswith("#"):
-            raise ValueError("Unsupported content after project.version")
-        return version
-
-    raise ValueError("Missing project.version")
-
-
 def read_pyproject_project_dependencies(pyproject_path: Path) -> list[str]:
     """Read project dependencies from a pyproject.toml file.
 
