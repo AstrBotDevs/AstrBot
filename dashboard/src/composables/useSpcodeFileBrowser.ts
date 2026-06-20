@@ -35,11 +35,14 @@ export interface UseSpcodeFileBrowser {
   dispose: () => void;
 }
 
-/** Type guard for the three snapshot kinds (excludes idle/loading/error). */
-function isSnapshotKind(
-  kind: FileBrowserFetchState["kind"],
-): kind is "directory" | "file" | "symlink" {
-  return kind === "directory" || kind === "file" || kind === "symlink";
+/** Type guard for the three snapshot states (excludes idle/loading/error).
+ *  Operates on the whole state object so `state.value.snapshot` is narrowed. */
+function isSnapshotState(
+  s: FileBrowserFetchState,
+): s is { kind: "directory"; snapshot: SpcodeFileBrowserDirectorySnapshot }
+  | { kind: "file"; snapshot: SpcodeFileBrowserFileSnapshot }
+  | { kind: "symlink"; snapshot: SpcodeFileBrowserSymlinkSnapshot } {
+  return s.kind === "directory" || s.kind === "file" || s.kind === "symlink";
 }
 
 /** Classify an axios/network error into a reason code for the UI. */
@@ -74,13 +77,13 @@ export function useSpcodeFileBrowser(pathRef: MaybeRef<string>): UseSpcodeFileBr
     const path = targetPath ?? toValue(pathRef);
     if (!path) {
       // Empty path → backend returns path_not_found. Short-circuit.
-      const prev = isSnapshotKind(state.value.kind) ? state.value.snapshot : undefined;
+      const prev = isSnapshotState(state.value) ? state.value.snapshot : undefined;
       state.value = { kind: "error", reason: "path_not_found", previousSnapshot: prev };
       return;
     }
     abortController?.abort();
     abortController = new AbortController();
-    const isFirst = !isSnapshotKind(state.value.kind);
+    const isFirst = !isSnapshotState(state.value);
     if (isFirst) state.value = { kind: "loading" };
     try {
       const resp = await pluginExtensionApi.get<SpcodeFileBrowserRawResponse>(
@@ -95,7 +98,7 @@ export function useSpcodeFileBrowser(pathRef: MaybeRef<string>): UseSpcodeFileBr
     } catch (err) {
       if (!isMounted) return;
       if ((err as { name?: string })?.name === "CanceledError") return;
-      const prev = isSnapshotKind(state.value.kind) ? state.value.snapshot : undefined;
+      const prev = isSnapshotState(state.value) ? state.value.snapshot : undefined;
       if (err instanceof FileBrowserParseError) {
         state.value = { kind: "error", reason: err.reason, previousSnapshot: prev };
         return;
