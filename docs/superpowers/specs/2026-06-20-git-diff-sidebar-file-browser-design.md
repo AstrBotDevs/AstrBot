@@ -351,7 +351,14 @@ export type FileBrowserFetchState =
   | { kind: "directory"; snapshot: SpcodeFileBrowserDirectorySnapshot }
   | { kind: "file"; snapshot: SpcodeFileBrowserFileSnapshot }
   | { kind: "symlink"; snapshot: SpcodeFileBrowserSymlinkSnapshot }
-  | { kind: "error"; reason: string; previousSnapshot?: ... };
+  | {
+      kind: "error";
+      reason: string;
+      previousSnapshot?:
+        | SpcodeFileBrowserDirectorySnapshot
+        | SpcodeFileBrowserFileSnapshot
+        | SpcodeFileBrowserSymlinkSnapshot;
+    };
 
 export interface UseSpcodeFileBrowser {
   state: Ref<FileBrowserFetchState>;
@@ -384,8 +391,9 @@ export function useSpcodeFileBrowser(
     if (!isMounted) return;
     const path = targetPath ?? toValue(pathRef);
     if (!path) {
-      // 空路径视同未传,后端会返回 path_not_found;前端先短路避免无效请求
-      const prev = state.value.kind === "ok-kind" ? state.value.snapshot : undefined;
+      // Empty path is equivalent to "not provided" — backend returns path_not_found.
+      // Short-circuit on the client to avoid a wasted round-trip.
+      const prev = isSnapshotKind(state.value.kind) ? state.value.snapshot : undefined;
       state.value = { kind: "error", reason: "path_not_found", previousSnapshot: prev };
       return;
     }
@@ -407,14 +415,12 @@ export function useSpcodeFileBrowser(
       if (!isMounted) return;
       if ((err as { name?: string })?.name === "CanceledError") return;
       if (err instanceof FileBrowserParseError) {
-        // data.type === null 的真错误
-        const prev = state.value.kind === "directory" || state.value.kind === "file" || state.value.kind === "symlink"
-          ? state.value.snapshot : undefined;
+        // data.type === null 真错误(parse 函数主动 throw)
+        const prev = isSnapshotKind(state.value.kind) ? state.value.snapshot : undefined;
         state.value = { kind: "error", reason: err.reason, previousSnapshot: prev };
         return;
       }
-      const prev = state.value.kind === "directory" || state.value.kind === "file" || state.value.kind === "symlink"
-        ? state.value.snapshot : undefined;
+      const prev = isSnapshotKind(state.value.kind) ? state.value.snapshot : undefined;
       state.value = { kind: "error", reason: classifyError(err), previousSnapshot: prev };
     }
   }
@@ -435,6 +441,13 @@ export function useSpcodeFileBrowser(
   return { state, refresh, dispose };
 }
 
+/** Type guard: state.kind is one of the three snapshot kinds. */
+function isSnapshotKind(
+  kind: FileBrowserFetchState["kind"],
+): kind is "directory" | "file" | "symlink" {
+  return kind === "directory" || kind === "file" || kind === "symlink";
+}
+
 function classifyError(err: unknown): string {
   if (typeof err === "object" && err !== null) {
     const anyErr = err as { code?: string; message?: string };
@@ -448,41 +461,37 @@ function classifyError(err: unknown): string {
 
 ### 4.3 `FileBrowserView.vue` 主组件
 
+> **设计决策**:工作树状态(`worktreeList` / `mainWorktreePath` / `selectedWorktree`)由父组件 `GitDiffSidebar.vue` 拥有并向下传递 props,**避免**重复实例化 `useSpcodeWorktrees()`(否则会触发重复的 mount 拉取 + 第二个 dispose 路径)。`useSpcodeProjectStatus` 是模块级单例,本组件可直接调用。
+
 ```vue
 <!-- Author: elecvoid243, 2026-06-20
      Spec: docs/superpowers/specs/2026-06-20-git-diff-sidebar-file-browser-design.md §4.3 -->
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
-import { useSpcodeWorktrees } from "@/composables/useSpcodeWorktrees";
 import { useSpcodeFileBrowser } from "@/composables/useSpcodeFileBrowser";
 import FileBrowserBreadcrumb from "./FileBrowserBreadcrumb.vue";
 import FileBrowserEntryList from "./FileBrowserEntryList.vue";
 import FileBrowserFilePreview from "./FileBrowserFilePreview.vue";
+import type { SpcodeGitWorktree } from "@/composables/parseSpcodeWorktrees";
 
 const props = defineProps<{
   currentPath: string;
   isDark?: boolean;
+  /** 当前 worktree 根路径(由父组件计算:selectedWorktree ?? mainWorktreePath);null = 项目未加载 */
+  rootPath: string | null;
+  /** 工作树列表(从父组件传入;此组件不调用 useSpcodeWorktrees) */
+  worktrees: SpcodeGitWorktree[];
 }>();
 const emit = defineEmits<{ (e: "navigate", path: string): void }>();
 
 const { tm } = useModuleI18n("features/chat");
 const spcodeStatus = useSpcodeProjectStatus();
-const worktreesComposable = useSpcodeWorktrees();
 
 const fileBrowserComposable = useSpcodeFileBrowser(
   computed(() => props.currentPath),
 );
-
-const mainWorktreePath = computed(() => {
-  const s = worktreesComposable.state.value;
-  if (s.kind !== "ok") return null;
-  return s.snapshot.worktrees.find((w) => w.isMain)?.path ?? null;
-});
-
-// 在 Files 视图下,响应 worktree 切换时父组件会重置 currentPath
-// 此处仅做渲染分发
 </script>
 
 <template>
@@ -517,6 +526,7 @@ const mainWorktreePath = computed(() => {
         <FileBrowserFilePreview
           :state="fileBrowserComposable.state.value"
           :is-dark="!!isDark"
+          @navigate-target="(p) => emit('navigate', p)"
         />
       </div>
     </template>
@@ -552,6 +562,27 @@ const mainWorktreePath = computed(() => {
   color: rgba(var(--v-theme-on-surface), 0.6);
 }
 .empty-text { font-size: 14px; }
+
+/* Mobile: stack the two panes vertically (see §9.6 acceptance test).
+   The outer GitDiffSidebar is already fullscreen on < 760px (mobile
+   rule inherited), so we just collapse the flex direction here. */
+@media (max-width: 760px) {
+  .file-browser-body {
+    flex-direction: column;
+  }
+  .file-browser-entry-list {
+    flex: 0 0 auto;
+    max-height: 40vh;
+    min-width: 0;
+  }
+  .file-browser-divider {
+    width: auto;
+    height: 1px;
+  }
+  .file-browser-preview {
+    flex: 1 1 auto;
+  }
+}
 </style>
 ```
 
@@ -722,7 +753,38 @@ const props = defineProps<{
   state: FileBrowserFetchState;
   isDark: boolean;
 }>();
+const emit = defineEmits<{
+  (e: "navigate-target", resolvedPath: string): void;
+}>();
 const { tm } = useModuleI18n("features/chat");
+
+/**
+ * Resolve a symlink target string (which may be relative) against the
+ * symlink's parent directory. Mirrors POSIX symlink semantics:
+ * - Absolute target: use as-is
+ * - Relative target: join with parent dir of the symlink
+ *
+ * The backend does NOT resolve symlinks (per file-browser spec §3.5.4);
+ * if the user wants to view the resolved content, we manually re-issue
+ * the request with the resolved path so the backend re-classifies it.
+ */
+function resolveTargetPath(symlinkPath: string, target: string): string {
+  // Cross-platform separator detection: Windows uses `\`, Unix uses `/`.
+  const isWindows = symlinkPath.includes("\\");
+  const sep = isWindows ? "\\" : "/";
+  if (target.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(target)) {
+    return target;  // Absolute path
+  }
+  // Relative: join with parent dir of symlink
+  const lastSep = Math.max(symlinkPath.lastIndexOf("/"), symlinkPath.lastIndexOf("\\"));
+  const parentDir = lastSep >= 0 ? symlinkPath.slice(0, lastSep) : symlinkPath;
+  // Normalize: collapse ../ and ./ segments using a simple resolution
+  const joined = parentDir + sep + target;
+  // Note: this does not fully resolve ".."; the backend will return
+  // path_not_found if the result is invalid. That's acceptable — the
+  // user can manually correct via the breadcrumb.
+  return joined;
+}
 
 const shikiHighlighter = ref<any>(null);
 const shikiReady = ref(false);
@@ -735,17 +797,53 @@ onMounted(async () => {
   }
 });
 
-// Shiki 与 useSpcodeGitDiff.ts 同源的 detectLanguage 函数
-function detectLanguage(path: string): string {
-  const EXT_TO_LANG: Record<string, string> = {
-    ".py":"python",".js":".mjs":".cjs":"javascript",".ts":"typescript",".tsx":"tsx",".jsx":"jsx",
-    ".vue":"vue",".json":"json",".yaml":".yml":"yaml",".sh":".bash":".zsh":"bash",
-    ".css":"css",".html":".htm":"html",".xml":"xml",".md":"markdown",".sql":"sql",
-    ".c":".h":"c",".cpp":".cc":".cxx":".hpp":"cpp",".go":"go",".rs":"rust",".diff":".patch":"diff",
-  };
-  const m = path.match(/\.([\w]+)$/i);
+// Mirror of detectLanguage in ToolResultView.vue (line 160-165) to ensure
+// consistent language detection between the tool result view and this preview.
+const EXT_TO_LANG: Record<string, string> = {
+  ".py": "python",
+  ".js": "javascript",
+  ".mjs": "javascript",
+  ".cjs": "javascript",
+  ".ts": "typescript",
+  ".tsx": "tsx",
+  ".jsx": "jsx",
+  ".vue": "vue",
+  ".json": "json",
+  ".yaml": "yaml",
+  ".yml": "yaml",
+  ".sh": "bash",
+  ".bash": "bash",
+  ".zsh": "bash",
+  ".css": "css",
+  ".html": "html",
+  ".htm": "html",
+  ".xml": "xml",
+  ".svg": "xml",
+  ".md": "markdown",
+  ".sql": "sql",
+  ".java": "java",
+  ".ini": "ini",
+  ".diff": "diff",
+  ".patch": "diff",
+  ".ps1": "powershell",
+  ".dockerfile": "dockerfile",
+  ".txt": "text",
+  ".c": "c",
+  ".h": "c",
+  ".cpp": "cpp",
+  ".cc": "cpp",
+  ".cxx": "cpp",
+  ".hpp": "cpp",
+  ".c++": "cpp",
+  ".go": "go",
+  ".rs": "rust",
+};
+
+function detectLanguage(filePath: string): string {
+  const m = filePath.match(/\.([\w]+)$/i);
   if (!m) return "text";
-  return EXT_TO_LANG["." + m[1].toLowerCase()] || "text";
+  const key = "." + m[1].toLowerCase();
+  return EXT_TO_LANG[key] || "text";
 }
 
 const highlightedHtml = computed(() => {
@@ -788,6 +886,23 @@ function formatMtime(mtime: number | null): string {
   if (!mtime) return "—";
   return new Date(mtime * 1000).toLocaleString();
 }
+
+// Map the composable's reason codes to localized messages. Mirrors the
+// pattern in GitDiffBodyContent.vue (lines 20-30 of the sister spec).
+const REASON_I18N_KEYS: Record<string, string> = {
+  path_not_found: "spcodeProjectLoad.fileBrowser.error.pathNotFound",
+  permission_denied: "spcodeProjectLoad.fileBrowser.error.permissionDenied",
+  special_file: "spcodeProjectLoad.fileBrowser.error.specialFile",
+};
+
+function localizedReason(reason: string): string {
+  const key = REASON_I18N_KEYS[reason];
+  if (key) return tm(key);
+  if (reason === "network") {
+    return tm("spcodeProjectLoad.fileBrowser.error.network");
+  }
+  return tm("spcodeProjectLoad.fileBrowser.error.unknown", { reason });
+}
 </script>
 
 <template>
@@ -813,15 +928,28 @@ function formatMtime(mtime: number | null): string {
       <span class="preview-hint">{{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}</span>
     </div>
 
-    <!-- symlink 状态(顶层 symlink,即 path 本身是 symlink) -->
+    <!-- symlink 状态(顶层 symlink,即 path 本身是 symlink)
+         NOTE: backend returns type="symlink" for any symlink regardless of
+         target type (per file-browser spec §3.5.4 / 7.3). To view the
+         resolved content, click "Go to target" which navigates to the
+         target path; the backend re-classifies it as file/dir/symlink. -->
     <div v-else-if="state.kind === 'symlink'" class="preview-center">
       <v-icon size="32" color="info">mdi-link-variant</v-icon>
       <div class="preview-symlink-info">
-        <div class="preview-symlink-target">{{ state.snapshot.meta.target }}</div>
+        <div class="preview-symlink-target-label">→ {{ state.snapshot.meta.target }}</div>
         <div v-if="!state.snapshot.meta.targetExists" class="preview-symlink-dangling">
           {{ tm("spcodeProjectLoad.fileBrowser.entryType.dangling") }}
         </div>
       </div>
+      <v-btn
+        v-if="state.snapshot.meta.targetExists"
+        size="small"
+        variant="tonal"
+        :prepend-icon="'mdi-arrow-right'"
+        @click="emit('navigate-target', resolveTargetPath(state.snapshot.meta.path, state.snapshot.meta.target))"
+      >
+        {{ tm("spcodeProjectLoad.fileBrowser.preview.goToTarget") }}
+      </v-btn>
     </div>
 
     <!-- 文件 -->
@@ -1098,23 +1226,21 @@ function loadViewMode(): ViewMode {
     if (raw && (VALID_VIEW_MODES as ReadonlyArray<string>).includes(raw)) {
       return raw as ViewMode;
     }
-  } catch { /* localStorage 不可用 */ }
+  } catch { /* localStorage unavailable (e.g. private mode) */ }
   return "files";  // 默认 Files 视图(更通用)
 }
 function persistViewMode(mode: ViewMode): void {
   try { localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode); } catch { /* 静默降级 */ }
 }
 const viewMode = ref<ViewMode>(loadViewMode());
+// Lifecycle: polling start/stop is the SOLE responsibility of the existing
+// modelValue watcher (line 102-116 of GitDiffSidebar.vue). This handler
+// only updates the viewMode ref + persists; it does NOT touch the polling
+// state directly. See §6.1 for the single-source-of-truth invariant.
 function onViewModeChange(mode: ViewMode): void {
   if (mode === viewMode.value) return;
   viewMode.value = mode;
   persistViewMode(mode);
-  // 模式切换的副作用:启动/停止 diff 轮询
-  if (mode === "diff") {
-    if (props.modelValue && isMounted) composable.startPolling(10_000);
-  } else {
-    composable.stopPolling();
-  }
 }
 
 // ── File browser state ────────────────────────────────────────
@@ -1131,16 +1257,21 @@ function persistCurrentPath(path: string): void {
   }, 300);
 }
 
-const fileBrowserCurrentPath = ref<string>("");
-const fileBrowserComposable = useSpcodeFileBrowser(
-  computed(() => fileBrowserCurrentPath.value),
-);
-
 const mainWorktreePath = computed(
   () => worktreeList.value.find((w) => w.isMain)?.path ?? null,
 );
 const currentWorktreeRoot = computed(
   () => selectedWorktree.value ?? mainWorktreePath.value,
+);
+
+// Initial currentPath: prefer the project's loaded directory when known
+// (avoids a path_not_found error flash before the worktree-list watcher
+// populates the root). Falls back to empty string when project not loaded.
+const fileBrowserCurrentPath = ref<string>(
+  spcodeStatus.status.value.directory ?? "",
+);
+const fileBrowserComposable = useSpcodeFileBrowser(
+  computed(() => fileBrowserCurrentPath.value),
 );
 
 // 校验 currentPath 是否在当前根目录下
@@ -1158,7 +1289,9 @@ function validateCurrentPath(
   return root;  // 越界 → 重置
 }
 
-// 当 worktree 列表就绪后,校验持久化的 worktree 和 currentPath
+// When the worktree list is ready: validate the persisted worktree and
+// currentPath, then populate currentPath if it was still empty (the
+// initial value is only the project root, not the worktree-specific one).
 watch(
   () => worktreesComposable.state.value,
   (s) => {
@@ -1170,18 +1303,26 @@ watch(
     }
     // 校验 currentPath
     const root = selectedWorktree.value ?? wtList.find((w) => w.isMain)?.path ?? null;
-    fileBrowserCurrentPath.value = validateCurrentPath(persistedCurrentPath.value, root);
+    const validated = validateCurrentPath(persistedCurrentPath.value, root);
+    // Only overwrite if the current value is empty (initial state) or
+    // differs from the validated result. This prevents unnecessary
+    // refetch when the user is already browsing and the watcher fires
+    // for unrelated reasons.
+    if (!fileBrowserCurrentPath.value || fileBrowserCurrentPath.value !== validated) {
+      fileBrowserCurrentPath.value = validated;
+    }
   },
   { immediate: true },
 );
 
-// 当 selectedWorktree 变化时,重置 currentPath
+// When selectedWorktree changes: reset currentPath to new root
+// (matches the Diff view's behavior of resetting scope on worktree change).
 watch(
   selectedWorktree,
   (newVal) => {
     if (viewMode.value !== "files") return;
     const root = newVal ?? mainWorktreePath.value;
-    if (root) {
+    if (root && fileBrowserCurrentPath.value !== root) {
       fileBrowserCurrentPath.value = root;
       persistCurrentPath(root);
     }
@@ -1285,6 +1426,16 @@ onBeforeUnmount(() => {
 └─────────────────────────────────────────────────────┘
 ```
 
+**单点真相 (single source of truth) 不变量**:
+
+- **Polling 生命周期**由 `modelValue` watcher 独占管理(打开 sidebar 时 `composable.startPolling(10_000)`,关闭时 `composable.stopPolling()`)。`onViewModeChange` **不**直接操作 polling,因为:
+  - `useSpcodeGitDiff.ts` 的 `startPolling` 内部已用 `pollTimer` 守卫,幂等 — 多次调用安全
+  - 但 stopPolling 后再 startPolling 会重置计时器,可能跳过原计划的 10s 等待
+  - 统一由 modelValue watcher 处理保证"sidebar 打开 = polling,sidebar 关闭 = 不 polling"的一致性
+  - view-mode 切换**不**触发额外的 polling 行为;modelValue 不变则 polling 状态不变
+
+- **CurrentPath 写入 localStorage** 在 `fileBrowserCurrentPath` watcher 中统一处理(§5.1 末尾),view-mode / worktree / scope 切换都不直接写 localStorage,避免竞态
+
 ### 6.2 持久化表
 
 | 状态 | localStorage key | 类型 | 写入时机 | 加载时校验 |
@@ -1315,10 +1466,10 @@ onBeforeUnmount(() => {
 
 ## 7. i18n 键(中/英/俄三语)
 
-新增键挂在 `spcodeProjectLoad.fileBrowser.*` 下;zh-CN 完整,en-US/ru-RU 留 TODO 翻译占位(沿用姊妹 spec 做法)。
+新增键挂在 `spcodeProjectLoad.fileBrowser.*` 下,三语同步提供(实施者填 en-US / ru-RU;与 zh-CN 镜像)。
 
+**zh-CN**(`/dashboard/src/i18n/locales/zh-CN/features/chat.json`):
 ```jsonc
-// zh-CN/features/chat.json
 {
   "spcodeProjectLoad": {
     "fileBrowser": {
@@ -1343,7 +1494,8 @@ onBeforeUnmount(() => {
         "binary": "二进制文件,无法预览",
         "tooLarge": "文件过大 ({size}),无法预览",
         "copy": "复制",
-        "copySuccess": "已复制"
+        "copySuccess": "已复制",
+        "goToTarget": "前往目标"
       },
       "error": {
         "loadFailedTitle": "无法加载",
@@ -1358,7 +1510,89 @@ onBeforeUnmount(() => {
 }
 ```
 
-en-US / ru-RU 由实施者按 zh-CN 镜像翻译;本 spec 不强求 commit 时三语同步。
+**en-US**(`/dashboard/src/i18n/locales/en-US/features/chat.json`):
+```jsonc
+{
+  "spcodeProjectLoad": {
+    "fileBrowser": {
+      "title": "Workspace Browser",
+      "viewMode": {
+        "files": "Files",
+        "diff": "Git Diff"
+      },
+      "breadcrumbRoot": "Project root",
+      "loading": "Loading…",
+      "empty": "Empty directory",
+      "placeholder": "Load a project first",
+      "truncated": "⚠ Listing truncated, only the first 1000 items are shown",
+      "entryType": {
+        "directory": "Folder",
+        "file": "File",
+        "symlink": "Symbolic link",
+        "dangling": "Dangling link"
+      },
+      "preview": {
+        "selectFromLeft": "Select a file from the left to preview",
+        "binary": "Binary file, preview unavailable",
+        "tooLarge": "File too large ({size}), preview unavailable",
+        "copy": "Copy",
+        "copySuccess": "Copied",
+        "goToTarget": "Go to target"
+      },
+      "error": {
+        "loadFailedTitle": "Failed to load",
+        "pathNotFound": "Path not found",
+        "permissionDenied": "Permission denied",
+        "specialFile": "Special file type, preview unavailable",
+        "network": "Network error",
+        "unknown": "Load failed ({reason})"
+      }
+    }
+  }
+}
+```
+
+**ru-RU**(`/dashboard/src/i18n/locales/ru-RU/features/chat.json`):
+```jsonc
+{
+  "spcodeProjectLoad": {
+    "fileBrowser": {
+      "title": "Обзор рабочей области",
+      "viewMode": {
+        "files": "Файлы",
+        "diff": "Git Diff"
+      },
+      "breadcrumbRoot": "Корень проекта",
+      "loading": "Загрузка…",
+      "empty": "Пустая директория",
+      "placeholder": "Сначала загрузите проект",
+      "truncated": "⚠ Список обрезан, показаны первые 1000 элементов",
+      "entryType": {
+        "directory": "Папка",
+        "file": "Файл",
+        "symlink": "Символическая ссылка",
+        "dangling": "Битая ссылка"
+      },
+      "preview": {
+        "selectFromLeft": "Выберите файл слева для предпросмотра",
+        "binary": "Двоичный файл, предпросмотр недоступен",
+        "tooLarge": "Файл слишком большой ({size}), предпросмотр недоступен",
+        "copy": "Копировать",
+        "copySuccess": "Скопировано",
+        "goToTarget": "Перейти к цели"
+      },
+      "error": {
+        "loadFailedTitle": "Не удалось загрузить",
+        "pathNotFound": "Путь не найден",
+        "permissionDenied": "Доступ запрещён",
+        "specialFile": "Специальный тип файла, предпросмотр недоступен",
+        "network": "Ошибка сети",
+        "unknown": "Ошибка загрузки ({reason})"
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -1389,11 +1623,11 @@ en-US / ru-RU 由实施者按 zh-CN 镜像翻译;本 spec 不强求 commit 时�
 - [ ] 左栏显示项目根目录的子项(目录 → 文件 → symlink 排序正确)
 - [ ] 隐藏文件(`.env`、`.git/`)不显示
 - [ ] 点击目录 → 左栏切换到该子目录(面包屑更新)
-- [ ] 点击文本文件 → 右栏显示 Shiki 高亮内容
+- [ ] 点击文本文件 → 右栏显示 Shiki 高亮内容(左栏清空,见 §4.4 v1 行为)
 - [ ] 点击二进制文件 → 右栏显示"二进制"占位
 - [ ] 点击大文件(> 5MB)→ 右栏显示"过大"占位 + size
-- [ ] 点击 symlink(指向文件)→ 右栏显示 symlink target + 文件预览
-- [ ] 点击悬空 symlink → 点击无效(红标 opacity 0.5)
+- [ ] 点击 symlink(指向文件)→ 右栏显示 symlink target + "Go to target" 按钮;点击按钮 → 跳转到 target 路径(后端重新分类)
+- [ ] 点击悬空 symlink → 点击无效(红标 opacity 0.5,"Go to target" 按钮不显示)
 
 ### 9.2 view-mode 切换
 - [ ] 点击 "Git Diff" pill → 视图切换为 Diff,启动 10s 轮询
@@ -1424,7 +1658,7 @@ en-US / ru-RU 由实施者按 zh-CN 镜像翻译;本 spec 不强求 commit 时�
 - [ ] 项目未加载时打开 sidebar → Files 视图显示"请先加载项目"占位
 - [ ] 切换 view-mode 不影响另一个视图的滚动位置(独立)
 - [ ] 拖拽 resize 在两种视图下都正常
-- [ ] 移动端(< 760px)sidebar 全屏覆盖,双栏变单栏或保持双栏(实施时决定)
+- [ ] 移动端(< 760px):sidebar 全屏覆盖(继承 GitDiffSidebar 现有 mobile 规则);**Files 视图双栏改单栏堆叠** — 左栏(目录列表)在上,占 max-height 40vh;右栏(预览)在下,占剩余空间
 - [ ] 大量目录项(> 1000)显示截断 warning
 
 ### 9.7 视觉与样式
