@@ -50,7 +50,7 @@
   },
   "upgradeRecovery": {
     "title": "Upgrade Needs Restart",
-    "description": "The WebUI has been updated to {dashboardVersion}, but AstrBot Core is still {coreVersion}. This usually means the restart flow was interrupted by refreshing the page during upgrade.",
+    "description": "The WebUI has been updated to {dashboardVersion}, but AstrBot Core is still {coreVersion}. This usually means the restart flow was interrupted by refreshing the page during upgrade. If restarting still does not resolve it, try deleting the data/dist folder under the AstrBot runtime directory, then restart AstrBot.",
     "hint": "Restart the backend to finish the upgrade. This page will reload automatically after AstrBot is back.",
     "restartButton": "Restart Backend",
     "laterButton": "Later",
