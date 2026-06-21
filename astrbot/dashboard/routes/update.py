@@ -1,5 +1,8 @@
+import asyncio
 import traceback
 import uuid
+import zipfile
+from pathlib import Path
 
 from quart import request
 
@@ -8,7 +11,15 @@ from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.migration.helper import check_migration_needed_v4, do_migration_v4
 from astrbot.core.updator import AstrBotUpdator
-from astrbot.core.utils.io import download_dashboard, get_dashboard_version
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_system_tmp_path,
+)
+from astrbot.core.utils.io import (
+    download_dashboard,
+    extract_dashboard,
+    get_dashboard_version,
+)
 
 from .route import Response, Route, RouteContext
 
@@ -35,6 +46,7 @@ class UpdateRoute(Route):
         self.astrbot_updator = astrbot_updator
         self.core_lifecycle = core_lifecycle
         self.update_progress: dict[str, dict] = {}
+        self._update_tasks: dict[str, asyncio.Task] = {}
         self.register_routes()
 
     def _init_update_progress(self, progress_id: str, version: str) -> None:
@@ -198,7 +210,62 @@ class UpdateRoute(Route):
         if proxy:
             proxy = proxy.removesuffix("/")
 
+        existing_task = self._update_tasks.get(progress_id)
+        if existing_task and not existing_task.done():
+            return (
+                Response()
+                .ok(
+                    {"id": progress_id, "status": "running"},
+                    "更新任务正在进行中。",
+                )
+                .__dict__,
+                200,
+                CLEAR_SITE_DATA_HEADERS,
+            )
+
         self._init_update_progress(progress_id, version)
+        task = asyncio.create_task(
+            self._run_update_project(progress_id, version, latest, reboot, proxy),
+        )
+        self._update_tasks[progress_id] = task
+        task.add_done_callback(lambda _task: self._update_tasks.pop(progress_id, None))
+        return (
+            Response()
+            .ok(
+                {"id": progress_id, "status": "running"},
+                "更新任务已开始。",
+            )
+            .__dict__,
+            200,
+            CLEAR_SITE_DATA_HEADERS,
+        )
+
+    async def _run_update_project(
+        self,
+        progress_id: str,
+        version: str,
+        latest: bool,
+        reboot: bool,
+        proxy: str | None,
+    ) -> None:
+        """Run an update task outside the request lifecycle.
+
+        Args:
+            progress_id: Progress record id reported to the frontend.
+            version: Target version without the latest sentinel.
+            latest: Whether to install the latest release.
+            reboot: Whether to restart AstrBot after applying files.
+            proxy: Optional GitHub proxy URL.
+
+        Returns:
+            None.
+        """
+
+        update_temp_dir = Path(get_astrbot_system_tmp_path()) / "updates"
+        update_temp_dir.mkdir(parents=True, exist_ok=True)
+        update_token = uuid.uuid4().hex
+        dashboard_zip_path = update_temp_dir / f"{update_token}-dashboard.zip"
+        core_zip_path = update_temp_dir / f"{update_token}-core.zip"
         try:
             self._set_update_stage(
                 progress_id,
@@ -208,15 +275,17 @@ class UpdateRoute(Route):
                 0,
             )
             await download_dashboard(
+                path=str(dashboard_zip_path),
                 latest=latest,
                 version=version,
-                proxy=proxy,
+                proxy=proxy or "",
                 progress_callback=self._make_progress_callback(
                     progress_id,
                     "dashboard",
                     0,
                     45,
                 ),
+                extract=False,
             )
             self._set_update_stage(
                 progress_id,
@@ -233,16 +302,19 @@ class UpdateRoute(Route):
                 "正在下载 AstrBot 项目代码...",
                 45,
             )
-            await self.astrbot_updator.update(
-                latest=latest,
-                version=version,
-                proxy=proxy,
-                progress_callback=self._make_progress_callback(
-                    progress_id,
-                    "core",
-                    45,
-                    45,
-                ),
+            core_zip_path = Path(
+                await self.astrbot_updator.download_update_package(
+                    latest=latest,
+                    version=version,
+                    proxy=proxy or "",
+                    path=core_zip_path,
+                    progress_callback=self._make_progress_callback(
+                        progress_id,
+                        "core",
+                        45,
+                        45,
+                    ),
+                )
             )
             self._set_update_stage(
                 progress_id,
@@ -250,6 +322,50 @@ class UpdateRoute(Route):
                 "done",
                 "项目代码下载完成。",
                 90,
+            )
+
+            self._set_update_stage(
+                progress_id,
+                "verify",
+                "running",
+                "下载完成，正在校验更新包...",
+                90,
+            )
+            for zip_path in (dashboard_zip_path, core_zip_path):
+                with zipfile.ZipFile(zip_path, "r") as archive:
+                    corrupt_member = archive.testzip()
+                if corrupt_member:
+                    raise RuntimeError(f"更新包校验失败: {corrupt_member}")
+            self._set_update_stage(
+                progress_id,
+                "verify",
+                "done",
+                "更新包校验完成。",
+                91,
+            )
+
+            self._set_update_stage(
+                progress_id,
+                "apply",
+                "running",
+                "下载完成，正在应用更新...",
+                91,
+            )
+            await asyncio.to_thread(
+                self.astrbot_updator.apply_update_package,
+                core_zip_path,
+            )
+            await asyncio.to_thread(
+                extract_dashboard,
+                dashboard_zip_path,
+                Path(get_astrbot_data_path()),
+            )
+            self._set_update_stage(
+                progress_id,
+                "apply",
+                "done",
+                "更新文件应用完成。",
+                92,
             )
 
             # pip 更新依赖
@@ -290,12 +406,7 @@ class UpdateRoute(Route):
                         "overall_percent": 100,
                     },
                 )
-                ret = (
-                    Response()
-                    .ok(None, "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。")
-                    .__dict__
-                )
-                return ret, 200, CLEAR_SITE_DATA_HEADERS
+                return
             self.update_progress[progress_id].update(
                 {
                     "status": "success",
@@ -304,12 +415,14 @@ class UpdateRoute(Route):
                     "overall_percent": 100,
                 },
             )
-            ret = (
-                Response()
-                .ok(None, "更新成功，AstrBot 将在下次启动时应用新的代码。")
-                .__dict__
+        except asyncio.CancelledError:
+            self.update_progress[progress_id].update(
+                {
+                    "status": "error",
+                    "message": "更新任务已取消。",
+                },
             )
-            return ret, 200, CLEAR_SITE_DATA_HEADERS
+            logger.warning(f"Update task was cancelled: {progress_id}")
         except Exception as e:
             self.update_progress[progress_id].update(
                 {
@@ -318,7 +431,13 @@ class UpdateRoute(Route):
                 },
             )
             logger.error(f"/api/update_project: {traceback.format_exc()}")
-            return Response().error(e.__str__()).__dict__
+        finally:
+            for zip_path in (dashboard_zip_path, core_zip_path):
+                try:
+                    if zip_path.exists():
+                        zip_path.unlink()
+                except Exception as cleanup_exc:
+                    logger.warning(f"清理更新临时文件失败: {zip_path}, {cleanup_exc}")
 
     async def update_dashboard(self):
         try:

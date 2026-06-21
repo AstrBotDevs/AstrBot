@@ -59,6 +59,34 @@ def _strip_query(url: str) -> str:
     return urlunsplit(("", "", parsed.path, "", parsed.fragment))
 
 
+async def _wait_for_update_progress(
+    test_client,
+    authenticated_header: dict,
+    progress_id: str,
+) -> dict:
+    """Wait until an update task reaches a terminal status.
+
+    Args:
+        test_client: Quart test client.
+        authenticated_header: Headers for authenticated dashboard requests.
+        progress_id: Update progress id to poll.
+
+    Returns:
+        The update progress response payload.
+    """
+
+    for _ in range(100):
+        response = await test_client.get(
+            f"/api/update/progress?id={progress_id}",
+            headers=authenticated_header,
+        )
+        data = await response.get_json()
+        if data["data"].get("status") in {"success", "error"}:
+            return data
+        await asyncio.sleep(0.01)
+    pytest.fail(f"Update task did not finish: {progress_id}")
+
+
 @pytest.fixture
 def registered_plugin_page(core_lifecycle_td: AstrBotCoreLifecycle, monkeypatch):
     plugin_root = (
@@ -2463,39 +2491,76 @@ async def test_do_update(
     authenticated_header: dict,
     core_lifecycle_td: AstrBotCoreLifecycle,
     monkeypatch,
-    tmp_path_factory,
+    tmp_path,
 ):
     test_client = app.test_client()
 
-    # Use a temporary path for the mock update to avoid side effects
-    temp_release_dir = tmp_path_factory.mktemp("release")
-    release_path = temp_release_dir / "astrbot"
-    calls = []
+    release_path = tmp_path / "astrbot"
+    calls: list[str] = []
 
-    async def mock_update(*args, **kwargs):
-        """Mocks the update process by creating a directory in the temp path."""
-        calls.append("core")
+    async def mock_download_update_package(*args, **kwargs):
+        """Mock the core package download by writing a valid ZIP archive."""
+        calls.append("download-core")
         callback = kwargs.get("progress_callback")
         if callback:
             callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
+        zip_path = Path(kwargs["path"])
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr("AstrBot-v3.4.0/README.md", "core")
+        return zip_path
+
+    def mock_apply_update_package(zip_path):
+        """Mock applying the core package."""
+        calls.append("apply-core")
+        assert zipfile.is_zipfile(zip_path)
         os.makedirs(release_path, exist_ok=True)
 
     async def mock_download_dashboard(*args, **kwargs):
-        """Mocks the dashboard download to prevent network access."""
-        calls.append("dashboard")
+        """Mock the dashboard download by writing a valid ZIP archive."""
+        calls.append("download-dashboard")
         callback = kwargs.get("progress_callback")
         if callback:
             callback({"downloaded": 10, "total": 10, "percent": 1, "speed": 1})
-        return
+        zip_path = Path(kwargs["path"])
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr("dist/index.html", "dashboard")
+
+    def mock_extract_dashboard(zip_path, extract_path):
+        """Mock applying the dashboard package."""
+        calls.append("apply-dashboard")
+        assert zipfile.is_zipfile(zip_path)
+        assert Path(extract_path) == tmp_path / "data"
 
     async def mock_pip_install(*args, **kwargs):
         """Mocks pip install to prevent actual installation."""
+        calls.append("pip")
         return
 
-    monkeypatch.setattr(core_lifecycle_td.astrbot_updator, "update", mock_update)
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "download_update_package",
+        mock_download_update_package,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "apply_update_package",
+        mock_apply_update_package,
+    )
     monkeypatch.setattr(
         "astrbot.dashboard.routes.update.download_dashboard",
         mock_download_dashboard,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.extract_dashboard",
+        mock_extract_dashboard,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_astrbot_system_tmp_path",
+        lambda: str(tmp_path / "tmp"),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_astrbot_data_path",
+        lambda: str(tmp_path / "data"),
     )
     monkeypatch.setattr(
         "astrbot.dashboard.routes.update.pip_installer.install",
@@ -2510,17 +2575,99 @@ async def test_do_update(
     assert response.status_code == 200
     data = await response.get_json()
     assert data["status"] == "ok"
-    assert os.path.exists(release_path)
-    assert calls[:2] == ["dashboard", "core"]
+    assert data["data"]["id"] == "test-progress"
+    assert data["data"]["status"] == "running"
 
-    progress_response = await test_client.get(
-        "/api/update/progress?id=test-progress",
-        headers=authenticated_header,
+    progress_data = await _wait_for_update_progress(
+        test_client,
+        authenticated_header,
+        "test-progress",
     )
-    progress_data = await progress_response.get_json()
+    assert os.path.exists(release_path)
+    assert calls == [
+        "download-dashboard",
+        "download-core",
+        "apply-core",
+        "apply-dashboard",
+        "pip",
+    ]
     assert progress_data["status"] == "ok"
     assert progress_data["data"]["status"] == "success"
     assert progress_data["data"]["overall_percent"] == 100
+
+
+@pytest.mark.asyncio
+async def test_do_update_does_not_apply_files_when_core_download_fails(
+    app: Quart,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+    tmp_path,
+):
+    test_client = app.test_client()
+    calls: list[str] = []
+
+    async def mock_download_dashboard(*args, **kwargs):
+        """Mock the dashboard download by writing a valid ZIP archive."""
+        calls.append("download-dashboard")
+        zip_path = Path(kwargs["path"])
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr("dist/index.html", "dashboard")
+
+    async def mock_download_update_package(*args, **kwargs):
+        """Mock a core package download failure."""
+        calls.append("download-core")
+        raise RuntimeError("core download failed")
+
+    def fail_apply_update_package(*args, **kwargs):
+        """Ensure core files are not applied after a download failure."""
+        calls.append("apply-core")
+        raise AssertionError("core package should not be applied")
+
+    def fail_extract_dashboard(*args, **kwargs):
+        """Ensure dashboard files are not applied after a download failure."""
+        calls.append("apply-dashboard")
+        raise AssertionError("dashboard package should not be applied")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.get_astrbot_system_tmp_path",
+        lambda: str(tmp_path / "tmp"),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.download_dashboard",
+        mock_download_dashboard,
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.routes.update.extract_dashboard",
+        fail_extract_dashboard,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "download_update_package",
+        mock_download_update_package,
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "apply_update_package",
+        fail_apply_update_package,
+    )
+
+    response = await test_client.post(
+        "/api/update/do",
+        headers=authenticated_header,
+        json={"version": "v3.4.0", "reboot": False, "progress_id": "atomic-fail"},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    progress_data = await _wait_for_update_progress(
+        test_client,
+        authenticated_header,
+        "atomic-fail",
+    )
+    assert progress_data["data"]["status"] == "error"
+    assert calls == ["download-dashboard", "download-core"]
 
 
 @pytest.mark.asyncio
