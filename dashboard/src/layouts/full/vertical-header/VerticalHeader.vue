@@ -616,7 +616,11 @@ function applyUpdateProgress(payload: UpdateProgress) {
     },
   };
   if (payload.status === "success" || payload.status === "error") {
+    installLoading.value = false;
     stopUpdateProgressPolling();
+  }
+  if (payload.stage === "restart") {
+    waitForAstrBotRestart(restartStartTime.value);
   }
   if (payload.status === "success") {
     waitForAstrBotRestart(restartStartTime.value);
@@ -673,20 +677,21 @@ async function switchVersion(targetVersion: string) {
     })
     .then((res) => {
       updateStatus.value = res.data.message;
-      updateProgress.value = {
-        ...updateProgress.value,
-        status:
-          res.data.status === "ok" ? "success" : updateProgress.value.status,
-        message: res.data.message,
-        overall_percent:
-          res.data.status === "ok" ? 100 : updateProgress.value.overall_percent,
-      };
-      if (res.data.status == "ok") {
-        waitForAstrBotRestart(initialStartTime);
+      if (res.data.status === "error") {
+        stopUpdateProgressPolling();
+        installLoading.value = false;
+        updateProgress.value = {
+          ...updateProgress.value,
+          status: "error",
+          message:
+            res.data.message || t("core.header.updateDialog.progress.failed"),
+        };
       }
     })
     .catch((err) => {
       console.log(err);
+      stopUpdateProgressPolling();
+      installLoading.value = false;
       updateStatus.value = err;
       updateProgress.value = {
         ...updateProgress.value,
@@ -696,10 +701,6 @@ async function switchVersion(targetVersion: string) {
           err?.message ||
           t("core.header.updateDialog.progress.failed"),
       };
-    })
-    .finally(() => {
-      installLoading.value = false;
-      stopUpdateProgressPolling();
     });
 }
 

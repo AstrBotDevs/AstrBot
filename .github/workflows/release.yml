@@ -71,6 +71,15 @@ jobs:
           echo "${{ steps.tag.outputs.tag }}" > dist/assets/version
           zip -r "AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip" dist
 
+      - name: Build core package
+        shell: bash
+        run: |
+          git archive \
+            --format=zip \
+            --prefix="AstrBot-${{ steps.tag.outputs.tag }}/" \
+            --output="AstrBot-${{ steps.tag.outputs.tag }}-core.zip" \
+            HEAD
+
       - name: Upload dashboard artifact
         uses: actions/upload-artifact@v7
         with:
@@ -78,11 +87,12 @@ jobs:
           if-no-files-found: error
           path: dashboard/AstrBot-${{ steps.tag.outputs.tag }}-dashboard.zip
 
-      - name: Upload dashboard package to Cloudflare R2
+      - name: Upload release packages to Cloudflare R2
         if: ${{ env.R2_ACCOUNT_ID != '' && env.R2_ACCESS_KEY_ID != '' && env.R2_SECRET_ACCESS_KEY != '' }}
         env:
           R2_BUCKET_NAME: "astrbot"
-          R2_OBJECT_NAME: "astrbot-webui-latest.zip"
+          DASHBOARD_LATEST_OBJECT_NAME: "astrbot-webui-latest.zip"
+          CORE_LATEST_OBJECT_NAME: "astrbot-core-latest.zip"
           VERSION_TAG: ${{ steps.tag.outputs.tag }}
         shell: bash
         run: |
@@ -98,10 +108,17 @@ jobs:
           endpoint = https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
           EOF
 
-          cp "dashboard/AstrBot-${VERSION_TAG}-dashboard.zip" "dashboard/${R2_OBJECT_NAME}"
-          rclone copy "dashboard/${R2_OBJECT_NAME}" "r2:${R2_BUCKET_NAME}" --progress
+          cp "dashboard/AstrBot-${VERSION_TAG}-dashboard.zip" "dashboard/${DASHBOARD_LATEST_OBJECT_NAME}"
+          rclone copy "dashboard/${DASHBOARD_LATEST_OBJECT_NAME}" "r2:${R2_BUCKET_NAME}" --progress
           cp "dashboard/AstrBot-${VERSION_TAG}-dashboard.zip" "dashboard/astrbot-webui-${VERSION_TAG}.zip"
           rclone copy "dashboard/astrbot-webui-${VERSION_TAG}.zip" "r2:${R2_BUCKET_NAME}" --progress
+
+          cp "AstrBot-${VERSION_TAG}-core.zip" "${CORE_LATEST_OBJECT_NAME}"
+          rclone copy "${CORE_LATEST_OBJECT_NAME}" "r2:${R2_BUCKET_NAME}" --progress
+          cp "AstrBot-${VERSION_TAG}-core.zip" "astrbot-core-${VERSION_TAG}.zip"
+          rclone copy "astrbot-core-${VERSION_TAG}.zip" "r2:${R2_BUCKET_NAME}" --progress
+          rclone copyto "AstrBot-${VERSION_TAG}-core.zip" "r2:${R2_BUCKET_NAME}/astrbot-core/${VERSION_TAG}/source.zip" --progress
+          rclone copyto "AstrBot-${VERSION_TAG}-core.zip" "r2:${R2_BUCKET_NAME}/download/astrbot-core/${VERSION_TAG}/source.zip" --progress
 
   publish-release:
     name: Publish GitHub Release
