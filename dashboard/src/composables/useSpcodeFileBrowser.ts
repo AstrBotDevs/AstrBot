@@ -107,12 +107,27 @@ export function useSpcodeFileBrowser(pathRef: MaybeRef<string>): UseSpcodeFileBr
     }
   }
 
-  // Auto-refresh when pathRef changes (post-flush so initial assignment
-  // doesn't trigger an extra fetch for the first navigation).
+  // Auto-refresh when pathRef changes. `immediate: true` is required
+  // so the very first mount fetches the initial path — without it,
+  // Vue's `watch` does NOT fire on the initial value, and a FileBrowserView
+  // mounted with an already-resolved path (e.g. `mainWorktreePath` set by
+  // the parent's worktree-list watcher) would stay stuck on `idle` →
+  // "loading" forever until the user manually changes pathRef (which is
+  // the "switch worktree and back" workaround users discovered).
+  //
+  // Skip empty paths so we don't immediately transition to the
+  // `path_not_found` error state when the parent hasn't yet resolved a
+  // root path (race window between component mount and worktree-list
+  // load). The watcher will fire again as soon as pathRef becomes
+  // non-empty.
   watch(
     () => toValue(pathRef),
-    () => { if (isMounted) void refresh(); },
-    { flush: "post" },
+    (path) => {
+      if (!isMounted) return;
+      if (!path) return;
+      void refresh(path);
+    },
+    { flush: "post", immediate: true },
   );
 
   function dispose(): void {

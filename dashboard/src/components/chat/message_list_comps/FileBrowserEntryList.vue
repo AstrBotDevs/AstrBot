@@ -1,5 +1,9 @@
 <!-- Author: elecvoid243, 2026-06-20
-     Spec: docs/superpowers/specs/2026-06-20-git-diff-sidebar-file-browser-design.md §4.4 -->
+     Spec: docs/superpowers/specs/2026-06-20-git-diff-sidebar-file-browser-design.md §4.4
+     Updated 2026-06-21 — drop "back to parent" affordance; instead the
+     parent directory stays mounted in this pane (driven by the
+     dirComposable in FileBrowserView) and the currently-previewed file
+     is highlighted via `selected-path`. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
@@ -8,8 +12,18 @@ import type { SpcodeFileBrowserEntry } from "@/composables/parseSpcodeFileBrowse
 
 const props = defineProps<{
   state: FileBrowserFetchState;
+  /** Path of the file currently being previewed in the right pane;
+   *  used to highlight the matching entry in this list. */
+  selectedPath: string | null;
 }>();
-const emit = defineEmits<{ (e: "navigate", path: string): void }>();
+// Emit the full entry (not just the path) so the parent can inspect
+// `entry.type` and route correctly:
+//   - directory: navigate to that directory, clear preview
+//   - file / symlink: navigate to its parent, preview the path
+// Emitting only the path would force the parent to re-look-up the
+// entry by path from the current directory snapshot, which is racy
+// if the snapshot changes between the click and the handler.
+const emit = defineEmits<{ (e: "navigate", entry: SpcodeFileBrowserEntry): void }>();
 const { tm } = useModuleI18n("features/chat");
 
 const TYPE_ICONS: Record<SpcodeFileBrowserEntry["type"], { icon: string; color: string }> = {
@@ -27,47 +41,10 @@ const truncated = computed<boolean>(() => {
   return props.state.kind === "directory" && props.state.snapshot.meta.truncated;
 });
 
-/**
- * Parent path of the currently-viewed file/symlink. When the user
- * opens a file, the directory entries disappear from the left pane
- * (since state becomes "file"). Without an alternative affordance
- * the left pane would be empty and the user would have to use the
- * breadcrumb at the top to navigate back — which is more clicks and
- * less discoverable. This computed powers a single "← parent"
- * affordance shown at the top of the left pane while a file is open.
- */
-const currentFilePath = computed<string | null>(() => {
-  if (props.state.kind === "file" || props.state.kind === "symlink") {
-    return props.state.snapshot.meta.path;
-  }
-  return null;
-});
-
-const parentPath = computed<string | null>(() => {
-  const p = currentFilePath.value;
-  if (!p) return null;
-  const isWindows = p.includes("\\");
-  const sep = isWindows ? "\\" : "/";
-  const lastSep = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-  if (lastSep <= 0) return null;
-  return p.slice(0, lastSep);
-});
-
-const parentName = computed<string>(() => {
-  const p = parentPath.value;
-  if (!p) return "/";
-  const sep = p.includes("\\") ? "\\" : "/";
-  return p.slice(p.lastIndexOf(sep) + 1) || p;
-});
-
-function goToParent(): void {
-  if (parentPath.value) emit("navigate", parentPath.value);
-}
-
 function handleClick(entry: SpcodeFileBrowserEntry): void {
   // Dangling symlink: click does nothing
   if (entry.type === "symlink" && entry.target_exists === false) return;
-  emit("navigate", entry.path);
+  emit("navigate", entry);
 }
 
 function formatSize(bytes: number | null): string {
@@ -84,23 +61,6 @@ function formatSize(bytes: number | null): string {
       {{ tm("spcodeProjectLoad.fileBrowser.truncated") }}
     </div>
 
-    <!-- Back-to-parent affordance: shown when a file/symlink is
-         open. The directory entries don't apply anymore (state is
-         no longer "directory"), but giving the user a single
-         clickable "go up" item keeps the left pane useful and
-         discoverable. -->
-    <button
-      v-if="parentPath"
-      type="button"
-      class="file-browser-back"
-      @click="goToParent"
-    >
-      <v-icon size="16" color="info">mdi-arrow-up</v-icon>
-      <span class="back-label">{{
-        tm("spcodeProjectLoad.fileBrowser.entryType.backToParent", { name: parentName })
-      }}</span>
-    </button>
-
     <div v-if="entries.length === 0 && state.kind === 'directory'" class="file-browser-empty-dir">
       <v-icon size="24" color="grey">mdi-folder-open-outline</v-icon>
       <span>{{ tm("spcodeProjectLoad.fileBrowser.empty") }}</span>
@@ -114,6 +74,7 @@ function formatSize(bytes: number | null): string {
         :class="{
           'is-symlink': entry.type === 'symlink',
           'is-dangling': entry.type === 'symlink' && entry.target_exists === false,
+          'is-selected': entry.path === selectedPath,
         }"
         @click="handleClick(entry)"
       >
@@ -162,36 +123,6 @@ function formatSize(bytes: number | null): string {
   color: rgba(var(--v-theme-on-surface), 0.5);
   font-size: 13px;
 }
-/* Back-to-parent affordance (visible while a file/symlink is open
-   in the right pane). Matches the entry-row style for visual
-   consistency — same hover background, same row height. */
-.file-browser-back {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  margin: 2px 0;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
-  color: rgba(var(--v-theme-on-surface), 0.7);
-  font-family: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-  width: 100%;
-  transition: background 0.1s, color 0.1s;
-}
-.file-browser-back:hover {
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  color: rgba(var(--v-theme-on-surface), 0.95);
-}
-.back-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
 .file-browser-entries {
   list-style: none;
   margin: 0;
@@ -204,10 +135,37 @@ function formatSize(bytes: number | null): string {
   padding: 5px 14px;
   cursor: pointer;
   font-size: 12.5px;
-  transition: background 0.1s;
+  transition: background 0.1s, color 0.1s;
 }
 .file-browser-entry:hover {
   background: rgba(var(--v-theme-on-surface), 0.04);
+}
+/* Selected entry: the file currently being previewed in the right
+   pane. Uses a subtle primary tint so it stays distinct from the
+   hover state but doesn't compete with the file content's syntax
+   highlighting. `is-selected` wins over `is-symlink` background
+   because we want the selection cue to remain visible. */
+.file-browser-entry.is-selected {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgba(var(--v-theme-on-surface), 0.95);
+  font-weight: 500;
+}
+.file-browser-entry.is-selected:hover {
+  background: rgba(var(--v-theme-primary), 0.18);
+}
+.file-browser-entry.is-selected::before {
+  /* Thin accent bar on the left edge to make the selection obvious
+     even when the file name is short and the row is wide. */
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgb(var(--v-theme-primary));
+}
+.file-browser-entries {
+  position: relative; /* anchor for the ::before accent bar */
 }
 .file-browser-entry.is-dangling {
   opacity: 0.5;

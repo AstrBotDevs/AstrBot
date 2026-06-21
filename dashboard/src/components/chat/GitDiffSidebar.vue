@@ -132,6 +132,12 @@ const selectedWorktree = ref<string | null>(null);
 // first-time users likely want to "see what's in the project").
 const viewMode = ref<"files" | "diff">(loadViewMode());
 const fileBrowserCurrentPath = ref<string>(loadFileBrowserCurrentPath());
+// fileBrowserPreviewPath is the file (if any) currently shown in the
+// right pane. It is intentionally NOT persisted: when the user reloads
+// the page we want the directory listing (persisted via currentPath),
+// not an auto-reopened file. Cleared on worktree / project switches,
+// breadcrumb clicks, and any directory navigation.
+const fileBrowserPreviewPath = ref<string | null>(null);
 
 // Hydrate selectedScope from localStorage (validated; fall back to default).
 const _persistedScope = loadSelectedScope();
@@ -180,6 +186,8 @@ watch(
 // AND cross-validate the persisted currentPath against the new root.
 // This is the only place where fileBrowserCurrentPath is overwritten
 // during initial hydration; thereafter the user is in control.
+// Also clear any preview path: a preview from a different worktree
+// would be invalid in the new context.
 watch(
   () => worktreesComposable.state.value,
   (s) => {
@@ -197,6 +205,12 @@ watch(
     if (fileBrowserCurrentPath.value !== validated) {
       fileBrowserCurrentPath.value = validated;
     }
+    // Preview path is transient and almost certainly invalid in a new
+    // worktree context; clear it so the right pane shows the
+    // "select from left" hint instead of a stale file.
+    if (fileBrowserPreviewPath.value !== null) {
+      fileBrowserPreviewPath.value = null;
+    }
   },
   { immediate: true },
 );
@@ -206,7 +220,8 @@ watch(
 // (which reset selectedWorktree to null via the directory watcher
 // further below). Per spec §5.1: "reset currentPath regardless of
 // current viewMode" — we don't want stale paths leaking into a
-// different worktree.
+// different worktree. The preview path is also cleared: a preview
+// pointing into the old worktree is meaningless in the new one.
 watch(
   selectedWorktree,
   (newVal) => {
@@ -215,6 +230,7 @@ watch(
       fileBrowserCurrentPath.value = root;
       persistCurrentPath(root);
     }
+    fileBrowserPreviewPath.value = null;
   },
 );
 
@@ -353,11 +369,17 @@ function onScopeChange(scope: GitDiffScope): void {
   pendingScope.value = scope;
 }
 
-// Spec 2026-06-20 §4.3: user clicked a breadcrumb or entry → update
-// currentPath. The composable inside FileBrowserView re-fetches
-// automatically when this ref changes.
-function onFileBrowserNavigate(path: string): void {
-  fileBrowserCurrentPath.value = path;
+// Navigation payload from FileBrowserView: dirPath is the directory
+// whose entries appear in the left pane; previewPath is an optional
+// file to display in the right pane (null = show directory hint).
+// FileBrowserEntryList sends previewPath=null for directory clicks
+// and previewPath=file.path for file/symlink clicks.
+function onFileBrowserNavigate(payload: {
+  dirPath: string;
+  previewPath: string | null;
+}): void {
+  fileBrowserCurrentPath.value = payload.dirPath;
+  fileBrowserPreviewPath.value = payload.previewPath;
 }
 
 onBeforeUnmount(() => {
@@ -641,12 +663,13 @@ const currentRoot = computed<string | null>(() => {
       <!-- Body: Files view OR Diff view -->
       <div class="git-diff-sidebar-body">
         <FileBrowserView
-          v-if="viewMode === 'files'"
-          :current-path="fileBrowserCurrentPath"
-          :is-dark="!!isDark"
-          :root-path="currentRoot"
-          @navigate="onFileBrowserNavigate"
-        />
+                  v-if="viewMode === 'files'"
+                  :current-path="fileBrowserCurrentPath"
+                  :preview-path="fileBrowserPreviewPath"
+                  :is-dark="!!isDark"
+                  :root-path="currentRoot"
+                  @navigate="onFileBrowserNavigate"
+                />
         <GitDiffBodyContent
           v-else
           :state="composable.state.value"

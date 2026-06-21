@@ -1,29 +1,92 @@
 <!-- Author: elecvoid243, 2026-06-20
      Spec: docs/superpowers/specs/2026-06-20-git-diff-sidebar-file-browser-design.md §4.3
-     Updated 2026-06-21 — draggable divider for left/right panes. -->
+     Updated 2026-06-21 — draggable divider + split dir/preview composables
+     so the left pane keeps showing the parent directory while the right
+     pane previews a file inside it. -->
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useSpcodeFileBrowser } from "@/composables/useSpcodeFileBrowser";
+import type { SpcodeFileBrowserEntry } from "@/composables/parseSpcodeFileBrowser";
 import FileBrowserBreadcrumb from "./FileBrowserBreadcrumb.vue";
 import FileBrowserEntryList from "./FileBrowserEntryList.vue";
 import FileBrowserFilePreview from "./FileBrowserFilePreview.vue";
 
 const props = defineProps<{
+  /** Directory whose entries are shown in the left pane. */
   currentPath: string;
+  /** File path to preview in the right pane; null = show hint. */
+  previewPath: string | null;
   isDark?: boolean;
   /** Current worktree root (parent computes: selectedWorktree ?? mainWorktreePath). null = project not loaded. */
   rootPath: string | null;
 }>();
-const emit = defineEmits<{ (e: "navigate", path: string): void }>();
+
+/**
+ * Navigation payload:
+ * - `dirPath`: the directory the left pane should display (always set).
+ * - `previewPath`: the file the right pane should preview, or null to
+ *   clear the preview and show the "select from left" hint.
+ * File clicks send { dirPath: parentOf(file), previewPath: file.path };
+ * directory / breadcrumb clicks send { dirPath: <clicked>, previewPath: null }.
+ */
+const emit = defineEmits<{
+  (e: "navigate", payload: { dirPath: string; previewPath: string | null }): void;
+}>();
 
 const { tm } = useModuleI18n("features/chat");
 const spcodeStatus = useSpcodeProjectStatus();
 
-const fileBrowserComposable = useSpcodeFileBrowser(
+// Two independent composables so the directory listing stays in the
+// left pane while the right pane shows a different (file) path.
+// `dirComposable` always fetches `currentPath`; `previewComposable`
+// only fetches when `previewPath` is non-empty (its watch has an
+// empty-path short-circuit to avoid spurious path_not_found errors).
+const dirComposable = useSpcodeFileBrowser(
   computed(() => props.currentPath),
 );
+const previewComposable = useSpcodeFileBrowser(
+  computed(() => props.previewPath ?? ""),
+);
+
+// Breadcrumb path: when previewing a file, show the FILE'S path so
+// the user can see "root / src / file.ts" in the breadcrumb instead
+// of just "root / src". When browsing a directory, show currentPath.
+const breadcrumbPath = computed<string>(() => props.previewPath ?? props.currentPath);
+
+/** Compute the parent directory of a path (POSIX + Windows separators). */
+function parentOf(p: string): string {
+  const isWindows = p.includes("\\");
+  const lastSep = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  if (lastSep <= 0) return isWindows ? "\\" : "/";
+  return p.slice(0, lastSep);
+}
+
+function onEntryNavigate(entry: SpcodeFileBrowserEntry): void {
+  // Dangling symlink: EntryList already filters clicks on these.
+  if (entry.type === "directory") {
+    emit("navigate", { dirPath: entry.path, previewPath: null });
+  } else {
+    // File or symlink: navigate to the parent (left pane shows the
+    // directory listing) and preview the clicked path on the right.
+    emit("navigate", { dirPath: parentOf(entry.path), previewPath: entry.path });
+  }
+}
+
+function onBreadcrumbNavigate(path: string): void {
+  // Clicking a breadcrumb segment always clears the preview — the
+  // user is moving up the tree, not asking to keep the file open.
+  emit("navigate", { dirPath: path, previewPath: null });
+}
+
+function onPreviewTargetNavigate(resolvedTarget: string): void {
+  // Symlink "go to target": treat as a file click so the right pane
+  // previews it; if the target is actually a directory, the
+  // previewComposable will land on a directory state and the user
+  // can then click the entry in the right pane to navigate into it.
+  emit("navigate", { dirPath: parentOf(resolvedTarget), previewPath: resolvedTarget });
+}
 
 // ── Draggable divider (left/right pane resize) ──────────────────
 // leftPanePercent is the share of horizontal space the entry list
@@ -67,6 +130,12 @@ function onMouseUp(): void {
 onBeforeUnmount(() => {
   // If user is mid-drag when the sidebar unmounts, release cleanly.
   if (isResizing.value) onMouseUp();
+  // Release BOTH composables. Without this, an AbortController
+  // stays alive across re-mounts (e.g. toggling viewMode files ↔
+  // diff), and the in-flight request can still write to a stale
+  // `state` ref.
+  dirComposable.dispose();
+  previewComposable.dispose();
 });
 </script>
 
@@ -79,38 +148,55 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <FileBrowserBreadcrumb
-        :current-path="currentPath"
+        :current-path="breadcrumbPath"
         :root-path="rootPath"
-        @navigate="(p) => emit('navigate', p)"
+        @navigate="onBreadcrumbNavigate"
       />
 
       <div ref="bodyRef" class="file-browser-body" :class="{ resizing: isResizing }">
-              <FileBrowserEntryList
-                class="file-browser-pane-left"
-                :style="{ width: leftPanePercent + '%' }"
-                :state="fileBrowserComposable.state.value"
-                @navigate="(p) => emit('navigate', p)"
-              />
+        <FileBrowserEntryList
+          class="file-browser-pane-left"
+          :style="{ width: leftPanePercent + '%' }"
+          :state="dirComposable.state.value"
+          :selected-path="previewPath"
+          @navigate="onEntryNavigate"
+        />
 
-              <div
-                class="file-browser-divider"
-                role="separator"
-                aria-orientation="vertical"
-                :aria-valuenow="Math.round(leftPanePercent)"
-                aria-valuemin="15"
-                aria-valuemax="70"
-                @mousedown="startResize"
-              />
+        <div
+          class="file-browser-divider"
+          role="separator"
+          aria-orientation="vertical"
+          :aria-valuenow="Math.round(leftPanePercent)"
+          aria-valuemin="15"
+          aria-valuemax="70"
+          @mousedown="startResize"
+        />
 
-              <FileBrowserFilePreview
-                class="file-browser-pane-right"
-                :style="{ width: 100 - leftPanePercent + '%' }"
-                :state="fileBrowserComposable.state.value"
-                :is-dark="!!isDark"
-                @navigate-target="(p) => emit('navigate', p)"
-                @retry="() => fileBrowserComposable.refresh()"
-              />
-            </div>
+        <!-- Right pane: render the live preview only when a file is
+             being previewed. When previewPath is null we show a
+             static "select from left" hint instead — the
+             previewComposable stays in idle state (its watch skips
+             empty paths) and there's nothing useful to display. -->
+        <FileBrowserFilePreview
+          v-if="previewPath"
+          class="file-browser-pane-right"
+          :style="{ width: 100 - leftPanePercent + '%' }"
+          :state="previewComposable.state.value"
+          :is-dark="!!isDark"
+          @navigate-target="onPreviewTargetNavigate"
+          @retry="() => previewComposable.refresh()"
+        />
+        <div
+          v-else
+          class="file-browser-pane-right file-browser-preview-empty"
+          :style="{ width: 100 - leftPanePercent + '%' }"
+        >
+          <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
+          <span class="preview-hint">
+            {{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}
+          </span>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -152,6 +238,17 @@ onBeforeUnmount(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+.file-browser-preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 32px 16px;
 }
 .file-browser-divider {
   width: 6px;
