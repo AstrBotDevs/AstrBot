@@ -59,8 +59,9 @@
 | 8 | 评论数据模型 | **带行内容快照**(`lineContent` / `contextBefore` / `contextAfter` 在 add 时冻结) | 文件可能被编辑;line 漂移后 LLM 仍能用 lineContent 作为 fingerprint 定位 |
 | 9 | LLM 上下文格式 | **git-diff 风格**(`>` 标记 + 行号列 + ±1 临近行) | 业界标准;LLM 已熟悉此格式 |
 | 10 | 邻近评论合并 | **同文件 line 差 ≤ 3 行的多条评论合并为一段** | 避免重复 context;token 效率 |
-| 11 | 切 session 清空 | ✅ 是 | session 切换是明确的上下文边界 |
+| 11 | 切 session 清空 | ✅ 是(调用 `fileComments.resetForSession()` 清空 `comments`;**contentCache 跨 session 保留**,下次开文件会被 watch 重新注册) | session 切换是明确的上下文边界;contentCache 保留避免无意义重读 |
 | 12 | 切 worktree / 项目 | **评论按 filePath 区分**,不强制清空 | 评论与文件路径绑定,worktree 切换不应丢评论 |
+| 13 | 仅评论无文本能否发送 | ✅ 是(`sendCurrentMessage` 在 `draft` 空、`stagedFiles` 空、但 `totalCount > 0` 时仍可发送) | 用户"累积多条评论后一键提问"的工作流,无需额外敲字 |
 
 ---
 
@@ -118,11 +119,17 @@ StandaloneChat.vue (修改)
 
 ### 4.1 `useFileComments.ts` composable
 
-#### 状态(内部封装,不暴露 bucket)
+**设计原则(基于 reviewer 反馈)**:
+
+- **Comments per active session, cleared on switch**:切换 chat session 时,当前 session 的所有评论一并清空(不做 per-session 持久化以避免 D11 模糊)。Cache 跨 session 保留(下次重新打开文件时,`immediate: true` 的 watch 会重新注册)。
+- **Single-level bucket**:`comments[filePath] = FileComment[]` 而不是 `comments[sessionId][filePath]`。
+- **`addComment` 返回 `null` 而不是抛错**:让调用方决定 UX(显示 snackbar、保持编辑器打开等)。
+- **共享 `extractLineContext` helper**:供 composable 和 `FileBrowserFilePreview` 复用,避免重复实现。
+- **`crypto.randomUUID?.() || fallback`** 模式与 `StandaloneChat.vue:311` 保持一致。
+
+#### `FileComment` interface + helper(模块级 export)
 
 ```typescript
-import { reactive, computed, ref, type Ref, type InjectionKey } from "vue";
-
 /**
  * Single file comment, anchored to a line at comment-creation time.
  * `lineContent` and `contextBefore`/`contextAfter` are frozen snapshots
@@ -148,120 +155,110 @@ export interface FileComment {
   updatedAt: number;
 }
 
-export interface UseFileCommentsOptions {
-  /** Currently active chat session id. Ref so we can react to switches. */
-  currentSessionId: Ref<string>;
+/** Single source of truth for line context extraction. Used by both
+ *  useFileComments (to freeze the snapshot in addComment) and by
+ *  FileBrowserFilePreview (to populate the editor preview). Keeping
+ *  the two call sites in lockstep via one helper means the editor
+ *  preview is always consistent with what the comment will store. */
+export interface LineContext {
+  lineContent: string;
+  contextBefore: string | null;
+  contextAfter: string | null;
 }
 
-/**
- * In-memory comment store, scoped to a single chat session lifecycle.
- *
- * Bucket shape (internal, NOT exposed):
- *   comments[sessionId][filePath] = FileComment[]
- *   contentCache[sessionId][filePath] = string
- *
- * The content cache is **per-session** so a session switch clears
- * caches for the previous session — comments and their frozen
- * snapshots remain valid because the snapshots are stored on the
- * comment itself, not derived from the cache at read time.
- */
-export function useFileComments(options: UseFileCommentsOptions) {
-  // Internal state — never returned. The composable's surface area
-  // is the explicit return below.
-  const comments = reactive<
-    Record<string, Record<string, FileComment[]>>
-  >({});
-  const contentCache = reactive<
-    Record<string, Record<string, string>>
-  >({});
+export function extractLineContext(content: string, line: number): LineContext | null {
+  const lines = content.split("\n");
+  const idx = line - 1;
+  if (idx < 0 || idx >= lines.length) return null;
+  return {
+    lineContent: lines[idx],
+    contextBefore: idx > 0 ? lines[idx - 1] : null,
+    contextAfter: idx < lines.length - 1 ? lines[idx + 1] : null,
+  };
+}
 
-  function bucketFor(sessionId: string): Record<string, FileComment[]> {
-    if (!comments[sessionId]) comments[sessionId] = {};
-    return comments[sessionId];
-  }
-  function cacheFor(sessionId: string): Record<string, string> {
-    if (!contentCache[sessionId]) contentCache[sessionId] = {};
-    return contentCache[sessionId];
-  }
+/** UUID generator matching the pattern used in StandaloneChat.vue:311. */
+function newId(): string {
+  return (
+    (globalThis.crypto?.randomUUID?.() as string | undefined) ??
+    `${Date.now()}-${Math.random()}`
+  );
+}
+```
+
+#### Composable 本体
+
+```typescript
+import { reactive, computed, type Ref } from "vue";
+
+export function useFileComments(_currentSessionId: Ref<string>) {
+  // Current-session comments, flat partitioned by filePath. Wiped on
+  // session switch via resetForSession(). NOT bucketed by sessionId —
+  // we deliberately do not preserve round-trip A → B → A, because
+  // (1) "local comments" semantic argues against it, (2) per-session
+  // bucketing adds complexity for no concrete UX benefit, (3) the
+  // content cache (which IS preserved) auto-rebuilds on next file open.
+  const comments = reactive<Record<string, FileComment[]>>({});
+  // Global content cache, single-level. Survives session switches
+  // (and is auto-overwritten by registerFileContent on next file load).
+  // Used only inside addComment() to freeze line snapshots.
+  const contentCache = reactive<Record<string, string>>({});
 
   /**
-   * Drop the previous session's content cache when the user switches
-   * sessions. Comments themselves are kept (keyed by sessionId) so
-   * switching back to a previous session restores them — but the
-   * line-snapshot extraction in addComment needs the current file
-   * content, which is only valid for the active session.
+   * Drop the current session's comments. Called by StandaloneChat
+   * when the user switches to a different session. Does NOT clear
+   * contentCache (see field doc above).
    */
-  function onSessionChange(prev: string, next: string): void {
-    if (prev && prev !== next) {
-      // Wipe the previous session's content cache only. Comments
-      // for `prev` remain available if the user switches back
-      // (and the file is re-loaded, the cache will be re-filled).
-      for (const k of Object.keys(contentCache[prev] ?? {})) {
-        delete contentCache[prev][k];
-      }
-    }
+  function resetForSession(): void {
+    for (const k of Object.keys(comments)) delete comments[k];
   }
 
   /**
    * Register a file's current full content. Called by
-   * FileBrowserFilePreview when a file finishes loading. Required
-   * before any addComment() for the same `(sessionId, filePath)` —
-   * addComment() throws if the cache is empty.
+   * FileBrowserFilePreview when a file finishes loading
+   * (`immediate: true` watch). Idempotent — last write wins.
    */
   function registerFileContent(filePath: string, content: string): void {
-    cacheFor(options.currentSessionId.value)[filePath] = content;
+    contentCache[filePath] = content;
   }
 
   /**
    * Add a comment, freezing lineContent / contextBefore / contextAfter
    * from the cached content at this moment.
    *
-   * Throws (descriptive Error) if the cache is empty for this file
-   * — the caller (FileBrowserFilePreview) is responsible for calling
-   * registerFileContent() before opening the editor. We throw rather
-   * than silently produce an empty snapshot, because a comment with
-   * `lineContent = ""` would be useless as an LLM fingerprint.
+   * Returns null if the cache has no entry for this file. In practice
+   * this should be unreachable — the `immediate: true` watch in
+   * FileBrowserFilePreview registers content before the editor opens
+   * — but the null return lets the caller show a snackbar instead of
+   * crashing if the invariant ever breaks (e.g. external file refresh
+   * that clears the cache while the editor is open).
    */
   function addComment(input: {
     filePath: string;
     line: number;
     text: string;
-  }): FileComment {
-    const sessionCache = contentCache[options.currentSessionId.value];
-    const content = sessionCache?.[input.filePath];
-    if (content === undefined) {
-      throw new Error(
-        `useFileComments.addComment: no cached content for ${input.filePath}. ` +
-          "The file browser must call registerFileContent() before opening the editor.",
-      );
-    }
-    const lines = content.split("\n");
-    const idx = input.line - 1;
-    if (idx < 0 || idx >= lines.length) {
-      throw new Error(
-        `useFileComments.addComment: line ${input.line} out of range (file has ${lines.length} lines).`,
-      );
-    }
+  }): FileComment | null {
+    const content = contentCache[input.filePath];
+    if (content === undefined) return null;
+    const ctx = extractLineContext(content, input.line);
+    if (ctx === null) return null;
     const comment: FileComment = {
-      id: crypto.randomUUID(),
+      id: newId(),
       filePath: input.filePath,
       line: input.line,
-      lineContent: lines[idx],
-      contextBefore: idx > 0 ? lines[idx - 1] : null,
-      contextAfter: idx < lines.length - 1 ? lines[idx + 1] : null,
+      lineContent: ctx.lineContent,
+      contextBefore: ctx.contextBefore,
+      contextAfter: ctx.contextAfter,
       text: input.text,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    const bucket = bucketFor(options.currentSessionId.value);
-    (bucket[input.filePath] ??= []).push(comment);
+    (comments[input.filePath] ??= []).push(comment);
     return comment;
   }
 
   function updateComment(id: string, newText: string): void {
-    const bucket = comments[options.currentSessionId.value];
-    if (!bucket) return;
-    for (const list of Object.values(bucket)) {
+    for (const list of Object.values(comments)) {
       const c = list.find((c) => c.id === id);
       if (c) {
         c.text = newText;
@@ -272,42 +269,45 @@ export function useFileComments(options: UseFileCommentsOptions) {
   }
 
   function deleteComment(id: string): void {
-    const bucket = comments[options.currentSessionId.value];
-    if (!bucket) return;
-    for (const [path, list] of Object.entries(bucket)) {
+    for (const [path, list] of Object.entries(comments)) {
       const i = list.findIndex((c) => c.id === id);
       if (i >= 0) {
         list.splice(i, 1);
-        if (list.length === 0) delete bucket[path];
+        if (list.length === 0) delete comments[path];
         return;
       }
     }
   }
 
-  /** Find a comment by id across all files in the current session.
-   *  Returns null if not found. Used by FileBrowserFilePreview to
-   *  open the editor for an existing comment. */
+  /** Find a comment by id in the current session. Returns null if not
+   *  found. Used by FileBrowserFilePreview to open the editor for
+   *  an existing comment. */
   function findCommentById(id: string): FileComment | null {
-    const bucket = comments[options.currentSessionId.value];
-    if (!bucket) return null;
-    for (const list of Object.values(bucket)) {
+    for (const list of Object.values(comments)) {
       const c = list.find((c) => c.id === id);
       if (c) return c;
     }
     return null;
   }
 
+  /** Find the comment on a specific line of a specific file, if any.
+   *  Used by FileBrowserCodeView to check "should this gutter cell
+   *  show the comment indicator instead of the '+' button?" without
+   *  scanning the bucket itself. */
+  function commentForLine(filePath: string, line: number): FileComment | null {
+    return comments[filePath]?.find((c) => c.line === line) ?? null;
+  }
+
   /** Total comment count for the current session (across all files). */
   const totalCount = computed<number>(() => {
-    const bucket = comments[options.currentSessionId.value];
-    if (!bucket) return 0;
-    return Object.values(bucket).reduce((s, l) => s + l.length, 0);
+    let n = 0;
+    for (const list of Object.values(comments)) n += list.length;
+    return n;
   });
 
   /** Comments for a specific file in the current session. */
   function commentsForFile(filePath: string): FileComment[] {
-    const bucket = comments[options.currentSessionId.value];
-    return bucket?.[filePath] ?? [];
+    return comments[filePath] ?? [];
   }
 
   /** Format all comments in the current session as a structured
@@ -321,10 +321,8 @@ export function useFileComments(options: UseFileCommentsOptions) {
    *  code block uses git-diff-style `>` marker for the commented
    *  line. See §5 for the full format spec. */
   function formatForLLM(): string {
-    const bucket = comments[options.currentSessionId.value];
-    if (!bucket) return "";
     const allComments: FileComment[] = [];
-    for (const list of Object.values(bucket)) allComments.push(...list);
+    for (const list of Object.values(comments)) allComments.push(...list);
     if (allComments.length === 0) return "";
 
     // Group by filePath
@@ -425,22 +423,42 @@ export function useFileComments(options: UseFileCommentsOptions) {
   }
 
   return {
-    // Minimal surface — internal state stays private.
     totalCount,
-    onSessionChange,
+    resetForSession,
     registerFileContent,
     addComment,
     updateComment,
     deleteComment,
     findCommentById,
+    commentForLine,
     commentsForFile,
     formatForLLM,
   };
 }
+```
 
+> **注 1**:`_currentSessionId` 参数保留(下划线前缀表示当前未使用)—— 后续若需要 session-scoped 行为(比如 per-session persistence),可在不改 API 的前提下引用它。也可直接删除 —— 决定:保留,作为占位/未来扩展点。
+>
+> **注 2**:`addComment` 返回 `null` 而不是抛错(对应 reviewer 反馈):调用方在 `onSaveComment` 里检查 null,显示 snackbar 并保留 editor 文本(见 §4.4)。
+
+#### InjectionKey(导出在文件底部)
+
+```typescript
+import type { InjectionKey } from "vue";
+
+/**
+ * Stable injection key for the file-comments store. Must be exported
+ * from this single file (NOT re-declared in StandaloneChat.vue or
+ * FileBrowserFilePreview.vue). A Symbol literal in two files would
+ * produce two different symbols and silently break inject().
+ */
 export const FILE_COMMENTS_KEY: InjectionKey<ReturnType<typeof useFileComments>> =
   Symbol("fileComments");
 ```
+
+> **正确用法**:
+> - `StandaloneChat.vue`:`import { ..., FILE_COMMENTS_KEY } from "@/composables/useFileComments";` 然后 `provide(FILE_COMMENTS_KEY, fileComments)`
+> - `FileBrowserFilePreview.vue`:`import { ..., FILE_COMMENTS_KEY } from "@/composables/useFileComments";` 然后 `inject(FILE_COMMENTS_KEY)`
 
 ### 4.2 `FileBrowserCodeView.vue` 新组件
 
@@ -502,9 +520,9 @@ const emit = defineEmits<{
       <button
         v-if="line === hoveredLine && !hasComment(line)"
         class="gutter-add-btn"
-        :aria-label="tm('comment.addButtonAria', { line })"
+        :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line })"
         @click="emit('request-add', line)"
-            >+</button>
+      >+</button>
       <button
         v-else-if="hasComment(line)"
         class="gutter-comment-indicator"
@@ -615,8 +633,8 @@ const emit = defineEmits<{
     <v-icon size="14">mdi-comment-text-outline</v-icon>
     <span class="editor-title">
       {{ commentId
-        ? tm("comment.editTitle", { line })
-        : tm("comment.newTitle", { line }) }}
+        ? tm("spcodeProjectLoad.fileBrowser.comment.editTitle", { line })
+        : tm("spcodeProjectLoad.fileBrowser.comment.newTitle", { line }) }}
     </span>
     <span class="editor-context">
       <code v-if="contextBefore">{{ contextBefore }}</code>
@@ -629,7 +647,7 @@ const emit = defineEmits<{
     v-model="text"
     class="comment-editor-input"
     rows="3"
-    :placeholder="tm('comment.placeholder')"
+    :placeholder="tm('spcodeProjectLoad.fileBrowser.comment.placeholder')"
   />
   <div class="comment-editor-actions">
     <v-btn
@@ -639,11 +657,11 @@ const emit = defineEmits<{
       variant="text"
       @click="emit('delete', commentId)"
     >
-      {{ tm("comment.delete") }}
+      {{ tm("spcodeProjectLoad.fileBrowser.comment.delete") }}
     </v-btn>
     <v-spacer />
     <v-btn size="small" variant="text" @click="emit('cancel')">
-      {{ tm("comment.cancel") }}
+      {{ tm("spcodeProjectLoad.fileBrowser.comment.cancel") }}
     </v-btn>
     <v-btn
       size="small"
@@ -652,13 +670,11 @@ const emit = defineEmits<{
       :disabled="!text.trim()"
       @click="emit('save', { text: text.trim(), commentId, line })"
     >
-      {{ tm("comment.save") }}
+      {{ tm("spcodeProjectLoad.fileBrowser.comment.save") }}
     </v-btn>
   </div>
 </div>
 ```
-
-> **注**:`tm("comment.xxx")` 是相对路径,`useModuleI18n("features/chat")` 已注入前缀 `spcodeProjectLoad.fileBrowser.`,所以完整 key 是 `spcodeProjectLoad.fileBrowser.comment.xxx`。§7 给出完整键定义。
 
 #### 行为细节
 
@@ -714,8 +730,13 @@ const emit = defineEmits<{
 **新增的 script 逻辑**(接在现有 imports 之后):
 
 ```typescript
-import { inject } from "vue";
-import { useFileComments, FILE_COMMENTS_KEY } from "@/composables/useFileComments";
+import { inject, ref } from "vue";
+import {
+  useFileComments,
+  FILE_COMMENTS_KEY,
+  extractLineContext,
+  type LineContext,
+} from "@/composables/useFileComments";
 
 const props = defineProps<{
   state: FileBrowserFetchState;
@@ -730,8 +751,8 @@ const emit = defineEmits<{
 const { tm } = useModuleI18n("features/chat");
 
 // Inject the shared comments store. StandaloneChat always provides
-// it via provide(FILE_COMMENTS_KEY, ...), so we assert non-null.
-// (No fallback store: YAGNI — if the key is missing it's a bug.)
+// it via provide(FILE_COMMENTS_KEY, ...); a missing key here is a
+// programmer error, not a runtime condition we can recover from.
 const fileComments = inject(FILE_COMMENTS_KEY);
 if (!fileComments) {
   throw new Error(
@@ -744,21 +765,29 @@ if (!fileComments) {
 const activeEditLine = ref<number | null>(null);
 const activeEditCommentId = ref<string | null>(null);
 const editorInitialText = ref<string>("");
-const editorContext = ref<{
-  lineContent: string | null;
-  contextBefore: string | null;
-  contextAfter: string | null;
-} | null>(null);
+const editorContext = ref<LineContext | null>(null);
+
+// Snackbar shown if addComment returns null (cache empty — see §4.1).
+const snackbar = ref<{ visible: boolean; text: string }>({ visible: false, text: "" });
 
 function currentFilePath(): string | null {
   return props.state.kind === "file" ? props.state.snapshot.meta.path : null;
 }
 
-// When the file content changes, register it with the comments
-// store so addComment can extract line snapshots. Watch `immediate`
-// so the first load registers synchronously.
+function currentFileContent(): string | null {
+  return props.state.kind === "file" ? props.state.snapshot.content : null;
+}
+
+/** INVARIANT: this watch keeps fileComments.contentCache[path] in sync
+ *  with state.snapshot.content. The two are read interchangeably:
+ *  - onRequestAdd uses `state.snapshot.content` (via extractLineContext)
+ *    to populate the editor preview.
+ *  - fileComments.addComment uses its own cache to freeze the snapshot.
+ *  They MUST stay in sync — a stale preview would show context that
+ *  doesn't match what the comment will actually store. The watch
+ *  (immediate + reactive) is the single point that maintains this. */
 watch(
-  () => (props.state.kind === "file" ? props.state.snapshot.content : null),
+  () => currentFileContent(),
   (content) => {
     const path = currentFilePath();
     if (path && content !== null) {
@@ -770,29 +799,12 @@ watch(
 
 function onRequestAdd(line: number): void {
   const path = currentFilePath();
-  if (!path) return;
+  const content = currentFileContent();
+  if (!path || content === null) return;
   activeEditLine.value = line;
   activeEditCommentId.value = null;
   editorInitialText.value = "";
-  // Look up the comment-time context for the line being commented.
-  // The cache is always populated for the current file (we registered
-  // it in the watch above), so this should never be undefined in
-  // practice — but fall back gracefully to the editor without
-  // context if it somehow is.
-  const content = fileComments.commentsForFile(path);  // unused, but for type inference
-  void content;  // (placeholder, see below)
-  // We need access to the cached content for context extraction.
-  // Since the composable doesn't expose the cache, we instead
-  // re-derive context from the current state.snapshot.content.
-  if (props.state.kind === "file" && props.state.snapshot.content !== null) {
-    const lines = props.state.snapshot.content.split("\n");
-    const idx = line - 1;
-    editorContext.value = {
-      lineContent: lines[idx] ?? null,
-      contextBefore: idx > 0 ? (lines[idx - 1] ?? null) : null,
-      contextAfter: idx < lines.length - 1 ? (lines[idx + 1] ?? null) : null,
-    };
-  }
+  editorContext.value = extractLineContext(content, line);  // null if line out of range
 }
 
 function onRequestEdit(commentId: string): void {
@@ -815,21 +827,28 @@ function onSaveComment(payload: {
 }): void {
   if (payload.commentId) {
     fileComments.updateComment(payload.commentId, payload.text);
-  } else {
-    const path = currentFilePath();
-    if (!path) return;
-    try {
-      fileComments.addComment({
-        filePath: path,
-        line: payload.line,
-        text: payload.text,
-      });
-    } catch (err) {
-      // addComment throws if the cache is empty (file not yet
-      // registered). The watch above guarantees the cache is filled
-      // before the editor opens, so this is a defensive log.
-      console.error("Failed to add comment:", err);
-    }
+    closeEditor();
+    return;
+  }
+  // New comment path
+  const path = currentFilePath();
+  if (!path) return;
+  const created = fileComments.addComment({
+    filePath: path,
+    line: payload.line,
+    text: payload.text,
+  });
+  if (created === null) {
+    // Cache is empty for this file. In practice the invariant watch
+    // above prevents this, but we surface a snackbar (instead of
+    // silently dropping the comment) so the user knows their text
+    // is kept in the editor and they can retry after the file
+    // re-loads.
+    snackbar.value = {
+      visible: true,
+      text: tm("spcodeProjectLoad.fileBrowser.comment.saveError"),
+    };
+    return;  // Do NOT close editor — let user retry.
   }
   closeEditor();
 }
@@ -846,27 +865,38 @@ function onDeleteComment(commentId: string): void {
 }
 ```
 
-> **注 1**:`onRequestAdd` 直接从 `props.state.snapshot.content` 切 context,**不**通过 composable 暴露的 cache —— 这避免了"为了 UI 用一下就暴露内部状态"的反模式。composable 的 cache 仅在 `addComment` 内部使用(冻结快照时)。
+> **注 1**:`onRequestAdd` 用模块级 `extractLineContext` helper —— 与 `addComment` 内部用的 helper **同一个**,确保 editor 预览的上下文与 comment 实际存储的快照严格一致(不变量已在代码注释中明确)。
 >
-> **注 2**:`inject` 没有 fallback,缺 key 直接抛错 —— 这是显式契约(`StandaloneChat` 必须 provide)。如果未来在 `StandaloneChat` 之外渲染此组件,会立即报错,而不是 silent no-op。
+> **注 2**:`addComment` 返回 null 时**保留编辑器打开**,只显示 snackbar。用户输入不丢,可重试。
+>
+> **注 3**:`i18n key` 使用**完整路径** `tm("spcodeProjectLoad.fileBrowser.comment.xxx")`,**不要**省略 `spcodeProjectLoad.fileBrowser.` 前缀。`useModuleI18n("features/chat")` 只注入 `features.chat.`,后续路径必须显式写出。参考 `FileBrowserFilePreview.vue:129` 的 `tm("spcodeProjectLoad.fileBrowser.preview.copy")` 用法。
 
 ### 4.5 `ChatInput.vue` 改动 — 评论计数 chip
 
-在底部 status-row 区域(`<div class="input-area__status-row">` 后面、`<input-container>` 前面)新增 chip:
+**位置**:`<div class="input-area__status-row__right">` 内(与 `GitDiffChip` 同侧),在 `GitDiffChip` **之后**:
 
 ```html
-<v-chip
-  v-if="commentCount > 0"
-  size="x-small"
-  variant="tonal"
-  color="primary"
-  class="comment-count-chip"
-  prepend-icon="mdi-comment-text-outline"
-  :title="tm('comment.countTooltip')"
->
-  {{ tm("comment.countLabel", { count: commentCount }) }}
-</v-chip>
+<div class="input-area__status-row__right">
+  <SpcodePlanModeChip v-if="showPlanModeChip" @toggle="handlePlanModeToggle" />
+  <GitDiffChip
+    v-if="spcodeStatus.status.value.loaded"
+    @open-diff-sidebar="emit('open-diff-sidebar')"
+  />
+  <v-chip
+    v-if="commentCount > 0"
+    size="x-small"
+    variant="tonal"
+    color="primary"
+    class="comment-count-chip"
+    prepend-icon="mdi-comment-text-outline"
+    :title="tm('spcodeProjectLoad.fileBrowser.comment.countTooltip')"
+  >
+    {{ tm("spcodeProjectLoad.fileBrowser.comment.countLabel", { count: commentCount }) }}
+  </v-chip>
+</div>
 ```
+
+**为什么放 `__right` 内**:现有 `input-area__status-row` 是 `space-between` 布局,左侧放 `SpcodeProjectIndicator`,右侧 `__right` 包了所有 chip。新增评论 chip 必须进 `__right`,否则会被推到中间。
 
 新增 prop:
 
@@ -890,13 +920,14 @@ import { useFileComments } from "@/composables/useFileComments";
 export const FILE_COMMENTS_KEY: InjectionKey<ReturnType<typeof useFileComments>> =
   Symbol("fileComments");
 
-const fileComments = useFileComments({ currentSessionId: currSessionId });
+const fileComments = useFileComments(currSessionId);
 provide(FILE_COMMENTS_KEY, fileComments);
 
-// Reset comments on session change
+// Reset comments on session change (see §4.1 resetForSession —
+// wipes comments bucket, keeps contentCache).
 watch(currSessionId, (newId, oldId) => {
   if (oldId && newId !== oldId) {
-    fileComments.resetForSession(oldId);
+    fileComments.resetForSession();
   }
 });
 ```
@@ -1026,20 +1057,21 @@ const fullText = commentText
 | 3 | **大文件性能**:1000+ 行的文件,gutter 有 1000+ 个 cell | DOM 元素多,初始渲染慢 | v1 可接受(<5MB 文件一般 < 2000 行);未来用虚拟滚动 |
 | 4 | **Hover 性能**:`@mousemove` 触发 O(N) 行元素遍历 | mousemove 频繁触发时计算开销 | 实测 < 5ms/帧(1000 行);如需更省可加 rAF throttle |
 | 5 | **评论注入与 `buildOutgoingParts` 边界**:`fullText` 是一整段 plain text,LLM 看到的是 1 个 part | 部分 LLM 模型可能拆 token 不准 | 沿用现有 plain part 路径,后端无需改动;若未来需要独立 part,扩展 MessagePart 类型 |
-| 6 | **行号偏移**:用户编辑文件后,comment 的 `line` 字段可能与现文件不一致 | 输出的行号可能误导 LLM | 在 §5.1 头部明确告诉 LLM "use lineContent as fingerprint";同时冻结的 lineContent 是 fingerprint 的核心 |
-| 7 | **session 切换时未持久化评论**:刷新或切 session 丢评论 | 用户体验:刷新即丢 | 决策 D2 明示"不持久化";若未来需要持久化,加 `localStorage[sessionId]` 缓存 |
-| 8 | ~~`onRequestEdit` 需要找 comment~~ | (已解决) | `findCommentById` 已加入 §4.1 接口 |
-| 9 | **键盘可达性**:gutter "+" 按钮虽然可 tab 聚焦,但鼠标 hover 才显示 | 键盘用户看不到 | 始终渲染 "+" 按钮(只是默认 opacity:0);focus 时 opacity:1 |
-| 10 | **缩进对齐脆弱**:`"  ${marker} ${padded} │ ${lineContent}"` 用 hard-coded 空格数 | 改字体/字号时对齐错位 | 改为用 CSS flex 列布局(三列:marker + line# + content),不依赖 hard-coded 空格 |
-| 11 | **截图里编辑器在固定位置**:本设计也用固定位置 | 多行编辑器占底部空间 | 限制 textarea rows=3,可滚动 |
-| 12 | **4-backtick fence 自身被嵌套**:如果用户 comment 含 4-backtick,外层 fence 仍被破坏 | 极端情况:LLM 看到 broken markdown | 极小概率(4-backtick 罕见);若发生,LLM 仍能 fallback 到 plain text 解析 |
+| 6 | **`buildOutgoingParts` 接受 userText + commentText 拼装**:当前实现分 `text` 和 `stagedFiles` 两类;拼装后只通过 `text` 参数 | 改动实质 | `sendCurrentMessage` 在调用 `buildOutgoingParts(fullText)` 时,`stagedFiles` 仍由 `buildOutgoingParts` 自己 append(实现见 §4.6 完整示例);spec 不改 `buildOutgoingParts` 本身 |
+| 7 | **行号偏移**:用户编辑文件后,comment 的 `line` 字段可能与现文件不一致 | 输出的行号可能误导 LLM | 在 §5.1 头部明确告诉 LLM "use lineContent as fingerprint";同时冻结的 lineContent 是 fingerprint 的核心 |
+| 8 | **session 切换时未持久化评论**:刷新或切 session 丢评论 | 用户体验:刷新即丢 | 决策 D2 明示"不持久化";若未来需要持久化,加 `localStorage[sessionId]` 缓存 |
+| 9 | ~~`onRequestEdit` 需要找 comment~~ | (已解决) | `findCommentById` 已加入 §4.1 接口 |
+| 10 | **键盘可达性**:gutter "+" 按钮虽然可 tab 聚焦,但鼠标 hover 才显示 | 键盘用户看不到 | 始终渲染 "+" 按钮(只是默认 opacity:0);focus 时 opacity:1 |
+| 11 | **缩进对齐脆弱**:`"  ${marker} ${padded} │ ${lineContent}"` 用 hard-coded 空格数 | 改字体/字号时对齐错位 | 改为用 CSS flex 列布局(三列:marker + line# + content),不依赖 hard-coded 空格 |
+| 12 | **截图里编辑器在固定位置**:本设计也用固定位置 | 多行编辑器占底部空间 | 限制 textarea rows=3,可滚动 |
+| 13 | **4-backtick fence 自身被嵌套**:如果用户 comment 含 4-backtick,外层 fence 仍被破坏 | 极端情况:LLM 看到 broken markdown | 极小概率(4-backtick 罕见);若发生,LLM 仍能 fallback 到 plain text 解析 |
 
 ### 6.1 移动端(< 760px)的折中
 
 姐妹 spec `2026-06-20-git-diff-sidebar-file-browser-design.md` §9.6 / §4.3 在 < 760px 把双栏改为上下堆叠。本 spec 在移动端的行为:
 
 - **`FileBrowserCodeView` 三列(gutter + line-numbers + code)** 仍保留,只是 gutter 宽度缩到 16px(`+` 按钮缩到 16×16)。代码本身需要行号,否则移动端阅读 100+ 行代码会迷失。
-- **`FileCommentEditor`** 在 < 760px 时改为**全屏覆盖**(fixed inset: 0),避免占用 1/3 屏幕。具体做法:`FileCommentEditor` 自身使用 `:deep()` 媒体查询或者宿主容器 `.file-browser-preview` 在窄屏下加 `.is-mobile` class,触发全屏样式。
+- **`FileCommentEditor`** 在 < 760px 时改为**全屏覆盖**(fixed inset: 0),避免占用 1/3 屏幕。具体做法:**在 `.file-browser-preview` 容器上根据视口宽度加 `.is-mobile` class**(`useDisplay().width.value < 760`),然后用 scoped CSS `.file-browser-preview.is-mobile .comment-editor { position: fixed; inset: 0; }`。媒体查询(scoped 写法:不写全局 media,直接在 class 选择器旁 `:deep()` 媒体查询)作为备选,但 `.is-mobile` class 更显式、易于调试。
 - **`comment-count-chip`** 在 < 760px 隐藏(底部 status row 空间紧张,移动端用户主要用 chat 输入框,评论数提示的 ROI 低)。
 - **Hover 行为**:移动端没有 hover,`+` 按钮始终显示在 gutter(默认 opacity:1,无 hover 状态)。
 
@@ -1049,16 +1081,17 @@ const fullText = commentText
 
 ```json
 "spcodeProjectLoad.fileBrowser.comment": {
-  "addButton": "添加评论",               // + button aria-label / tooltip
+  "addButton": "添加评论",                  // + button aria-label / tooltip
   "addButtonAria": "在第 {line} 行添加评论",
-  "newTitle": "对第 {line} 行发布评论",     // editor header
-  "editTitle": "编辑第 {line} 行的评论",
+  "newTitle": "对第 {line} 行发布评论",        // editor header (新建)
+  "editTitle": "编辑第 {line} 行的评论",      // editor header (编辑现有)
   "placeholder": "写下你的评论...",
   "save": "保存",
   "cancel": "取消",
   "delete": "删除",
+  "saveError": "评论保存失败,请刷新文件后重试", // snackbar shown when addComment returns null
   "indicatorAria": "第 {line} 行的评论: {preview}",  // hover tooltip
-  "countLabel": "{count} 个评论",          // chat input chip
+  "countLabel": "{count} 个评论",            // chat input chip
   "countTooltip": "下次发送时会带上这些评论"
 }
 ```
@@ -1095,6 +1128,9 @@ const fullText = commentText
 | 12 | 二进制文件 | gutter 不显示(CodeView 根本不渲染,跟现状一致) |
 | 13 | 5MB 大文件(content = null) | 显示"过大"提示,无 gutter,无编辑器入口 |
 | 14 | keyboard 焦点到 "+" 按钮 | 按钮可见(opacity 1,符合风险 §6.1 #9) |
+| 15 | 仅评论无文本:评论 1 条,input 框为空,点击发送 | 仍可发送;bot 收到的 message 只有 `[File review comments]` 块,无 userText;评论计数清零(下次编辑也不会带) |
+| 16 | 文件被外部刷新(用户改 IDE 后 sidebar refresh):点击评论指示器 | 编辑器打开,显示**冻结的快照**(`lineContent` 是 comment 创建时的内容);如果当前文件已大幅变动,用户能在编辑器里看到"上下文是过时的"提示 |
+| 17 | 添加评论失败(invariant 破坏:外部刷新清掉 cache,user 在保存前编辑器还开着) | 显示 `comment.saveError` snackbar;**编辑器不关闭**,用户输入保留,可刷新文件后重试 |
 
 ---
 
