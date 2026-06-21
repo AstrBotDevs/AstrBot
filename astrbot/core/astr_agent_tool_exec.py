@@ -215,6 +215,29 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 )
                 return
 
+            # Reject delegation while the target subagent is already running to
+            # keep each subagent strictly single-task at a time.
+            resolved_agent_name = getattr(handoff_tool.agent, "name", None)
+            if (
+                resolved_agent_name
+                and SubAgentManager.get_subagent_status(
+                    run_context.context.event.unified_msg_origin, resolved_agent_name
+                )
+                == SubAgentStatus.RUNNING
+            ):
+                yield mcp.types.CallToolResult(
+                    content=[
+                        mcp.types.TextContent(
+                            type="text",
+                            text=(
+                                f"Error: SubAgent '{resolved_agent_name}' is currently RUNNING. "
+                                "Wait for it to finish (e.g. via wait_for_subagent) or pick another subagent."
+                            ),
+                        )
+                    ]
+                )
+                return
+
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
                 async for r in cls._execute_handoff_background(
@@ -229,6 +252,28 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         if isinstance(tool, HandoffTool):
+            # Same single-task guard as above for direct HandoffTool invocations.
+            direct_agent_name = getattr(tool.agent, "name", None)
+            if (
+                direct_agent_name
+                and SubAgentManager.get_subagent_status(
+                    run_context.context.event.unified_msg_origin, direct_agent_name
+                )
+                == SubAgentStatus.RUNNING
+            ):
+                yield mcp.types.CallToolResult(
+                    content=[
+                        mcp.types.TextContent(
+                            type="text",
+                            text=(
+                                f"Error: SubAgent '{direct_agent_name}' is currently RUNNING. "
+                                "Wait for it to finish (e.g. via wait_for_subagent) or pick another subagent."
+                            ),
+                        )
+                    ]
+                )
+                return
+
             is_bg = tool_args.pop("background_task", False)
             if is_bg:
                 async for r in cls._execute_handoff_background(
