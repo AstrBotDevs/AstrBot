@@ -9,11 +9,15 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+
+import aiohttp
 
 from astrbot.core import DEMO_MODE as _DEMO_MODE
 from astrbot.core import logger
 from astrbot.core import pip_installer as _pip_installer
 from astrbot.core.config.default import VERSION
+from astrbot.core.config.update_config import UpdateConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.astrbot_path import (
@@ -406,6 +410,81 @@ class UpdateService:
         except Exception as exc:
             logger.error(f"/api/update_pip: {traceback.format_exc()}")
             raise UpdateServiceError(exc.__str__()) from exc
+
+    @staticmethod
+    def _resolve_announcement_url() -> str | None:
+        """Derive the upstream ``/announcement`` URL from the update server base URL.
+
+        Reuses ``core_update.release_api_url`` (e.g. ``http://server:8080/releases``)
+        to avoid expanding ``update_config.json``. The trailing path is stripped so
+        ``/announcement`` is always rooted at the scheme+netloc.
+
+        Returns:
+            Absolute upstream URL, or ``None`` if the configured base URL is
+            missing or malformed.
+        """
+        try:
+            base_full = UpdateConfig().get_core_release_api_url()
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"读取 update_config 失败，无法解析公告上游: {e!s}")
+            return None
+
+        parsed = urlparse(base_full)
+        if not parsed.scheme or not parsed.netloc:
+            return None
+        return f"{parsed.scheme}://{parsed.netloc}/announcement"
+
+    async def get_announcement(self) -> UpdateServiceResult:
+        """Proxy the upstream update server's ``/announcement`` endpoint.
+
+        Status code semantics (preserved end-to-end so the frontend can hide the
+        bar on 404 without false negatives):
+          - 200 with JSON body → success result carrying the payload
+          - 404 → ``UpdateServiceError("当前没有公告")`` (frontend hides the bar)
+          - 4xx/5xx → ``UpdateServiceError`` mentioning the HTTP status
+          - network/parse errors → ``UpdateServiceError`` with the cause
+
+        Returns:
+            UpdateServiceResult whose ``data`` is the upstream JSON payload.
+
+        Raises:
+            UpdateServiceError: For every non-200 outcome; the route layer
+                maps this to the appropriate HTTP status code.
+        """
+        upstream_url = self._resolve_announcement_url()
+        if not upstream_url:
+            raise UpdateServiceError(
+                "更新服务器 base URL 未配置或格式不合法，无法获取公告。"
+            )
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    upstream_url,
+                    timeout=aiohttp.ClientTimeout(total=5.0),
+                    headers={"Accept": "application/json"},
+                ) as response:
+                    if response.status == 404:
+                        raise UpdateServiceError("当前没有公告")
+                    if response.status >= 400:
+                        detail = await response.text()
+                        logger.warning(
+                            f"更新服务器公告接口异常: {response.status} {detail[:200]}"
+                        )
+                        raise UpdateServiceError(
+                            f"更新服务器返回错误: HTTP {response.status}"
+                        )
+                    payload = await response.json(content_type=None)
+        except UpdateServiceError:
+            raise
+        except aiohttp.ClientError as e:
+            logger.warning(f"连接更新服务器失败 ({upstream_url}): {e!s}")
+            raise UpdateServiceError(f"无法连接更新服务器: {e!s}") from e
+        except (ValueError, asyncio.TimeoutError) as e:
+            logger.warning(f"获取公告响应解析失败: {e!s}")
+            raise UpdateServiceError(f"获取公告失败: {e!s}") from e
+
+        return UpdateServiceResult(status="success", data=payload)
 
     def _init_update_progress(self, progress_id: str, version: str) -> None:
         self.update_progress[progress_id] = {

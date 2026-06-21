@@ -115,9 +115,10 @@ onMounted(() => {
           overflow: isCurrentChatRoute ? 'hidden' : undefined,
         }"
       >
-        <!-- 顶部滚动公告条: 放在 v-main 内最顶部,
-             由 v-main 的 padding 自动让出 toolbar 和 sidebar 区域,
-             position: sticky 让其粘在 v-main 顶部, 不挡 toolbar 按钮/logo -->
+        <!-- 顶部滚动公告条: 放在 v-main 内最顶部, 由 v-main 的 padding 让出
+             toolbar (top) 和 sidebar (left) 区域. 组件内部用 sticky + 负 margin
+             把 bar 渲染为 36px 高的"浮动覆盖层", 视觉上浮在 chat 之上但不挤压
+             chat 布局 (chat 仍从 v-main 顶部开始渲染, bar 用 z-index 覆盖在上). -->
         <AnnouncementBar />
         <v-container
           fluid

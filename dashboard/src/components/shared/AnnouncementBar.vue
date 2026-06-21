@@ -143,8 +143,11 @@ function stripMarkdown(md: string): string {
 
 <style scoped>
 .ann-bar-wrapper {
-  /* 容器仅作切换, 不占视觉空间 */
-  display: contents;
+  /* 提供 absolute 子元素 (折叠态 button) 的定位锚点.
+     自身 0 高度, 不挤压 chat. 展开态 bar 用 sticky + 负 margin 也能正常工作. */
+  position: relative;
+  height: 0;
+  z-index: 5;
 }
 
 .announcement-bar {
@@ -156,11 +159,17 @@ function stripMarkdown(md: string): string {
   border-bottom: 1px solid #ffe082;
   color: #b45309;
   font-size: 13px;
-  /* 粘在 v-main 顶部: v-main 自带 padding 让出 toolbar (top) 和 sidebar (left),
-     不会挡 toolbar 的 logo/按钮, 也不会覆盖 sidebar. */
+  /* 浮动覆盖层: sticky 让 bar 始终停在 v-main 顶部 (滚动时也不消失),
+     margin-bottom: -36px 把 bar 自己的 36px 高度从 flex 流中"吐回去",
+     等价于让下一个 flex 元素 (RouterView → chat 页面) 提升 36px,
+     净效果: chat 页面从 bar 顶部同一 y 位置开始渲染, bar 视觉上
+     覆盖在 chat 之上, 不再把 chat 整体下推.
+     负 margin 不会破坏 sticky 行为 (sticky 本质上还是 relative 布局). */
   position: sticky;
   top: 0;
+  margin-bottom: -36px;
   z-index: 5;
+  box-shadow: 0 1px 3px rgba(180, 83, 9, 0.08);
 }
 
 .ann-left {
@@ -215,15 +224,19 @@ function stripMarkdown(md: string): string {
   }
 }
 
-/* 折叠态: 36x36 圆角小按钮, 紧贴 v-main 顶部, 同样 sticky 不挡 toolbar/sidebar. */
+/* 折叠态: 36x36 圆角小按钮, 浮动覆盖在 v-main 左上角.
+   用 position: absolute 彻底脱离文档流, 不依赖负 margin 抵消, 100% 不挤压 chat.
+   父容器 .ann-bar-wrapper (position: relative) 提供定位上下文:
+     top: 0  = v-main 内容区顶部 (v-main 的 padding-top 已让出 toolbar 区域)
+     left: 0 = v-main 内容区左侧 (v-main 的 padding-left 已让出 sidebar 区域)
+   top: 6px / left: 6px 留出 6px 视觉留白. */
 .ann-toggle-btn {
-  position: sticky;
+  position: absolute;
   top: 6px;
+  left: 6px;
   z-index: 5;
-  align-self: flex-start;
   width: 36px;
   height: 36px;
-  margin: 0 0 6px 6px;
   padding: 0;
   border-radius: 10px;
   border: 1px solid #ffe082;
