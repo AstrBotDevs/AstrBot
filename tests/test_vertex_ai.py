@@ -227,6 +227,34 @@ def test_vertex_ai_source_normalization_preserves_json_and_api_key_fields():
     assert "key" not in normalized
 
 
+def test_vertex_ai_source_normalization_migrates_legacy_key_json_credentials():
+    # A legacy service-account JSON stored in the common ``key`` field must be
+    # migrated into vertex_ai_credentials_json before ``key`` is dropped, so the
+    # credentials are not lost on the first dashboard save.
+    service_account_json = '{"project_id":"legacy-project"}'
+    config = _vertex_config(
+        type="googlegenai_chat_completion",
+        vertex_ai_auth_type="json",
+        vertex_ai_credentials_json="",
+        key=[service_account_json],
+    )
+
+    normalized = normalize_vertex_ai_provider_source_config(config)
+    assert "key" not in normalized
+    assert normalized["vertex_ai_credentials_json"] == service_account_json
+    # An explicit credentials JSON is never overwritten by the legacy key.
+    explicit = _vertex_config(
+        type="googlegenai_chat_completion",
+        vertex_ai_auth_type="json",
+        vertex_ai_credentials_json='{"project_id":"explicit"}',
+        key=['{"project_id":"legacy"}'],
+    )
+    normalized_explicit = normalize_vertex_ai_provider_source_config(explicit)
+    assert (
+        normalized_explicit["vertex_ai_credentials_json"] == '{"project_id":"explicit"}'
+    )
+
+
 def test_vertex_ai_missing_auth_type_defaults_to_json():
     config = _vertex_config(vertex_ai_auth_type="")
 

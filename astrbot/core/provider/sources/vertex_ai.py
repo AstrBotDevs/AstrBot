@@ -82,8 +82,25 @@ def normalize_vertex_ai_provider_source_config(
 ) -> dict[str, Any]:
     """Normalize a Vertex AI provider source before persisting it."""
 
+    # Capture a legacy service-account JSON that lived in the common ``key``
+    # field from the RAW input first: runtime normalization may clear ``key``
+    # for API-key auth, and the persisted source drops ``key`` entirely below.
+    # Without this migration the credentials would be lost on the first save.
+    legacy_credentials_json = ""
+    if (
+        isinstance(provider_config, dict)
+        and provider_config.get("provider") == "google-vertex-ai"
+        and not str(provider_config.get("vertex_ai_credentials_json") or "").strip()
+    ):
+        legacy_credentials_json = extract_vertex_ai_credentials_json(provider_config)
+
     normalized = normalize_vertex_ai_provider_config(provider_config)
     if normalized.get("provider") == "google-vertex-ai":
+        if (
+            legacy_credentials_json.strip()
+            and not str(normalized.get("vertex_ai_credentials_json") or "").strip()
+        ):
+            normalized["vertex_ai_credentials_json"] = legacy_credentials_json
         normalized.pop("key", None)
     return normalized
 
