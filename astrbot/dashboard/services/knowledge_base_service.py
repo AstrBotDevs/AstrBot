@@ -609,15 +609,16 @@ class KnowledgeBaseService:
         }
 
     @staticmethod
-    def _read_single_upload(form_data, files) -> tuple[str, bytes]:
-        """Read the first uploaded file from a multipart request into memory.
+    def _read_single_upload(form_data, files):
+        """Return the first uploaded file object from a multipart request.
 
         Args:
             form_data: Parsed multipart form fields.
             files: Parsed multipart file fields.
 
         Returns:
-            A tuple of ``(file_name, file_content)``.
+            The first uploaded file object (e.g. a Quart ``FileStorage``). Use
+            :meth:`_save_and_read_upload_file` to obtain its name and bytes.
 
         Raises:
             KnowledgeBaseServiceError: If no file is present.
@@ -794,6 +795,8 @@ class KnowledgeBaseService:
         kb_helper = await self.get_kb_manager().get_kb(kb_id)
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
+        if kb_helper.kb.kb_type != "table":
+            raise KnowledgeBaseServiceError("只能向表格知识库导入表格数据")
 
         task_id = str(uuid.uuid4())
         self.init_task(task_id, status="pending")
