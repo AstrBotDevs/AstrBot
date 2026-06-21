@@ -4,7 +4,7 @@
      so the left pane keeps showing the parent directory while the right
      pane previews a file inside it. -->
 <script setup lang="ts">
-import { computed, ref, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useSpcodeFileBrowser } from "@/composables/useSpcodeFileBrowser";
@@ -127,6 +127,22 @@ function onMouseUp(): void {
   document.removeEventListener("mouseup", onMouseUp);
 }
 
+// ── Left-pane collapse / expand ──────────────────────────────────
+// Lets the user temporarily hide the directory list so the right
+// pane (file preview) gets full width — useful when reading a long
+// file on a narrow sidebar. The collapse button is only shown while
+// a file is being previewed (the only context where the user would
+// reasonably want to hide the parent-dir list). When the preview
+// clears (user navigates away or closes the file), we auto-restore
+// the pane so the user can browse again.
+const isLeftPaneCollapsed = ref<boolean>(false);
+watch(
+  () => props.previewPath,
+  (p) => {
+    if (!p) isLeftPaneCollapsed.value = false;
+  },
+);
+
 onBeforeUnmount(() => {
   // If user is mid-drag when the sidebar unmounts, release cleanly.
   if (isResizing.value) onMouseUp();
@@ -153,16 +169,55 @@ onBeforeUnmount(() => {
         @navigate="onBreadcrumbNavigate"
       />
 
-      <div ref="bodyRef" class="file-browser-body" :class="{ resizing: isResizing }">
-        <FileBrowserEntryList
+      <div
+        ref="bodyRef"
+        class="file-browser-body"
+        :class="{ resizing: isResizing, 'left-collapsed': isLeftPaneCollapsed }"
+      >
+        <!-- Expand handle: only when collapsed. Placed FIRST in DOM
+             order so it sits at the leftmost position in the flex
+             row. Click to restore the left pane at its previous
+             width (leftPanePercent ref is preserved across collapse). -->
+        <button
+          v-if="isLeftPaneCollapsed"
+          type="button"
+          class="file-browser-expand-handle"
+          :title="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
+          :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
+          @click="isLeftPaneCollapsed = false"
+        >
+          <v-icon size="16">mdi-chevron-double-right</v-icon>
+        </button>
+
+        <!-- Left pane wrapper: holds the entry list AND the collapse
+             button. `position: relative` so the absolutely-positioned
+             collapse button anchors to the pane's top-right. v-show
+             preserves the inline `width` style so collapse ↔ expand
+             animations are smooth. -->
+        <div
+          v-show="!isLeftPaneCollapsed"
           class="file-browser-pane-left"
           :style="{ width: leftPanePercent + '%' }"
-          :state="dirComposable.state.value"
-          :selected-path="previewPath"
-          @navigate="onEntryNavigate"
-        />
+        >
+          <FileBrowserEntryList
+            :state="dirComposable.state.value"
+            :selected-path="previewPath"
+            @navigate="onEntryNavigate"
+          />
+          <button
+            v-if="previewPath"
+            type="button"
+            class="file-browser-collapse-btn"
+            :title="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
+            :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
+            @click="isLeftPaneCollapsed = true"
+          >
+            <v-icon size="14">mdi-chevron-double-left</v-icon>
+          </button>
+        </div>
 
         <div
+          v-show="!isLeftPaneCollapsed"
           class="file-browser-divider"
           role="separator"
           aria-orientation="vertical"
@@ -172,15 +227,14 @@ onBeforeUnmount(() => {
           @mousedown="startResize"
         />
 
-        <!-- Right pane: render the live preview only when a file is
-             being previewed. When previewPath is null we show a
-             static "select from left" hint instead — the
-             previewComposable stays in idle state (its watch skips
-             empty paths) and there's nothing useful to display. -->
+        <!-- Right pane: when collapsed, suppress the inline width
+             (rely on flex: 1 1 auto to fill the remaining space
+             after the expand handle). Otherwise size to the
+             complement of leftPanePercent. -->
         <FileBrowserFilePreview
           v-if="previewPath"
           class="file-browser-pane-right"
-          :style="{ width: 100 - leftPanePercent + '%' }"
+          :style="isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }"
           :state="previewComposable.state.value"
           :is-dark="!!isDark"
           @navigate-target="onPreviewTargetNavigate"
@@ -189,7 +243,7 @@ onBeforeUnmount(() => {
         <div
           v-else
           class="file-browser-pane-right file-browser-preview-empty"
-          :style="{ width: 100 - leftPanePercent + '%' }"
+          :style="isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }"
         >
           <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
           <span class="preview-hint">
@@ -224,8 +278,11 @@ onBeforeUnmount(() => {
 /* Left pane takes the user-resized percent; min-width keeps long
    file names readable even at MIN_PERCENT. Right pane fills the
    remainder. Both are flex children with inline width from the
-   resize handler so :style overrides any default flex-basis. */
+   resize handler so :style overrides any default flex-basis.
+   `position: relative` anchors the absolutely-positioned collapse
+   button to the pane's top-right corner. */
 .file-browser-pane-left {
+  position: relative;
   flex: 0 0 auto;
   min-width: 120px;
   overflow: hidden;
@@ -238,6 +295,22 @@ onBeforeUnmount(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+/* Smooth width transition for collapse / expand. Suppressed during
+   drag (`.resizing`) so mousemove updates don't lag behind the
+   cursor. Also covers the divider + expand handle so the layout
+   shifts as a single unit. */
+.file-browser-pane-left,
+.file-browser-pane-right,
+.file-browser-divider,
+.file-browser-expand-handle {
+  transition: width 0.2s ease, flex-basis 0.2s ease, padding 0.2s ease;
+}
+.file-browser-body.resizing .file-browser-pane-left,
+.file-browser-body.resizing .file-browser-pane-right,
+.file-browser-body.resizing .file-browser-divider,
+.file-browser-body.resizing .file-browser-expand-handle {
+  transition: none;
 }
 .file-browser-preview-empty {
   display: flex;
@@ -267,6 +340,61 @@ onBeforeUnmount(() => {
   background: rgba(var(--v-theme-primary), 0.18);
   border-left-color: rgba(var(--v-theme-primary), 0.5);
 }
+/* Collapse button: small chevron anchored to the top-right of the
+   left pane. Only meaningful while a file is being previewed, but
+   we always render it when previewPath is set (visibility is
+   handled by the v-if guard in the template, not by display:none
+   here). Subtle border + hover surface so it doesn't compete with
+   the entry rows. */
+.file-browser-collapse-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 5;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--v-theme-surface), 0.6);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+}
+.file-browser-collapse-btn:hover,
+.file-browser-collapse-btn:focus-visible {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  outline: none;
+}
+/* Expand handle: thin vertical strip at the leftmost edge of the
+   body when the left pane is collapsed. Mirrors the divider's
+   hover treatment so the affordance is discoverable. 24px gives
+   a generous click target without being obtrusive. */
+.file-browser-expand-handle {
+  flex: 0 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+}
+.file-browser-expand-handle:hover,
+.file-browser-expand-handle:focus-visible {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+  border-right-color: rgba(var(--v-theme-primary), 0.4);
+  outline: none;
+}
 .file-browser-empty {
   display: flex;
   flex-direction: column;
@@ -281,7 +409,9 @@ onBeforeUnmount(() => {
 
 /* Mobile: stack the two panes vertically. The divider becomes a
    thin horizontal bar; on touch devices there's no drag, so the
-   hit target stays 6px high. */
+   hit target stays 6px high. The collapse button is hidden on
+   mobile (limited screen real estate — the user can use the
+   breadcrumb / back button instead). */
 @media (max-width: 760px) {
   .file-browser-body {
     flex-direction: column;
@@ -305,6 +435,13 @@ onBeforeUnmount(() => {
     border-left: none;
     border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
     cursor: default;
+  }
+  /* On mobile, the collapse button is redundant (the user can
+     already scroll the entry list out of view by scrolling the
+     pane). Hide it to save vertical space. */
+  .file-browser-collapse-btn,
+  .file-browser-expand-handle {
+    display: none;
   }
 }
 </style>

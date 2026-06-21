@@ -278,6 +278,10 @@
       "empty": "空目录",
       "placeholder": "请先加载项目",
       "truncated": "⚠ 列表已截断,仅显示前 1000 项",
+      "pane": {
+        "collapse": "折叠文件列表",
+        "expand": "展开文件列表"
+      },
       "entryType": {
         "directory": "文件夹",
         "file": "文件",

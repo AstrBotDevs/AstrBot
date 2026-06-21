@@ -278,6 +278,10 @@
       "empty": "Empty directory",
       "placeholder": "Load a project first",
       "truncated": "⚠ Listing truncated, only the first 1000 items are shown",
+      "pane": {
+        "collapse": "Collapse file list",
+        "expand": "Expand file list"
+      },
       "entryType": {
         "directory": "Folder",
         "file": "File",
