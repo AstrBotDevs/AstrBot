@@ -55,6 +55,7 @@ let showAdvancedUpdateSettings = ref(false);
 let restartWaiting = ref(false);
 let restartStartTime = ref<number | string | null>(null);
 let restartPollTimer: ReturnType<typeof setInterval> | null = null;
+const RESTART_START_TIME_POLL_INTERVAL_MS = 2000;
 type DownloadStageStatus = "pending" | "running" | "done" | "error";
 type DownloadStage = {
   status: DownloadStageStatus;
@@ -569,20 +570,25 @@ async function fetchAstrBotStartTime() {
   return startTime;
 }
 
-function waitForAstrBotRestart(initialStartTime: number | string | null) {
-  if (restartWaiting.value) {
+function waitForAstrBotRestart(
+  initialStartTime: number | string | null,
+  showWaiting = true,
+) {
+  if (showWaiting && !restartWaiting.value) {
+    restartWaiting.value = true;
+    updateProgress.value = {
+      ...updateProgress.value,
+      stage: "restart",
+      status: "success",
+      message: t("core.header.updateDialog.progress.restarting"),
+      overall_percent: 100,
+    };
+  }
+  if (restartPollTimer) {
     return;
   }
-  stopRestartPolling();
-  restartWaiting.value = true;
+
   restartStartTime.value = initialStartTime;
-  updateProgress.value = {
-    ...updateProgress.value,
-    stage: "restart",
-    status: "success",
-    message: t("core.header.updateDialog.progress.restarting"),
-    overall_percent: 100,
-  };
 
   const poll = async () => {
     try {
@@ -601,9 +607,10 @@ function waitForAstrBotRestart(initialStartTime: number | string | null) {
     }
   };
 
+  void poll();
   restartPollTimer = setInterval(() => {
     void poll();
-  }, 1000);
+  }, RESTART_START_TIME_POLL_INTERVAL_MS);
 }
 
 function applyUpdateProgress(payload: UpdateProgress) {
@@ -618,6 +625,9 @@ function applyUpdateProgress(payload: UpdateProgress) {
   if (payload.status === "success" || payload.status === "error") {
     installLoading.value = false;
     stopUpdateProgressPolling();
+  }
+  if (payload.status === "error") {
+    stopRestartPolling();
   }
   if (payload.stage === "restart") {
     waitForAstrBotRestart(restartStartTime.value);
@@ -667,6 +677,7 @@ async function switchVersion(targetVersion: string) {
     initialStartTime = commonStore.getStartTime();
   }
   restartStartTime.value = initialStartTime;
+  waitForAstrBotRestart(initialStartTime, false);
   startUpdateProgressPolling(progressId);
 
   axios
@@ -691,6 +702,12 @@ async function switchVersion(targetVersion: string) {
     .catch((err) => {
       console.log(err);
       stopUpdateProgressPolling();
+      if (!err?.response && restartPollTimer) {
+        waitForAstrBotRestart(restartStartTime.value);
+        updateStatus.value = t("core.header.updateDialog.progress.restarting");
+        return;
+      }
+      stopRestartPolling();
       installLoading.value = false;
       updateStatus.value = err;
       updateProgress.value = {
