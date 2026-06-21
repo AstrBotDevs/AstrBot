@@ -4,6 +4,7 @@ import json
 import logging
 import random
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Literal, cast
 
 import httpx
@@ -27,6 +28,7 @@ from astrbot.core.utils.network_utils import is_connection_error, log_connection
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
+from .request_retry import retry_provider_request
 from .vertex_ai import (
     GOOGLE_CLOUD_PLATFORM_SCOPE,
     VERTEX_AI_API_KEY_AUTH,
@@ -143,7 +145,8 @@ class ProviderGoogleGenAI(Provider):
         self.client = genai.Client(**client_kwargs).aio
 
     def _is_vertex_ai_config(self) -> bool:
-        return self.provider_config.get("provider") == "google-vertex-ai"
+        provider_config = getattr(self, "provider_config", None) or {}
+        return provider_config.get("provider") == "google-vertex-ai"
 
     def _get_vertex_ai_auth_type(self) -> str:
         return normalize_vertex_ai_auth_type(
@@ -735,7 +738,13 @@ class ProviderGoogleGenAI(Provider):
             )
         return chain_result
 
-    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+    ) -> LLMResponse:
         """非流式请求 Gemini API"""
         self._ensure_vertex_ai_api_key_for_generation()
         system_instruction = next(
@@ -763,10 +772,14 @@ class ProviderGoogleGenAI(Provider):
                     modalities,
                     temperature,
                 )
-                result = await self.client.models.generate_content(
-                    model=model,
-                    contents=cast(types.ContentListUnion, conversation),
-                    config=config,
+                result = await retry_provider_request(
+                    "Gemini",
+                    lambda: self.client.models.generate_content(
+                        model=model,
+                        contents=cast(types.ContentListUnion, conversation),
+                        config=config,
+                    ),
+                    max_attempts=request_max_retries,
                 )
                 logger.debug(
                     "[Gemini] generate_content result: "
@@ -836,6 +849,8 @@ class ProviderGoogleGenAI(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
         self._ensure_vertex_ai_api_key_for_generation()
@@ -855,10 +870,14 @@ class ProviderGoogleGenAI(Provider):
                     payloads.get("tool_choice", "auto"),
                     system_instruction,
                 )
-                result = await self.client.models.generate_content_stream(
-                    model=model,
-                    contents=cast(types.ContentListUnion, conversation),
-                    config=config,
+                result = await retry_provider_request(
+                    "Gemini",
+                    lambda: self.client.models.generate_content_stream(
+                        model=model,
+                        contents=cast(types.ContentListUnion, conversation),
+                        config=config,
+                    ),
+                    max_attempts=request_max_retries,
                 )
                 break
             except APIError as e:
@@ -974,6 +993,7 @@ class ProviderGoogleGenAI(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -1015,7 +1035,11 @@ class ProviderGoogleGenAI(Provider):
 
         for _ in range(retry):
             try:
-                return await self._query(payloads, func_tool)
+                return await self._query(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                )
             except APIError as e:
                 if await self._handle_api_error(e, keys):
                     continue
@@ -1036,6 +1060,7 @@ class ProviderGoogleGenAI(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         if contexts is None:
@@ -1077,7 +1102,11 @@ class ProviderGoogleGenAI(Provider):
 
         for _ in range(retry):
             try:
-                async for response in self._query_stream(payloads, func_tool):
+                async for response in self._query_stream(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                ):
                     yield response
                 break
             except APIError as e:
@@ -1090,7 +1119,10 @@ class ProviderGoogleGenAI(Provider):
             return await self._get_vertex_ai_models()
 
         try:
-            models = await self.client.models.list()
+            models = await retry_provider_request(
+                "Gemini",
+                lambda: self.client.models.list(),
+            )
             model_ids = []
             for model in models:
                 if (
