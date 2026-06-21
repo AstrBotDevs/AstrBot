@@ -318,6 +318,7 @@
       "binaryFile": "Binary file changed (no text preview)",
       "noContent": "Content truncated or incomplete",
       "worktreeTabs": {
+        "label": "Worktrees",
         "ariaLabel": "Select worktree to view diff",
         "mainBadge": "main",
         "detachedBadge": "detached"

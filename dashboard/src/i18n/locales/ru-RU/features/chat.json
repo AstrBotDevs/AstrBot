@@ -308,6 +308,7 @@
       "binaryFile": "Бинарный файл изменён (без предпросмотра)",
       "noContent": "Содержимое обрезано или неполное",
       "worktreeTabs": {
+        "label": "Рабочие деревья",
         "ariaLabel": "Выберите worktree для просмотра diff",
         "mainBadge": "главный",
         "detachedBadge": "отсоединён"

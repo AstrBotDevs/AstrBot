@@ -318,6 +318,7 @@
       "binaryFile": "二进制文件改动（无文本预览）",
       "noContent": "内容已截断或不完整",
       "worktreeTabs": {
+        "label": "工作树",
         "ariaLabel": "选择 worktree 查看 diff",
         "mainBadge": "主",
         "detachedBadge": "游离"

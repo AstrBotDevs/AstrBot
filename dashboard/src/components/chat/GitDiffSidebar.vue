@@ -576,6 +576,14 @@ const currentRoot = computed<string | null>(() => {
         role="tablist"
         :aria-label="tm('spcodeProjectLoad.diffSidebar.worktreeTabs.ariaLabel')"
       >
+        <!-- Section label: clarifies that the buttons below switch
+             worktrees (otherwise they look like generic pills with
+             no obvious purpose). Anchored to the left of the flex row;
+             existing flex-wrap still lets the tabs wrap to a new line
+             on narrow widths. -->
+        <span class="git-diff-sidebar-tabs-label">
+          {{ tm("spcodeProjectLoad.diffSidebar.worktreeTabs.label") }}
+        </span>
         <button
           v-for="wt in worktreeList"
           :key="wt.path"
@@ -890,9 +898,25 @@ const currentRoot = computed<string | null>(() => {
 .git-diff-sidebar-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 14px 8px;
+  align-items: center;
+  gap: 6px 4px;
+  padding: 8px 14px;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+/* Section label: small muted text that anchors the tab row to a
+   clear purpose ("these pills switch worktrees"). `flex-shrink: 0`
+   keeps it from being squeezed when the tabs wrap on narrow
+   widths; when the row wraps, the label stays on its own line. */
+.git-diff-sidebar-tabs-label {
+  flex-shrink: 0;
+  margin-right: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  user-select: none;
 }
 
 .git-diff-sidebar-tab {
