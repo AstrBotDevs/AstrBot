@@ -42,16 +42,19 @@ def _normalize_headers(raw_headers: list[object]) -> list[str]:
         A list of non-empty, de-duplicated header strings.
     """
     headers: list[str] = []
-    seen: dict[str, int] = {}
+    seen: set[str] = set()
     for idx, raw in enumerate(raw_headers):
         name = str(raw).strip() if raw is not None else ""
         if not name or name.lower().startswith("unnamed:"):
             name = f"column_{idx + 1}"
-        if name in seen:
-            seen[name] += 1
-            name = f"{name}_{seen[name]}"
-        else:
-            seen[name] = 0
+
+        base_name = name
+        counter = 1
+        while name in seen:
+            name = f"{base_name}_{counter}"
+            counter += 1
+
+        seen.add(name)
         headers.append(name)
     return headers
 
@@ -90,7 +93,7 @@ def _read_dataframe(
                     keep_default_na=False,
                     encoding=encoding,
                 )
-            except (UnicodeDecodeError, ValueError) as exc:
+            except Exception as exc:
                 last_error = exc
                 continue
         raise ValueError(f"无法解析 CSV 文件，可能是编码问题: {last_error}")

@@ -481,7 +481,7 @@ class KBHelper:
             name = col.get("name")
             if not name:
                 continue
-            value = str(row.get(name, "")).strip()
+            value = str(row.get(name) or "").strip()
             if value:
                 lines.append(f"{name}: {value}")
         return "\n".join(lines)

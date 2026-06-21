@@ -630,6 +630,28 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("缺少文件")
         return file_list[0]
 
+    @staticmethod
+    async def _save_and_read_upload_file(file) -> tuple[str, bytes]:
+        """Persist an uploaded file to a temp path and read it back into memory.
+
+        Args:
+            file: The uploaded file object from a multipart request.
+
+        Returns:
+            A tuple of ``(file_name, file_content)``.
+        """
+        file_name = file.filename
+        temp_file_path = (
+            Path(get_astrbot_temp_path()) / f"kb_table_{uuid.uuid4()}_{file_name}"
+        )
+        try:
+            await file.save(temp_file_path)
+            async with aiofiles.open(temp_file_path, "rb") as file_obj:
+                file_content = await file_obj.read()
+            return file_name, file_content
+        finally:
+            temp_file_path.unlink(missing_ok=True)
+
     async def preview_table(
         self,
         *,
@@ -654,20 +676,23 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("Content-Type 须为 multipart/form-data")
         if not form_data.get("kb_id"):
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
-        header_row = int(form_data.get("header_row", 0))
-        preview_rows = int(form_data.get("preview_rows", 20))
+
+        try:
+            header_row = int(form_data.get("header_row", 0))
+            if header_row < 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError("表头行数必须是大于等于 0 的整数") from exc
+
+        try:
+            preview_rows = int(form_data.get("preview_rows", 20))
+            if preview_rows <= 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError("预览行数必须是大于 0 的整数") from exc
 
         file = self._read_single_upload(form_data, files)
-        file_name = file.filename
-        temp_file_path = (
-            Path(get_astrbot_temp_path()) / f"kb_table_{uuid.uuid4()}_{file_name}"
-        )
-        await file.save(temp_file_path)
-        try:
-            async with aiofiles.open(temp_file_path, "rb") as file_obj:
-                file_content = await file_obj.read()
-        finally:
-            temp_file_path.unlink(missing_ok=True)
+        file_name, file_content = await self._save_and_read_upload_file(file)
 
         from astrbot.core.knowledge_base.parsers.table_parser import (
             is_table_file,
@@ -716,10 +741,36 @@ class KnowledgeBaseService:
         kb_id = form_data.get("kb_id")
         if not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
-        header_row = int(form_data.get("header_row", 0))
-        batch_size = int(form_data.get("batch_size", 32))
-        tasks_limit = int(form_data.get("tasks_limit", 3))
-        max_retries = int(form_data.get("max_retries", 3))
+
+        try:
+            header_row = int(form_data.get("header_row", 0))
+            if header_row < 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError("表头行数必须是大于等于 0 的整数") from exc
+
+        try:
+            batch_size = int(form_data.get("batch_size", 32))
+            if batch_size <= 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError("批处理大小必须是大于 0 的整数") from exc
+
+        try:
+            tasks_limit = int(form_data.get("tasks_limit", 3))
+            if tasks_limit <= 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError("并发限制必须是大于 0 的整数") from exc
+
+        try:
+            max_retries = int(form_data.get("max_retries", 3))
+            if max_retries < 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError(
+                "最大重试次数必须是大于等于 0 的整数"
+            ) from exc
 
         columns_config_raw = form_data.get("columns_config")
         if not columns_config_raw:
@@ -730,20 +781,13 @@ class KnowledgeBaseService:
             raise KnowledgeBaseServiceError("columns_config 格式错误") from exc
         if not isinstance(columns_config, list) or not columns_config:
             raise KnowledgeBaseServiceError("columns_config 必须是非空列表")
+        if not all(isinstance(c, dict) for c in columns_config):
+            raise KnowledgeBaseServiceError("columns_config 格式错误：元素必须是对象")
         if not any(c.get("is_index") for c in columns_config):
             raise KnowledgeBaseServiceError("至少需要选择一个索引列")
 
         file = self._read_single_upload(form_data, files)
-        file_name = file.filename
-        temp_file_path = (
-            Path(get_astrbot_temp_path()) / f"kb_table_{uuid.uuid4()}_{file_name}"
-        )
-        await file.save(temp_file_path)
-        try:
-            async with aiofiles.open(temp_file_path, "rb") as file_obj:
-                file_content = await file_obj.read()
-        finally:
-            temp_file_path.unlink(missing_ok=True)
+        file_name, file_content = await self._save_and_read_upload_file(file)
         file_type = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
         file_size = len(file_content)
 
