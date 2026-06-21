@@ -790,6 +790,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             return
 
+        self._sanitize_tool_call_entries(llm_resp)
+
         if not llm_resp.tools_call_name:
             await self._complete_with_assistant_response(llm_resp)
 
@@ -1269,6 +1271,74 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         text = (llm_resp.completion_text or "").strip()
         return bool(text)
 
+    @staticmethod
+    def _sanitize_tool_call_entries(llm_resp: LLMResponse) -> None:
+        """Drop malformed tool calls and keep names/args/ids aligned."""
+        if not llm_resp.tools_call_name:
+            return
+
+        tool_names: list[str] = []
+        tool_args: list[dict[str, T.Any]] = []
+        tool_ids: list[str] = []
+        tool_extra_content: dict[str, dict[str, T.Any]] = {}
+        dropped_count = 0
+        changed = False
+
+        for idx, tool_name in enumerate(llm_resp.tools_call_name):
+            if not isinstance(tool_name, str) or not tool_name:
+                dropped_count += 1
+                changed = True
+                continue
+
+            tool_names.append(tool_name)
+
+            if idx < len(llm_resp.tools_call_args):
+                raw_args = llm_resp.tools_call_args[idx]
+                if isinstance(raw_args, dict):
+                    tool_args.append(raw_args)
+                else:
+                    tool_args.append({})
+                    changed = True
+            else:
+                tool_args.append({})
+                changed = True
+
+            if idx < len(llm_resp.tools_call_ids):
+                raw_tool_id = llm_resp.tools_call_ids[idx]
+                tool_id = (
+                    raw_tool_id
+                    if isinstance(raw_tool_id, str) and raw_tool_id
+                    else f"call_{uuid.uuid4().hex[:8]}"
+                )
+                if tool_id != raw_tool_id:
+                    changed = True
+            else:
+                tool_id = f"call_{uuid.uuid4().hex[:8]}"
+                changed = True
+            tool_ids.append(tool_id)
+
+            extra_content = llm_resp.tools_call_extra_content.get(tool_id)
+            if extra_content:
+                tool_extra_content[tool_id] = extra_content
+
+        if len(tool_names) != len(llm_resp.tools_call_name):
+            changed = True
+        if len(tool_args) != len(llm_resp.tools_call_args):
+            changed = True
+        if len(tool_ids) != len(llm_resp.tools_call_ids):
+            changed = True
+
+        if dropped_count:
+            logger.warning(
+                f"Dropped {dropped_count} malformed tool call(s) with empty names."
+            )
+
+        if changed:
+            llm_resp.tools_call_name = tool_names
+            llm_resp.tools_call_args = tool_args
+            llm_resp.tools_call_ids = tool_ids
+            llm_resp.tools_call_extra_content = tool_extra_content
+
     def _build_tool_subset(self, tool_set: ToolSet, tool_names: list[str]) -> ToolSet:
         """Build a subset of tools from the given tool set based on tool names."""
         subset = ToolSet()
@@ -1283,6 +1353,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp: LLMResponse,
     ) -> tuple[LLMResponse, ToolSet | None]:
         """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
+        self._sanitize_tool_call_entries(llm_resp)
         tool_names = llm_resp.tools_call_name
         if not tool_names:
             return llm_resp, self.req.func_tool
@@ -1311,6 +1382,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     request_max_retries=self.request_max_retries,
                 )
                 if requery_resp:
+                    self._sanitize_tool_call_entries(requery_resp)
                     llm_resp = requery_resp
 
                 # If the re-query still returns no tool calls, and also does not have a meaningful assistant reply,
@@ -1338,6 +1410,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         request_max_retries=self.request_max_retries,
                     )
                     if repair_resp:
+                        self._sanitize_tool_call_entries(repair_resp)
                         llm_resp = repair_resp
 
         return llm_resp, subset
