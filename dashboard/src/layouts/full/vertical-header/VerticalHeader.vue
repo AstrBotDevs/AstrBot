@@ -30,6 +30,7 @@ const { t } = useI18n();
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
 const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
+const SHOW_PRE_RELEASES_KEY = "astrbot:updateDialog:showPreReleases";
 let dialog = ref(false);
 let accountWarning = ref(false);
 let accountWarningMd5 = ref(false);
@@ -50,6 +51,11 @@ let dashboardHasNewVersion = ref(false);
 let dashboardCurrentVersion = ref("");
 let releases = ref<any[]>([]);
 let releasesLoading = ref(false);
+const showPreReleases = ref(
+  typeof window === "undefined"
+    ? false
+    : localStorage.getItem(SHOW_PRE_RELEASES_KEY) === "true",
+);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
 let showAdvancedUpdateSettings = ref(false);
@@ -150,7 +156,12 @@ const releasesHeader = computed(() => [
   { title: t("core.header.updateDialog.table.content"), key: "body" },
   { title: t("core.header.updateDialog.table.actions"), key: "switch" },
 ]);
-const firstReleasePageItems = computed(() => releases.value.slice(0, 6));
+const visibleReleases = computed(() =>
+  showPreReleases.value
+    ? releases.value
+    : releases.value.filter((item: any) => !isPreRelease(item.tag_name)),
+);
+const firstReleasePageItems = computed(() => visibleReleases.value.slice(0, 6));
 const firstReleasePageHasPreRelease = computed(() =>
   firstReleasePageItems.value.some((item: any) => isPreRelease(item.tag_name)),
 );
@@ -883,6 +894,11 @@ onMounted(() => {
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
+watch(showPreReleases, (value) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SHOW_PRE_RELEASES_KEY, value ? "true" : "false");
+});
+
 watch(
   () => route.fullPath,
   (newPath) => {
@@ -1456,6 +1472,21 @@ onMounted(async () => {
 
             <!-- 发行版 -->
             <div class="mt-5">
+              <div class="release-table-toolbar mb-3">
+                <div class="text-subtitle-1 font-weight-medium">
+                  {{ t("core.header.updateDialog.releases") }}
+                </div>
+                <v-switch
+                  v-model="showPreReleases"
+                  class="release-prerelease-switch"
+                  color="warning"
+                  density="compact"
+                  hide-details
+                  inset
+                  :label="t('core.header.updateDialog.showPreReleases')"
+                ></v-switch>
+              </div>
+
               <v-alert
                 v-if="!installLoading && firstReleasePageHasPreRelease"
                 type="warning"
@@ -1489,7 +1520,7 @@ onMounted(async () => {
 
               <v-data-table
                 :headers="releasesHeader"
-                :items="releases"
+                :items="visibleReleases"
                 item-key="name"
                 :items-per-page="6"
                 density="comfortable"
@@ -1911,6 +1942,18 @@ onMounted(async () => {
 
 .theme-toggle-btn {
   margin-left: 0;
+}
+
+.release-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.release-prerelease-switch {
+  flex: 0 1 auto;
 }
 
 /* 响应式布局样式 */
