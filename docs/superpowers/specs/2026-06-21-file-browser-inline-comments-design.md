@@ -98,7 +98,7 @@
 
 ```
 StandaloneChat.vue (修改)
-  ├─ useFileComments(sessionId)         [NEW]      ← 唯一真相源
+  ├─ useFileComments()                  [NEW]      ← 唯一真相源
   │     ├─ comments: Map<filePath, FileComment[]>
   │     ├─ currentContentCache: Map<filePath, string>
   │     ├─ addComment / updateComment / deleteComment
@@ -290,14 +290,6 @@ export function useFileComments() {
     return null;
   }
 
-  /** Find the comment on a specific line of a specific file, if any.
-   *  Used by FileBrowserCodeView to check "should this gutter cell
-   *  show the comment indicator instead of the '+' button?" without
-   *  scanning the bucket itself. */
-  function commentForLine(filePath: string, line: number): FileComment | null {
-    return comments[filePath]?.find((c) => c.line === line) ?? null;
-  }
-
   /** Total comment count for the current session (across all files). */
   const totalCount = computed<number>(() => {
     let n = 0;
@@ -430,7 +422,6 @@ export function useFileComments() {
     updateComment,
     deleteComment,
     findCommentById,
-    commentForLine,
     commentsForFile,
     formatForLLM,
   };
