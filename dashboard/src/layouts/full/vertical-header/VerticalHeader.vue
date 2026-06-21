@@ -570,6 +570,12 @@ async function fetchAstrBotStartTime() {
   return startTime;
 }
 
+function reloadWithCacheBuster() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("_r", Date.now().toString());
+  window.location.replace(url.toString());
+}
+
 function waitForAstrBotRestart(
   initialStartTime: number | string | null,
   showWaiting = true,
@@ -600,7 +606,7 @@ function waitForAstrBotRestart(
       ) {
         stopRestartPolling();
         restartWaiting.value = false;
-        window.location.reload();
+        reloadWithCacheBuster();
       }
     } catch (_error) {
       // Backend may be unavailable while the process is restarting.
@@ -730,7 +736,7 @@ function updateDashboard() {
       updateStatus.value = res.data.message;
       if (res.data.status == "ok") {
         setTimeout(() => {
-          window.location.reload();
+          reloadWithCacheBuster();
         }, 1000);
       }
     })

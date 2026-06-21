@@ -32,7 +32,7 @@ class AstrBotUpdator(RepoZipUpdator):
         """Build the hosted core package URL for a release tag.
 
         Args:
-            version: Release tag, such as ``v4.26.6``.
+            version: Release tag, such as ``v4.25.6``.
 
         Returns:
             Public package URL, or None when hosted package download is disabled.
