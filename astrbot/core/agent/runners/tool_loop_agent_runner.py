@@ -473,9 +473,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if self.streaming:
             stream = self.provider.text_chat_stream(**payload)
             async for resp in stream:  # type: ignore
+                if not resp.is_chunk:
+                    self._sanitize_tool_call_entries(resp)
                 yield resp
         else:
-            yield await self.provider.text_chat(**payload)
+            yield await self._text_chat_with_sanitized_tool_calls(**payload)
+
+    async def _text_chat_with_sanitized_tool_calls(
+        self, **kwargs: T.Any
+    ) -> LLMResponse:
+        resp = await self.provider.text_chat(**kwargs)
+        self._sanitize_tool_call_entries(resp)
+        return resp
 
     async def _iter_llm_responses_with_fallback(
         self,
@@ -789,8 +798,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
             return
-
-        self._sanitize_tool_call_entries(llm_resp)
 
         if not llm_resp.tools_call_name:
             await self._complete_with_assistant_response(llm_resp)
@@ -1274,7 +1281,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     @staticmethod
     def _sanitize_tool_call_entries(llm_resp: LLMResponse) -> None:
         """Drop malformed tool calls and keep names/args/ids aligned."""
-        if not llm_resp.tools_call_name:
+        raw_tool_names = llm_resp.tools_call_name
+        if not raw_tool_names:
+            return
+
+        if not isinstance(raw_tool_names, list):
+            logger.warning(
+                "Dropped malformed tool calls because tool names are invalid."
+            )
+            llm_resp.tools_call_name = []
+            llm_resp.tools_call_args = []
+            llm_resp.tools_call_ids = []
+            llm_resp.tools_call_extra_content = {}
             return
 
         tool_names: list[str] = []
@@ -1283,8 +1301,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_extra_content: dict[str, dict[str, T.Any]] = {}
         dropped_count = 0
         changed = False
+        raw_tool_args = llm_resp.tools_call_args
+        raw_tool_ids = llm_resp.tools_call_ids
+        tool_args_source = raw_tool_args if isinstance(raw_tool_args, list) else []
+        tool_ids_source = raw_tool_ids if isinstance(raw_tool_ids, list) else []
+        if tool_args_source is not raw_tool_args:
+            changed = True
+        if tool_ids_source is not raw_tool_ids:
+            changed = True
+        raw_extra_content = llm_resp.tools_call_extra_content
+        extra_content_map = (
+            raw_extra_content if isinstance(raw_extra_content, dict) else {}
+        )
+        if extra_content_map is not raw_extra_content:
+            changed = True
 
-        for idx, tool_name in enumerate(llm_resp.tools_call_name):
+        for idx, tool_name in enumerate(raw_tool_names):
             if not isinstance(tool_name, str) or not tool_name:
                 dropped_count += 1
                 changed = True
@@ -1292,8 +1324,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
             tool_names.append(tool_name)
 
-            if idx < len(llm_resp.tools_call_args):
-                raw_args = llm_resp.tools_call_args[idx]
+            if idx < len(tool_args_source):
+                raw_args = tool_args_source[idx]
                 if isinstance(raw_args, dict):
                     tool_args.append(raw_args)
                 else:
@@ -1303,8 +1335,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 tool_args.append({})
                 changed = True
 
-            if idx < len(llm_resp.tools_call_ids):
-                raw_tool_id = llm_resp.tools_call_ids[idx]
+            if idx < len(tool_ids_source):
+                raw_tool_id = tool_ids_source[idx]
                 tool_id = (
                     raw_tool_id
                     if isinstance(raw_tool_id, str) and raw_tool_id
@@ -1317,20 +1349,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 changed = True
             tool_ids.append(tool_id)
 
-            extra_content = llm_resp.tools_call_extra_content.get(tool_id)
-            if extra_content:
+            extra_content = extra_content_map.get(tool_id)
+            if isinstance(extra_content, dict) and extra_content:
                 tool_extra_content[tool_id] = extra_content
 
-        if len(tool_names) != len(llm_resp.tools_call_name):
+        if len(tool_names) != len(raw_tool_names):
             changed = True
-        if len(tool_args) != len(llm_resp.tools_call_args):
+        if len(tool_args) != len(tool_args_source):
             changed = True
-        if len(tool_ids) != len(llm_resp.tools_call_ids):
+        if len(tool_ids) != len(tool_ids_source):
+            changed = True
+        if tool_extra_content != extra_content_map:
             changed = True
 
         if dropped_count:
             logger.warning(
-                f"Dropped {dropped_count} malformed tool call(s) with empty names."
+                f"Dropped {dropped_count} malformed tool call(s) with "
+                "non-string or empty names."
             )
 
         if changed:
@@ -1353,7 +1388,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp: LLMResponse,
     ) -> tuple[LLMResponse, ToolSet | None]:
         """Used in 'skills_like' tool schema mode to re-query LLM with param-only tool schemas."""
-        self._sanitize_tool_call_entries(llm_resp)
         tool_names = llm_resp.tools_call_name
         if not tool_names:
             return llm_resp, self.req.func_tool
@@ -1371,7 +1405,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)
-                requery_resp = await self.provider.text_chat(
+                requery_resp = await self._text_chat_with_sanitized_tool_calls(
                     contexts=self._sanitize_contexts_for_provider(contexts),
                     func_tool=param_subset,
                     model=self.req.model,
@@ -1382,7 +1416,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     request_max_retries=self.request_max_retries,
                 )
                 if requery_resp:
-                    self._sanitize_tool_call_entries(requery_resp)
                     llm_resp = requery_resp
 
                 # If the re-query still returns no tool calls, and also does not have a meaningful assistant reply,
@@ -1399,7 +1432,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         tool_names,
                         extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
-                    repair_resp = await self.provider.text_chat(
+                    repair_resp = await self._text_chat_with_sanitized_tool_calls(
                         contexts=self._sanitize_contexts_for_provider(repair_contexts),
                         func_tool=param_subset,
                         model=self.req.model,
@@ -1410,7 +1443,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         request_max_retries=self.request_max_retries,
                     )
                     if repair_resp:
-                        self._sanitize_tool_call_entries(repair_resp)
                         llm_resp = repair_resp
 
         return llm_resp, subset
