@@ -193,24 +193,24 @@ def update_pyproject_version(version: str) -> Path:
     raise ReleaseError("Missing [project].version in pyproject.toml")
 
 
-def update_default_config_version(version: str) -> Path:
-    """Update the hard-coded runtime version in default.py.
+def update_package_version(version: str) -> Path:
+    """Update the package version in astrbot/__init__.py.
 
     Args:
         version: Release version to write.
 
     Returns:
-        Path to the modified default.py file.
+        Path to the modified astrbot/__init__.py file.
 
     Raises:
-        ReleaseError: The runtime version constant cannot be found or parsed.
+        ReleaseError: The package version constant cannot be found or parsed.
     """
-    default_config_path = REPO_ROOT / "astrbot" / "core" / "config" / "default.py"
-    lines = default_config_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    package_init_path = REPO_ROOT / "astrbot" / "__init__.py"
+    lines = package_init_path.read_text(encoding="utf-8").splitlines(keepends=True)
 
     for index, line in enumerate(lines):
         match = re.match(
-            r"^(\s*VERSION\s*=\s*)([\"'])(.*?)(\2)(\s*(?:#.*)?)(\n?)$",
+            r"^(\s*__version__\s*=\s*)([\"'])(.*?)(\2)(\s*(?:#.*)?)(\n?)$",
             line,
         )
         if not match:
@@ -218,10 +218,10 @@ def update_default_config_version(version: str) -> Path:
 
         prefix, quote, _current, _closing_quote, suffix, newline = match.groups()
         lines[index] = f"{prefix}{quote}{version}{quote}{suffix}{newline}"
-        default_config_path.write_text("".join(lines), encoding="utf-8")
-        return default_config_path
+        package_init_path.write_text("".join(lines), encoding="utf-8")
+        return package_init_path
 
-    raise ReleaseError("Missing VERSION in astrbot/core/config/default.py")
+    raise ReleaseError("Missing __version__ in astrbot/__init__.py")
 
 
 def write_changelog(version: str, commits: list[str]) -> Path:
@@ -332,7 +332,7 @@ def commit_and_maybe_push(
         [
             "add",
             "pyproject.toml",
-            "astrbot/core/config/default.py",
+            "astrbot/__init__.py",
             str(changelog_path.relative_to(REPO_ROOT)),
         ]
     )
@@ -369,9 +369,7 @@ def print_next_steps(
     else:
         print("Next:")
         print(f"1. Review and polish {changelog_rel}")
-        print(
-            f"2. git add pyproject.toml astrbot/core/config/default.py {changelog_rel}"
-        )
+        print(f"2. git add pyproject.toml astrbot/__init__.py {changelog_rel}")
         print(f'3. git commit -m "chore: bump version to {version}"')
         print(f"4. git push -u {args.remote} {branch}")
 
@@ -454,7 +452,7 @@ def main(argv: list[str] | None = None) -> int:
 
         commits = release_commits(tag)
         update_pyproject_version(version)
-        update_default_config_version(version)
+        update_package_version(version)
         changelog_path = write_changelog(version, commits)
         run_validation(args)
 
