@@ -8,6 +8,17 @@ from filelock import FileLock, Timeout
 DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
 
 
+async def check_dashboard(astrbot_root: Path) -> None:
+    """Check whether dashboard assets are available.
+
+    Args:
+        astrbot_root: AstrBot data directory path.
+    """
+    from ..utils import check_dashboard as _check_dashboard
+
+    await _check_dashboard(astrbot_root)
+
+
 def _initialize_config_from_env(astrbot_root: Path) -> None:
     if DASHBOARD_INITIAL_PASSWORD_ENV not in os.environ:
         return
@@ -43,8 +54,6 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
         click.echo(f"{'Created' if not path.exists() else 'Directory exists'}: {path}")
 
     _initialize_config_from_env(astrbot_root)
-
-    from ..utils import check_dashboard
 
     await check_dashboard(astrbot_root / "data")
 
