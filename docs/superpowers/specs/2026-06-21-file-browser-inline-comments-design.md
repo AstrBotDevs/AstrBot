@@ -189,9 +189,9 @@ function newId(): string {
 #### Composable 本体
 
 ```typescript
-import { reactive, computed, type Ref } from "vue";
+import { reactive, computed } from "vue";
 
-export function useFileComments(_currentSessionId: Ref<string>) {
+export function useFileComments() {
   // Current-session comments, flat partitioned by filePath. Wiped on
   // session switch via resetForSession(). NOT bucketed by sessionId —
   // we deliberately do not preserve round-trip A → B → A, because
@@ -437,9 +437,7 @@ export function useFileComments(_currentSessionId: Ref<string>) {
 }
 ```
 
-> **注 1**:`_currentSessionId` 参数保留(下划线前缀表示当前未使用)—— 后续若需要 session-scoped 行为(比如 per-session persistence),可在不改 API 的前提下引用它。也可直接删除 —— 决定:保留,作为占位/未来扩展点。
->
-> **注 2**:`addComment` 返回 `null` 而不是抛错(对应 reviewer 反馈):调用方在 `onSaveComment` 里检查 null,显示 snackbar 并保留 editor 文本(见 §4.4)。
+> **注**:`addComment` 返回 `null` 而不是抛错(对应 reviewer 反馈):调用方在 `onSaveComment` 里检查 null,显示 snackbar 并保留 editor 文本(见 §4.4)。
 
 #### InjectionKey(导出在文件底部)
 
@@ -539,6 +537,54 @@ const emit = defineEmits<{
   <pre class="code-content" v-html="highlightedHtml" @mousemove="onMouseMove" />
 </div>
 ```
+
+#### Script helpers(模板引用的 helper 全部声明)
+
+模板里用了 `lines` / `hasComment(line)` / `commentText(line)` / `commentIdFor(line)`。声明:
+
+```typescript
+import { computed, ref } from "vue";
+import type { FileComment } from "@/composables/useFileComments";
+
+const props = defineProps<{
+  highlightedHtml: string;
+  filePath: string;
+  comments: FileComment[];
+  activeEditLine: number | null;
+  activeEditCommentId: string | null;
+  isDark: boolean;
+}>();
+const emit = defineEmits<{
+  (e: "request-add", line: number): void;
+  (e: "request-edit", commentId: string): void;
+}>();
+
+/** Total line count derived from the Shiki output by counting
+ *  `<span class="line">` wrappers. Used to size the gutter /
+ *  line-numbers columns. The exact extraction rule depends on
+ *  Shiki's internal DOM — keep this single helper as the only
+ *  place that knows it. */
+const lines = computed<number[]>(() => {
+  const m = props.highlightedHtml.match(/<span class="line">/g);
+  const count = m ? m.length : 0;
+  return Array.from({ length: count }, (_, i) => i + 1);
+});
+
+const codeContentRef = ref<HTMLElement | null>(null);
+const hoveredLine = ref<number | null>(null);
+
+function hasComment(line: number): boolean {
+  return props.comments.some((c) => c.line === line);
+}
+function commentText(line: number): string {
+  return props.comments.find((c) => c.line === line)?.text ?? "";
+}
+function commentIdFor(line: number): string | null {
+  return props.comments.find((c) => c.line === line)?.id ?? null;
+}
+```
+
+> **注**:这里的 `hasComment` / `commentText` / `commentIdFor` 是简单的 `Array.some/find`,O(N) per call。FileBrowserCodeView 渲染 1000 行,gutter 在每次 mousemove 触发 hover 重渲 = 1000× O(M) calls(M = 该文件评论数)。实际 M < 10,开销可忽略。如未来单文件评论数 > 100,改成 `Map<line, FileComment>` 由父组件预计算并通过 prop 传入(本 spec 不做)。
 
 #### 对齐策略
 
@@ -732,7 +778,6 @@ const emit = defineEmits<{
 ```typescript
 import { inject, ref } from "vue";
 import {
-  useFileComments,
   FILE_COMMENTS_KEY,
   extractLineContext,
   type LineContext,
@@ -778,14 +823,13 @@ function currentFileContent(): string | null {
   return props.state.kind === "file" ? props.state.snapshot.content : null;
 }
 
-/** INVARIANT: this watch keeps fileComments.contentCache[path] in sync
- *  with state.snapshot.content. The two are read interchangeably:
- *  - onRequestAdd uses `state.snapshot.content` (via extractLineContext)
- *    to populate the editor preview.
- *  - fileComments.addComment uses its own cache to freeze the snapshot.
- *  They MUST stay in sync — a stale preview would show context that
- *  doesn't match what the comment will actually store. The watch
- *  (immediate + reactive) is the single point that maintains this. */
+/** INVARIANT: this watch is the ONLY point that writes to
+ *  fileComments.contentCache. Both `onRequestAdd` (via extractLineContext
+ *  on state.snapshot.content) and `addComment` (via contentCache)
+ *  read the same value, so they MUST stay in sync — a stale
+ *  preview would show context that doesn't match what the comment
+ *  will actually store. The watch (immediate + reactive) is the
+ *  single point that maintains this. */
 watch(
   () => currentFileContent(),
   (content) => {
@@ -914,13 +958,13 @@ defineProps<{
 #### 创建 + provide
 
 ```typescript
-import { provide, type InjectionKey } from "vue";
-import { useFileComments } from "@/composables/useFileComments";
+import { provide } from "vue";
+// Import FILE_COMMENTS_KEY from the composable (single source of
+// truth — DO NOT re-declare Symbol("fileComments") here; see §4.1
+// bottom note).
+import { useFileComments, FILE_COMMENTS_KEY } from "@/composables/useFileComments";
 
-export const FILE_COMMENTS_KEY: InjectionKey<ReturnType<typeof useFileComments>> =
-  Symbol("fileComments");
-
-const fileComments = useFileComments(currSessionId);
+const fileComments = useFileComments();
 provide(FILE_COMMENTS_KEY, fileComments);
 
 // Reset comments on session change (see §4.1 resetForSession —
@@ -1057,21 +1101,36 @@ const fullText = commentText
 | 3 | **大文件性能**:1000+ 行的文件,gutter 有 1000+ 个 cell | DOM 元素多,初始渲染慢 | v1 可接受(<5MB 文件一般 < 2000 行);未来用虚拟滚动 |
 | 4 | **Hover 性能**:`@mousemove` 触发 O(N) 行元素遍历 | mousemove 频繁触发时计算开销 | 实测 < 5ms/帧(1000 行);如需更省可加 rAF throttle |
 | 5 | **评论注入与 `buildOutgoingParts` 边界**:`fullText` 是一整段 plain text,LLM 看到的是 1 个 part | 部分 LLM 模型可能拆 token 不准 | 沿用现有 plain part 路径,后端无需改动;若未来需要独立 part,扩展 MessagePart 类型 |
-| 6 | **`buildOutgoingParts` 接受 userText + commentText 拼装**:当前实现分 `text` 和 `stagedFiles` 两类;拼装后只通过 `text` 参数 | 改动实质 | `sendCurrentMessage` 在调用 `buildOutgoingParts(fullText)` 时,`stagedFiles` 仍由 `buildOutgoingParts` 自己 append(实现见 §4.6 完整示例);spec 不改 `buildOutgoingParts` 本身 |
-| 7 | **行号偏移**:用户编辑文件后,comment 的 `line` 字段可能与现文件不一致 | 输出的行号可能误导 LLM | 在 §5.1 头部明确告诉 LLM "use lineContent as fingerprint";同时冻结的 lineContent 是 fingerprint 的核心 |
-| 8 | **session 切换时未持久化评论**:刷新或切 session 丢评论 | 用户体验:刷新即丢 | 决策 D2 明示"不持久化";若未来需要持久化,加 `localStorage[sessionId]` 缓存 |
-| 9 | ~~`onRequestEdit` 需要找 comment~~ | (已解决) | `findCommentById` 已加入 §4.1 接口 |
-| 10 | **键盘可达性**:gutter "+" 按钮虽然可 tab 聚焦,但鼠标 hover 才显示 | 键盘用户看不到 | 始终渲染 "+" 按钮(只是默认 opacity:0);focus 时 opacity:1 |
-| 11 | **缩进对齐脆弱**:`"  ${marker} ${padded} │ ${lineContent}"` 用 hard-coded 空格数 | 改字体/字号时对齐错位 | 改为用 CSS flex 列布局(三列:marker + line# + content),不依赖 hard-coded 空格 |
-| 12 | **截图里编辑器在固定位置**:本设计也用固定位置 | 多行编辑器占底部空间 | 限制 textarea rows=3,可滚动 |
-| 13 | **4-backtick fence 自身被嵌套**:如果用户 comment 含 4-backtick,外层 fence 仍被破坏 | 极端情况:LLM 看到 broken markdown | 极小概率(4-backtick 罕见);若发生,LLM 仍能 fallback 到 plain text 解析 |
+
+| 6 | **行号偏移**:用户编辑文件后,comment 的 `line` 字段可能与现文件不一致 | 输出的行号可能误导 LLM | 在 §5.1 头部明确告诉 LLM "use lineContent as fingerprint";同时冻结的 lineContent 是 fingerprint 的核心 |
+| 7 | **session 切换时未持久化评论**:刷新或切 session 丢评论 | 用户体验:刷新即丢 | 决策 D2 明示"不持久化";若未来需要持久化,加 `localStorage[sessionId]` 缓存 |
+| 8 | ~~`onRequestEdit` 需要找 comment~~ | (已解决) | `findCommentById` 已加入 §4.1 接口 |
+| 9 | **键盘可达性**:gutter "+" 按钮虽然可 tab 聚焦,但鼠标 hover 才显示 | 键盘用户看不到 | 始终渲染 "+" 按钮(只是默认 opacity:0);focus 时 opacity:1 |
+| 10 | **缩进对齐脆弱**:`"  ${marker} ${padded} │ ${lineContent}"` 用 hard-coded 空格数 | 改字体/字号时对齐错位 | 改为用 CSS flex 列布局(三列:marker + line# + content),不依赖 hard-coded 空格 |
+| 11 | **截图里编辑器在固定位置**:本设计也用固定位置 | 多行编辑器占底部空间 | 限制 textarea rows=3,可滚动 |
+| 12 | **4-backtick fence 自身被嵌套**:如果用户 comment 含 4-backtick,外层 fence 仍被破坏 | 极端情况:LLM 看到 broken markdown | 极小概率(4-backtick 罕见);若发生,LLM 仍能 fallback 到 plain text 解析 |
 
 ### 6.1 移动端(< 760px)的折中
 
 姐妹 spec `2026-06-20-git-diff-sidebar-file-browser-design.md` §9.6 / §4.3 在 < 760px 把双栏改为上下堆叠。本 spec 在移动端的行为:
 
 - **`FileBrowserCodeView` 三列(gutter + line-numbers + code)** 仍保留,只是 gutter 宽度缩到 16px(`+` 按钮缩到 16×16)。代码本身需要行号,否则移动端阅读 100+ 行代码会迷失。
-- **`FileCommentEditor`** 在 < 760px 时改为**全屏覆盖**(fixed inset: 0),避免占用 1/3 屏幕。具体做法:**在 `.file-browser-preview` 容器上根据视口宽度加 `.is-mobile` class**(`useDisplay().width.value < 760`),然后用 scoped CSS `.file-browser-preview.is-mobile .comment-editor { position: fixed; inset: 0; }`。媒体查询(scoped 写法:不写全局 media,直接在 class 选择器旁 `:deep()` 媒体查询)作为备选,但 `.is-mobile` class 更显式、易于调试。
+- **`FileCommentEditor`** 在 < 760px 时改为**全屏覆盖**(fixed inset: 0),避免占用 1/3 屏幕。具体做法(已锁):在 `FileBrowserFilePreview.vue` 顶层:
+  ```typescript
+  import { useDisplay } from "vuetify";
+  const { width } = useDisplay();
+  const isMobile = computed(() => width.value < 760);
+  ```
+  ```html
+  <div class="file-browser-preview" :class="{ 'is-mobile': isMobile }">...</div>
+  ```
+  然后 scoped CSS:
+  ```css
+  .file-browser-preview.is-mobile :deep(.comment-editor) {
+    position: fixed;
+    inset: 0;
+  }
+  ```
 - **`comment-count-chip`** 在 < 760px 隐藏(底部 status row 空间紧张,移动端用户主要用 chat 输入框,评论数提示的 ROI 低)。
 - **Hover 行为**:移动端没有 hover,`+` 按钮始终显示在 gutter(默认 opacity:1,无 hover 状态)。
 
