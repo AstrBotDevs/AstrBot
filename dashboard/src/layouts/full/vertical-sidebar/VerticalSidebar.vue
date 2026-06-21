@@ -308,7 +308,7 @@ async function fetchStarCount() {
   }
 }
 
-fetchStarCount();
+// fetchStarCount();
 
 // 打开更新日志对话框
 function openChangelogDialog() {
@@ -363,8 +363,8 @@ function openChangelogDialog() {
         </v-btn>
       </div>
     </div>
-    
-    <div 
+
+    <div
       v-if="!customizer.mini_sidebar && customizer.Sidebar_drawer"
       class="sidebar-resize-handle"
       @mousedown="startSidebarResize"
@@ -372,7 +372,7 @@ function openChangelogDialog() {
     >
     </div>
   </v-navigation-drawer>
-  
+
   <div
     v-if="showIframe"
     id="draggable-iframe"

@@ -63,12 +63,10 @@ export function useSpcodeGitDiff(
     try {
       const worktree = toValue(worktreeRef);
       const scope = toValue(scopeRef);
-      // TEMP-DIAG-2026-06-20: trace scope propagation end-to-end.
-      // Remove once the "scope 参数不变" bug is fixed.
-      console.info("[spcode-git-diff] request", {
-        url: "spcode/git-diff",
-        params: { umo, scope, worktree: worktree ?? null },
-      });
+      // console.info("[spcode-git-diff] request", {
+      //   url: "spcode/git-diff",
+      //   params: { umo, scope, worktree: worktree ?? null },
+      // });
       const resp = await pluginExtensionApi.get<SpcodeGitDiffRawResponse>(
         "spcode/git-diff",
         {
