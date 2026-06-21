@@ -611,7 +611,13 @@ async function fetchAstrBotStartTime() {
 
 function reloadAfterUpdate() {
   stopRestartReloadTimer();
-  window.location.reload();
+  reloadWithCacheBuster();
+}
+
+function reloadWithCacheBuster() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("_r", Date.now().toString());
+  window.location.replace(url.toString());
 }
 
 function showRestartCompleted() {
@@ -819,7 +825,7 @@ function updateDashboard() {
       updateStatus.value = res.data.message || "";
       if (res.data.status == "ok") {
         setTimeout(() => {
-          window.location.reload();
+          reloadWithCacheBuster();
         }, 1000);
       }
     })
