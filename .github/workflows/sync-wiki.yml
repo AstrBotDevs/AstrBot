@@ -1,4 +1,4 @@
-name: sync wiki
+name: Sync AstrBot Docs to GitHub Wiki
 
 on:
   workflow_dispatch:
