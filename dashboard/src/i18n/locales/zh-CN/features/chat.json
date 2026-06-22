@@ -297,6 +297,20 @@
         "copySuccess": "已复制",
         "goToTarget": "前往目标"
       },
+      "comment": {
+        "addButton": "添加评论",
+        "addButtonAria": "为第 {line} 行添加评论",
+        "newTitle": "对第 {line} 行发布评论",
+        "editTitle": "编辑第 {line} 行的评论",
+        "placeholder": "写下你的评论…",
+        "save": "保存",
+        "cancel": "取消",
+        "delete": "删除",
+        "saveError": "保存评论失败,请重新打开文件后重试。",
+        "indicatorAria": "第 {line} 行的评论:{preview}",
+        "countLabel": "{count} 条评论",
+        "countTooltip": "这些评论会随你的下一条消息一起发送"
+      },
       "error": {
         "loadFailedTitle": "无法加载",
         "pathNotFound": "路径不存在",

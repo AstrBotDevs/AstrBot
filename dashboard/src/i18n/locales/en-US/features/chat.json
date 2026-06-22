@@ -297,6 +297,20 @@
         "copySuccess": "Copied",
         "goToTarget": "Go to target"
       },
+      "comment": {
+        "addButton": "Add comment",
+        "addButtonAria": "Add comment on line {line}",
+        "newTitle": "Comment on line {line}",
+        "editTitle": "Edit comment on line {line}",
+        "placeholder": "Write your comment…",
+        "save": "Save",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "saveError": "Failed to save comment. Please reopen the file and retry.",
+        "indicatorAria": "Comment on line {line}: {preview}",
+        "countLabel": "{count} comments",
+        "countTooltip": "These will be included with your next message"
+      },
       "error": {
         "loadFailedTitle": "Failed to load",
         "pathNotFound": "Path not found",
