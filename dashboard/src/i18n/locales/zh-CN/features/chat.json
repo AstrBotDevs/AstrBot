@@ -309,7 +309,25 @@
         "saveError": "保存评论失败,请重新打开文件后重试。",
         "indicatorAria": "第 {line} 行的评论:{preview}",
         "countLabel": "{count} 条评论",
-        "countTooltip": "这些评论会随你的下一条消息一起发送"
+        "countTooltip": "这些评论会随你的下一条消息一起发送",
+        "chip": {
+          "clearAll": "清空全部评论"
+        },
+        "confirmClear": {
+          "title": "清空全部评论？",
+          "message": "将删除当前会话的全部 {count} 条评论，此操作不可撤销。",
+          "confirm": "全部删除",
+          "cancel": "取消"
+        },
+        "previewDialog": {
+          "title": "评论预览 ({count})",
+          "empty": "暂无评论",
+          "closeButton": "关闭",
+          "clearAllButton": "全部删除",
+          "deleteButton": "删除此评论",
+          "lineLabel": "L {line}",
+          "openWithCount": "打开评论预览 ({count})"
+        }
       },
       "error": {
         "loadFailedTitle": "无法加载",

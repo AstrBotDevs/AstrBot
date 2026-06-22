@@ -309,7 +309,25 @@
         "saveError": "Failed to save comment. Please reopen the file and retry.",
         "indicatorAria": "Comment on line {line}: {preview}",
         "countLabel": "{count} comments",
-        "countTooltip": "These will be included with your next message"
+        "countTooltip": "These will be included with your next message",
+        "chip": {
+          "clearAll": "Clear all comments"
+        },
+        "confirmClear": {
+          "title": "Clear all comments?",
+          "message": "This will delete all {count} comments in the current session. This action cannot be undone.",
+          "confirm": "Clear all",
+          "cancel": "Cancel"
+        },
+        "previewDialog": {
+          "title": "Comments preview ({count})",
+          "empty": "No comments yet",
+          "closeButton": "Close",
+          "clearAllButton": "Clear all",
+          "deleteButton": "Delete this comment",
+          "lineLabel": "L {line}",
+          "openWithCount": "Open comments preview ({count})"
+        }
       },
       "error": {
         "loadFailedTitle": "Failed to load",
