@@ -91,7 +91,7 @@ Chat.vue (fileComments) ──┘              ↓
 
 **改动点**：
 - 删除 `ChatInput` 的 `commentCount: number` prop
-- `Chat.vue` / `StandaloneChat.vue` 移除 `:comment-count="..."` 绑定
+- `Chat.vue` 移除 2 处 `:comment-count="fileComments.totalCount.value"` 绑定（已确认在 line 323 和 line 473），`StandaloneChat.vue` 移除 1 处（line 154），共 3 处
 - `ChatInput` 内部 `const fileComments = useFileComments()`
 - `useFileComments()` 新增两个方法：
   - `commentsByFile(): Array<{ filePath: string; comments: FileComment[] }>` —— 按文件路径分组，每组按行号排序
@@ -115,26 +115,23 @@ Chat.vue (fileComments) ──┘              ↓
 <div
   class="comment-count-chip d-none d-md-flex"
   :class="{ 'comment-count-chip--hovered': chipHovered }"
-  variant="tonal"
-  color="warning"
-  size="small"
   @mouseenter="chipHovered = true"
   @mouseleave="chipHovered = false"
 >
   <button
     type="button"
     class="comment-count-chip__main"
-    @click="previewDialogOpen = true"
-    :aria-label="tm('comment.previewDialog.open')"
+    @click="openPreview"
+    :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.previewDialog.openWithCount', { count: fileComments.totalCount.value })"
   >
     <v-icon size="14" start>mdi-comment-text-outline</v-icon>
-    {{ tm("...countLabel", { count: fileComments.totalCount.value }) }}
+    {{ tm("spcodeProjectLoad.fileBrowser.comment.countLabel", { count: fileComments.totalCount.value }) }}
   </button>
   <button
     v-if="chipHovered"
     type="button"
     class="comment-count-chip__clear"
-    :aria-label="tm('comment.chip.clearAll')"
+    :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.chip.clearAll')"
     @click.stop="confirmClearOpen = true"
   >
     <v-icon size="14">mdi-close</v-icon>
@@ -155,7 +152,7 @@ Chat.vue (fileComments) ──┘              ↓
 │  评论预览 (N)                                  ×  │
 ├──────────────────────────────────────────────────┤
 │                                                  │
-│  ▾ src/foo.py                                    │
+│  src/foo.py                                      │
 │    ┌──────────────────────────────────────────┐  │
 │    │ L 35  │ from astrbot.core import ...    │  │
 │    │ 这行代码是什么意思                      ✕ │  │
@@ -165,7 +162,7 @@ Chat.vue (fileComments) ──┘              ↓
 │    │ 123                                  ✕ │  │
 │    └──────────────────────────────────────────┘  │
 │                                                  │
-│  ▾ src/bar.py                                    │
+│  src/bar.py                                      │
 │    ┌──────────────────────────────────────────┐  │
 │    │ L 12  │ def hello():                    │  │
 │    │ 多行评论\n第二行\n第三行              ✕ │  │
@@ -175,6 +172,8 @@ Chat.vue (fileComments) ──┘              ↓
 │                          [全部删除]      [关闭]   │
 └──────────────────────────────────────────────────┘
 ```
+
+**空状态**：当 `groups.length === 0` 时显示 `comment.previewDialog.empty` 占位文案，footer 只显示"关闭"按钮（隐藏"全部删除"）。但因为 §5.3 的 `watch` 会在 totalCount=0 时自动关闭弹窗，正常路径下不会进入这个分支——只在初始化竞态等边角场景下短暂可见。
 
 **组件 props/emit**：
 
@@ -319,12 +318,28 @@ function clearAll(): void {
 ### 5.3 ChatInput 改动后的事件处理
 
 ```ts
+import { watch } from "vue";
 import { useFileComments } from "@/composables/useFileComments";
 
 const fileComments = useFileComments();
 const previewDialogOpen = ref(false);
 const confirmClearOpen = ref(false);
 const chipHovered = ref(false);
+
+/** Auto-close preview/confirm dialogs when the last comment is gone,
+ *  e.g. after clearAll() or session reset. Avoids showing a stale
+ *  empty state inside an open dialog. */
+watch(
+  () => fileComments.totalCount.value,
+  (n) => {
+    if (n === 0) {
+      previewDialogOpen.value = false;
+      confirmClearOpen.value = false;
+    }
+  },
+);
+
+const groups = computed(() => fileComments.commentsByFile());
 
 function onDeleteComment(id: string): void {
   fileComments.deleteComment(id);
@@ -333,7 +348,13 @@ function onConfirmClearAll(): void {
   fileComments.clearAll();
   confirmClearOpen.value = false;
 }
+function openPreview(): void {
+  previewDialogOpen.value = true;
+  chipHovered.value = false;  // reset hover state for cleanliness
+}
 ```
+
+`groups` 是 `computed`，传递给 `CommentsPreviewDialog` 时会自动响应 `useFileComments` 的 `comments` reactive 变化。
 
 ### 5.4 i18n key 清单
 
@@ -341,19 +362,19 @@ function onConfirmClearAll(): void {
 
 | key | zh-CN | en-US |
 |---|---|---|
-| `comment.previewDialog.open` | 打开评论预览 | Open comments preview |
-| `comment.previewDialog.title` | 评论预览 ({count}) | Comments preview ({count}) |
-| `comment.previewDialog.empty` | 暂无评论 | No comments yet |
-| `comment.previewDialog.closeButton` | 关闭 | Close |
-| `comment.previewDialog.clearAllButton` | 全部删除 | Clear all |
-| `comment.previewDialog.lineLabel` | L {line} | L {line} |
-| `comment.chip.clearAll` | 清空全部评论 | Clear all comments |
-| `comment.confirmClear.title` | 清空全部评论？ | Clear all comments? |
-| `comment.confirmClear.message` | 将删除当前会话的全部 {count} 条评论，此操作不可撤销。 | This will delete all {count} comments in the current session. This action cannot be undone. |
-| `comment.confirmClear.confirm` | 全部删除 | Clear all |
-| `comment.confirmClear.cancel` | 取消 | Cancel |
+| `spcodeProjectLoad.fileBrowser.comment.previewDialog.openWithCount` | 打开评论预览 ({count}) | Open comments preview ({count}) |
+| `spcodeProjectLoad.fileBrowser.comment.previewDialog.title` | 评论预览 ({count}) | Comments preview ({count}) |
+| `spcodeProjectLoad.fileBrowser.comment.previewDialog.empty` | 暂无评论 | No comments yet |
+| `spcodeProjectLoad.fileBrowser.comment.previewDialog.closeButton` | 关闭 | Close |
+| `spcodeProjectLoad.fileBrowser.comment.previewDialog.clearAllButton` | 全部删除 | Clear all |
+| `spcodeProjectLoad.fileBrowser.comment.previewDialog.lineLabel` | L {line} | L {line} |
+| `spcodeProjectLoad.fileBrowser.comment.chip.clearAll` | 清空全部评论 | Clear all comments |
+| `spcodeProjectLoad.fileBrowser.comment.confirmClear.title` | 清空全部评论？ | Clear all comments? |
+| `spcodeProjectLoad.fileBrowser.comment.confirmClear.message` | 将删除当前会话的全部 {count} 条评论，此操作不可撤销。 | This will delete all {count} comments in the current session. This action cannot be undone. |
+| `spcodeProjectLoad.fileBrowser.comment.confirmClear.confirm` | 全部删除 | Clear all |
+| `spcodeProjectLoad.fileBrowser.comment.confirmClear.cancel` | 取消 | Cancel |
 
-`spcodeProjectLoad.fileBrowser.comment.countLabel` / `countTooltip` / `addButtonAria` / `indicatorAria` 沿用 v1。
+`spcodeProjectLoad.fileBrowser.comment.countLabel` / `countTooltip` / `addButtonAria` / `indicatorAria` 沿用 v1。`ru-RU` 翻译在实现时按现有 v1 翻译风格补齐。
 
 ---
 
@@ -395,7 +416,7 @@ function onConfirmClearAll(): void {
 3. **hover chip**：✕ 按钮出现，红色圆形
 4. **点 chip 主体**：打开预览弹窗，显示该评论
 5. **点 chip ✕**：打开二次确认弹窗 "清空全部 1 条评论？"
-6. **点确认**：评论清空，chip 消失，preview dialog 如果开着会自动关闭（因为 v-if）
+6. **点确认**：评论清空，chip 消失，preview dialog 如果开着会自动关闭（§5.3 的 `watch` 在 totalCount=0 时把 `previewDialogOpen` 置 false）
 7. **点取消**：二次确认关闭，评论保留
 8. **预览弹窗里加 2 个文件的评论**：弹窗按文件分组，每组按行号排序
 9. **点预览里的单条 ✕**：该评论消失，弹窗不关
