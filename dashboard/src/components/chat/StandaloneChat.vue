@@ -151,6 +151,7 @@
         :session-id="currSessionId || null"
         :current-session="currentSession"
         :config-id="configId || 'default'"
+        :comment-count="fileComments.totalCount.value"
         send-shortcut="enter"
         @send="sendCurrentMessage"
         @stop="stopCurrentSession"
@@ -180,8 +181,10 @@ import {
   nextTick,
   onBeforeUnmount,
   onMounted,
+  provide,
   reactive,
   ref,
+  watch,
 } from "vue";
 import { chatApi, configRouteApi, fileApi } from "@/api/v1";
 import { setCustomComponents } from "markstream-vue";
@@ -195,6 +198,10 @@ import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue"
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import { useMediaHandling } from "@/composables/useMediaHandling";
+import {
+  FILE_COMMENTS_KEY,
+  useFileComments,
+} from "@/composables/useFileComments";
 import {
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
@@ -229,6 +236,19 @@ const shouldStickToBottom = ref(true);
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const imagePreview = reactive({ visible: false, url: "" });
+
+// Inline comment store (Chunk 4). Provided to descendants (notably
+// FileBrowserFilePreview) via FILE_COMMENTS_KEY. resetForSession() is
+// invoked from the currSessionId watcher below so comments are scoped
+// to the active chat session per spec §2.
+const fileComments = useFileComments();
+provide(FILE_COMMENTS_KEY, fileComments);
+
+watch(currSessionId, (newId, oldId) => {
+  if (oldId && newId !== oldId) {
+    fileComments.resetForSession();
+  }
+});
 
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
 const customMarkdownTags = ["ref"];
@@ -304,10 +324,22 @@ async function bindConfigToSession(sessionId: string) {
 }
 
 async function sendCurrentMessage() {
-  if (!draft.value.trim() && !stagedFiles.value.length) return;
+  // D13 guard: allow sending when draft is empty if there are staged
+  // files OR pending comments. The plan calls this out as a hard
+  // requirement — users sometimes annotate several lines and send
+  // only the review without a separate text prompt.
+  if (
+    !draft.value.trim() &&
+    !stagedFiles.value.length &&
+    fileComments.totalCount.value === 0
+  ) {
+    return;
+  }
   const sessionId = await ensureSession();
-  const text = draft.value.trim();
-  const parts = buildOutgoingParts(text);
+  const userText = draft.value.trim();
+  const commentText = fileComments.formatForLLM();
+  const fullText = [userText, commentText].filter(Boolean).join("\n\n");
+  const parts = buildOutgoingParts(fullText);
   const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   const selection = inputRef.value?.getCurrentSelection();
   const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
