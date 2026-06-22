@@ -38,7 +38,6 @@ def _bootstrap():
     global _initialized
     if _initialized:
         return
-    _initialized = True
 
     global \
         astrbot_config, \
@@ -71,6 +70,8 @@ def _bootstrap():
         astrbot_config.get("pypi_index_url", None),
     )
 
+    _initialized = True
+
 
 # PEP 562 module-level __getattr__ and __dir__ for lazy loading of global instances
 _lazy_attrs = {
@@ -96,5 +97,5 @@ def __getattr__(name: str):
 def __dir__():
     """make sure dir() and IDE completion can discover lazy-loaded attributes"""
     # auto-collect all public symbols in the module __dict__ that do not start with an underscore
-    public_api = [k for k in globals() if not k.startswith("_")]
-    return public_api + list(_lazy_attrs)
+    public_api = {k for k in globals() if not k.startswith("_")}
+    return sorted(public_api | _lazy_attrs)
