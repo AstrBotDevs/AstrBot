@@ -64,14 +64,34 @@
 <script setup lang="ts">
 import { reactive } from "vue";
 
-const props = defineProps<{ data: any; args?: any }>();
+interface CodeExploreSymbol {
+    kind?: string;
+    name: string;
+    file?: string;
+    line?: number;
+    signature?: string;
+    source?: string;
+}
+
+interface CodeExploreData {
+    ok?: boolean;
+    error?: string;
+    summary?: string;
+    query_type?: string;
+    found?: boolean;
+    symbols?: CodeExploreSymbol[];
+    path?: string[];
+    callers?: Record<string, string[]>;
+}
+
+const props = defineProps<{ data: CodeExploreData; args?: any }>();
 const openSet = reactive<Record<number, boolean>>({});
 
 function toggleSymbol(i: number) {
     openSet[i] = !openSet[i];
 }
 
-function kindClass(kind: string) {
+function kindClass(kind: string | undefined) {
     if (kind === "class") return "kind-class";
     if (kind === "method") return "kind-method";
     if (kind === "function") return "kind-function";

@@ -36,7 +36,7 @@
   </v-card>
 </template>
 
-<script setup>
+<script setup lang="ts">
 const props = defineProps({
   title: {
     type: String,
@@ -48,9 +48,19 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["click"]);
+const emit = defineEmits<{
+  (e: "click", event: Event): void;
+}>();
 
-const handleClick = (event) => {
+defineSlots<{
+  default(): unknown;
+  "title-prepend"(): unknown;
+  "title-extra"(): unknown;
+  actions(): unknown;
+  control(): unknown;
+}>();
+
+const handleClick = (event: Event) => {
   if (!props.clickable) return;
   emit("click", event);
 };

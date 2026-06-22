@@ -30,7 +30,20 @@
 <script setup lang="ts">
 import { computed, reactive } from "vue";
 
-const props = defineProps<{ data: any; args?: any }>();
+interface EsSearchItem {
+    name: string;
+    path?: string;
+    size?: number;
+    full?: string;
+}
+
+interface EsSearchData {
+    count?: number;
+    engine?: string;
+    items?: EsSearchItem[];
+}
+
+const props = defineProps<{ data: EsSearchData; args?: any }>();
 const openSet = reactive<Record<number, boolean>>({});
 const displayedItems = computed(() => (props.data?.items || []).slice(0, 8));
 

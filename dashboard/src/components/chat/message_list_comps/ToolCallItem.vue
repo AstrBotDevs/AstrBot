@@ -14,7 +14,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 
 const props = defineProps({
@@ -23,6 +23,11 @@ const props = defineProps({
         default: false
     }
 });
+
+defineSlots<{
+    label(props: { expanded: boolean }): unknown;
+    details(): unknown;
+}>();
 
 const isExpanded = ref(false);
 
