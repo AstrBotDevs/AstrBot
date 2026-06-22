@@ -1110,11 +1110,99 @@ is-mobile class, which triggers the .comment-editor fullscreen
 overlay per spec §6.1."
 ```
 
-### Task 3.3: Chunk 3 completion checklist
+### Task 3.3: Relocate mobile fullscreen CSS from `FileCommentEditor.vue` to `FileBrowserFilePreview.vue`
 
-- [ ] All Tasks 3.1–3.2 done
-- [ ] `pnpm typecheck` exits 0 (or only fails on i18n saveError key)
-- [ ] 1 commit added: integration
+**Context:** Chunk 2 placed the mobile fullscreen rules in `FileCommentEditor.vue`'s scoped style:
+```css
+.file-browser-preview.is-mobile :deep(.comment-editor) { ... }
+.file-browser-preview.is-mobile :deep(.comment-editor-input) { ... }
+```
+In Vue 3, `:deep()` only removes the scope attribute from selectors INSIDE its parentheses. The selectors BEFORE `:deep()` still get the editor's scope id. The compiled selector becomes `.file-browser-preview.is-mobile[data-v-EDITOR] .comment-editor` — but the actual `.file-browser-preview` element is the parent (FileBrowserFilePreview.vue) with a DIFFERENT scope id. Result: both rules silently fail to match, breaking the §6.1 mobile fullscreen UX.
+
+**Fix:** move the two rules from `FileCommentEditor.vue` to `FileBrowserFilePreview.vue`'s scoped `<style>`. There, `.file-browser-preview.is-mobile` carries the parent's scope id, and `.comment-editor` (the editor's root) is correctly matched by the (now un-deep) descendant selector.
+
+**Files:**
+- Modify: `dashboard/src/components/chat/message_list_comps/FileCommentEditor.vue` — DELETE the two rules from `<style scoped>`
+- Modify: `dashboard/src/components/chat/message_list_comps/FileBrowserFilePreview.vue` — ADD the two rules in `<style scoped>` (anywhere; suggestion: end of the existing block, with a comment linking to the fix)
+
+- [ ] **Step 1: Read the existing `<style scoped>` block in `FileBrowserFilePreview.vue` to find the right place to insert**
+
+- [ ] **Step 2: Append the mobile fullscreen rules to `FileBrowserFilePreview.vue`'s scoped style**
+
+At the end of the existing `<style scoped>` block, add:
+
+```css
+/* Mobile fullscreen overlay for the inline-comment editor.
+   Lives here (not in FileCommentEditor.vue) so the .file-browser-preview
+   class is in the same Vue scope — see Chunk 2 review. */
+.file-browser-preview.is-mobile .comment-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgb(var(--v-theme-surface));
+  display: flex;
+  flex-direction: column;
+}
+.file-browser-preview.is-mobile .comment-editor-input {
+  flex: 1;
+  resize: none;
+}
+```
+
+- [ ] **Step 3: Delete the two broken rules from `FileCommentEditor.vue`'s scoped style**
+
+Find:
+```css
+.file-browser-preview.is-mobile :deep(.comment-editor) {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgb(var(--v-theme-surface));
+  display: flex;
+  flex-direction: column;
+}
+.file-browser-preview.is-mobile :deep(.comment-editor-input) {
+  flex: 1;
+  resize: none;
+}
+```
+
+Replace with: (nothing — delete the two rules entirely)
+
+- [ ] **Step 4: Run typecheck**
+
+Run: `cd dashboard && pnpm typecheck 2>&1 | tail -30`
+Expected: exits 0.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add dashboard/src/components/chat/message_list_comps/FileBrowserFilePreview.vue \
+        dashboard/src/components/chat/message_list_comps/FileCommentEditor.vue
+git commit -m "fix(comments): relocate mobile editor fullscreen CSS to parent scope
+
+The mobile fullscreen rules lived in FileCommentEditor.vue's scoped
+style with selectors '.file-browser-preview.is-mobile :deep(.comment-editor)'.
+Vue 3 scoped CSS only strips the scope id from selectors INSIDE :deep()'s
+parentheses; selectors before :deep() still get the editor's scope id.
+Result: compiled as '.file-browser-preview.is-mobile[data-v-EDITOR]
+.comment-editor' — the actual .file-browser-preview element is the
+parent (FileBrowserFilePreview.vue) with a different scope id, so the
+rule silently failed to match. On viewports < 760px, the editor
+rendered as a small inline panel instead of the fullscreen overlay
+required by spec §6.1.
+
+Fix: move both rules to FileBrowserFilePreview.vue's scoped style
+block. There, .file-browser-preview.is-mobile carries the parent's
+scope id, and .comment-editor (the editor's root) is matched by the
+(now non-deep) descendant selector."
+```
+
+### Task 3.4: Chunk 3 completion checklist
+
+- [ ] All Tasks 3.1–3.3 done
+- [ ] `pnpm typecheck` exits 0
+- [ ] 2 commits added: integration / mobile-CSS-relocate
 
 ---
 
