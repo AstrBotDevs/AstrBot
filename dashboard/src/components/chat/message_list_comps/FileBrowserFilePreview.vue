@@ -493,4 +493,20 @@ function onDeleteComment(commentId: string): void {
   font-size: 12px;
   margin-top: 6px;
 }
+
+/* Mobile fullscreen overlay for the inline-comment editor.
+   Lives here (not in FileCommentEditor.vue) so the .file-browser-preview
+   class is in the same Vue scope - see Chunk 2 review. */
+.file-browser-preview.is-mobile .comment-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgb(var(--v-theme-surface));
+  display: flex;
+  flex-direction: column;
+}
+.file-browser-preview.is-mobile .comment-editor-input {
+  flex: 1;
+  resize: none;
+}
 </style>

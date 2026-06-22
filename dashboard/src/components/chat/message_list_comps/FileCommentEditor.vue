@@ -158,16 +158,4 @@ function handleKeyDown(e: KeyboardEvent): void {
   margin-top: 8px;
   gap: 4px;
 }
-.file-browser-preview.is-mobile :deep(.comment-editor) {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgb(var(--v-theme-surface));
-  display: flex;
-  flex-direction: column;
-}
-.file-browser-preview.is-mobile :deep(.comment-editor-input) {
-  flex: 1;
-  resize: none;
-}
 </style>
