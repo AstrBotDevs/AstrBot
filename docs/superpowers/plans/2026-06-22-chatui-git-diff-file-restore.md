@@ -178,6 +178,12 @@ test("classifyReason maps null/undefined to 'unknown'", () => {
 
 - [ ] **Step 2: 运行测试,确认失败**
 
+> **前提**:Node ≥ 22.6(`--experimental-strip-types` 内建)或 Node ≥ 23.6(默认开启 TypeScript 支持)。验证版本:
+> ```bash
+> node --version
+> ```
+> 用户环境实测 Node v24.7.0,无需额外配置。如果未来 CI 跑 Node 18/20,需要 `node --experimental-strip-types --test ...` 兜底。
+
 ```bash
 cd dashboard
 node --test tests/parseSpcodeFileRestore.test.mjs
