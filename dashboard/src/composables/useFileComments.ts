@@ -4,6 +4,7 @@
 // comments feature. See spec §1, §2 (decisions), §4.1, §5 for context.
 
 import { reactive, computed } from "vue";
+import type { InjectionKey } from "vue";
 
 /**
  * Single file comment, anchored to a line at comment-creation time.
@@ -265,3 +266,12 @@ export function useFileComments() {
     formatForLLM,
   };
 }
+
+/**
+ * Stable injection key for the file-comments store. Must be exported
+ * from this single file (NOT re-declared in StandaloneChat.vue or
+ * FileBrowserFilePreview.vue). A Symbol literal in two files would
+ * produce two different symbols and silently break inject().
+ */
+export const FILE_COMMENTS_KEY: InjectionKey<ReturnType<typeof useFileComments>> =
+  Symbol("fileComments");
