@@ -378,3 +378,418 @@ def _context_with_provider_settings(provider_settings):
         event=SimpleNamespace(unified_msg_origin="test:private:session"),
     )
     return SimpleNamespace(context=agent_context)
+
+
+class _FakeMetasoResponse:
+    def __init__(self, status=200, json_data=None, text_data=""):
+        self.status = status
+        self.json_data = json_data or {}
+        self.text_data = text_data
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    async def json(self):
+        return self.json_data
+
+    async def text(self):
+        return self.text_data
+
+
+class _FakeMetasoSession:
+    def __init__(self, response):
+        self.response = response
+        self.trust_env = None
+        self.entered = False
+        self.exited = False
+        self.posted = None
+
+    async def __aenter__(self):
+        self.entered = True
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.exited = True
+        return None
+
+    def post(self, url, json, headers):
+        self.posted = {"url": url, "json": json, "headers": headers}
+        return self.response
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_maps_web_results(monkeypatch):
+    async def fake_metaso_search(provider_settings, payload):
+        assert payload == {"q": "test", "scope": "webpage", "size": 5}
+        return [
+            tools.SearchResult(
+                title="Result A",
+                url="https://example.com/a",
+                snippet="Snippet A",
+            )
+        ]
+
+    monkeypatch.setattr(tools, "_metaso_search", fake_metaso_search)
+    tool = tools.MetasoWebSearchTool()
+    context = _context_with_provider_settings({"websearch_metaso_key": ["my-key"]})
+
+    result = await tool.call(context, query="test", size=5)
+
+    assert json.loads(result)["results"] == [
+        {
+            "title": "Result A",
+            "url": "https://example.com/a",
+            "snippet": "Snippet A",
+            "index": json.loads(result)["results"][0]["index"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_uses_default_key_when_empty(monkeypatch):
+    async def fake_metaso_search(provider_settings, payload):
+        assert payload == {"q": "test", "scope": "webpage", "size": 5}
+        return [
+            tools.SearchResult(
+                title="Result A",
+                url="https://example.com/a",
+                snippet="Snippet A",
+            )
+        ]
+
+    monkeypatch.setattr(tools, "_metaso_search", fake_metaso_search)
+    tool = tools.MetasoWebSearchTool()
+    context = _context_with_provider_settings({"websearch_metaso_key": []})
+
+    result = await tool.call(context, query="test", size=5)
+    assert json.loads(result)["results"][0]["title"] == "Result A"
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_payload_defaults(monkeypatch):
+    captured = {}
+
+    async def fake_metaso_search(provider_settings, payload):
+        captured["payload"] = payload
+        return [tools.SearchResult(title="X", url="https://x.com", snippet="x")]
+
+    monkeypatch.setattr(tools, "_metaso_search", fake_metaso_search)
+    tool = tools.MetasoWebSearchTool()
+    context = _context_with_provider_settings({"websearch_metaso_key": ["k"]})
+
+    await tool.call(context, query="hello")
+
+    assert captured["payload"] == {"q": "hello", "scope": "webpage", "size": 10}
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_caps_size_low(monkeypatch):
+    captured = {}
+
+    async def fake_metaso_search(provider_settings, payload):
+        captured["payload"] = payload
+        return [tools.SearchResult(title="X", url="https://x.com", snippet="x")]
+
+    monkeypatch.setattr(tools, "_metaso_search", fake_metaso_search)
+    tool = tools.MetasoWebSearchTool()
+    context = _context_with_provider_settings({"websearch_metaso_key": ["k"]})
+
+    await tool.call(context, query="hello", size=0)
+    assert captured["payload"]["size"] == 1
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_caps_size_high(monkeypatch):
+    captured = {}
+
+    async def fake_metaso_search(provider_settings, payload):
+        captured["payload"] = payload
+        return [tools.SearchResult(title="X", url="https://x.com", snippet="x")]
+
+    monkeypatch.setattr(tools, "_metaso_search", fake_metaso_search)
+    tool = tools.MetasoWebSearchTool()
+    context = _context_with_provider_settings({"websearch_metaso_key": ["k"]})
+
+    await tool.call(context, query="hello", size=999)
+    assert captured["payload"]["size"] == 100
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_no_results_returns_error(monkeypatch):
+    async def fake_metaso_search(provider_settings, payload):
+        return []
+
+    monkeypatch.setattr(tools, "_metaso_search", fake_metaso_search)
+    tool = tools.MetasoWebSearchTool()
+    context = _context_with_provider_settings({"websearch_metaso_key": ["k"]})
+
+    result = await tool.call(context, query="test")
+    assert result == "Error: Metaso searcher did not return any results."
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_returns_results_from_api(monkeypatch):
+    session = _FakeMetasoSession(
+        _FakeMetasoResponse(
+            status=200,
+            json_data={
+                "webpages": [
+                    {
+                        "title": "Result One",
+                        "link": "https://example.com/1",
+                        "snippet": "Snippet one.",
+                    },
+                    {
+                        "title": "Result Two",
+                        "link": "https://example.com/2",
+                        "summary": "Summary two.",
+                    },
+                ],
+            },
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._metaso_search(
+        {"websearch_metaso_key": ["metaso-key"]},
+        {"q": "test", "scope": "webpage", "size": 5},
+    )
+
+    assert session.posted == {
+        "url": "https://metaso.cn/api/v1/search",
+        "json": {"q": "test", "scope": "webpage", "size": 5},
+        "headers": {
+            "Authorization": "Bearer metaso-key",
+            "Content-Type": "application/json",
+        },
+    }
+    assert results == [
+        tools.SearchResult(
+            title="Result One",
+            url="https://example.com/1",
+            snippet="Snippet one.",
+        ),
+        tools.SearchResult(
+            title="Result Two",
+            url="https://example.com/2",
+            snippet="Summary two.",
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_uses_default_key_when_no_keys_configured(monkeypatch):
+    session = _FakeMetasoSession(
+        _FakeMetasoResponse(
+            status=200,
+            json_data={
+                "webpages": [
+                    {
+                        "title": "Result",
+                        "link": "https://example.com",
+                        "snippet": "Snippet.",
+                    },
+                ],
+            },
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._metaso_search(
+        {"websearch_metaso_key": []},
+        {"q": "test", "scope": "webpage", "size": 5},
+    )
+
+    assert session.posted["headers"]["Authorization"] == f"Bearer {tools._METASO_DEFAULT_API_KEY}"
+    assert results[0].title == "Result"
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_uses_configured_keys_when_present(monkeypatch):
+    session = _FakeMetasoSession(
+        _FakeMetasoResponse(
+            status=200,
+            json_data={
+                "webpages": [
+                    {
+                        "title": "Result",
+                        "link": "https://example.com",
+                        "snippet": "Snippet.",
+                    },
+                ],
+            },
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._metaso_search(
+        {"websearch_metaso_key": ["custom-key"]},
+        {"q": "test", "scope": "webpage", "size": 5},
+    )
+
+    assert session.posted["headers"]["Authorization"] == "Bearer custom-key"
+    assert results[0].title == "Result"
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_http_401(monkeypatch):
+    session = _FakeMetasoSession(
+        _FakeMetasoResponse(status=401, text_data="Unauthorized")
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(Exception, match="unauthorized"):
+        await tools._metaso_search(
+            {"websearch_metaso_key": ["bad-key"]},
+            {"q": "test", "scope": "webpage", "size": 5},
+        )
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_http_403(monkeypatch):
+    session = _FakeMetasoSession(
+        _FakeMetasoResponse(status=403, text_data="Forbidden")
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(Exception, match="unauthorized"):
+        await tools._metaso_search(
+            {"websearch_metaso_key": ["bad-key"]},
+            {"q": "test", "scope": "webpage", "size": 5},
+        )
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_http_429(monkeypatch):
+    session = _FakeMetasoSession(
+        _FakeMetasoResponse(status=429, text_data="Rate limited")
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(Exception, match="rate-limited"):
+        await tools._metaso_search(
+            {"websearch_metaso_key": ["key"]},
+            {"q": "test", "scope": "webpage", "size": 5},
+        )
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_code_3003_daily_limit(monkeypatch):
+    session = _FakeMetasoSession(
+        _FakeMetasoResponse(
+            status=200,
+            json_data={"code": 3003, "message": "今日调用次数已达上限"},
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(Exception, match="daily search limit"):
+        await tools._metaso_search(
+            {"websearch_metaso_key": ["key"]},
+            {"q": "test", "scope": "webpage", "size": 5},
+        )
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_code_2005_invalid_key(monkeypatch):
+    session = _FakeMetasoSession(
+        _FakeMetasoResponse(
+            status=200,
+            json_data={"code": 2005, "message": "API密钥无效"},
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(Exception, match="API key rejected"):
+        await tools._metaso_search(
+            {"websearch_metaso_key": ["bad-key"]},
+            {"q": "test", "scope": "webpage", "size": 5},
+        )
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_non_zero_code(monkeypatch):
+    session = _FakeMetasoSession(
+        _FakeMetasoResponse(
+            status=200,
+            json_data={"code": 9999, "message": "Unknown error"},
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(Exception, match="code=9999"):
+        await tools._metaso_search(
+            {"websearch_metaso_key": ["key"]},
+            {"q": "test", "scope": "webpage", "size": 5},
+        )
+
+
+@pytest.mark.asyncio
+async def test_metaso_search_empty_webpages(monkeypatch):
+    session = _FakeMetasoSession(
+        _FakeMetasoResponse(
+            status=200,
+            json_data={"webpages": []},
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._metaso_search(
+        {"websearch_metaso_key": ["key"]},
+        {"q": "test", "scope": "webpage", "size": 5},
+    )
+
+    assert results == []

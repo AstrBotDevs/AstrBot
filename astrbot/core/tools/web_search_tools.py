@@ -13,6 +13,11 @@ from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.tools.registry import builtin_tool
 
+
+class WebSearchError(RuntimeError):
+    """Raised when a web search provider request fails."""
+
+
 WEB_SEARCH_TOOL_NAMES = [
     "web_search_baidu",
     "web_search_tavily",
@@ -21,6 +26,7 @@ WEB_SEARCH_TOOL_NAMES = [
     "web_search_brave",
     "web_search_firecrawl",
     "firecrawl_extract_web_page",
+    "web_search_metaso",
 ]
 _TAVILY_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
@@ -41,6 +47,10 @@ _FIRECRAWL_WEB_SEARCH_TOOL_CONFIG = {
 _BAIDU_WEB_SEARCH_TOOL_CONFIG = {
     "provider_settings.web_search": True,
     "provider_settings.websearch_provider": "baidu_ai_search",
+}
+_METASO_WEB_SEARCH_TOOL_CONFIG = {
+    "provider_settings.web_search": True,
+    "provider_settings.websearch_provider": "metaso",
 }
 
 
@@ -76,6 +86,11 @@ _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
 _BRAVE_KEY_ROTATOR = _KeyRotator("websearch_brave_key", "Brave")
 _FIRECRAWL_KEY_ROTATOR = _KeyRotator("websearch_firecrawl_key", "Firecrawl")
+_METASO_KEY_ROTATOR = _KeyRotator("websearch_metaso_key", "Metaso")
+_METASO_DEFAULT_API_KEY = "mk-E384C1DD5E8501BB7EFE27C949AFDE5B"
+# The above default API key is intentionally public. It is the official Metaso
+# free-tier key provided by Metaso for evaluation and low-volume use (100 queries/day).
+# Configure your own key via websearch_metaso_key for higher quotas.
 
 
 def normalize_legacy_web_search_config(cfg) -> None:
@@ -99,6 +114,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
         "websearch_bocha_key",
         "websearch_brave_key",
         "websearch_firecrawl_key",
+        "websearch_metaso_key",
     ):
         value = provider_settings.get(setting_name)
         if isinstance(value, str):
@@ -367,6 +383,65 @@ async def _baidu_search(
                 )
                 for item in references
                 if item.get("url")
+            ]
+
+
+async def _metaso_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    keys = provider_settings.get("websearch_metaso_key", [])
+    metaso_key = (
+        await _METASO_KEY_ROTATOR.get(provider_settings)
+        if keys
+        else _METASO_DEFAULT_API_KEY
+    )
+    headers = {
+        "Authorization": f"Bearer {metaso_key}",
+        "Content-Type": "application/json",
+    }
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.post(
+            "https://metaso.cn/api/v1/search",
+            json=payload,
+            headers=headers,
+        ) as response:
+            if response.status in (401, 403):
+                raise WebSearchError(
+                    "Metaso search failed: unauthorized. Check your Metaso API key."
+                )
+            if response.status == 429:
+                raise WebSearchError(
+                    "Metaso search failed: rate-limited. Try again later."
+                )
+            if response.status != 200:
+                reason = await response.text()
+                raise WebSearchError(
+                    f"Metaso search failed: {reason}, status: {response.status}",
+                )
+            data = await response.json()
+            code = data.get("code", 0)
+            if code == 3003:
+                raise WebSearchError(
+                    "Metaso search failed: daily search limit reached. "
+                    "See: https://metaso.cn/search-api/playground"
+                )
+            if code == 2005:
+                raise WebSearchError(
+                    "Metaso search failed: API key rejected. Check your Metaso API key."
+                )
+            if code != 0:
+                raise WebSearchError(
+                    f"Metaso search failed: code={code}, message={data.get('message', '')}",
+                )
+            webpages = data.get("webpages", [])
+            return [
+                SearchResult(
+                    title=item.get("title", ""),
+                    url=item.get("link", ""),
+                    snippet=item.get("snippet") or item.get("summary") or "",
+                )
+                for item in webpages
             ]
 
 
@@ -803,10 +878,56 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         return _search_result_payload(results)
 
 
+@builtin_tool(config=_METASO_WEB_SEARCH_TOOL_CONFIG)
+@pydantic_dataclass
+class MetasoWebSearchTool(FunctionTool[AstrAgentContext]):
+    name: str = "web_search_metaso"
+    description: str = (
+        "A web search tool based on Metaso Search API, used to retrieve web pages "
+        "related to the user's query. Metaso provides 100 free queries per day by "
+        "default. Configure your own API key (websearch_metaso_key) for higher quotas."
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Required. Search query."},
+                "size": {
+                    "type": "integer",
+                    "description": "Optional. Number of search results to return. Range: 1-100. Default is 10.",
+                },
+            },
+            "required": ["query"],
+        }
+    )
+
+    async def call(self, context, **kwargs) -> ToolExecResult:
+        _, provider_settings, _ = _get_runtime(context)
+        size = int(kwargs.get("size", 10))
+        if size < 1:
+            size = 1
+        if size > 100:
+            size = 100
+
+        payload = {
+            "q": kwargs["query"],
+            "scope": "webpage",
+            "size": size,
+        }
+
+        results = await _metaso_search(provider_settings, payload)
+        if not results:
+            return "Error: Metaso searcher did not return any results."
+        return _search_result_payload(results)
+
+
 __all__ = [
     "BaiduWebSearchTool",
     "BochaWebSearchTool",
     "BraveWebSearchTool",
+    "FirecrawlExtractWebPageTool",
+    "FirecrawlWebSearchTool",
+    "MetasoWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
     "WEB_SEARCH_TOOL_NAMES",
