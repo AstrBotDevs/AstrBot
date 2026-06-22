@@ -35,6 +35,30 @@ test("parses success envelope", () => {
   assert.equal(r.snapshot.reason, null);
   assert.equal(r.snapshot.file, "main.py");
   assert.equal(r.snapshot.elapsedMs, 23);
+  assert.equal(r.snapshot.scope, "unstaged");
+});
+
+test("parses success envelope with staged scope (v3.6)", () => {
+  // Plugin v3.6+ auto-detects scope via git status and echoes it back.
+  const r = parseSpcodeFileRestore({
+    status: "ok",
+    data: { ...baseData, scope: "staged" },
+  });
+  assert.equal(r.kind, "ok");
+  assert.equal(r.snapshot.restored, true);
+  assert.equal(r.snapshot.scope, "staged");
+});
+
+test("defaults missing/invalid scope to unstaged (forward-compat)", () => {
+  // Older plugin versions (<v3.6) always returned scope="unstaged".
+  // Unknown future values should fall back to "unstaged" rather than
+  // crashing the success toast.
+  const r = parseSpcodeFileRestore({
+    status: "ok",
+    data: { ...baseData, scope: "bogus-scope" },
+  });
+  assert.equal(r.kind, "ok");
+  assert.equal(r.snapshot.scope, "unstaged");
 });
 
 test("parses failure envelope with reason", () => {

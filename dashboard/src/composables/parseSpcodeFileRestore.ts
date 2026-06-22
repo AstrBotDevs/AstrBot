@@ -32,7 +32,13 @@ export interface SpcodeFileRestoreRawResponse {
   umo: string | null;
   worktree: string;
   directory: string | null;
-  scope: "unstaged";
+  /**
+   * Echoed by the plugin to indicate the restore scope it actually applied
+   * (since the plugin auto-detects from `git status` since v3.6):
+   *   - "unstaged": worktree was reset to index (file was modified but not staged)
+   *   - "staged":   both index and worktree were reset to HEAD (file was staged)
+   */
+  scope: "unstaged" | "staged";
   elapsed_ms: number;
   stderr: string;
 }
@@ -44,6 +50,7 @@ export interface SpcodeFileRestoreSnapshot {
   umo: string | null;
   worktree: string;
   directory: string | null;
+  scope: "unstaged" | "staged";
   elapsedMs: number;
   stderr: string;
 }
@@ -75,6 +82,11 @@ export function parseSpcodeFileRestore(
     throw new Error("missing data in response");
   }
   const d = env.data as Partial<SpcodeFileRestoreRawResponse>;
+  // v3.6: scope can be "unstaged" or "staged"; default to "unstaged" to keep
+  // forward-compat with older plugin versions that always echoed "unstaged".
+  const rawScope = d.scope;
+  const scope: "unstaged" | "staged" =
+    rawScope === "staged" ? "staged" : "unstaged";
   return {
     kind: "ok",
     snapshot: {
@@ -84,6 +96,7 @@ export function parseSpcodeFileRestore(
       umo: typeof d.umo === "string" ? d.umo : null,
       worktree: typeof d.worktree === "string" ? d.worktree : "",
       directory: typeof d.directory === "string" ? d.directory : null,
+      scope,
       elapsedMs: typeof d.elapsed_ms === "number" ? d.elapsed_ms : 0,
       stderr: typeof d.stderr === "string" ? d.stderr : "",
     },
