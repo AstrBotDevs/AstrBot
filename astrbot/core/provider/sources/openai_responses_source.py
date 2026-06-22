@@ -27,6 +27,23 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         ).parameters.keys()
 
     @staticmethod
+    def _get_field(obj: Any, name: str, default: Any = None) -> Any:
+        if isinstance(obj, dict):
+            return obj.get(name, default)
+        return getattr(obj, name, default)
+
+    @staticmethod
+    def _arguments_to_json_string(arguments: Any) -> str:
+        if arguments is None:
+            return ""
+        if isinstance(arguments, str):
+            return arguments
+        try:
+            return json.dumps(arguments, ensure_ascii=False)
+        except TypeError:
+            return str(arguments)
+
+    @staticmethod
     def _message_content_to_response_content(content: Any, role: str) -> Any:
         if isinstance(content, str) or content is None:
             return content or ""
@@ -74,29 +91,20 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
     @staticmethod
     def _chat_tool_call_to_response_function_call(tool_call: Any) -> dict:
-        if isinstance(tool_call, dict):
-            function = tool_call.get("function", {})
-            call_id = tool_call.get("id") or tool_call.get("call_id") or ""
-        else:
-            function = getattr(tool_call, "function", {})
-            call_id = (
-                getattr(tool_call, "id", None)
-                or getattr(tool_call, "call_id", None)
-                or ""
-            )
-
-        if isinstance(function, dict):
-            name = function.get("name", "")
-            arguments = function.get("arguments", "")
-        else:
-            name = getattr(function, "name", "")
-            arguments = getattr(function, "arguments", "")
+        function = ProviderOpenAIResponses._get_field(tool_call, "function", {})
+        call_id = (
+            ProviderOpenAIResponses._get_field(tool_call, "id")
+            or ProviderOpenAIResponses._get_field(tool_call, "call_id")
+            or ""
+        )
+        name = ProviderOpenAIResponses._get_field(function, "name", "")
+        arguments = ProviderOpenAIResponses._get_field(function, "arguments", "")
 
         return {
             "type": "function_call",
             "call_id": call_id,
             "name": name or "",
-            "arguments": arguments or "",
+            "arguments": ProviderOpenAIResponses._arguments_to_json_string(arguments),
             "status": "completed",
         }
 
@@ -173,24 +181,16 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             return None
 
         def _get(name: str) -> int:
-            if isinstance(usage, dict):
-                value = usage.get(name, 0)
-            else:
-                value = getattr(usage, name, 0)
+            value = ProviderOpenAIResponses._get_field(usage, name, 0)
             return value if isinstance(value, int) else 0
 
         input_tokens = _get("input_tokens")
         output_tokens = _get("output_tokens")
         cached = 0
-        details = (
-            usage.get("input_tokens_details")
-            if isinstance(usage, dict)
-            else getattr(usage, "input_tokens_details", None)
-        )
-        if isinstance(details, dict):
-            cached = details.get("cached_tokens", 0) or 0
-        elif details is not None:
-            cached = getattr(details, "cached_tokens", 0) or 0
+        details = ProviderOpenAIResponses._get_field(usage, "input_tokens_details")
+        if details is not None:
+            cached = ProviderOpenAIResponses._get_field(details, "cached_tokens", 0)
+            cached = cached or 0
         cached = cached if isinstance(cached, int) else 0
         return TokenUsage(
             input_other=max(input_tokens - cached, 0),
@@ -200,51 +200,57 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
     @staticmethod
     def _extract_response_output_text(response: Any) -> str:
-        output_text = getattr(response, "output_text", None)
+        output_text = ProviderOpenAIResponses._get_field(response, "output_text")
         if isinstance(output_text, str):
             return output_text.strip()
-        if isinstance(response, dict) and isinstance(response.get("output_text"), str):
-            return response["output_text"].strip()
 
-        output = (
-            response.get("output", [])
-            if isinstance(response, dict)
-            else getattr(response, "output", [])
-        )
+        output = ProviderOpenAIResponses._get_field(response, "output", [])
         parts: list[str] = []
         if isinstance(output, list):
             for item in output:
-                content = (
-                    item.get("content", [])
-                    if isinstance(item, dict)
-                    else getattr(item, "content", [])
-                )
+                content = ProviderOpenAIResponses._get_field(item, "content", [])
                 if not isinstance(content, list):
                     continue
                 for part in content:
-                    part_type = (
-                        part.get("type")
-                        if isinstance(part, dict)
-                        else getattr(part, "type", None)
-                    )
+                    part_type = ProviderOpenAIResponses._get_field(part, "type")
                     if part_type not in {"output_text", "text"}:
                         continue
-                    text = (
-                        part.get("text")
-                        if isinstance(part, dict)
-                        else getattr(part, "text", None)
-                    )
+                    text = ProviderOpenAIResponses._get_field(part, "text")
                     if isinstance(text, str):
                         parts.append(text)
         return "".join(parts).strip()
 
     @staticmethod
     def _iter_response_output_items(response: Any) -> list[Any]:
-        if isinstance(response, dict):
-            output = response.get("output", [])
-        else:
-            output = getattr(response, "output", [])
+        output = ProviderOpenAIResponses._get_field(response, "output", [])
         return output if isinstance(output, list) else []
+
+    @classmethod
+    def _iter_function_calls(cls, response: Any) -> list[dict[str, Any]]:
+        calls: list[dict[str, Any]] = []
+        for item in cls._iter_response_output_items(response):
+            if cls._get_field(item, "type") != "function_call":
+                continue
+            calls.append(
+                {
+                    "name": cls._get_field(item, "name"),
+                    "arguments": cls._get_field(item, "arguments"),
+                    "call_id": cls._get_field(item, "call_id"),
+                }
+            )
+        return calls
+
+    @staticmethod
+    def _parse_function_call_arguments(arguments: Any) -> dict:
+        if isinstance(arguments, str):
+            try:
+                parsed_args = json.loads(arguments)
+            except json.JSONDecodeError:
+                return {}
+            return parsed_args if isinstance(parsed_args, dict) else {}
+        if isinstance(arguments, dict):
+            return arguments
+        return {}
 
     async def _parse_responses_completion(
         self,
@@ -252,53 +258,19 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         tools: ToolSet | None,
     ) -> LLMResponse:
         llm_response = LLMResponse("assistant")
-        response_id = (
-            response.get("id")
-            if isinstance(response, dict)
-            else getattr(response, "id", None)
-        )
+        response_id = self._get_field(response, "id")
 
         if tools is not None:
             args_ls: list[dict] = []
             func_name_ls: list[str] = []
             tool_call_ids: list[str] = []
-            for item in self._iter_response_output_items(response):
-                item_type = (
-                    item.get("type")
-                    if isinstance(item, dict)
-                    else getattr(item, "type", None)
-                )
-                if item_type != "function_call":
-                    continue
-                name = (
-                    item.get("name")
-                    if isinstance(item, dict)
-                    else getattr(item, "name", None)
-                )
-                arguments = (
-                    item.get("arguments")
-                    if isinstance(item, dict)
-                    else getattr(item, "arguments", None)
-                )
-                call_id = (
-                    item.get("call_id")
-                    if isinstance(item, dict)
-                    else getattr(item, "call_id", None)
-                )
+            for call in self._iter_function_calls(response):
+                name = call["name"]
                 if not name:
                     continue
-                if isinstance(arguments, str):
-                    try:
-                        parsed_args = json.loads(arguments)
-                    except json.JSONDecodeError:
-                        parsed_args = {}
-                elif isinstance(arguments, dict):
-                    parsed_args = arguments
-                else:
-                    parsed_args = {}
-                args_ls.append(parsed_args)
+                args_ls.append(self._parse_function_call_arguments(call["arguments"]))
                 func_name_ls.append(name)
-                tool_call_ids.append(call_id or response_id or "")
+                tool_call_ids.append(call["call_id"] or response_id or "")
             if args_ls:
                 llm_response.role = "tool"
                 llm_response.tools_call_args = args_ls
@@ -310,11 +282,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             llm_response.result_chain = MessageChain().message(completion_text)
         llm_response.raw_completion = response
         llm_response.id = response_id
-        usage = (
-            response.get("usage")
-            if isinstance(response, dict)
-            else getattr(response, "usage", None)
-        )
+        usage = self._get_field(response, "usage")
         llm_response.usage = self._response_usage_to_token_usage(usage)
         return llm_response
 
@@ -331,13 +299,11 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         self._apply_provider_specific_extra_body_overrides(extra_body)
         return request_payload, extra_body
 
-    async def _query(
+    def _build_responses_request(
         self,
         payloads: dict,
         tools: ToolSet | None,
-        *,
-        request_max_retries: int | None = None,
-    ) -> LLMResponse:
+    ) -> tuple[dict, dict]:
         self._sanitize_assistant_messages(payloads)
         response_payload = self._chat_payload_to_responses_payload(payloads)
         response_tools = self._responses_function_tools(tools)
@@ -349,8 +315,16 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 )
         else:
             response_payload.pop("tool_choice", None)
+        return self._split_responses_extra_body(response_payload)
 
-        request_payload, extra_body = self._split_responses_extra_body(response_payload)
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+    ) -> LLMResponse:
+        request_payload, extra_body = self._build_responses_request(payloads, tools)
         response = await retry_provider_request(
             "OpenAI",
             lambda: self.client.responses.create(
@@ -364,9 +338,75 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
     @staticmethod
     def _event_value(event: Any, name: str, default: Any = None) -> Any:
-        if isinstance(event, dict):
-            return event.get(name, default)
-        return getattr(event, name, default)
+        return ProviderOpenAIResponses._get_field(event, name, default)
+
+    @classmethod
+    def _stream_function_call_key(
+        cls,
+        event: Any,
+        function_calls: dict[str, dict[str, Any]],
+    ) -> str:
+        item = cls._event_value(event, "item")
+        for value in (
+            cls._event_value(event, "output_index"),
+            cls._event_value(event, "item_id"),
+            cls._get_field(item, "id"),
+            cls._get_field(item, "call_id"),
+        ):
+            if value is not None:
+                return str(value)
+        return str(len(function_calls))
+
+    @classmethod
+    def _merge_stream_function_call_event(
+        cls,
+        event: Any,
+        function_calls: dict[str, dict[str, Any]],
+    ) -> None:
+        event_type = cls._event_value(event, "type", "")
+        item = cls._event_value(event, "item")
+        call_key = cls._stream_function_call_key(event, function_calls)
+
+        if event_type in {"response.output_item.added", "response.output_item.done"}:
+            if cls._get_field(item, "type") != "function_call":
+                return
+            call = function_calls.setdefault(call_key, {})
+            call["name"] = cls._get_field(item, "name", call.get("name"))
+            call["call_id"] = cls._get_field(item, "call_id", call.get("call_id"))
+            arguments = cls._get_field(item, "arguments")
+            if arguments is not None:
+                call["arguments"] = arguments
+            return
+
+        if event_type == "response.function_call_arguments.delta":
+            delta = cls._event_value(event, "delta", "")
+            if delta:
+                call = function_calls.setdefault(call_key, {})
+                call["arguments"] = f"{call.get('arguments', '')}{delta}"
+            return
+
+        if event_type == "response.function_call_arguments.done":
+            arguments = cls._event_value(event, "arguments", "")
+            function_calls.setdefault(call_key, {})["arguments"] = arguments
+
+    async def _stream_function_calls_to_response(
+        self,
+        function_calls: dict[str, dict[str, Any]],
+        tools: ToolSet | None,
+    ) -> LLMResponse:
+        output = []
+        for call in function_calls.values():
+            if not call.get("name"):
+                continue
+            output.append(
+                {
+                    "type": "function_call",
+                    "name": call.get("name", ""),
+                    "call_id": call.get("call_id", ""),
+                    "arguments": call.get("arguments", ""),
+                }
+            )
+        return await self._parse_responses_completion({"output": output}, tools)
 
     async def _query_stream(
         self,
@@ -375,19 +415,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         *,
         request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
-        self._sanitize_assistant_messages(payloads)
-        response_payload = self._chat_payload_to_responses_payload(payloads)
-        response_tools = self._responses_function_tools(tools)
-        if response_tools:
-            response_payload["tools"] = response_tools
-            if tools and not tools.empty():
-                response_payload["tool_choice"] = response_payload.get(
-                    "tool_choice", "auto"
-                )
-        else:
-            response_payload.pop("tool_choice", None)
-
-        request_payload, extra_body = self._split_responses_extra_body(response_payload)
+        request_payload, extra_body = self._build_responses_request(payloads, tools)
         stream = await retry_provider_request(
             "OpenAI",
             lambda: self.client.responses.create(
@@ -400,6 +428,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
 
         output_text = ""
         final_response = None
+        function_calls: dict[str, dict[str, Any]] = {}
         async for event in stream:
             event_type = self._event_value(event, "type", "")
             if event_type == "response.output_text.delta":
@@ -418,11 +447,18 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                     output_text = str(text)
             elif event_type == "response.completed":
                 final_response = self._event_value(event, "response")
+            else:
+                self._merge_stream_function_call_event(event, function_calls)
 
         if final_response is not None:
             llm_response = await self._parse_responses_completion(final_response, tools)
             if not llm_response.completion_text and output_text:
                 llm_response.result_chain = MessageChain().message(output_text)
+        elif function_calls:
+            llm_response = await self._stream_function_calls_to_response(
+                function_calls,
+                tools,
+            )
         else:
             llm_response = LLMResponse(
                 "assistant",
