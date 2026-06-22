@@ -376,6 +376,34 @@
           "git_error": "Git execution failed ({reason})",
           "generic": "Failed to fetch changes ({reason})"
         }
+      },
+      "restore": {
+        "button": "Restore",
+        "buttonAria": "Restore file {path}",
+        "confirmTitle": "Restore file?",
+        "confirmMessage": "This will discard all uncommitted changes to \"{path}\". This cannot be undone.",
+        "confirmAction": "Restore",
+        "confirmCancel": "Cancel",
+        "success": "Restored {path}",
+        "error": {
+          "reason": {
+            "network": "Network error",
+            "unknown": "Restore failed ({reason})",
+            "invalid_body": "Malformed request",
+            "missing_file": "File not specified",
+            "feature_disabled": "Feature disabled (check spcode config agentsmd_enabled / codegraph_enabled)",
+            "no_project_loaded": "No project loaded",
+            "directory_missing": "Loaded directory no longer exists",
+            "not_a_git_repo": "Current directory is not a Git repository",
+            "worktree_invalid": "Target worktree is invalid",
+            "git_unavailable": "Git executable not found",
+            "path_unsafe": "File path is unsafe (rejected)",
+            "file_not_found": "File does not exist",
+            "not_modified": "File has no uncommitted changes",
+            "untracked_file": "Cannot restore an untracked file (use git rm --cached or git add)",
+            "git_error": "Git execution failed ({stderr})"
+          }
+        }
       }
     },
     "planModeChip": {

@@ -1,5 +1,6 @@
 <!-- Author: elecvoid243, 2026-06-17 -->
-<!-- Spec: docs/superpowers/specs/2026-06-17-chatui-git-diff-sidebar-design.md §4.2.3 -->
+<!-- Spec: docs/superpowers/specs/2026-06-17-chatui-git-diff-sidebar-design.md §4.2.3
+     Updated 2026-06-22 — thread 'restore' event for file-restore button -->
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { GitDiffFetchState } from '@/composables/useSpcodeGitDiff'
@@ -12,10 +13,12 @@ const props = defineProps<{
   state: GitDiffFetchState
   expanded: Set<string>
   isDark: boolean
+  onRestore?: (path: string) => void
 }>()
 const emit = defineEmits<{
   (e: 'toggle', path: string): void
   (e: 'retry'): void
+  (e: 'restore', path: string): void
 }>()
 
 const REASON_I18N_KEYS: Record<string, string> = {
@@ -80,7 +83,9 @@ const files = computed(() => {
       :file="f"
       :expanded="expanded.has(f.path)"
       :is-dark="isDark"
+      :on-restore="onRestore"
       @toggle="emit('toggle', f.path)"
+      @restore="emit('restore', $event)"
     />
     <div v-if="state.kind === 'error' && errorInfo" class="git-diff-banner-error">
       <span>{{ localizedReason(errorInfo.reason) }}</span>

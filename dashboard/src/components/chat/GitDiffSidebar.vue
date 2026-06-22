@@ -12,6 +12,7 @@ import {
 } from "@/composables/useSpcodeGitDiff";
 import { useSpcodeWorktrees } from "@/composables/useSpcodeWorktrees";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
+import { useSpcodeFileRestore, type RestoreResult } from "@/composables/useSpcodeFileRestore";
 import { useModuleI18n } from "@/i18n/composables";
 import GitDiffBodyContent from "@/components/chat/message_list_comps/GitDiffBodyContent.vue";
 import FileBrowserView from "@/components/chat/message_list_comps/FileBrowserView.vue";
@@ -247,6 +248,43 @@ const composable = useSpcodeGitDiff(selectedWorktree, selectedScope);
 const spcodeStatus = useSpcodeProjectStatus();
 const expandedSet = ref<Set<string>>(new Set());
 
+// ── file-restore (spec §3.2) ───────────────────────────────────────
+// Composable instance lives at sidebar level so it can call
+// composable.refresh() and reach the snackbar / dialog state.
+const fileRestore = useSpcodeFileRestore();
+const restoringFile = ref<string | null>(null);
+
+// Confirm dialog state.
+const confirmDialogOpen = ref(false);
+const confirmTargetPath = ref<string | null>(null);
+
+// Snackbar state (success / warning / error).
+interface SnackbarState {
+  show: boolean;
+  message: string;
+  color: "success" | "warning" | "error";
+}
+const snackbar = ref<SnackbarState>({ show: false, message: "", color: "success" });
+
+// Maps a restore reason code to a snackbar message + color.
+const RESTORE_REASON_I18N_KEYS: Record<string, { key: string; color: "warning" | "error" }> = {
+  invalid_body: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.invalid_body", color: "error" },
+  missing_file: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.missing_file", color: "error" },
+  feature_disabled: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.feature_disabled", color: "error" },
+  no_project_loaded: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.no_project_loaded", color: "error" },
+  directory_missing: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.directory_missing", color: "error" },
+  not_a_git_repo: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.not_a_git_repo", color: "error" },
+  worktree_invalid: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.worktree_invalid", color: "error" },
+  git_unavailable: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.git_unavailable", color: "error" },
+  path_unsafe: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.path_unsafe", color: "error" },
+  file_not_found: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.file_not_found", color: "error" },
+  not_modified: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.not_modified", color: "warning" },
+  untracked_file: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.untracked_file", color: "warning" },
+  git_error: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.git_error", color: "error" },
+  network: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.network", color: "error" },
+  unknown: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.unknown", color: "error" },
+};
+
 const isProjectLoaded = computed(
   () => spcodeStatus.status.value.loaded === true,
 );
@@ -410,9 +448,53 @@ function onFileBrowserNavigate(payload: {
   fileBrowserPreviewPath.value = payload.previewPath;
 }
 
+// Spec §3.2 data flow: GitDiffFileItem -> GitDiffBodyContent -> here.
+function onFileRestore(path: string): void {
+  confirmTargetPath.value = path;
+  confirmDialogOpen.value = true;
+}
+
+function onCancelRestore(): void {
+  confirmDialogOpen.value = false;
+  confirmTargetPath.value = null;
+}
+
+async function onConfirmRestore(): Promise<void> {
+  const path = confirmTargetPath.value;
+  if (!path) return;
+  confirmDialogOpen.value = false;
+  confirmTargetPath.value = null;
+  restoringFile.value = path;
+  const umo = spcodeStatus.status.value.umo;
+  const worktree = selectedWorktree.value;
+  const result: RestoreResult = await fileRestore.restore({ file: path, worktree, umo });
+  restoringFile.value = null;
+  // Special-case "aborted" (Chunk 2 review note): no toast, just reset state.
+  // This only fires during teardown (pre-mount guard / post-await unmount / axios cancel).
+  if (!result.ok && result.reason === "aborted") {
+    return;
+  }
+  if (result.ok) {
+    snackbar.value = {
+      show: true,
+      message: tm("spcodeProjectLoad.diffSidebar.restore.success", { path }),
+      color: "success",
+    };
+    // Spec §3.2: success -> immediate refresh so the row disappears.
+    await composable.refresh();
+  } else {
+    const mapping = RESTORE_REASON_I18N_KEYS[result.reason] ?? RESTORE_REASON_I18N_KEYS.unknown;
+    const message = mapping.key === "spcodeProjectLoad.diffSidebar.restore.error.reason.git_error"
+      ? tm(mapping.key, { stderr: result.stderr ?? "" })
+      : tm(mapping.key);
+    snackbar.value = { show: true, message, color: mapping.color };
+  }
+}
+
 onBeforeUnmount(() => {
   onMouseUp();
   composable.dispose();
+  fileRestore.dispose();
   worktreesComposable.dispose();
   if (persistCurrentPathTimer) {
     clearTimeout(persistCurrentPathTimer);
@@ -724,15 +806,56 @@ const currentRoot = computed<string | null>(() => {
                   @navigate="onFileBrowserNavigate"
                 />
         <GitDiffBodyContent
-          v-else
-          :state="composable.state.value"
-          :expanded="expandedSet"
-          :is-dark="!!isDark"
-          @toggle="toggleFile"
-          @retry="onManualRefresh"
-        />
-      </div>
-    </aside>
+                  v-else
+                  :state="composable.state.value"
+                  :expanded="expandedSet"
+                  :is-dark="!!isDark"
+                  :on-restore="onFileRestore"
+                  @toggle="toggleFile"
+                  @retry="onManualRefresh"
+                  @restore="onFileRestore"
+                />
+              </div>
+
+              <!-- Spec §6.3: inline <v-dialog persistent> confirmation. -->
+              <v-dialog
+                v-model="confirmDialogOpen"
+                persistent
+                max-width="440"
+              >
+                <v-card>
+                  <v-card-title class="text-h6">
+                    {{ tm("spcodeProjectLoad.diffSidebar.restore.confirmTitle") }}
+                  </v-card-title>
+                  <v-card-text>
+                    {{ tm("spcodeProjectLoad.diffSidebar.restore.confirmMessage", { path: confirmTargetPath ?? "" }) }}
+                  </v-card-text>
+                  <v-card-actions>
+                    <v-spacer />
+                    <v-btn
+                      variant="text"
+                      @click="onCancelRestore"
+                    >{{ tm("spcodeProjectLoad.diffSidebar.restore.confirmCancel") }}</v-btn>
+                    <v-btn
+                      variant="flat"
+                      color="warning"
+                      :loading="restoringFile !== null"
+                      @click="onConfirmRestore"
+                    >{{ tm("spcodeProjectLoad.diffSidebar.restore.confirmAction") }}</v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-dialog>
+
+              <!-- Spec §6.4: result snackbar. -->
+              <v-snackbar
+                v-model="snackbar.show"
+                :color="snackbar.color"
+                :timeout="snackbar.color === 'success' ? 4000 : 6000"
+                location="bottom right"
+              >
+                {{ snackbar.message }}
+              </v-snackbar>
+            </aside>
   </transition>
 </template>
 
