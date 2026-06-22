@@ -47,9 +47,9 @@
 | 1 | 客户端预检 | **不做**;所有 reason 走 toast | 后端是权威;预检与真实状态可能不一致(用户在另一终端已恢复);轮询已 10s,过期自然收敛 |
 | 2 | 成功后的列表刷新 | **立即调用 `composable.refresh()`** | UI 立即收敛,所见即所恢复;toast 已能定位 |
 | 3 | 失败时的错误反馈 | **全局 `v-snackbar`**,reason → i18n 映射 | 与 `GitDiffBodyContent` 既有 REASON_I18N_KEYS 风格一致;不破坏列表布局;统一样式 |
-| 4 | HTML 嵌套按钮问题 | **重构外层 row 为 `<div role="button" tabindex=0>` + 键盘事件,内层 ↩ 用真 `<button>`** | HTML 合规;`@click.stop` 阻断冒泡;`role="button"` + `tabindex=0` 保留键盘可达 |
+| 4 | HTML 嵌套按钮问题 | **重构外层 row 为 `<div role="button" tabindex=0>` + 键盘事件,内层 ↩ 用真 `<button>`** | 当前 `GitDiffFileItem.vue:24` 是 `<button>`;HTML5 规范禁止 button-in-button 嵌套(交互模型冲突 + 可访问性树混乱),必须重构外层;`@click.stop` 阻断冒泡;`role="button"` + `tabindex=0` 保留键盘可达 |
 | 5 | 架构模式 | **composable 在 `GitDiffSidebar` 持有,回调下传** | 顶层有 `selectedWorktree` / `composable.refresh` / snackbar 挂载点;数据流单向;与既有 `useSpcodeGitDiff` 模式同构 |
-| 6 | 确认对话框组件 | **复用项目已有的 `useConfirmDialog()` 命令式 API**(`@/utils/confirmDialog`) | 项目里已有单例(参见 `ChatInput.vue:541` 既有用法);YAGNI 不抽新组件 |
+| 6 | 确认对话框组件 | **本地内联 `<v-dialog persistent>`** in `GitDiffSidebar.vue`,**不**复用 `useConfirmDialog()` | 验证 `dashboard/src/components/ConfirmDialog.vue:8-9` 按钮文本与颜色**硬编码**,不接受 `confirmText`/`color`;`ConfirmDialogOptions`(`utils/confirmDialog.ts:3-6`) 只支持 `title`+`message`;且 `ConfirmDialog.vue` 缺少 `persistent` 属性,点击遮罩关闭会悬挂 Promise(已存在 bug,不在本 spec 范围)。本地 v-dialog 完全控制标题/正文/按钮文本/按钮颜色/遮罩行为,与 `FileBrowserFilePreview.vue:41-112` 既有 dialog 模式一致 |
 | 7 | 同时点击多个文件 | **限制单文件**(单一 `restoringFile` ref) | 后续点击的按钮 disabled + spinner;简单可预测 |
 | 8 | i18n 命名空间 | **3 个 locale 都加 `diffSidebar.restore.*` 键** | 与既有 diffSidebar 结构对齐(已有 4 个嵌套 namespace);新功能必须全语言 |
 | 9 | 键盘可达性 | **Tab 到 ↩,Enter 触发;Esc 关闭 snackbar(Vuetify 默认)** | 默认免费,显式写出来避免未来改坏 |
@@ -145,32 +145,34 @@ Response 200:
 - `umo` = `spcodeStatus.status.value.umo`(项目未载入时不渲染按钮 — 见 §6.2)
 - `worktree` = `selectedWorktree.value`(为 null 时不传,后端走主 worktree)
 
-**前端不解析**:`scope`、`elapsed_ms`、`stderr`(不展示给用户)
+**前端不解析**:`scope`、`elapsed_ms`、`stderr`(成功路径完全不展示;失败路径仅 `git_error` 时展示 stderr,见 §5)
+
+> 跨引用:URL 路径由 `dashboard/src/api/v1.ts:1299-1316` 的 `pluginExtensionApi.post('spcode/file-restore', body)` 生成,后端注册于 `astrbot_plugin_spcode_toolkit/main.py:2044`(`route="/spcode/file-restore"`)。如果未来要改路由,需同步两处。
 
 ---
 
 ## 5. 错误处理矩阵
 
-新建 `RESTORE_REASON_I18N_KEYS`(放 `GitDiffSidebar.vue` 模块顶部,与 `GitDiffBodyContent` 既有映射同构):
+新建 `RESTORE_REASON_I18N_KEYS`(放 `GitDiffSidebar.vue` 模块顶部,**与 `GitDiffBodyContent`/`FileBrowserFilePreview` 既有 `error.reason.{code}` 嵌套结构同构**):
 
 | 后端 `data.reason` | i18n key | toast color | 备注 |
 |--------------------|----------|-------------|------|
 | `null`(成功) | `restore.success({path})` | `success` | 列表立即 refresh |
-| `invalid_body` | `restore.error.invalid_body` | `error` | 前端不会主动构造这种 body |
-| `missing_file` | `restore.error.missing_file` | `error` | 理论不可达(按钮必带 file) |
-| `feature_disabled` | `restore.error.feature_disabled` | `error` | 提示检查 spcode 配置 |
-| `no_project_loaded` | `restore.error.no_project_loaded` | `error` | 理论不可达(未载入不渲染按钮) |
-| `directory_missing` | `restore.error.directory_missing` | `error` | 加载目录被删 |
-| `not_a_git_repo` | `restore.error.not_a_git_repo` | `error` | 加载的不是 git 目录 |
-| `worktree_invalid` | `restore.error.worktree_invalid` | `error` | worktree 路径异常 |
-| `git_unavailable` | `restore.error.git_unavailable` | `error` | 服务端无 git |
-| `path_unsafe` | `restore.error.path_unsafe` | `error` | 文件路径被 4 步防御拒绝 |
-| `file_not_found` | `restore.error.file_not_found` | `error` | 文件在 disk 上消失 |
-| `not_modified` | `restore.error.not_modified` | `warning` | 已与 index 一致(无操作) |
-| `untracked_file` | `restore.error.untracked_file` | `warning` | git checkout 拒绝 |
-| `git_error` | `restore.error.git_error({stderr})` | `error` | 其他 git 错误,带 stderr |
-| axios `ERR_NETWORK` | `restore.error.network` | `error` | 前端拦截 |
-| 其他 | `restore.error.unknown({reason})` | `error` | 兜底 |
+| `invalid_body` | `restore.error.reason.invalid_body` | `error` | 前端不会主动构造这种 body |
+| `missing_file` | `restore.error.reason.missing_file` | `error` | 理论不可达(按钮必带 file) |
+| `feature_disabled` | `restore.error.reason.feature_disabled` | `error` | 提示检查 spcode 配置 |
+| `no_project_loaded` | `restore.error.reason.no_project_loaded` | `error` | 理论不可达(未载入不渲染按钮) |
+| `directory_missing` | `restore.error.reason.directory_missing` | `error` | 加载目录被删 |
+| `not_a_git_repo` | `restore.error.reason.not_a_git_repo` | `error` | 加载的不是 git 目录 |
+| `worktree_invalid` | `restore.error.reason.worktree_invalid` | `error` | worktree 路径异常 |
+| `git_unavailable` | `restore.error.reason.git_unavailable` | `error` | 服务端无 git |
+| `path_unsafe` | `restore.error.reason.path_unsafe` | `error` | 文件路径被 4 步防御拒绝 |
+| `file_not_found` | `restore.error.reason.file_not_found` | `error` | 文件在 disk 上消失 |
+| `not_modified` | `restore.error.reason.not_modified` | `warning` | 已与 index 一致(无操作) |
+| `untracked_file` | `restore.error.reason.untracked_file` | `warning` | git checkout 拒绝;**stderr 静默**(见 §10 M2 注释) |
+| `git_error` | `restore.error.reason.git_error({stderr})` | `error` | 其他 git 错误,带 stderr |
+| axios `ERR_NETWORK` | `restore.error.reason.network` | `error` | 前端拦截 |
+| 其他 | `restore.error.reason.unknown({reason})` | `error` | 兜底 |
 
 `color` 在 `warning` (amber)与 `error` (red) 之间区分:**`not_modified` / `untracked_file` 是"不危险但失败"**,用 `warning` 提示色(避免误以为"系统出错")。
 
@@ -203,14 +205,17 @@ const showRestoreButton = computed(() => {
 
 > 注:Q1 决策"不做客户端预检",但 `loaded` / `umo` 是**前置**而非预检 — 后端会直接 `no_project_loaded`,前端拦下可省一次请求。
 
-### 6.3 二次确认对话框
+### 6.3 二次确认对话框(内联 `<v-dialog>`)
+
+`GitDiffSidebar.vue` 模板中本地内联一个 `<v-dialog v-model="confirmDialogOpen" persistent max-width="440">`,**不**走 `useConfirmDialog()`(见 §2 决策 #6)。理由:本 spec 需要自定义按钮文本/颜色与 persistent 行为,既有 `ConfirmDialog` 不支持。
 
 - 标题:`restore.confirmTitle`
 - 正文:`restore.confirmMessage({path})` — **必须包含完整文件路径**(避免误恢复)
-- 主按钮:`restore.confirmAction`(color=warning,因为是破坏性操作)
-- 取消按钮:`restore.confirmCancel`(variant=text)
-- 不可关闭遮罩点击关闭(强制显式选择)
-- `Esc` 关闭等同取消
+- 主按钮:`restore.confirmAction`(`color="warning"`,`variant="flat"`,因为是破坏性操作)
+- 取消按钮:`restore.confirmCancel`(`variant="text"`)
+- `persistent`:遮罩点击**不**关闭,强制显式选择(避免被误触跳过)
+- `Esc` 关闭等同取消(由 `<v-dialog>` 默认行为提供;`persistent` 不影响 Esc)
+- 状态:`confirmDialogOpen` (ref<boolean>) + `confirmTargetPath` (ref<string|null>)
 
 ### 6.4 Snackbar
 
@@ -244,21 +249,23 @@ const showRestoreButton = computed(() => {
     "confirmCancel": "取消",
     "success": "已恢复 {path}",
     "error": {
-      "network": "网络连接失败",
-      "unknown": "恢复失败（{reason}）",
-      "invalid_body": "请求格式错误",
-      "missing_file": "未指定文件",
-      "feature_disabled": "功能未启用（请检查 spcode 配置 agentsmd_enabled / codegraph_enabled）",
-      "no_project_loaded": "项目未载入",
-      "directory_missing": "已加载的目录不存在",
-      "not_a_git_repo": "当前目录不是 Git 仓库",
-      "worktree_invalid": "目标 worktree 无效",
-      "git_unavailable": "未检测到 git 可执行文件",
-      "path_unsafe": "文件路径不安全（已拒绝）",
-      "file_not_found": "文件不存在",
-      "not_modified": "文件无未暂存改动",
-      "untracked_file": "未跟踪的文件无法恢复（请用 git rm --cached 或 git add）",
-      "git_error": "Git 执行失败（{stderr}）"
+      "reason": {
+        "network": "网络连接失败",
+        "unknown": "恢复失败（{reason}）",
+        "invalid_body": "请求格式错误",
+        "missing_file": "未指定文件",
+        "feature_disabled": "功能未启用（请检查 spcode 配置 agentsmd_enabled / codegraph_enabled）",
+        "no_project_loaded": "项目未载入",
+        "directory_missing": "已加载的目录不存在",
+        "not_a_git_repo": "当前目录不是 Git 仓库",
+        "worktree_invalid": "目标 worktree 无效",
+        "git_unavailable": "未检测到 git 可执行文件",
+        "path_unsafe": "文件路径不安全（已拒绝）",
+        "file_not_found": "文件不存在",
+        "not_modified": "文件无未暂存改动",
+        "untracked_file": "未跟踪的文件无法恢复（请用 git rm --cached 或 git add）",
+        "git_error": "Git 执行失败（{stderr}）"
+      }
     }
   }
 }
@@ -276,21 +283,23 @@ const showRestoreButton = computed(() => {
   "confirmCancel": "Cancel",
   "success": "Restored {path}",
   "error": {
-    "network": "Network error",
-    "unknown": "Restore failed ({reason})",
-    "invalid_body": "Malformed request",
-    "missing_file": "File not specified",
-    "feature_disabled": "Feature disabled (check spcode config agentsmd_enabled / codegraph_enabled)",
-    "no_project_loaded": "No project loaded",
-    "directory_missing": "Loaded directory no longer exists",
-    "not_a_git_repo": "Current directory is not a Git repository",
-    "worktree_invalid": "Target worktree is invalid",
-    "git_unavailable": "Git executable not found",
-    "path_unsafe": "File path is unsafe (rejected)",
-    "file_not_found": "File does not exist",
-    "not_modified": "File has no uncommitted changes",
-    "untracked_file": "Cannot restore an untracked file (use git rm --cached or git add)",
-    "git_error": "Git execution failed ({stderr})"
+    "reason": {
+      "network": "Network error",
+      "unknown": "Restore failed ({reason})",
+      "invalid_body": "Malformed request",
+      "missing_file": "File not specified",
+      "feature_disabled": "Feature disabled (check spcode config agentsmd_enabled / codegraph_enabled)",
+      "no_project_loaded": "No project loaded",
+      "directory_missing": "Loaded directory no longer exists",
+      "not_a_git_repo": "Current directory is not a Git repository",
+      "worktree_invalid": "Target worktree is invalid",
+      "git_unavailable": "Git executable not found",
+      "path_unsafe": "File path is unsafe (rejected)",
+      "file_not_found": "File does not exist",
+      "not_modified": "File has no uncommitted changes",
+      "untracked_file": "Cannot restore an untracked file (use git rm --cached or git add)",
+      "git_error": "Git execution failed ({stderr})"
+    }
   }
 }
 ```
@@ -307,21 +316,23 @@ const showRestoreButton = computed(() => {
   "confirmCancel": "Отмена",
   "success": "Восстановлено: {path}",
   "error": {
-    "network": "Ошибка сети",
-    "unknown": "Не удалось восстановить ({reason})",
-    "invalid_body": "Некорректный запрос",
-    "missing_file": "Файл не указан",
-    "feature_disabled": "Функция отключена (проверьте spcode config agentsmd_enabled / codegraph_enabled)",
-    "no_project_loaded": "Проект не загружен",
-    "directory_missing": "Загруженный каталог больше не существует",
-    "not_a_git_repo": "Текущий каталог не является репозиторием Git",
-    "worktree_invalid": "Целевое worktree недопустимо",
-    "git_unavailable": "Исполняемый файл git не найден",
-    "path_unsafe": "Путь к файлу небезопасен (отклонено)",
-    "file_not_found": "Файл не существует",
-    "not_modified": "Файл не имеет незафиксированных изменений",
-    "untracked_file": "Невозможно восстановить неотслеживаемый файл (используйте git rm --cached или git add)",
-    "git_error": "Ошибка выполнения Git ({stderr})"
+    "reason": {
+      "network": "Ошибка сети",
+      "unknown": "Не удалось восстановить ({reason})",
+      "invalid_body": "Некорректный запрос",
+      "missing_file": "Файл не указан",
+      "feature_disabled": "Функция отключена (проверьте spcode config agentsmd_enabled / codegraph_enabled)",
+      "no_project_loaded": "Проект не загружен",
+      "directory_missing": "Загруженный каталог больше не существует",
+      "not_a_git_repo": "Текущий каталог не является репозиторием Git",
+      "worktree_invalid": "Целевое worktree недопустимо",
+      "git_unavailable": "Исполняемый файл git не найден",
+      "path_unsafe": "Путь к файлу небезопасен (отклонено)",
+      "file_not_found": "Файл не существует",
+      "not_modified": "Файл не имеет незафиксированных изменений",
+      "untracked_file": "Невозможно восстановить неотслеживаемый файл (используйте git rm --cached или git add)",
+      "git_error": "Ошибка выполнения Git ({stderr})"
+    }
   }
 }
 ```
@@ -337,15 +348,19 @@ const showRestoreButton = computed(() => {
 | `dashboard/src/composables/parseSpcodeFileRestore.ts` | 新增 | +60 | 解析响应;导出 `SpcodeFileRestoreSnapshot`、`RestoreReason` 联合类型、`classifyReason` |
 | `dashboard/src/composables/useSpcodeFileRestore.ts` | 新增 | +120 | POST 包装;`restore({file, worktree?, umo})` → `RestoreResult`;AbortController 防双击;classifyError |
 | `dashboard/tests/parseSpcodeFileRestore.test.mjs` | 新增 | +80 | 单元测试:解析 success / failure envelope、reason 分类、缺 `data` 抛错 |
-| `dashboard/src/components/chat/message_list_comps/GitDiffFileItem.vue` | 修改 | +40 / -10 | 重构 row 为 `<div role="button">` + 键盘事件;新增 ↩ `<button>` + `@click.stop`;接收 `onRestore` / `isRestoring` props |
+| `dashboard/src/components/chat/message_list_comps/GitDiffFileItem.vue` | 修改 | +55 / -12 | 重构 row 为 `<div role="button">` + 键盘事件(Enter/Space 触发 toggle);新增 ↩ `<button>` + `@click.stop`;新增 CSS 块(.git-diff-file-restore:focus-ring/opacity/spinner ~15 行);接收 `onRestore` / `isRestoring` props |
 | `dashboard/src/components/chat/message_list_comps/GitDiffBodyContent.vue` | 修改 | +15 | 接收 `onRestore` callback,re-emit 给 `GitDiffFileItem`;增加 `onRestore` 事件 |
-| `dashboard/src/components/chat/GitDiffSidebar.vue` | 修改 | +80 | 实例化 `useSpcodeFileRestore()`;实现 `onFileRestore(path)`;v-snackbar 挂载;RESTORE_REASON_I18N_KEYS 映射;将 `onRestore` 回调下传 |
-| `dashboard/src/i18n/locales/zh-CN/features/chat.json` | 修改 | +25 | `diffSidebar.restore.*` 命名空间 |
-| `dashboard/src/i18n/locales/en-US/features/chat.json` | 修改 | +25 | `diffSidebar.restore.*` 命名空间 |
-| `dashboard/src/i18n/locales/ru-RU/features/chat.json` | 修改 | +25 | `diffSidebar.restore.*` 命名空间 |
+| `dashboard/src/components/chat/GitDiffSidebar.vue` | 修改 | +110 | 实例化 `useSpcodeFileRestore()`;实现 `onFileRestore(path)`;v-snackbar 挂载;**本地内联 `<v-dialog persistent>` 确认框**;RESTORE_REASON_I18N_KEYS 映射;将 `onRestore` 回调下传 |
+| `dashboard/src/i18n/locales/zh-CN/features/chat.json` | 修改 | +28 | `diffSidebar.restore.*` 命名空间(§7.1) |
+| `dashboard/src/i18n/locales/en-US/features/chat.json` | 修改 | +28 | `diffSidebar.restore.*` 命名空间(§7.2) |
+| `dashboard/src/i18n/locales/ru-RU/features/chat.json` | 修改 | +28 | `diffSidebar.restore.*` 命名空间(§7.3) |
 | `docs/superpowers/specs/2026-06-22-chatui-git-diff-file-restore-design.md` | 新增 | — | 本文档 |
 
-**总计**:新增 ~260 行,修改 ~170 行(净增),3 个 i18n 文件各 +25 行。
+**总计**:新增 ~260 行,修改 ~195 行(净增),3 个 i18n 文件各 +28 行。
+
+**关于 2 文件拆分(`parseSpcodeFileRestore.ts` + `useSpcodeFileRestore.ts`)的 AGENTS.md 合规说明**:
+
+`AGENTS.md` "No Unnecessary Helpers" 规则要求"3 处以上复用"或"极高复杂度"才可抽 helper。本 spec 的解析器(`parseSpcodeFileRestore.ts`)虽然只被 `useSpcodeFileRestore` 一处使用,**但**它必须被 `dashboard/tests/parseSpcodeFileRestore.test.mjs` 单独导入做单元测试(在 Node `node --test` 环境下,Vue 组件 / composable 难以 mock,而纯函数解析器零依赖可测)。**2 文件拆分与既有 `parseSpcodeGitDiff.ts` + `useSpcodeGitDiff.ts` 同构**(参见 `dashboard/src/composables/parseSpcodeGitDiff.ts` vs `useSpcodeGitDiff.ts`)。YAGNI 与代码对称性的取舍在两难之间,本 spec 选择与既有模式对齐。
 
 ---
 
@@ -405,6 +420,7 @@ test("throws on missing data field") {
 | 后端拒绝(`path_unsafe` 等) | 低 | toast 明确显示 reason;不修改文件;不刷新 |
 | 成功后用户的展开内容被清空 | 低 | Q2=B 决策已接受;`composable.refresh` 触发后该行从列表消失(连同展开内容) |
 | i18n 漏译 → UI 显示 key 字面值 | 低 | §7 强制 3 语言同步;CI(未来)可加 vue-i18n 校验 |
+| `untracked_file` 的 stderr(`git status --porcelain` 输出)被静默不显示 | 低 | UX 取舍:`not_modified` / `untracked_file` 是"不危险但失败",用 `warning` 颜色(非 `error`);它们各自的 reason 文案已能定位问题(`文件无未暂存改动` / `未跟踪的文件无法恢复`);如果未来需要,在 toast 加一个 "details" 链接展开 stderr 是 v2 范畴(见 §13 开放问题) |
 | AbortController 取消后用户切回看到 stale spinner | 低 | 取消后立即清 `restoringFile`;`isMounted` 检查在 `useSpcodeFileRestore` 入口 |
 | row 重构为 div + role=button 破坏现有可访问性 | 低 | 显式加 `tabindex=0` + `@keydown.enter/space`;与 `GitDiffSidebar.vue` 既有模式一致 |
 | 既有 `GitDiffFileItem` 单元快照测试(Vitest 之类)被破坏 | 低 | dashboard 无 Vue 组件测试;但若未来加测试,本次修改需补 |
@@ -431,6 +447,7 @@ test("throws on missing data field") {
 - 不修改 `_conf_schema.json` / `metadata.yaml`
 - `pnpm dev` / `pnpm typecheck` / `pnpm lint` 必须通过
 - 测试: `node --test tests/parseSpcodeFileRestore.test.mjs` 必须全 PASS
+- **关于 `pnpm test` 脚本的缺位**:`dashboard/package.json:6-17` **没有** `test` 脚本(只有 `dev` / `build` / `typecheck` / `lint`)。本 spec 单元测试通过 `node --test` 直接调用(项目已有 5 个 `tests/*.test.mjs` 走同一模式,见 `tests/imeInput.test.mjs` 等)。**可选 PR**:在 `package.json` 新增 `"test:unit": "node --test tests/*.test.mjs"`,与 `typecheck` / `lint` 对齐。本 spec 不强制要求(避免范围蔓延) |
 
 ---
 
@@ -438,4 +455,4 @@ test("throws on missing data field") {
 
 - 是否需要在 refresh 之前加一个"乐观更新"阶段(立即从列表移除,失败时再回滚)?**不** — 失败概率低,操作可逆(git reflog),增加复杂度不划算
 - 是否需要在 v-snackbar 里加一个"撤销"按钮(短期内回退 `git checkout`)?**不** — v1 范围之外,需要后端先支持 inverse 端点
-- 是否要把 toast 文案 i18n 中的 `path` 截断(避免长路径撑爆 viewport)?**部分** — Vuetify snackbar 默认不换行,长 path 会被截断,接受现状(用户可从 confirm 对话框看完整 path)
+- 是否要把 toast 文案 i18n 中的 `path` 截断(避免长路径撑爆 viewport)?**不截断** — Vuetify snackbar 默认行为是文本溢出截断(用户视觉上看到 "已恢复 F:\github\Astr..."),但**完整路径已在 confirm 对话框显示过**(`restore.confirmMessage({path})`),用户点确认前已看过完整路径,toast 截断不损失关键信息;真要查看可用 `useSpcodeFileBrowser` 跳到该文件验证。**不**引入截断函数(避免增加 ~10 行 helper 又一个 YAGNI 风险点)
