@@ -156,6 +156,12 @@ function dismiss() {
   visible.value = false;
 }
 
+function reloadWithCacheBuster() {
+  const url = new URL(window.location.href);
+  url.searchParams.set('_r', Date.now().toString());
+  window.location.replace(url.toString());
+}
+
 function waitForRestart() {
   clearRestartTimer();
   let attempts = 0;
@@ -169,7 +175,7 @@ function waitForRestart() {
       ) {
         clearRestartTimer();
         sessionStorage.removeItem(UPGRADE_RECOVERY_TOKEN_KEY);
-        window.location.reload();
+        reloadWithCacheBuster();
       }
     } catch (_error) {
       // The backend may be temporarily unavailable during restart.

@@ -1,4 +1,4 @@
-name: release
+name: Build and Deploy AstrBot Docs
 
 on:
   push:
