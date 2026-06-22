@@ -30,26 +30,41 @@
               @open-diff-sidebar="emit('open-diff-sidebar')"
             />
             <!--
-              Pending inline file-comments chip (Chunk 4). Hidden on
-              mobile (< md breakpoint) per spec §4.6 to keep the input
-              row uncluttered; the chip's only purpose is informational.
-              The count comes from the parent so the chip auto-updates
-              as the user adds/edits/deletes comments in the file
-              preview.
+              Pending inline file-comments chip. Hidden on mobile
+              (< md breakpoint) to keep the input row uncluttered.
+              The main button opens the preview dialog; the inline
+              ✕ button (visible only on chip hover) clears all
+              comments via the confirmDialog plugin.
             -->
-            <v-chip
-              v-if="commentCount > 0"
-              size="small"
-              variant="tonal"
-              color="warning"
+            <div
+              v-if="fileComments.totalCount.value > 0"
               class="comment-count-chip d-none d-md-flex"
+              :class="{ 'comment-count-chip--hovered': chipHovered }"
+              @mouseenter="chipHovered = true"
+              @mouseleave="chipHovered = false"
             >
-              <v-icon size="14" start>mdi-comment-text-outline</v-icon>
-              {{ tm("spcodeProjectLoad.fileBrowser.comment.countLabel", { count: commentCount }) }}
-              <v-tooltip activator="parent" location="top">
-                {{ tm("spcodeProjectLoad.fileBrowser.comment.countTooltip") }}
-              </v-tooltip>
-            </v-chip>
+              <button
+                type="button"
+                class="comment-count-chip__main"
+                :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.previewDialog.openWithCount', { count: fileComments.totalCount.value })"
+                @click="openPreview"
+              >
+                <v-icon size="14" start>mdi-comment-text-outline</v-icon>
+                {{ tm("spcodeProjectLoad.fileBrowser.comment.countLabel", { count: fileComments.totalCount.value }) }}
+                <v-tooltip activator="parent" location="top">
+                  {{ tm("spcodeProjectLoad.fileBrowser.comment.countTooltip") }}
+                </v-tooltip>
+              </button>
+              <button
+                v-if="chipHovered"
+                type="button"
+                class="comment-count-chip__clear"
+                :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.chip.clearAll')"
+                @click.stop="onRequestClearAll"
+              >
+                <v-icon size="14">mdi-close</v-icon>
+              </button>
+            </div>
           </div>
         </div>
     <div
@@ -377,6 +392,13 @@
       :wake-prefixes="wakePrefixes"
       @submit="handleProjectLoadSubmit"
     />
+
+    <CommentsPreviewDialog
+      v-model="previewDialogOpen"
+      :groups="previewGroups"
+      @delete-comment="onDeleteComment"
+      @request-clear-all="onRequestClearAll"
+    />
   </div>
 </template>
 
@@ -405,7 +427,10 @@ import ProjectLoadDialog from "./ProjectLoadDialog.vue";
 import SpcodeProjectIndicator from "./SpcodeProjectIndicator.vue";
 import SpcodePlanModeChip from "./SpcodePlanModeChip.vue";
 import GitDiffChip from "./GitDiffChip.vue";
+import CommentsPreviewDialog from "./CommentsPreviewDialog.vue";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
+import { useFileComments } from "@/composables/useFileComments";
+import { useConfirmDialog } from "@/utils/confirmDialog";
 import { useSpcodeProjectLoad } from "@/composables/useSpcodeProjectLoad";
 import { useSpcodePlanMode } from "@/composables/useSpcodePlanMode";
 import { useSpcodePlanModeLoad } from "@/composables/useSpcodePlanModeLoad";
@@ -439,9 +464,6 @@ interface Props {
   configId?: string | null;
   replyTo?: ReplyInfo | null;
   sendShortcut?: "enter" | "shift_enter";
-  /** Inline file comments pending in the current chat session.
-   *  Drives the "N comments" chip in the status row. */
-  commentCount?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -451,7 +473,6 @@ const props = withDefaults(defineProps<Props>(), {
   stagedFiles: () => [],
   replyTo: null,
   sendShortcut: "shift_enter",
-  commentCount: 0,
 });
 
 const emit = defineEmits<{
@@ -487,6 +508,56 @@ const isDragging = ref(false);
 const isComposing = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
 let dragLeaveTimeout: number | null = null;
+
+// Inline comment-chip state. ChatInput owns the chip interaction
+// surface; it reads the comment store directly (same singleton that
+// FileBrowserFilePreview writes to) so it does not need a prop.
+const fileComments = useFileComments();
+const previewDialogOpen = ref(false);
+const chipHovered = ref(false);
+
+/** Auto-close preview dialog when the last comment is cleared, e.g.
+ *  after clearAll() or a session reset. Avoids a stale empty state
+ *  inside an open dialog. */
+watch(
+  () => fileComments.totalCount.value,
+  (n) => {
+    if (n === 0) previewDialogOpen.value = false;
+  },
+);
+
+const previewGroups = computed(() => fileComments.commentsByFile());
+
+function openPreview(): void {
+  previewDialogOpen.value = true;
+  chipHovered.value = false;
+}
+
+function onDeleteComment(id: string): void {
+  fileComments.deleteComment(id);
+}
+
+const confirmDialog = useConfirmDialog();
+async function onRequestClearAll(): Promise<void> {
+  const count = fileComments.totalCount.value;
+  if (!confirmDialog) {
+    // Plugin not registered; fall back to immediate delete.
+    fileComments.clearAll();
+    return;
+  }
+  const ok = await confirmDialog({
+    title: tm(
+      "spcodeProjectLoad.fileBrowser.comment.confirmClear.title",
+    ),
+    message: tm(
+      "spcodeProjectLoad.fileBrowser.comment.confirmClear.message",
+      { count },
+    ),
+  });
+  if (ok) {
+    fileComments.clearAll();
+  }
+}
 
 // 命令提示相关状态
 const allCommands = ref<CommandItem[]>([]);
@@ -1657,5 +1728,57 @@ defineExpose({
     width: 58px;
     flex-basis: 58px;
   }
+}
+
+/* Inline comments chip. Self-contained pill that mirrors the
+   Vuetify "tonal warning" style we replaced. */
+.comment-count-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  background: rgba(var(--v-theme-warning), 0.16);
+  color: rgb(var(--v-theme-warning));
+  font-size: 12px;
+  line-height: 1;
+}
+.comment-count-chip__main {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.comment-count-chip__main:hover,
+.comment-count-chip__main:focus-visible {
+  filter: brightness(1.1);
+}
+.comment-count-chip__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(var(--v-theme-error), 0.85);
+  color: rgb(var(--v-theme-on-error));
+  border: 0;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.12s, transform 0.12s;
+}
+.comment-count-chip__clear:hover {
+  opacity: 1;
+  transform: scale(1.08);
 }
 </style>
