@@ -1,5 +1,6 @@
 import os
 import threading
+from typing import TYPE_CHECKING
 
 from astrbot.core.config import AstrBotConfig
 from astrbot.core.config.default import DB_PATH
@@ -30,6 +31,30 @@ DEMO_MODE = os.getenv("DEMO_MODE", "False").strip().lower() in ("true", "1", "t"
 
 _bootstrap_lock = threading.Lock()
 _initialized = False
+
+if TYPE_CHECKING:
+    import logging
+
+    astrbot_config: AstrBotConfig
+    t2i_base_url: str
+    html_renderer: HtmlRenderer
+    logger: logging.Logger
+    db_helper: SQLiteDatabase
+    sp: SharedPreferences
+    file_token_service: FileTokenService
+    pip_installer: PipInstaller
+
+# PEP 562 module-level __getattr__ and __dir__ for lazy loading of global instances
+_lazy_attrs = {
+    "astrbot_config",
+    "t2i_base_url",
+    "html_renderer",
+    "logger",
+    "db_helper",
+    "sp",
+    "file_token_service",
+    "pip_installer",
+}
 
 
 def _bootstrap():
@@ -79,19 +104,6 @@ def _bootstrap():
         )
 
         _initialized = True
-
-
-# PEP 562 module-level __getattr__ and __dir__ for lazy loading of global instances
-_lazy_attrs = {
-    "astrbot_config",
-    "t2i_base_url",
-    "html_renderer",
-    "logger",
-    "db_helper",
-    "sp",
-    "file_token_service",
-    "pip_installer",
-}
 
 
 def __getattr__(name: str):
