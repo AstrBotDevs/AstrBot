@@ -1,10 +1,19 @@
 <!-- Author: elecvoid243, 2026-06-20
      Spec: docs/superpowers/specs/2026-06-20-git-diff-sidebar-file-browser-design.md §4.5 -->
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from "vue";
+import { computed, ref, onMounted, watch, inject } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { ensureShikiLanguages, renderShikiCode, escapeHtml } from "@/utils/shiki";
 import type { FileBrowserFetchState } from "@/composables/useSpcodeFileBrowser";
+import { useDisplay } from "vuetify";
+import {
+  FILE_COMMENTS_KEY,
+  extractLineContext,
+  useFileComments,
+  type LineContext,
+} from "@/composables/useFileComments";
+import FileBrowserCodeView from "./FileBrowserCodeView.vue";
+import FileCommentEditor from "./FileCommentEditor.vue";
 
 const props = defineProps<{
   state: FileBrowserFetchState;
@@ -168,10 +177,121 @@ function localizedReason(reason: string): string {
   }
   return tm("spcodeProjectLoad.fileBrowser.error.unknown", { reason });
 }
+
+// --- inline comments (Chunk 3) ---
+
+// Use inject's factory-default form (3-arg overload) so the return type
+// is narrowed to T (not T | undefined) — the explicit `if (!x) throw`
+// pattern loses narrowing inside nested function callbacks (watch
+// handlers, etc.). The factory is typed to return T (via the explicit
+// annotation) but actually never returns — the throw is the whole body.
+const _fileCommentsMissing = (): ReturnType<typeof useFileComments> => {
+  throw new Error(
+    "FileBrowserFilePreview: FILE_COMMENTS_KEY not provided. " +
+      "FileBrowserFilePreview must be rendered inside StandaloneChat.",
+  );
+};
+const fileComments = inject(FILE_COMMENTS_KEY, _fileCommentsMissing, true);
+
+const activeEditLine = ref<number | null>(null);
+const activeEditCommentId = ref<string | null>(null);
+const editorInitialText = ref<string>("");
+const editorContext = ref<LineContext | null>(null);
+const snackbar = ref<{ visible: boolean; text: string }>({
+  visible: false,
+  text: "",
+});
+
+const { width } = useDisplay();
+const isMobile = computed<boolean>(() => width.value < 760);
+
+function currentFilePath(): string | null {
+  return props.state.kind === "file" ? props.state.snapshot.meta.path : null;
+}
+function currentFileContent(): string | null {
+  return props.state.kind === "file" ? props.state.snapshot.content : null;
+}
+
+/** INVARIANT: this watch is the ONLY point that writes to
+ *  fileComments.contentCache. Both `onRequestAdd` (via extractLineContext
+ *  on state.snapshot.content) and `addComment` (via contentCache) read
+ *  the same value, so they MUST stay in sync — a stale preview would
+ *  show context that doesn't match what the comment will actually store. */
+watch(
+  () => currentFileContent(),
+  (content) => {
+    const path = currentFilePath();
+    if (path && content !== null) {
+      fileComments.registerFileContent(path, content);
+    }
+  },
+  { immediate: true },
+);
+
+function onRequestAdd(line: number): void {
+  const path = currentFilePath();
+  const content = currentFileContent();
+  if (!path || content === null) return;
+  activeEditLine.value = line;
+  activeEditCommentId.value = null;
+  editorInitialText.value = "";
+  editorContext.value = extractLineContext(content, line);
+}
+
+function onRequestEdit(commentId: string): void {
+  const existing = fileComments.findCommentById(commentId);
+  if (!existing) return;
+  activeEditLine.value = existing.line;
+  activeEditCommentId.value = existing.id;
+  editorInitialText.value = existing.text;
+  editorContext.value = {
+    lineContent: existing.lineContent,
+    contextBefore: existing.contextBefore,
+    contextAfter: existing.contextAfter,
+  };
+}
+
+function onSaveComment(payload: {
+  text: string;
+  commentId: string | null;
+  line: number;
+}): void {
+  if (payload.commentId) {
+    fileComments.updateComment(payload.commentId, payload.text);
+    closeEditor();
+    return;
+  }
+  const path = currentFilePath();
+  if (!path) return;
+  const created = fileComments.addComment({
+    filePath: path,
+    line: payload.line,
+    text: payload.text,
+  });
+  if (created === null) {
+    snackbar.value = {
+      visible: true,
+      text: tm("spcodeProjectLoad.fileBrowser.comment.saveError"),
+    };
+    return;
+  }
+  closeEditor();
+}
+
+function closeEditor(): void {
+  activeEditLine.value = null;
+  activeEditCommentId.value = null;
+  editorContext.value = null;
+}
+
+function onDeleteComment(commentId: string): void {
+  fileComments.deleteComment(commentId);
+  closeEditor();
+}
 </script>
 
 <template>
-  <div class="file-browser-preview">
+  <div class="file-browser-preview" :class="{ 'is-mobile': isMobile }">
     <!-- 加载中 -->
     <div v-if="state.kind === 'idle' || state.kind === 'loading'" class="preview-center">
       <v-progress-circular indeterminate color="primary" :size="32" />
@@ -250,9 +370,40 @@ function localizedReason(reason: string): string {
         <span>{{ tm("spcodeProjectLoad.fileBrowser.preview.tooLarge", { size: formatBytes(state.snapshot.meta.size) }) }}</span>
       </div>
 
-      <!-- 文本内容(Shiki 高亮) -->
-      <pre v-else class="preview-file-content" v-html="highlightedHtml" />
+      <!-- 文本内容(Shiki 高亮) + 行内评论 gutter/编辑器 -->
+      <FileBrowserCodeView
+        v-else
+        :highlighted-html="highlightedHtml"
+        :file-path="state.snapshot.meta.path"
+        :comments="fileComments.commentsForFile(state.snapshot.meta.path)"
+        :active-edit-line="activeEditLine"
+        :active-edit-comment-id="activeEditCommentId"
+        :is-dark="isDark"
+        @request-add="onRequestAdd"
+        @request-edit="onRequestEdit"
+      />
+      <FileCommentEditor
+        v-if="activeEditLine !== null"
+        :line="activeEditLine"
+        :comment-id="activeEditCommentId"
+        :initial-text="editorInitialText"
+        :line-content="editorContext?.lineContent ?? null"
+        :context-before="editorContext?.contextBefore ?? null"
+        :context-after="editorContext?.contextAfter ?? null"
+        :file-path="state.snapshot.meta.path"
+        @save="onSaveComment"
+        @cancel="closeEditor"
+        @delete="onDeleteComment"
+      />
     </div>
+    <v-snackbar
+      v-model="snackbar.visible"
+      :timeout="4000"
+      color="error"
+      location="bottom"
+    >
+      {{ snackbar.text }}
+    </v-snackbar>
   </div>
 </template>
 
