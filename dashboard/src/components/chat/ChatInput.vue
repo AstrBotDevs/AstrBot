@@ -29,6 +29,27 @@
               v-if="spcodeStatus.status.value.loaded"
               @open-diff-sidebar="emit('open-diff-sidebar')"
             />
+            <!--
+              Pending inline file-comments chip (Chunk 4). Hidden on
+              mobile (< md breakpoint) per spec §4.6 to keep the input
+              row uncluttered; the chip's only purpose is informational.
+              The count comes from the parent so the chip auto-updates
+              as the user adds/edits/deletes comments in the file
+              preview.
+            -->
+            <v-chip
+              v-if="commentCount > 0"
+              size="small"
+              variant="tonal"
+              color="warning"
+              class="comment-count-chip d-none d-md-flex"
+            >
+              <v-icon size="14" start>mdi-comment-text-outline</v-icon>
+              {{ tm("spcodeProjectLoad.fileBrowser.comment.countLabel", { count: commentCount }) }}
+              <v-tooltip activator="parent" location="top">
+                {{ tm("spcodeProjectLoad.fileBrowser.comment.countTooltip") }}
+              </v-tooltip>
+            </v-chip>
           </div>
         </div>
     <div
@@ -418,6 +439,9 @@ interface Props {
   configId?: string | null;
   replyTo?: ReplyInfo | null;
   sendShortcut?: "enter" | "shift_enter";
+  /** Inline file comments pending in the current chat session.
+   *  Drives the "N comments" chip in the status row. */
+  commentCount?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -427,6 +451,7 @@ const props = withDefaults(defineProps<Props>(), {
   stagedFiles: () => [],
   replyTo: null,
   sendShortcut: "shift_enter",
+  commentCount: 0,
 });
 
 const emit = defineEmits<{
