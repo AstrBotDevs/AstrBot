@@ -151,7 +151,6 @@
         :session-id="currSessionId || null"
         :current-session="currentSession"
         :config-id="configId || 'default'"
-        <!-- comment-count prop removed: ChatInput now reads useFileComments() directly -->
         send-shortcut="enter"
         @send="sendCurrentMessage"
         @stop="stopCurrentSession"

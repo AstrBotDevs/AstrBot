@@ -256,11 +256,31 @@ const isProjectLoaded = computed(
 const isScopeLoading = computed(() => pendingScope.value !== null);
 
 const isFetching = ref(false);
+// Template ref to the <FileBrowserView> child so the header refresh
+// button can reach its exposed refresh() method when the user is in
+// files view. The component is rendered behind v-if="viewMode==='files'",
+// so the ref is null while diff view is active — onManualRefresh
+// handles the null case explicitly.
+// Inline interface (instead of InstanceType<typeof FileBrowserView>)
+// because <script setup> components don't auto-export their exposed
+// methods to the public type — defineExpose types are local to the
+// file that calls it. Mirroring the shape here keeps the consumer
+// honest about what it can call.
+const fileBrowserRef = ref<{ refresh: () => Promise<void> } | null>(null);
 async function onManualRefresh(): Promise<void> {
   if (isFetching.value) return;
   isFetching.value = true;
   try {
-    await composable.refresh();
+    // View-mode-aware dispatch (option B): in files view the button
+    // reloads the workspace (directory listing + file preview); in
+    // diff view it reloads the git diff data. The previous behavior
+    // (always reload git diff) was a UX trap in files view — the
+    // user could see the spinner but no visible data would change.
+    if (viewMode.value === "files") {
+      await fileBrowserRef.value?.refresh();
+    } else {
+      await composable.refresh();
+    }
   } finally {
     isFetching.value = false;
   }
@@ -272,21 +292,29 @@ onMounted(() => {
   void worktreesComposable.refresh();
 });
 
+// Spec: polling starts ONLY when the sidebar is open AND the user is
+// viewing the Git Diff tab. The Files ("workspace") tab never polls —
+// there's no diff data to refresh, and pulling it would be wasted
+// network/CPU. We track both inputs in a single watcher so the
+// polling lifecycle has one source of truth.
 watch(
-  () => props.modelValue,
-  async (open) => {
-    if (open) {
+  [() => props.modelValue, viewMode],
+  async ([open, mode]) => {
+    const shouldPoll = open && mode === "diff";
+    if (shouldPoll) {
       isFetching.value = true;
       try {
         await composable.refresh();
       } finally {
         isFetching.value = false;
       }
-      // Re-check modelValue after await: user may have closed the sidebar
-      // during the refresh, in which case a sibling watcher already called
-      // stopPolling() — calling startPolling() here would re-arm the timer
-      // and leak polling after close.
-      if (props.modelValue) composable.startPolling(10_000);
+      // Re-check conditions after await: the user may have switched
+      // tabs or closed the sidebar during the refresh. Starting
+      // polling here without re-checking would leak a timer after
+      // a tab switch (e.g. diff → files) or after the sidebar closes.
+      if (props.modelValue && viewMode.value === "diff") {
+        composable.startPolling(10_000);
+      }
     } else {
       composable.stopPolling();
     }
@@ -512,17 +540,33 @@ const currentRoot = computed<string | null>(() => {
           </v-tooltip>
         </div>
         <div class="git-diff-sidebar-actions">
-          <v-btn
-            icon="mdi-refresh"
-            size="small"
-            variant="text"
-            :loading="isFetching"
-            @click="onManualRefresh"
-          >
-            <v-tooltip activator="parent" location="bottom" :open-delay="200">
-              {{ tm("spcodeProjectLoad.diffSidebar.refreshTooltip") }}
-            </v-tooltip>
-          </v-btn>
+          <!-- Tooltip wraps the button (NOT the other way around).
+               v-tooltip inside v-btn with activator="parent" is a
+               known Vuetify-3 anti-pattern that interferes with the
+               button's internal icon slot — the icon then fails to
+               render and only the tonal background "circle" remains
+               visible. Using #activator + v-bind="tipProps" is the
+               standard pattern across this codebase (see
+               GitDiffChip.vue). mdi-restart reads as a more elegant
+               single-arc refresh glyph than mdi-refresh's chunky
+               stem; semantics ("do it again from scratch") are
+               appropriate for both view modes. -->
+          <v-tooltip location="bottom" :open-delay="200">
+            <template #activator="{ props: tipProps }">
+              <v-btn
+                v-bind="tipProps"
+                icon
+                size="small"
+                variant="tonal"
+                color="primary"
+                :loading="isFetching"
+                @click="onManualRefresh"
+              >
+                <v-icon size="18">mdi-restart</v-icon>
+              </v-btn>
+            </template>
+            {{ tm("spcodeProjectLoad.diffSidebar.refreshTooltip") }}
+          </v-tooltip>
           <v-btn
             icon="mdi-close"
             size="small"
@@ -672,6 +716,7 @@ const currentRoot = computed<string | null>(() => {
       <div class="git-diff-sidebar-body">
         <FileBrowserView
                   v-if="viewMode === 'files'"
+                  ref="fileBrowserRef"
                   :current-path="fileBrowserCurrentPath"
                   :preview-path="fileBrowserPreviewPath"
                   :is-dark="!!isDark"

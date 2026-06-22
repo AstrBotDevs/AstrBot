@@ -88,6 +88,23 @@ function onPreviewTargetNavigate(resolvedTarget: string): void {
   emit("navigate", { dirPath: parentOf(resolvedTarget), previewPath: resolvedTarget });
 }
 
+/** Manually re-fetch the workspace contents. Exposed to the parent
+ *  sidebar so its header refresh button can mean "reload the
+ *  workspace" in files view (mirroring how the same button means
+ *  "reload git diff" in diff view). Always refreshes the directory
+ *  listing; refreshes the file preview only if a file is currently
+ *  being previewed — calling previewComposable.refresh() with no
+ *  preview path would force it into the path_not_found error state. */
+async function refresh(): Promise<void> {
+  const tasks: Promise<void>[] = [dirComposable.refresh()];
+  if (props.previewPath) {
+    tasks.push(previewComposable.refresh());
+  }
+  await Promise.all(tasks);
+}
+
+defineExpose({ refresh });
+
 // ── Draggable divider (left/right pane resize) ──────────────────
 // leftPanePercent is the share of horizontal space the entry list
 // takes; the preview takes (100 - leftPanePercent). Mirrors the

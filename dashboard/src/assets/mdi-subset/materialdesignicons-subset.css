@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 307 icons */
+/* Auto-generated MDI subset – 309 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -304,6 +304,10 @@
   content: "\F0817";
 }
 
+.mdi-comment-text-outline::before {
+  content: "\F0189";
+}
+
 .mdi-compare-vertical::before {
   content: "\F1493";
 }
@@ -382,6 +386,10 @@
 
 .mdi-delete-outline::before {
   content: "\F09E7";
+}
+
+.mdi-delete-sweep::before {
+  content: "\F05E9";
 }
 
 .mdi-delete-sweep-outline::before {

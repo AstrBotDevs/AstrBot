@@ -1,13 +1,12 @@
 <!-- Author: elecvoid243, 2026-06-20
      Spec: docs/superpowers/specs/2026-06-20-git-diff-sidebar-file-browser-design.md §4.5 -->
 <script setup lang="ts">
-import { computed, ref, onMounted, watch, inject } from "vue";
+import { computed, ref, onMounted, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { ensureShikiLanguages, renderShikiCode, escapeHtml } from "@/utils/shiki";
 import type { FileBrowserFetchState } from "@/composables/useSpcodeFileBrowser";
 import { useDisplay } from "vuetify";
 import {
-  FILE_COMMENTS_KEY,
   extractLineContext,
   useFileComments,
   type LineContext,
@@ -179,19 +178,10 @@ function localizedReason(reason: string): string {
 }
 
 // --- inline comments (Chunk 3) ---
-
-// Use inject's factory-default form (3-arg overload) so the return type
-// is narrowed to T (not T | undefined) — the explicit `if (!x) throw`
-// pattern loses narrowing inside nested function callbacks (watch
-// handlers, etc.). The factory is typed to return T (via the explicit
-// annotation) but actually never returns — the throw is the whole body.
-const _fileCommentsMissing = (): ReturnType<typeof useFileComments> => {
-  throw new Error(
-    "FileBrowserFilePreview: FILE_COMMENTS_KEY not provided. " +
-      "FileBrowserFilePreview must be rendered inside StandaloneChat.",
-  );
-};
-const fileComments = inject(FILE_COMMENTS_KEY, _fileCommentsMissing, true);
+// The file-comments store is a module-level singleton (see
+// useFileComments.ts header for why provide/inject was abandoned).
+// Every component that calls useFileComments() gets the same instance.
+const fileComments = useFileComments();
 
 const activeEditLine = ref<number | null>(null);
 const activeEditCommentId = ref<string | null>(null);
