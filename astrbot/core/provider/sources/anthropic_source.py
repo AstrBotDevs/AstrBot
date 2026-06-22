@@ -303,6 +303,52 @@ class ProviderAnthropic(Provider):
             else:
                 new_messages.append(message)
 
+        # --- Orphaned tool_result sanitizer ---
+        # After context truncation, tool_result blocks may reference tool_use
+        # IDs that no longer exist. The Anthropic API rejects these with 400.
+        valid_tool_use_ids: set[str] = set()
+        for msg in new_messages:
+            if msg.get("role") == "assistant" and isinstance(msg.get("content"), list):
+                for block in msg["content"]:
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        valid_tool_use_ids.add(block.get("id", ""))
+
+        sanitized: list[dict] = []
+        for msg in new_messages:
+            if msg.get("role") == "user" and isinstance(msg.get("content"), list):
+                cleaned_content = [
+                    block for block in msg["content"]
+                    if not (
+                        isinstance(block, dict)
+                        and block.get("type") == "tool_result"
+                        and block.get("tool_use_id") not in valid_tool_use_ids
+                    )
+                ]
+                if cleaned_content:
+                    sanitized.append({**msg, "content": cleaned_content})
+            else:
+                sanitized.append(msg)
+        new_messages = sanitized
+
+        # --- Merge consecutive same-role messages ---
+        # Stripping orphaned tool_results may leave adjacent messages with the
+        # same role, which violates Anthropic's strict alternation requirement.
+        merged: list[dict] = []
+        for msg in new_messages:
+            if merged and merged[-1].get("role") == msg.get("role"):
+                prev = merged[-1]
+                prev_content = prev.get("content", [])
+                if isinstance(prev_content, str):
+                    prev_content = [{"type": "text", "text": prev_content}]
+                    prev["content"] = prev_content
+                cur_content = msg.get("content", [])
+                if isinstance(cur_content, str):
+                    cur_content = [{"type": "text", "text": cur_content}]
+                prev_content.extend(cur_content)
+            else:
+                merged.append(msg)
+        new_messages = merged
+
         return system_prompt, new_messages
 
     def _extract_usage(self, usage: Usage | None) -> TokenUsage:
