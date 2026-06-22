@@ -337,14 +337,19 @@ class ProviderAnthropic(Provider):
         for msg in new_messages:
             if merged and merged[-1].get("role") == msg.get("role"):
                 prev = merged[-1]
-                prev_content = prev.get("content", [])
+                prev_content = prev.get("content") or []
                 if isinstance(prev_content, str):
                     prev_content = [{"type": "text", "text": prev_content}]
-                    prev["content"] = prev_content
-                cur_content = msg.get("content", [])
+                else:
+                    prev_content = list(prev_content)
+
+                cur_content = msg.get("content") or []
                 if isinstance(cur_content, str):
                     cur_content = [{"type": "text", "text": cur_content}]
-                prev_content.extend(cur_content)
+                else:
+                    cur_content = list(cur_content)
+
+                merged[-1] = {**prev, "content": prev_content + cur_content}
             else:
                 merged.append(msg)
         new_messages = merged
