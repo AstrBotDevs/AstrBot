@@ -366,6 +366,34 @@
           "git_error": "Ошибка выполнения Git ({reason})",
           "generic": "Не удалось получить изменения ({reason})"
         }
+      },
+      "restore": {
+        "button": "Восстановить",
+        "buttonAria": "Восстановить файл {path}",
+        "confirmTitle": "Восстановить файл?",
+        "confirmMessage": "Это отменит все незафиксированные изменения в \"{path}\". Действие необратимо.",
+        "confirmAction": "Восстановить",
+        "confirmCancel": "Отмена",
+        "success": "Восстановлено: {path}",
+        "error": {
+          "reason": {
+            "network": "Ошибка сети",
+            "unknown": "Не удалось восстановить ({reason})",
+            "invalid_body": "Некорректный запрос",
+            "missing_file": "Файл не указан",
+            "feature_disabled": "Функция отключена (проверьте spcode config agentsmd_enabled / codegraph_enabled)",
+            "no_project_loaded": "Проект не загружен",
+            "directory_missing": "Загруженный каталог больше не существует",
+            "not_a_git_repo": "Текущий каталог не является репозиторием Git",
+            "worktree_invalid": "Целевое worktree недопустимо",
+            "git_unavailable": "Исполняемый файл git не найден",
+            "path_unsafe": "Путь к файлу небезопасен (отклонено)",
+            "file_not_found": "Файл не существует",
+            "not_modified": "Файл не имеет незафиксированных изменений",
+            "untracked_file": "Невозможно восстановить неотслеживаемый файл (используйте git rm --cached или git add)",
+            "git_error": "Ошибка выполнения Git ({stderr})"
+          }
+        }
       }
     },
     "planModeChip": {
