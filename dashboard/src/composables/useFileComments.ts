@@ -4,7 +4,6 @@
 // comments feature. See spec §1, §2 (decisions), §4.1, §5 for context.
 
 import { reactive, computed } from "vue";
-import type { InjectionKey } from "vue";
 
 /**
  * Single file comment, anchored to a line at comment-creation time.
@@ -72,8 +71,21 @@ function newId(): string {
  * FileBrowserFilePreview's `immediate: true` watch whenever a file
  * is opened. addComment freezes the line snapshot from the cache;
  * returns null if the cache is empty (caller decides UX).
+ *
+ * Module-level singleton: every component that calls `useFileComments()`
+ * gets the SAME store instance. This is required because the file
+ * browser (`FileBrowserFilePreview`, rendered inside `Chat.vue`) and
+ * the chat input's `sendCurrentMessage` (also in `Chat.vue`) live in
+ * the SAME component tree, but the legacy plan assumed they were both
+ * inside `StandaloneChat.vue` — which is only rendered on the config
+ * page, NOT the main chat. Provide/inject via a parent does not work
+ * across sibling subtrees (e.g., `Chat.vue` vs `StandaloneChat.vue`).
+ * A module-level singleton works in both contexts without adding a
+ * Pinia dependency.
  */
-export function useFileComments() {
+let _instance: ReturnType<typeof createFileComments> | null = null;
+
+function createFileComments() {
   const comments = reactive<Record<string, FileComment[]>>({});
   const contentCache = reactive<Record<string, string>>({});
 
@@ -157,6 +169,27 @@ export function useFileComments() {
   /** Comments for a specific file in the current session. */
   function commentsForFile(filePath: string): FileComment[] {
     return comments[filePath] ?? [];
+  }
+
+  /** All comments grouped by filePath, with each group sorted by line
+   *  ASC. Groups themselves are sorted by filePath ASC for stable
+   *  rendering. Returns a fresh array each call (safe to iterate /
+   *  sort downstream). Used by CommentsPreviewDialog. */
+  function commentsByFile(): Array<{ filePath: string; comments: FileComment[] }> {
+    const entries = Object.entries(comments)
+      .filter(([, list]) => list.length > 0)
+      .map(([filePath, list]) => ({
+        filePath,
+        comments: [...list].sort((a, b) => a.line - b.line),
+      }));
+    entries.sort((a, b) => a.filePath.localeCompare(b.filePath));
+    return entries;
+  }
+
+  /** Delete every comment across all files. Idempotent. Does not
+   *  touch contentCache (content survives session switches). */
+  function clearAll(): void {
+    for (const k of Object.keys(comments)) delete comments[k];
   }
 
   /** Format all comments in the current session as a structured
@@ -251,7 +284,7 @@ export function useFileComments() {
         out.push("````");
       }
     }
-    return out.join("\n");
+  return out.join("\n");
   }
 
   return {
@@ -263,15 +296,19 @@ export function useFileComments() {
     deleteComment,
     findCommentById,
     commentsForFile,
+    commentsByFile,
+    clearAll,
     formatForLLM,
   };
 }
 
 /**
- * Stable injection key for the file-comments store. Must be exported
- * from this single file (NOT re-declared in StandaloneChat.vue or
- * FileBrowserFilePreview.vue). A Symbol literal in two files would
- * produce two different symbols and silently break inject().
+ * Returns the singleton file-comments store. The first call creates
+ * the store; subsequent calls return the same instance. See the file
+ * header for the rationale (sibling component trees can't use
+ * provide/inject).
  */
-export const FILE_COMMENTS_KEY: InjectionKey<ReturnType<typeof useFileComments>> =
-  Symbol("fileComments");
+export function useFileComments() {
+  if (!_instance) _instance = createFileComments();
+  return _instance;
+}
