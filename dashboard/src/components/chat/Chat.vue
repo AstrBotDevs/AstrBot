@@ -598,6 +598,7 @@ import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import TodoSidebar from "@/components/chat/message_list_comps/TodoSidebar.vue";
 import GitDiffSidebar from "@/components/chat/GitDiffSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
+import { useFileComments } from "@/composables/useFileComments";
 import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
 import {
   messageBlocks as buildMessageBlocks,
@@ -971,6 +972,18 @@ const {
       void spcodePlanMode.refresh(resolveCurrentUmo(currSessionId.value));
     }
   },
+});
+
+// Inline file-review comments (Chunk 4). The store is a module-level
+// singleton (see useFileComments.ts header); FileBrowserFilePreview
+// (inside GitDiffSidebar → FileBrowserView) and this ChatInput share
+// the same instance. resetForSession() drops the current session's
+// comments so they don't leak across sessions (spec §2).
+const fileComments = useFileComments();
+watch(currSessionId, (newId, oldId) => {
+  if (oldId && newId !== oldId) {
+    fileComments.resetForSession();
+  }
 });
 
 const transportMode = ref<TransportMode>(
@@ -1348,7 +1361,15 @@ async function selectSession(sessionId: string, pushRoute = true) {
 }
 
 async function sendCurrentMessage() {
-  if (!canSend.value) return;
+  // D13 guard: allow sending when draft is empty if there are staged
+  // files OR file-review comments. Otherwise return.
+  if (
+    !canSend.value &&
+    !stagedFiles.value.length &&
+    fileComments.totalCount.value === 0
+  ) {
+    return;
+  }
 
   sending.value = true;
   try {
@@ -1371,7 +1392,12 @@ async function sendCurrentMessage() {
       }
     }
 
-    const text = draft.value.trim();
+    const userText = draft.value.trim();
+    const commentText = fileComments.formatForLLM();
+    // Concatenate user text + comment block with a blank line. The
+    // bot's first message will show "[File review comments]" header
+    // even when userText is empty.
+    const text = [userText, commentText].filter(Boolean).join("\n\n");
     const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     const outgoingParts = buildOutgoingParts(text);
     const selection = inputRef.value?.getCurrentSelection();

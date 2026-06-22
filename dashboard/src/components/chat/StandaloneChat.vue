@@ -151,7 +151,7 @@
         :session-id="currSessionId || null"
         :current-session="currentSession"
         :config-id="configId || 'default'"
-        :comment-count="fileComments.totalCount.value"
+        <!-- comment-count prop removed: ChatInput now reads useFileComments() directly -->
         send-shortcut="enter"
         @send="sendCurrentMessage"
         @stop="stopCurrentSession"
@@ -181,7 +181,6 @@ import {
   nextTick,
   onBeforeUnmount,
   onMounted,
-  provide,
   reactive,
   ref,
   watch,
@@ -198,10 +197,7 @@ import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue"
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import { useMediaHandling } from "@/composables/useMediaHandling";
-import {
-  FILE_COMMENTS_KEY,
-  useFileComments,
-} from "@/composables/useFileComments";
+import { useFileComments } from "@/composables/useFileComments";
 import {
   displayParts as displayMessageParts,
   messageBlocks as buildMessageBlocks,
@@ -238,11 +234,11 @@ const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const imagePreview = reactive({ visible: false, url: "" });
 
 // Inline comment store (Chunk 4). Provided to descendants (notably
-// FileBrowserFilePreview) via FILE_COMMENTS_KEY. resetForSession() is
-// invoked from the currSessionId watcher below so comments are scoped
-// to the active chat session per spec §2.
+// FileBrowserFilePreview) all reach the same instance via the
+// module-level singleton (see useFileComments.ts header).
+// resetForSession() is invoked from the currSessionId watcher below so
+// comments are scoped to the active chat session per spec §2.
 const fileComments = useFileComments();
-provide(FILE_COMMENTS_KEY, fileComments);
 
 watch(currSessionId, (newId, oldId) => {
   if (oldId && newId !== oldId) {
