@@ -105,5 +105,6 @@ def __getattr__(name: str):
 def __dir__():
     """make sure dir() and IDE completion can discover lazy-loaded attributes"""
     # auto-collect all public symbols in the module __dict__ that do not start with an underscore
-    public_api = {k for k in globals() if not k.startswith("_")}
+    with _bootstrap_lock:
+        public_api = {k for k in globals() if not k.startswith("_")}
     return sorted(public_api | _lazy_attrs)
