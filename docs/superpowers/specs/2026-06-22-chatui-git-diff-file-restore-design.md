@@ -103,9 +103,9 @@ GitDiffFileItem
 
 ```
 GitDiffFileItem 按钮:
-  IDLE ─click→ CONFIRMING(等待 useConfirmDialog 结果)
+  IDLE ─click→ CONFIRMING(等待内联 `<v-dialog>` 用户选择)
   CONFIRMING ─cancel→ IDLE
-  CONFIRMING ─ok→ RESTORING(restoreFile = file.path)
+  CONFIRMING ─ok→ RESTORING(restoringFile = file.path)
   RESTORING ─success→ IDLE(父级调用 refresh,本行从列表消失 → 组件卸载)
   RESTORING ─failure→ IDLE(toast 错误)
   RESTORING ─network err→ IDLE(toast network)
