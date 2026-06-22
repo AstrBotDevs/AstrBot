@@ -51,7 +51,7 @@ v1 评论功能（`2026-06-21` spec）已交付：用户能在 `FileBrowserFileP
 | 6 | 弹窗内展示结构 | **按文件路径分组** | 评论和文件强关联；按文件分组最自然，跨文件查找清晰 |
 | 7 | chip ✕ 显示逻辑 | **只在 hover chip 时才出现** | 简洁；和 chip "信息展示" 的本职不抢眼；避免静止状态下视觉杂乱 |
 | 8 | 弹窗里"全部删除"按钮 | **弹窗 footer 也有"全部删除"按钮** | 走和 chip ✕ 一样的二次确认流程，用户在弹窗内也能一键清空，不用先关弹窗再点 chip |
-| 9 | 二次确认组件 | **抽成独立的 `ConfirmDialog.vue` 通用组件** | 后续其它场景（如"删除 session"、"重置项目"）也可复用；避免在 ChatInput 里堆 v-dialog 代码 |
+| 9 | 二次确认组件 | **复用项目已有的命令式 `confirmDialog`（`@/utils/confirmDialog`）** | 项目里已有单例 confirmDialog（`@/components/ConfirmDialog.vue` + `confirmPlugin.ts` 注入 `$confirm`，`useConfirmDialog()` 暴露）。抽出新组件是 YAGNI——直接用现成 API 即可 |
 
 ---
 
@@ -194,40 +194,31 @@ const emit = defineEmits<{
 
 **为什么 emit 而不是直接调 `useFileComments()`**：保持组件纯展示，方便复用 / 测试。
 
-### 4.3 二次确认弹窗 `ConfirmDialog.vue`（新通用组件）
+### 4.3 二次确认弹窗（复用 `useConfirmDialog()`）
 
-```vue
-<v-dialog :model-value="modelValue" max-width="420" @update:model-value="$emit('update:modelValue', $event)">
-  <v-card>
-    <v-card-title>{{ title }}</v-card-title>
-    <v-card-text>
-      <p>{{ message }}</p>
-      <slot name="extra" />
-    </v-card-text>
-    <v-card-actions>
-      <v-spacer />
-      <v-btn variant="text" @click="$emit('cancel')">{{ cancelText }}</v-btn>
-      <v-btn :color="confirmColor ?? 'error'" variant="flat" @click="$emit('confirm')">
-        {{ confirmText }}
-      </v-btn>
-    </v-card-actions>
-  </v-card>
-</v-dialog>
-```
-
-**Props**：
+不创建新组件。直接用项目现有的命令式 confirmDialog：
 
 ```ts
-defineProps<{
-  modelValue: boolean;
-  title: string;
-  message: string;
-  confirmText?: string;
-  cancelText?: string;
-  confirmColor?: string;
-}>()
-const emit = defineEmits<{
-  "update:modelValue": [v: boolean];
+import { useConfirmDialog } from "@/utils/confirmDialog";
+
+const confirmDialog = useConfirmDialog();
+async function onRequestClearAll() {
+  const ok = await confirmDialog({
+    title: tm("spcodeProjectLoad.fileBrowser.comment.confirmClear.title"),
+    message: tm(
+      "spcodeProjectLoad.fileBrowser.comment.confirmClear.message",
+      { count },
+    ),
+  });
+  if (ok) fileComments.clearAll();
+}
+```
+
+底层组件是 `dashboard/src/components/ConfirmDialog.vue`（单例命令式，标题/消息由调用方传入），通过 `confirmPlugin.ts` 全局注册 `app.config.globalProperties.$confirm` 并通过 `provide/inject` 暴露；`useConfirmDialog()` 内部 `inject("$confirm")`。
+
+`ChatInput` 中两个入口都走同一个 handler：
+- chip hover 后的红色 ✕ 按钮 → `onRequestClearAll`
+- 预览弹窗 footer 的"全部删除"按钮 → `@request-clear-all="onRequestClearAll"`
   confirm: [];
   cancel: [];
 }>()
@@ -441,12 +432,13 @@ function openPreview(): void {
 | 文件 | 改动 | 类型 |
 |------|------|------|
 | `dashboard/src/composables/useFileComments.ts` | 新增 `commentsByFile()` 和 `clearAll()` | 修改 |
-| `dashboard/src/components/chat/ChatInput.vue` | 替换 chip 为自定义容器，引入 useFileComments，加预览弹窗 + 二次确认弹窗 | 修改 |
+| `dashboard/src/components/chat/ChatInput.vue` | 替换 chip 为自定义容器，引入 useFileComments，引入 `CommentsPreviewDialog`，通过 `useConfirmDialog()` 弹确认 | 修改 |
 | `dashboard/src/components/chat/CommentsPreviewDialog.vue` | 新建预览弹窗组件 | 新建 |
-| `dashboard/src/components/chat/ConfirmDialog.vue` | 新建通用确认弹窗组件 | 新建 |
 | `dashboard/src/components/chat/Chat.vue` | 移除 `:comment-count="..."` | 修改 |
 | `dashboard/src/components/chat/StandaloneChat.vue` | 移除 `:comment-count="..."` | 修改 |
-| `dashboard/src/i18n/locales/*/features/chat.json`（zh/en/ru） | 新增 11 个 key | 修改 |
+| `dashboard/src/i18n/locales/*/features/chat.json`（zh/en/ru） | 新增 12 个 key（11 个 spec + `previewDialog.deleteButton` 用于单条删除按钮 aria-label） | 修改 |
+
+> **关于决策 9 的实现说明**：spec 决策 9 原本规划新建声明式 `ConfirmDialog.vue`。实施时发现项目里已存在 `dashboard/src/components/ConfirmDialog.vue`（命令式单例，通过 `confirmPlugin` 注册为 `$confirm`，`useConfirmDialog()` 暴露），按照 KISS/YAGNI 原则直接复用现成 API，未新建组件。这是 v1.1 的实现偏差，与决策意图（"用 confirm 弹窗做二次确认"）一致，仅是组件来源不同。
 
 ---
 
