@@ -5,8 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from astrbot.core.astr_main_agent import MainAgentBuildResult
 from astrbot.core.cron.manager import CronJobManager, CronJobSchedulingError
 from astrbot.core.db.po import CronJob
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.provider.entities import ProviderRequest
 
 
 @pytest.fixture
@@ -519,3 +523,80 @@ class TestGetNextRunTime:
         next_run = cron_manager._get_next_run_time("non-existent")
 
         assert next_run is None
+
+
+class TestWokeMainAgent:
+    """Tests for cron-triggered main-agent wake flow."""
+
+    @pytest.mark.asyncio
+    async def test_woke_main_agent_calls_llm_request_hook_before_reset(
+        self, cron_manager, mock_context
+    ):
+        """Test cron path mirrors the normal request-hook timing."""
+
+        async def reset_stub():
+            return None
+
+        async def empty_steps(*args, **kwargs):
+            if False:
+                yield None
+
+        cron_manager.ctx = mock_context
+        mock_context.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": {"tool_call_timeout": 120},
+        }
+        mock_context.conversation_manager.get_curr_conversation_id = AsyncMock(
+            return_value="conv-id"
+        )
+        mock_context.conversation_manager.get_conversation = AsyncMock(
+            return_value=MagicMock(history="[]", cid="conv-id", persona_id=None)
+        )
+        mock_context.get_llm_tool_manager.return_value = MagicMock()
+
+        req = ProviderRequest(prompt="scheduled")
+        runner = MagicMock()
+        runner.step_until_done = empty_steps
+        runner.get_final_llm_resp.return_value = None
+        build_result = MainAgentBuildResult(
+            agent_runner=runner,
+            provider_request=req,
+            provider=MagicMock(),
+            reset_coro=reset_stub(),
+        )
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                AsyncMock(return_value=build_result),
+            ) as mock_build_main_agent,
+            patch(
+                "astrbot.core.cron.manager.call_event_hook",
+                AsyncMock(side_effect=[False, True]),
+                create=True,
+            ) as mock_call_event_hook,
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="hello",
+                session_str=MessageSession(
+                    platform_name="cron",
+                    message_type=MessageType.OTHER_MESSAGE,
+                    session_id="test-session",
+                ),
+                extras={"cron_job": {}, "cron_payload": {}},
+            )
+
+        assert mock_build_main_agent.await_args.kwargs["apply_reset"] is False
+        assert (
+            mock_call_event_hook.await_args_list[0].args[1].name
+            == "OnWaitingLLMRequestEvent"
+        )
+        assert (
+            mock_call_event_hook.await_args_list[1].args[1].name
+            == "OnLLMRequestEvent"
+        )
+        assert mock_call_event_hook.await_args_list[1].args[2] is req
