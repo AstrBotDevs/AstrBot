@@ -775,16 +775,17 @@ async def get_plugin_readme_by_id(
 
 @router.get("/plugins/market/readme")
 async def get_plugin_market_readme(
-    request: Request,
+    repo: str = Query(..., description="Full GitHub repo URL"),
+    ref: str | None = Query(None, description="Git ref"),
+    proxy: str | None = Query(None, description="Optional GitHub proxy URL prefix"),
     _auth: AuthContext = Depends(require_plugin_scope),
     service: PluginService = Depends(get_service),
 ):
-    q = request.query_params
     return await _run_service(
         service.get_market_plugin_readme(
-            repo=q.get("repo"),
-            ref=q.get("ref"),
-            proxy=q.get("proxy"),
+            repo=repo,
+            ref=ref,
+            proxy=proxy,
         ),
         log_label="/api/plugin/market_readme",
     )
