@@ -139,6 +139,10 @@
                 },
                 "web_search_link": {
                     "description": "Показывать ссылки на источники"
+                },
+                "websearch_exa_key": {
+                    "description": "API-ключ Exa",
+                    "hint": "Можно добавить несколько ключей для ротации. Получить ключ: https://dashboard.exa.ai"
                 }
             }
         },
