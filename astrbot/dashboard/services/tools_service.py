@@ -165,7 +165,8 @@ class ToolsService:
                 old_config,
                 active,
             )
-            self._validate_server_config(server_config)
+            if active or not only_update_active:
+                self._validate_server_config(server_config)
 
             if is_rename:
                 config["mcpServers"].pop(old_name)
