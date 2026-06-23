@@ -279,6 +279,10 @@ class LLMSummaryCompressor:
             response = await self.provider.text_chat(
                 contexts=sanitized_summary_contexts,
             )
+            if response.role == "err":
+                logger.error(f"Failed to generate summary: {response.completion_text}")
+                self.last_call_failed = True
+                return messages
             summary_content = (response.completion_text or "").strip()
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
