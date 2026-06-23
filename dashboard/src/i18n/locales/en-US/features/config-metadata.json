@@ -251,7 +251,7 @@
       "provider_settings": {
         "max_context_length": {
           "description": "Max Turns Before Compression",
-          "hint": "Persistent conversation history is truncated or LLM-compressed by the strategy below only after it exceeds this many turns. Request-time contexts are also constrained by this value before sending. -1 means no turn-based limit."
+          "hint": "When persistent conversation history exceeds this many turns, it is handled by the 'Handling for History Limits or Context Window Pressure' strategy below (truncation or LLM compression — see that setting for details). Request-time contexts are also constrained by this value before sending. -1 means no turn-based limit."
         },
         "dequeue_context_length": {
           "description": "Turns to Discard When Limit Exceeded",
@@ -263,7 +263,7 @@
             "Truncate by Turns",
             "Compress by LLM"
           ],
-          "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
+          "hint": "This strategy applies whenever either limit is hit: 'Max Turns Before Compression' is exceeded, or the in-flight request's tokens approach the model's context window. Choosing 'Compress by LLM' first attempts to generate a summary that preserves key points; if compression fails (provider unavailable, call error, etc.), it automatically falls back to 'Truncate by Turns' so the context size stays bounded. Either way, this only affects the working set sent to the model for the current request — already-persisted conversation history in the database is never overwritten or lost as a result of this step."
         },
         "llm_compress_instruction": {
           "description": "Context Compression Instruction",
