@@ -132,8 +132,8 @@ class ContextManager:
 
         compressed = await self.compressor(messages)
         was_lossy = (
-            isinstance(self.compressor, LLMSummaryCompressor)
-            and self.compressor.last_call_failed
+            not isinstance(self.compressor, LLMSummaryCompressor)
+            or self.compressor.last_call_failed
         )
         messages = compressed
 
