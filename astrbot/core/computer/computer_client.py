@@ -27,6 +27,7 @@ sandbox_registry = SandboxRegistry()
 sandbox_manager = SandboxManager(registry=sandbox_registry, providers={})
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 _SANDBOX_SKILLS_SYNC_LOCK = asyncio.Lock()
+_SANDBOX_SKILLS_PREPARE_UPLOAD_ATTEMPTS = 3
 
 # Tracks tools registered per provider so core can remove them on unregister.
 _provider_tools: dict[str, list[FunctionTool]] = {}
@@ -689,10 +690,31 @@ async def _sync_skills_to_sandbox(
                     shutil.copytree(skill_dir, bundle_root / skill_name)
                 shutil.make_archive(str(zip_base), "zip", str(bundle_root))
                 logger.info("Uploading skills bundle to sandbox...")
-                await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
-                upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
+                upload_result = {"success": False}
+                for attempt in range(1, _SANDBOX_SKILLS_PREPARE_UPLOAD_ATTEMPTS + 1):
+                    try:
+                        await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
+                        upload_result = await booter.upload_file(
+                            str(zip_path), str(remote_zip)
+                        )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        upload_result = {"success": False, "error": str(exc)}
+                    if upload_result.get("success", False):
+                        break
+                    if attempt < _SANDBOX_SKILLS_PREPARE_UPLOAD_ATTEMPTS:
+                        logger.warning(
+                            "[Computer] Skills bundle prepare/upload attempt %d/%d failed: %s",
+                            attempt,
+                            _SANDBOX_SKILLS_PREPARE_UPLOAD_ATTEMPTS,
+                            upload_result.get("error") or upload_result,
+                        )
+                        await asyncio.sleep(1)
                 if not upload_result.get("success", False):
-                    raise RuntimeError("Failed to upload skills bundle to sandbox.")
+                    raise RuntimeError(
+                        f"Failed to upload skills bundle to sandbox: {upload_result}"
+                    )
             else:
                 logger.info(
                     "No local skills found. Keeping sandbox built-ins and refreshing metadata."
