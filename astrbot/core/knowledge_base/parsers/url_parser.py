@@ -7,6 +7,17 @@ import aiohttp
 SUPPORTED_URL_EXTRACT_PROVIDERS = ("tavily", "firecrawl")
 
 
+def _normalize_keys(keys: str | list[str] | None) -> list[str]:
+    """将密钥配置规范化为列表。
+
+    兼容历史配置中将单个密钥存为字符串的情况，避免 list("key") 把字符串
+    拆成单个字符。
+    """
+    if isinstance(keys, str):
+        return [keys] if keys else []
+    return list(keys or [])
+
+
 class URLExtractor:
     """URL 内容提取器，封装 Tavily / Firecrawl API 调用和密钥轮换。
 
@@ -16,10 +27,10 @@ class URLExtractor:
 
     def __init__(
         self,
-        tavily_keys: list[str] | None = None,
+        tavily_keys: str | list[str] | None = None,
         *,
         provider: str = "tavily",
-        firecrawl_keys: list[str] | None = None,
+        firecrawl_keys: str | list[str] | None = None,
     ) -> None:
         """
         初始化 URL 提取器
@@ -37,8 +48,8 @@ class URLExtractor:
             )
 
         self._keys: dict[str, list[str]] = {
-            "tavily": list(tavily_keys or []),
-            "firecrawl": list(firecrawl_keys or []),
+            "tavily": _normalize_keys(tavily_keys),
+            "firecrawl": _normalize_keys(firecrawl_keys),
         }
         if not self._keys[self.provider]:
             raise ValueError(
@@ -170,10 +181,10 @@ class URLExtractor:
 # 为了向后兼容，提供一个简单的函数接口
 async def extract_text_from_url(
     url: str,
-    tavily_keys: list[str] | None = None,
+    tavily_keys: str | list[str] | None = None,
     *,
     provider: str = "tavily",
-    firecrawl_keys: list[str] | None = None,
+    firecrawl_keys: str | list[str] | None = None,
 ) -> str:
     """
     简单的函数接口，用于从 URL 提取文本内容

@@ -25,7 +25,10 @@ from .chunking.markdown import MarkdownChunker
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
-from .parsers.url_parser import extract_text_from_url
+from .parsers.url_parser import (
+    SUPPORTED_URL_EXTRACT_PROVIDERS,
+    extract_text_from_url,
+)
 from .parsers.util import select_parser
 from .prompts import TEXT_REPAIR_SYSTEM_PROMPT
 
@@ -618,11 +621,13 @@ class KBHelper:
         """
         # 根据配置的网页搜索提供商选择 URL 内容提取后端。
         # 仅 Tavily 与 Firecrawl 支持单页内容提取；其余提供商回退到 Tavily。
-        provider_settings = self.prov_mgr.acm.default_conf.get("provider_settings", {})
+        provider_settings = (
+            self.prov_mgr.acm.default_conf.get("provider_settings") or {}
+        )
         websearch_provider = provider_settings.get("websearch_provider", "tavily")
         url_extract_provider = (
             websearch_provider
-            if websearch_provider in ("tavily", "firecrawl")
+            if websearch_provider in SUPPORTED_URL_EXTRACT_PROVIDERS
             else "tavily"
         )
         tavily_keys = provider_settings.get("websearch_tavily_key", [])

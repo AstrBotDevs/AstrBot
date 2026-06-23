@@ -113,6 +113,22 @@ async def test_firecrawl_empty_content_raises(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_single_string_key_is_not_split_into_chars(monkeypatch):
+    # Legacy configs may store a single key as a bare string; it must be
+    # treated as one key, not split into individual characters.
+    response = _FakeResponse(200, {"data": {"markdown": "body"}})
+    recorder = _patch_session(monkeypatch, response)
+
+    await url_parser.extract_text_from_url(
+        "https://example.com",
+        provider="firecrawl",
+        firecrawl_keys="firecrawl-key",
+    )
+
+    assert recorder["headers"]["Authorization"] == "Bearer firecrawl-key"
+
+
+@pytest.mark.asyncio
 async def test_default_provider_is_tavily_backward_compatible(monkeypatch):
     response = _FakeResponse(200, {"results": [{"raw_content": "legacy body"}]})
     recorder = _patch_session(monkeypatch, response)
