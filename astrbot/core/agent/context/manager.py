@@ -53,18 +53,50 @@ class ContextManager:
         Returns:
             The processed message list.
         """
+        result, _ = await self.process_with_meta(messages, trusted_token_usage)
+        return result
+
+    async def process_with_meta(
+        self, messages: list[Message], trusted_token_usage: int = 0
+    ) -> tuple[list[Message], bool]:
         try:
             result = messages
+            was_hard_truncated = False
 
-            # 1. 基于轮次的截断 (Enforce max turns)
             if self.config.enforce_max_turns != -1:
-                result = self.truncator.truncate_by_turns(
-                    result,
-                    keep_most_recent_turns=self.config.enforce_max_turns,
-                    drop_turns=self.config.truncate_turns,
-                )
+                non_system_count = len([m for m in result if m.role != "system"]) // 2
+                if non_system_count > self.config.enforce_max_turns:
+                    if isinstance(self.compressor, LLMSummaryCompressor):
+                        logger.debug(
+                            "Turn limit (%s) exceeded (%s turns), "
+                            "delegating to LLM summary compressor instead of "
+                            "hard truncation.",
+                            self.config.enforce_max_turns,
+                            non_system_count,
+                        )
+                        compressed = await self.compressor(result)
+                        if self.compressor.last_call_failed:
+                            logger.warning(
+                                "LLM summary compression failed; falling back "
+                                "to turn-based truncation to bound context "
+                                "size.",
+                            )
+                            result = self.truncator.truncate_by_turns(
+                                result,
+                                keep_most_recent_turns=self.config.enforce_max_turns,
+                                drop_turns=self.config.truncate_turns,
+                            )
+                            was_hard_truncated = True
+                        else:
+                            result = compressed
+                    else:
+                        result = self.truncator.truncate_by_turns(
+                            result,
+                            keep_most_recent_turns=self.config.enforce_max_turns,
+                            drop_turns=self.config.truncate_turns,
+                        )
+                        was_hard_truncated = True
 
-            # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(
                     result, trusted_token_usage
@@ -73,16 +105,19 @@ class ContextManager:
                 if self.compressor.should_compress(
                     result, total_tokens, self.config.max_context_tokens
                 ):
-                    result = await self._run_compression(result, total_tokens)
+                    result, compression_was_lossy = await self._run_compression(
+                        result, total_tokens
+                    )
+                    was_hard_truncated = was_hard_truncated or compression_was_lossy
 
-            return result
+            return result, was_hard_truncated
         except Exception as e:
             logger.error(f"Error during context processing: {e}", exc_info=True)
-            return messages
+            return messages, False
 
     async def _run_compression(
         self, messages: list[Message], prev_tokens: int
-    ) -> list[Message]:
+    ) -> tuple[list[Message], bool]:
         """
         Compress/truncate the messages.
 
@@ -95,7 +130,12 @@ class ContextManager:
         """
         logger.debug("Compress triggered, starting compression...")
 
-        messages = await self.compressor(messages)
+        compressed = await self.compressor(messages)
+        was_lossy = (
+            isinstance(self.compressor, LLMSummaryCompressor)
+            and self.compressor.last_call_failed
+        )
+        messages = compressed
 
         # double check
         tokens_after_summary = self.token_counter.count_tokens(messages)
@@ -117,5 +157,6 @@ class ContextManager:
             )
             # still need compress, truncate by half
             messages = self.truncator.truncate_by_halving(messages)
+            was_lossy = True
 
-        return messages
+        return messages, was_lossy
