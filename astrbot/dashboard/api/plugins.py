@@ -773,6 +773,23 @@ async def get_plugin_readme_by_id(
     )
 
 
+@router.get("/plugins/market/readme")
+async def get_plugin_market_readme(
+    request: Request,
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    q = request.query_params
+    return await _run_service(
+        service.get_market_plugin_readme(
+            repo=q.get("repo"),
+            ref=q.get("ref"),
+            proxy=q.get("proxy"),
+        ),
+        log_label="/api/plugin/market_readme",
+    )
+
+
 @router.get("/plugins/changelog")
 async def get_plugin_changelog_by_id(
     plugin_id: str = Query(...),
