@@ -8,8 +8,10 @@
     "update": "Update",
     "account": "Account",
     "theme": {
+      "title": "Theme",
       "light": "Light Mode",
-      "dark": "Dark Mode"
+      "dark": "Dark Mode",
+      "system": "Follow System"
     }
   },
   "updateDialog": {
@@ -24,7 +26,9 @@
       "release": "😊 Release"
     },
     "advancedSettings": "Advanced settings",
+    "releases": "Releases",
     "updateToLatest": "Update to Latest Version",
+    "showPreReleases": "Show pre-release versions",
     "preRelease": "Pre-release",
     "preReleaseWarning": {
       "title": "Pre-release Version Notice",
@@ -58,6 +62,9 @@
       "restart": "Preparing restart...",
       "restarting": "Restarting AstrBot",
       "completed": "Update complete",
+      "successReady": "Update successful",
+      "autoReloadIn": "Refreshing automatically in {seconds}s",
+      "reloadNow": "Refresh now",
       "failed": "Update failed"
     },
     "redirectConfirm": {
@@ -95,8 +102,8 @@
   "accountDialog": {
     "title": "Modify Account",
     "securityWarning": "Security Reminder: Please change your password to secure your account",
-    "securityWarningLegacy": "The new AstrBot version has improved security. Please change your password.",
-    "securityWarningUpgrade": "Legacy password storage detected. Please change your password to complete the security upgrade.",
+    "securityWarningMd5": "The new AstrBot version has improved security. Please change your password.",
+    "securityWarningUpgrade": "MD5 password storage detected. Please change your password to complete the security upgrade.",
     "form": {
       "currentPassword": "Current Password",
       "newPassword": "New Password",

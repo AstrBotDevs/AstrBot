@@ -179,8 +179,6 @@
     @cancel="handleConfigSave2faCancel"
   />
 
-  <WaitingForRestart ref="wfr"></WaitingForRestart>
-
   <!-- 测试聊天抽屉 -->
   <v-overlay
     v-model="testChatDrawer"
@@ -216,13 +214,11 @@
 
 
 <script>
-import axios from 'axios';
+import { configProfileApi, systemConfigApi } from '@/api/v1';
 import AstrBotCoreConfigWrapper from '@/components/config/AstrBotCoreConfigWrapper.vue';
-import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import StandaloneChat from '@/components/chat/StandaloneChat.vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
@@ -236,7 +232,6 @@ export default {
   components: {
     AstrBotCoreConfigWrapper,
     VueMonacoEditor,
-    WaitingForRestart,
     StandaloneChat,
     UnsavedChangesConfirmDialog,
     DashboardTwoFactorDialog
@@ -358,6 +353,10 @@ export default {
       }
     },
     async '$route.fullPath'(newVal) {
+      if (this.extractConfigTypeFromHash(newVal) === 'system') {
+        this.$router.replace('/settings#system-config');
+        return;
+      }
       await this.syncConfigTypeFromHash(newVal);
     },
     initialConfigId(newVal) {
@@ -425,6 +424,10 @@ export default {
     const hashConfigType = this.extractConfigTypeFromHash(
       this.$route?.fullPath || ''
     );
+    if (hashConfigType === 'system') {
+      this.$router.replace('/settings#system-config');
+      return;
+    }
     this.configType = hashConfigType || 'normal';
     this.isSystemConfig = this.configType === 'system';
 
@@ -452,15 +455,12 @@ export default {
     // 处理语言切换事件，重新加载配置以获取插件的 i18n 数据
     handleLocaleChange() {
       // 重新加载当前配置
-      if (this.selectedConfigID) {
-        this.getConfig(this.selectedConfigID);
-      } else if (this.isSystemConfig) {
+      if (this.isSystemConfig) {
         this.getConfig();
+      } else if (this.selectedConfigID) {
+        this.getConfig(this.selectedConfigID);
       }
     },
-
-  },
-  methods: {
     onConfigSearchInput(value) {
       this.configSearchKeyword = normalizeTextInput(value);
     },
@@ -485,7 +485,7 @@ export default {
     },
     getConfigInfoList(abconf_id) {
       // 获取配置列表
-      axios.get('/api/config/abconfs').then((res) => {
+      configProfileApi.list().then((res) => {
         this.configInfoList = res.data.data.info_list;
 
         if (abconf_id) {
@@ -515,17 +515,11 @@ export default {
     },
     getConfig(abconf_id) {
       this.fetched = false
-      const params = {};
+      const request = this.isSystemConfig
+        ? systemConfigApi.get()
+        : configProfileApi.get(abconf_id || this.selectedConfigID);
 
-      if (this.isSystemConfig) {
-        params.system_config = '1';
-      } else {
-        params.id = abconf_id || this.selectedConfigID;
-      }
-
-      axios.get('/api/config/abconf', {
-        params: params
-      }).then((res) => {
+      request.then((res) => {
         this.config_data = res.data.data.config;
         this.lastSavedConfigSnapshot = this.getConfigSnapshot(this.config_data);
         this.fetched = true
@@ -562,10 +556,14 @@ export default {
     },
     async saveAstrbotConfig(postData, headers = {}, allow2faPrompt = true) {
       try {
-        const res = await axios.post('/api/config/astrbot/update', postData, {
+        const confId = postData.conf_id || 'default';
+        const requestConfig = {
           headers,
           validateStatus: (status) => (status >= 200 && status < 300) || status === 401,
-        });
+        };
+        const res = this.isSystemConfig
+          ? await systemConfigApi.update(postData.config, requestConfig)
+          : await configProfileApi.update(confId, postData.config, requestConfig);
 
         if (res.status === 401 && res.data?.data?.totp_required) {
           if (allow2faPrompt && !headers['X-2FA-Code']) {
@@ -590,9 +588,6 @@ export default {
           this.save_message_success = "success";
           this.onConfigSaved();
 
-          if (this.isSystemConfig) {
-            restartAstrBotRuntime(this.$refs.wfr).catch(() => {})
-          }
           return { success: true };
         }
 
@@ -675,7 +670,7 @@ export default {
       }
     },
     createNewConfig(configName) {
-      axios.post('/api/config/abconf/new', {
+      configProfileApi.create({
         name: configName
       }).then((res) => {
         if (res.data.status === "ok") {
@@ -815,9 +810,7 @@ export default {
       }
     },
     copyConfig(configName) {
-      axios.get('/api/config/abconf', {
-        params: { id: this.copySourceConfigId }
-      }).then((res) => {
+      configProfileApi.get(this.copySourceConfigId).then((res) => {
         const sourceConfig = res.data?.data?.config;
         if (!sourceConfig) {
           this.save_message = this.tm('configManagement.copyFailed');
@@ -825,7 +818,7 @@ export default {
           this.save_message_success = "error";
           return;
         }
-        return axios.post('/api/config/abconf/new', {
+        return configProfileApi.create({
           name: configName,
           config: sourceConfig
         });
@@ -856,9 +849,7 @@ export default {
       }
     },
     deleteConfig(configId) {
-      axios.post('/api/config/abconf/delete', {
-        id: configId
-      }).then((res) => {
+      configProfileApi.delete(configId).then((res) => {
         if (res.data.status === "ok") {
           this.save_message = res.data.message;
           this.save_message_snack = true;
@@ -879,10 +870,7 @@ export default {
       });
     },
     updateConfigInfo(configName) {
-      axios.post('/api/config/abconf/update', {
-        id: this.editingConfigId,
-        name: configName
-      }).then((res) => {
+      configProfileApi.rename(this.editingConfigId, configName).then((res) => {
         if (res.data.status === "ok") {
           this.save_message = res.data.message;
           this.save_message_snack = true;
@@ -924,7 +912,7 @@ export default {
           await this.updateConfig();
           // 系统配置保存后不跳转
           if (this.isSystemConfig) {
-            this.$router.replace('/config#system');
+            this.$router.replace('/settings#system-config');
             return;
           }
         }

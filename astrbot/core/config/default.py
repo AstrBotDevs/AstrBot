@@ -2,10 +2,12 @@
 
 import os
 
+from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.25.2"
+VERSION = __version__
+
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -101,6 +103,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "default_provider_id": "",
         "fallback_chat_models": [],
+        "request_max_retries": 5,
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "image_caption_cache_ttl": 600,
@@ -329,7 +332,7 @@ CONFIG_METADATA_2 = {
                 "description": "消息平台适配器",
                 "type": "list",
                 "config_template": {
-                    "QQ 官方机器人(WebSocket)": {
+                    "QQ 官方机器人(Websocket, 推荐)": {
                         "id": "default",
                         "type": "qq_official",
                         "enable": True,
@@ -418,7 +421,7 @@ CONFIG_METADATA_2 = {
                         "weixin_oc_bot_type": "3",
                         "weixin_oc_qr_poll_interval": 1,
                         "weixin_oc_long_poll_timeout_ms": 35_000,
-                        "weixin_oc_api_timeout_ms": 15_000,
+                        "weixin_oc_api_timeout_ms": 120_000,
                     },
                     "飞书(Lark)": {
                         "id": "lark",
@@ -1808,6 +1811,25 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_voice_name": "Leda",
                         "proxy": "",
                     },
+                    "ElevenLabs TTS(API)": {
+                        "hint": "API Key 从 https://elevenlabs.io/app/settings/api-keys 获取。Voice ID 可在 https://elevenlabs.io/app/voice-library 浏览选择。",
+                        "id": "elevenlabs_tts",
+                        "type": "elevenlabs_tts_api",
+                        "provider": "elevenlabs",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.elevenlabs.io/v1",
+                        "model": "eleven_multilingual_v2",
+                        "elevenlabs-tts-voice-id": "JBFqnCBsd6RMkjVDRZzb",
+                        "elevenlabs-tts-output-format": "mp3_44100_128",
+                        "elevenlabs-tts-stability": "",
+                        "elevenlabs-tts-similarity-boost": "",
+                        "elevenlabs-tts-style": "",
+                        "elevenlabs-tts-use-speaker-boost": True,
+                        "timeout": "20",
+                        "proxy": "",
+                    },
                     "OpenAI Embedding": {
                         "id": "openai_embedding",
                         "type": "openai_embedding",
@@ -2790,6 +2812,9 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                     },
+                    "request_max_retries": {
+                        "type": "int",
+                    },
                     "wake_prefix": {
                         "type": "string",
                     },
@@ -3148,6 +3173,11 @@ CONFIG_METADATA_3 = {
                         "items": {"type": "string"},
                         "_special": "select_providers",
                         "hint": "主聊天模型请求失败时，按顺序切换到这些模型。",
+                    },
+                    "provider_settings.request_max_retries": {
+                        "description": "请求最大重试次数",
+                        "type": "int",
+                        "hint": "单次模型请求遇到可重试错误时的最大尝试次数。",
                     },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",
@@ -3881,7 +3911,7 @@ CONFIG_METADATA_3 = {
                     "disable_builtin_commands": {
                         "description": "禁用自带指令",
                         "type": "bool",
-                        "hint": "禁用所有 AstrBot 的自带指令，如 help, provider, model 等。",
+                        "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
                     },
                 },
             },

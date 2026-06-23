@@ -67,7 +67,7 @@
     "loading": "Loading...",
     "installed": "Installed",
     "unknown": "Unknown",
-    "incompatible": "Incompatible"
+    "unsupported": "Unsupported"
   },
   "tooltips": {
     "enable": "Click to Enable",
@@ -229,8 +229,8 @@
       "confirm": "Continue",
       "cancel": "Cancel"
     },
-    "versionCompatibility": {
-      "title": "Version Compatibility Warning",
+    "versionSupport": {
+      "title": "Version Support Warning",
       "message": "This plugin declares an AstrBot version range that does not match your current version. You can ignore this warning and continue installation, but it may not work correctly.",
       "confirm": "Ignore Warning and Install",
       "cancel": "Cancel Installation"
@@ -373,7 +373,7 @@
     "neoPayloadTitle": "Neo Payload",
     "neoPayloadFailed": "Failed to load payload",
     "runtimeNoneWarning": "Computer Use runtime is set to None; Skills may not run correctly because no runtime is enabled.",
-    "runtimeHint": "Set the Computer Use runtime to Local or Sandbox in settings so AstrBot can use your Skills.",
+    "runtimeHint": "Set the Computer Use runtime to Local or Sandbox in settings so AstrBot can use your Skills. Workspace Skills are not shown on this page yet.",
     "neoRuntimeRequired": "Neo Skills are available only when runtime is sandbox and sandbox booter is shipyard_neo.",
     "sourceLocalOnly": "Local Skill",
     "sourceSandboxOnly": "Sandbox Preset Skill",

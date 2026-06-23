@@ -376,7 +376,43 @@
                   hide-details
                   :no-data-text="tm('form.noUmos')"
                   @focus="loadUmos()"
-                />
+                >
+                  <template #item="{ props, item }">
+                    <v-list-item v-bind="props">
+                      <template #title>
+                        <UmoDisplay
+                          v-bind="getUmoDisplayProps(item.raw)"
+                          compact
+                          :show-info="false"
+                          :show-platform="false"
+                        />
+                      </template>
+                      <template #append>
+                        <v-chip
+                          v-if="getUmoInfo(item.raw).platform"
+                          size="x-small"
+                          :color="
+                            getPlatformColor(getUmoInfo(item.raw).platform)
+                          "
+                          class="cron-umo-platform"
+                        >
+                          {{ getUmoInfo(item.raw).platform }}
+                        </v-chip>
+                      </template>
+                    </v-list-item>
+                  </template>
+                  <template #selection="{ item }">
+                    <v-chip
+                      v-if="item && getUmoSelectionText(item.raw)"
+                      size="small"
+                      variant="tonal"
+                      color="primary"
+                      class="umo-selection-chip"
+                    >
+                      {{ getUmoSelectionText(item.raw) }}
+                    </v-chip>
+                  </template>
+                </v-autocomplete>
               </div>
             </v-card-text>
             <v-card-actions class="justify-end px-5 pb-5">
@@ -400,12 +436,13 @@
 </template>
 
 <script setup lang="ts">
-import axios from "axios";
 import { computed, onMounted, ref } from "vue";
 import { useTheme } from "vuetify";
+import { botApi, cronApi, sessionApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import UmoDisplay from "@/components/shared/UmoDisplay.vue";
 
 const { tm } = useModuleI18n("features/cron");
 const theme = useTheme();
@@ -419,6 +456,7 @@ const proactivePlatforms = ref<
   { id: string; name: string; display_name?: string }[]
 >([]);
 const availableUmos = ref<string[]>([]);
+const availableUmoInfoMap = ref<Record<string, UmoInfo>>({});
 const loadingUmos = ref(false);
 const platformDialog = ref(false);
 const createDialog = ref(false);
@@ -434,6 +472,15 @@ type ScheduleMode =
   | "monthly"
   | "cron";
 type IntervalUnit = "minutes" | "hours" | "days";
+type UmoInfo = {
+  umo: string;
+  platform?: string;
+  message_type?: string;
+  session_id?: string;
+  auto_name?: string;
+  user_alias?: string;
+  display_name?: string;
+};
 
 const newJob = ref({
   schedule_mode: "once" as ScheduleMode,
@@ -587,7 +634,9 @@ function nextRunText(item: any): string {
 }
 
 function lastRunTooltipText(item: any): string {
-  const lastRun = `${tm("table.headers.lastRun")}: ${formatTime(item.last_run_at)}`;
+  const lastRun = `${tm("table.headers.lastRun")}: ${formatTime(
+    item.last_run_at,
+  )}`;
   const lastError = String(item.last_error || "").trim();
   if (!lastError) {
     return lastRun;
@@ -688,15 +737,77 @@ function weekdayText(value: number): string {
   return tm(`form.weekdays.${keyMap[value]}`);
 }
 
+function parseUmoInfo(umo: string): UmoInfo {
+  const parts = umo.split(":");
+  return {
+    umo,
+    platform: parts[0] || "",
+    message_type: parts[1] || "",
+    session_id: parts.slice(2).join(":") || umo,
+    auto_name: "",
+    user_alias: "",
+    display_name: umo,
+  };
+}
+
+function mergeUmoInfos(infos: UmoInfo[] = []) {
+  const next = { ...availableUmoInfoMap.value };
+  for (const info of infos) {
+    if (info?.umo) {
+      next[info.umo] = { ...(next[info.umo] || {}), ...info };
+    }
+  }
+  availableUmoInfoMap.value = next;
+}
+
+function getUmoInfo(umo: string): UmoInfo {
+  return availableUmoInfoMap.value[umo] || parseUmoInfo(umo);
+}
+
+function getUmoDisplayProps(umo: string) {
+  const info = getUmoInfo(umo);
+  return {
+    umo,
+    platform: info.platform || "",
+    messageType: info.message_type || "",
+    sessionId: info.session_id || "",
+    autoName: info.auto_name || "",
+    userAlias: info.user_alias || "",
+  };
+}
+
+function getPlatformColor(platform = "") {
+  const colors: Record<string, string> = {
+    aiocqhttp: "blue",
+    qq_official: "purple",
+    telegram: "light-blue",
+    discord: "indigo",
+    webchat: "orange",
+  };
+  return colors[platform] || "grey";
+}
+
+function getUmoSelectionText(value?: string | null): string {
+  if (!value) return "";
+  const info = getUmoInfo(value);
+  const aliasName = info.user_alias || "";
+  const autoName = info.auto_name || "";
+  if (aliasName && autoName && aliasName !== autoName) {
+    return `${aliasName}（${autoName}）`;
+  }
+  return aliasName || autoName || value || info.display_name || "";
+}
+
 async function loadUmos(force = false) {
   if (loadingUmos.value || (!force && availableUmos.value.length)) return;
   loadingUmos.value = true;
   try {
-    const res = await axios.get("/api/session/active-umos");
+    const res = await sessionApi.activeUmos();
     if (res.data.status === "ok") {
       const loadedUmos = Array.isArray(res.data.data?.umos)
         ? res.data.data.umos
         : [];
+      mergeUmoInfos(res.data.data?.umo_infos || []);
       availableUmos.value = Array.from(
         new Set([...availableUmos.value, ...loadedUmos]),
       );
@@ -711,13 +822,16 @@ async function loadUmos(force = false) {
 async function loadJobs() {
   loading.value = true;
   try {
-    const res = await axios.get("/api/cron/jobs");
+    const res = await cronApi.list();
     if (res.data.status === "ok") {
       const data = Array.isArray(res.data.data) ? res.data.data : [];
       jobs.value = data.map((job: any) => ({
         ...job,
         session: job?.payload?.session || job?.session || "",
       }));
+      mergeUmoInfos(
+        jobs.value.map(getJobSession).filter(Boolean).map(parseUmoInfo),
+      );
     } else {
       toast(res.data.message || tm("messages.loadFailed"), "error");
     }
@@ -730,7 +844,7 @@ async function loadJobs() {
 
 async function loadPlatforms() {
   try {
-    const res = await axios.get("/api/platform/stats");
+    const res = await botApi.stats();
     if (res.data.status === "ok" && Array.isArray(res.data.data?.platforms)) {
       proactivePlatforms.value = res.data.data.platforms
         .filter((p: any) => p?.meta?.support_proactive_message)
@@ -747,7 +861,7 @@ async function loadPlatforms() {
 
 async function toggleJob(job: any) {
   try {
-    const res = await axios.patch(`/api/cron/jobs/${job.job_id}`, {
+    const res = await cronApi.update(job.job_id, {
       enabled: job.enabled,
     });
     if (res.data.status !== "ok") {
@@ -762,7 +876,7 @@ async function toggleJob(job: any) {
 
 async function deleteJob(job: any) {
   try {
-    const res = await axios.delete(`/api/cron/jobs/${job.job_id}`);
+    const res = await cronApi.delete(job.job_id);
     if (res.data.status === "ok") {
       toast(tm("messages.deleteSuccess"));
       jobs.value = jobs.value.filter((item) => item.job_id !== job.job_id);
@@ -779,7 +893,7 @@ async function runJobNow(job: any) {
   if (!jobId || runningJobIds.value.has(jobId)) return;
   runningJobIds.value = new Set([...runningJobIds.value, jobId]);
   try {
-    const res = await axios.post(`/api/cron/jobs/${jobId}/run`);
+    const res = await cronApi.run(jobId);
     if (res.data.status === "ok") {
       toast(tm("messages.runStarted"));
       await loadJobs();
@@ -842,6 +956,7 @@ function openEdit(job: any) {
   const schedule = readScheduleFromJob(job);
   if (job.session && !availableUmos.value.includes(job.session)) {
     availableUmos.value = [job.session, ...availableUmos.value];
+    mergeUmoInfos([parseUmoInfo(job.session)]);
   }
   newJob.value = {
     schedule_mode: schedule.schedule_mode,
@@ -1148,7 +1263,7 @@ async function createJob() {
   creating.value = true;
   try {
     const payload = buildPayload();
-    const res = await axios.post("/api/cron/jobs", payload);
+    const res = await cronApi.create(payload);
     if (res.data.status === "ok") {
       toast(tm("messages.createSuccess"));
       createDialog.value = false;
@@ -1179,10 +1294,7 @@ async function updateJob() {
       ...buildPayload(),
       description: newJob.value.note,
     };
-    const res = await axios.patch(
-      `/api/cron/jobs/${editingJobId.value}`,
-      payload,
-    );
+    const res = await cronApi.update(editingJobId.value, payload);
     if (res.data.status === "ok") {
       toast(tm("messages.updateSuccess"));
       createDialog.value = false;
@@ -1308,6 +1420,23 @@ onMounted(() => {
   min-width: 0;
   align-items: center;
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cron-umo-platform {
+  margin-inline-start: 12px;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.umo-selection-chip {
+  max-width: 100%;
+}
+
+.umo-selection-chip :deep(.v-chip__content) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

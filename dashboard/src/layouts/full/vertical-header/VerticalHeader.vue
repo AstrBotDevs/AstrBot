@@ -17,6 +17,7 @@ import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
+import { authApi, isLegacyFallbackError, statsApi, updatesApi } from "@/api/v1";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 
 enableKatex();
@@ -29,9 +30,10 @@ const { t } = useI18n();
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
 const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
+const SHOW_PRE_RELEASES_KEY = "astrbot:updateDialog:showPreReleases";
 let dialog = ref(false);
 let accountWarning = ref(false);
-let accountWarningLegacy = ref(false);
+let accountWarningMd5 = ref(false);
 let accountWarningUpgrade = ref(false);
 let updateStatusDialog = ref(false);
 let aboutDialog = ref(false);
@@ -47,14 +49,24 @@ let hasNewVersion = ref(false);
 let botCurrVersion = ref("");
 let dashboardHasNewVersion = ref(false);
 let dashboardCurrentVersion = ref("");
-let releases = ref([]);
+let releases = ref<any[]>([]);
 let releasesLoading = ref(false);
+const showPreReleases = ref(
+  typeof window === "undefined"
+    ? false
+    : localStorage.getItem(SHOW_PRE_RELEASES_KEY) === "true",
+);
 let updatingDashboardLoading = ref(false);
 let installLoading = ref(false);
 let showAdvancedUpdateSettings = ref(false);
 let restartWaiting = ref(false);
 let restartStartTime = ref<number | string | null>(null);
 let restartPollTimer: ReturnType<typeof setInterval> | null = null;
+let restartCompleted = ref(false);
+let restartReloadCountdown = ref(3);
+let restartReloadTimer: ReturnType<typeof setInterval> | null = null;
+const RESTART_FEEDBACK_DELAY_SECONDS = 3;
+const RESTART_START_TIME_POLL_INTERVAL_MS = 2000;
 type DownloadStageStatus = "pending" | "running" | "done" | "error";
 type DownloadStage = {
   status: DownloadStageStatus;
@@ -144,7 +156,12 @@ const releasesHeader = computed(() => [
   { title: t("core.header.updateDialog.table.content"), key: "body" },
   { title: t("core.header.updateDialog.table.actions"), key: "switch" },
 ]);
-const firstReleasePageItems = computed(() => releases.value.slice(0, 6));
+const visibleReleases = computed(() =>
+  showPreReleases.value
+    ? releases.value
+    : releases.value.filter((item: any) => !isPreRelease(item.tag_name)),
+);
+const firstReleasePageItems = computed(() => visibleReleases.value.slice(0, 6));
 const firstReleasePageHasPreRelease = computed(() =>
   firstReleasePageItems.value.some((item: any) => isPreRelease(item.tag_name)),
 );
@@ -350,24 +367,24 @@ function accountEdit() {
     ? confirmPassword.value
     : "";
 
-  axios
-    .post("/api/auth/account/edit", {
+  authApi
+    .updateAccount({
       password: currentPasswordValue,
       new_password: newPasswordValue,
       confirm_password: confirmPasswordValue,
-      new_username: newUsername.value ? newUsername.value : username,
+      new_username: newUsername.value || username || undefined,
     })
     .then((res) => {
       if (res.data.status == "error") {
         accountEditStatus.value.error = true;
-        accountEditStatus.value.message = res.data.message;
+        accountEditStatus.value.message = res.data.message || "";
         password.value = "";
         newPassword.value = "";
         confirmPassword.value = "";
         return;
       }
       accountEditStatus.value.success = true;
-      accountEditStatus.value.message = res.data.message;
+      accountEditStatus.value.message = res.data.message || "";
       setTimeout(() => {
         dialog.value = !dialog.value;
         const authStore = useAuthStore();
@@ -391,37 +408,37 @@ function accountEdit() {
 }
 
 function getVersion() {
-  axios
-    .get("/api/stat/version")
+  statsApi
+    .version()
     .then((res) => {
-      botCurrVersion.value = "v" + res.data.data.version;
-      dashboardCurrentVersion.value = res.data.data?.dashboard_version;
+      botCurrVersion.value = "v" + (res.data.data.version || "");
+      dashboardCurrentVersion.value = res.data.data?.dashboard_version || "";
       commonStore.setAstrBotVersion(
-        res.data.data.version,
-        res.data.data?.dashboard_version,
+        res.data.data.version || "",
+        res.data.data?.dashboard_version || undefined,
       );
       const change_pwd_hint = res.data.data?.change_pwd_hint;
-      const legacy_pwd_hint = res.data.data?.legacy_pwd_hint;
+      const md5_pwd_hint = res.data.data?.md5_pwd_hint;
       const password_upgrade_required =
         res.data.data?.password_upgrade_required;
-      if (change_pwd_hint || legacy_pwd_hint || password_upgrade_required) {
+      if (change_pwd_hint || md5_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
         accountWarningUpgrade.value = !!password_upgrade_required;
-        accountWarningLegacy.value =
-          !!legacy_pwd_hint && !password_upgrade_required;
+        accountWarningMd5.value =
+          !!md5_pwd_hint && !password_upgrade_required;
         if (
           change_pwd_hint ||
-          (legacy_pwd_hint && !password_upgrade_required)
+          (md5_pwd_hint && !password_upgrade_required)
         ) {
           localStorage.setItem("change_pwd_hint", "true");
         } else {
           localStorage.removeItem("change_pwd_hint");
         }
-        if (legacy_pwd_hint && !password_upgrade_required) {
-          localStorage.setItem("legacy_pwd_hint", "true");
+        if (md5_pwd_hint && !password_upgrade_required) {
+          localStorage.setItem("md5_pwd_hint", "true");
         } else {
-          localStorage.removeItem("legacy_pwd_hint");
+          localStorage.removeItem("md5_pwd_hint");
         }
         if (password_upgrade_required) {
           localStorage.setItem("password_upgrade_required", "true");
@@ -429,10 +446,10 @@ function getVersion() {
           localStorage.removeItem("password_upgrade_required");
         }
       } else {
-        accountWarningLegacy.value = false;
+        accountWarningMd5.value = false;
         accountWarningUpgrade.value = false;
         localStorage.removeItem("change_pwd_hint");
-        localStorage.removeItem("legacy_pwd_hint");
+        localStorage.removeItem("md5_pwd_hint");
         localStorage.removeItem("password_upgrade_required");
       }
     })
@@ -443,36 +460,41 @@ function getVersion() {
 
 function initPasswordWarningFromStorage() {
   const hasChangePwdHint = localStorage.getItem("change_pwd_hint") === "true";
-  const hasLegacyPwdHint = localStorage.getItem("legacy_pwd_hint") === "true";
+  const hasMd5PwdHint =
+    localStorage.getItem("md5_pwd_hint") === "true";
   const hasPasswordUpgradeRequired =
     localStorage.getItem("password_upgrade_required") === "true";
-  if (hasChangePwdHint || hasLegacyPwdHint || hasPasswordUpgradeRequired) {
+  if (hasChangePwdHint || hasMd5PwdHint || hasPasswordUpgradeRequired) {
     dialog.value = true;
     accountWarning.value = true;
     accountWarningUpgrade.value = hasPasswordUpgradeRequired;
-    accountWarningLegacy.value =
-      hasLegacyPwdHint && !hasPasswordUpgradeRequired;
+    accountWarningMd5.value =
+      hasMd5PwdHint && !hasPasswordUpgradeRequired;
   }
 }
 
 function checkUpdate() {
   updateStatus.value = t("core.header.updateDialog.status.checking");
-  axios
-    .get("/api/update/check")
+  updatesApi
+    .check()
     .then((res) => {
       hasNewVersion.value = res.data.data.has_new_version;
 
       if (res.data.data.has_new_version) {
-        releaseMessage.value = res.data.message;
+        releaseMessage.value = res.data.message || "";
         updateStatus.value = t("core.header.version.hasNewVersion");
       } else {
-        updateStatus.value = res.data.message;
+        updateStatus.value = res.data.message || "";
       }
       dashboardHasNewVersion.value = isDesktopReleaseMode.value
         ? false
         : res.data.data.dashboard_has_new_version;
     })
     .catch((err) => {
+      if (isLegacyFallbackError(err)) {
+        console.log(err);
+        return;
+      }
       if (err.response && err.response.status == 401) {
         console.log("401");
         const authStore = useAuthStore();
@@ -486,8 +508,8 @@ function checkUpdate() {
 
 function getReleases() {
   releasesLoading.value = true;
-  return axios
-    .get("/api/update/releases")
+  return updatesApi
+    .releases()
     .then((res) => {
       releases.value = res.data.data.map((item: any) => {
         item.published_at = new Date(item.published_at).toLocaleString();
@@ -562,27 +584,90 @@ function stopRestartPolling() {
   }
 }
 
+function stopRestartReloadTimer() {
+  if (restartReloadTimer) {
+    clearInterval(restartReloadTimer);
+    restartReloadTimer = null;
+  }
+}
+
+function resetRestartFeedbackState() {
+  stopRestartReloadTimer();
+  stopRestartPolling();
+  restartCompleted.value = false;
+  restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
+  restartWaiting.value = false;
+}
+
 async function fetchAstrBotStartTime() {
-  const res = await axios.get("/api/stat/start-time", { timeout: 3000 });
-  const startTime = res.data?.data?.start_time ?? null;
+  const res = await statsApi.startTime();
+  const rawStartTime = res.data?.data?.start_time;
+  const parsedStartTime =
+    typeof rawStartTime === "number" ? rawStartTime : Number(rawStartTime || 0);
+  const startTime = Number.isFinite(parsedStartTime) ? parsedStartTime : 0;
   commonStore.startTime = startTime;
   return startTime;
 }
 
-function waitForAstrBotRestart(initialStartTime: number | string | null) {
-  if (restartWaiting.value) {
+function reloadAfterUpdate() {
+  stopRestartReloadTimer();
+  reloadWithCacheBuster();
+}
+
+function reloadWithCacheBuster() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("_r", Date.now().toString());
+  window.location.replace(url.toString());
+}
+
+function showRestartCompleted() {
+  if (restartCompleted.value) {
     return;
   }
-  stopRestartPolling();
-  restartWaiting.value = true;
-  restartStartTime.value = initialStartTime;
+  stopUpdateProgressPolling();
+  stopRestartReloadTimer();
+  restartWaiting.value = false;
+  restartCompleted.value = true;
+  restartReloadCountdown.value = RESTART_FEEDBACK_DELAY_SECONDS;
   updateProgress.value = {
     ...updateProgress.value,
-    stage: "restart",
     status: "success",
-    message: t("core.header.updateDialog.progress.restarting"),
+    stage: "done",
+    message: t("core.header.updateDialog.progress.successReady"),
     overall_percent: 100,
   };
+  restartReloadTimer = setInterval(() => {
+    if (restartReloadCountdown.value <= 1) {
+      reloadAfterUpdate();
+      return;
+    }
+    restartReloadCountdown.value -= 1;
+  }, 1000);
+}
+
+function waitForAstrBotRestart(
+  initialStartTime: number | string | null,
+  showWaiting = true,
+) {
+  if (restartCompleted.value) {
+    return;
+  }
+  if (showWaiting && !restartWaiting.value) {
+    restartWaiting.value = true;
+    restartStartTime.value = initialStartTime;
+    updateProgress.value = {
+      ...updateProgress.value,
+      stage: "restart",
+      status: "success",
+      message: t("core.header.updateDialog.progress.restarting"),
+      overall_percent: 100,
+    };
+  }
+  if (restartPollTimer) {
+    return;
+  }
+
+  restartStartTime.value = initialStartTime;
 
   const poll = async () => {
     try {
@@ -593,20 +678,27 @@ function waitForAstrBotRestart(initialStartTime: number | string | null) {
         currentStartTime !== initialStartTime
       ) {
         stopRestartPolling();
-        restartWaiting.value = false;
-        window.location.reload();
+        showRestartCompleted();
       }
     } catch (_error) {
       // Backend may be unavailable while the process is restarting.
     }
   };
 
+  void poll();
   restartPollTimer = setInterval(() => {
     void poll();
-  }, 1000);
+  }, RESTART_START_TIME_POLL_INTERVAL_MS);
 }
 
 function applyUpdateProgress(payload: UpdateProgress) {
+  if (
+    payload.status === "idle" &&
+    payload.id === updateProgress.value.id &&
+    updateProgress.value.status !== "idle"
+  ) {
+    return;
+  }
   updateProgress.value = {
     ...createEmptyUpdateProgress(),
     ...payload,
@@ -615,8 +707,16 @@ function applyUpdateProgress(payload: UpdateProgress) {
       ...(payload.stages || {}),
     },
   };
+  if (payload.stage === "restart") {
+    stopUpdateProgressPolling();
+    waitForAstrBotRestart(restartStartTime.value);
+    return;
+  }
   if (payload.status === "success" || payload.status === "error") {
     stopUpdateProgressPolling();
+  }
+  if (payload.status === "error") {
+    stopRestartPolling();
   }
   if (payload.status === "success") {
     waitForAstrBotRestart(restartStartTime.value);
@@ -626,8 +726,8 @@ function applyUpdateProgress(payload: UpdateProgress) {
 function startUpdateProgressPolling(progressId: string) {
   stopUpdateProgressPolling();
   const poll = () => {
-    axios
-      .get("/api/update/progress", { params: { id: progressId } })
+    updatesApi
+      .progress(progressId)
       .then((res) => {
         if (res.data?.data) {
           applyUpdateProgress(res.data.data);
@@ -646,7 +746,10 @@ async function switchVersion(targetVersion: string) {
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  let initialStartTime: number | string | null = null;
+  let initialStartTime: number | string | null = commonStore.getStartTime();
+  if (initialStartTime === -1) {
+    initialStartTime = null;
+  }
   updateProgress.value = {
     ...createEmptyUpdateProgress(),
     id: progressId,
@@ -654,39 +757,50 @@ async function switchVersion(targetVersion: string) {
     version: targetVersion,
     message: t("core.header.updateDialog.progress.preparing"),
   } as UpdateProgress;
+  resetRestartFeedbackState();
   updateStatus.value = t("core.header.updateDialog.status.switching");
   installLoading.value = true;
 
-  try {
-    initialStartTime = await fetchAstrBotStartTime();
-  } catch (_error) {
-    initialStartTime = commonStore.getStartTime();
+  if (initialStartTime === null) {
+    try {
+      initialStartTime = await fetchAstrBotStartTime();
+    } catch (_error) {
+      initialStartTime = null;
+    }
   }
   restartStartTime.value = initialStartTime;
+  waitForAstrBotRestart(initialStartTime, false);
   startUpdateProgressPolling(progressId);
 
-  axios
-    .post("/api/update/do", {
+  updatesApi
+    .core({
       version: targetVersion,
       proxy: getSelectedGitHubProxy(),
       progress_id: progressId,
     })
     .then((res) => {
-      updateStatus.value = res.data.message;
-      updateProgress.value = {
-        ...updateProgress.value,
-        status:
-          res.data.status === "ok" ? "success" : updateProgress.value.status,
-        message: res.data.message,
-        overall_percent:
-          res.data.status === "ok" ? 100 : updateProgress.value.overall_percent,
-      };
-      if (res.data.status == "ok") {
-        waitForAstrBotRestart(initialStartTime);
+      updateStatus.value = res.data.message || "";
+      if (res.data.status === "error") {
+        stopUpdateProgressPolling();
+        stopRestartPolling();
+        updateProgress.value = {
+          ...updateProgress.value,
+          status: "error",
+          message:
+            res.data.message ||
+            t("core.header.updateDialog.progress.failed"),
+        };
       }
     })
     .catch((err) => {
       console.log(err);
+      stopUpdateProgressPolling();
+      if (!err?.response && restartPollTimer) {
+        waitForAstrBotRestart(restartStartTime.value);
+        updateStatus.value = t("core.header.updateDialog.progress.restarting");
+        return;
+      }
+      stopRestartPolling();
       updateStatus.value = err;
       updateProgress.value = {
         ...updateProgress.value,
@@ -699,20 +813,19 @@ async function switchVersion(targetVersion: string) {
     })
     .finally(() => {
       installLoading.value = false;
-      stopUpdateProgressPolling();
     });
 }
 
 function updateDashboard() {
   updatingDashboardLoading.value = true;
   updateStatus.value = t("core.header.updateDialog.status.updating");
-  axios
-    .post("/api/update/dashboard")
+  updatesApi
+    .dashboard()
     .then((res) => {
-      updateStatus.value = res.data.message;
+      updateStatus.value = res.data.message || "";
       if (res.data.status == "ok") {
         setTimeout(() => {
-          window.location.reload();
+          reloadWithCacheBuster();
         }, 1000);
       }
     })
@@ -725,13 +838,16 @@ function updateDashboard() {
     });
 }
 
-function toggleDarkMode() {
-  const newTheme =
-    customizer.uiTheme === "PurpleThemeDark"
-      ? "PurpleTheme"
-      : "PurpleThemeDark";
-  customizer.SET_UI_THEME(newTheme);
-  theme.global.name.value = newTheme;
+// 主题选项配置
+const themeOptions = [
+  { mode: 'light' as const,  icon: 'mdi-white-balance-sunny', labelKey: 'core.header.buttons.theme.light'  },
+  { mode: 'dark'  as const,  icon: 'mdi-weather-night',       labelKey: 'core.header.buttons.theme.dark'   },
+  { mode: 'system' as const, icon: 'mdi-sync',                labelKey: 'core.header.buttons.theme.system' },
+] as const;
+
+function setThemeMode(mode: 'light' | 'dark' | 'system') {
+  customizer.SET_THEME_MODE(mode);
+  theme.global.name.value = customizer.uiTheme;
 }
 
 function openReleaseNotesDialog(body: string, tag: string) {
@@ -758,6 +874,7 @@ commonStore.getStartTime();
 onUnmounted(() => {
   stopUpdateProgressPolling();
   stopRestartPolling();
+  stopRestartReloadTimer();
 });
 
 // 视图模式切换
@@ -783,6 +900,11 @@ onMounted(() => {
 // 监听 viewMode 变化，切换到 bot 模式时跳转到首页
 // 保存 bot 模式的最後路由
 // 監聽 route 變化，保存最後一次 bot 路由
+watch(showPreReleases, (value) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SHOW_PRE_RELEASES_KEY, value ? "true" : "false");
+});
+
 watch(
   () => route.fullPath,
   (newPath) => {
@@ -1077,29 +1199,68 @@ onMounted(async () => {
         </v-card>
       </v-menu>
 
-      <!-- 主题切换 -->
-      <v-list-item
-        @click="toggleDarkMode()"
-        class="styled-menu-item"
-        rounded="md"
+      <!-- 主题切换分组 -->
+      <v-menu
+        open-on-click
+        :open-on-hover="!$vuetify.display.xs"
+        :open-delay="!$vuetify.display.xs ? 60 : 0"
+        :close-delay="!$vuetify.display.xs ? 120 : 0"
+        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+        offset="8"
       >
-        <template v-slot:prepend>
-          <v-icon>
-            {{
-              useCustomizerStore().uiTheme === "PurpleThemeDark"
-                ? "mdi-weather-night"
-                : "mdi-white-balance-sunny"
-            }}
-          </v-icon>
+        <template v-slot:activator="{ props: themeMenuProps }">
+          <v-list-item
+            v-bind="themeMenuProps"
+            @click.stop
+            class="styled-menu-item theme-group-trigger"
+            rounded="md"
+          >
+            <template v-slot:prepend>
+              <v-icon>mdi-brightness-6</v-icon>
+            </template>
+            <v-list-item-title>{{
+              t("core.header.buttons.theme.title")
+            }}</v-list-item-title>
+            <template v-slot:append>
+              <span class="theme-group-current">
+                <v-icon size="16">{{
+                  customizer.themeMode === 'dark'
+                    ? 'mdi-weather-night'
+                    : customizer.themeMode === 'system'
+                      ? 'mdi-theme-light-dark'
+                      : 'mdi-white-balance-sunny'
+                }}</v-icon>
+              </span>
+              <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
+            </template>
+          </v-list-item>
         </template>
-        <v-list-item-title>
-          {{
-            useCustomizerStore().uiTheme === "PurpleThemeDark"
-              ? t("core.header.buttons.theme.light")
-              : t("core.header.buttons.theme.dark")
-          }}
-        </v-list-item-title>
-      </v-list-item>
+
+        <v-card
+          class="styled-menu-card"
+          style="min-width: 170px"
+          elevation="8"
+          rounded="lg"
+        >
+          <v-list density="compact" class="styled-menu-list pa-1">
+            <v-list-item
+              v-for="option in themeOptions"
+              :key="option.mode"
+              @click="setThemeMode(option.mode)"
+              :class="{
+                'styled-menu-item-active': customizer.themeMode === option.mode,
+              }"
+              class="styled-menu-item"
+              rounded="md"
+            >
+              <template v-slot:prepend>
+                <v-icon size="18" class="theme-option-icon">{{ option.icon }}</v-icon>
+              </template>
+              <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-menu>
 
       <!-- 更新按钮 -->
       <v-list-item
@@ -1180,8 +1341,39 @@ onMounted(async () => {
             <div
               v-if="installLoading || updateProgress.status !== 'idle'"
               class="update-progress-panel mt-5"
+              :class="{ 'update-progress-panel--success': restartCompleted }"
             >
-              <div v-if="restartWaiting" class="restart-waiting-panel">
+              <div
+                v-if="restartCompleted"
+                class="update-feedback-panel update-feedback-panel--success"
+              >
+                <v-icon
+                  icon="mdi-check-circle"
+                  color="success"
+                  size="46"
+                ></v-icon>
+                <div class="text-subtitle-1 font-weight-medium">
+                  {{ t("core.header.updateDialog.progress.successReady") }}
+                </div>
+                <div class="text-caption text-medium-emphasis">
+                  {{
+                    t("core.header.updateDialog.progress.autoReloadIn", {
+                      seconds: restartReloadCountdown,
+                    })
+                  }}
+                </div>
+                <v-btn
+                  color="success"
+                  variant="elevated"
+                  size="small"
+                  @click="reloadAfterUpdate"
+                >
+                  <v-icon class="mr-1" size="18">mdi-refresh</v-icon>
+                  {{ t("core.header.updateDialog.progress.reloadNow") }}
+                </v-btn>
+              </div>
+
+              <div v-else-if="restartWaiting" class="update-feedback-panel">
                 <v-progress-circular
                   indeterminate
                   color="primary"
@@ -1286,6 +1478,21 @@ onMounted(async () => {
 
             <!-- 发行版 -->
             <div class="mt-5">
+              <div class="release-table-toolbar mb-3">
+                <div class="text-subtitle-1 font-weight-medium">
+                  {{ t("core.header.updateDialog.releases") }}
+                </div>
+                <v-switch
+                  v-model="showPreReleases"
+                  class="release-prerelease-switch"
+                  color="warning"
+                  density="compact"
+                  hide-details
+                  inset
+                  :label="t('core.header.updateDialog.showPreReleases')"
+                ></v-switch>
+              </div>
+
               <v-alert
                 v-if="!installLoading && firstReleasePageHasPreRelease"
                 type="warning"
@@ -1319,7 +1526,7 @@ onMounted(async () => {
 
               <v-data-table
                 :headers="releasesHeader"
-                :items="releases"
+                :items="visibleReleases"
                 item-key="name"
                 :items-per-page="6"
                 density="comfortable"
@@ -1560,8 +1767,8 @@ onMounted(async () => {
               t(
                 accountWarningUpgrade
                   ? "core.header.accountDialog.securityWarningUpgrade"
-                  : accountWarningLegacy
-                  ? "core.header.accountDialog.securityWarningLegacy"
+                  : accountWarningMd5
+                  ? "core.header.accountDialog.securityWarningMd5"
                   : "core.header.accountDialog.securityWarning",
               )
             }}</strong>
@@ -1743,6 +1950,18 @@ onMounted(async () => {
   margin-left: 0;
 }
 
+.release-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.release-prerelease-switch {
+  flex: 0 1 auto;
+}
+
 /* 响应式布局样式 */
 .logo-container {
   margin-left: 10px;
@@ -1822,6 +2041,23 @@ onMounted(async () => {
   min-width: 180px;
 }
 
+.theme-group-trigger :deep(.v-list-item__append) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-group-current {
+  display: flex;
+  align-items: center;
+  opacity: 0.75;
+}
+
+.theme-option-icon {
+  margin-right: 8px;
+  opacity: 0.85;
+}
+
 .mobile-mode-toggle-wrapper {
   display: flex;
   justify-content: center;
@@ -1858,6 +2094,33 @@ onMounted(async () => {
   padding: 16px;
 }
 
+.update-progress-panel {
+  overflow: hidden;
+  position: relative;
+  transition:
+    border-color 0.9s ease,
+    box-shadow 0.9s ease;
+}
+
+.update-progress-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(var(--v-theme-success), 0.16),
+    rgba(var(--v-theme-success), 0.07)
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.1s ease;
+}
+
+.update-progress-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
 .release-message-preview {
   max-height: 220px;
   overflow: hidden;
@@ -1886,6 +2149,53 @@ onMounted(async () => {
   gap: 16px;
 }
 
+.update-progress-panel--success {
+  border-color: rgba(var(--v-theme-success), 0.48);
+  box-shadow: inset 0 0 0 1px rgba(var(--v-theme-success), 0.08);
+}
+
+.update-progress-panel--success::before {
+  animation: update-success-green-in 1.2s ease-out;
+  opacity: 1;
+}
+
+.update-feedback-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 150px;
+  padding: 18px 0 22px;
+  text-align: center;
+}
+
+.update-feedback-panel--success {
+  animation: update-success-content-in 0.45s ease-out both;
+}
+
+@keyframes update-success-green-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes update-success-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .advanced-settings-toggle {
   display: inline-flex;
   align-items: center;
@@ -1903,14 +2213,6 @@ onMounted(async () => {
 
 .advanced-settings-toggle:hover {
   color: rgb(var(--v-theme-primary));
-}
-
-.restart-waiting-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 0 22px;
 }
 
 .update-stage-list {

@@ -3,15 +3,19 @@ import builtins
 from io import BytesIO
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
+import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
+from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
 
 
 class _ErrorWithBody(Exception):
@@ -114,6 +118,57 @@ def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
     provider._create_http_client({"proxy": ""})
 
     assert captured["httpx_module"] is openai_source_module.httpx
+
+
+@pytest.mark.asyncio
+async def test_get_models_retries_transient_request_error(monkeypatch):
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
+
+    class FakeModels:
+        def __init__(self):
+            self.calls = 0
+
+        async def list(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise httpx.ConnectError("temporary connection failure")
+            return SimpleNamespace(
+                data=[
+                    SimpleNamespace(id="gpt-b"),
+                    SimpleNamespace(id="gpt-a"),
+                ]
+            )
+
+    models = FakeModels()
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    provider.client = SimpleNamespace(models=models)
+
+    assert await provider.get_models() == ["gpt-a", "gpt-b"]
+    assert models.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_text_chat_passes_request_max_retries_to_query():
+    captured: dict[str, object] = {}
+
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    provider.api_keys = ["test-key"]
+    provider.client = SimpleNamespace(api_key=None)
+
+    async def fake_prepare_chat_payload(*args, **kwargs):
+        return {"messages": [], "model": "gpt-4o-mini"}, []
+
+    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+        captured["request_max_retries"] = request_max_retries
+        return LLMResponse(role="assistant", completion_text="ok")
+
+    provider._prepare_chat_payload = fake_prepare_chat_payload
+    provider._query = fake_query
+
+    await provider.text_chat(prompt="hello", request_max_retries=2)
+
+    assert captured["request_max_retries"] == 2
 
 
 @pytest.mark.asyncio
@@ -655,19 +710,22 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls(monkeyp
     provider = _make_provider()
     try:
 
-        async def fake_download(url: str) -> str:
-            assert url == "https://example.com/quoted.png"
-            return "/tmp/quoted.png"
-
-        def fake_encode(image_path: str, **_kwargs) -> str:
-            assert image_path == "/tmp/quoted.png"
-            return "data:image/png;base64,abcd"
+        async def fake_resolve_media_ref_to_base64_data(
+            media_ref: str,
+            *,
+            media_type: str,
+            strict: bool = False,
+        ) -> ResolvedMediaData:
+            assert media_ref == "https://example.com/quoted.png"
+            assert media_type == "image"
+            assert strict is False
+            return ResolvedMediaData(base64_data="abcd", mime_type="image/png")
 
         monkeypatch.setattr(
-            "astrbot.core.provider.sources.openai_source.download_image_by_url",
-            fake_download,
+            openai_source_module,
+            "resolve_media_ref_to_base64_data",
+            fake_resolve_media_ref_to_base64_data,
         )
-        monkeypatch.setattr(provider, "_encode_image_file_to_data_url", fake_encode)
 
         contexts = [
             {
@@ -779,12 +837,13 @@ async def test_prepare_chat_payload_materializes_context_http_image_urls_with_de
         image_path = tmp_path / "quoted-image.png"
         PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_path)
 
-        async def fake_download(url: str) -> str:
+        async def fake_download(url: str, target_path: str) -> None:
             assert url == "https://example.com/quoted.png"
-            return str(image_path)
+            with open(target_path, "wb") as f:
+                f.write(image_path.read_bytes())
 
         monkeypatch.setattr(
-            "astrbot.core.provider.sources.openai_source.download_image_by_url",
+            "astrbot.core.utils.media_utils.download_file",
             fake_download,
         )
 
@@ -843,37 +902,22 @@ async def test_prepare_chat_payload_materializes_context_file_uri_image_urls(tmp
         await provider.terminate()
 
 
-@pytest.mark.asyncio
-async def test_file_uri_to_path_preserves_windows_drive_letter():
-    provider = _make_provider()
-    try:
-        assert provider._file_uri_to_path("file:///C:/tmp/quoted-image.png") == (
-            "C:/tmp/quoted-image.png"
-        )
-    finally:
-        await provider.terminate()
+def test_file_uri_to_path_preserves_windows_drive_letter():
+    assert file_uri_to_path("file:///C:/tmp/quoted-image.png") == (
+        "C:/tmp/quoted-image.png"
+    )
 
 
-@pytest.mark.asyncio
-async def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
-    provider = _make_provider()
-    try:
-        assert provider._file_uri_to_path("file://C:/tmp/quoted-image.png") == (
-            "C:/tmp/quoted-image.png"
-        )
-    finally:
-        await provider.terminate()
+def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
+    assert file_uri_to_path("file://C:/tmp/quoted-image.png") == (
+        "C:/tmp/quoted-image.png"
+    )
 
 
-@pytest.mark.asyncio
-async def test_file_uri_to_path_preserves_remote_netloc_as_unc_path():
-    provider = _make_provider()
-    try:
-        assert provider._file_uri_to_path("file://server/share/quoted-image.png") == (
-            "//server/share/quoted-image.png"
-        )
-    finally:
-        await provider.terminate()
+def test_file_uri_to_path_preserves_remote_netloc_as_unc_path():
+    assert file_uri_to_path("file://server/share/quoted-image.png") == (
+        "//server/share/quoted-image.png"
+    )
 
 
 @pytest.mark.asyncio
@@ -1089,24 +1133,111 @@ async def test_prepare_chat_payload_materializes_context_localhost_file_uri_imag
 
 
 @pytest.mark.asyncio
+async def test_resolve_audio_part_supports_data_audio_uri(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.utils.media_utils.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+    provider = _make_provider()
+    try:
+        audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
+        audio_ref = f"data:audio/wav;base64,{base64.b64encode(audio_bytes).decode()}"
+
+        audio_part = await provider._resolve_audio_part(audio_ref)
+
+        assert audio_part == {
+            "type": "input_audio",
+            "input_audio": {
+                "data": base64.b64encode(audio_bytes).decode("utf-8"),
+                "format": "wav",
+            },
+        }
+        assert not list(tmp_path.iterdir())
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_resolve_audio_part_supports_base64_scheme(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "astrbot.core.utils.media_utils.get_astrbot_temp_path",
+        lambda: str(tmp_path),
+    )
+    provider = _make_provider()
+    try:
+        audio_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 16
+        audio_ref = f"base64://{base64.b64encode(audio_bytes).decode()}"
+
+        audio_part = await provider._resolve_audio_part(audio_ref)
+
+        assert audio_part == {
+            "type": "input_audio",
+            "input_audio": {
+                "data": base64.b64encode(audio_bytes).decode("utf-8"),
+                "format": "wav",
+            },
+        }
+        assert not list(tmp_path.iterdir())
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_audio_preprocess_failure_does_not_log_media_ref(monkeypatch):
+    provider = _make_provider()
+    captured: dict[str, object] = {}
+
+    async def fake_resolve_media_ref_to_base64_data(*args, **kwargs):
+        raise ValueError("boom")
+
+    def fake_warning(message, *args, **kwargs):
+        captured["message"] = message
+        captured["args"] = args
+
+    monkeypatch.setattr(
+        openai_source_module,
+        "resolve_media_ref_to_base64_data",
+        fake_resolve_media_ref_to_base64_data,
+    )
+    monkeypatch.setattr(openai_source_module.logger, "warning", fake_warning)
+
+    try:
+        audio_ref = "data:audio/wav;base64," + "A" * 1000
+
+        assert await provider._resolve_audio_part(audio_ref) is None
+
+        assert captured["message"] == "音频预处理失败，将忽略。错误: %s"
+        assert len(captured["args"]) == 1
+        assert str(captured["args"][0]) == "boom"
+        rendered_log_args = f"{captured['message']} {captured['args']}"
+        assert audio_ref not in rendered_log_args
+        assert "data:audio" not in rendered_log_args
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_prepare_chat_payload_keeps_original_context_image_when_materialization_fails(
     monkeypatch,
 ):
     provider = _make_provider()
     try:
 
-        async def fake_download(url: str) -> str:
-            assert url == "https://example.com/expired.png"
-            return "/tmp/not-an-image"
+        async def fake_resolve_media_ref_to_base64_data(
+            media_ref: str,
+            *,
+            media_type: str,
+            strict: bool = False,
+        ) -> None:
+            assert media_ref == "https://example.com/expired.png"
+            assert media_type == "image"
+            assert strict is False
+            return None
 
         monkeypatch.setattr(
-            "astrbot.core.provider.sources.openai_source.download_image_by_url",
-            fake_download,
-        )
-        monkeypatch.setattr(
-            provider,
-            "_encode_image_file_to_data_url",
-            lambda _image_path, **_kwargs: None,
+            openai_source_module,
+            "resolve_media_ref_to_base64_data",
+            fake_resolve_media_ref_to_base64_data,
         )
 
         payloads, _ = await provider._prepare_chat_payload(

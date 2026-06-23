@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import unquote
 
-import quart
 from requests import Response
 from wechatpy.enterprise import WeChatClient, parse_message
 from wechatpy.enterprise.crypto import WeChatCrypto
@@ -28,8 +27,9 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import convert_audio_to_wav
+from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .wecom_event import WecomPlatformEvent
@@ -65,7 +65,7 @@ def _extract_wecom_media_filename(disposition: str | None) -> str | None:
 
 class WecomServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
-        self.server = quart.Quart(__name__)
+        self.server = FastAPIWebhookServer("wecom-webhook")
         self.port = int(cast(str, config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.server.add_url_rule(
@@ -89,15 +89,15 @@ class WecomServer:
         self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
         self.shutdown_event = asyncio.Event()
 
-    async def verify(self):
+    async def verify(self, request):
         """内部服务器的 GET 验证入口"""
-        return await self.handle_verify(quart.request)
+        return await self.handle_verify(request)
 
     async def handle_verify(self, request) -> str:
         """处理验证请求，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: FastAPI webhook request 对象
 
         Returns:
             验证响应
@@ -117,15 +117,15 @@ class WecomServer:
             logger.error("验证请求有效性失败，签名异常，请检查配置。")
             raise
 
-    async def callback_command(self):
+    async def callback_command(self, request):
         """内部服务器的 POST 回调入口"""
-        return await self.handle_callback(quart.request)
+        return await self.handle_callback(request)
 
     async def handle_callback(self, request) -> str:
         """处理回调请求，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: FastAPI webhook request 对象
 
         Returns:
             响应内容
@@ -287,13 +287,7 @@ class WecomPlatformAdapter(Platform):
         message_obj.message_id = uuid.uuid4().hex
         message_obj.raw_message = {"_proactive_send": True}
 
-        event = WecomPlatformEvent(
-            message_str=message_obj.message_str,
-            message_obj=message_obj,
-            platform_meta=self.meta(),
-            session_id=message_obj.session_id,
-            client=self.client,
-        )
+        event = self.create_event(message_obj)
         await event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
@@ -398,8 +392,11 @@ class WecomPlatformAdapter(Platform):
                 f.write(resp.content)
 
             try:
-                path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
-                path_wav = await convert_audio_to_wav(path, path_wav)
+                path_wav = await MediaResolver(
+                    path,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
             except Exception as e:
                 logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
@@ -474,8 +471,11 @@ class WecomPlatformAdapter(Platform):
                 f.write(resp.content)
 
             try:
-                path_wav = os.path.join(temp_dir, f"weixinkefu_{media_id}.wav")
-                path_wav = await convert_audio_to_wav(path, path_wav)
+                path_wav = await MediaResolver(
+                    path,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
             except Exception as e:
                 logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
@@ -510,15 +510,25 @@ class WecomPlatformAdapter(Platform):
             return
         await self.handle_msg(abm)
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = WecomPlatformEvent(
+    def create_event(self, message: AstrBotMessage) -> WecomPlatformEvent:
+        """Creates a WeCom message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created WeCom message event.
+        """
+        return WecomPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     def get_client(self) -> WeChatClient:
         return self.client

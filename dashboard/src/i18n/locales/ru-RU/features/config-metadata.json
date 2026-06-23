@@ -45,6 +45,10 @@
                     "description": "Резервные модели чата (ID)",
                     "hint": "Если текущая модель недоступна, запрос будет перенаправлен на эти модели по порядку."
                 },
+                "request_max_retries": {
+                    "description": "Максимум повторов запроса",
+                    "hint": "Максимальное число попыток для одного запроса модели при повторяемых ошибках."
+                },
                 "default_image_caption_provider_id": {
                     "description": "Модель описания изображений",
                     "hint": "Оставьте пустым для отключения; полезно для моделей без поддержки мультимодальности"
@@ -613,7 +617,7 @@
             },
             "unified_webhook_mode": {
                 "description": "Единый режим Webhook",
-                "hint": "Использовать общий вход вебхуков AstrBot без открытия новых портов. URL: /api/platform/webhook/{uuid}."
+                "hint": "Использовать общий вход вебхуков AstrBot без открытия новых портов. URL: /api/v1/webhooks/platforms/{uuid}."
             },
             "webhook_uuid": {
                 "description": "UUID вебхука",
@@ -790,7 +794,7 @@
             },
             "disable_builtin_commands": {
                 "description": "Отключить встроенные команды",
-                "hint": "Отключает help, provider, model и другие базовые команды."
+                "hint": "Отключает help, sid, new и другие базовые команды."
             }
         },
         "whitelist": {
@@ -1590,6 +1594,30 @@
             "openai-tts-voice": {
                 "description": "API Base URL",
                 "hint": "Голоса OpenAI TTS: alloy, echo и др."
+            },
+            "elevenlabs-tts-voice-id": {
+                "description": "ID голоса",
+                "hint": "ID голоса ElevenLabs. Просмотрите и скопируйте ID на https://elevenlabs.io/app/voice-library. По умолчанию 'JBFqnCBsd6RMkjVDRZzb' (George)."
+            },
+            "elevenlabs-tts-output-format": {
+                "description": "Формат вывода",
+                "hint": "Формат аудио, например 'mp3_44100_128', 'mp3_22050_32', 'wav_44100' или 'opus_48000_128'. Raw PCM/u-law/a-law форматы не поддерживаются. По умолчанию 'mp3_44100_128'."
+            },
+            "elevenlabs-tts-stability": {
+                "description": "Стабильность",
+                "hint": "Стабильность голоса, диапазон [0, 1]. Оставьте пустым для значения по умолчанию."
+            },
+            "elevenlabs-tts-similarity-boost": {
+                "description": "Усиление сходства",
+                "hint": "Насколько вывод соответствует исходному голосу, диапазон [0, 1]. Оставьте пустым для значения по умолчанию."
+            },
+            "elevenlabs-tts-style": {
+                "description": "Выразительность стиля",
+                "hint": "Выразительность стиля голоса, диапазон [0, 1]. Высокие значения увеличивают задержку. Оставьте пустым для значения по умолчанию."
+            },
+            "elevenlabs-tts-use-speaker-boost": {
+                "description": "Усиление диктора",
+                "hint": "Усиливает сходство с исходным диктором. Может немного увеличить задержку."
             },
             "mimo-tts-voice": {
                 "description": "Голос",

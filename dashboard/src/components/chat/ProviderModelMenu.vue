@@ -64,7 +64,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import axios from 'axios';
+import { providerApi } from '@/api/v1';
 
 interface ModelMetadata {
     modalities?: { input?: string[] };
@@ -110,12 +110,10 @@ function saveToStorage() {
 }
 
 function loadProviderConfigs() {
-    axios.get('/api/config/provider/list', {
-        params: { provider_type: 'chat_completion' }
-    }).then(response => {
+    providerApi.listByProviderType('chat_completion').then(response => {
         if (response.data.status === 'ok') {
             // 过滤掉 enable 为 false 的配置
-            providerConfigs.value = (response.data.data || []).filter(
+            providerConfigs.value = ((response.data.data || []) as unknown as ProviderConfig[]).filter(
                 (p: ProviderConfig) => p.enable !== false
             );
         }
