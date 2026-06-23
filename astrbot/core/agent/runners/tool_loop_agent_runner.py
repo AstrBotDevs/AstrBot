@@ -193,7 +193,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             parts.append(TextPart(text=llm_resp.completion_text))
         if len(parts) == 0:
             logger.warning("LLM returned empty assistant message with no tool calls.")
-        self.run_context.messages.append(Message(role="assistant", content=parts))
+        self._append_message(Message(role="assistant", content=parts))
 
         try:
             await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
@@ -318,6 +318,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 Message(role="system", content=request.system_prompt),
             )
         self.run_context.messages = messages
+        self.run_context.persisted_messages = list(messages)
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
@@ -326,6 +327,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if self.read_tool is not None:
             return f"`{self.read_tool.name}`"
         return "the available file-read tool"
+
+    def _append_message(self, message: Message) -> None:
+        self.run_context.messages.append(message)
+        if self.run_context.persisted_messages is not None:
+            self.run_context.persisted_messages.append(message)
+
+    def _extend_messages(self, new_messages: T.Sequence[Message]) -> None:
+        self.run_context.messages.extend(new_messages)
+        if self.run_context.persisted_messages is not None:
+            self.run_context.persisted_messages.extend(new_messages)
 
     async def _assemble_request_context_for_provider(
         self,
@@ -697,7 +708,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not self.req:
             raise ValueError("Request is not set. Please call reset() first.")
 
-        if self._state == AgentState.IDLE:
+        is_first_step = self._state == AgentState.IDLE
+        if is_first_step:
             try:
                 await self.agent_hooks.on_agent_begin(self.run_context)
             except Exception as e:
@@ -707,13 +719,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
-        # Process request-time context before sending it to the provider.
-        token_usage = self.req.conversation.token_usage if self.req.conversation else 0
-        self._simple_print_message_role("[BefCompact]", self.run_context.messages)
-        self.run_context.messages = await self.request_context_manager.process(
-            self.run_context.messages, trusted_token_usage=token_usage
-        )
-        self._simple_print_message_role("[AftCompact]", self.run_context.messages)
+        if is_first_step:
+            token_usage = (
+                self.req.conversation.token_usage if self.req.conversation else 0
+            )
+            self._simple_print_message_role("[BefCompact]", self.run_context.messages)
+            pre_compaction_count = len(self.run_context.messages)
+            (
+                self.run_context.messages,
+                was_hard_truncated,
+            ) = await self.request_context_manager.process_with_meta(
+                self.run_context.messages, trusted_token_usage=token_usage
+            )
+            self._simple_print_message_role("[AftCompact]", self.run_context.messages)
+
+            if (
+                not was_hard_truncated
+                and len(self.run_context.messages) != pre_compaction_count
+            ):
+                self.run_context.persisted_messages = list(self.run_context.messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
@@ -903,9 +927,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 tool_calls_result=tool_call_result_blocks,
             )
             # record the assistant message with tool calls
-            self.run_context.messages.extend(
-                tool_calls_result.to_openai_messages_model()
-            )
+            self._extend_messages(tool_calls_result.to_openai_messages_model())
 
             # If there are cached images and the model supports image input,
             # append a user message with images so LLM can see them
@@ -937,9 +959,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 )
                             )
                     if image_parts:
-                        self.run_context.messages.append(
-                            Message(role="user", content=image_parts)
-                        )
+                        self._append_message(Message(role="user", content=image_parts))
                         logger.debug(
                             f"Appended {len(cached_images)} cached image(s) to context for LLM review"
                         )
@@ -965,7 +985,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if self.req:
                 self.req.func_tool = None
             # 注入提示词
-            self.run_context.messages.append(
+            self._append_message(
                 Message(
                     role="user",
                     content=self.MAX_STEPS_REACHED_PROMPT,
@@ -1386,7 +1406,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.completion_text:
             parts.append(TextPart(text=llm_resp.completion_text))
         if parts:
-            self.run_context.messages.append(Message(role="assistant", content=parts))
+            self._append_message(Message(role="assistant", content=parts))
 
         try:
             await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
