@@ -28,7 +28,6 @@ async def generate_tsne_visualization(
 
     """
     try:
-        import faiss
         import matplotlib  # type: ignore[reportMissingImports]
         import numpy as np
 
@@ -53,48 +52,16 @@ async def generate_tsne_visualization(
             return None
 
         kb = kb_helper.kb
-        index_path = kb_helper.kb_dir / "index.faiss"
         vec_db: FaissVecDB = kb_helper.vec_db  # type: ignore
         storage = vec_db.embedding_storage
 
-        if storage.db_type == "faiss":
-            # 读取 FAISS 索引
-            if not index_path.exists():
-                logger.warning(f"FAISS 索引不存在: {index_path!s}")
-                return None
+        total_count = storage.ntotal
+        if total_count == 0:
+            logger.warning("索引为空")
+            return None
 
-            index = faiss.read_index(str(index_path))
-
-            if index.ntotal == 0:
-                logger.warning("索引为空")
-                return None
-
-            # 提取所有向量
-            logger.info(f"提取 {index.ntotal} 个向量用于可视化...")
-            if isinstance(index, faiss.IndexIDMap):
-                base_index = faiss.downcast_index(index.index)
-                if hasattr(base_index, "reconstruct_n"):
-                    vectors = base_index.reconstruct_n(0, index.ntotal)
-                else:
-                    vectors = np.zeros((index.ntotal, index.d), dtype=np.float32)
-                    for i in range(index.ntotal):
-                        base_index.reconstruct(i, vectors[i])
-            elif hasattr(index, "reconstruct_n"):
-                vectors = index.reconstruct_n(0, index.ntotal)
-            else:
-                vectors = np.zeros((index.ntotal, index.d), dtype=np.float32)
-                for i in range(index.ntotal):
-                    index.reconstruct(i, vectors[i])
-            dimensions = index.d
-            total_count = index.ntotal
-        else:
-            # NumPy format
-            vectors = storage._numpy_vectors
-            if len(vectors) == 0:
-                logger.warning("索引为空")
-                return None
-            dimensions = storage.dimension
-            total_count = len(vectors)
+        vectors = storage.get_all_vectors()
+        dimensions = storage.dimension
 
         # 获取查询向量
         embedding_provider = vec_db.embedding_provider

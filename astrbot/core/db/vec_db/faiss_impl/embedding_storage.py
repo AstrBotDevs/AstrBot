@@ -4,21 +4,55 @@ import numpy as np
 
 
 class EmbeddingStorage:
+    @staticmethod
+    def read_index_type(storage_path: str | None) -> str:
+        """从存储路径所在目录读取 index_type 文件的配置。
+
+        Args:
+            storage_path: 向量数据库文件路径
+
+        Returns:
+            str: "faiss" 或 "numpy"
+        """
+        if not storage_path:
+            return "faiss"
+        parent_dir = os.path.dirname(storage_path)
+        index_type_path = os.path.join(parent_dir, "index_type")
+        if os.path.exists(index_type_path):
+            try:
+                with open(index_type_path, encoding="utf-8") as f:
+                    val = f.read().strip()
+                    if val in ("faiss", "numpy"):
+                        return val
+            except Exception:
+                pass
+        return "faiss"
+
+    @staticmethod
+    def write_index_type(storage_path: str | None, db_type: str) -> None:
+        """在存储路径所在目录写入 index_type 文件的配置。
+
+        Args:
+            storage_path: 向量数据库文件路径
+            db_type: 数据库类型，"faiss" 或 "numpy"
+        """
+        if not storage_path:
+            return
+        parent_dir = os.path.dirname(storage_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+        index_type_path = os.path.join(parent_dir, "index_type")
+        try:
+            with open(index_type_path, "w", encoding="utf-8") as f:
+                f.write(db_type)
+        except Exception:
+            pass
+
     def __init__(self, dimension: int, path: str | None = None) -> None:
         self.dimension = dimension
         self.path = path
         self.index = None
-        self.db_type = "faiss"
-
-        if path:
-            parent_dir = os.path.dirname(path)
-            index_type_path = os.path.join(parent_dir, "index_type")
-            if os.path.exists(index_type_path):
-                try:
-                    with open(index_type_path, encoding="utf-8") as f:
-                        self.db_type = f.read().strip()
-                except Exception:
-                    pass
+        self.db_type = self.read_index_type(path)
 
         # If db_type is faiss, check if the CPU supports it
         if self.db_type == "faiss":
@@ -27,14 +61,7 @@ class EmbeddingStorage:
             if not is_faiss_importable():
                 self.db_type = "numpy"
                 # Update index_type file to numpy
-                if path:
-                    parent_dir = os.path.dirname(path)
-                    index_type_path = os.path.join(parent_dir, "index_type")
-                    try:
-                        with open(index_type_path, "w", encoding="utf-8") as f:
-                            f.write("numpy")
-                    except Exception:
-                        pass
+                self.write_index_type(path, "numpy")
 
         if self.db_type == "faiss":
             try:
@@ -73,11 +100,7 @@ class EmbeddingStorage:
                     faiss.write_index(self.index, path)
 
                     # Update index_type file to faiss
-                    if path:
-                        parent_dir = os.path.dirname(path)
-                        index_type_path = os.path.join(parent_dir, "index_type")
-                        with open(index_type_path, "w", encoding="utf-8") as f:
-                            f.write("faiss")
+                    self.write_index_type(path, "faiss")
 
                     from astrbot import logger
 
@@ -130,6 +153,44 @@ class EmbeddingStorage:
                     logger.warning(
                         f"检测到 legacy FAISS 索引但当前运行在 NumPy 降级模式，无法直接读取，将启动空索引: {path}"
                     )
+
+    @property
+    def ntotal(self) -> int:
+        """获取索引中的向量总数。"""
+        if self.db_type == "faiss":
+            return self.index.ntotal if self.index is not None else 0
+        else:
+            return len(self._numpy_vectors)
+
+    def get_all_vectors(self) -> np.ndarray:
+        """从存储中获取所有的向量。
+
+        Returns:
+            np.ndarray: 包含所有向量的 numpy 数组，形状为 (n_total, dimension)。
+        """
+        if self.db_type == "faiss":
+            if self.index is None or self.index.ntotal == 0:
+                return np.empty((0, self.dimension), dtype=np.float32)
+
+            index = self.index
+            if isinstance(index, self._faiss.IndexIDMap):
+                base_index = self._faiss.downcast_index(index.index)
+                if hasattr(base_index, "reconstruct_n"):
+                    return base_index.reconstruct_n(0, index.ntotal)
+                else:
+                    vectors = np.zeros((index.ntotal, index.d), dtype=np.float32)
+                    for i in range(index.ntotal):
+                        base_index.reconstruct(i, vectors[i])
+                    return vectors
+            elif hasattr(index, "reconstruct_n"):
+                return index.reconstruct_n(0, index.ntotal)
+            else:
+                vectors = np.zeros((index.ntotal, index.d), dtype=np.float32)
+                for i in range(index.ntotal):
+                    index.reconstruct(i, vectors[i])
+                return vectors
+        else:
+            return self._numpy_vectors
 
     async def insert(self, vector: np.ndarray, id: int) -> None:
         """插入向量
@@ -199,6 +260,10 @@ class EmbeddingStorage:
         Returns:
             tuple: (距离, 索引)
 
+        Note:
+            通常 Embedding 接口（如 OpenAI）返回的向量本身即为 L2 归一化单位向量。
+            为了与其保持距离度量语义一致，FAISS 与 NumPy 均在检索时对查询向量进行 L2 归一化。
+            这使得两边对于实际输入的距离度量语义（L2 距离平方在归一化后等价于 2 * (1 - cosine_similarity)）保持完全一致。
         """
         if self.db_type == "faiss":
             assert self.index is not None, "FAISS index is not initialized."

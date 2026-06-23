@@ -182,16 +182,18 @@ class KBHelper:
                 f"知识库 {self.kb.kb_name}({self.kb.kb_id}) 初始化重排序能力失败，将跳过重排序: {e}",
             )
 
+        from astrbot.core.db.vec_db.faiss_impl.embedding_storage import EmbeddingStorage
         from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
         # Write or load index_type file
+        index_store_path = str(self.kb_dir / "index.faiss")
         index_type_file = self.kb_dir / "index_type"
         if not index_type_file.exists():
             vector_db_type = getattr(self, "vector_db_type", "faiss")
-            self.kb_dir.mkdir(parents=True, exist_ok=True)
-            index_type_file.write_text(vector_db_type, encoding="utf-8")
+            EmbeddingStorage.write_index_type(index_store_path, vector_db_type)
+            self.vector_db_type = vector_db_type
         else:
-            self.vector_db_type = index_type_file.read_text(encoding="utf-8").strip()
+            self.vector_db_type = EmbeddingStorage.read_index_type(index_store_path)
 
         vec_db = FaissVecDB(
             doc_store_path=str(self.kb_dir / "doc.db"),
