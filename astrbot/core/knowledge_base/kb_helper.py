@@ -184,6 +184,15 @@ class KBHelper:
 
         from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 
+        # Write or load index_type file
+        index_type_file = self.kb_dir / "index_type"
+        if not index_type_file.exists():
+            vector_db_type = getattr(self, "vector_db_type", "faiss")
+            self.kb_dir.mkdir(parents=True, exist_ok=True)
+            index_type_file.write_text(vector_db_type, encoding="utf-8")
+        else:
+            self.vector_db_type = index_type_file.read_text(encoding="utf-8").strip()
+
         vec_db = FaissVecDB(
             doc_store_path=str(self.kb_dir / "doc.db"),
             index_store_path=str(self.kb_dir / "index.faiss"),

@@ -94,6 +94,7 @@ class KnowledgeBaseManager:
         top_k_dense: int | None = None,
         top_k_sparse: int | None = None,
         top_m_final: int | None = None,
+        vector_db_type: str | None = "faiss",
     ) -> KBHelper:
         """创建新的知识库实例"""
         if embedding_provider_id is None:
@@ -122,6 +123,7 @@ class KnowledgeBaseManager:
                     kb_root_dir=FILES_PATH,
                     chunker=CHUNKER,
                 )
+                kb_helper.vector_db_type = vector_db_type or "faiss"
                 await kb_helper.initialize()
                 await session.commit()
                 self.kb_insts[kb.kb_id] = kb_helper

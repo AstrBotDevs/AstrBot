@@ -267,6 +267,10 @@ class KnowledgeBaseService:
         kb_manager = self.get_kb_manager()
         kbs = await kb_manager.list_kbs()
 
+        from astrbot.core.utils.runtime_env import is_faiss_importable
+
+        faiss_available = is_faiss_importable()
+
         kb_list = []
         for kb in kbs:
             kb_dict = kb.model_dump()
@@ -275,7 +279,12 @@ class KnowledgeBaseService:
                 kb_dict["init_error"] = kb_helper.init_error
             kb_list.append(kb_dict)
 
-        return {"items": kb_list, "page": page, "page_size": page_size}
+        return {
+            "items": kb_list,
+            "page": page,
+            "page_size": page_size,
+            "faiss_available": faiss_available,
+        }
 
     async def list_kbs_from_dashboard_query(self, *, page, page_size) -> dict[str, Any]:
         return await self.list_kbs(
@@ -340,6 +349,7 @@ class KnowledgeBaseService:
             top_k_dense=payload.get("top_k_dense"),
             top_k_sparse=payload.get("top_k_sparse"),
             top_m_final=payload.get("top_m_final"),
+            vector_db_type=payload.get("vector_db_type", "faiss"),
         )
         return kb_helper.kb.model_dump(), "创建知识库成功"
 

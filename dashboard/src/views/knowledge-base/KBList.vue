@@ -1,5 +1,18 @@
 <template>
   <div class="kb-list-page">
+    <v-alert
+      v-if="!faissAvailable && !ignoreFaissWarning"
+      type="warning"
+      closable
+      class="mb-4"
+      @click:close="onCloseFaissWarning"
+    >
+      <div class="text-subtitle-1 font-weight-bold">硬件兼容性提示</div>
+      <div>
+        检测到当前 CPU 不支持 FAISS 向量库所需的 AVX2 指令集（或未安装 <code>faiss-cpu</code>）。新创建的知识库可选降级为 <b>NumPy</b> 模式运行。已有知识库如果初始化失败，可通过从源码自编译安装兼容版 <code>faiss-cpu</code> 解决。
+      </div>
+    </v-alert>
+
     <div v-if="loading && kbList.length === 0" class="loading-container">
       <v-progress-circular indeterminate color="primary" size="64" />
       <p class="mt-4 text-medium-emphasis">{{ t('list.loading') }}</p>
@@ -143,6 +156,46 @@
 
           <!-- 表单 -->
           <v-form ref="formRef" @submit.prevent="submitForm">
+            <v-alert
+              v-if="!faissAvailable && !editingKB"
+              type="warning"
+              variant="tonal"
+              class="mb-4"
+              density="compact"
+            >
+              <div class="text-subtitle-2 mb-1">硬件兼容性警告 (缺少 AVX2 指令集)</div>
+              <div class="text-caption mb-2">
+                检测到当前系统的 CPU 不支持 FAISS 向量检索所需的 AVX2 指令集（或未安装 <code>faiss-cpu</code>）。为避免进程崩溃，我们推荐您将向量检索库降级为 NumPy（计算较慢但在该 CPU 上能运行，适用于中小知识库）。
+              </div>
+              
+              <v-radio-group v-model="formData.vector_db_type" inline hide-details class="mb-2">
+                <v-radio label="降级为 NumPy (推荐)" value="numpy" color="primary"></v-radio>
+                <v-radio label="继续尝试 FAISS" value="faiss" color="warning"></v-radio>
+              </v-radio-group>
+
+              <!-- 教程展开项 -->
+              <v-expansion-panels variant="accordion" class="border-0 bg-transparent shadow-none" style="box-shadow: none !important;">
+                <v-expansion-panel class="bg-transparent border-0" style="box-shadow: none !important; border: none !important;">
+                  <v-expansion-panel-title class="pa-0 text-caption font-weight-bold" style="min-height: auto; padding: 0 !important; color: var(--v-theme-warning); height: 24px;">
+                    💡 如何自编译安装兼容旧 CPU 的 faiss-cpu？
+                  </v-expansion-panel-title>
+                  <v-expansion-panel-text class="pa-0 text-caption text-left mt-2">
+                    <pre class="pa-2 rounded text-xs overflow-x-auto" style="white-space: pre-wrap; font-family: monospace; font-size: 11px; line-height: 1.4; background-color: rgba(0,0,0,0.05) !important;">
+# 1. 安装编译工具 (以 Debian/Ubuntu 为例):
+sudo apt install -y cmake swig g++ python3-dev
+# 2. 克隆 faiss 源码:
+git clone https://github.com/facebookresearch/faiss.git && cd faiss
+# 3. 配置为 generic 通用模式 (不启用 AVX2/GPU):
+cmake . -B build -DFAISS_ENABLE_GPU=OFF -DFAISS_ENABLE_PYTHON=ON -DFAISS_OPT_LEVEL=generic
+# 4. 编译并安装到 Python 环境:
+cmake --build build --config Release -j
+cd build/faiss/python && python setup.py install
+                    </pre>
+                  </v-expansion-panel-text>
+                </v-expansion-panel>
+              </v-expansion-panels>
+            </v-alert>
+
             <v-text-field v-model="formData.kb_name" :label="t('create.nameLabel')"
               :placeholder="t('create.namePlaceholder')" variant="outlined"
               :rules="[v => !!v || t('create.nameRequired')]" required class="mb-4" hint="后续如修改知识库名称，需重新在配置文件更新。" persistent-hint />
@@ -276,6 +329,13 @@ const showEmbeddingWarning = ref(false)
 const embeddingChangeDialog = ref(false)
 const pendingEmbeddingProvider = ref<string | null>(null)
 
+const faissAvailable = ref(true)
+const ignoreFaissWarning = ref(localStorage.getItem('ignore_faiss_warning') === 'true')
+const onCloseFaissWarning = () => {
+  localStorage.setItem('ignore_faiss_warning', 'true')
+  ignoreFaissWarning.value = true
+}
+
 // 对话框
 const showCreateDialog = ref(false)
 const showEmojiPicker = ref(false)
@@ -297,7 +357,8 @@ const formData = ref({
   description: '',
   emoji: '📚',
   embedding_provider_id: null,
-  rerank_provider_id: null
+  rerank_provider_id: null,
+  vector_db_type: 'faiss'
 })
 
 // Emoji 分类
@@ -336,6 +397,11 @@ const loadKnowledgeBases = async (refreshStats = false) => {
     })
     if (response.data.status === 'ok') {
       kbList.value = response.data.data.items || []
+      faissAvailable.value = response.data.data.faiss_available !== false
+      // 如果 FAISS 不可用，默认创建时降级为 numpy
+      if (!faissAvailable.value) {
+        formData.value.vector_db_type = 'numpy'
+      }
     } else {
       showSnackbar(response.data.message || t('messages.loadError'), 'error')
     }
@@ -434,7 +500,8 @@ const submitForm = async () => {
       description: formData.value.description,
       emoji: formData.value.emoji,
       embedding_provider_id: formData.value.embedding_provider_id,
-      rerank_provider_id: formData.value.rerank_provider_id
+      rerank_provider_id: formData.value.rerank_provider_id,
+      vector_db_type: formData.value.vector_db_type
     }
 
     let response
@@ -471,7 +538,8 @@ const closeCreateDialog = () => {
     description: '',
     emoji: '📚',
     embedding_provider_id: null,
-    rerank_provider_id: null
+    rerank_provider_id: null,
+    vector_db_type: faissAvailable.value ? 'faiss' : 'numpy'
   }
   formRef.value?.reset()
 }

@@ -86,6 +86,9 @@ export type ChatProjectRequest = {
 };
 
 export type ChatRequest = {
+    /**
+     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     */
     username?: string;
     session_id?: string;
     /**
@@ -253,12 +256,15 @@ export type JsonSchema = {
 };
 
 export type KnowledgeBaseRequest = {
-    name: string;
+    kb_name?: string;
+    name?: string;
     description?: string;
     embedding_provider_id?: string;
     rerank_provider_id?: string;
     chunking?: DynamicConfig;
     metadata?: DynamicConfig;
+    vector_db_type?: string;
+    [key: string]: unknown | string | DynamicConfig;
 };
 
 export type KnowledgeDocumentImportRequest = {

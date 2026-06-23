@@ -5613,8 +5613,9 @@ components:
 
     KnowledgeBaseRequest:
       type: object
-      required: [name]
       properties:
+        kb_name:
+          type: string
         name:
           type: string
         description:
@@ -5627,7 +5628,9 @@ components:
           $ref: "#/components/schemas/DynamicConfig"
         metadata:
           $ref: "#/components/schemas/DynamicConfig"
-      additionalProperties: false
+        vector_db_type:
+          type: string
+      additionalProperties: true
 
     KnowledgeDocumentUploadRequest:
       type: object

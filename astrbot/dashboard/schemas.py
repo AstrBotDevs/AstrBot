@@ -206,12 +206,14 @@ class ImMessageRequest(OpenModel):
 
 class KnowledgeBaseRequest(OpenModel):
     kb_id: str | None = None
+    kb_name: str | None = None
     name: str | None = None
     description: str | None = None
     embedding_provider_id: str | None = None
     rerank_provider_id: str | None = None
     chunk_size: int | None = None
     chunk_overlap: int | None = None
+    vector_db_type: str | None = None
 
 
 class KnowledgeBaseImportRequest(OpenModel):
