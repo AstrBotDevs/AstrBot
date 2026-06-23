@@ -33,13 +33,19 @@ const props = defineProps<{
     args?: Record<string, any>;
 }>();
 
-/** 拆分的 4 个 todo_* 工具 + 老 todo_list 统一识别。 */
+/** todo_* 工具统一识别。
+ *  - v2.12+ 6 个独立工具:create / query / add / update / delete / clear
+ *  - 兼容:v2.12 之前 todo_modify、v2.2.0 之前 todo_list
+ */
 const TODO_TOOL_NAMES: ReadonlySet<string> = new Set([
     "todo_create",
     "todo_query",
-    "todo_modify",
+    "todo_add",
+    "todo_update",
+    "todo_delete",
     "todo_clear",
-    "todo_list", // 兼容老历史
+    "todo_modify", // legacy (v2.12 之前)
+    "todo_list", // legacy (v2.2.0 之前)
 ]);
 const isTodoTool = computed(() => TODO_TOOL_NAMES.has(props.toolName));
 

@@ -798,26 +798,35 @@ export function useMessages(options: UseMessagesOptions) {
   }
 
   /**
-   * spcode 插件 4 个 todo_* 工具 + 旧 `todo_list` 的统一识别集合。
+   * spcode 插件 todo_* 工具的统一识别集合。
    *
-   * - `todo_create` / `todo_query` / `todo_modify` / `todo_clear` 是 v2.2.0
-   *   拆出来的 4 个独立工具,各自返回的 data 都含 `list` / `stats` /
-   *   `attention_items` 三件套(clear 除外,clear 后 list 不存在)。
-   * - `todo_list` 是 v2.2.0 之前的合并工具,这里保留以便兼容老会话历史
-   *   中可能出现的 tool_call 事件。
+   * v2.2.0 拆出 4 个独立工具(todo_create / todo_query / todo_modify /
+   *   todo_clear);v2.12 进一步把 `todo_modify` 拆为 `todo_add` /
+   *   `todo_update` / `todo_delete` 3 个独立工具。
+   *   - create / query / add / update / delete:返回的 data 都含
+   *     `list` / `stats` / `attention_items` 三件套,前端实时刷新
+   *     todo summary bar 与 TodoSidebar。
+   *   - clear:返回 null,显式置空(bar 立即消失)。
+   * - `todo_list` / `todo_modify` 是 v2.2.0 / v2.12 之前的合并工具,这里
+   *   保留以便兼容老会话历史中可能出现的 tool_call 事件。
    */
   const TODO_TOOL_NAMES: ReadonlySet<string> = new Set([
     "todo_create",
     "todo_query",
-    "todo_modify",
+    "todo_add",
+    "todo_update",
+    "todo_delete",
     "todo_clear",
-    "todo_list",
+    "todo_modify", // legacy (v2.12 之前)
+    "todo_list", // legacy (v2.2.0 之前)
   ]);
 
   /**
    * 按 sessionId 隔离的最新 todo 快照。
    *
-   * - value[sid] = TodoSnapshot:todo_create/modify/query 成功时写入。
+   * - value[sid] = TodoSnapshot:
+   *     todo_create/query/add/update/delete(及 v2.12 之前的 todo_modify)
+   *     成功时写入。
    * - value[sid] = null:todo_clear 成功时显式置空(bar 立即消失)。
    * - key 不存在:该 session 尚未调用过 todo 工具(bar 不显示)。
    *

@@ -1,10 +1,9 @@
 <template>
     <div class="todo-list-result">
         <!--
-          v2.2.0: 旧 todo_list 工具被拆为 4 个独立工具。
-          本组件按 (toolName, args.mode, data 字段) 联合推断渲染分支。
-          旧 todo_list 工具的"data.item_id" / "data.item" 字段路径仍保留,只
-          是当 toolName 不是 todo_list 时,优先级让位给新工具的字段。
+          v2.12:旧 todo_modify 工具被进一步拆为 3 个独立工具 (todo_add /
+          todo_update / todo_delete)。本组件按 toolName 优先推断渲染分支;
+          旧 todo_list / todo_modify 工具的兼容路径通过 data 字段形状兜底。
         -->
 
         <!-- A) todo_create / 旧 list(创建) -->
@@ -21,7 +20,7 @@
             </div>
         </template>
 
-        <!-- B) todo_modify(mode='add') / 旧 add -->
+        <!-- B) todo_add / todo_modify(mode='add') / 旧 add -->
         <template v-else-if="actionType === 'add'">
             <div class="status-row success">
                 <v-icon size="14">mdi-check-circle</v-icon>
@@ -41,7 +40,7 @@
             >{{ formatItems(data.items) }}</pre>
         </template>
 
-        <!-- C) todo_modify(mode='update') / 旧 update -->
+        <!-- C) todo_update / todo_modify(mode='update') / 旧 update -->
         <template v-else-if="actionType === 'update'">
             <div class="status-row success">
                 <v-icon size="14">mdi-check-circle</v-icon>
@@ -61,7 +60,7 @@
             >{{ formatItems(data.items) }}</pre>
         </template>
 
-        <!-- D) todo_modify(mode='delete') / 旧 delete -->
+        <!-- D) todo_delete / todo_modify(mode='delete') / 旧 delete -->
         <template v-else-if="actionType === 'delete'">
             <div class="status-row success">
                 <v-icon size="14">mdi-check-circle</v-icon>
@@ -134,15 +133,21 @@ import { computed } from "vue";
 import TodoListPanel from "./TodoListPanel.vue";
 
 /**
- * 渲染 todo_create / todo_query / todo_modify / todo_clear / (legacy)todo_list
- * 5 个工具的返回结果。父组件 (SpcodeToolResultView) 负责按 toolName 分发。
+ * 渲染 todo_* 工具的返回结果。父组件 (SpcodeToolResultView) 负责按
+ * toolName 分发到本组件。
+ *
+ * 支持的工具:
+ *   - v2.12+ 6 个独立工具:todo_create / todo_query / todo_add /
+ *     todo_update / todo_delete / todo_clear
+ *   - legacy (v2.12 之前):todo_modify(add/update/delete 三合一)
+ *   - legacy (v2.2.0 之前):todo_list
  *
  * actionType 推断优先级:
- *   1) 工具名(新工具最稳)         : toolName 决定
- *   2) args.mode (todo_modify 拆) : 进一步区分 add/update/delete
+ *   1) 工具名(新工具最稳)         : toolName 直接决定
+ *   2) args.mode (legacy modify)  : 仅 todo_modify 需要
  *   3) data 字段形状(老 todo_list): 兜底,保持历史会话可读
  *
- * @author elecvoid243 / 2026-06-14
+ * @author elecvoid243 / 2026-06-14 (refactored 2026-06-23: 支持 v2.12 拆分)
  */
 
 type ActionType =
@@ -166,13 +171,17 @@ const actionType = computed<ActionType>(() => {
     const tn = props.toolName;
     const mode = props.args?.mode;
 
-    // 1) 新工具:按 toolName 优先
+    // 1) 新工具(v2.12+):按 toolName 直接决定
     if (tn === "todo_create") return "create";
     if (tn === "todo_query") return "query";
     if (tn === "todo_clear") return "clear";
+    if (tn === "todo_add") return "add";
+    if (tn === "todo_update") return "update";
+    if (tn === "todo_delete") return "delete";
+
+    // 2) legacy (v2.12 之前) todo_modify:add/update/delete 通过 args.mode 区分
+    //    (后端在 modify() 中也是用同一 args.mode 分发的)
     if (tn === "todo_modify") {
-        // add / update / delete 通过 args.mode 区分
-        // (后端在 modify() 中也是用同一 args.mode 分发的)
         if (mode === "add" || mode === "update" || mode === "delete") return mode;
         // 兜底:从 data 字段反推
         if (props.data.deleted !== undefined) return "delete";
@@ -184,7 +193,7 @@ const actionType = computed<ActionType>(() => {
         return "update";
     }
 
-    // 2) 旧 todo_list:按 data 字段形状推断
+    // 3) legacy (v2.2.0 之前) todo_list:按 data 字段形状推断
     //    顺序很重要 — create/add/update 都会附带 list+stats,必须先用各自特有
     //    字段先匹配,query 兜底匹配 data.list.items。
     if (props.data.list_title !== undefined) return "create";

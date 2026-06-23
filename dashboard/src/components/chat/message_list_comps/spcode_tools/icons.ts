@@ -1,17 +1,21 @@
 /**
  * spcode_toolkit 工具的 mdi 图标常量。
  *
- * v2.2.0 起,原来的 todo_list 工具被拆分为 4 个独立工具:
- *   - todo_create :  新建一个 todo list
- *   - todo_query  :  读取当前 todo list
- *   - todo_modify :  add / update / delete 三合一
- *   - todo_clear  :  删整个 list(文件 unlink)
- * 它们共享同一个 mdi 图标,统一在 UI 上以"列表"语义呈现。
+ * todo 工具演进:
+ *   - v2.2.0:把 todo_list 拆为 4 个独立工具 (create / query / modify / clear)
+ *   - v2.12:把 todo_modify 进一步拆为 add / update / delete 3 个独立工具
+ * 现在共 6 个 todo_* 工具,各自分配了语义化图标:
+ *   - todo_create :  mdi-format-list-checks   (新建清单)
+ *   - todo_query  :  mdi-format-list-checks   (读取清单)
+ *   - todo_add    :  mdi-plus-circle-outline  (追加 item)
+ *   - todo_update :  mdi-pencil-outline       (更新 item)
+ *   - todo_delete :  mdi-trash-can-outline    (删除 item)
+ *   - todo_clear  :  mdi-format-list-checks   (清空整个 list)
  *
- * 旧条目 `todo_list` 保留以兼容老会话历史记录中的工具名。
+ * 旧条目 `todo_list` / `todo_modify` 保留以兼容老会话历史记录中的工具名。
  *
  * Author: ui_spcode_foundation
- * Date: 2026-06-07 (revised 2026-06-14, fixed 2026-06-18)
+ * Date: 2026-06-07 (revised 2026-06-14, fixed 2026-06-18, refactored 2026-06-23)
  */
 export const SPCODE_ICONS: Record<string, string> = {
     code_check: "mdi-shield-check-outline",
@@ -24,12 +28,15 @@ export const SPCODE_ICONS: Record<string, string> = {
     // `<pre class="result-raw">` 原始 JSON,看不到样式化结果卡。
     astrbot_file_remove: "mdi-trash-can-outline",
     astrbot_file_compare: "mdi-vector-difference",
-    // 拆分的 4 个 todo 工具共享同一图标
+    // v2.12 拆分后的 6 个 todo 工具
     todo_create: "mdi-format-list-checks",
     todo_query: "mdi-format-list-checks",
-    todo_modify: "mdi-format-list-checks",
+    todo_add: "mdi-plus-circle-outline",
+    todo_update: "mdi-pencil-outline",
+    todo_delete: "mdi-trash-can-outline",
     todo_clear: "mdi-format-list-checks",
-    // 兼容老历史
+    // 兼容老历史(v2.12 之前的 modify、v2.2.0 之前的 list)
+    todo_modify: "mdi-format-list-checks",
     todo_list: "mdi-format-list-checks",
 };
 
@@ -38,7 +45,10 @@ export function getSpcodeIcon(toolName: string): string {
     return SPCODE_ICONS[toolName] ?? "mdi-wrench";
 }
 
-/** spcode 工具的合法名称集合(含拆分后的 4 个 todo_* + 旧 todo_list 兼容项)。 */
+/** spcode 工具的合法名称集合
+ *  - v2.12+ 6 个 todo_* 工具(create / query / add / update / delete / clear)
+ *  - legacy:todo_modify(v2.12 之前)、todo_list(v2.2.0 之前)
+ */
 export const SPCODE_TOOL_NAMES: ReadonlySet<string> = new Set(
     Object.keys(SPCODE_ICONS),
 );
