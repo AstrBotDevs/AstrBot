@@ -562,6 +562,8 @@ def _adjust_replacement_indent(
     matched_block: str,
     content: str = "",
     match_idx: int = -1,
+    *,
+    strict_indent: bool = True,
 ) -> str:
     """Adjust new_string's indentation using the actual match shape.
 
@@ -576,13 +578,24 @@ def _adjust_replacement_indent(
         matched_block: Exact block found in the file.
         content: Full file content, used to inspect match position.
         match_idx: Start offset of matched_block in content.
+        strict_indent: When True (default), preserve current behavior: on a
+            fuzzy match, force ``new`` to align with the file's actual
+            indentation (``target_indent``), discarding any relative indent
+            shift the caller encoded in ``new``. When False, treat the
+            indentation declared by ``old`` as authoritative and rebuild
+            ``new`` on top of ``source_indent`` instead, allowing the caller
+            to dedent / reindent the whole block even when ``old`` only
+            matched fuzzily. Tabs/spaces style conflicts are only treated as
+            an error in strict mode; in non-strict mode the caller has
+            explicitly accepted the risk.
 
     Returns:
         Replacement text adjusted for the current match position.
 
     Raises:
         ValueError: If a fuzzy match would require reconciling incompatible
-            indentation styles such as tabs versus spaces.
+            indentation styles such as tabs versus spaces (only when
+            ``strict_indent=True``).
     """
     if not content or match_idx < 0:
         return new_string
@@ -602,17 +615,20 @@ def _adjust_replacement_indent(
         #       spaces, oldString only carries 8, so find() hits at offset 4);
         #   (b) genuine in-content match with no own indent — prefix already
         #       equals the full line indent (e.g. oldString == "foo" in "    foo").
-        # The previous code used prefix itself as the target, which is correct
-        # for (b) but collapses indentation for (a) (and any multi-line case).
-        # Rebuild onto the file's FULL line indent instead. The first line will
-        # be prefixed with `prefix` at the splice site, so it only needs the
-        # portion of full_indent that prefix has not already supplied.
+        # Rebuild onto the file's FULL line indent in strict mode, or onto
+        # the caller's declared old indentation in non-strict mode. The
+        # first line is prefixed with `prefix` at the splice site, so it
+        # only needs the portion that prefix has not already supplied.
         full_indent = _get_leading_whitespace(content[line_start:])
         first_line_indent = (
             full_indent[len(prefix) :]
             if full_indent.startswith(prefix)
             else full_indent
         )
+        # In non-strict mode, honor the caller's declared old indentation
+        # for continuation lines so a dedented new still works.
+        source_indent = _common_leading_whitespace(old_string)
+        continuation_indent = full_indent if strict_indent else source_indent
         replacement_indent = _common_leading_whitespace(new_string)
         relative_new = _strip_common_indent(new_string, replacement_indent)
         lines = relative_new.split("\n")
@@ -623,7 +639,7 @@ def _adjust_replacement_indent(
             elif i == 0:
                 adjusted.append(first_line_indent + line)
             else:
-                adjusted.append(full_indent + line)
+                adjusted.append(continuation_indent + line)
         return "\n".join(adjusted)
 
     target_indent = _common_leading_whitespace(matched_block)
@@ -632,26 +648,33 @@ def _adjust_replacement_indent(
 
     # Trust the caller's indentation only when the search block already
     # matches the file's indentation exactly (precise baseline); otherwise
-    # rebuild new_string from the file's target indentation below.
+    # rebuild new_string from a base indent picked by strict_indent.
     if target_indent == source_indent:
         return new_string
 
-    if _indent_styles_conflict(target_indent, source_indent):
+    if strict_indent and _indent_styles_conflict(target_indent, source_indent):
         raise ValueError(
             "Matched oldString, but indentation uses incompatible tab/space "
-            "styles. Provide old and new with exact file indentation."
+            "styles. Provide old and new with exact file indentation, or pass "
+            "strict_indent=False to accept the caller's declared indentation."
         )
 
-    # Rebuild new_string from the file's target indentation. Strip the
-    # caller's own common indentation first (self-consistent, derived from
-    # new_string rather than the possibly-wrong old_string) so a new_string
-    # whose indent drifts below source_indent is not left under-indented.
+    # Strict mode (default): align with the file's actual indentation so a
+    # caller who got old wrong does not corrupt surrounding code.
+    # Non-strict mode: trust the caller's declared old indentation, so new
+    # can shift the whole block's indent level (e.g. dedent) freely.
+    base_indent = target_indent if strict_indent else source_indent
+
+    # Strip the caller's own common indentation (self-consistent, derived
+    # from new_string rather than the possibly-wrong old_string) so a
+    # new_string whose indent drifts below replacement_indent is not left
+    # under-indented relative to base_indent.
     relative_new = _strip_common_indent(new_string, replacement_indent)
     lines = relative_new.split("\n")
     adjusted: list[str] = []
     for line in lines:
         if line.strip():
-            adjusted.append(target_indent + line)
+            adjusted.append(base_indent + line)
         else:
             adjusted.append(line)
     return "\n".join(adjusted)
@@ -668,9 +691,22 @@ def robust_replace(
     new_string: str,
     *,
     replace_all: bool = False,
+    strict_indent: bool = True,
 ) -> tuple[str, int]:
     """
     Replace old_string with new_string using the multi-strategy replacer chain.
+
+    Args:
+        content: File content to edit (already normalized to LF).
+        old_string: Search text provided by the caller.
+        new_string: Replacement text provided by the caller.
+        replace_all: When True, replace every match; otherwise require a
+            unique match.
+        strict_indent: Forwarded to ``_adjust_replacement_indent``. When
+            True (default), the file's actual indentation is preserved on
+            fuzzy matches and any relative indent shift in ``new`` is
+            discarded. When False, the caller's declared old indentation
+            is trusted so ``new`` can dedent / reindent the whole block.
 
     Returns:
         A tuple of (new_content, replacements_count).
@@ -720,6 +756,7 @@ def robust_replace(
                     match,
                     content,
                     idx,
+                    strict_indent=strict_indent,
                 )
                 new_content = (
                     new_content[:idx] + adjusted_new + new_content[idx + len(match) :]
@@ -736,6 +773,7 @@ def robust_replace(
                 match,
                 content,
                 idx,
+                strict_indent=strict_indent,
             )
             return content[:idx] + adjusted_new + content[idx + len(match) :], 1
 
@@ -783,6 +821,7 @@ def bytes_edit_file(
     new_string: str,
     *,
     replace_all: bool = False,
+    strict_indent: bool = True,
     encoding: str = "utf-8",
 ) -> tuple[bytes, EditResult]:
     """
@@ -825,6 +864,7 @@ def bytes_edit_file(
         normalized_old,
         normalized_new,
         replace_all=replace_all,
+        strict_indent=strict_indent,
     )
 
     # Convert back to original line endings

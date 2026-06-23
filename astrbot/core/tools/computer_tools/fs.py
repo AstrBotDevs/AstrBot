@@ -589,13 +589,27 @@ class FileEditTool(FunctionTool):
                     "type": "boolean",
                     "description": "[Edit Mode] Replace all matches (default: false).",
                 },
+                "strict_indent": {
+                    "type": "boolean",
+                    "description": (
+                        "[Edit Mode] How to handle indentation differences between "
+                        "`new` and the matched block in the file. Default true "
+                        "preserves the file's actual indentation and discards any "
+                        "relative indent shift in `new`. Set false to trust the "
+                        "indentation declared by `old` and let `new` shift the "
+                        "whole block's indent level (e.g. dedent) even when `old` "
+                        "matched fuzzily. Ignored when `old` matches exactly."
+                    ),
+                    "default": True,
+                },
                 "backup_id": {
                     "type": "string",
                     "description": "[Rollback Mode] Backup ID to restore.",
                 },
                 "list_history": {
                     "type": "boolean",
-                    "description": "[List Mode] Show backup history (default: false).",
+                    "description": "[List Mode] Show backup history.",
+                    "default": False,
                 },
             },
             "required": ["path"],
@@ -609,6 +623,7 @@ class FileEditTool(FunctionTool):
         old: str | None = None,
         new: str | None = None,
         replace_all: bool = False,
+        strict_indent: bool = True,
         backup_id: str | None = None,
         list_history: bool = False,
     ) -> ToolExecResult:
@@ -667,6 +682,7 @@ class FileEditTool(FunctionTool):
                 old,
                 new,
                 replace_all,
+                strict_indent,
                 local_env,
                 history_mgr,
             )
@@ -767,6 +783,7 @@ class FileEditTool(FunctionTool):
         old: str,
         new: str,
         replace_all: bool,
+        strict_indent: bool,
         local_env: bool,
         history_mgr,
     ) -> str:
@@ -804,6 +821,7 @@ class FileEditTool(FunctionTool):
                     old,
                     new,
                     replace_all=replace_all,
+                    strict_indent=strict_indent,
                     encoding="utf-8",
                 )
             except ValueError as exc:
