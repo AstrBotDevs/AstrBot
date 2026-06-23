@@ -624,7 +624,7 @@ class KBHelper:
         provider_settings = (
             self.prov_mgr.acm.default_conf.get("provider_settings") or {}
         )
-        websearch_provider = provider_settings.get("websearch_provider", "tavily")
+        websearch_provider = provider_settings.get("websearch_provider", "tavily").lower()
         url_extract_provider = (
             websearch_provider
             if websearch_provider in SUPPORTED_URL_EXTRACT_PROVIDERS
