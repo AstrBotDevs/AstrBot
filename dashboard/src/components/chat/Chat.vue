@@ -962,7 +962,14 @@ const {
   // by the `currSessionId` watcher above.
   onStreamEnd: (sessionId) => {
     if (sessionId === currSessionId.value) {
-      void spcodeStatus.refresh();
+      // Bug fix (2026-06-23, elecvoid243): spcodeStatus.refresh()
+      // must receive the full umo (not be called bare). Without it,
+      // backend's fallback branch returns the most-recently-loaded
+      // project across ALL umos, so the indicator can display another
+      // session's project when several umos have projects loaded
+      // concurrently. Plan mode already passes umo (see below);
+      // project status now mirrors the same pattern.
+      void spcodeStatus.refresh(resolveCurrentUmo(currSessionId.value));
       // Plan/build has the same race: an `/plan` or `/build`
       // response is processed during stream-end, so the chip needs
       // to be refreshed in lockstep to stay in sync with the bot's
@@ -1114,19 +1121,25 @@ watch(
     // retain their current behavior (the spec's E13 "close together"
     // wording is inaccurate — only the git-diff sidebar closes here).
     gitDiffSidebarOpen.value = false;
-    await spcodeStatus.refresh();
+    // Bug fix (2026-06-23, elecvoid243): pass the resolved umo so the
+    // backend queries THIS session's loaded project. The bare
+    // refresh() hit the "most-recently-loaded project across all
+    // umos" fallback branch — wrong in the multi-umo case. See the
+    // matching fix in onStreamEnd above and in ChatInput.vue's
+    // showSpcodeIndicator watcher.
+    await spcodeStatus.refresh(resolveCurrentUmo(next));
     // Same lifecycle for plan/build: the chip is per-umo, so it
-    // MUST be re-fetched on every session switch. We do not
-    // optimistically carry over the previous session's flag because
-    // plan/build is intentionally NOT shared between sessions (a
-    // user might want plan mode in one project while building in
-    // another).
-    //
-    // CRITICAL: refresh() requires the full unified_msg_origin string
-    // the backend keys per-session state on, NOT the bare session id
-    // (webchat conversation id). See :func:`resolveCurrentUmo` for the
-    // exact format.
-    await spcodePlanMode.refresh(resolveCurrentUmo(next));
+        // MUST be re-fetched on every session switch. We do not
+        // optimistically carry over the previous session's flag because
+        // plan/build is intentionally NOT shared between sessions (a
+        // user might want plan mode in one project while building in
+        // another).
+        //
+        // CRITICAL: refresh() requires the full unified_msg_origin string
+        // the backend keys per-session state on, NOT the bare session id
+        // (webchat conversation id). See :func:`resolveCurrentUmo` for the
+        // exact format.
+        await spcodePlanMode.refresh(resolveCurrentUmo(next));
   },
   { immediate: true },
 );

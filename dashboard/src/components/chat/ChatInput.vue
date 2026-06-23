@@ -1246,7 +1246,17 @@ function openProjectLoadDialog(): void {
 const spcodeStatus = useSpcodeProjectStatus();
 watch(showSpcodeIndicator, async (visible) => {
   if (visible) {
-    await spcodeStatus.refresh();
+    // Bug fix (2026-06-23, elecvoid243): pass the resolved umo so the
+    // backend queries THIS session's loaded project (not the global
+    // "most-recently-loaded" fallback). Mirrors the Chat.vue watchers
+    // and the plan-mode refresh pattern below.
+    const umo = props.currentSession
+      ? buildWebchatUmoDetails(
+          props.currentSession.session_id,
+          Boolean(props.currentSession.is_group),
+        ).umo
+      : null;
+    await spcodeStatus.refresh(umo);
   }
 }, { immediate: false });
 
