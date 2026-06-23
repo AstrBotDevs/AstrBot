@@ -220,8 +220,20 @@ const editToolDiff = computed(() => {
 const editToolFilePath = computed(() => {
   if (!isEditTool.value) return "";
   const raw = editToolCleanResult.value;
-  const match = raw.match(/^Edited\s+(.+?)\./m);
-  return match ? match[1] : "";
+  // Success: "Edited {path}." followed by "Replaced {N} occurrence(s)...".
+  // Anchoring on "Replaced" prevents the regex from being truncated by a
+  // period that appears inside the path itself (e.g. ".py" on a path like
+  // "D:\AstrbotWorkSpace\test.py" — a naive `(.+?)\.` would stop at the
+  // first ".", giving "D:\AstrbotWorkSpace\test").
+  const successMatch = raw.match(/^Edited\s+(.+?)\.\s+Replaced/m);
+  if (successMatch) return successMatch[1];
+  // Error (e.g. AST validation rejection): "Error editing file: [{path}]: ...".
+  // The path is wrapped in square brackets by the backend so the regex
+  // can safely extract it even when the path itself contains colons (such
+  // as Windows drive letters like "D:\..."), which a naive `(.+?):` would
+  // also match, truncating the captured group to "D".
+  const errorMatch = raw.match(/^Error editing file:\s*\[(.+?)\]:/);
+  return errorMatch ? errorMatch[1] : "";
 });
 
 const editToolSummary = computed(() => {

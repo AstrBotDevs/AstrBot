@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-import zipfile
 from pathlib import Path
 
 import psutil

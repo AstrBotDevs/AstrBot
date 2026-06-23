@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+import re
 import zipfile
 from types import SimpleNamespace
 from typing import Any
@@ -620,3 +621,415 @@ async def test_grep_tool_applies_result_limit(
     assert "match-2" in result
     assert "match-3" not in result
     assert "[Truncated to first 2 result groups.]" in result
+
+
+# ---------------------------------------------------------------------------
+# Python AST safety net for astrbot_file_edit_tool
+# ---------------------------------------------------------------------------
+
+
+class _StubHistoryManager:
+    """No-op history manager for tests (no backup persistence)."""
+
+    def save_backup(self, *_args, **_kwargs):
+        return None
+
+
+def _setup_local_edit_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    workspace_subdir: str = "",
+):
+    """Patch workspace/temp paths so FileEditTool operates inside tmp_path.
+
+    Returns the actual workspace root the tool will use. The tool itself
+    appends the UMO-derived subdirectory (``qq_friend_user-1`` for the
+    default test UMO ``qq:friend:user-1``) to whatever base path this
+    function provides to ``get_astrbot_workspaces_path``.
+    """
+    workspace_base = tmp_path / "workspaces"
+    workspace_base.mkdir(parents=True, exist_ok=True)
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        fs_tools, "get_astrbot_workspaces_path", lambda: str(workspace_base)
+    )
+    monkeypatch.setattr(fs_tools, "get_astrbot_temp_path", lambda: str(temp_root))
+
+    actual_root = workspace_base / "qq_friend_user-1"
+    if workspace_subdir:
+        actual_root = actual_root / workspace_subdir
+    actual_root.mkdir(parents=True, exist_ok=True)
+    return actual_root
+
+
+def test_is_python_file_matches_py_suffix_case_insensitive():
+    assert fs_tools._is_python_file("foo.py") is True
+    assert fs_tools._is_python_file("foo.PY") is True
+    assert fs_tools._is_python_file("path/to/foo.Py") is True
+    assert fs_tools._is_python_file("foo.txt") is False
+    assert fs_tools._is_python_file("foo.py.bak") is False
+    assert fs_tools._is_python_file("foo") is False
+
+
+# ---------------------------------------------------------------------------
+# Path-display regex contract (frontend ↔ backend)
+# ---------------------------------------------------------------------------
+#
+# The frontend's `editToolFilePath` (in ToolCallCard.vue) extracts the file
+# path from the tool's result string. The regex used there is mirrored here
+# in Python so we can lock down the contract that both sides depend on. If
+# the backend format or the frontend regex changes, this test must be
+# updated in lockstep.
+
+
+# Frontend regex (mirrored in Python for testing).
+# The JavaScript source is in ToolCallCard.vue → editToolFilePath computed.
+_FRONTEND_SUCCESS_REGEX = re.compile(r"^Edited\s+(.+?)\.\s+Replaced", re.MULTILINE)
+_FRONTEND_ERROR_REGEX = re.compile(r"^Error editing file:\s*\[(.+?)\]:")
+
+# The previously broken regexes — kept here as a regression guard so we can
+# prove the old behavior would have failed.
+_OLD_BROKEN_SUCCESS_REGEX = re.compile(r"^Edited\s+(.+?)\.", re.MULTILINE)
+_OLD_BROKEN_ERROR_REGEX = re.compile(r"^Error editing file:\s*(.+?):", re.MULTILINE)
+
+
+def test_edit_tool_error_regex_extracts_windows_style_path():
+    """The error message wraps the path in `[...]` so the frontend regex
+    can extract it even when the path contains colons (Windows drive
+    letters, e.g. ``D:\\AstrbotWorkSpace\\test.py``).
+
+    The old format (``Error editing file: {path}: ...``) + old regex
+    (``(.+?):``) is also exercised here to prove that the fix was
+    necessary — without brackets, the regex truncates the path at the
+    colon in the drive letter.
+    """
+    new_format = (
+        "Error editing file: [D:\\AstrbotWorkSpace\\test.py]: "
+        "Python syntax validation failed after edit. "
+        "No changes were written. "
+        "IndentationError at line 3, column 12: unexpected indent."
+    )
+
+    # New format + new regex extracts the full path
+    match = _FRONTEND_ERROR_REGEX.match(new_format)
+    assert match is not None
+    assert match.group(1) == "D:\\AstrbotWorkSpace\\test.py"
+
+    # Old format + old regex truncates at the drive-letter colon — this
+    # is the exact bug the user reported. Keeping this assertion as a
+    # regression guard so a future refactor cannot silently reintroduce
+    # the issue.
+    old_format = (
+        "Error editing file: D:\\AstrbotWorkSpace\\test.py: "
+        "Python syntax validation failed after edit."
+    )
+    broken = _OLD_BROKEN_ERROR_REGEX.match(old_format)
+    assert broken is not None
+    assert broken.group(1) == "D", (
+        "Regression guard: the old regex + old format must still "
+        "truncate the path to 'D' for this test to prove the fix is "
+        "necessary."
+    )
+
+
+def test_edit_tool_error_regex_extracts_posix_style_path():
+    """POSIX-style paths (no colons) must continue to work."""
+    error_msg = (
+        "Error editing file: [/home/user/test.py]: "
+        "Python syntax validation failed after edit."
+    )
+    match = _FRONTEND_ERROR_REGEX.match(error_msg)
+    assert match is not None
+    assert match.group(1) == "/home/user/test.py"
+
+
+def test_edit_tool_success_regex_extracts_windows_style_path():
+    """The success message ends with ``Replaced {N} occurrence(s)...``,
+    which the regex anchors on so it is not truncated by a period inside
+    the path (e.g. ``.py`` on ``D:\\...\\test.py``).
+
+    The old regex (``(.+?)\\.``) is exercised here against a path
+    containing ``.py`` to prove the bug it would have caused: the
+    captured group would be the path with ``.py`` stripped off.
+    """
+    success_msg = (
+        "Edited D:\\AstrbotWorkSpace\\test.py.\n"
+        "Replaced 1 occurrence(s) using first match mode."
+    )
+
+    # New (fixed) regex extracts the full path
+    match = _FRONTEND_SUCCESS_REGEX.match(success_msg)
+    assert match is not None
+    assert match.group(1) == "D:\\AstrbotWorkSpace\\test.py"
+
+    # Old (broken) regex truncates at the first period inside the path
+    # — this is the bug the new regex fixes. Keeping it as a regression
+    # guard.
+    broken = _OLD_BROKEN_SUCCESS_REGEX.match(success_msg)
+    assert broken is not None
+    assert broken.group(1) == "D:\\AstrbotWorkSpace\\test", (
+        "Regression guard: the old regex must still drop '.py' for this "
+        "test to prove the fix is necessary."
+    )
+
+
+def test_edit_tool_success_regex_extracts_posix_style_path():
+    """POSIX-style paths must continue to work."""
+    success_msg = (
+        "Edited /home/user/test.py.\nReplaced 1 occurrence(s) using first match mode."
+    )
+    match = _FRONTEND_SUCCESS_REGEX.match(success_msg)
+    assert match is not None
+    assert match.group(1) == "/home/user/test.py"
+
+
+def test_edit_tool_error_regex_returns_none_for_unrecognized_format():
+    """Both regexes must return None (frontend falls back to empty path)
+    when the result doesn't match the expected format."""
+    assert _FRONTEND_SUCCESS_REGEX.match("Some other output") is None
+    assert _FRONTEND_ERROR_REGEX.match("Some other output") is None
+    # Old format (no brackets) is not matched by the new error regex
+    assert _FRONTEND_ERROR_REGEX.match("Error editing file: foo.py: bar") is None
+
+
+def test_validate_python_ast_returns_none_for_valid_code():
+    assert fs_tools._validate_python_ast("def foo():\n    return 1\n") is None
+    assert fs_tools._validate_python_ast("") is None
+    assert fs_tools._validate_python_ast("x = 1\n") is None
+
+
+def test_validate_python_ast_returns_syntax_error_for_invalid_code():
+    # Missing closing paren: SyntaxError
+    err = fs_tools._validate_python_ast("def foo(:\n")
+    assert isinstance(err, SyntaxError)
+
+    # Missing indentation of the function body: IndentationError
+    # (note: IndentationError is a subclass of SyntaxError, so isinstance
+    # checks against SyntaxError succeed for both)
+    err_indent = fs_tools._validate_python_ast("def foo():\nreturn 1\n")
+    assert isinstance(err_indent, IndentationError)
+    assert isinstance(err_indent, SyntaxError)
+
+
+@pytest.mark.asyncio
+async def test_edit_tool_rejects_indentation_introduced_by_edit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """When a previously valid .py file becomes invalid after the edit, the
+    tool must reject the edit and leave the file unchanged."""
+    workspace_root = _setup_local_edit_env(monkeypatch, tmp_path)
+    target = workspace_root / "module.py"
+    original = (
+        "class A:\n"
+        "    async def initialize(self) -> None:\n"
+        '        """Plugin activation."""\n'
+        "        self.ready = True\n"
+    )
+    target.write_text(original, encoding="utf-8")
+
+    old = '    async def initialize(self) -> None:\n        """Plugin activation."""\n'
+    # Bad `new` adds 4 extra spaces of indentation, making it invalid.
+    new = (
+        "    async def initialize(self) -> None:\n"
+        '            """Plugin activation."""\n'
+    )
+
+    context = _make_context(require_admin=True, role="admin", runtime="local")
+    result = await fs_tools.FileEditTool().call(
+        context,
+        path="module.py",
+        old=old,
+        new=new,
+    )
+
+    # Error message checks
+    assert "Python syntax validation failed after edit" in result
+    assert "No changes were written" in result
+    assert "PREVIEW ONLY" in result
+    assert "file was NOT modified" in result
+    # The diff block should be present so the LLM can see the rejected diff
+    assert "```diff" in result
+    # The path should be wrapped in [...] in the error so the frontend
+    # regex can extract it even when the path itself contains colons
+    # (e.g. Windows drive letters like "D:\...").
+    assert f"[{target}]:" in result
+    # File must be byte-for-byte unchanged
+    assert target.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.asyncio
+async def test_edit_tool_applies_valid_python_edit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """A correct edit on a valid .py file must succeed and update the file."""
+    workspace_root = _setup_local_edit_env(monkeypatch, tmp_path)
+    target = workspace_root / "module.py"
+    target.write_text(
+        "class A:\n"
+        "    async def initialize(self) -> None:\n"
+        "        self.ready = False\n",
+        encoding="utf-8",
+    )
+
+    old = "        self.ready = False\n"
+    new = "        self.ready = True\n"
+
+    context = _make_context(require_admin=True, role="admin", runtime="local")
+    result = await fs_tools.FileEditTool().call(
+        context,
+        path="module.py",
+        old=old,
+        new=new,
+    )
+
+    # Successful path produces the standard "Edited" header
+    assert "Edited" in result
+    assert "Replaced 1 occurrence" in result
+    # File should now have the new content
+    assert "self.ready = True" in target.read_text(encoding="utf-8")
+    assert "self.ready = False" not in target.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_edit_tool_allows_repair_of_already_invalid_python_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """If the original .py file is already invalid, the edit should be allowed
+    so the tool can be used to repair it. The AST gate only blocks edits that
+    would make a *previously valid* file invalid."""
+    workspace_root = _setup_local_edit_env(monkeypatch, tmp_path)
+    target = workspace_root / "broken.py"
+    # Already invalid: bad indent in `def`
+    target.write_text(
+        "def foo(:\n    return 1\n",
+        encoding="utf-8",
+    )
+
+    old = "def foo(:\n"
+    new = "def foo():\n"
+
+    context = _make_context(require_admin=True, role="admin", runtime="local")
+    result = await fs_tools.FileEditTool().call(
+        context,
+        path="broken.py",
+        old=old,
+        new=new,
+    )
+
+    # Repair must succeed — no AST rejection
+    assert "Python syntax validation failed" not in result
+    assert "Edited" in result
+    assert "def foo():" in target.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_edit_tool_skips_ast_check_for_non_python_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """Non-.py files must not be AST-validated, even if the resulting content
+    would not be valid Python."""
+    workspace_root = _setup_local_edit_env(monkeypatch, tmp_path)
+    target = workspace_root / "config.json"
+    target.write_text('{"k": 1}\n', encoding="utf-8")
+
+    # Content here is not valid Python (JSON), but we don't care because the
+    # file is not .py — the AST gate must not trigger.
+    old = '{"k": 1}\n'
+    new = '{"k": 2}\n'
+
+    context = _make_context(require_admin=True, role="admin", runtime="local")
+    result = await fs_tools.FileEditTool().call(
+        context,
+        path="config.json",
+        old=old,
+        new=new,
+    )
+
+    assert "Python syntax validation failed" not in result
+    assert "Edited" in result
+    assert '{"k": 2}' in target.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_edit_tool_ast_error_truncates_large_diff(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """The embedded rejected diff must be truncated to keep the error
+    message short and avoid blowing the LLM's context window.
+
+    We use very long lines (200+ chars) so that even a single-line edit
+    produces a diff of well over 800 characters and the truncation cap
+    is actually exercised.
+    """
+    workspace_root = _setup_local_edit_env(monkeypatch, tmp_path)
+    target = workspace_root / "big.py"
+
+    # Build a file with very long lines so the diff exceeds 800 chars.
+    padding = "x" * 200
+    lines = ["def f():\n", f"    {padding} = 1\n"]
+    for i in range(50):
+        lines.append(f"    {padding}_{i} = {i}\n")
+    target.write_text("".join(lines), encoding="utf-8")
+
+    # Inject a single wrong line near the middle — diff will be ~7 lines
+    # of ~200 chars each, well over 800.
+    old = f"    {padding}_25 = 25\n"
+    new = f"        {padding}_25 = 25\n"
+
+    context = _make_context(require_admin=True, role="admin", runtime="local")
+    result = await fs_tools.FileEditTool().call(
+        context,
+        path="big.py",
+        old=old,
+        new=new,
+    )
+
+    # Truncation marker must appear because the diff exceeds 800 chars
+    assert "Python syntax validation failed" in result
+    assert "(diff truncated)" in result
+    # File must remain unchanged
+    assert f"        {padding}_25" not in target.read_text(encoding="utf-8")
+    assert f"    {padding}_25 = 25" in target.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_edit_tool_ast_error_message_contains_line_and_column(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """The error message should pinpoint the line/column of the syntax issue
+    so the LLM can locate the problem quickly."""
+    workspace_root = _setup_local_edit_env(monkeypatch, tmp_path)
+    target = workspace_root / "module.py"
+    target.write_text(
+        "class A:\n"
+        "    async def initialize(self) -> None:\n"
+        '        """Plugin activation."""\n'
+        "        self.ready = True\n",
+        encoding="utf-8",
+    )
+
+    old = '    async def initialize(self) -> None:\n        """Plugin activation."""\n'
+    new = (
+        "    async def initialize(self) -> None:\n"
+        '            """Plugin activation."""\n'
+    )
+
+    context = _make_context(require_admin=True, role="admin", runtime="local")
+    result = await fs_tools.FileEditTool().call(
+        context,
+        path="module.py",
+        old=old,
+        new=new,
+    )
+
+    # The error type and a line/column location must be present
+    assert "IndentationError" in result or "SyntaxError" in result
+    assert "line " in result

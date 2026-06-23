@@ -33,6 +33,7 @@ Local path resolution rule:
 - In sandbox runtime, relative paths are passed through unchanged.
 """
 
+import ast
 import asyncio
 import base64
 import os
@@ -471,6 +472,34 @@ async def _sandbox_write_bytes(sb, path: str, data: bytes) -> None:
         )
 
 
+def _is_python_file(path: str) -> bool:
+    """Return whether a path should receive Python syntax validation.
+
+    Args:
+        path: File path being edited.
+
+    Returns:
+        True when the path ends with `.py` (case-insensitive).
+    """
+    return Path(path).suffix.lower() == ".py"
+
+
+def _validate_python_ast(content: str) -> SyntaxError | None:
+    """Validate Python source with `ast.parse`.
+
+    Args:
+        content: Python source text to parse.
+
+    Returns:
+        The syntax error when parsing fails, otherwise None.
+    """
+    try:
+        ast.parse(content)
+    except SyntaxError as exc:
+        return exc
+    return None
+
+
 def _format_result(
     path: str,
     result: EditResult,
@@ -779,6 +808,39 @@ class FileEditTool(FunctionTool):
                 )
             except ValueError as exc:
                 return f"Error editing file: {exc}"
+
+            # 2.5. Python AST safety net: reject edits that turn a previously
+            # valid Python file into an invalid one (e.g. LLM indentation bugs).
+            # If the original file is already invalid, the edit is allowed so the
+            # tool can still be used to repair broken Python files.
+            if _is_python_file(normalized_path):
+                old_error = _validate_python_ast(result.old_content)
+                new_error = _validate_python_ast(result.new_content)
+                if old_error is None and new_error is not None:
+                    location = f"line {new_error.lineno}"
+                    if new_error.offset is not None:
+                        location += f", column {new_error.offset}"
+                    diff_section = ""
+                    if result.diff:
+                        diff_preview = result.diff
+                        if len(diff_preview) > 800:
+                            diff_preview = diff_preview[:800] + "\n... (diff truncated)"
+                        diff_section = (
+                            "\n\n"
+                            "The diff below is a PREVIEW ONLY. The file was NOT "
+                            "modified and remains in its previous state.\n\n"
+                            "```diff\n"
+                            f"{diff_preview}\n"
+                            "```"
+                        )
+                    return (
+                        f"Error editing file: [{normalized_path}]: "
+                        "Python syntax validation failed after edit. "
+                        "No changes were written. "
+                        f"{type(new_error).__name__} at {location}: {new_error.msg}. "
+                        "Check the indentation and block structure in `new`."
+                        f"{diff_section}"
+                    )
 
             # 3. Save backup (only after successful validation, async)
             try:
