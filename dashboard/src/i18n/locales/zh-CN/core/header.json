@@ -8,8 +8,10 @@
     "update": "更新",
     "account": "账户",
     "theme": {
+      "title": "主题",
       "light": "浅色模式",
-      "dark": "深色模式"
+      "dark": "深色模式",
+      "system": "跟随系统"
     }
   },
   "updateDialog": {
@@ -24,7 +26,9 @@
       "release": "😊 正式版"
     },
     "advancedSettings": "高级设置",
+    "releases": "版本列表",
     "updateToLatest": "更新到最新版本",
+    "showPreReleases": "显示预发布版本",
     "preRelease": "预发布",
     "preReleaseWarning": {
       "title": "预发布版本提醒",
@@ -58,6 +62,9 @@
       "restart": "正在准备重启...",
       "restarting": "正在重启 AstrBot",
       "completed": "更新完成",
+      "successReady": "更新成功",
+      "autoReloadIn": "{seconds} 秒后自动刷新",
+      "reloadNow": "立即刷新",
       "failed": "更新失败"
     },
     "redirectConfirm": {
@@ -95,7 +102,7 @@
   "accountDialog": {
     "title": "修改账户",
     "securityWarning": "安全提醒: 请修改密码以确保账户安全",
-    "securityWarningLegacy": "新的 AstrBot 版本强化了安全策略，请重新修改密码",
+    "securityWarningMd5": "新的 AstrBot 版本强化了安全策略，请重新修改密码",
     "securityWarningUpgrade": "检测到旧版本密码存储方式，请修改密码以完成安全升级",
     "form": {
       "currentPassword": "当前密码",

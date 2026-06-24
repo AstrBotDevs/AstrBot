@@ -6,7 +6,7 @@
                 {{ labels.title }}
             </v-card-title>
             <v-card-text>
-                <v-form ref="form" v-model="formValid">
+                <v-form ref="form" v-model="formValid" @submit.prevent="submitForm" :disabled="loading">
                     <v-text-field v-model="formData.name" :label="mergedLabels.nameLabel"
                         :rules="[(v: any) => !!v || mergedLabels.nameRequired]" variant="outlined"
                         density="comfortable" autofocus class="mb-3" />

@@ -85,6 +85,8 @@ from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
+    ExaGetContentsTool,
+    ExaWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
     TavilyExtractWebPageTool,
@@ -115,12 +117,22 @@ from astrbot.core.utils.quoted_message_parser import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
+WEEKDAY_NAMES = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
 WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
     {
         "web_search_baidu",
         "web_search_tavily",
         "web_search_bocha",
         "web_search_brave",
+        "web_search_exa",
     }
 )
 WEB_SEARCH_CITATION_PROMPT = (
@@ -269,10 +281,11 @@ async def _apply_kb(
             )
             if not kb_result:
                 return
-            if req.system_prompt is not None:
-                req.system_prompt += (
-                    f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
-                )
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=f"[Related Knowledge Base Results]:\n{kb_result}",
+                ).mark_as_temp()
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while retrieving knowledge base: %s", exc)
     else:
@@ -485,14 +498,26 @@ async def _ensure_persona_and_skills(
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
     skills = _filter_skills_for_current_config(skills, cfg)
+    workspace_skills = (
+        skill_manager.list_workspace_skills(
+            _get_workspace_path_for_umo(event.unified_msg_origin)
+        )
+        if runtime == "local"
+        else []
+    )
 
-    if skills:
+    if skills or workspace_skills:
         if persona and persona.get("skills") is not None:
             if not persona["skills"]:
                 skills = []
             else:
                 allowed = set(persona["skills"])
                 skills = [skill for skill in skills if skill.name in allowed]
+        if workspace_skills and (not persona or persona.get("skills") != []):
+            skills_by_name = {skill.name: skill for skill in skills}
+            for skill in workspace_skills:
+                skills_by_name[skill.name] = skill
+            skills = [skills_by_name[name] for name in sorted(skills_by_name)]
         if skills:
             req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
             if runtime == "none":
@@ -680,7 +705,20 @@ async def _append_video_attachment(
         video_path = await video.convert_to_file_path()
     except Exception as exc:  # noqa: BLE001
         if quoted:
-            logger.error("Error processing quoted video attachment: %s", exc)
+            logger.debug(
+                "Quoted video attachment is not locally resolvable, preserving ref: %s",
+                exc,
+            )
+            video_ref = video.path or video.url or video.file or ""
+            ref_name = os.path.basename(video_ref.split("?", 1)[0].rstrip("/"))
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=(
+                        "[Video Attachment in quoted message: "
+                        f"name {ref_name or 'video'}, ref {video_ref}]"
+                    )
+                )
+            )
         else:
             logger.error("Error processing video attachment: %s", exc)
         return
@@ -767,6 +805,7 @@ async def _process_quote_message(
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
     config: MainAgentBuildConfig | None = None,
     main_provider_supports_image: bool = False,
+    skip_quote_image_caption: bool = False,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -796,54 +835,63 @@ async def _process_quote_message(
                 image_seg = comp
                 break
 
-    if image_seg and main_provider_supports_image:
-        logger.debug(
-            "Skipping quote image captioning because the main provider supports image input."
-        )
-    elif image_seg and not img_cap_prov_id:
-        logger.debug(
-            "No dedicated image caption provider configured. "
-            "Skipping quote image captioning."
-        )
-    elif image_seg:
-        try:
-            prov = None
-            path = None
-            compress_path = None
-            prov = plugin_context.get_provider_by_id(img_cap_prov_id)
-            if prov is None:
-                prov = plugin_context.get_using_provider(event.unified_msg_origin)
+    if image_seg:
+        if skip_quote_image_caption:
+            logger.debug(
+                "Skipping quote image captioning because image captioning already handled this request."
+            )
+        elif main_provider_supports_image:
+            logger.debug(
+                "Skipping quote image captioning because the main provider supports image input."
+            )
+        elif not img_cap_prov_id:
+            logger.debug(
+                "No dedicated image caption provider configured. "
+                "Skipping quote image captioning."
+            )
+        else:
+            try:
+                prov = None
+                path = None
+                compress_path = None
+                prov = plugin_context.get_provider_by_id(img_cap_prov_id)
+                if prov is None:
+                    prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
-            if prov and isinstance(prov, Provider):
-                path = await image_seg.convert_to_file_path()
-                compress_path = await _compress_image_for_provider(
-                    path,
-                    config.provider_settings if config else None,
-                )
-                if path and _is_generated_compressed_image_path(path, compress_path):
-                    event.track_temporary_local_file(compress_path)
-                llm_resp = await prov.text_chat(
-                    prompt="Please describe the image content.",
-                    image_urls=[compress_path],
-                )
-                if llm_resp.completion_text:
-                    content_parts.append(
-                        f"[Image Caption in quoted message]: {llm_resp.completion_text}"
+                if prov and isinstance(prov, Provider):
+                    path = await image_seg.convert_to_file_path()
+                    compress_path = await _compress_image_for_provider(
+                        path,
+                        config.provider_settings if config else None,
                     )
-            else:
-                logger.warning("No provider found for image captioning in quote.")
-        except BaseException as exc:
-            logger.error("处理引用图片失败: %s", exc)
-        finally:
-            if (
-                compress_path
-                and compress_path != path
-                and os.path.exists(compress_path)
-            ):
-                try:
-                    os.remove(compress_path)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Fail to remove temporary compressed image: %s", exc)
+                    if path and _is_generated_compressed_image_path(
+                        path, compress_path
+                    ):
+                        event.track_temporary_local_file(compress_path)
+                    llm_resp = await prov.text_chat(
+                        prompt="Please describe the image content.",
+                        image_urls=[compress_path],
+                    )
+                    if llm_resp.completion_text:
+                        content_parts.append(
+                            f"[Image Caption in quoted message]: {llm_resp.completion_text}"
+                        )
+                else:
+                    logger.warning("No provider found for image captioning in quote.")
+            except BaseException as exc:
+                logger.error("处理引用图片失败: %s", exc)
+            finally:
+                if (
+                    compress_path
+                    and compress_path != path
+                    and os.path.exists(compress_path)
+                ):
+                    try:
+                        os.remove(compress_path)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Fail to remove temporary compressed image: %s", exc
+                        )
 
     quoted_content = "\n".join(content_parts)
     quoted_text = f"<Quoted Message>\n{quoted_content}\n</Quoted Message>"
@@ -874,18 +922,17 @@ def _append_system_reminders(
                 system_parts.append(f"Group name: {group_name}")
 
     if cfg.get("datetime_system_prompt"):
-        current_time = None
+        now = None
         if timezone:
             try:
                 now = datetime.datetime.now(zoneinfo.ZoneInfo(timezone))
-                current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
             except Exception as exc:  # noqa: BLE001
                 logger.error("时区设置错误: %s, 使用本地时区", exc)
-        if not current_time:
-            current_time = (
-                datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M (%Z)")
-            )
-        system_parts.append(f"Current datetime: {current_time}")
+        if now is None:
+            now = datetime.datetime.now().astimezone()
+        current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
+        weekday = WEEKDAY_NAMES[now.weekday()]
+        system_parts.append(f"Current datetime: {current_time}, Weekday: {weekday}")
 
     if system_parts:
         system_content = (
@@ -910,11 +957,12 @@ async def _decorate_llm_request(
     main_provider_supports_image = provider is not None and _provider_supports_modality(
         provider, "image"
     )
+    img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
+    quote_images_already_captioned = False
 
     if req.conversation:
         await _ensure_persona_and_skills(req, cfg, plugin_context, event)
 
-        img_cap_prov_id: str = cfg.get("default_image_caption_provider_id") or ""
         if img_cap_prov_id and req.image_urls and not main_provider_supports_image:
             await _ensure_img_caption(
                 event,
@@ -923,8 +971,8 @@ async def _decorate_llm_request(
                 plugin_context,
                 img_cap_prov_id,
             )
+            quote_images_already_captioned = True
 
-    img_cap_prov_id = cfg.get("default_image_caption_provider_id") or ""
     quoted_message_settings = _get_quoted_message_parser_settings(cfg)
     await _process_quote_message(
         event,
@@ -934,6 +982,7 @@ async def _decorate_llm_request(
         quoted_message_settings,
         config,
         main_provider_supports_image=main_provider_supports_image,
+        skip_quote_image_caption=quote_images_already_captioned,
     )
 
     tz = config.timezone
@@ -1161,6 +1210,9 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
     elif provider == "baidu_ai_search":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
+    elif provider == "exa":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
 
 
 def _apply_web_search_citation_prompt(
@@ -1570,6 +1622,7 @@ async def build_main_agent(
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
+        request_max_retries=config.provider_settings.get("request_max_retries", 5),
         tool_result_overflow_dir=(
             get_astrbot_system_tmp_path()
             if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")

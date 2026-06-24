@@ -67,7 +67,7 @@
         "loading": "Загрузка...",
         "installed": "Установлен",
         "unknown": "Неизвестно",
-        "incompatible": "Несовместимо"
+        "unsupported": "Не поддерживается"
     },
     "tooltips": {
         "enable": "Включить",
@@ -228,7 +228,7 @@
             "confirm": "Продолжить",
             "cancel": "Отмена"
         },
-        "versionCompatibility": {
+        "versionSupport": {
             "title": "Предупреждение о версии",
             "message": "Требуемая плагином версия AstrBot не совпадает с вашей текущей версией. Вы можете продолжить установку на свой страх и риск.",
             "confirm": "Игнорировать и установить",
@@ -368,7 +368,7 @@
         "neoPayloadTitle": "Детали Neo Payload",
         "neoPayloadFailed": "Ошибка чтения Payload",
         "runtimeNoneWarning": "Среда выполнения Computer Use не задана. Навыки могут не работать, так как нет активного окружения.",
-        "runtimeHint": "Установите среду выполнения в «local» или «sandbox» в настройках способностей использования компьютера.",
+        "runtimeHint": "Установите среду выполнения в «local» или «sandbox» в настройках способностей использования компьютера. Навыки из рабочей области пока не отображаются на этой странице.",
         "neoRuntimeRequired": "Neo Skills доступны только в среде sandbox с драйвером shipyard_neo.",
         "sourceLocalOnly": "Локальный навык",
         "sourceSandboxOnly": "Предустановленный Sandbox навык",

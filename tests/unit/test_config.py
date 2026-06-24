@@ -10,6 +10,8 @@ from astrbot.core.config.default import DEFAULT_VALUE_MAP
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.utils.auth_password import (
     DEFAULT_DASHBOARD_PASSWORD,
+    hash_dashboard_password,
+    hash_md5_dashboard_password,
     validate_dashboard_password,
     verify_dashboard_password,
 )
@@ -320,6 +322,53 @@ class TestAstrBotConfigLoad:
             config["dashboard"]["password"], generated_password
         )
 
+    def test_reset_dashboard_password_env_rotates_existing_password(
+        self, temp_config_path, monkeypatch
+    ):
+        """Test startup reset flag rotates an already configured dashboard password."""
+        old_password = "OldPassword123"
+        default_config = {
+            "dashboard": {
+                "username": "astrbot",
+                "password": "",
+                "pbkdf2_password": "",
+            },
+        }
+        with open(temp_config_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "dashboard": {
+                        "username": "astrbot",
+                        "password": hash_md5_dashboard_password(old_password),
+                        "pbkdf2_password": hash_dashboard_password(old_password),
+                        "password_change_required": False,
+                        "password_storage_upgraded": True,
+                    }
+                },
+                f,
+            )
+
+        monkeypatch.setenv("ASTRBOT_RESET_DASHBOARD_PASSWORD", "1")
+        config = AstrBotConfig(
+            config_path=temp_config_path,
+            default_config=default_config,
+        )
+        generated_password = getattr(config, "_generated_dashboard_password", None)
+
+        assert isinstance(generated_password, str)
+        assert config["dashboard"]["password_change_required"] is True
+        assert config["dashboard"]["password_storage_upgraded"] is True
+        assert "ASTRBOT_RESET_DASHBOARD_PASSWORD" not in os.environ
+        assert verify_dashboard_password(
+            config["dashboard"]["pbkdf2_password"], generated_password
+        )
+        assert not verify_dashboard_password(
+            config["dashboard"]["pbkdf2_password"], old_password
+        )
+        assert verify_dashboard_password(
+            config["dashboard"]["password"], generated_password
+        )
+
     def test_legacy_astrbot_user_without_change_flag_keeps_legacy_password(
         self, temp_config_path
     ):
@@ -528,6 +577,38 @@ class TestConfigHotReload:
         assert loaded_config["extra_field"] == "value"
         # Original fields are preserved because update merges
         assert "platform_settings" in loaded_config
+
+    def test_save_config_preserves_existing_file_when_write_fails(
+        self, temp_config_path, minimal_default_config, monkeypatch
+    ):
+        """Config saves should not corrupt the existing file on write failure."""
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=minimal_default_config
+        )
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            original_content = f.read()
+
+        def failing_dump(*args, **kwargs):
+            file_obj = args[1]
+            file_obj.write("{")
+            raise RuntimeError("simulated interrupted write")
+
+        config.new_field = "new_value"
+        monkeypatch.setattr(
+            "astrbot.core.config.astrbot_config.json.dump",
+            failing_dump,
+        )
+
+        with pytest.raises(RuntimeError, match="simulated interrupted write"):
+            config.save_config()
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert f.read() == original_content
+        assert [
+            entry.name
+            for entry in os.scandir(os.path.dirname(temp_config_path))
+            if entry.name != os.path.basename(temp_config_path)
+        ] == []
 
     def test_modification_persists_after_reload(
         self, temp_config_path, minimal_default_config

@@ -29,6 +29,7 @@ from astrbot.api.platform import (
 from astrbot.core import astrbot_config
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .weixin_oc_client import WeixinOCClient
 from .weixin_oc_event import WeixinOCMessageEvent
@@ -823,7 +824,12 @@ class WeixinOCAdapter(Platform):
                 file_name="voice.silk",
                 fallback_suffix=".silk",
             )
-            return Record.fromFileSystem(str(voice_path))
+            path_wav = await MediaResolver(
+                str(voice_path),
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
+            return Record(file=path_wav, url=path_wav)
 
         return None
 
@@ -1554,15 +1560,7 @@ class WeixinOCAdapter(Platform):
             message_str=text,
         )
 
-        self.commit_event(
-            WeixinOCMessageEvent(
-                message_str=text,
-                message_obj=abm,
-                platform_meta=self.meta(),
-                session_id=abm.session_id,
-                platform=self,
-            )
-        )
+        self.commit_event(self.create_event(abm))
 
     async def _poll_inbound_updates(self) -> None:
         data = await self.client.request_json(
@@ -1679,6 +1677,23 @@ class WeixinOCAdapter(Platform):
 
     def meta(self) -> PlatformMetadata:
         return self.metadata
+
+    def create_event(self, message: AstrBotMessage) -> WeixinOCMessageEvent:
+        """Creates a Weixin OC message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Weixin OC message event.
+        """
+        return WeixinOCMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+            platform=self,
+        )
 
     async def run(self) -> None:
         try:

@@ -4,13 +4,12 @@ import logging
 import os
 import re
 import sys
-import httpx
-
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from pathlib import Path, PureWindowsPath
 from typing import Any, Generic
-from mcp.shared.exceptions import McpError
+
+import httpx
 
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
@@ -87,31 +86,49 @@ _DENIED_DOCKER_ARGS = frozenset(
     }
 )
 _STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS"
+_ANYIO_TRANSPORT_ERRORS: tuple[type[Exception], ...] = ()
+_MCP_TRANSPORT_ERRORS: tuple[type[Exception], ...] = ()
 
 try:
     import anyio
     import mcp
     from mcp.client.sse import sse_client
+    from mcp.shared.exceptions import McpError
+
+    _ANYIO_TRANSPORT_ERRORS = (
+        anyio.ClosedResourceError,
+        anyio.BrokenResourceError,
+        anyio.EndOfStream,
+    )
+    _MCP_TRANSPORT_ERRORS = (McpError,)
 except (ModuleNotFoundError, ImportError):
     logger.warning(
         "Warning: Missing 'mcp' dependency, MCP services will be unavailable."
     )
 
+streamable_http_client_legacy = None
+streamable_http_client = None
+
 try:
-    from mcp.client.streamable_http import streamablehttp_client
-except (ModuleNotFoundError, ImportError):
-    logger.warning(
-        "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
+    from mcp.client.streamable_http import (
+        streamablehttp_client as streamable_http_client_legacy,
     )
+except (ModuleNotFoundError, ImportError):
+    try:
+        from mcp.client.streamable_http import (
+            streamable_http_client as streamable_http_client,
+        )
+    except (ModuleNotFoundError, ImportError):
+        logger.warning(
+            "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
+        )
 
 # Transport/connection error types that should trigger automatic reconnection.
 # Covers broken streams (anyio), HTTP errors like 404 (httpx), basic
 # socket-level failures, and MCP protocol errors (e.g. Session terminated)
 # so that a restarted MCP server can be recovered from.
 _TRANSPORT_ERRORS: tuple[type[Exception], ...] = (
-    anyio.ClosedResourceError,
-    anyio.BrokenResourceError,
-    anyio.EndOfStream,
+    *_ANYIO_TRANSPORT_ERRORS,
     ConnectionError,
     ConnectionResetError,
     BrokenPipeError,
@@ -119,13 +136,13 @@ _TRANSPORT_ERRORS: tuple[type[Exception], ...] = (
     httpx.ConnectError,
     httpx.ReadError,
     httpx.RemoteProtocolError,
-    McpError,
+    *_MCP_TRANSPORT_ERRORS,
 )
 
 # Keywords in exception messages that indicate a transport/connection problem.
 _CONNECTION_ERROR_KEYWORDS = (
     "session terminated",
-    "terminated",
+    "session was terminated",
     "closed resource",
     "broken resource",
     "connection closed",
@@ -133,12 +150,14 @@ _CONNECTION_ERROR_KEYWORDS = (
 )
 
 
-def _is_connection_error(exc: BaseException) -> bool:
-    """Return True if *exc* looks like a transport / connection failure.
+def _is_connection_error(exc: Exception) -> bool:
+    """Check whether an exception looks like a transport failure.
 
-    Checks both the exception hierarchy and the string representation so that
-    library-specific errors (e.g. MCP ``LifecycleError`` with "Session
-    terminated") are covered even if we cannot import them directly.
+    Args:
+        exc: Exception raised while calling an MCP tool.
+
+    Returns:
+        True if the exception should trigger MCP client reconnection.
     """
     if isinstance(exc, _TRANSPORT_ERRORS):
         return True
@@ -383,11 +402,9 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
         properties = normalized.get("properties")
         if isinstance(properties, dict):
-            original_properties = (
-                node.get("properties")
-                if isinstance(node.get("properties"), dict)
-                else {}
-            )
+            original_properties = node.get("properties")
+            if not isinstance(original_properties, dict):
+                original_properties = {}
             required = normalized.get("required")
             required_list = required[:] if isinstance(required, list) else []
 
@@ -497,17 +514,38 @@ class MCPClient:
                     ),
                 )
             else:
-                timeout = timedelta(seconds=cfg.get("timeout", 30))
-                sse_read_timeout = timedelta(
-                    seconds=cfg.get("sse_read_timeout", 60 * 5),
-                )
-                self._streams_context = streamablehttp_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=timeout,
-                    sse_read_timeout=sse_read_timeout,
-                    terminate_on_close=cfg.get("terminate_on_close", True),
-                )
+                timeout_seconds = cfg.get("timeout", 30)
+                sse_read_timeout_seconds = cfg.get("sse_read_timeout", 60 * 5)
+                if streamable_http_client_legacy:
+                    timeout = timedelta(seconds=timeout_seconds)
+                    sse_read_timeout = timedelta(seconds=sse_read_timeout_seconds)
+                    self._streams_context = streamable_http_client_legacy(
+                        url=cfg["url"],
+                        headers=cfg.get("headers", {}),
+                        timeout=timeout,
+                        sse_read_timeout=sse_read_timeout,
+                        terminate_on_close=cfg.get("terminate_on_close", True),
+                    )
+                elif streamable_http_client:
+                    http_client = await self.exit_stack.enter_async_context(
+                        httpx.AsyncClient(
+                            headers=cfg.get("headers", {}),
+                            timeout=httpx.Timeout(
+                                timeout_seconds,
+                                read=sse_read_timeout_seconds,
+                            ),
+                            follow_redirects=True,
+                        ),
+                    )
+                    self._streams_context = streamable_http_client(
+                        url=cfg["url"],
+                        http_client=http_client,
+                        terminate_on_close=cfg.get("terminate_on_close", True),
+                    )
+                else:
+                    raise RuntimeError(
+                        "Streamable HTTP transport is not available in the installed MCP library version."
+                    )
                 read_s, write_s, _ = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
@@ -643,23 +681,26 @@ class MCPClient:
             Exception: raised after all retries are exhausted
         """
 
-        last_exc: BaseException | None = None
+        max_attempts = 3
+        last_exc: Exception | None = None
 
-        for attempt in range(3):
+        for attempt in range(max_attempts):
             if not self.session:
                 # Session was cleared (e.g. by a previous failed reconnect).
                 # Try to reconnect instead of immediately failing.
                 logger.warning(
-                    f"MCP session is not available, attempting to reconnect... (attempt {attempt + 1}/3)"
+                    f"MCP session is not available, attempting to reconnect... (attempt {attempt + 1}/{max_attempts})"
                 )
                 try:
                     await self._reconnect()
                 except Exception as reconnect_err:
+                    last_exc = reconnect_err
                     logger.error(f"Reconnection failed: {reconnect_err}")
-                    if attempt == 2:
+                    if attempt == max_attempts - 1:
                         raise ValueError(
                             "MCP session is not available after reconnection attempts"
                         ) from reconnect_err
+                    await asyncio.sleep(min(2**attempt, 3))
                 continue
 
             try:
@@ -668,7 +709,7 @@ class MCPClient:
                     arguments=arguments,
                     read_timeout_seconds=read_timeout_seconds,
                 )
-            except BaseException as e:
+            except Exception as e:
                 last_exc = e
 
                 if not _is_connection_error(e):
@@ -677,18 +718,22 @@ class MCPClient:
 
                 logger.warning(
                     f"MCP tool {tool_name} call failed ({type(e).__name__}: {e}), "
-                    f"attempting to reconnect... (attempt {attempt + 1}/3)"
+                    f"attempting to reconnect... (attempt {attempt + 1}/{max_attempts})"
                 )
 
                 try:
                     await self._reconnect()
                 except Exception as reconnect_err:
                     logger.error(f"Reconnection failed: {reconnect_err}")
-                    if attempt == 2:
+                    if attempt == max_attempts - 1:
                         raise e from reconnect_err
+                if attempt < max_attempts - 1:
+                    await asyncio.sleep(min(2**attempt, 3))
 
         # Should not reach here, but just in case
-        raise last_exc  # type: ignore[misc]
+        if last_exc:
+            raise last_exc
+        raise ValueError("MCP session is not available after reconnection attempts")
 
     async def cleanup(self) -> None:
         """Clean up resources including old exit stacks from reconnections"""
