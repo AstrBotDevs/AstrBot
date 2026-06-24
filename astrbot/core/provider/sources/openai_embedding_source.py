@@ -70,7 +70,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         kwargs = {}
         if "embedding_dimensions" in self.provider_config:
             try:
-                kwargs["dimensions"] = int(self.provider_config["embedding_dimensions"])
+                dim_val = int(self.provider_config["embedding_dimensions"])
+                if dim_val > 0:
+                    kwargs["dimensions"] = dim_val
             except (ValueError, TypeError):
                 logger.warning(
                     f"embedding_dimensions in embedding configs is not a valid integer: '{self.provider_config['embedding_dimensions']}', ignored."

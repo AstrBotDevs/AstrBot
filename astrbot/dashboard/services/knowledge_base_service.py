@@ -304,9 +304,11 @@ class KnowledgeBaseService:
             )
         try:
             vec = await provider.get_embedding("astrbot")
-            if len(vec) != provider.get_dim():
+            actual_dim = len(vec)
+            configured_dim = provider.get_dim()
+            if configured_dim != 0 and actual_dim != configured_dim:
                 raise ValueError(
-                    f"嵌入向量维度不匹配，实际是 {len(vec)}，然而配置是 {provider.get_dim()}",
+                    f"嵌入向量维度不匹配，实际是 {actual_dim}，然而配置是 {configured_dim}",
                 )
         except Exception as exc:
             raise KnowledgeBaseServiceError(f"测试嵌入模型失败: {exc!s}") from exc
