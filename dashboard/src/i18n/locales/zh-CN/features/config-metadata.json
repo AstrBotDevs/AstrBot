@@ -141,6 +141,10 @@
         },
         "web_search_link": {
           "description": "显示来源引用"
+        },
+        "websearch_exa_key": {
+          "description": "Exa API Key",
+          "hint": "可添加多个 Key 进行轮询。获取 Key: https://dashboard.exa.ai"
         }
       }
     },

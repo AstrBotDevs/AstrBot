@@ -378,3 +378,138 @@ def _context_with_provider_settings(provider_settings):
         event=SimpleNamespace(unified_msg_origin="test:private:session"),
     )
     return SimpleNamespace(context=agent_context)
+
+
+# --- Exa tests ---
+
+
+def test_normalize_legacy_web_search_config_migrates_exa_key():
+    config = _FakeConfig({"provider_settings": {"websearch_exa_key": "exa-key"}})
+
+    tools.normalize_legacy_web_search_config(config)
+
+    assert config["provider_settings"]["websearch_exa_key"] == ["exa-key"]
+    assert config.saved is True
+
+
+@pytest.mark.asyncio
+async def test_exa_search_maps_results(monkeypatch):
+    async def fake_exa_search(provider_settings, payload):
+        assert provider_settings["websearch_exa_key"] == ["exa-key"]
+        assert payload["query"] == "AstrBot"
+        assert payload["numResults"] == 5
+        return [
+            tools.SearchResult(
+                title="AstrBot",
+                url="https://example.com",
+                snippet="AI Agent Assistant",
+            )
+        ]
+
+    monkeypatch.setattr(tools, "_exa_search", fake_exa_search)
+    tool = tools.ExaWebSearchTool()
+    context = _context_with_provider_settings({"websearch_exa_key": ["exa-key"]})
+
+    result = await tool.call(context, query="AstrBot", num_results=5)
+
+    parsed = json.loads(result)
+    assert parsed["results"][0]["title"] == "AstrBot"
+    assert parsed["results"][0]["url"] == "https://example.com"
+    assert parsed["results"][0]["snippet"] == "AI Agent Assistant"
+
+
+@pytest.mark.asyncio
+async def test_exa_search_raw_api_call(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={
+                "results": [
+                    {
+                        "title": "AstrBot",
+                        "url": "https://example.com",
+                        "text": "AI Agent Assistant",
+                    }
+                ],
+            },
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._exa_search(
+        {"websearch_exa_key": ["exa-key"]},
+        {"query": "AstrBot", "numResults": 10, "type": "auto"},
+    )
+
+    assert session.posted["url"] == "https://api.exa.ai/search"
+    assert session.posted["headers"]["x-api-key"] == "exa-key"
+    assert results == [
+        tools.SearchResult(
+            title="AstrBot", url="https://example.com", snippet="AI Agent Assistant"
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_exa_search_raises_on_http_error(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(status=401, text_data="Unauthorized")
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(
+        Exception,
+        match="Exa web search failed: Unauthorized, status: 401",
+    ):
+        await tools._exa_search(
+            {"websearch_exa_key": ["exa-key"]},
+            {"query": "AstrBot"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_exa_get_contents_returns_text(monkeypatch):
+    async def fake_exa_get_contents(provider_settings, payload):
+        assert provider_settings["websearch_exa_key"] == ["exa-key"]
+        assert payload["ids"] == ["https://example.com"]
+        return [{"url": "https://example.com", "text": "# Example Content"}]
+
+    monkeypatch.setattr(tools, "_exa_get_contents", fake_exa_get_contents)
+    tool = tools.ExaGetContentsTool()
+    context = _context_with_provider_settings({"websearch_exa_key": ["exa-key"]})
+
+    result = await tool.call(context, url="https://example.com")
+
+    assert result == "URL: https://example.com\nContent: # Example Content"
+
+
+@pytest.mark.asyncio
+async def test_exa_get_contents_raises_on_http_error(monkeypatch):
+    session = _FakeFirecrawlSession(
+        _FakeFirecrawlResponse(status=403, text_data="Forbidden")
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(
+        Exception,
+        match="Exa get contents failed: Forbidden, status: 403",
+    ):
+        await tools._exa_get_contents(
+            {"websearch_exa_key": ["exa-key"]},
+            {"ids": ["https://example.com"]},
+        )
