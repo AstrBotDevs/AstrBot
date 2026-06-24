@@ -30,6 +30,10 @@ from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
 
+class APIReturnNoneError(Exception):
+    pass
+
+
 def _patch_qq_botpy_formdata() -> None:
     """Patch qq-botpy for aiohttp>=3.12 compatibility.
 
@@ -49,21 +53,25 @@ def _patch_qq_botpy_formdata() -> None:
 
 _patch_qq_botpy_formdata()
 
-# Retry decorator for QQ Official API transient errors (HTTP 500/504)
-_qqofficial_retry = retry(
-    retry=retry_if_exception_type(
-        (
-            botpy.errors.ServerError,
-            botpy.errors.SequenceNumberError,
-            OSError,
-            asyncio.TimeoutError,
-        )
-    ),
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=2, min=2, max=30),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-    reraise=True,
-)
+
+def _qqofficial_retry(max_attempts: int = 5):
+    """Retry decorator for QQ Official API transient errors (HTTP 500/504)"""
+    return retry(
+        retry=retry_if_exception_type(
+            (
+                botpy.errors.ServerError,
+                botpy.errors.SequenceNumberError,
+                OSError,
+                asyncio.TimeoutError,
+                APIReturnNoneError,
+            )
+        ),
+        stop=stop_after_attempt(max_attempts),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+
 
 _QQOFFICIAL_SEND_API_ERRORS = (
     botpy.errors.ForbiddenError,
@@ -558,7 +566,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "srv_send_msg": False,
         }
 
-        @_qqofficial_retry
+        @_qqofficial_retry()
         async def _do_upload():
             if "openid" in kwargs:
                 payload["openid"] = kwargs["openid"]
@@ -629,7 +637,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         else:
             return None
 
-        @_qqofficial_retry
+        @_qqofficial_retry()
         async def _do_upload():
             return await self.bot.api._http.request(route, json=payload)
 
@@ -680,11 +688,27 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 stream_data.pop("id", None)
             payload["stream"] = stream_data
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
-        result = await self.bot.api._http.request(route, json=payload)
 
-        if result is None:
-            logger.warning("[QQOfficial] post_c2c_message: API 返回 None，跳过本次发送")
+        retry_times = 3
+
+        @_qqofficial_retry(retry_times)
+        async def _do_request():
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "发送消息API返回None，触发重试"
+                logger.warning(f"[QQOfficial] post_c2c_message: {err_msg}")
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        result = None
+        try:
+            result = await _do_request()
+        except APIReturnNoneError:
+            logger.warning(
+                f"[QQOfficial] post_c2c_message: 发送消息失败，API 返回 None，共尝试{retry_times}次后放弃"
+            )
             return None
+
         if not isinstance(result, dict):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None
