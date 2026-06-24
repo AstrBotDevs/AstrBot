@@ -115,17 +115,8 @@ except (ModuleNotFoundError, ImportError):
 
 
 def _is_mcp_reconnect_error(exc: BaseException) -> bool:
-    try:
-        anyio_module = anyio
-    except NameError:
-        anyio_module = None
-
-    closed_resource_error = getattr(anyio_module, "ClosedResourceError", None)
-    if isinstance(closed_resource_error, type) and isinstance(
-def _is_mcp_reconnect_error(exc: BaseException) -> bool:
     if "anyio" in globals() and isinstance(exc, anyio.ClosedResourceError):
         return True
-
     message = str(exc).lower()
     return any(marker in message for marker in _MCP_RECONNECT_ERROR_MESSAGES)
 
