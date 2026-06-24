@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 import re
 import threading
@@ -25,7 +26,7 @@ from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_md5_dashboard_password,
 )
-from astrbot.core.utils.io import get_dashboard_version
+from astrbot.core.utils.io import get_dashboard_dist_version, get_dashboard_version
 from astrbot.core.utils.storage_cleaner import StorageCleaner
 from astrbot.core.utils.version_comparator import VersionComparator
 from astrbot.dashboard.password_state import (
@@ -102,6 +103,55 @@ class StatService:
             "change_pwd_hint": await self.is_default_cred(),
             "md5_pwd_hint": md5_pwd_hint,
             "password_upgrade_required": not storage_upgraded,
+        }
+
+    async def get_public_versions(
+        self,
+        dashboard_static_folder: str | None = None,
+    ) -> dict:
+        """Return version details that are safe to expose before login.
+
+        Args:
+            dashboard_static_folder: Static WebUI dist directory currently served by
+                the dashboard, when available.
+
+        Returns:
+            Public WebUI and AstrBot version information.
+        """
+
+        dashboard_version = None
+        if dashboard_static_folder:
+            dashboard_version = get_dashboard_dist_version(
+                Path(dashboard_static_folder)
+            )
+        if dashboard_version is None:
+            dashboard_version = await get_dashboard_version()
+
+        code_version = None
+        version_file = Path(get_astrbot_path()) / "astrbot" / "__init__.py"
+        try:
+            module = ast.parse(version_file.read_text(encoding="utf-8"))
+            for statement in module.body:
+                if not isinstance(statement, ast.Assign):
+                    continue
+                if not any(
+                    isinstance(target, ast.Name) and target.id == "__version__"
+                    for target in statement.targets
+                ):
+                    continue
+                if isinstance(statement.value, ast.Constant) and isinstance(
+                    statement.value.value,
+                    str,
+                ):
+                    code_version = statement.value.value.strip()
+                break
+        except (OSError, SyntaxError, UnicodeDecodeError) as exc:
+            logger.warning("Failed to read AstrBot code version from disk: %s", exc)
+
+        return {
+            "webui_version": dashboard_version,
+            "astrbot_version": VERSION,
+            "astrbot_code_version": code_version,
         }
 
     def get_start_time(self) -> dict:

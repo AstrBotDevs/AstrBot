@@ -265,6 +265,7 @@ class AstrBotDashboard:
             "/api/auth/logout",
             "/api/auth/setup-status",
             "/api/auth/setup",
+            "/api/stat/versions",
         }
         allowed_endpoint_prefixes = [
             "/api/file",
