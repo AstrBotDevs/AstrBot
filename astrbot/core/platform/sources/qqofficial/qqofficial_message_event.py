@@ -573,7 +573,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 route = Route(
                     "POST", "/v2/users/{openid}/files", openid=kwargs["openid"]
                 )
-                return await self.bot.api._http.request(route, json=payload)
             elif "group_openid" in kwargs:
                 payload["group_openid"] = kwargs["group_openid"]
                 route = Route(
@@ -581,11 +580,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     "/v2/groups/{group_openid}/files",
                     group_openid=kwargs["group_openid"],
                 )
-                return await self.bot.api._http.request(route, json=payload)
             else:
                 raise ValueError("Invalid upload parameters")
 
-        result = await _do_upload()
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "上传图片API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        try:
+            result = await _do_upload()
+        except APIReturnNoneError:
+            logger.warning(f"上传图片API返回None，共尝试5次后放弃: {payload}")
+            raise
 
         if not isinstance(result, dict):
             raise RuntimeError(
@@ -639,7 +647,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
 
         @_qqofficial_retry()
         async def _do_upload():
-            return await self.bot.api._http.request(route, json=payload)
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "上传文件API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
 
         try:
             result = await _do_upload()
@@ -654,6 +666,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_info=result["file_info"],
                     ttl=result.get("ttl", 0),
                 )
+        except APIReturnNoneError:
+            logger.warning(f"上传文件API返回None，共尝试5次后放弃: {file_source}")
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
             logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
