@@ -23,11 +23,15 @@ import type {
 } from "@/composables/parseSpcodeGitDiff";
 import { useSpcodeWorktrees } from "@/composables/useSpcodeWorktrees";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
-import { useSpcodeFileRestore, type RestoreResult } from "@/composables/useSpcodeFileRestore";
+import {
+  useSpcodeFileRestore,
+  type RestoreResult,
+} from "@/composables/useSpcodeFileRestore";
 import { useSpcodeGitStage } from "@/composables/useSpcodeGitStage";
 import { useSpcodeGitUnstage } from "@/composables/useSpcodeGitUnstage";
 import { useSpcodeGitCommit } from "@/composables/useSpcodeGitCommit";
 import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
+import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
 import { classifyReason } from "@/composables/parseSpcodeGitWorkflow";
 import { useModuleI18n } from "@/i18n/composables";
 import GitDiffBodyContent from "@/components/chat/message_list_comps/GitDiffBodyContent.vue";
@@ -49,16 +53,25 @@ const { tm } = useModuleI18n("features/chat");
 // by an older app version.
 const STORAGE_KEYS = {
   viewMode: "astrbot.spcode.gitDiffSidebar.viewMode",
-  fileBrowserCurrentPath: "astrbot.spcode.gitDiffSidebar.fileBrowserCurrentPath",
+  fileBrowserCurrentPath:
+    "astrbot.spcode.gitDiffSidebar.fileBrowserCurrentPath",
   selectedWorktree: "astrbot.spcode.gitDiffSidebar.selectedWorktree",
   selectedScope: "astrbot.spcode.gitDiffSidebar.selectedScope",
 } as const;
 
 function safeGetItem(key: string): string | null {
-  try { return localStorage.getItem(key); } catch { return null; }
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 function safeSetItem(key: string, value: string): void {
-  try { localStorage.setItem(key, value); } catch { /* no-op */ }
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* no-op */
+  }
 }
 
 function loadViewMode(): "files" | "diff" | "history" {
@@ -90,7 +103,10 @@ function persistCurrentPath(path: string): void {
 // Cross-root validator (spec §5.1 lines 1300-1310). Returns the input
 // if it's inside the root, else the root. Used to reset stale paths
 // after project / worktree switches.
-function validateCurrentPath(persisted: string | null, root: string | null): string {
+function validateCurrentPath(
+  persisted: string | null,
+  root: string | null,
+): string {
   if (!root) return "";
   if (!persisted) return root;
   const normPersisted = persisted.replace(/\\/g, "/");
@@ -190,18 +206,15 @@ const mainWorktreePath = computed(
 
 // Persist viewMode / selectedScope / selectedWorktree on every change.
 // fileBrowserCurrentPath uses persistCurrentPath (300ms debounce).
-watch(viewMode, (v) => safeSetItem(STORAGE_KEYS.viewMode, v), { flush: "post" });
-watch(
-  selectedScope,
-  (v) => safeSetItem(STORAGE_KEYS.selectedScope, v),
-  { flush: "post" },
-);
+watch(viewMode, (v) => safeSetItem(STORAGE_KEYS.viewMode, v), {
+  flush: "post",
+});
+watch(selectedScope, (v) => safeSetItem(STORAGE_KEYS.selectedScope, v), {
+  flush: "post",
+});
 watch(
   selectedWorktree,
-  (v) => safeSetItem(
-    STORAGE_KEYS.selectedWorktree,
-    v === null ? "null" : v,
-  ),
+  (v) => safeSetItem(STORAGE_KEYS.selectedWorktree, v === null ? "null" : v),
   { flush: "post" },
 );
 
@@ -217,13 +230,15 @@ watch(
     if (s.kind !== "ok") return;
     const wtList = s.snapshot.worktrees;
     // Validate selectedWorktree
-    if (selectedWorktree.value && !wtList.some((w) => w.path === selectedWorktree.value)) {
+    if (
+      selectedWorktree.value &&
+      !wtList.some((w) => w.path === selectedWorktree.value)
+    ) {
       selectedWorktree.value = null;
     }
     // Validate currentPath against the (possibly new) root
-    const root = selectedWorktree.value
-      ?? wtList.find((w) => w.isMain)?.path
-      ?? null;
+    const root =
+      selectedWorktree.value ?? wtList.find((w) => w.isMain)?.path ?? null;
     const validated = validateCurrentPath(fileBrowserCurrentPath.value, root);
     if (fileBrowserCurrentPath.value !== validated) {
       fileBrowserCurrentPath.value = validated;
@@ -245,26 +260,22 @@ watch(
 // current viewMode" — we don't want stale paths leaking into a
 // different worktree. The preview path is also cleared: a preview
 // pointing into the old worktree is meaningless in the new one.
-watch(
-  selectedWorktree,
-  (newVal) => {
-    const root = newVal ?? mainWorktreePath.value;
-    if (root && fileBrowserCurrentPath.value !== root) {
-      fileBrowserCurrentPath.value = root;
-      persistCurrentPath(root);
-    }
-    fileBrowserPreviewPath.value = null;
-  },
-);
+watch(selectedWorktree, (newVal) => {
+  const root = newVal ?? mainWorktreePath.value;
+  if (root && fileBrowserCurrentPath.value !== root) {
+    fileBrowserCurrentPath.value = root;
+    persistCurrentPath(root);
+  }
+  fileBrowserPreviewPath.value = null;
+});
 
 // Persist currentPath (debounced 300ms, spec §5.1 line 1357-1361).
 // Empty path is skipped — we don't want to overwrite a valid persisted
 // value with an empty string during the brief interval before the
 // worktree-list watcher fires.
-watch(
-  fileBrowserCurrentPath,
-  (newPath) => { if (newPath) persistCurrentPath(newPath); },
-);
+watch(fileBrowserCurrentPath, (newPath) => {
+  if (newPath) persistCurrentPath(newPath);
+});
 
 const composable = useSpcodeGitDiff(selectedWorktree, selectedScope);
 // git-status is fetched alongside git-diff ONLY for the unstaged view.
@@ -313,7 +324,11 @@ interface SnackbarState {
   color: "success" | "warning" | "error";
   stderr?: string;
 }
-const snackbar = ref<SnackbarState>({ show: false, message: "", color: "success" });
+const snackbar = ref<SnackbarState>({
+  show: false,
+  message: "",
+  color: "success",
+});
 
 function showSnackbar(
   message: string,
@@ -324,22 +339,70 @@ function showSnackbar(
 }
 
 // Maps a restore reason code to a snackbar message + color.
-const RESTORE_REASON_I18N_KEYS: Record<string, { key: string; color: "warning" | "error" }> = {
-  invalid_body: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.invalid_body", color: "error" },
-  missing_file: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.missing_file", color: "error" },
-  feature_disabled: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.feature_disabled", color: "error" },
-  no_project_loaded: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.no_project_loaded", color: "error" },
-  directory_missing: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.directory_missing", color: "error" },
-  not_a_git_repo: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.not_a_git_repo", color: "error" },
-  worktree_invalid: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.worktree_invalid", color: "error" },
-  git_unavailable: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.git_unavailable", color: "error" },
-  path_unsafe: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.path_unsafe", color: "error" },
-  file_not_found: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.file_not_found", color: "error" },
-  not_modified: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.not_modified", color: "warning" },
-  untracked_file: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.untracked_file", color: "warning" },
-  git_error: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.git_error", color: "error" },
-  network: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.network", color: "error" },
-  unknown: { key: "spcodeProjectLoad.diffSidebar.restore.error.reason.unknown", color: "error" },
+const RESTORE_REASON_I18N_KEYS: Record<
+  string,
+  { key: string; color: "warning" | "error" }
+> = {
+  invalid_body: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.invalid_body",
+    color: "error",
+  },
+  missing_file: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.missing_file",
+    color: "error",
+  },
+  feature_disabled: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.feature_disabled",
+    color: "error",
+  },
+  no_project_loaded: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.no_project_loaded",
+    color: "error",
+  },
+  directory_missing: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.directory_missing",
+    color: "error",
+  },
+  not_a_git_repo: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.not_a_git_repo",
+    color: "error",
+  },
+  worktree_invalid: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.worktree_invalid",
+    color: "error",
+  },
+  git_unavailable: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.git_unavailable",
+    color: "error",
+  },
+  path_unsafe: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.path_unsafe",
+    color: "error",
+  },
+  file_not_found: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.file_not_found",
+    color: "error",
+  },
+  not_modified: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.not_modified",
+    color: "warning",
+  },
+  untracked_file: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.untracked_file",
+    color: "warning",
+  },
+  git_error: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.git_error",
+    color: "error",
+  },
+  network: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.network",
+    color: "error",
+  },
+  unknown: {
+    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.unknown",
+    color: "error",
+  },
 };
 
 const isProjectLoaded = computed(
@@ -407,10 +470,7 @@ watch(
         // here we DO await both so the initial load is consistent
         // before the first render. Fire-and-forget would risk showing
         // an empty "new files" section on first paint.
-        await Promise.all([
-          composable.refresh(),
-          gitStatus.refresh(),
-        ]);
+        await Promise.all([composable.refresh(), gitStatus.refresh()]);
       } finally {
         isFetching.value = false;
       }
@@ -490,19 +550,62 @@ const newFilePaths = computed<ReadonlySet<string>>(() => {
   return new Set(paths);
 });
 
+// ── New-file line counts ────────────────────────────────────────────
+// git-status does not return patch data, so the new-file stubs have
+// no `additions` count. We compensate by reading each new file via
+// /spcode/file-browser (cached, worktree-scoped) and counting lines
+// locally. The composable fills `lineCounts.counts.value` reactively
+// as fetches complete; until then the row renders "+0 −0" (same as a
+// diff row with no slice). See useSpcodeNewFileLineCounts.ts for the
+// cache / revalidation strategy. `currentRoot` is defined further
+// below for the FileBrowserView — we inline its expression here so
+// the composable runs before that declaration.
+const lineCounts = useSpcodeNewFileLineCounts(
+  newFilePaths,
+  computed(() => selectedWorktree.value ?? mainWorktreePath.value ?? ""),
+);
+
 /** Build a SpcodeGitDiffFile-shaped stub for an untracked/intent-to-add
- *  entry. No diff slice is available (git-status does not return
- *  patches), so `slice` is null. `status: "A"` keeps the ICON_MAP
- *  fallback sane; the row's visual code is overridden by `isNewFile`. */
+ *  entry. No native diff slice is available (git-status does not
+ *  return patches), but `useSpcodeNewFileLineCounts` caches the raw
+ *  file content per path, so we synthesize a unified-diff slice with
+ *  a `@@ -0,0 +1,N @@` header and `+`-prefixed lines. This lets
+ *  <DiffPreview> render the file with line numbers, the green
+ *  "added" tint, the standard 30-line truncation, and a
+ *  "Show all N lines" overflow button — all without a new
+ *  component. When the content is not yet fetched (or the file is
+ *  binary / too large), `slice` is null and the row shows the
+ *  "noContent" placeholder. `status: "A"` keeps the row aligned
+ *  with regular "added" diff entries; GitDiffFileItem.vue still
+ *  uses the `isNewFile` prop to render a distinct left icon
+ *  (mdi-file-plus-outline). */
 function newFileStub(f: SpcodeGitStatusFile): SpcodeGitDiffFile {
+  const content = lineCounts.contents.value.get(f.path);
   return {
     path: f.path,
     status: "A" as FileStatus,
-    additions: 0,
+    additions: lineCounts.counts.value.get(f.path) ?? 0,
     deletions: 0,
-    slice: null,
+    slice: content !== undefined ? buildNewFileSlice(content) : null,
     isBinary: false,
   };
+}
+
+/** Build a synthetic unified-diff slice from the raw content of a
+ *  brand-new file. Mirrors what `git diff /dev/null <file>` would
+ *  emit: one hunk starting at line 1 of the new file, with every
+ *  line marked as an addition. The trailing empty line introduced
+ *  by a final `\n` is dropped so the hunk header's count matches
+ *  the additions badge (which `countLines` already normalizes). */
+function buildNewFileSlice(content: string): string {
+  // Split on \n; file-browser already normalized \r\n → \n.
+  const raw = content.split("\n");
+  // Drop the trailing empty element caused by a final newline so
+  // the displayed line count matches the +N badge.
+  const lines = raw[raw.length - 1] === "" ? raw.slice(0, -1) : raw;
+  const header = `@@ -0,0 +1,${lines.length} @@`;
+  const body = lines.map((line) => `+${line}`).join("\n");
+  return `${header}\n${body}\n`;
 }
 
 /**
@@ -644,7 +747,11 @@ async function onConfirmRestore(): Promise<void> {
   restoringFile.value = path;
   const umo = spcodeStatus.status.value.umo;
   const worktree = selectedWorktree.value;
-  const result: RestoreResult = await fileRestore.restore({ file: path, worktree, umo });
+  const result: RestoreResult = await fileRestore.restore({
+    file: path,
+    worktree,
+    umo,
+  });
   restoringFile.value = null;
   // Special-case "aborted" (Chunk 2 review note): no toast, just reset state.
   // This only fires during teardown (pre-mount guard / post-await unmount / axios cancel).
@@ -659,10 +766,14 @@ async function onConfirmRestore(): Promise<void> {
     // Spec §3.2: success -> immediate refresh so the row disappears.
     await composable.refresh();
   } else {
-    const mapping = RESTORE_REASON_I18N_KEYS[result.reason] ?? RESTORE_REASON_I18N_KEYS.unknown;
-    const message = mapping.key === "spcodeProjectLoad.diffSidebar.restore.error.reason.git_error"
-      ? tm(mapping.key, { stderr: result.stderr ?? "" })
-      : tm(mapping.key);
+    const mapping =
+      RESTORE_REASON_I18N_KEYS[result.reason] ??
+      RESTORE_REASON_I18N_KEYS.unknown;
+    const message =
+      mapping.key ===
+      "spcodeProjectLoad.diffSidebar.restore.error.reason.git_error"
+        ? tm(mapping.key, { stderr: result.stderr ?? "" })
+        : tm(mapping.key);
     showSnackbar(message, mapping.color);
   }
 }
@@ -677,7 +788,10 @@ function isAborted(result: { ok: boolean; reason?: string }): boolean {
   return !result.ok && result.reason === "aborted";
 }
 
-function reasonKey(endpoint: "stage" | "unstage" | "commit", reason: string): string {
+function reasonKey(
+  endpoint: "stage" | "unstage" | "commit",
+  reason: string,
+): string {
   // classifyReason 把 reason 字符串归一化到 ReasonMeta.i18nKey(已在
   // parseSpcodeGitWorkflow 暴露)。i18nKey 形如 "error.reason.path_unsafe"。
   const meta = classifyReason(reason, endpoint);
@@ -705,7 +819,12 @@ async function onStageFile(path: string): Promise<void> {
   if (result.ok) {
     // 乐观语义(spec §3.3.1):用响应 `files` 覆盖 stagedFiles。
     stagedFiles.value = new Set(result.snapshot.files);
-    await composable.refresh();
+    // Parallel refresh: git-diff shows the file in the staged view,
+    // git-status moves it out of "untracked"/"intent_to_add" so the
+    // merged unstaged list drops the new-file stub. Without the
+    // second call the user would wait up to 10s for the polling
+    // tick to remove the row.
+    await Promise.all([composable.refresh(), gitStatus.refresh()]);
     showSnackbar(
       tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.success", { path }),
       "success",
@@ -716,7 +835,11 @@ async function onStageFile(path: string): Promise<void> {
     const message = meta.withReason
       ? tm(key, { reason: result.reason })
       : tm(key);
-    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
   }
 }
 
@@ -728,7 +851,11 @@ async function onUnstageFile(path: string): Promise<void> {
   if (isAborted(result)) return;
   if (result.ok) {
     stagedFiles.value = new Set(result.snapshot.files);
-    await composable.refresh();
+    // Parallel refresh: after unstaging, git-status reclassifies the
+    // file (intent_to_add / unstaged) and the unstaged diff picks it
+    // up; git-status must refresh in lock-step to avoid a stale
+    // "Stage all" count and a stale new-file stub set.
+    await Promise.all([composable.refresh(), gitStatus.refresh()]);
     showSnackbar(
       tm("spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.success", { path }),
       "success",
@@ -739,7 +866,11 @@ async function onUnstageFile(path: string): Promise<void> {
     const message = meta.withReason
       ? tm(key, { reason: result.reason })
       : tm(key);
-    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
   }
 }
 
@@ -778,7 +909,9 @@ async function onConfirmStageAll(): Promise<void> {
   if (isAborted(result)) return;
   if (result.ok) {
     stagedFiles.value = new Set(result.snapshot.files);
-    await composable.refresh();
+    // Parallel refresh: "Stage all" affects every unstaged file
+    // (modified + untracked); both endpoints must re-classify.
+    await Promise.all([composable.refresh(), gitStatus.refresh()]);
     showSnackbar(
       tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.successAll", {
         count: result.snapshot.stagedCount,
@@ -791,7 +924,11 @@ async function onConfirmStageAll(): Promise<void> {
     const message = meta.withReason
       ? tm(key, { reason: result.reason })
       : tm(key);
-    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
   }
 }
 
@@ -823,24 +960,31 @@ async function onConfirmCommit(payload: { message: string }): Promise<void> {
     return;
   }
   if (result.ok) {
-    // 成功:覆盖 stagedFiles(后端响应),refresh diff,可选 refresh log
+    // 成功:覆盖 stagedFiles(后端响应),refresh diff+status,可
+    // 选 refresh log。git-status 也要刷新:commit 后工作区清空,
+    // 文件从 untracked/unstaged/staged 三个集合中全部消失。
     stagedFiles.value = new Set(result.snapshot.files);
     commitDialogOpen.value = false;
     commitLastError.value = null;
-    await composable.refresh();
+    await Promise.all([composable.refresh(), gitStatus.refresh()]);
     if (viewMode.value === "history") {
       await gitLog.refresh();
     }
     const shortSha = (result.snapshot.sha || "").slice(0, 7) || "?";
     showSnackbar(
-      tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.success", { sha: shortSha }),
+      tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.success", {
+        sha: shortSha,
+      }),
       "success",
     );
   } else {
     // 失败:保持 dialog 打开,显示 stderr 块(spec §3.3.4 DIALOG_OPEN_KEEP_ERROR)
     const meta = reasonMeta("commit", result.reason);
     const key = reasonKey("commit", result.reason);
-    commitLastError.value = { reason: result.reason, stderr: result.stderr ?? "" };
+    commitLastError.value = {
+      reason: result.reason,
+      stderr: result.stderr ?? "",
+    };
     const message = meta.withReason
       ? tm(key, { reason: result.reason })
       : tm(key);
@@ -854,10 +998,7 @@ async function onConfirmCommit(payload: { message: string }): Promise<void> {
 
 // Spec §3.4 决策 #24:切 worktree / 切 umo 时清空 ETag。
 // 监听 selectedWorktree 和 umo,变更时调用 gitLog.invalidateEtag()。
-watch(
-  selectedWorktree,
-  () => gitLog.invalidateEtag(),
-);
+watch(selectedWorktree, () => gitLog.invalidateEtag());
 watch(
   () => spcodeStatus.status.value.umo,
   (newUmo, oldUmo) => {
@@ -896,7 +1037,8 @@ watch(selectedWorktree, () => {
 const logHasMore = computed(() => {
   const s = gitLog.state.value;
   if (s.kind === "ok") return s.snapshot.hasMore;
-  if (s.kind === "error" && s.previousSnapshot) return s.previousSnapshot.hasMore;
+  if (s.kind === "error" && s.previousSnapshot)
+    return s.previousSnapshot.hasMore;
   return false;
 });
 const logIsLoading = computed(() => gitLog.state.value.kind === "loading");
@@ -1023,9 +1165,11 @@ const currentRoot = computed<string | null>(() => {
       <div class="git-diff-sidebar-header">
         <div class="git-diff-sidebar-title-wrap">
           <span class="git-diff-sidebar-title">
-            {{ viewMode === "files"
-              ? tm("spcodeProjectLoad.fileBrowser.title")
-              : tm("spcodeProjectLoad.diffSidebar.title") }}
+            {{
+              viewMode === "files"
+                ? tm("spcodeProjectLoad.fileBrowser.title")
+                : tm("spcodeProjectLoad.diffSidebar.title")
+            }}
           </span>
           <v-tooltip
             v-if="viewMode === 'diff' && directoryPath"
@@ -1120,7 +1264,9 @@ const currentRoot = computed<string | null>(() => {
           type="button"
           role="tab"
           :aria-selected="viewMode === 'history'"
-          :aria-label="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.history.tabAria')"
+          :aria-label="
+            tm('spcodeProjectLoad.diffSidebar.gitWorkflow.history.tabAria')
+          "
           :class="[
             'git-diff-sidebar-view-tab',
             { 'is-active': viewMode === 'history' },
@@ -1128,7 +1274,9 @@ const currentRoot = computed<string | null>(() => {
           @click="viewMode = 'history'"
         >
           <v-icon size="14">mdi-history</v-icon>
-          <span>{{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.tab") }}</span>
+          <span>{{
+            tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.tab")
+          }}</span>
         </button>
       </div>
 
@@ -1201,7 +1349,8 @@ const currentRoot = computed<string | null>(() => {
                 { 'is-active': selectedScope === opt.value },
               ]"
               :disabled="
-                !isProjectLoaded || (isScopeLoading && pendingScope !== opt.value)
+                !isProjectLoaded ||
+                (isScopeLoading && pendingScope !== opt.value)
               "
               @click="onScopeChange(opt.value)"
             >
@@ -1234,43 +1383,43 @@ const currentRoot = computed<string | null>(() => {
       <!-- Body: Files / Diff / History -->
       <div class="git-diff-sidebar-body">
         <FileBrowserView
-                  v-if="viewMode === 'files'"
-                  ref="fileBrowserRef"
-                  :current-path="fileBrowserCurrentPath"
-                  :preview-path="fileBrowserPreviewPath"
-                  :is-dark="!!isDark"
-                  :root-path="currentRoot"
-                  @navigate="onFileBrowserNavigate"
-                />
+          v-if="viewMode === 'files'"
+          ref="fileBrowserRef"
+          :current-path="fileBrowserCurrentPath"
+          :preview-path="fileBrowserPreviewPath"
+          :is-dark="!!isDark"
+          :root-path="currentRoot"
+          @navigate="onFileBrowserNavigate"
+        />
         <GitDiffBodyContent
-                  v-else-if="viewMode === 'diff'"
-                  :state="diffBodyState"
-                  :expanded="expandedSet"
-                  :is-dark="!!isDark"
-                  :on-restore="onFileRestore"
-                  :selected-scope="selectedScope"
-                  :on-stage="onStageFile"
-                  :on-unstage="onUnstageFile"
-                  :is-staging="gitStage.isStaging"
-                  :is-unstaging="gitUnstage.isUnstaging"
-                  :new-file-paths="newFilePaths"
-                  @toggle="toggleFile"
-                  @retry="onManualRefresh"
-                  @restore="onFileRestore"
-                  @stage="onStageFile"
-                  @unstage="onUnstageFile"
-                />
+          v-else-if="viewMode === 'diff'"
+          :state="diffBodyState"
+          :expanded="expandedSet"
+          :is-dark="!!isDark"
+          :on-restore="onFileRestore"
+          :selected-scope="selectedScope"
+          :on-stage="onStageFile"
+          :on-unstage="onUnstageFile"
+          :is-staging="gitStage.isStaging"
+          :is-unstaging="gitUnstage.isUnstaging"
+          :new-file-paths="newFilePaths"
+          @toggle="toggleFile"
+          @retry="onManualRefresh"
+          @restore="onFileRestore"
+          @stage="onStageFile"
+          @unstage="onUnstageFile"
+        />
         <!-- Spec 2026-06-24 §6.5:History view 渲染 GitLogView。 -->
         <GitLogView
-                  v-else-if="viewMode === 'history'"
-                  :state="gitLog.state.value"
-                  :has-more="logHasMore"
-                  :is-loading="logIsLoading"
-                  @apply="onLogApply"
-                  @load-more="onLogLoadMore"
-                  @refresh="() => gitLog.refresh()"
-                />
-              </div>
+          v-else-if="viewMode === 'history'"
+          :state="gitLog.state.value"
+          :has-more="logHasMore"
+          :is-loading="logIsLoading"
+          @apply="onLogApply"
+          @load-more="onLogLoadMore"
+          @refresh="() => gitLog.refresh()"
+        />
+      </div>
 
       <!-- Spec §6.7:粘性 commit bar(diff 视图下显示)。
            移动端 spec §10 风险 #10:仍可见,按钮缩窄。 -->
@@ -1284,95 +1433,105 @@ const currentRoot = computed<string | null>(() => {
         @commit="onClickCommit"
       />
 
-              <!-- Spec §6.3: inline <v-dialog persistent> confirmation. -->
-              <v-dialog
-                v-model="confirmDialogOpen"
-                persistent
-                max-width="440"
-              >
-                <v-card>
-                  <v-card-title class="text-h6">
-                    {{ tm("spcodeProjectLoad.diffSidebar.restore.confirmTitle") }}
-                  </v-card-title>
-                  <v-card-text>
-                    {{ tm("spcodeProjectLoad.diffSidebar.restore.confirmMessage", { path: confirmTargetPath ?? "" }) }}
-                  </v-card-text>
-                  <v-card-actions>
-                    <v-spacer />
-                    <v-btn
-                      variant="text"
-                      @click="onCancelRestore"
-                    >{{ tm("spcodeProjectLoad.diffSidebar.restore.confirmCancel") }}</v-btn>
-                    <v-btn
-                      variant="flat"
-                      color="warning"
-                      :loading="restoringFile !== null"
-                      @click="onConfirmRestore"
-                    >{{ tm("spcodeProjectLoad.diffSidebar.restore.confirmAction") }}</v-btn>
-                  </v-card-actions>
-                </v-card>
-              </v-dialog>
+      <!-- Spec §6.3: inline <v-dialog persistent> confirmation. -->
+      <v-dialog v-model="confirmDialogOpen" persistent max-width="440">
+        <v-card>
+          <v-card-title class="text-h6">
+            {{ tm("spcodeProjectLoad.diffSidebar.restore.confirmTitle") }}
+          </v-card-title>
+          <v-card-text>
+            {{
+              tm("spcodeProjectLoad.diffSidebar.restore.confirmMessage", {
+                path: confirmTargetPath ?? "",
+              })
+            }}
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" @click="onCancelRestore">{{
+              tm("spcodeProjectLoad.diffSidebar.restore.confirmCancel")
+            }}</v-btn>
+            <v-btn
+              variant="flat"
+              color="warning"
+              :loading="restoringFile !== null"
+              @click="onConfirmRestore"
+              >{{
+                tm("spcodeProjectLoad.diffSidebar.restore.confirmAction")
+              }}</v-btn
+            >
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
-              <!-- Spec §6.3: 全部暂存确认弹窗(spec 2026-06-24 §3.3.3 + Q4)。 -->
-              <v-dialog
-                v-model="confirmStageAllOpen"
-                persistent
-                max-width="440"
-              >
-                <v-card>
-                  <v-card-title class="text-h6">
-                    {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmTitle") }}
-                  </v-card-title>
-                  <v-card-text>
-                    {{
-                      tm(
-                        "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmMessage",
-                        { count: pendingStageAllCount },
-                      )
-                    }}
-                  </v-card-text>
-                  <v-card-actions>
-                    <v-spacer />
-                    <v-btn variant="text" @click="onCancelStageAll">
-                      {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmCancel") }}
-                    </v-btn>
-                    <v-btn
-                      variant="flat"
-                      color="primary"
-                      :loading="gitStage.isStagingAll.value"
-                      @click="onConfirmStageAll"
-                    >
-                      {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmAction") }}
-                    </v-btn>
-                  </v-card-actions>
-                </v-card>
-              </v-dialog>
+      <!-- Spec §6.3: 全部暂存确认弹窗(spec 2026-06-24 §3.3.3 + Q4)。 -->
+      <v-dialog v-model="confirmStageAllOpen" persistent max-width="440">
+        <v-card>
+          <v-card-title class="text-h6">
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmTitle",
+              )
+            }}
+          </v-card-title>
+          <v-card-text>
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmMessage",
+                { count: pendingStageAllCount },
+              )
+            }}
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" @click="onCancelStageAll">
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmCancel",
+                )
+              }}
+            </v-btn>
+            <v-btn
+              variant="flat"
+              color="primary"
+              :loading="gitStage.isStagingAll.value"
+              @click="onConfirmStageAll"
+            >
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmAction",
+                )
+              }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
-              <!-- Spec §6.4: 提交弹窗。 -->
-              <GitCommitDialog
-                v-model="commitDialogOpen"
-                :staged-files="Array.from(stagedFiles)"
-                :is-committing="gitCommit.isCommitting.value"
-                :last-error="commitLastError ?? undefined"
-                @confirm="onConfirmCommit"
-                @cancel="onCancelCommit"
-              />
+      <!-- Spec §6.4: 提交弹窗。 -->
+      <GitCommitDialog
+        v-model="commitDialogOpen"
+        :staged-files="Array.from(stagedFiles)"
+        :is-committing="gitCommit.isCommitting.value"
+        :last-error="commitLastError ?? undefined"
+        @confirm="onConfirmCommit"
+        @cancel="onCancelCommit"
+      />
 
-              <!-- Spec §6.4: result snackbar (扩展:支持 stderr <pre> 块)。 -->
-              <v-snackbar
-                v-model="snackbar.show"
-                :color="snackbar.color"
-                :timeout="snackbar.color === 'success' ? 4000 : 6000"
-                location="bottom right"
-                multi-line
-              >
-                <div v-if="snackbar.stderr" class="spcode-snackbar-stderr">
-                  <div class="spcode-snackbar-message">{{ snackbar.message }}</div>
-                  <pre class="spcode-snackbar-pre">{{ snackbar.stderr }}</pre>
-                </div>
-                <div v-else>{{ snackbar.message }}</div>
-              </v-snackbar>
-            </aside>
+      <!-- Spec §6.4: result snackbar (扩展:支持 stderr <pre> 块)。 -->
+      <v-snackbar
+        v-model="snackbar.show"
+        :color="snackbar.color"
+        :timeout="snackbar.color === 'success' ? 4000 : 6000"
+        location="bottom right"
+        multi-line
+      >
+        <div v-if="snackbar.stderr" class="spcode-snackbar-stderr">
+          <div class="spcode-snackbar-message">{{ snackbar.message }}</div>
+          <pre class="spcode-snackbar-pre">{{ snackbar.stderr }}</pre>
+        </div>
+        <div v-else>{{ snackbar.message }}</div>
+      </v-snackbar>
+    </aside>
   </transition>
 </template>
 

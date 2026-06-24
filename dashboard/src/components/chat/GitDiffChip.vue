@@ -1,5 +1,8 @@
-<!-- Author: elecvoid243, 2026-06-17 -->
+<!-- Author: elecvoid243, 2026-06-24 -->
 <!-- Spec: docs/superpowers/specs/2026-06-17-chatui-git-diff-sidebar-design.md §4.2.1 -->
+<!-- Renamed chip label/icon from "Git Diff" / mdi-source-pull to "查看工作区" /
+     mdi-folder-open to reflect the broader workspace scope (file browser +
+     diff + staging + commit + history). -->
 <script setup lang="ts">
 import { useModuleI18n } from '@/i18n/composables'
 const { tm } = useModuleI18n('features/chat')
@@ -15,7 +18,7 @@ function open(): void { emit('open-diff-sidebar') }
         variant="outlined"
         size="small"
         density="comfortable"
-        prepend-icon="mdi-source-pull"
+        prepend-icon="mdi-folder-open"
         class="git-diff-chip"
         @click="open"
       >

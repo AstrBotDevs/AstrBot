@@ -162,6 +162,24 @@ function asStringArray(v: unknown): string[] {
   return v.filter((x): x is string => typeof x === "string");
 }
 
+/** Derive success/failure from the spcode git-workflow envelope.
+ *
+ * Spec §3 contract (tools/webapi/_helpers.py: `_make_envelope`):
+ *   success=True  → data.reason === null
+ *   success=False → data.reason === "<reason_code>"
+ * The backend never writes `success` into `data`. Reading
+ * `asBoolean(d.success)` returns `false` for every response,
+ * silently turning every success into a "reason=unknown" snackbar.
+ * Anchoring on `reason === null` matches the spec exactly and
+ * fixes the regression reported 2026-06-24 (vue-side "unknown
+ * error" toast on successful code-file staging). */
+function deriveSuccess(d: { success?: unknown; reason?: unknown }): boolean {
+  // Honor an explicit `success` field if a future backend adds it;
+  // otherwise fall back to the canonical spec indicator.
+  if (d.success !== undefined) return asBoolean(d.success);
+  return d.reason === null;
+}
+
 // ─── Endpoint-specific parsers ────────────────────────────────────
 
 /** Parse the envelope from POST /spcode/git-stage. */
@@ -170,7 +188,7 @@ export function parseSpcodeGitStage(raw: unknown): ParseResult<SpcodeStageSnapsh
   return {
     kind: "ok",
     snapshot: {
-      success: asBoolean(d.success),
+      success: deriveSuccess(d),
       reason: d.reason ?? null,
       stderr: asString(d.stderr),
       elapsedMs: asNumber(d.elapsed_ms),
@@ -198,7 +216,7 @@ export function parseSpcodeGitCommit(raw: unknown): ParseResult<SpcodeCommitSnap
   return {
     kind: "ok",
     snapshot: {
-      success: asBoolean(d.success),
+      success: deriveSuccess(d),
       reason: d.reason ?? null,
       stderr: asString(d.stderr),
       elapsedMs: asNumber(d.elapsed_ms),
@@ -246,7 +264,7 @@ export function parseSpcodeGitLog(raw: unknown): ParseResult<SpcodeLogSnapshot> 
   return {
     kind: "ok",
     snapshot: {
-      success: asBoolean(d.success),
+      success: deriveSuccess(d),
       reason: d.reason ?? null,
       loaded: asBoolean(d.loaded),
       elapsedMs: asNumber(d.elapsed_ms),

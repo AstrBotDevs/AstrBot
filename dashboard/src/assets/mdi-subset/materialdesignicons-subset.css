@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 310 icons */
+/* Auto-generated MDI subset – 314 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -72,6 +72,10 @@
   content: "\F0045";
 }
 
+.mdi-arrow-down-bold-circle-outline::before {
+  content: "\F0048";
+}
+
 .mdi-arrow-down-thin::before {
   content: "\F19B3";
 }
@@ -94,6 +98,10 @@
 
 .mdi-arrow-up-bold::before {
   content: "\F0737";
+}
+
+.mdi-arrow-up-bold-circle-outline::before {
+  content: "\F0060";
 }
 
 .mdi-arrow-up-circle::before {
@@ -502,6 +510,10 @@
 
 .mdi-file-pdf-box::before {
   content: "\F0226";
+}
+
+.mdi-file-plus-outline::before {
+  content: "\F0EED";
 }
 
 .mdi-file-powerpoint-box::before {
@@ -1078,6 +1090,10 @@
 
 .mdi-source-branch::before {
   content: "\F062C";
+}
+
+.mdi-source-commit::before {
+  content: "\F0718";
 }
 
 .mdi-source-pull::before {

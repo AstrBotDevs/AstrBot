@@ -4,113 +4,114 @@
      nesting a real <button> for the restore action (HTML5 forbids
      button-in-button nesting; see spec §2 decision #4).
      Updated: 2026-06-24 — add `isNewFile` prop so the sidebar can render
-     untracked / intent-to-add files (sourced from git-status) with a
-     distinct color (teal accent) and a "新增文件" badge instead of the
-     +/- diff stats. Spec: docs/superpowers/specs/2026-06-17-chatui-git-diff-sidebar-design.md
-     §4.2.3 (merged untracked). -->
+     untracked / intent-to-add files (sourced from git-status) with the
+     SAME row style as regular diff rows; only the left icon differs
+     (mdi-file-plus-outline in `success` color, vs the status-derived
+     icon for modified files). Spec: docs/superpowers/specs/2026-06-17-
+     chatui-git-diff-sidebar-design.md §4.2.3 (merged untracked). -->
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { SpcodeGitDiffFile, FileStatus } from '@/composables/parseSpcodeGitDiff'
-import { useModuleI18n } from '@/i18n/composables'
-import { useSpcodeProjectStatus } from '@/composables/useSpcodeProjectStatus'
-import DiffPreview from '@/components/chat/message_list_comps/DiffPreview.vue'
+import { computed } from "vue";
+import type {
+  SpcodeGitDiffFile,
+  FileStatus,
+} from "@/composables/parseSpcodeGitDiff";
+import { useModuleI18n } from "@/i18n/composables";
+import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
+import DiffPreview from "@/components/chat/message_list_comps/DiffPreview.vue";
 
-const { tm } = useModuleI18n('features/chat')
+const { tm } = useModuleI18n("features/chat");
 
 const props = defineProps<{
-  file: SpcodeGitDiffFile
-  expanded: boolean
-  isDark: boolean
+  file: SpcodeGitDiffFile;
+  expanded: boolean;
+  isDark: boolean;
   /** When provided, renders the restore button and emits 'restore' on click. */
-  onRestore?: (path: string) => void
+  onRestore?: (path: string) => void;
   /** True while a restore request is in flight for THIS row. */
-  isRestoring?: boolean
+  isRestoring?: boolean;
   // Spec §6.2.4 (P1-1): child is scope-agnostic. Parent pre-computes
   // showStage / showUnstage from selectedScope + project status and
   // passes booleans down. Default false keeps the file item
   // backward-compatible with callers that don't yet supply these.
-  showStage?: boolean
-  showUnstage?: boolean
-  onStage?: (path: string) => void
-  onUnstage?: (path: string) => void
-  isStaging?: boolean
-  isUnstaging?: boolean
-  // When true, render as a "new file" (untracked / intent-to-add) instead
-  // of a regular diff row: distinct teal accent, no +/- stats, no
-  // DiffPreview body. Sourced from /spcode/git-status and merged into the
-  // unstaged view by GitDiffSidebar.
-  isNewFile?: boolean
-}>()
+  showStage?: boolean;
+  showUnstage?: boolean;
+  onStage?: (path: string) => void;
+  onUnstage?: (path: string) => void;
+  isStaging?: boolean;
+  isUnstaging?: boolean;
+  // When true, the row represents a brand-new file (untracked /
+  // intent-to-add) sourced from /spcode/git-status and merged into the
+  // unstaged view by GitDiffSidebar. The row renders with the same
+  // visual style as a regular diff row (no teal border, no special
+  // badge); only the left icon differs — see `iconInfo` below.
+  isNewFile?: boolean;
+}>();
 const emit = defineEmits<{
-  (e: 'toggle'): void
-  (e: 'restore', path: string): void
-  (e: 'stage', path: string): void
-  (e: 'unstage', path: string): void
-}>()
+  (e: "toggle"): void;
+  (e: "restore", path: string): void;
+  (e: "stage", path: string): void;
+  (e: "unstage", path: string): void;
+}>();
 
 const ICON_MAP: Record<FileStatus, { icon: string; color: string }> = {
-  M: { icon: 'mdi-pencil', color: 'primary' },
-  A: { icon: 'mdi-plus-circle', color: 'success' },
-  D: { icon: 'mdi-minus-circle', color: 'error' },
-  R: { icon: 'mdi-rename-box', color: 'warning' },
-  C: { icon: 'mdi-content-copy', color: 'info' },
-  T: { icon: 'mdi-swap-horizontal', color: 'info' },
-  unknown: { icon: 'mdi-file-document-edit-outline', color: 'grey' },
-}
-const iconInfo = computed(() => ICON_MAP[props.file.status])
+  M: { icon: "mdi-pencil", color: "primary" },
+  A: { icon: "mdi-plus-circle", color: "success" },
+  D: { icon: "mdi-minus-circle", color: "error" },
+  R: { icon: "mdi-rename-box", color: "warning" },
+  C: { icon: "mdi-content-copy", color: "info" },
+  T: { icon: "mdi-swap-horizontal", color: "info" },
+  unknown: { icon: "mdi-file-document-edit-outline", color: "grey" },
+};
+// Brand-new file rows share the same row visual as diff rows; the only
+// difference is the left icon — `mdi-file-plus-outline` (file-shaped
+// "new" glyph) instead of the status-derived glyph, kept in `success`
+// so the color stays consistent with the "added" semantic.
+const NEW_FILE_ICON = { icon: "mdi-file-plus-outline", color: "success" };
+const iconInfo = computed(() =>
+  props.isNewFile ? NEW_FILE_ICON : ICON_MAP[props.file.status],
+);
 
-const spcodeStatus = useSpcodeProjectStatus()
+const spcodeStatus = useSpcodeProjectStatus();
 /** Spec §6.2: button visible only when project is loaded + umo present. */
 const showRestoreButton = computed(() => {
   return Boolean(
     props.onRestore &&
       spcodeStatus.status.value.loaded &&
       spcodeStatus.status.value.umo,
-  )
-})
-
-/**
- * New-file variant uses a teal accent so it is visually distinct from
- * diff rows (which use the FileStatus-derived color). Keeps the row
- * expandable but renders a stub body (no diff patch to show).
- */
-const newFileIcon = 'mdi-file-plus-outline'
-const newFileColor = 'teal'
+  );
+});
 
 function onRowKeydown(e: KeyboardEvent): void {
   // Spec §6.5: Enter / Space toggles the row.
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault()
-    emit('toggle')
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    emit("toggle");
   }
 }
 
 function onRestoreClick(e: MouseEvent): void {
   // Spec §6.1: @click.stop prevents the click from bubbling to the row's
   // toggle handler.
-  e.stopPropagation()
-  if (props.isRestoring) return
-  emit('restore', props.file.path)
+  e.stopPropagation();
+  if (props.isRestoring) return;
+  emit("restore", props.file.path);
 }
 
 function onStageClick(e: MouseEvent): void {
-  e.stopPropagation()
-  if (props.isStaging) return
-  emit('stage', props.file.path)
+  e.stopPropagation();
+  if (props.isStaging) return;
+  emit("stage", props.file.path);
 }
 
 function onUnstageClick(e: MouseEvent): void {
-  e.stopPropagation()
-  if (props.isUnstaging) return
-  emit('unstage', props.file.path)
+  e.stopPropagation();
+  if (props.isUnstaging) return;
+  emit("unstage", props.file.path);
 }
 </script>
 
 <template>
-  <div
-    class="git-diff-file-item"
-    :class="{ expanded: expanded, 'is-new-file': isNewFile }"
-  >
+  <div class="git-diff-file-item" :class="{ expanded: expanded }">
     <div
       class="git-diff-file-row"
       role="button"
@@ -119,20 +120,14 @@ function onUnstageClick(e: MouseEvent): void {
       @click="emit('toggle')"
       @keydown="onRowKeydown"
     >
-      <v-icon
-        v-if="isNewFile"
-        :size="16"
-        :color="newFileColor"
-      >{{ newFileIcon }}</v-icon>
-      <v-icon v-else :size="16" :color="iconInfo.color">{{ iconInfo.icon }}</v-icon>
+      <v-icon :size="16" :color="iconInfo.color">{{ iconInfo.icon }}</v-icon>
       <span class="git-diff-file-path">{{ file.path }}</span>
-      <!-- New files: replace +/- stats with a "新增文件" badge so users
-           see at a glance that this row is sourced from git-status
-           rather than git-diff. -->
-      <span v-if="isNewFile" class="git-diff-new-file-badge">
-        {{ tm('spcodeProjectLoad.diffSidebar.newFile.badge') }}
-      </span>
-      <span v-else class="git-diff-file-stats">
+      <!-- Stats: diff rows show real additions/deletions from the
+           patch. New-file stubs show +N −0 where N is the actual
+           line count from the file-browser content cache
+           (see useSpcodeNewFileLineCounts); until that fetch
+           completes the value is 0, matching the previous behavior. -->
+      <span class="git-diff-file-stats">
         <span class="git-diff-add">+{{ file.additions }}</span>
         <span class="git-diff-del">−{{ file.deletions }}</span>
       </span>
@@ -146,9 +141,17 @@ function onUnstageClick(e: MouseEvent): void {
         class="git-diff-file-stage is-unstage"
         :class="{ 'is-loading': isUnstaging }"
         :disabled="isUnstaging"
-        :aria-label="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.buttonAria', { path: file.path })"
+        :aria-label="
+          tm('spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.buttonAria', {
+            path: file.path,
+          })
+        "
         :aria-busy="isUnstaging ? 'true' : 'false'"
-        :title="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.buttonAria', { path: file.path })"
+        :title="
+          tm('spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.buttonAria', {
+            path: file.path,
+          })
+        "
         @click="onUnstageClick"
       >
         <v-progress-circular
@@ -165,9 +168,17 @@ function onUnstageClick(e: MouseEvent): void {
         class="git-diff-file-stage is-stage"
         :class="{ 'is-loading': isStaging }"
         :disabled="isStaging"
-        :aria-label="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.stage.buttonAria', { path: file.path })"
+        :aria-label="
+          tm('spcodeProjectLoad.diffSidebar.gitWorkflow.stage.buttonAria', {
+            path: file.path,
+          })
+        "
         :aria-busy="isStaging ? 'true' : 'false'"
-        :title="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.stage.buttonAria', { path: file.path })"
+        :title="
+          tm('spcodeProjectLoad.diffSidebar.gitWorkflow.stage.buttonAria', {
+            path: file.path,
+          })
+        "
         @click="onStageClick"
       >
         <v-progress-circular
@@ -184,9 +195,17 @@ function onUnstageClick(e: MouseEvent): void {
         class="git-diff-file-restore"
         :class="{ 'is-loading': isRestoring }"
         :disabled="isRestoring"
-        :aria-label="tm('spcodeProjectLoad.diffSidebar.restore.buttonAria', { path: file.path })"
+        :aria-label="
+          tm('spcodeProjectLoad.diffSidebar.restore.buttonAria', {
+            path: file.path,
+          })
+        "
         :aria-busy="isRestoring ? 'true' : 'false'"
-        :title="tm('spcodeProjectLoad.diffSidebar.restore.buttonAria', { path: file.path })"
+        :title="
+          tm('spcodeProjectLoad.diffSidebar.restore.buttonAria', {
+            path: file.path,
+          })
+        "
         @click="onRestoreClick"
       >
         <v-progress-circular
@@ -201,26 +220,26 @@ function onUnstageClick(e: MouseEvent): void {
         :size="16"
         class="git-diff-file-chevron"
         :class="{ expanded: expanded }"
-      >mdi-chevron-down</v-icon>
+        >mdi-chevron-down</v-icon
+      >
     </div>
     <div v-if="expanded" class="git-diff-file-body">
-      <!-- New files have no diff patch — render a stub explaining where
-           the row came from and how to start tracking it. -->
-      <div v-if="isNewFile" class="git-diff-new-file-body">
-        <v-icon :size="14" :color="newFileColor">{{ newFileIcon }}</v-icon>
-        <span class="git-diff-new-file-body-text">
-          {{ tm('spcodeProjectLoad.diffSidebar.newFile.bodyHint') }}
-        </span>
-      </div>
+      <!-- Binary stub: short-circuit regardless of slice. -->
       <v-alert
-        v-else-if="file.isBinary"
+        v-if="file.isBinary"
         type="info"
         density="compact"
         variant="tonal"
         class="git-diff-binary-alert"
       >
-        {{ tm('spcodeProjectLoad.diffSidebar.binaryFile') }}
+        {{ tm("spcodeProjectLoad.diffSidebar.binaryFile") }}
       </v-alert>
+      <!-- Diff rows have a real `slice` from git-diff; new-file
+           stubs get a synthetic `@@ -0,0 +1,N @@` + `+`-prefixed
+           slice built from the file-browser content cache (see
+           `useSpcodeNewFileLineCounts`). Both render the same
+           DiffPreview with the standard 30-line truncation +
+           "Show all N lines" overflow. -->
       <DiffPreview
         v-else-if="file.slice"
         :content="file.slice"
@@ -228,8 +247,12 @@ function onUnstageClick(e: MouseEvent): void {
         :collapsible="false"
         :is-dark="isDark"
       />
+      <!-- Fallback: content not yet fetched (or file is too large /
+           binary). Shows the same placeholder as a diff row whose
+           patch exceeds the truncation cap, keeping the body
+           layout identical across all three "empty slice" causes. -->
       <div v-else class="git-diff-file-no-content">
-        {{ tm('spcodeProjectLoad.diffSidebar.noContent') }}
+        {{ tm("spcodeProjectLoad.diffSidebar.noContent") }}
       </div>
     </div>
   </div>
@@ -240,31 +263,56 @@ function onUnstageClick(e: MouseEvent): void {
   /* Dark mode flips to a translucent white so the divider remains
      visible against the dark surface. Tied to the `isDark` prop that
      Chat.vue already passes down. */
-  border-bottom: 1px solid v-bind('isDark ? "rgba(255, 255, 255, 0.18)" : "rgba(0, 0, 0, 0.08)"');
+  border-bottom: 1px solid
+    v-bind('isDark ? "rgba(255, 255, 255, 0.18)" : "rgba(0, 0, 0, 0.08)"');
 }
 .git-diff-file-row {
-  display: flex; align-items: center; gap: 8px;
-  width: 100%; padding: 8px 12px;
-  background: transparent; border: none; cursor: pointer; text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
 }
-.git-diff-file-row:hover { background: rgba(0, 0, 0, 0.04); }
+.git-diff-file-row:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
 .git-diff-file-row:focus-visible {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: -2px;
 }
 .git-diff-file-path {
-  flex: 1; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-family: monospace; font-size: 13px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 13px;
 }
-.git-diff-file-stats { display: flex; gap: 6px; font-family: monospace; font-size: 12px; }
-.git-diff-add { color: rgb(46, 160, 67); }
-.git-diff-del { color: rgb(248, 81, 73); }
+.git-diff-file-stats {
+  display: flex;
+  gap: 6px;
+  font-family: monospace;
+  font-size: 12px;
+}
+.git-diff-add {
+  color: rgb(46, 160, 67);
+}
+.git-diff-del {
+  color: rgb(248, 81, 73);
+}
 .git-diff-file-restore {
   /* Spec §6.1: muted by default, full opacity on row hover. Real <button>
      so it can be focused, disabled, and announced by screen readers. */
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   padding: 0;
   background: transparent;
   border: 1px solid transparent;
@@ -272,99 +320,103 @@ function onUnstageClick(e: MouseEvent): void {
   color: rgb(var(--v-theme-primary));
   cursor: pointer;
   opacity: 0.5;
-  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    border-color 0.12s ease;
   flex-shrink: 0;
 }
-.git-diff-file-row:hover .git-diff-file-restore { opacity: 1; }
-.git-diff-file-restore:hover { background: rgba(var(--v-theme-primary), 0.1); }
+.git-diff-file-row:hover .git-diff-file-restore {
+  opacity: 1;
+}
+.git-diff-file-restore:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
+}
 .git-diff-file-restore:focus-visible {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: 2px;
   opacity: 1;
 }
-.git-diff-file-restore:disabled { cursor: not-allowed; opacity: 0.3; }
-.git-diff-file-restore.is-loading { opacity: 1; }
+.git-diff-file-restore:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+.git-diff-file-restore.is-loading {
+  opacity: 1;
+}
 
 /* Spec §6.2: 行内 stage / unstage 按钮;与 restore 共享 opacity 0.5/1 模式。 */
 .git-diff-file-stage {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   padding: 0;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
   cursor: pointer;
   opacity: 0.5;
-  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    border-color 0.12s ease;
   flex-shrink: 0;
 }
-.git-diff-file-row:hover .git-diff-file-stage { opacity: 1; }
+.git-diff-file-row:hover .git-diff-file-stage {
+  opacity: 1;
+}
 .git-diff-file-stage:focus-visible {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: 2px;
   opacity: 1;
 }
-.git-diff-file-stage:disabled { cursor: not-allowed; opacity: 0.3; }
-.git-diff-file-stage.is-loading { opacity: 1; }
+.git-diff-file-stage:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+.git-diff-file-stage.is-loading {
+  opacity: 1;
+}
 .git-diff-file-stage.is-stage {
   color: rgb(var(--v-theme-secondary));
 }
-.git-diff-file-stage.is-stage:hover { background: rgba(var(--v-theme-secondary), 0.1); }
+.git-diff-file-stage.is-stage:hover {
+  background: rgba(var(--v-theme-secondary), 0.1);
+}
 .git-diff-file-stage.is-unstage {
   color: rgb(255, 152, 0);
 }
-.git-diff-file-stage.is-unstage:hover { background: rgba(255, 152, 0, 0.1); }
+.git-diff-file-stage.is-unstage:hover {
+  background: rgba(255, 152, 0, 0.1);
+}
 
 @media (max-width: 760px) {
   /* Spec §10 风险 #10: 移动端按钮缩窄 */
   .git-diff-file-stage,
   .git-diff-file-restore {
-    width: 22px; height: 22px;
+    width: 22px;
+    height: 22px;
   }
 }
-.git-diff-file-chevron { transition: transform 0.15s; }
-.git-diff-file-chevron.expanded { transform: rotate(180deg); }
-.git-diff-file-body { padding: 0 12px 12px; }
+.git-diff-file-chevron {
+  transition: transform 0.15s;
+}
+.git-diff-file-chevron.expanded {
+  transform: rotate(180deg);
+}
+.git-diff-file-body {
+  padding: 0 12px 12px;
+}
 .git-diff-file-no-content {
   /* Themed muted text — stays readable in both light and dark modes. */
-  padding: 12px; text-align: center; color: rgba(var(--v-theme-on-surface), 0.45); font-size: 12px;
-}
-.git-diff-binary-alert { font-size: 13px; }
-
-/* ── New-file variant ────────────────────────────────────────────────
- * Sourced from /spcode/git-status (scope=untracked | intent_to_add).
- * Uses a teal left border + faint tinted background so the row reads as
- * "different" without overpowering diff content. The badge in the row
- * uses the same teal so the visual code is consistent. */
-.git-diff-file-item.is-new-file .git-diff-file-row {
-  border-left: 3px solid rgb(0, 150, 136);
-  padding-left: 9px; /* compensate for the 3px border so total padding stays 12px */
-}
-.git-diff-file-item.is-new-file .git-diff-file-row:hover {
-  /* Teal-tinted hover for new files (vs neutral grey for diff rows). */
-  background: rgba(0, 150, 136, 0.08);
-}
-.git-diff-new-file-badge {
-  display: inline-flex;
-  align-items: center;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  padding: 1px 6px;
-  border-radius: 3px;
-  color: rgb(0, 150, 136);
-  background: rgba(0, 150, 136, 0.12);
-  flex-shrink: 0;
-}
-.git-diff-new-file-body {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  color: rgba(var(--v-theme-on-surface), 0.55);
+  padding: 12px;
+  text-align: center;
+  color: rgba(var(--v-theme-on-surface), 0.45);
   font-size: 12px;
 }
-.git-diff-new-file-body-text {
-  font-family: inherit;
+.git-diff-binary-alert {
+  font-size: 13px;
 }
 </style>

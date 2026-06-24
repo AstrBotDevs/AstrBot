@@ -3,9 +3,9 @@
 | 项目 | 内容 |
 |------|------|
 | 主题 | Dashboard ChatUI 联动 spcode 插件的 Git Diff 侧边栏 |
-| 日期 | 2026-06-17 |
+| 日期 | 2026-06-17（创建）；2026-06-24（chip 文案/图标变更） |
 | 作者 | elecvoid243 |
-| 状态 | Draft — 待用户审阅 |
+| 状态 | Implemented — 2026-06-24 chip 文案改为「查看工作区」/icon 改为 `mdi-folder-open` |
 | 关联插件 | `astrbot_plugin_spcode_toolkit`（**源码路径**：`F:\github\astrbot_plugin_spcode_toolkit`，由 AstrBot 加载时复制到 `F:\github\Astrbot\data\plugins\astrbot_plugin_spcode_toolkit`，两者内容以源码为准） |
 | 关联端点 | `GET /plugins/extensions/spcode/git-diff`（handler `handle_get_git_diff`，定义于源码 `main.py:1603`；路由注册于 `main.py:1130-1135`） |
 | 关联代码 | `dashboard/src/components/chat/*`、`dashboard/src/composables/useSpcode*` |
@@ -36,7 +36,7 @@
 
 在 ChatUI 中**新增一个轻量入口 + 侧边栏**，让用户能：
 
-1. 在「加载项目」chip 同一行右侧看到一个 outlined `Git Diff` chip，**仅当 chip 自身可见且项目已载入时显示**
+1. 在「加载项目」chip 同一行右侧看到一个 outlined「查看工作区」chip（icon `mdi-folder-open`），**仅当 chip 自身可见且项目已载入时显示**
 2. 点击 chip → 右侧弹出可拖拽侧边栏，列出所有改动的文件（path + status + +/-）
 3. 点击某个文件 → 展开显示该文件的 unified diff（复用 `DiffPreview.vue`）
 4. sidebar 打开期间每 10s 静默刷新一次（不打断 UI）
@@ -65,7 +65,7 @@
 | 2 | 与 `ReasoningSidebar` 等其它侧边的关系 | **A 互斥**（沿用现有 `openXxxPanel` 模式） | 与 Chat.vue 现状完全一致；用户场景上同时看 reasoning + diff 不常见 |
 | 3 | diff 刷新策略 | **B**：打开时拉取 + 打开期间每 10s 静默轮询 + header 手动 refresh 按钮 | 端点 ~47ms；自动跟着 bot/编辑器变；轮询期间静默替换不闪烁 |
 | 4 | 加载中 / 空态 / 截断 / 失败 / 网络错误 / 轮询过渡 | 按推荐方案（见 §5.1 表） | 用户对所有六类状态逐一确认 |
-| 5 | 按钮视觉风格 | **B**：outlined v-chip + 文字 "Git Diff" + icon `mdi-source-pull` | 与现有「加载项目」chip 视觉对仗；扫一眼即知是同类操作；放 status row 右侧通过 `justify-content: space-between` 自然分隔 |
+| 5 | 按钮视觉风格 | **B**：outlined v-chip + 文字「查看工作区」 + icon `mdi-folder-open`（2026-06-24 由 "Git Diff" / `mdi-source-pull` 改） | 与现有「加载项目」chip 视觉对仗；扫一眼即知是同类操作；放 status row 右侧通过 `justify-content: space-between` 自然分隔 |
 | 6 | 单文件 diff 切片策略 | **预切 + 整段切片 + 二进制单独占位** | 收到 response 立即按 `^diff --git /m` 切；每段原样传给 `DiffPreview.extractDiffContent`（其内部跳到 `@@`）；二进制文件（切片含 "Binary files ... differ"）渲染 `v-alert` 占位 |
 | 7 | i18n 键命名 | `spcodeProjectLoad.diffSidebar.*`（中/英/俄三语） | 挂在现有 `spcodeProjectLoad` 根下，与 `dialog.*` / `indicator.*` 同级；英俄翻译由实现者填写 |
 | 8 | 后端 reason 枚举完整覆盖 | 7 个值全 i18n：`feature_disabled` / `no_project_loaded` / `directory_missing` / `not_a_git_repo` / `git_unavailable` / `git_error` / `null` | 与源码 `handle_get_git_diff` 完全对齐（见 `main.py:1640-1705`），不留"未知 reason 兜底"盲区 |
@@ -239,7 +239,7 @@ export interface UseSpcodeGitDiffReturn {
         variant="outlined"
         size="small"
         density="comfortable"
-        prepend-icon="mdi-source-pull"
+        prepend-icon="mdi-folder-open"
         class="git-diff-chip"
         @click="open"
       >
@@ -270,7 +270,7 @@ function open() { emit('open-diff-sidebar') }
 </div>
 ```
 
-`.input-area__status-row` 加 `justify-content: space-between`，让现有 chip 靠左、Git Diff chip 靠右自然分开（chip 不可见时不影响布局）。
+`.input-area__status-row` 加 `justify-content: space-between`，让现有 chip 靠左、「查看工作区」chip 靠右自然分开（chip 不可见时不影响布局）。
 
 #### 4.2.2 `<GitDiffSidebar/>` — 外壳
 
@@ -415,8 +415,8 @@ function localizedReason(reason: string | null, tm: Function): string {
 
 | 键 | 中文 | English | Русский |
 |---|---|---|---|
-| `spcodeProjectLoad.diffSidebar.chip` | `Git Diff` | `Git Diff` | `Git Diff` |
-| `spcodeProjectLoad.diffSidebar.chipTooltip` | `查看 Git 改动` | `View Git changes` | `Просмотр изменений Git` |
+| `spcodeProjectLoad.diffSidebar.chip` | `查看工作区` | `Workspace` | `Рабочая область` |
+| `spcodeProjectLoad.diffSidebar.chipTooltip` | `查看工作区文件、改动和历史` | `Browse workspace files, changes, and history` | `Просмотр файлов, изменений и истории рабочей области` |
 | `spcodeProjectLoad.diffSidebar.title` | `项目改动` | `Project changes` | `Изменения проекта` |
 | `spcodeProjectLoad.diffSidebar.refreshTooltip` | `刷新` | `Refresh` | `Обновить` |
 | `spcodeProjectLoad.diffSidebar.loading` | `加载中…` | `Loading…` | `Загрузка…` |
@@ -533,7 +533,7 @@ function dispose(): void {
   │                                  │  → GitDiffChip v-if   │                          │                          │                              │
   │                                  │  → chip appears       │                          │                          │                              │
   │                                  │                       │                          │                          │                              │
-  │ 2. click "Git Diff" chip         │                       │                          │                          │                              │
+  │ 2. click "查看工作区" chip       │                       │                          │                          │                              │
   ├──────────────────────────────────>│                       │                          │                          │                              │
   │                                  │ emit "open-diff-      │                          │                          │                              │
   │                                  │       sidebar"        │                          │                          │                              │

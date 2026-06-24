@@ -27,8 +27,13 @@ const emit = defineEmits<{
 const localFilter = ref<LogFilter>({ ref: "HEAD", n: 20 });
 
 const commits = computed(() => {
-  if (props.state.kind === "ok" || props.state.kind === "error") {
-    return props.state.snapshot.commits;
+  if (props.state.kind === "ok") return props.state.snapshot.commits;
+  if (props.state.kind === "error") {
+    // On error, keep showing the last successful snapshot's commits (if any)
+    // so the user does not lose context during transient failures. For the
+    // empty-repository case (reason === "empty_repository") the fallback
+    // returns [] so the empty-illustration branch in the template fires.
+    return props.state.previousSnapshot?.commits ?? [];
   }
   return [];
 });

@@ -349,10 +349,6 @@
       "truncated": "⚠ diff 已截断（仅显示前 {shown} / {max} 字节，可能不完整）",
       "binaryFile": "二进制文件改动（无文本预览）",
       "noContent": "内容已截断或不完整",
-      "newFile": {
-        "badge": "新增文件",
-        "bodyHint": "未跟踪的新文件（来源：git status），暂存后可看到 diff"
-      },
       "worktreeTabs": {
         "label": "工作树",
         "ariaLabel": "选择 worktree 查看 diff",
