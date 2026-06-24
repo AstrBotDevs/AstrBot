@@ -20,6 +20,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.computer import computer_client
 from astrbot.core.computer.sandbox_tool_binding import tool_available_in_runtime
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
@@ -252,8 +253,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return {}
 
     @staticmethod
-    def _tool_available_for_runtime_config(tool: FunctionTool, runtime: str) -> bool:
-        if not tool_available_in_runtime(tool, runtime):
+    def _tool_available_for_runtime_config(
+        tool: FunctionTool, runtime: str, provider_id: str | None = None
+    ) -> bool:
+        if not tool_available_in_runtime(tool, runtime, provider_id):
             return False
         rule = get_builtin_tool_config_rule(tool.name)
         if rule is None:
@@ -281,6 +284,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        provider_id = None
+        if runtime == "sandbox":
+            provider_id = computer_client.get_current_sandbox_provider_id(
+                event.unified_msg_origin
+            )
         tool_mgr = (
             ctx.get_llm_tool_manager()
             if hasattr(ctx, "get_llm_tool_manager")
@@ -309,7 +317,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 if registered_tool.name in handoff_names:
                     continue
                 if registered_tool.active and cls._tool_available_for_runtime_config(
-                    registered_tool, runtime
+                    registered_tool, runtime, provider_id
                 ):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
@@ -326,7 +334,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 if (
                     registered_tool
                     and registered_tool.active
-                    and cls._tool_available_for_runtime_config(registered_tool, runtime)
+                    and cls._tool_available_for_runtime_config(
+                        registered_tool, runtime, provider_id
+                    )
                 ):
                     toolset.add_tool(registered_tool)
                     continue
@@ -335,7 +345,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     toolset.add_tool(runtime_tool)
             elif isinstance(
                 tool_name_or_obj, FunctionTool
-            ) and cls._tool_available_for_runtime_config(tool_name_or_obj, runtime):
+            ) and cls._tool_available_for_runtime_config(
+                tool_name_or_obj, runtime, provider_id
+            ):
                 toolset.add_tool(tool_name_or_obj)
         return None if toolset.empty() else toolset
 

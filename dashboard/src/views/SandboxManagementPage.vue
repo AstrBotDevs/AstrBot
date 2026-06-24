@@ -470,7 +470,7 @@ function canUseAction(item: SandboxRecord, action: SandboxAction) {
     case 'screenshot':
       return status === 'running' && hasCapability(item, 'screenshot')
     case 'destroy':
-      return status !== 'stopping' && !item.controller_session_id
+      return status !== 'stopping'
   }
 }
 
@@ -954,13 +954,10 @@ async function saveConfig() {
 
 function releaseSandbox(item: SandboxRecord) {
   return sandboxAction(
-    'delete',
-    '/api/sandbox/current',
+    'post',
+    sandboxApiPath(item, '/force-release'),
     undefined,
-    tm('messages.released'),
-    {
-      params: { session_id: 'dashboard', sandbox_id: item.sandbox_id }
-    }
+    tm('messages.released')
   )
 }
 
@@ -987,8 +984,8 @@ async function confirmDestroySandbox() {
   destroyDialog.value = false
   destroySandboxTarget.value = null
   try {
-    const res = await axios.delete(sandboxApiPath(targetId), {
-      params: { session_id: 'dashboard', _t: Date.now() }
+    const res = await axios.delete(sandboxApiPath(targetId, '/force'), {
+      params: { _t: Date.now() }
     })
     if (res.data.status === 'ok') {
       startDestroyPolling(targetId)
@@ -1010,7 +1007,7 @@ async function confirmDestroySandbox() {
 }
 
 async function screenshotSandbox(item: SandboxRecord) {
-  const data = await sandboxAction('post', sandboxApiPath(item, '/screenshot'))
+  const data = await sandboxAction('post', sandboxApiPath(item, '/admin-screenshot'))
   if (!data) return
   const screenshot = data?.screenshot
   const legacyResult = data?.result
@@ -1043,7 +1040,7 @@ async function runConsoleCommand() {
   consoleRunning.value = true
   try {
     const shellCommand = buildConsoleShellCommand(command, cwd)
-    const data = await sandboxAction('post', sandboxApiPath(sandboxId, '/shell'), {
+    const data = await sandboxAction('post', sandboxApiPath(sandboxId, '/admin-shell'), {
       command: shellCommand,
       timeout: 300
     }, undefined, {}, true)

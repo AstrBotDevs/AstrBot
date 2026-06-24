@@ -124,20 +124,27 @@ class SandboxService:
         self, session_id: str, sandbox_id: str | None = None
     ) -> dict:
         try:
-            if sandbox_id:
-                sandbox = computer_client.sandbox_manager.force_release_sandbox(
-                    sandbox_id
-                )
-            else:
-                sandbox = computer_client.sandbox_manager.release_current_sandbox(
-                    session_id
-                )
+            sandbox = computer_client.sandbox_manager.release_current_sandbox(
+                session_id,
+                sandbox_id,
+            )
             return {"sandbox": sandbox}
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise SandboxServiceError(
                 f"Failed to release sandbox: {exc!s}",
                 public_message="Failed to release sandbox.",
+            ) from exc
+
+    def force_release_sandbox(self, sandbox_id: str) -> dict:
+        try:
+            sandbox = computer_client.sandbox_manager.force_release_sandbox(sandbox_id)
+            return {"sandbox": sandbox}
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise SandboxServiceError(
+                f"Failed to force release sandbox: {exc!s}",
+                public_message="Failed to force release sandbox.",
             ) from exc
 
     async def takeover_sandbox(self, session_id: str, sandbox_id: str) -> dict:
@@ -172,7 +179,6 @@ class SandboxService:
             booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
                 sandbox_id,
                 session_id,
-                require_lease=False,
                 context=self.core_lifecycle.star_context,
             )
             shell = getattr(booter, "shell", None)
@@ -197,6 +203,39 @@ class SandboxService:
                 public_message="Failed to run sandbox shell.",
             ) from exc
 
+    async def admin_run_shell(self, sandbox_id: str, data: dict) -> dict:
+        try:
+            command = str(data.get("command") or "").strip()
+            if not command:
+                raise SandboxServiceError("command is required", log_traceback=False)
+            booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
+                sandbox_id,
+                "dashboard",
+                require_lease=False,
+                context=self.core_lifecycle.star_context,
+            )
+            shell = getattr(booter, "shell", None)
+            if shell is None:
+                raise SandboxServiceError(
+                    "Sandbox does not support shell.", log_traceback=False
+                )
+            result = await shell.exec(
+                command,
+                cwd=data.get("cwd"),
+                env=data.get("env"),
+                timeout=sanitize_shell_timeout(data.get("timeout", 300)),
+                shell=data.get("shell", True),
+            )
+            return {"result": result}
+        except SandboxServiceError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise SandboxServiceError(
+                f"Failed to run admin sandbox shell: {exc!s}",
+                public_message="Failed to run admin sandbox shell.",
+            ) from exc
+
     async def capture_screenshot(
         self, session_id: str, sandbox_id: str, data: dict
     ) -> dict:
@@ -204,7 +243,6 @@ class SandboxService:
             booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
                 sandbox_id,
                 session_id,
-                require_lease=False,
                 context=self.core_lifecycle.star_context,
             )
             gui = getattr(booter, "gui", None)
@@ -221,6 +259,30 @@ class SandboxService:
             raise SandboxServiceError(
                 f"Failed to capture sandbox screenshot: {exc!s}",
                 public_message="Failed to capture sandbox screenshot.",
+            ) from exc
+
+    async def admin_capture_screenshot(self, sandbox_id: str, data: dict) -> dict:
+        try:
+            booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
+                sandbox_id,
+                "dashboard",
+                require_lease=False,
+                context=self.core_lifecycle.star_context,
+            )
+            gui = getattr(booter, "gui", None)
+            if gui is None:
+                raise SandboxServiceError(
+                    "Sandbox does not support screenshots.", log_traceback=False
+                )
+            screenshot = await gui.screenshot(path=data.get("path"))
+            return {"screenshot": screenshot}
+        except SandboxServiceError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise SandboxServiceError(
+                f"Failed to capture admin sandbox screenshot: {exc!s}",
+                public_message="Failed to capture admin sandbox screenshot.",
             ) from exc
 
     def update_sandbox(self, sandbox_id: str, data: dict) -> dict:
@@ -271,4 +333,18 @@ class SandboxService:
             raise SandboxServiceError(
                 f"Failed to destroy sandbox: {exc!s}",
                 public_message="Failed to destroy sandbox.",
+            ) from exc
+
+    async def force_destroy_sandbox(self, sandbox_id: str) -> dict:
+        try:
+            computer_client.sandbox_manager.force_release_sandbox(sandbox_id)
+            sandbox = await computer_client.sandbox_manager.destroy_sandbox_deferred(
+                "dashboard", sandbox_id
+            )
+            return {"sandbox": sandbox}
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise SandboxServiceError(
+                f"Failed to force destroy sandbox: {exc!s}",
+                public_message="Failed to force destroy sandbox.",
             ) from exc

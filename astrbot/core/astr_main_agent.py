@@ -442,9 +442,11 @@ def _filter_skills_for_current_config(
     return filtered
 
 
-def _tool_available_for_current_runtime(tool: FunctionTool, cfg: dict) -> bool:
+def _tool_available_for_current_runtime(
+    tool: FunctionTool, cfg: dict, provider_id: str | None = None
+) -> bool:
     runtime = str(cfg.get("computer_use_runtime", "local"))
-    if not tool_available_in_runtime(tool, runtime):
+    if not tool_available_in_runtime(tool, runtime, provider_id):
         return False
     rule = get_builtin_tool_config_rule(tool.name)
     if rule is None:
@@ -464,8 +466,9 @@ def _filter_tools_for_current_config(
     toolset: ToolSet, cfg: dict, session_id: str
 ) -> ToolSet:
     filtered = ToolSet()
+    provider_id = computer_client.get_current_sandbox_provider_id(session_id)
     for tool in toolset:
-        if _tool_available_for_current_runtime(tool, cfg):
+        if _tool_available_for_current_runtime(tool, cfg, provider_id):
             filtered.add_tool(tool)
     return filtered
 
@@ -567,13 +570,14 @@ async def _ensure_persona_and_skills(
                 persona_toolset.remove_tool(tool.name)
     else:
         persona_toolset = ToolSet()
+        provider_id = computer_client.get_current_sandbox_provider_id(session_id)
         if persona["tools"]:
             for tool_name in persona["tools"]:
                 tool = tmgr.get_func(tool_name)
                 if (
                     tool
                     and tool.active
-                    and _tool_available_for_current_runtime(tool, cfg)
+                    and _tool_available_for_current_runtime(tool, cfg, provider_id)
                 ):
                     persona_toolset.add_tool(tool)
     if not req.func_tool:
@@ -612,7 +616,13 @@ async def _ensure_persona_and_skills(
                             tool.name
                             for tool in tmgr.func_list
                             if not isinstance(tool, HandoffTool)
-                            and _tool_available_for_current_runtime(tool, cfg)
+                            and _tool_available_for_current_runtime(
+                                tool,
+                                cfg,
+                                computer_client.get_current_sandbox_provider_id(
+                                    session_id
+                                ),
+                            )
                         ]
                     )
                     continue

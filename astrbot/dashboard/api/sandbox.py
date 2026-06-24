@@ -12,7 +12,7 @@ from astrbot.dashboard.services.sandbox_helpers import (
     is_demo_mode,
 )
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Sandbox"])
 legacy_router = APIRouter(
@@ -139,6 +139,17 @@ async def takeover_sandbox(
     )
 
 
+@legacy_router.post("/{sandbox_id}/force-release")
+async def force_release_sandbox(
+    sandbox_id: str,
+    _username: str = Depends(require_dashboard_user),
+    service: SandboxService = Depends(get_service),
+):
+    if demo_response := _demo_mode_error():
+        return demo_response
+    return await _run(lambda: service.force_release_sandbox(sandbox_id))
+
+
 @legacy_router.post("/{sandbox_id}/default")
 async def set_default_sandbox(
     sandbox_id: str,
@@ -166,6 +177,19 @@ async def run_shell(
     )
 
 
+@legacy_router.post("/{sandbox_id}/admin-shell")
+async def admin_run_shell(
+    sandbox_id: str,
+    request: Request,
+    _username: str = Depends(require_dashboard_user),
+    service: SandboxService = Depends(get_service),
+):
+    if demo_response := _demo_mode_error():
+        return demo_response
+    data = await _json_or_empty(request)
+    return await _run(lambda: service.admin_run_shell(sandbox_id, data))
+
+
 @legacy_router.post("/{sandbox_id}/screenshot")
 async def capture_screenshot(
     sandbox_id: str,
@@ -178,6 +202,17 @@ async def capture_screenshot(
     return await _run(
         lambda: service.capture_screenshot(_session_id(session_id), sandbox_id, data)
     )
+
+
+@legacy_router.post("/{sandbox_id}/admin-screenshot")
+async def admin_capture_screenshot(
+    sandbox_id: str,
+    request: Request,
+    _username: str = Depends(require_dashboard_user),
+    service: SandboxService = Depends(get_service),
+):
+    data = await _json_or_empty(request)
+    return await _run(lambda: service.admin_capture_screenshot(sandbox_id, data))
 
 
 @legacy_router.patch("/{sandbox_id}")
@@ -205,3 +240,14 @@ async def destroy_sandbox(
     return await _run(
         lambda: service.destroy_sandbox(_session_id(session_id), sandbox_id)
     )
+
+
+@legacy_router.delete("/{sandbox_id}/force")
+async def force_destroy_sandbox(
+    sandbox_id: str,
+    _username: str = Depends(require_dashboard_user),
+    service: SandboxService = Depends(get_service),
+):
+    if demo_response := _demo_mode_error():
+        return demo_response
+    return await _run(lambda: service.force_destroy_sandbox(sandbox_id))

@@ -2804,9 +2804,55 @@ class TestApplySandboxTools:
         provider_tool.sandbox_provider_id = "provider_a"
         toolset.add_tool(provider_tool)
 
-        filtered = module._filter_tools_for_current_config(toolset, cfg, "session-a")
+        with patch(
+            "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
+            return_value="provider_a",
+        ):
+            filtered = module._filter_tools_for_current_config(
+                toolset, cfg, "session-a"
+            )
 
         assert "provider_a_screenshot" in filtered.names()
+
+    def test_registered_provider_tools_are_filtered_by_current_provider_each_build(
+        self,
+    ):
+        module = ama
+        cfg = {"computer_use_runtime": "sandbox"}
+        toolset = ToolSet()
+
+        provider_tool = FunctionTool(
+            name="provider_a_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="Provider A screenshot",
+        )
+        provider_tool.sandbox_provider_id = "provider_a"
+        toolset.add_tool(provider_tool)
+
+        current_provider = "provider_a"
+
+        def get_current_provider(_session_id):
+            return current_provider
+
+        with patch(
+            "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
+            side_effect=get_current_provider,
+        ):
+            matching = module._filter_tools_for_current_config(
+                toolset, cfg, "session-a"
+            )
+            current_provider = "provider_b"
+            non_matching = module._filter_tools_for_current_config(
+                toolset, cfg, "session-a"
+            )
+            current_provider = "provider_a"
+            matching_again = module._filter_tools_for_current_config(
+                toolset, cfg, "session-a"
+            )
+
+        assert "provider_a_screenshot" in matching.names()
+        assert "provider_a_screenshot" not in non_matching.names()
+        assert "provider_a_screenshot" in matching_again.names()
 
     def test_filter_tools_for_current_config_applies_builtin_runtime_rules(self):
         module = ama

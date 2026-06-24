@@ -317,6 +317,11 @@ async def test_build_handoff_toolset_uses_registered_provider_tools_only(
             {"provider_id": "provider_b", "tool_names": ["provider_b_tool"]},
         ],
     )
+    monkeypatch.setattr(
+        computer_client,
+        "get_current_sandbox_provider_id",
+        lambda _session_id: "provider_a",
+    )
 
     try:
         toolset = FunctionToolExecutor._build_handoff_toolset(run_context, None)
@@ -324,6 +329,66 @@ async def test_build_handoff_toolset_uses_registered_provider_tools_only(
         assert "astrbot_sandbox_query" in toolset.names()
         assert "provider_a_screenshot" in toolset.names()
         assert "provider_b_tool" not in toolset.names()
+    finally:
+        llm_tools.func_list = previous_tools
+        FunctionToolExecutor._runtime_computer_tools_cache.clear()
+
+
+@pytest.mark.asyncio
+async def test_build_handoff_toolset_filters_registered_provider_tools_each_build(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+
+    provider_tool = FunctionTool(
+        name="provider_a_screenshot",
+        parameters={"type": "object", "properties": {}},
+        description="Provider A screenshot",
+    )
+    provider_tool.sandbox_provider_id = "provider_a"
+
+    previous_tools = list(llm_tools.func_list)
+    FunctionToolExecutor._runtime_computer_tools_cache.clear()
+    llm_tools.func_list = [provider_tool]
+
+    tool_mgr = SimpleNamespace(
+        func_list=[provider_tool],
+        get_builtin_tool=lambda cls, **kwargs: cls(**kwargs),
+        get_func=lambda name: provider_tool if name == provider_tool.name else None,
+    )
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {
+            "provider_settings": {"computer_use_runtime": "sandbox"}
+        },
+        get_llm_tool_manager=lambda: tool_mgr,
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+
+    current_provider = "provider_a"
+
+    def get_current_provider(_session_id):
+        return current_provider
+
+    monkeypatch.setattr(
+        computer_client,
+        "get_current_sandbox_provider_id",
+        get_current_provider,
+    )
+
+    try:
+        matching = FunctionToolExecutor._build_handoff_toolset(run_context, None)
+        current_provider = "provider_b"
+        non_matching = FunctionToolExecutor._build_handoff_toolset(run_context, None)
+        current_provider = "provider_a"
+        matching_again = FunctionToolExecutor._build_handoff_toolset(run_context, None)
+
+        assert matching is not None
+        assert non_matching is not None
+        assert matching_again is not None
+        assert "provider_a_screenshot" in matching.names()
+        assert "provider_a_screenshot" not in non_matching.names()
+        assert "provider_a_screenshot" in matching_again.names()
     finally:
         llm_tools.func_list = previous_tools
         FunctionToolExecutor._runtime_computer_tools_cache.clear()

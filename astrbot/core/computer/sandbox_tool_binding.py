@@ -14,7 +14,9 @@ TFunctionTool = type[FunctionTool]
 _sandbox_provider_tool_config_rules: dict[str, BuiltinToolConfigRule] = {}
 
 
-def tool_available_in_runtime(tool: Any, runtime: str) -> bool:
+def tool_available_in_runtime(
+    tool: Any, runtime: str, provider_id: str | None = None
+) -> bool:
     """Return whether a tool should be exposed for the computer-use runtime.
 
     Provider-specific sandbox tools are registered once when their provider is
@@ -24,7 +26,9 @@ def tool_available_in_runtime(tool: Any, runtime: str) -> bool:
     tool_provider = getattr(tool, "sandbox_provider_id", None)
     if not tool_provider:
         return True
-    return runtime == "sandbox"
+    return runtime == "sandbox" and _normalize_provider_id(
+        tool_provider
+    ) == _normalize_provider_id(provider_id)
 
 
 def mark_tool_as_sandbox_provider_tool(tool: Any, provider_id: str) -> Any:

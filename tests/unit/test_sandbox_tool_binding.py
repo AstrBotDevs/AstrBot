@@ -17,10 +17,12 @@ class FakeTool:
         self.sandbox_provider_id = sandbox_provider_id
 
 
-def test_provider_scoped_tool_is_available_to_any_sandbox_runtime():
+def test_provider_scoped_tool_is_available_only_for_matching_sandbox_provider():
     tool = FakeTool("sandbox_tool", sandbox_provider_id="Generic")
 
-    assert tool_available_in_runtime(tool, "sandbox")
+    assert tool_available_in_runtime(tool, "sandbox", "generic")
+    assert not tool_available_in_runtime(tool, "sandbox")
+    assert not tool_available_in_runtime(tool, "sandbox", "other")
     assert not tool_available_in_runtime(tool, "local")
 
 
