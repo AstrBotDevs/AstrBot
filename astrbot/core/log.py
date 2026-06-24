@@ -264,6 +264,31 @@ class LogManager:
 
     @classmethod
     def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker) -> None:
+        """
+        这段代码是一个类方法，用于给指定的日志记录器配置一个队列日志处理器。具体作用如下：
+
+        1. **确保日志增强过滤器存在**：调用 `_ensure_logger_enricher_filter(logger)` 为日志记录器添加必要的信息增强过滤器。
+
+        2. **避免重复添加**：遍历日志记录器已有的处理器，如果已经存在 `LogQueueHandler` 类型的处理器，则直接返回，防止重复配置。
+
+        3. **创建并配置队列日志处理器**：
+        - 创建一个 `LogQueueHandler` 实例，传入 `log_broker`（日志代理/中间件）
+        - 设置日志级别为 `DEBUG`，接收所有级别的日志
+        - 添加 ANSI 颜色过滤器，用于过滤控制台颜色代码
+        - 设置日志格式，包含：
+            - `ansi_prefix`：ANSI 颜色前缀
+            - 时间戳（精确到毫秒）
+            - 插件标签
+            - 日志级别缩写
+            - 版本标签
+            - 源文件名和行号
+            - 日志消息内容
+            - `ansi_reset`：ANSI 颜色重置
+
+        4. **激活处理器**：将配置好的处理器添加到日志记录器中，使其开始工作。
+
+        整体来说，这是一个**队列化的日志输出配置**，将日志消息通过代理/中间件异步发送，常用于分布式系统或需要统一处理日志的场景。
+        """
         cls._ensure_logger_enricher_filter(logger)
 
         for handler in logger.handlers:

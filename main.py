@@ -74,11 +74,11 @@ def check_env() -> None:
         logger.error("请使用 Python3.10+ 运行本项目。")
         exit()
 
-    astrbot_root = get_astrbot_root()
+    astrbot_root = get_astrbot_root() # 项目所在的路径 'C:\\Users\\Admin\\Master\\projects\\github\\AstrBot'
     if astrbot_root not in sys.path:
         sys.path.insert(0, astrbot_root)
 
-    site_packages_path = get_astrbot_site_packages_path()
+    site_packages_path = get_astrbot_site_packages_path() #  'C:\\Users\\Admin\\Master\\projects\\github\\AstrBot\\data\\site-packages'
     if not is_packaged_desktop_runtime() and site_packages_path not in sys.path:
         sys.path.append(site_packages_path)
 
@@ -112,7 +112,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
         logger.warning("WebUI directory not found: %s. Using default.", webui_dir)
 
     data_dist_path = Path(get_astrbot_data_path()) / "dist"
-    bundled_dist = get_bundled_dashboard_dist_path()
+    bundled_dist = get_bundled_dashboard_dist_path() # WindowsPath('C:/Users/Admin/Master/projects/github/AstrBot/astrbot/dashboard/dist')
     if data_dist_path.exists():
         v = get_dashboard_dist_version(data_dist_path)
         if is_dashboard_dist_compatible(data_dist_path, VERSION):
