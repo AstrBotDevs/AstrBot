@@ -3,6 +3,7 @@ from astrbot import logger
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
+from .round_utils import count_conversation_rounds
 from .token_counter import EstimateTokenCounter
 from .truncator import ContextTruncator
 
@@ -64,15 +65,15 @@ class ContextManager:
             was_hard_truncated = False
 
             if self.config.enforce_max_turns != -1:
-                non_system_count = len([m for m in result if m.role != "system"]) // 2
-                if non_system_count > self.config.enforce_max_turns:
+                turn_count = count_conversation_rounds(result)
+                if turn_count > self.config.enforce_max_turns:
                     if isinstance(self.compressor, LLMSummaryCompressor):
                         logger.debug(
                             "Turn limit (%s) exceeded (%s turns), "
                             "delegating to LLM summary compressor instead of "
                             "hard truncation.",
                             self.config.enforce_max_turns,
-                            non_system_count,
+                            turn_count,
                         )
                         compressed = await self.compressor(result)
                         if self.compressor.last_call_failed:
@@ -153,10 +154,24 @@ class ContextManager:
             messages, tokens_after_summary, self.config.max_context_tokens
         ):
             logger.info(
-                "Context still exceeds max tokens after compression, applying halving truncation..."
+                "Context still exceeds max tokens after compression, applying hard truncation..."
             )
-            # still need compress, truncate by half
-            messages = self.truncator.truncate_by_halving(messages)
             was_lossy = True
+            while self.compressor.should_compress(
+                messages, tokens_after_summary, self.config.max_context_tokens
+            ):
+                truncated = self.truncator.truncate_by_dropping_oldest_turns(
+                    messages,
+                    drop_turns=self.config.truncate_turns,
+                )
+                if truncated == messages:
+                    truncated = self.truncator.truncate_by_halving(messages)
+                if truncated == messages:
+                    break
+                next_tokens = self.token_counter.count_tokens(truncated)
+                if next_tokens >= tokens_after_summary:
+                    break
+                messages = truncated
+                tokens_after_summary = next_tokens
 
         return messages, was_lossy

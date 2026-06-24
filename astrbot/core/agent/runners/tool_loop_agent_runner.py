@@ -719,25 +719,29 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
-        if is_first_step:
-            token_usage = (
-                self.req.conversation.token_usage if self.req.conversation else 0
-            )
-            self._simple_print_message_role("[BefCompact]", self.run_context.messages)
-            pre_compaction_count = len(self.run_context.messages)
-            (
-                self.run_context.messages,
-                was_hard_truncated,
-            ) = await self.request_context_manager.process_with_meta(
-                self.run_context.messages, trusted_token_usage=token_usage
-            )
-            self._simple_print_message_role("[AftCompact]", self.run_context.messages)
+        token_usage = (
+            self.req.conversation.token_usage
+            if is_first_step and self.req.conversation
+            else 0
+        )
+        source_messages = (
+            self.run_context.persisted_messages or self.run_context.messages
+        )
+        self._simple_print_message_role("[BefCompact]", source_messages)
+        pre_compaction_count = len(source_messages)
+        (
+            self.run_context.messages,
+            was_hard_truncated,
+        ) = await self.request_context_manager.process_with_meta(
+            source_messages, trusted_token_usage=token_usage
+        )
+        self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
-            if (
-                not was_hard_truncated
-                and len(self.run_context.messages) != pre_compaction_count
-            ):
-                self.run_context.persisted_messages = list(self.run_context.messages)
+        if (
+            not was_hard_truncated
+            and len(self.run_context.messages) != pre_compaction_count
+        ):
+            self.run_context.persisted_messages = list(self.run_context.messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:

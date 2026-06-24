@@ -134,6 +134,32 @@ class TestContextTruncator:
         assert len(result) == 6
         assert result == messages
 
+    def test_truncate_by_turns_counts_tool_chain_as_one_round(self):
+        """Tool calls/results inside one round should not count as extra turns."""
+        truncator = ContextTruncator()
+        messages = [
+            self.create_message("user", "Run a tool"),
+            Message(
+                role="assistant",
+                content="Calling tool",
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "lookup", "arguments": "{}"},
+                    }
+                ],
+            ),
+            Message(role="tool", content="Tool result", tool_call_id="call_1"),
+            self.create_message("assistant", "Done"),
+        ]
+
+        result = truncator.truncate_by_turns(
+            messages, keep_most_recent_turns=1, drop_turns=1
+        )
+
+        assert result == messages
+
     def test_truncate_by_turns_ensures_user_first(self):
         """Test that truncate_by_turns ensures user message comes first."""
         truncator = ContextTruncator()

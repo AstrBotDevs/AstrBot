@@ -42,6 +42,26 @@ class MockProvider:
         return MagicMock(id="test_provider", type="openai")
 
 
+class MessageCountTokenCounter:
+    """Token counter that assigns a fixed cost to each message."""
+
+    def count_tokens(
+        self, messages: list[Message], trusted_token_usage: int = 0
+    ) -> int:
+        """Count tokens by message count for deterministic tests.
+
+        Args:
+            messages: The messages to count.
+            trusted_token_usage: A trusted token count to return when present.
+
+        Returns:
+            The deterministic token count.
+        """
+        if trusted_token_usage > 0:
+            return trusted_token_usage
+        return len(messages) * 100
+
+
 class TestContextManager:
     """Test suite for ContextManager."""
 
@@ -466,6 +486,32 @@ class TestContextManager:
         system_msgs = [m for m in result if m.role == "system"]
         assert len(system_msgs) >= 1
         assert system_msgs[0].content == "System instruction"
+
+    @pytest.mark.asyncio
+    async def test_enforce_max_turns_counts_tool_chain_as_one_round(self):
+        """Tool messages in one round should not inflate turn count."""
+        config = ContextConfig(enforce_max_turns=1, truncate_turns=1)
+        manager = ContextManager(config)
+        messages = [
+            self.create_message("user", "Run a tool"),
+            Message(
+                role="assistant",
+                content="Calling tool",
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "lookup", "arguments": "{}"},
+                    }
+                ],
+            ),
+            Message(role="tool", content="Tool result", tool_call_id="call_1"),
+            self.create_message("assistant", "Done"),
+        ]
+
+        result = await manager.process(messages)
+
+        assert result == messages
 
     # ==================== Token-based Compression Tests ====================
 
@@ -969,6 +1015,28 @@ class TestContextManager:
 
         # Should have been compressed
         assert len(result) <= len(messages)
+
+    @pytest.mark.asyncio
+    async def test_llm_failure_falls_back_until_token_threshold(self):
+        """Failed LLM compression should hard truncate until tokens are acceptable."""
+        mock_provider = MockProvider()
+        mock_provider.text_chat = AsyncMock(
+            return_value=LLMResponse(role="err", completion_text="compress failed")
+        )
+        config = ContextConfig(
+            max_context_tokens=300,
+            truncate_turns=1,
+            llm_compress_provider=mock_provider,  # type: ignore[arg-type]
+            custom_token_counter=MessageCountTokenCounter(),
+        )
+        manager = ContextManager(config)
+        messages = self.create_messages(10)
+
+        result, was_hard_truncated = await manager.process_with_meta(messages)
+
+        assert was_hard_truncated is True
+        assert len(result) == 2
+        assert manager.token_counter.count_tokens(result) <= 246
 
     # ==================== split_into_rounds Tests ====================
 
