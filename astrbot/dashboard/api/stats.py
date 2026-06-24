@@ -79,9 +79,9 @@ async def get_public_versions(
     request: Request,
     service: StatService = Depends(get_service),
 ):
-    return await _run(
-        lambda: service.get_public_versions(
-            getattr(request.app.state, "dashboard_static_folder", None),
+    return ok(
+        await service.get_public_versions(
+            getattr(request.app.state, "dashboard_static_folder", None)
         )
     )
 
@@ -184,9 +184,9 @@ async def get_dashboard_public_versions(
     request: Request,
     service: StatService = Depends(get_service),
 ):
-    return await _run(
-        lambda: service.get_public_versions(
-            getattr(request.app.state, "dashboard_static_folder", None),
+    return ok(
+        await service.get_public_versions(
+            getattr(request.app.state, "dashboard_static_folder", None)
         )
     )
 

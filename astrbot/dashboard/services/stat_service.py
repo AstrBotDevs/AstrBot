@@ -119,17 +119,14 @@ class StatService:
             Public WebUI and AstrBot version information.
         """
 
-        dashboard_version = None
-        if dashboard_static_folder:
-            dashboard_version = get_dashboard_dist_version(
-                Path(dashboard_static_folder)
-            )
-        if dashboard_version is None:
-            dashboard_version = await get_dashboard_version()
+        def read_code_version() -> str | None:
+            """Read the AstrBot code version from the package file.
 
-        code_version = None
-        version_file = Path(get_astrbot_path()) / "astrbot" / "__init__.py"
-        try:
+            Returns:
+                The version string from disk, or None when it is unavailable.
+            """
+
+            version_file = Path(get_astrbot_path()) / "astrbot" / "__init__.py"
             module = ast.parse(version_file.read_text(encoding="utf-8"))
             for statement in module.body:
                 if not isinstance(statement, ast.Assign):
@@ -143,9 +140,25 @@ class StatService:
                     statement.value.value,
                     str,
                 ):
-                    code_version = statement.value.value.strip()
-                break
-        except (OSError, SyntaxError, UnicodeDecodeError) as exc:
+                    return statement.value.value.strip()
+                return None
+            return None
+
+        dashboard_version = None
+        try:
+            if dashboard_static_folder:
+                dashboard_version = get_dashboard_dist_version(
+                    Path(dashboard_static_folder)
+                )
+            if dashboard_version is None:
+                dashboard_version = await get_dashboard_version()
+        except Exception as exc:
+            logger.warning("Failed to read public WebUI version: %s", exc)
+
+        code_version = None
+        try:
+            code_version = await asyncio.to_thread(read_code_version)
+        except Exception as exc:
             logger.warning("Failed to read AstrBot code version from disk: %s", exc)
 
         return {

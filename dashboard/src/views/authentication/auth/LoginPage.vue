@@ -59,21 +59,11 @@ const versionValues = computed(() => {
 });
 
 const normalizedVersionValues = computed(() => {
-  let webui = versionValues.value.webui;
-  let runtime = versionValues.value.runtime;
-  let code = versionValues.value.code;
-
-  if (webui.charAt(0).toLowerCase() === 'v') {
-    webui = webui.slice(1);
-  }
-  if (runtime.charAt(0).toLowerCase() === 'v') {
-    runtime = runtime.slice(1);
-  }
-  if (code.charAt(0).toLowerCase() === 'v') {
-    code = code.slice(1);
-  }
-
-  return { webui, runtime, code };
+  return {
+    webui: versionValues.value.webui.replace(/^v/i, ''),
+    runtime: versionValues.value.runtime.replace(/^v/i, ''),
+    code: versionValues.value.code.replace(/^v/i, ''),
+  };
 });
 
 const versionWarnings = computed(() => {
@@ -133,7 +123,11 @@ onMounted(async () => {
     .then((res) => {
       publicVersions.value = res.data?.data || null;
     })
-    .catch(() => {});
+    .catch((error) => {
+      if (import.meta.env.DEV) {
+        console.warn('Failed to load public versions:', error);
+      }
+    });
 
   // 检查用户是否已登录，如果已登录则重定向
   if (authStore.has_token()) {
