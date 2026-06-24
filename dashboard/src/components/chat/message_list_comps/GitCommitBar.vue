@@ -2,31 +2,96 @@
      Date: 2026-06-24
      Spec: docs/superpowers/specs/2026-06-24-chatui-git-workflow-controls-design.md §6.7
      Sticky bottom bar shown only when a project is loaded. Surfaces
-     stagedFiles.size, the "Stage all" trigger (which opens the
-     confirm dialog owned by the sidebar), and the "Commit" trigger
-     (which opens the commit dialog). -->
+     stagedCount, the bulk action trigger (Stage all on unstaged/all
+     scopes, Unstage all on the staged scope), and the "Commit" trigger
+     (which opens the commit dialog).
+
+     The bulk action swaps label / disabled / event based on
+     `selectedScope` so the same button row carries both directions of
+     the stage ↔ unstage cycle without taking more vertical space. -->
 <script setup lang="ts">
+import { computed } from "vue";
+import type { GitDiffScope } from "@/composables/useSpcodeGitDiff";
 import { useModuleI18n } from "@/i18n/composables";
 
 const { tm } = useModuleI18n("features/chat");
 
-defineProps<{
+const props = defineProps<{
   stagedCount: number;
   unstagedCount: number;
   isStagingAll: boolean;
+  isUnstagingAll: boolean;
   isCommitting: boolean;
+  /** Drives the bulk action label/handler:
+   *    "staged"   → "取消全部暂存" → emit('unstage-all')
+   *    "unstaged" | "all" → "全部暂存" → emit('stage-all')
+   */
+  selectedScope: GitDiffScope;
 }>();
 
 const emit = defineEmits<{
   (e: "stage-all"): void;
+  (e: "unstage-all"): void;
   (e: "commit"): void;
 }>();
+
+// The bulk action flips between stage-all and unstage-all based on
+// the scope the user is looking at. Deriving everything (label /
+// aria / disabled / loading / event) from a single `isUnstageMode`
+// flag keeps the four outputs in lock-step — adding a new branch
+// later (e.g. a third mode) only requires flipping this boolean.
+const isUnstageMode = computed(() => props.selectedScope === "staged");
+
+const bulkLabel = computed(() =>
+  isUnstageMode.value
+    ? tm("spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.button")
+    : tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.button"),
+);
+
+const bulkAria = computed(() =>
+  isUnstageMode.value
+    ? tm(
+        "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.buttonAria",
+      )
+    : tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.buttonAria"),
+);
+
+const bulkDisabled = computed(() => {
+  // Disable when there's nothing to act on, when a bulk write is
+  // already in flight, or while a commit is pending (mutual
+  // exclusion with the commit dialog).
+  if (isUnstageMode.value) {
+    return (
+      props.stagedCount === 0 || props.isUnstagingAll || props.isCommitting
+    );
+  }
+  return props.unstagedCount === 0 || props.isStagingAll || props.isCommitting;
+});
+
+const bulkLoading = computed(() =>
+  isUnstageMode.value ? props.isUnstagingAll : props.isStagingAll,
+);
+
+const bulkColor = computed(() =>
+  // Unstage is reversible but still "moves work out of the index";
+  // the warning tint visually flags it as an undo-ish action while
+  // staying calmer than `error`. Stage stays `secondary` to match
+  // its non-destructive role.
+  isUnstageMode.value ? "warning" : "secondary",
+);
+
+function onBulkClick(): void {
+  if (isUnstageMode.value) emit("unstage-all");
+  else emit("stage-all");
+}
 </script>
 
 <template>
   <div class="git-commit-bar" role="region" aria-label="Git commit controls">
     <span class="git-commit-bar-status">
-      <v-icon size="14" class="git-commit-bar-status-icon">mdi-information-outline</v-icon>
+      <v-icon size="14" class="git-commit-bar-status-icon"
+        >mdi-information-outline</v-icon
+      >
       <span v-if="stagedCount > 0">
         {{
           tm(
@@ -36,27 +101,37 @@ const emit = defineEmits<{
         }}
       </span>
       <span v-else class="is-muted">
-        {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.stagedCountZero") }}
+        {{
+          tm(
+            "spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.stagedCountZero",
+          )
+        }}
       </span>
     </span>
     <div class="git-commit-bar-actions">
       <v-btn
         size="small"
         variant="tonal"
-        color="secondary"
-        :disabled="unstagedCount === 0 || isStagingAll || isCommitting"
-        :loading="isStagingAll"
-        :title="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.stageAllAria')"
-        @click="emit('stage-all')"
+        :color="bulkColor"
+        :disabled="bulkDisabled"
+        :loading="bulkLoading"
+        :title="bulkAria"
+        @click="onBulkClick"
       >
-        {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.stageAll") }}
+        {{ bulkLabel }}
       </v-btn>
       <v-btn
         size="small"
         variant="flat"
         color="primary"
         :disabled="stagedCount === 0 || isCommitting"
-        :title="stagedCount === 0 ? tm('spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.commitDisabledHint') : ''"
+        :title="
+          stagedCount === 0
+            ? tm(
+                'spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.commitDisabledHint',
+              )
+            : ''
+        "
         append-icon="mdi-arrow-right"
         @click="emit('commit')"
       >

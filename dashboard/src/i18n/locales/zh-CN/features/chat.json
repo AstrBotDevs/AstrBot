@@ -422,7 +422,16 @@
         },
         "unstage": {
           "buttonAria": "取消暂存 {path}",
-          "success": "已取消暂存 {path}"
+          "success": "已取消暂存 {path}",
+          "successAll": "已取消暂存全部 {count} 个文件",
+          "unstageAll": {
+            "button": "取消全部暂存",
+            "buttonAria": "取消暂存所有已暂存文件",
+            "confirmTitle": "取消全部暂存？",
+            "confirmMessage": "当前有 {count} 个文件已暂存。\n\n此操作可随时通过\"暂存\"撤销。",
+            "confirmAction": "取消全部暂存",
+            "confirmCancel": "取消"
+          }
         },
         "commit": {
           "bar": {

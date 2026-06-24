@@ -422,7 +422,16 @@
         },
         "unstage": {
           "buttonAria": "Unstage {path}",
-          "success": "Unstaged {path}"
+          "success": "Unstaged {path}",
+          "successAll": "Unstaged all {count} files",
+          "unstageAll": {
+            "button": "Unstage all",
+            "buttonAria": "Unstage all staged files",
+            "confirmTitle": "Unstage all?",
+            "confirmMessage": "{count} files are currently staged.\n\nThis can be undone via \"Stage\".",
+            "confirmAction": "Unstage all",
+            "confirmCancel": "Cancel"
+          }
         },
         "commit": {
           "bar": {

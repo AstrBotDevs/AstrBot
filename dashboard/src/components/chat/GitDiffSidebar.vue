@@ -301,6 +301,10 @@ const stagedFiles = ref<Set<string>>(new Set<string>());
 // Spec §3.3.3:confirm dialog for "Stage all"。
 const confirmStageAllOpen = ref(false);
 const pendingStageAllCount = ref(0);
+// Symmetric dialog for "Unstage all" — visible only from the staged
+// scope where the bulk button's label flips to "取消全部暂存".
+const confirmUnstageAllOpen = ref(false);
+const pendingUnstageAllCount = ref(0);
 
 // Spec §3.3.4:commit dialog state。
 const commitDialogOpen = ref(false);
@@ -521,11 +525,11 @@ watch(
   },
 );
 
-// ── Merged unstaged view (git-diff + git-status new files) ─────────
-// When the user is on the unstaged view we want brand-new files
-// (`untracked` + `intent_to_add`) to appear alongside modified files
-// in one list, with the new files rendered with a distinct color.
-// We achieve this by:
+// ── Merged view (git-diff + git-status new files) ─────────────────
+// For the **unstaged** and **all (vs HEAD)** views we want brand-new
+// files (`untracked` + `intent_to_add`) to appear alongside modified
+// files in one list, with the new files rendered with a distinct
+// color. We achieve this by:
 //   1. Building a `newFilePaths` Set from git-status's untracked +
 //      intent_to_add entries. The set is the source of truth for
 //      "is this row a new file"; the body content consults it.
@@ -533,14 +537,19 @@ watch(
 //      for each new file into the snapshot's `files` array so the body
 //      iterates a single list. New files use `status: "A"` (matches
 //      semantic meaning: "added to project") and carry a stub slice
-//      (no diff content available from git-status).
-//   3. We only do the merge when `selectedScope === "unstaged"`. For
-//      staged / all views we pass the original state untouched, so
-//      the existing behavior is preserved.
+//      (no diff content available from git-status). The
+//      `!existing.has(f.path)` guard inside the merge is what makes
+//      the same code safe across both views: `git diff HEAD` (all
+//      scope) already returns `intent_to_add` paths, so the splice
+//      becomes a no-op for those, while `untracked` paths are added
+//      because no native diff command includes them.
+//   3. We only skip the merge for the **staged** scope: there,
+//      `git diff --cached` already covers everything that could be
+//      staged, and an untracked file is by definition not staged.
 const EMPTY_PATH_SET: ReadonlySet<string> = new Set<string>();
 
 const newFilePaths = computed<ReadonlySet<string>>(() => {
-  if (selectedScope.value !== "unstaged") return EMPTY_PATH_SET;
+  if (selectedScope.value === "staged") return EMPTY_PATH_SET;
   const s = gitStatus.state.value;
   if (s.kind !== "ok") return EMPTY_PATH_SET;
   const paths: string[] = [];
@@ -617,7 +626,12 @@ function buildNewFileSlice(content: string): string {
  */
 const diffBodyState = computed<GitDiffFetchState>(() => {
   const base = composable.state.value;
-  if (selectedScope.value !== "unstaged") return base;
+  // See `newFilePaths` above for why we skip the merge only for the
+  // staged scope. The "all" scope shares the same splice logic as
+  // "unstaged" — the `!existing.has` guard inside the loop
+  // dedupes `intent_to_add` paths that already arrive from
+  // `git diff HEAD`.
+  if (selectedScope.value === "staged") return base;
   if (base.kind !== "ok") return base;
   const snapshot: SpcodeGitDiffSnapshot = base.snapshot;
   const statusSnap = gitStatus.state.value;
@@ -876,10 +890,14 @@ async function onUnstageFile(path: string): Promise<void> {
 
 // Spec §6.7.1:unstagedCount 派生(分 scope)。
 // Reads from diffBodyState (not composable.state) so the "Stage all"
-// button in the unstaged view includes untracked / intent-to-add
-// files that were merged in from /spcode/git-status. Without this
-// the user would see "Stage all (3)" but only the 2 diff rows get
-// staged, leaving the new file behind.
+// button includes untracked / intent-to-add files that were merged
+// in from /spcode/git-status. The merge now runs for both the
+// "unstaged" and "all (vs HEAD)" views (see `newFilePaths` above);
+// without this the user would see "Stage all (3)" but only 2 diff
+// rows get staged, leaving the new file behind. In the "all" view
+// the formula becomes `total - stagedFiles.size` where `total`
+// also includes the spliced untracked paths, which is the
+// correct semantic — they are untracked, therefore unstaged.
 const unstagedCount = computed(() => {
   const s = diffBodyState.value;
   if (s.kind !== "ok") return 0;
@@ -888,6 +906,19 @@ const unstagedCount = computed(() => {
   if (selectedScope.value === "unstaged") return total;
   // all:total = staged + unstaged(快照的),减去当前 stagedFiles
   return Math.max(0, total - stagedFiles.value.size);
+});
+
+// Symmetric counterpart: number of files currently in the index,
+// powering both the "取消全部暂存" button's disabled state and the
+// commit button's disabled state (see GitCommitBar). Reads the
+// authoritative backend count from git-status (which is polled in
+// parallel with git-diff in the diff view, regardless of scope), and
+// falls back to the local optimistic Set before the first status
+// fetch completes so the count is never negative / flicker-y.
+const stagedCount = computed(() => {
+  const s = gitStatus.state.value;
+  if (s.kind === "ok") return s.snapshot.summary.staged;
+  return stagedFiles.value.size;
 });
 
 function onClickStageAll(): void {
@@ -912,15 +943,74 @@ async function onConfirmStageAll(): Promise<void> {
     // Parallel refresh: "Stage all" affects every unstaged file
     // (modified + untracked); both endpoints must re-classify.
     await Promise.all([composable.refresh(), gitStatus.refresh()]);
+    // Snackbar count: use the pre-action count (snapshotted in the
+    // dialog at click time), NOT `result.snapshot.stagedCount` —
+    // the latter is the POST-action remaining staged count per
+    // the spcode API contract, which would be misleading here
+    // (e.g. staging 3 files when 2 were already staged would
+    // report 5; the user actually staged 3).
     showSnackbar(
       tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.successAll", {
-        count: result.snapshot.stagedCount,
+        count: pendingStageAllCount.value,
       }),
       "success",
     );
   } else {
     const meta = reasonMeta("stage", result.reason);
     const key = reasonKey("stage", result.reason);
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
+  }
+}
+
+// Mirror of onClickStageAll for the staged scope, where the bar's
+// bulk button flips to "取消全部暂存". Counts come from the
+// authoritative git-status summary so the user sees the real number
+// of files they'll move back to the worktree, not the optimistic
+// Set (which lags by one user action on first load).
+function onClickUnstageAll(): void {
+  pendingUnstageAllCount.value = stagedCount.value;
+  confirmUnstageAllOpen.value = true;
+}
+
+function onCancelUnstageAll(): void {
+  confirmUnstageAllOpen.value = false;
+  // pendingUnstageAllCount 不重置(对称 onCancelStageAll)
+}
+
+async function onConfirmUnstageAll(): Promise<void> {
+  confirmUnstageAllOpen.value = false;
+  const umo = spcodeStatus.status.value.umo;
+  const worktree = selectedWorktree.value;
+  const result = await gitUnstage.unstageAll({ worktree, umo });
+  if (isAborted(result)) return;
+  if (result.ok) {
+    // Mirror onConfirmStageAll: overwrite the optimistic Set with
+    // the response, then refresh diff + status in lock-step so the
+    // row moves immediately from staged back to unstaged.
+    stagedFiles.value = new Set(result.snapshot.files);
+    await Promise.all([composable.refresh(), gitStatus.refresh()]);
+    // Snackbar count: use the pre-action count from the dialog,
+    // NOT `result.snapshot.stagedCount` — that field is the
+    // POST-action remaining count, which would always be 0 after
+    // unstage-all and read as "已取消暂存 0 个文件" (the bug the
+    // user reported). `pendingUnstageAllCount` was captured when
+    // the dialog opened, so it matches what the user just unstaged.
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.successAll", {
+        count: pendingUnstageAllCount.value,
+      }),
+      "success",
+    );
+  } else {
+    const meta = reasonMeta("unstage", result.reason);
+    const key = reasonKey("unstage", result.reason);
     const message = meta.withReason
       ? tm(key, { reason: result.reason })
       : tm(key);
@@ -1027,9 +1117,15 @@ watch(
 );
 // Spec §10 风险 #12:在 confirmStageAllOpen 打开时切 worktree,
 // 先关 dialog(避免用户在切 worktree 后看到旧 worktree 的计数)。
+// Same risk applies to confirmUnstageAllOpen — both dialogs snapshot
+// the previous worktree's staged/unstaged count, so a switch mid-
+// dialog would display a stale number after re-open.
 watch(selectedWorktree, () => {
   if (confirmStageAllOpen.value) {
     confirmStageAllOpen.value = false;
+  }
+  if (confirmUnstageAllOpen.value) {
+    confirmUnstageAllOpen.value = false;
   }
 });
 
@@ -1425,11 +1521,14 @@ const currentRoot = computed<string | null>(() => {
            移动端 spec §10 风险 #10:仍可见,按钮缩窄。 -->
       <GitCommitBar
         v-if="viewMode === 'diff' && isProjectLoaded"
-        :staged-count="stagedFiles.size"
+        :staged-count="stagedCount"
         :unstaged-count="unstagedCount"
         :is-staging-all="gitStage.isStagingAll.value"
+        :is-unstaging-all="gitUnstage.isUnstagingAll.value"
         :is-committing="gitCommit.isCommitting.value"
+        :selected-scope="selectedScope"
         @stage-all="onClickStageAll"
+        @unstage-all="onClickUnstageAll"
         @commit="onClickCommit"
       />
 
@@ -1500,6 +1599,54 @@ const currentRoot = computed<string | null>(() => {
               {{
                 tm(
                   "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmAction",
+                )
+              }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Symmetric dialog for the staged scope's "取消全部暂存"
+           bulk action. Mirrors confirmStageAllOpen in structure so
+           the two flows feel identical from the user's POV — same
+           persistent modal, same title/message/cancel/action layout,
+           just routed through the unstage endpoint and tinted
+           `warning` to signal the index-mutating direction. -->
+      <v-dialog v-model="confirmUnstageAllOpen" persistent max-width="440">
+        <v-card>
+          <v-card-title class="text-h6">
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmTitle",
+              )
+            }}
+          </v-card-title>
+          <v-card-text>
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmMessage",
+                { count: pendingUnstageAllCount },
+              )
+            }}
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" @click="onCancelUnstageAll">
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmCancel",
+                )
+              }}
+            </v-btn>
+            <v-btn
+              variant="flat"
+              color="warning"
+              :loading="gitUnstage.isUnstagingAll.value"
+              @click="onConfirmUnstageAll"
+            >
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmAction",
                 )
               }}
             </v-btn>
