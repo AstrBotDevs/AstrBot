@@ -404,6 +404,106 @@
             "git_error": "Git 执行失败（{stderr}）"
           }
         }
+      },
+      "gitWorkflow": {
+        "stage": {
+          "buttonAria": "暂存 {path}",
+          "unstageButtonAria": "取消暂存 {path}",
+          "success": "已暂存 {path}",
+          "successAll": "已暂存全部 {count} 个文件",
+          "stageAll": {
+            "button": "全部暂存",
+            "buttonAria": "暂存所有未暂存文件",
+            "confirmTitle": "全部暂存？",
+            "confirmMessage": "当前有 {count} 个文件尚未暂存。\n\n此操作可随时通过\"取消暂存\"撤销。",
+            "confirmAction": "全部暂存",
+            "confirmCancel": "取消"
+          }
+        },
+        "unstage": {
+          "buttonAria": "取消暂存 {path}",
+          "success": "已取消暂存 {path}"
+        },
+        "commit": {
+          "bar": {
+            "stagedCount": "已暂存 {count} 个文件",
+            "stagedCountZero": "暂存文件后可提交",
+            "stageAll": "全部暂存",
+            "stageAllAria": "暂存所有未暂存文件",
+            "commit": "提交",
+            "commitDisabledHint": "暂存文件后才能提交"
+          },
+          "dialog": {
+            "title": "提交",
+            "messageLabel": "Commit message",
+            "messagePlaceholder": "feat: 简要描述本次改动...",
+            "charCounter": "{count} / 8192",
+            "stagedFilesTitle": "已暂存 {count} 个文件：",
+            "stagedFilesEmpty": "（无）",
+            "stderrTitle": "⚠ 错误输出",
+            "cancel": "取消",
+            "confirm": "提交",
+            "submitShortcutHint": "Ctrl+Enter 提交"
+          },
+          "success": "已提交 {sha}",
+          "failureHint": "提交失败，请修改 message 或修复错误后重试"
+        },
+        "history": {
+          "tab": "历史",
+          "tabAria": "切换到历史视图",
+          "filter": {
+            "ref": "Ref",
+            "refPlaceholder": "HEAD / 分支名 / SHA",
+            "author": "作者",
+            "authorPlaceholder": "作者名或邮箱",
+            "path": "路径",
+            "pathPlaceholder": "仓库相对路径",
+            "since": "起始时间",
+            "sincePlaceholder": "2026-06-01",
+            "n": "数量",
+            "nPlaceholder": "20",
+            "apply": "应用",
+            "reset": "重置"
+          },
+          "empty": "暂无提交记录",
+          "emptyRepository": "仓库还没有任何提交",
+          "loadMore": "加载更多",
+          "loading": "加载中…",
+          "truncated": "⚠ 输出已截断（可能不完整），请缩小过滤范围",
+          "relativeTime": {
+            "now": "刚刚",
+            "minutesAgo": "{n} 分钟前",
+            "hoursAgo": "{n} 小时前",
+            "daysAgo": "{n} 天前",
+            "exactDate": "{date}"
+          },
+          "filesStat": "{files} 个文件，+{add} −{del}",
+          "expandCommit": "展开 commit 详情",
+          "collapseCommit": "折叠 commit 详情"
+        },
+        "error": {
+          "reason": {
+            "network": "网络连接失败",
+            "unknown": "操作失败（{reason}）",
+            "feature_disabled": "功能未启用",
+            "no_project_loaded": "项目未载入",
+            "worktree_invalid": "目标 worktree 无效",
+            "directory_missing": "已加载的目录不存在",
+            "not_a_git_repo": "当前目录不是 Git 仓库",
+            "git_unavailable": "未检测到 git 可执行文件",
+            "git_error": "Git 执行失败",
+            "invalid_body": "请求格式错误",
+            "invalid_files": "files / all 参数错误（同时传、都不传、格式不对或数量超限）",
+            "invalid_all": "all 参数必须是 bool",
+            "invalid_message": "commit message 校验失败（非 str / 空 / 超过 8192 字符）",
+            "invalid_param": "query 参数解析失败",
+            "path_unsafe": "文件路径不安全（已拒绝）",
+            "nothing_to_commit": "没有可提交的暂存改动",
+            "hook_rejected": "pre-commit / commit-msg 钩子拒绝",
+            "identity_not_set": "请先 `git config --global user.email ...`",
+            "empty_repository": "仓库还没有任何提交"
+          }
+        }
       }
     },
     "planModeChip": {

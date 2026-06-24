@@ -13,9 +13,17 @@ import {
 import { useSpcodeWorktrees } from "@/composables/useSpcodeWorktrees";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useSpcodeFileRestore, type RestoreResult } from "@/composables/useSpcodeFileRestore";
+import { useSpcodeGitStage } from "@/composables/useSpcodeGitStage";
+import { useSpcodeGitUnstage } from "@/composables/useSpcodeGitUnstage";
+import { useSpcodeGitCommit } from "@/composables/useSpcodeGitCommit";
+import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
+import { classifyReason } from "@/composables/parseSpcodeGitWorkflow";
 import { useModuleI18n } from "@/i18n/composables";
 import GitDiffBodyContent from "@/components/chat/message_list_comps/GitDiffBodyContent.vue";
 import FileBrowserView from "@/components/chat/message_list_comps/FileBrowserView.vue";
+import GitCommitBar from "@/components/chat/message_list_comps/GitCommitBar.vue";
+import GitCommitDialog from "@/components/chat/message_list_comps/GitCommitDialog.vue";
+import GitLogView from "@/components/chat/message_list_comps/GitLogView.vue";
 const { tm } = useModuleI18n("features/chat");
 
 // ── localStorage persistence (spec 2026-06-20 §5.1 + §6) ────────────
@@ -42,9 +50,11 @@ function safeSetItem(key: string, value: string): void {
   try { localStorage.setItem(key, value); } catch { /* no-op */ }
 }
 
-function loadViewMode(): "files" | "diff" {
+function loadViewMode(): "files" | "diff" | "history" {
   const v = safeGetItem(STORAGE_KEYS.viewMode);
-  return v === "files" || v === "diff" ? v : "files";
+  // Spec §2 决策 #10:History 是第 3 个 viewMode,持久化时同样支持。
+  if (v === "files" || v === "diff" || v === "history") return v;
+  return "files";
 }
 function loadFileBrowserCurrentPath(): string {
   return safeGetItem(STORAGE_KEYS.fileBrowserCurrentPath) ?? "";
@@ -128,10 +138,11 @@ const SCOPE_OPTIONS: ReadonlyArray<ScopeOption> = [
 const selectedWorktree = ref<string | null>(null);
 
 // ── View-mode tab (spec 2026-06-20 §5.1 + §5.2) ─────────────────────
-// "files" shows <FileBrowserView>; "diff" shows <GitDiffBodyContent>.
+// "files" shows <FileBrowserView>; "diff" shows <GitDiffBodyContent>;
+// "history" shows <GitLogView> (spec 2026-06-24 §2 决策 #10)。
 // Default: "files" per spec §2 decision #10 (the more general view;
 // first-time users likely want to "see what's in the project").
-const viewMode = ref<"files" | "diff">(loadViewMode());
+const viewMode = ref<"files" | "diff" | "history">(loadViewMode());
 const fileBrowserCurrentPath = ref<string>(loadFileBrowserCurrentPath());
 // fileBrowserPreviewPath is the file (if any) currently shown in the
 // right pane. It is intentionally NOT persisted: when the user reloads
@@ -248,6 +259,25 @@ const composable = useSpcodeGitDiff(selectedWorktree, selectedScope);
 const spcodeStatus = useSpcodeProjectStatus();
 const expandedSet = ref<Set<string>>(new Set());
 
+// ── Git workflow composables (spec 2026-06-24 §3.2) ──────────────
+// All 4 live at the sidebar level so they can share stagedFiles state
+// and call composable.refresh() after a write.
+const gitStage = useSpcodeGitStage();
+const gitUnstage = useSpcodeGitUnstage();
+const gitCommit = useSpcodeGitCommit();
+const gitLog = useSpcodeGitLog(selectedWorktree);
+
+// Spec §3.4 决策 #22/#23:切 worktree 保留,切 project / unload 清空。
+const stagedFiles = ref<Set<string>>(new Set<string>());
+
+// Spec §3.3.3:confirm dialog for "Stage all"。
+const confirmStageAllOpen = ref(false);
+const pendingStageAllCount = ref(0);
+
+// Spec §3.3.4:commit dialog state。
+const commitDialogOpen = ref(false);
+const commitLastError = ref<{ reason: string; stderr: string } | null>(null);
+
 // ── file-restore (spec §3.2) ───────────────────────────────────────
 // Composable instance lives at sidebar level so it can call
 // composable.refresh() and reach the snackbar / dialog state.
@@ -258,13 +288,23 @@ const restoringFile = ref<string | null>(null);
 const confirmDialogOpen = ref(false);
 const confirmTargetPath = ref<string | null>(null);
 
-// Snackbar state (success / warning / error).
+// Snackbar state (success / warning / error). Spec §5.3 / §6.8:stderr
+// 单独字段,withStderr reason 携带,模板里 <pre> 块渲染。
 interface SnackbarState {
   show: boolean;
   message: string;
   color: "success" | "warning" | "error";
+  stderr?: string;
 }
 const snackbar = ref<SnackbarState>({ show: false, message: "", color: "success" });
+
+function showSnackbar(
+  message: string,
+  color: "success" | "warning" | "error",
+  stderr?: string,
+): void {
+  snackbar.value = { show: true, message, color, stderr };
+}
 
 // Maps a restore reason code to a snackbar message + color.
 const RESTORE_REASON_I18N_KEYS: Record<string, { key: string; color: "warning" | "error" }> = {
@@ -333,13 +373,15 @@ onMounted(() => {
 // Spec: polling starts ONLY when the sidebar is open AND the user is
 // viewing the Git Diff tab. The Files ("workspace") tab never polls —
 // there's no diff data to refresh, and pulling it would be wasted
-// network/CPU. We track both inputs in a single watcher so the
-// polling lifecycle has one source of truth.
+// network/CPU. History tab has its own 10s polling on useSpcodeGitLog.
+// We track both inputs in a single watcher so the polling lifecycle
+// has one source of truth.
 watch(
   [() => props.modelValue, viewMode],
   async ([open, mode]) => {
-    const shouldPoll = open && mode === "diff";
-    if (shouldPoll) {
+    const isDiff = mode === "diff";
+    const isHistory = mode === "history";
+    if (open && isDiff) {
       isFetching.value = true;
       try {
         await composable.refresh();
@@ -353,8 +395,22 @@ watch(
       if (props.modelValue && viewMode.value === "diff") {
         composable.startPolling(10_000);
       }
+      gitLog.stopPolling();
+    } else if (open && isHistory) {
+      // History view polls gitLog instead of gitDiff.
+      isFetching.value = true;
+      try {
+        await gitLog.refresh();
+      } finally {
+        isFetching.value = false;
+      }
+      if (props.modelValue && viewMode.value === "history") {
+        gitLog.startPolling(10_000);
+      }
+      composable.stopPolling();
     } else {
       composable.stopPolling();
+      gitLog.stopPolling();
     }
   },
   { immediate: true },
@@ -475,11 +531,10 @@ async function onConfirmRestore(): Promise<void> {
     return;
   }
   if (result.ok) {
-    snackbar.value = {
-      show: true,
-      message: tm("spcodeProjectLoad.diffSidebar.restore.success", { path }),
-      color: "success",
-    };
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.restore.success", { path }),
+      "success",
+    );
     // Spec §3.2: success -> immediate refresh so the row disappears.
     await composable.refresh();
   } else {
@@ -487,8 +542,244 @@ async function onConfirmRestore(): Promise<void> {
     const message = mapping.key === "spcodeProjectLoad.diffSidebar.restore.error.reason.git_error"
       ? tm(mapping.key, { stderr: result.stderr ?? "" })
       : tm(mapping.key);
-    snackbar.value = { show: true, message, color: mapping.color };
+    showSnackbar(message, mapping.color);
   }
+}
+
+// ── Git workflow handlers (spec 2026-06-24 §3.3) ──────────────────
+// All write paths follow the same recipe:
+//   1. 调用 composable.{stage,unstage,commit}(params)
+//   2. 成功 → 用响应 `files` 覆盖 stagedFiles,refresh diff,toast success
+//   3. 失败 → toast (携带 stderr 的 reason 走 <pre> 块),不破坏本地状态
+//   4. aborted → 静默(切 worktree / 卸载项目 / 组件卸载)
+function isAborted(result: { ok: boolean; reason: string }): boolean {
+  return !result.ok && result.reason === "aborted";
+}
+
+function reasonKey(endpoint: "stage" | "unstage" | "commit", reason: string): string {
+  // classifyReason 把 reason 字符串归一化到 ReasonMeta.i18nKey(已在
+  // parseSpcodeGitWorkflow 暴露)。i18nKey 形如 "error.reason.path_unsafe"。
+  const meta = classifyReason(reason, endpoint);
+  return `spcodeProjectLoad.diffSidebar.gitWorkflow.${meta.i18nKey}`;
+}
+
+function reasonMeta(
+  endpoint: "stage" | "unstage" | "commit",
+  reason: string,
+): { color: "error" | "warning"; withStderr: boolean; withReason: boolean } {
+  const meta = classifyReason(reason, endpoint);
+  return {
+    color: meta.color,
+    withStderr: !!meta.withStderr,
+    withReason: !!meta.withReason,
+  };
+}
+
+async function onStageFile(path: string): Promise<void> {
+  if (gitStage.isStaging.value.has(path)) return;
+  const umo = spcodeStatus.status.value.umo;
+  const worktree = selectedWorktree.value;
+  const result = await gitStage.stage({ files: [path], worktree, umo });
+  if (isAborted(result)) return;
+  if (result.ok) {
+    // 乐观语义(spec §3.3.1):用响应 `files` 覆盖 stagedFiles。
+    stagedFiles.value = new Set(result.snapshot.files);
+    await composable.refresh();
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.success", { path }),
+      "success",
+    );
+  } else {
+    const meta = reasonMeta("stage", result.reason);
+    const key = reasonKey("stage", result.reason);
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+async function onUnstageFile(path: string): Promise<void> {
+  if (gitUnstage.isUnstaging.value.has(path)) return;
+  const umo = spcodeStatus.status.value.umo;
+  const worktree = selectedWorktree.value;
+  const result = await gitUnstage.unstage({ files: [path], worktree, umo });
+  if (isAborted(result)) return;
+  if (result.ok) {
+    stagedFiles.value = new Set(result.snapshot.files);
+    await composable.refresh();
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.success", { path }),
+      "success",
+    );
+  } else {
+    const meta = reasonMeta("unstage", result.reason);
+    const key = reasonKey("unstage", result.reason);
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+// Spec §6.7.1:unstagedCount 派生(分 scope)。
+const unstagedCount = computed(() => {
+  const s = composable.state.value;
+  if (s.kind !== "ok") return 0;
+  const total = s.snapshot.files.length;
+  if (selectedScope.value === "staged") return 0;
+  if (selectedScope.value === "unstaged") return total;
+  // all:total = staged + unstaged(快照的),减去当前 stagedFiles
+  return Math.max(0, total - stagedFiles.value.size);
+});
+
+function onClickStageAll(): void {
+  // 同步计算 pending count(spec §3.3.3 + P1-3 修复)。
+  pendingStageAllCount.value = unstagedCount.value;
+  confirmStageAllOpen.value = true;
+}
+
+function onCancelStageAll(): void {
+  confirmStageAllOpen.value = false;
+  // pendingStageAllCount 不重置(spec §3.3.3:无副作用)
+}
+
+async function onConfirmStageAll(): Promise<void> {
+  confirmStageAllOpen.value = false;
+  const umo = spcodeStatus.status.value.umo;
+  const worktree = selectedWorktree.value;
+  const result = await gitStage.stageAll({ worktree, umo });
+  if (isAborted(result)) return;
+  if (result.ok) {
+    stagedFiles.value = new Set(result.snapshot.files);
+    await composable.refresh();
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.successAll", {
+        count: result.snapshot.stagedCount,
+      }),
+      "success",
+    );
+  } else {
+    const meta = reasonMeta("stage", result.reason);
+    const key = reasonKey("stage", result.reason);
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+function onClickCommit(): void {
+  commitLastError.value = null;
+  commitDialogOpen.value = true;
+}
+
+function onCancelCommit(): void {
+  // commit 在飞行时不允许关闭(防 race)
+  if (gitCommit.isCommitting.value) return;
+  commitDialogOpen.value = false;
+  commitLastError.value = null;
+}
+
+async function onConfirmCommit(payload: { message: string }): Promise<void> {
+  const umo = spcodeStatus.status.value.umo;
+  const worktree = selectedWorktree.value;
+  // 进入提交前清空 lastError(spec §3.3.4)
+  commitLastError.value = null;
+  const result = await gitCommit.commit({
+    message: payload.message,
+    worktree,
+    umo,
+  });
+  if (isAborted(result)) {
+    // abort 路径下,onBeforeUnmount 也会关 dialog
+    commitDialogOpen.value = false;
+    return;
+  }
+  if (result.ok) {
+    // 成功:覆盖 stagedFiles(后端响应),refresh diff,可选 refresh log
+    stagedFiles.value = new Set(result.snapshot.files);
+    commitDialogOpen.value = false;
+    commitLastError.value = null;
+    await composable.refresh();
+    if (viewMode.value === "history") {
+      await gitLog.refresh();
+    }
+    const shortSha = (result.snapshot.sha || "").slice(0, 7) || "?";
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.success", { sha: shortSha }),
+      "success",
+    );
+  } else {
+    // 失败:保持 dialog 打开,显示 stderr 块(spec §3.3.4 DIALOG_OPEN_KEEP_ERROR)
+    const meta = reasonMeta("commit", result.reason);
+    const key = reasonKey("commit", result.reason);
+    commitLastError.value = { reason: result.reason, stderr: result.stderr ?? "" };
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
+  }
+}
+
+// Spec §3.4 决策 #24:切 worktree / 切 umo 时清空 ETag。
+// 监听 selectedWorktree 和 umo,变更时调用 gitLog.invalidateEtag()。
+watch(
+  selectedWorktree,
+  () => gitLog.invalidateEtag(),
+);
+watch(
+  () => spcodeStatus.status.value.umo,
+  (newUmo, oldUmo) => {
+    if (newUmo !== oldUmo) {
+      gitLog.invalidateEtag();
+    }
+  },
+);
+
+// Spec §3.4 决策 #22:切 worktree 时保留 stagedFiles(本 spec 不重置)。
+// 切 project (umo 变更) / 卸载项目 时清空。
+watch(
+  () => spcodeStatus.status.value.loaded,
+  (loaded) => {
+    if (!loaded) {
+      stagedFiles.value = new Set<string>();
+    }
+  },
+);
+watch(
+  () => spcodeStatus.status.value.directory,
+  () => {
+    // 目录变了 → 视作切了项目(decision #23)。
+    stagedFiles.value = new Set<string>();
+  },
+);
+// Spec §10 风险 #12:在 confirmStageAllOpen 打开时切 worktree,
+// 先关 dialog(避免用户在切 worktree 后看到旧 worktree 的计数)。
+watch(selectedWorktree, () => {
+  if (confirmStageAllOpen.value) {
+    confirmStageAllOpen.value = false;
+  }
+});
+
+// ── History view wiring (spec 2026-06-24 §3.5) ───────────────────
+const logHasMore = computed(() => {
+  const s = gitLog.state.value;
+  if (s.kind === "ok") return s.snapshot.hasMore;
+  if (s.kind === "error" && s.previousSnapshot) return s.previousSnapshot.hasMore;
+  return false;
+});
+const logIsLoading = computed(() => gitLog.state.value.kind === "loading");
+function onLogApply(filter: LogFilter): void {
+  // 用 filter 调用 refresh(spec §6.5.1:filter 变化时 key 自动变化,旧 ETag 不复用)
+  void gitLog.refresh(filter);
+}
+function onLogLoadMore(): void {
+  void gitLog.loadMore();
 }
 
 onBeforeUnmount(() => {
@@ -496,6 +787,10 @@ onBeforeUnmount(() => {
   composable.dispose();
   fileRestore.dispose();
   worktreesComposable.dispose();
+  gitStage.dispose();
+  gitUnstage.dispose();
+  gitCommit.dispose();
+  gitLog.dispose();
   if (persistCurrentPathTimer) {
     clearTimeout(persistCurrentPathTimer);
     persistCurrentPathTimer = null;
@@ -693,6 +988,21 @@ const currentRoot = computed<string | null>(() => {
           <v-icon size="14">mdi-source-pull</v-icon>
           <span>{{ tm("spcodeProjectLoad.fileBrowser.viewMode.diff") }}</span>
         </button>
+        <!-- Spec 2026-06-24 §2 决策 #10:History 是第 3 个 viewMode。 -->
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="viewMode === 'history'"
+          :aria-label="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.history.tabAria')"
+          :class="[
+            'git-diff-sidebar-view-tab',
+            { 'is-active': viewMode === 'history' },
+          ]"
+          @click="viewMode = 'history'"
+        >
+          <v-icon size="14">mdi-history</v-icon>
+          <span>{{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.tab") }}</span>
+        </button>
       </div>
 
       <!-- Worktree tabs (visible in BOTH views, spec 2026-06-20 §5.3) -->
@@ -794,7 +1104,7 @@ const currentRoot = computed<string | null>(() => {
         </div>
       </template>
 
-      <!-- Body: Files view OR Diff view -->
+      <!-- Body: Files / Diff / History -->
       <div class="git-diff-sidebar-body">
         <FileBrowserView
                   v-if="viewMode === 'files'"
@@ -806,16 +1116,45 @@ const currentRoot = computed<string | null>(() => {
                   @navigate="onFileBrowserNavigate"
                 />
         <GitDiffBodyContent
-                  v-else
+                  v-else-if="viewMode === 'diff'"
                   :state="composable.state.value"
                   :expanded="expandedSet"
                   :is-dark="!!isDark"
                   :on-restore="onFileRestore"
+                  :selected-scope="selectedScope"
+                  :on-stage="onStageFile"
+                  :on-unstage="onUnstageFile"
+                  :is-staging="gitStage.isStaging"
+                  :is-unstaging="gitUnstage.isUnstaging"
                   @toggle="toggleFile"
                   @retry="onManualRefresh"
                   @restore="onFileRestore"
+                  @stage="onStageFile"
+                  @unstage="onUnstageFile"
+                />
+        <!-- Spec 2026-06-24 §6.5:History view 渲染 GitLogView。 -->
+        <GitLogView
+                  v-else-if="viewMode === 'history'"
+                  :state="gitLog.state.value"
+                  :has-more="logHasMore"
+                  :is-loading="logIsLoading"
+                  @apply="onLogApply"
+                  @load-more="onLogLoadMore"
+                  @refresh="() => gitLog.refresh()"
                 />
               </div>
+
+      <!-- Spec §6.7:粘性 commit bar(diff 视图下显示)。
+           移动端 spec §10 风险 #10:仍可见,按钮缩窄。 -->
+      <GitCommitBar
+        v-if="viewMode === 'diff' && isProjectLoaded"
+        :staged-count="stagedFiles.size"
+        :unstaged-count="unstagedCount"
+        :is-staging-all="gitStage.isStagingAll.value"
+        :is-committing="gitCommit.isCommitting.value"
+        @stage-all="onClickStageAll"
+        @commit="onClickCommit"
+      />
 
               <!-- Spec §6.3: inline <v-dialog persistent> confirmation. -->
               <v-dialog
@@ -846,14 +1185,64 @@ const currentRoot = computed<string | null>(() => {
                 </v-card>
               </v-dialog>
 
-              <!-- Spec §6.4: result snackbar. -->
+              <!-- Spec §6.3: 全部暂存确认弹窗(spec 2026-06-24 §3.3.3 + Q4)。 -->
+              <v-dialog
+                v-model="confirmStageAllOpen"
+                persistent
+                max-width="440"
+              >
+                <v-card>
+                  <v-card-title class="text-h6">
+                    {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmTitle") }}
+                  </v-card-title>
+                  <v-card-text>
+                    {{
+                      tm(
+                        "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmMessage",
+                        { count: pendingStageAllCount },
+                      )
+                    }}
+                  </v-card-text>
+                  <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="onCancelStageAll">
+                      {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmCancel") }}
+                    </v-btn>
+                    <v-btn
+                      variant="flat"
+                      color="primary"
+                      :loading="gitStage.isStagingAll.value"
+                      @click="onConfirmStageAll"
+                    >
+                      {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmAction") }}
+                    </v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-dialog>
+
+              <!-- Spec §6.4: 提交弹窗。 -->
+              <GitCommitDialog
+                v-model="commitDialogOpen"
+                :staged-files="Array.from(stagedFiles)"
+                :is-committing="gitCommit.isCommitting.value"
+                :last-error="commitLastError ?? undefined"
+                @confirm="onConfirmCommit"
+                @cancel="onCancelCommit"
+              />
+
+              <!-- Spec §6.4: result snackbar (扩展:支持 stderr <pre> 块)。 -->
               <v-snackbar
                 v-model="snackbar.show"
                 :color="snackbar.color"
                 :timeout="snackbar.color === 'success' ? 4000 : 6000"
                 location="bottom right"
+                multi-line
               >
-                {{ snackbar.message }}
+                <div v-if="snackbar.stderr" class="spcode-snackbar-stderr">
+                  <div class="spcode-snackbar-message">{{ snackbar.message }}</div>
+                  <pre class="spcode-snackbar-pre">{{ snackbar.stderr }}</pre>
+                </div>
+                <div v-else>{{ snackbar.message }}</div>
               </v-snackbar>
             </aside>
   </transition>
@@ -1175,6 +1564,30 @@ const currentRoot = computed<string | null>(() => {
   min-height: 0;
   overflow-y: auto;
   padding: 0 14px 12px;
+}
+
+/* ── Snackbar stderr block (spec §6.8) ─────────────────────────── */
+.spcode-snackbar-stderr {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.spcode-snackbar-message {
+  font-weight: 500;
+  margin-bottom: 0;
+}
+.spcode-snackbar-pre {
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin: 0;
 }
 
 /* ── Mobile ───────────────────────────────────────────────────── */

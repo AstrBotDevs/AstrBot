@@ -2,8 +2,9 @@
 <!-- Spec: docs/superpowers/specs/2026-06-17-chatui-git-diff-sidebar-design.md §4.2.3
      Updated 2026-06-22 — thread 'restore' event for file-restore button -->
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { GitDiffFetchState } from '@/composables/useSpcodeGitDiff'
+import { computed, type Ref } from 'vue'
+import type { GitDiffFetchState, GitDiffScope } from '@/composables/useSpcodeGitDiff'
+import { useSpcodeProjectStatus } from '@/composables/useSpcodeProjectStatus'
 import { useModuleI18n } from '@/i18n/composables'
 import GitDiffFileItem from '@/components/chat/message_list_comps/GitDiffFileItem.vue'
 
@@ -14,12 +15,50 @@ const props = defineProps<{
   expanded: Set<string>
   isDark: boolean
   onRestore?: (path: string) => void
+  // Spec §6.2.3 + §6.2.4: parent (GitDiffSidebar) supplies the
+  // scope + reactive Set<string> from useSpcodeGitStage / Unstage.
+  // We pre-compute showStage / showUnstage booleans so the file item
+  // stays scope-agnostic.
+  selectedScope?: GitDiffScope
+  onStage?: (path: string) => void
+  onUnstage?: (path: string) => void
+  isStaging?: Ref<Set<string>>
+  isUnstaging?: Ref<Set<string>>
 }>()
 const emit = defineEmits<{
   (e: 'toggle', path: string): void
   (e: 'retry'): void
   (e: 'restore', path: string): void
+  (e: 'stage', path: string): void
+  (e: 'unstage', path: string): void
 }>()
+
+const spcodeStatus = useSpcodeProjectStatus()
+// Spec §6.2.3: scope 派生按钮显隐(项目必须已加载 + scope=unstaged 显示 ↑)
+const showStageButton = computed(() => {
+  if (!props.onStage) return false
+  if (!spcodeStatus.status.value.loaded) return false
+  if (!spcodeStatus.status.value.umo) return false
+  return props.selectedScope === 'unstaged'
+})
+const showUnstageButton = computed(() => {
+  if (!props.onUnstage) return false
+  if (!spcodeStatus.status.value.loaded) return false
+  if (!spcodeStatus.status.value.umo) return false
+  return props.selectedScope === 'staged'
+})
+
+// Spec §3.2 (P1-4): 行级 in-flight 状态从父级 Set 派生。Set 本身在
+// Vue 3 里非响应式,所以 useSpcodeGitStage / useSpcodeGitUnstage 在 add
+// / delete 时**重新赋值** `isStaging.value = new Set(...)`,而不是 in-
+// place `.add()`。这里读 `props.isStaging?.value` 就能让模板的函数
+// 调用注册依赖,行级 spinner 会在 in-flight 窗口出现。
+function isStagingForPath(path: string): boolean {
+  return props.isStaging?.value?.has(path) ?? false
+}
+function isUnstagingForPath(path: string): boolean {
+  return props.isUnstaging?.value?.has(path) ?? false
+}
 
 const REASON_I18N_KEYS: Record<string, string> = {
   feature_disabled: 'spcodeProjectLoad.diffSidebar.error.reason.feature_disabled',
@@ -84,8 +123,16 @@ const files = computed(() => {
       :expanded="expanded.has(f.path)"
       :is-dark="isDark"
       :on-restore="onRestore"
+      :show-stage="showStageButton"
+      :show-unstage="showUnstageButton"
+      :on-stage="onStage"
+      :on-unstage="onUnstage"
+      :is-staging="isStagingForPath(f.path)"
+      :is-unstaging="isUnstagingForPath(f.path)"
       @toggle="emit('toggle', f.path)"
       @restore="emit('restore', $event)"
+      @stage="emit('stage', $event)"
+      @unstage="emit('unstage', $event)"
     />
     <div v-if="state.kind === 'error' && errorInfo" class="git-diff-banner-error">
       <span>{{ localizedReason(errorInfo.reason) }}</span>

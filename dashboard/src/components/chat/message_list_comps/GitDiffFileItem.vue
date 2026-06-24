@@ -20,10 +20,22 @@ const props = defineProps<{
   onRestore?: (path: string) => void
   /** True while a restore request is in flight for THIS row. */
   isRestoring?: boolean
+  // Spec §6.2.4 (P1-1): child is scope-agnostic. Parent pre-computes
+  // showStage / showUnstage from selectedScope + project status and
+  // passes booleans down. Default false keeps the file item
+  // backward-compatible with callers that don't yet supply these.
+  showStage?: boolean
+  showUnstage?: boolean
+  onStage?: (path: string) => void
+  onUnstage?: (path: string) => void
+  isStaging?: boolean
+  isUnstaging?: boolean
 }>()
 const emit = defineEmits<{
   (e: 'toggle'): void
   (e: 'restore', path: string): void
+  (e: 'stage', path: string): void
+  (e: 'unstage', path: string): void
 }>()
 
 const ICON_MAP: Record<FileStatus, { icon: string; color: string }> = {
@@ -62,6 +74,18 @@ function onRestoreClick(e: MouseEvent): void {
   if (props.isRestoring) return
   emit('restore', props.file.path)
 }
+
+function onStageClick(e: MouseEvent): void {
+  e.stopPropagation()
+  if (props.isStaging) return
+  emit('stage', props.file.path)
+}
+
+function onUnstageClick(e: MouseEvent): void {
+  e.stopPropagation()
+  if (props.isUnstaging) return
+  emit('unstage', props.file.path)
+}
 </script>
 
 <template>
@@ -80,6 +104,48 @@ function onRestoreClick(e: MouseEvent): void {
         <span class="git-diff-add">+{{ file.additions }}</span>
         <span class="git-diff-del">−{{ file.deletions }}</span>
       </span>
+      <!-- Spec §6.2: 行内暂存 / 取消暂存按钮。
+           子组件不感知 scope(由父级 GitDiffBodyContent 派生 showStage / showUnstage),
+           在 scope='all' 时两个 prop 均为 false,按钮不渲染(决策 #6)。
+           hover 行时才显全 opacity,与 restore 按钮一致(风险 #6 缓解)。 -->
+      <button
+        v-if="showUnstage"
+        type="button"
+        class="git-diff-file-stage is-unstage"
+        :class="{ 'is-loading': isUnstaging }"
+        :disabled="isUnstaging"
+        :aria-label="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.buttonAria', { path: file.path })"
+        :aria-busy="isUnstaging ? 'true' : 'false'"
+        :title="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.buttonAria', { path: file.path })"
+        @click="onUnstageClick"
+      >
+        <v-progress-circular
+          v-if="isUnstaging"
+          indeterminate
+          :size="14"
+          :width="2"
+        />
+        <v-icon v-else :size="16">mdi-arrow-down-bold-circle-outline</v-icon>
+      </button>
+      <button
+        v-if="showStage"
+        type="button"
+        class="git-diff-file-stage is-stage"
+        :class="{ 'is-loading': isStaging }"
+        :disabled="isStaging"
+        :aria-label="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.stage.buttonAria', { path: file.path })"
+        :aria-busy="isStaging ? 'true' : 'false'"
+        :title="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.stage.buttonAria', { path: file.path })"
+        @click="onStageClick"
+      >
+        <v-progress-circular
+          v-if="isStaging"
+          indeterminate
+          :size="14"
+          :width="2"
+        />
+        <v-icon v-else :size="16">mdi-arrow-up-bold-circle-outline</v-icon>
+      </button>
       <button
         v-if="showRestoreButton"
         type="button"
@@ -178,6 +244,44 @@ function onRestoreClick(e: MouseEvent): void {
 }
 .git-diff-file-restore:disabled { cursor: not-allowed; opacity: 0.3; }
 .git-diff-file-restore.is-loading { opacity: 1; }
+
+/* Spec §6.2: 行内 stage / unstage 按钮;与 restore 共享 opacity 0.5/1 模式。 */
+.git-diff-file-stage {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  flex-shrink: 0;
+}
+.git-diff-file-row:hover .git-diff-file-stage { opacity: 1; }
+.git-diff-file-stage:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+  opacity: 1;
+}
+.git-diff-file-stage:disabled { cursor: not-allowed; opacity: 0.3; }
+.git-diff-file-stage.is-loading { opacity: 1; }
+.git-diff-file-stage.is-stage {
+  color: rgb(var(--v-theme-secondary));
+}
+.git-diff-file-stage.is-stage:hover { background: rgba(var(--v-theme-secondary), 0.1); }
+.git-diff-file-stage.is-unstage {
+  color: rgb(255, 152, 0);
+}
+.git-diff-file-stage.is-unstage:hover { background: rgba(255, 152, 0, 0.1); }
+
+@media (max-width: 760px) {
+  /* Spec §10 风险 #10: 移动端按钮缩窄 */
+  .git-diff-file-stage,
+  .git-diff-file-restore {
+    width: 22px; height: 22px;
+  }
+}
 .git-diff-file-chevron { transition: transform 0.15s; }
 .git-diff-file-chevron.expanded { transform: rotate(180deg); }
 .git-diff-file-body { padding: 0 12px 12px; }

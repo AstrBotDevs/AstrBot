@@ -394,6 +394,106 @@
             "git_error": "Ошибка выполнения Git ({stderr})"
           }
         }
+      },
+      "gitWorkflow": {
+        "stage": {
+          "buttonAria": "Подготовить {path}",
+          "unstageButtonAria": "Отменить подготовку {path}",
+          "success": "Подготовлено: {path}",
+          "successAll": "Подготовлено файлов: {count}",
+          "stageAll": {
+            "button": "Подготовить всё",
+            "buttonAria": "Подготовить все неподготовленные файлы",
+            "confirmTitle": "Подготовить всё?",
+            "confirmMessage": "Сейчас {count} неподготовленных файлов.\n\nЭто можно отменить через \"Отменить подготовку\".",
+            "confirmAction": "Подготовить всё",
+            "confirmCancel": "Отмена"
+          }
+        },
+        "unstage": {
+          "buttonAria": "Отменить подготовку {path}",
+          "success": "Подготовка отменена: {path}"
+        },
+        "commit": {
+          "bar": {
+            "stagedCount": "Подготовлено файлов: {count}",
+            "stagedCountZero": "Подготовьте файлы для коммита",
+            "stageAll": "Подготовить всё",
+            "stageAllAria": "Подготовить все неподготовленные файлы",
+            "commit": "Закоммитить",
+            "commitDisabledHint": "Сначала подготовьте файлы"
+          },
+          "dialog": {
+            "title": "Коммит",
+            "messageLabel": "Сообщение коммита",
+            "messagePlaceholder": "feat: краткое описание изменений...",
+            "charCounter": "{count} / 8192",
+            "stagedFilesTitle": "Подготовлено файлов: {count}:",
+            "stagedFilesEmpty": "(пусто)",
+            "stderrTitle": "⚠ Вывод ошибки",
+            "cancel": "Отмена",
+            "confirm": "Закоммитить",
+            "submitShortcutHint": "Ctrl+Enter — закоммитить"
+          },
+          "success": "Закоммичено: {sha}",
+          "failureHint": "Коммит не удался. Исправьте сообщение или ошибки и повторите."
+        },
+        "history": {
+          "tab": "История",
+          "tabAria": "Переключиться на историю",
+          "filter": {
+            "ref": "Ref",
+            "refPlaceholder": "HEAD / ветка / SHA",
+            "author": "Автор",
+            "authorPlaceholder": "имя или email",
+            "path": "Путь",
+            "pathPlaceholder": "путь относительно репозитория",
+            "since": "С даты",
+            "sincePlaceholder": "2026-06-01",
+            "n": "Кол-во",
+            "nPlaceholder": "20",
+            "apply": "Применить",
+            "reset": "Сброс"
+          },
+          "empty": "Нет коммитов",
+          "emptyRepository": "В репозитории ещё нет коммитов",
+          "loadMore": "Загрузить ещё",
+          "loading": "Загрузка…",
+          "truncated": "⚠ Вывод обрезан (может быть неполным). Сузьте фильтр.",
+          "relativeTime": {
+            "now": "только что",
+            "minutesAgo": "{n} мин назад",
+            "hoursAgo": "{n} ч назад",
+            "daysAgo": "{n} дн назад",
+            "exactDate": "{date}"
+          },
+          "filesStat": "{files} файлов, +{add} −{del}",
+          "expandCommit": "Развернуть детали коммита",
+          "collapseCommit": "Свернуть детали коммита"
+        },
+        "error": {
+          "reason": {
+            "network": "Ошибка сети",
+            "unknown": "Операция не удалась ({reason})",
+            "feature_disabled": "Функция отключена",
+            "no_project_loaded": "Проект не загружен",
+            "worktree_invalid": "Целевое worktree недопустимо",
+            "directory_missing": "Загруженный каталог больше не существует",
+            "not_a_git_repo": "Текущий каталог не является репозиторием Git",
+            "git_unavailable": "Исполняемый файл git не найден",
+            "git_error": "Ошибка выполнения Git",
+            "invalid_body": "Некорректный запрос",
+            "invalid_files": "параметр files / all недопустим (взаимоисключающие, оба отсутствуют, неверный формат или превышен лимит)",
+            "invalid_all": "all должен быть boolean",
+            "invalid_message": "сообщение коммита недопустимо (не строка / пусто / более 8192 символов)",
+            "invalid_param": "ошибка разбора параметра query",
+            "path_unsafe": "Путь к файлу небезопасен (отклонено)",
+            "nothing_to_commit": "Нет подготовленных изменений",
+            "hook_rejected": "pre-commit / commit-msg хук отклонил",
+            "identity_not_set": "Сначала выполните `git config --global user.email ...`",
+            "empty_repository": "В репозитории ещё нет коммитов"
+          }
+        }
       }
     },
     "planModeChip": {

@@ -404,6 +404,106 @@
             "git_error": "Git execution failed ({stderr})"
           }
         }
+      },
+      "gitWorkflow": {
+        "stage": {
+          "buttonAria": "Stage {path}",
+          "unstageButtonAria": "Unstage {path}",
+          "success": "Staged {path}",
+          "successAll": "Staged all {count} files",
+          "stageAll": {
+            "button": "Stage all",
+            "buttonAria": "Stage all unstaged files",
+            "confirmTitle": "Stage all?",
+            "confirmMessage": "{count} files are currently unstaged.\n\nThis can be undone via \"Unstage\".",
+            "confirmAction": "Stage all",
+            "confirmCancel": "Cancel"
+          }
+        },
+        "unstage": {
+          "buttonAria": "Unstage {path}",
+          "success": "Unstaged {path}"
+        },
+        "commit": {
+          "bar": {
+            "stagedCount": "{count} files staged",
+            "stagedCountZero": "Stage files to commit",
+            "stageAll": "Stage all",
+            "stageAllAria": "Stage all unstaged files",
+            "commit": "Commit",
+            "commitDisabledHint": "Stage files before committing"
+          },
+          "dialog": {
+            "title": "Commit",
+            "messageLabel": "Commit message",
+            "messagePlaceholder": "feat: short description of changes...",
+            "charCounter": "{count} / 8192",
+            "stagedFilesTitle": "{count} files staged:",
+            "stagedFilesEmpty": "(empty)",
+            "stderrTitle": "⚠ Error output",
+            "cancel": "Cancel",
+            "confirm": "Commit",
+            "submitShortcutHint": "Ctrl+Enter to commit"
+          },
+          "success": "Committed {sha}",
+          "failureHint": "Commit failed. Please fix the message or errors and retry."
+        },
+        "history": {
+          "tab": "History",
+          "tabAria": "Switch to history view",
+          "filter": {
+            "ref": "Ref",
+            "refPlaceholder": "HEAD / branch / SHA",
+            "author": "Author",
+            "authorPlaceholder": "name or email",
+            "path": "Path",
+            "pathPlaceholder": "repo-relative path",
+            "since": "Since",
+            "sincePlaceholder": "2026-06-01",
+            "n": "Count",
+            "nPlaceholder": "20",
+            "apply": "Apply",
+            "reset": "Reset"
+          },
+          "empty": "No commits",
+          "emptyRepository": "Repository has no commits yet",
+          "loadMore": "Load more",
+          "loading": "Loading…",
+          "truncated": "⚠ Output truncated (may be incomplete). Narrow your filter.",
+          "relativeTime": {
+            "now": "just now",
+            "minutesAgo": "{n} min ago",
+            "hoursAgo": "{n}h ago",
+            "daysAgo": "{n}d ago",
+            "exactDate": "{date}"
+          },
+          "filesStat": "{files} files, +{add} −{del}",
+          "expandCommit": "Expand commit details",
+          "collapseCommit": "Collapse commit details"
+        },
+        "error": {
+          "reason": {
+            "network": "Network error",
+            "unknown": "Operation failed ({reason})",
+            "feature_disabled": "Feature disabled",
+            "no_project_loaded": "No project loaded",
+            "worktree_invalid": "Target worktree invalid",
+            "directory_missing": "Loaded directory no longer exists",
+            "not_a_git_repo": "Current directory is not a Git repository",
+            "git_unavailable": "Git executable not found",
+            "git_error": "Git execution failed",
+            "invalid_body": "Malformed request",
+            "invalid_files": "files / all parameter invalid (mutually exclusive, both missing, wrong format, or over limit)",
+            "invalid_all": "all must be a boolean",
+            "invalid_message": "commit message invalid (non-string / empty / over 8192 chars)",
+            "invalid_param": "query parameter parse error",
+            "path_unsafe": "File path unsafe (rejected)",
+            "nothing_to_commit": "No staged changes to commit",
+            "hook_rejected": "pre-commit / commit-msg hook rejected",
+            "identity_not_set": "Run `git config --global user.email ...` first",
+            "empty_repository": "Repository has no commits yet"
+          }
+        }
       }
     },
     "planModeChip": {
