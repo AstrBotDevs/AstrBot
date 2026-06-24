@@ -601,20 +601,18 @@ class ProviderManager:
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。可能是因为有未安装的依赖。",
                 exc_info=True,
             )
-            return
+            raise
         except Exception as e:
             logger.critical(
                 f"加载 {provider_config['type']}({provider_config['id']}) 提供商适配器失败：{e}。未知原因",
                 exc_info=True,
             )
-            return
+            raise
 
         if provider_config["type"] not in provider_cls_map:
-            logger.error(
-                f"Provider adapter not found: {provider_config['type']}({provider_config['id']}). Skipped.",
-                exc_info=True,
-            )
-            return
+            msg = f"Provider adapter not found: {provider_config['type']}({provider_config['id']})."
+            logger.error(msg, exc_info=True)
+            raise ValueError(msg)
 
         provider_metadata = provider_cls_map[provider_config["type"]]
         try:

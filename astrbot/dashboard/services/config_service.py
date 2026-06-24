@@ -1648,7 +1648,20 @@ class ProviderConfigService:
     async def test_provider(self, provider_id: str) -> dict:
         target = self.provider_manager.inst_map.get(provider_id)
         if not target:
-            raise ValueError(f"Provider {provider_id} not found")
+            # 检查配置中是否存在，帮助用户区分"从未添加"和"加载失败"
+            config_exists = any(
+                p.get("id") == provider_id
+                for p in self.config.get("provider", [])
+            )
+            if config_exists:
+                raise ValueError(
+                    f"Provider {provider_id} 已在配置中但加载失败，"
+                    "请检查 AstrBot 启动日志中的错误信息。"
+                )
+            raise ValueError(
+                f"Provider {provider_id} 未在配置中找到，"
+                "请先在 Provider 页面添加该服务提供商。"
+            )
         meta = target.meta()
         provider_type = getattr(meta, "provider_type", None)
         result = {
