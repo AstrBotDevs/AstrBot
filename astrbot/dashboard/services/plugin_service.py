@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import ssl
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -29,6 +30,7 @@ from astrbot.core.star.star_manager import (
     PluginVersionUnsupportedError,
 )
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
+from astrbot.core.zip_updator import RepoZipUpdator
 
 PLUGIN_UPDATE_CONCURRENCY = 3
 PLUGIN_OPERATION_FAILED_MESSAGE = "插件操作失败，请查看服务端日志。"
@@ -53,6 +55,11 @@ class RegistrySource:
     urls: list[str]
     cache_file: str
     md5_url: str | None
+
+
+# 市场插件 README 的内存缓存：(repo, ref) -> (timestamp, content)
+_MARKET_README_TTL = 600
+_market_readme_cache: dict[tuple[str, str], tuple[float, str]] = {}
 
 
 class PluginServiceError(Exception):
@@ -1097,6 +1104,68 @@ class PluginService:
         plugin_name: str | None,
     ) -> tuple[dict, str]:
         return self.get_plugin_readme(plugin_name)
+
+    async def get_market_plugin_readme(
+        self,
+        *,
+        repo: str | None,
+        ref: str | None,
+        proxy: str | None,
+    ) -> tuple[dict, str]:
+        """从 GitHub 仓库获取市场插件的 README。
+
+        使用 ``commit_sha``（或分支）锁定到用户浏览的版本，避免读取到与市场
+        缓存不一致的文档。raw URL 采用 ``github.com/{a}/{r}/raw/{ref}/{file}``
+        形式，与 gh-proxy 的 ``{proxy}/{url}`` 前缀拼接方式兼容。
+        """
+        if not repo:
+            raise PluginServiceError("repo 参数不能为空")
+        try:
+            author, repo_name, branch = RepoZipUpdator().parse_github_url(repo)
+        except ValueError as exc:
+            raise PluginServiceError(
+                f"无效的 GitHub 仓库地址: {exc}",
+                public_message="无效的 GitHub 仓库地址",
+            ) from exc
+
+        resolved_ref = (ref or branch or "master").strip()
+        cache_key = (f"{author}/{repo_name}", resolved_ref)
+        now = time.time()
+        cached = _market_readme_cache.get(cache_key)
+        if cached and now - cached[0] < _MARKET_README_TTL:
+            return {"content": cached[1]}, "成功获取README内容（缓存）"
+
+        proxy_prefix = (proxy or "").rstrip("/")
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        last_status = 0
+        async with aiohttp.ClientSession(
+            trust_env=True,
+            connector=aiohttp.TCPConnector(ssl=ssl_context),
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as session:
+            for fname in ("README.md", "readme.md", "Readme.md", "README.MD"):
+                raw_url = (
+                    f"https://github.com/{author}/{repo_name}"
+                    f"/raw/{resolved_ref}/{fname}"
+                )
+                fetch_url = f"{proxy_prefix}/{raw_url}" if proxy_prefix else raw_url
+                try:
+                    async with session.get(fetch_url) as resp:
+                        last_status = resp.status
+                        if resp.status != 200:
+                            continue
+                        text = await resp.text()
+                        if text and text.strip():
+                            _market_readme_cache[cache_key] = (now, text)
+                            return {"content": text}, "成功获取README内容"
+                except Exception as exc:
+                    logger.warning(f"获取 {fetch_url} 失败: {exc}")
+                    continue
+
+        raise PluginServiceError(
+            f"未找到 README 文件（最后状态码: {last_status}）",
+            public_message="未找到该插件的 README 文件",
+        )
 
     def get_plugin_changelog(self, plugin_name: str | None) -> tuple[dict, str]:
         logger.debug(f"正在获取插件 {plugin_name} 的更新日志")

@@ -86,6 +86,9 @@ export type ChatProjectRequest = {
 };
 
 export type ChatRequest = {
+    /**
+     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     */
     username?: string;
     session_id?: string;
     /**
@@ -1678,6 +1681,27 @@ export type GetPluginReadmeByIdData = {
 export type GetPluginReadmeByIdResponse = (string);
 
 export type GetPluginReadmeByIdError = unknown;
+
+export type GetPluginMarketReadmeData = {
+    query: {
+        /**
+         * Optional GitHub proxy URL prefix (e.g. https://gh-proxy.com).
+         */
+        proxy?: string;
+        /**
+         * Git ref (commit_sha preferred; falls back to master).
+         */
+        ref?: string;
+        /**
+         * Full GitHub repo URL (https://github.com/{author}/{repo}).
+         */
+        repo: string;
+    };
+};
+
+export type GetPluginMarketReadmeResponse = (string);
+
+export type GetPluginMarketReadmeError = unknown;
 
 export type GetPluginChangelogByIdData = {
     query: {

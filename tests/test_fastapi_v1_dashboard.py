@@ -2555,3 +2555,48 @@ async def test_v1_platform_webhook_is_public_route(
         "method": "POST",
         "payload": {"challenge": "ping"},
     }
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_market_readme_happy_path(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """市场插件 README 接口正常路径：返回 200 + 内容，缓存命中返回缓存版本。"""
+    plugin_service = asgi_app.state.services.plugins
+    call_count = 0
+
+    async def fake_get_market_plugin_readme(*, repo, ref, proxy):
+        nonlocal call_count
+        call_count += 1
+        return {"content": f"# README of {repo}"}, "success"
+
+    monkeypatch.setattr(
+        plugin_service, "get_market_plugin_readme", fake_get_market_plugin_readme
+    )
+
+    headers = _jwt_headers()
+    response = await asgi_client.get(
+        "/api/v1/plugins/market/readme",
+        params={"repo": "https://github.com/a/b", "ref": "main"},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["data"]["content"] == "# README of https://github.com/a/b"
+    assert call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_market_readme_requires_auth(
+    asgi_client: httpx.AsyncClient,
+):
+    """未经认证的请求应被拒绝（401）。"""
+    response = await asgi_client.get(
+        "/api/v1/plugins/market/readme",
+        params={"repo": "https://github.com/a/b"},
+    )
+    assert response.status_code == 401

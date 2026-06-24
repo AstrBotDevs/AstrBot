@@ -1862,6 +1862,35 @@ paths:
         "200":
           $ref: "#/components/responses/Text"
 
+  /api/v1/plugins/market/readme:
+    get:
+      tags: [Plugins]
+      summary: Get a marketplace plugin's README from its GitHub repo
+      operationId: getPluginMarketReadme
+      x-astrbot-scope: plugin
+      parameters:
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Full GitHub repo URL (https://github.com/{author}/{repo}).
+        - name: ref
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Git ref (commit_sha preferred; falls back to master).
+        - name: proxy
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional GitHub proxy URL prefix (e.g. https://gh-proxy.com).
+      responses:
+        "200":
+          $ref: "#/components/responses/Text"
+
   /api/v1/plugins/changelog:
     get:
       tags: [Plugins]
