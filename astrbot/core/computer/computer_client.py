@@ -539,6 +539,37 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
                 logger.warning(f"Failed to remove temp skills zip: {zip_path}")
 
 
+def make_sandbox_overflow_writer(
+    context: Context,
+    unified_msg_origin: str,
+):
+    """Build a callback that writes tool-result overflow content directly into the sandbox.
+
+    The returned callable has the signature
+    ``(content: str, tool_call_id: str) -> Awaitable[str]`` and returns the
+    sandbox-side absolute path so that ``astrbot_file_read_tool`` can read the
+    overflow file inside the sandbox container.
+    """
+
+    async def _write(content: str, tool_call_id: str) -> str:
+        safe_id = (
+            "".join(
+                ch if ch.isalnum() or ch in {"-", "_", "."} else "_"
+                for ch in tool_call_id
+            ).strip("._")
+            or "tool_call"
+        )
+        sandbox_path = f"/tmp/astrbot_overflow_{safe_id}_{uuid.uuid4().hex[:8]}.txt"
+        booter = await get_booter(context, unified_msg_origin)
+        await booter.fs.write_file(sandbox_path, content)
+        logger.debug(
+            "[Computer] Overflow file written to sandbox: %s", sandbox_path
+        )
+        return sandbox_path
+
+    return _write
+
+
 async def get_booter(
     context: Context,
     session_id: str,

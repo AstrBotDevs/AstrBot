@@ -1533,6 +1533,18 @@ async def build_main_agent(
     elif config.computer_use_runtime == "local":
         _apply_local_env_tools(req, plugin_context)
 
+    overflow_file_writer = None
+    if (
+        config.computer_use_runtime == "sandbox"
+        and req.func_tool
+        and req.func_tool.get_tool("astrbot_file_read_tool")
+    ):
+        from astrbot.core.computer.computer_client import make_sandbox_overflow_writer
+
+        overflow_file_writer = make_sandbox_overflow_writer(
+            plugin_context, event.unified_msg_origin
+        )
+
     agent_runner = AgentRunner()
     astr_agent_ctx = AstrAgentContext(
         context=plugin_context,
@@ -1625,6 +1637,7 @@ async def build_main_agent(
         read_tool=(
             req.func_tool.get_tool("astrbot_file_read_tool") if req.func_tool else None
         ),
+        overflow_file_writer=overflow_file_writer,
     )
 
     if apply_reset:
