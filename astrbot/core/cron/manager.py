@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -21,6 +22,70 @@ from astrbot.core.utils.history_saver import persist_agent_history
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
+
+
+_CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
+_CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
+
+
+def _normalize_crontab_day_of_week(day_of_week: str) -> str:
+    """Normalize standard crontab weekdays for APScheduler.
+
+    APScheduler treats numeric weekdays as Monday=0, while standard crontab and
+    AstrBot's WebUI use Sunday=0/7. Numeric weekday fields are expanded to
+    weekday names so the scheduled day remains unambiguous.
+
+    Args:
+        day_of_week: The day-of-week field from a five-part crontab expression.
+
+    Returns:
+        A day-of-week field compatible with APScheduler.
+
+    Raises:
+        ValueError: If a numeric weekday value or step is outside the supported
+            crontab range.
+    """
+    normalized_parts: list[str] = []
+    for raw_part in day_of_week.split(","):
+        part = raw_part.strip().lower()
+        match = _CRONTAB_WEEKDAY_PATTERN.fullmatch(part)
+        if not match:
+            normalized_parts.append(part)
+            continue
+
+        wildcard, start_text, end_text, step_text = match.groups()
+        step = int(step_text or "1")
+        if step < 1:
+            raise ValueError("day_of_week step must be greater than 0")
+
+        if wildcard:
+            if step == 1:
+                normalized_parts.append("*")
+                continue
+            values = range(0, 7, step)
+        else:
+            start = int(start_text)
+            end = int(end_text) if end_text is not None else None
+            if start < 0 or start > 7 or (end is not None and (end < 0 or end > 7)):
+                raise ValueError("day_of_week values must be between 0 and 7")
+            if end is not None and start > end:
+                raise ValueError("day_of_week range start must not exceed end")
+            if end is None:
+                end = 7 if step_text else start
+            values = range(start, end + 1, step)
+
+        weekdays: list[int] = []
+        for value in values:
+            weekday = 0 if value == 7 else value
+            if weekday not in weekdays:
+                weekdays.append(weekday)
+
+        if len(weekdays) == 7:
+            normalized_parts.append("*")
+        else:
+            normalized_parts.extend(_CRONTAB_WEEKDAY_NAMES[value] for value in weekdays)
+
+    return ",".join(normalized_parts)
 
 
 class CronJobSchedulingError(Exception):
@@ -177,7 +242,21 @@ class CronJobManager:
                     run_at = run_at.replace(tzinfo=tzinfo)
                 trigger = DateTrigger(run_date=run_at, timezone=tzinfo)
             else:
-                trigger = CronTrigger.from_crontab(job.cron_expression, timezone=tzinfo)
+                if not job.cron_expression:
+                    raise ValueError("recurring job missing cron_expression")
+                minute, hour, day, month, day_of_week = job.cron_expression.split()
+                normalized_cron_expression = " ".join(
+                    [
+                        minute,
+                        hour,
+                        day,
+                        month,
+                        _normalize_crontab_day_of_week(day_of_week),
+                    ]
+                )
+                trigger = CronTrigger.from_crontab(
+                    normalized_cron_expression, timezone=tzinfo
+                )
             self.scheduler.add_job(
                 self._run_job,
                 id=job.job_id,

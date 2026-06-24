@@ -2,10 +2,15 @@
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from astrbot.core.cron.manager import CronJobManager, CronJobSchedulingError
+from astrbot.core.cron.manager import (
+    CronJobManager,
+    CronJobSchedulingError,
+    _normalize_crontab_day_of_week,
+)
 from astrbot.core.db.po import CronJob
 
 
@@ -369,6 +374,15 @@ class TestRemoveScheduled:
 class TestScheduleJob:
     """Tests for _schedule_job method."""
 
+    def test_normalize_crontab_day_of_week(self):
+        """Test standard crontab weekday numbers are normalized."""
+        assert _normalize_crontab_day_of_week("0") == "sun"
+        assert _normalize_crontab_day_of_week("7") == "sun"
+        assert _normalize_crontab_day_of_week("1-5") == "mon,tue,wed,thu,fri"
+        assert _normalize_crontab_day_of_week("*/2") == "sun,tue,thu,sat"
+        assert _normalize_crontab_day_of_week("0-6") == "*"
+        assert _normalize_crontab_day_of_week("mon-fri") == "mon-fri"
+
     @pytest.mark.asyncio
     async def test_schedule_job_basic(
         self, cron_manager, sample_cron_job, mock_context
@@ -382,6 +396,30 @@ class TestScheduleJob:
 
         # Verify job was added to scheduler
         assert cron_manager.scheduler.get_job("test-job-id") is not None
+
+    @pytest.mark.asyncio
+    async def test_schedule_job_uses_standard_crontab_weekday_numbers(
+        self, cron_manager, sample_cron_job, mock_context
+    ):
+        """Test Sunday=0 crontab jobs are scheduled for Sunday."""
+        sample_cron_job.cron_expression = "0 9 * * 0"
+        sample_cron_job.timezone = "Asia/Shanghai"
+        mock_db = cron_manager.db
+        mock_db.list_cron_jobs = AsyncMock(return_value=[])
+        mock_db.update_cron_job = AsyncMock()
+
+        await cron_manager.start(mock_context)
+        cron_manager._schedule_job(sample_cron_job)
+
+        aps_job = cron_manager.scheduler.get_job("test-job-id")
+        assert aps_job is not None
+        next_fire_time = aps_job.trigger.get_next_fire_time(
+            None,
+            datetime(2026, 6, 22, tzinfo=ZoneInfo("Asia/Shanghai")),
+        )
+        assert next_fire_time == datetime(
+            2026, 6, 28, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai")
+        )
 
     @pytest.mark.asyncio
     async def test_schedule_job_with_timezone(
