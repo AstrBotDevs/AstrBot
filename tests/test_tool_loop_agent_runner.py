@@ -1741,6 +1741,250 @@ async def test_follow_up_after_stop_not_merged_into_tool_result(
         assert ticket_before.resolved.is_set()
 
 
+# ---------------------------------------------------------------------------
+# Tests for tool-result overflow file writer (sandbox mode fix)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_overflow_file_writer_callback_is_used(tmp_path, monkeypatch):
+    """When overflow_file_writer is provided, _write_tool_result_overflow_file
+    MUST delegate to the callback and return its result instead of writing to
+    tool_result_overflow_dir."""
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    read_tool = FunctionTool(
+        name="astrbot_file_read_tool",
+        description="read file",
+        parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    tool_set = ToolSet(tools=[tool, read_tool])
+    provider = SingleToolThenFinalProvider(tool.name, {"query": "large"})
+    request = ProviderRequest(prompt="run tool", func_tool=tool_set, contexts=[])
+    runner = ToolLoopAgentRunner()
+
+    # A spy callback that records calls and returns a known sandbox path
+    call_records: list[dict] = []
+    expected_sandbox_path = "/tmp/astrbot_overflow_deadbeef.txt"
+
+    async def _spy_writer(content: str, tool_call_id: str) -> str:
+        call_records.append({"content": content, "tool_call_id": tool_call_id})
+        return expected_sandbox_path
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(
+            Any, LargeTextToolExecutor.from_text(_make_large_tool_result_text())
+        ),
+        agent_hooks=MockHooks(),
+        streaming=False,
+        tool_result_overflow_dir=str(tmp_path),
+        read_tool=read_tool,
+        overflow_file_writer=_spy_writer,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    # Callback must have been called exactly once
+    assert len(call_records) == 1, (
+        f"Expected 1 callback invocation, got {len(call_records)}"
+    )
+    assert call_records[0]["tool_call_id"] == "call_large_result"
+
+    # The overflow notice in the tool message MUST contain the sandbox path
+    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
+    assert len(tool_messages) == 1
+    tool_message_content = str(tool_messages[0].content)
+    assert expected_sandbox_path in tool_message_content, (
+        f"Expected sandbox path '{expected_sandbox_path}' in notice, "
+        f"got: ...{tool_message_content[-200:]}"
+    )
+    assert "Truncated tool output preview shown above." in tool_message_content
+    assert "`astrbot_file_read_tool`" in tool_message_content
+
+    # The tool_result_overflow_dir directory MUST NOT be used
+    overflow_files = list(Path(tmp_path).glob("call_large_result_*.txt"))
+    assert len(overflow_files) == 0, (
+        f"Callback was provided but file was still written to "
+        f"tool_result_overflow_dir: {overflow_files}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_overflow_file_writer_none_uses_disk_fallback(tmp_path):
+    """When overflow_file_writer is None (default), the existing disk-based
+    overflow path MUST work exactly as before — no regression."""
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    read_tool = FunctionTool(
+        name="astrbot_file_read_tool",
+        description="read file",
+        parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    tool_set = ToolSet(tools=[tool, read_tool])
+    provider = SingleToolThenFinalProvider(tool.name, {"query": "large"})
+    request = ProviderRequest(prompt="run tool", func_tool=tool_set, contexts=[])
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(
+            Any, LargeTextToolExecutor.from_text(_make_large_tool_result_text())
+        ),
+        agent_hooks=MockHooks(),
+        streaming=False,
+        tool_result_overflow_dir=str(tmp_path),
+        read_tool=read_tool,
+        # overflow_file_writer NOT passed — should default to None
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    # Disk-based overflow MUST still work
+    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
+    assert len(tool_messages) == 1
+    tool_message_content = str(tool_messages[0].content)
+    assert "Truncated tool output preview shown above." in tool_message_content
+    assert "`astrbot_file_read_tool`" in tool_message_content
+
+    overflow_files = list(Path(tmp_path).glob("call_large_result_*.txt"))
+    assert len(overflow_files) == 1
+    assert (
+        overflow_files[0].read_text(encoding="utf-8") == _make_large_tool_result_text()
+    )
+
+
+def test_make_sandbox_overflow_writer_returns_callable():
+    """make_sandbox_overflow_writer must return an async callable."""
+    from astrbot.core.computer.computer_client import make_sandbox_overflow_writer
+
+    writer = make_sandbox_overflow_writer(
+        context=SimpleNamespace(),  # type: ignore[arg-type]
+        unified_msg_origin="test_umo",
+    )
+    assert callable(writer)
+    assert asyncio.iscoroutinefunction(writer)
+
+
+@pytest.mark.asyncio
+async def test_make_sandbox_overflow_writer_writes_via_booter(monkeypatch):
+    """The writer returned by make_sandbox_overflow_writer MUST write to the
+    sandbox filesystem via booter.fs.write_file and return a /tmp/ path."""
+    from astrbot.core.computer.computer_client import make_sandbox_overflow_writer
+
+    # Fake booter that records write_file calls
+    write_calls: list[dict] = []
+
+    class _FakeFS:
+        async def write_file(self, path: str, content: str) -> None:
+            write_calls.append({"path": path, "content": content})
+
+    class _FakeBooter:
+        def __init__(self):
+            self.fs = _FakeFS()
+
+    _fake_booter = _FakeBooter()
+
+    async def _fake_get_booter(context, umo):
+        return _fake_booter
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_booter",
+        _fake_get_booter,
+    )
+
+    writer = make_sandbox_overflow_writer(
+        context=SimpleNamespace(),  # type: ignore[arg-type]
+        unified_msg_origin="test_umo",
+    )
+
+    result_path = await writer("hello sandbox", "call_abc123")
+
+    # Must return a /tmp/ path
+    assert result_path.startswith("/tmp/astrbot_overflow_"), (
+        f"Expected sandbox /tmp/ path, got: {result_path}"
+    )
+    assert result_path.endswith(".txt")
+
+    # Must have called write_file on the booter
+    assert len(write_calls) == 1
+    assert write_calls[0]["path"] == result_path
+    assert write_calls[0]["content"] == "hello sandbox"
+
+
+@pytest.mark.asyncio
+async def test_overflow_notice_contains_sandbox_path_not_host_path(monkeypatch):
+    """End-to-end: when overflow_file_writer is wired up, the tool-message
+    notice MUST contain the sandbox-side /tmp/ path, not a host path."""
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    read_tool = FunctionTool(
+        name="astrbot_file_read_tool",
+        description="read file",
+        parameters={"type": "object", "properties": {"path": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    tool_set = ToolSet(tools=[tool, read_tool])
+    provider = SingleToolThenFinalProvider(tool.name, {"query": "large"})
+    request = ProviderRequest(prompt="run tool", func_tool=tool_set, contexts=[])
+    runner = ToolLoopAgentRunner()
+
+    sandbox_overflow_path = "/tmp/astrbot_overflow_sandbox_abc12345.txt"
+
+    async def _sandbox_writer(content: str, tool_call_id: str) -> str:
+        return sandbox_overflow_path
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(
+            Any, LargeTextToolExecutor.from_text(_make_large_tool_result_text())
+        ),
+        agent_hooks=MockHooks(),
+        streaming=False,
+        tool_result_overflow_dir="/tmp/.astrbot",  # host path — should NOT be used
+        read_tool=read_tool,
+        overflow_file_writer=_sandbox_writer,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    tool_messages = [m for m in runner.run_context.messages if m.role == "tool"]
+    assert len(tool_messages) == 1
+    tool_message_content = str(tool_messages[0].content)
+
+    # The notice MUST contain the sandbox path
+    assert sandbox_overflow_path in tool_message_content, (
+        f"Expected sandbox path {sandbox_overflow_path!r} in notice"
+    )
+    # The host path MUST NOT leak into the notice
+    assert "/tmp/.astrbot" not in tool_message_content, (
+        "Host tool_result_overflow_dir path leaked into sandbox-mode notice"
+    )
+
+
 if __name__ == "__main__":
     # 运行测试
     pytest.main([__file__, "-v"])
