@@ -13,7 +13,7 @@ import httpx
 from tenacity import (
     before_sleep_log,
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -93,6 +93,10 @@ _DENIED_DOCKER_ARGS = frozenset(
     }
 )
 _STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS"
+_MCP_RECONNECT_ERROR_MESSAGES = (
+    "session terminated",
+    "session was terminated",
+)
 
 try:
     import anyio
@@ -119,6 +123,13 @@ except (ModuleNotFoundError, ImportError):
         logger.warning(
             "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
         )
+
+
+def _is_mcp_reconnect_error(exc: BaseException) -> bool:
+    if "anyio" in globals() and isinstance(exc, anyio.ClosedResourceError):
+        return True
+    message = str(exc).lower()
+    return any(marker in message for marker in _MCP_RECONNECT_ERROR_MESSAGES)
 
 
 def _prepare_config(config: dict) -> dict:
@@ -635,7 +646,7 @@ class MCPClient:
         """
 
         @retry(
-            retry=retry_if_exception_type(anyio.ClosedResourceError),
+            retry=retry_if_exception(_is_mcp_reconnect_error),
             stop=stop_after_attempt(2),
             wait=wait_exponential(multiplier=1, min=1, max=3),
             before_sleep=before_sleep_log(logger, logging.WARNING),
@@ -651,9 +662,15 @@ class MCPClient:
                     arguments=arguments,
                     read_timeout_seconds=read_timeout_seconds,
                 )
-            except anyio.ClosedResourceError:
+            except Exception as exc:
+                if not _is_mcp_reconnect_error(exc):
+                    raise
+
                 logger.warning(
-                    f"MCP tool {tool_name} call failed (ClosedResourceError), attempting to reconnect..."
+                    "MCP tool %s call failed (%s: %s), attempting to reconnect...",
+                    tool_name,
+                    type(exc).__name__,
+                    exc,
                 )
                 # Attempt to reconnect
                 await self._reconnect()
