@@ -495,7 +495,9 @@ class KnowledgeBaseService:
 
         files_to_upload = []
         for file in file_list:
-            file_name = file.filename
+            file_name = Path(str(file.filename or "document").replace("\\", "/")).name
+            if file_name in {"", ".", ".."}:
+                file_name = "document"
             temp_file_path = (
                 Path(get_astrbot_temp_path()) / f"kb_upload_{uuid.uuid4()}_{file_name}"
             )
