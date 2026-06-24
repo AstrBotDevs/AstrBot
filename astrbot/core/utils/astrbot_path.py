@@ -42,12 +42,12 @@ def get_astrbot_data_path() -> str:
 
 def get_astrbot_config_path() -> str:
     """Return the AstrBot config directory path."""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "config"))
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "config")) # 'C:\\Users\\Admin\\Master\\projects\\github\\AstrBot\\data\\config'
 
 
 def get_astrbot_plugin_path() -> str:
     """Return the AstrBot plugin directory path."""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "plugins"))
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "plugins")) # 'C:\\Users\\Admin\\Master\\projects\\github\\AstrBot\\data\\plugins'
 
 
 def get_astrbot_plugin_data_path() -> str:
@@ -67,7 +67,7 @@ def get_astrbot_webchat_path() -> str:
 
 def get_astrbot_temp_path() -> str:
     """Return the AstrBot temporary data directory path."""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "temp"))
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "temp")) # 'C:\\Users\\Admin\\Master\\projects\\github\\AstrBot\\data\\temp'
 
 
 def get_astrbot_skills_path() -> str:
@@ -87,12 +87,12 @@ def get_astrbot_system_tmp_path() -> str:
 
 def get_astrbot_site_packages_path() -> str:
     """Return the AstrBot third-party site-packages directory path."""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "site-packages"))
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "site-packages")) # 'C:\\Users\\Admin\\Master\\projects\\github\\AstrBot\\data\\site-packages'
 
 
 def get_astrbot_knowledge_base_path() -> str:
     """Return the AstrBot knowledge base root path."""
-    return os.path.realpath(os.path.join(get_astrbot_data_path(), "knowledge_base"))
+    return os.path.realpath(os.path.join(get_astrbot_data_path(), "knowledge_base")) # 'C:\\Users\\Admin\\Master\\projects\\github\\AstrBot\\data\\knowledge_base'
 
 
 def get_astrbot_backups_path() -> str:

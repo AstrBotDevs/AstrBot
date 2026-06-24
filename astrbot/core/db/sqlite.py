@@ -50,21 +50,21 @@ class SQLiteDatabase(BaseDatabase):
 
     async def initialize(self) -> None:
         """Initialize the database by creating tables if they do not exist."""
-        async with self.engine.begin() as conn:
-            await conn.run_sync(SQLModel.metadata.create_all)
-            await conn.execute(text("PRAGMA journal_mode=WAL"))
-            await conn.execute(text("PRAGMA busy_timeout=30000"))
-            await conn.execute(text("PRAGMA synchronous=NORMAL"))
-            await conn.execute(text("PRAGMA cache_size=20000"))
-            await conn.execute(text("PRAGMA temp_store=MEMORY"))
-            await conn.execute(text("PRAGMA mmap_size=134217728"))
-            await conn.execute(text("PRAGMA optimize"))
+        async with self.engine.begin() as conn: # 开启数据库事务
+            await conn.run_sync(SQLModel.metadata.create_all) # 同步执行 SQLModel.metadata.create_all, 根据所有 SQLModel 模型定义，自动创建不存在的数据库表, create_all 是同步方法，需要用 run_sync 在异步环境中执行
+            await conn.execute(text("PRAGMA journal_mode=WAL")) # 设置日志模式为 WAL (Write-Ahead Logging), 允许并发读写，写入不阻塞读取，提升并发性能
+            await conn.execute(text("PRAGMA busy_timeout=30000")) # 设置忙等待超时为 30 秒（30000 毫秒）,当数据库被锁定时，等待最多 30 秒而不是立即报错
+            await conn.execute(text("PRAGMA synchronous=NORMAL")) # 设置同步模式为 NORMAL,在安全性和性能间取得平衡，比 FULL 模式快，比 OFF 模式安全 
+            await conn.execute(text("PRAGMA cache_size=20000")) # 设置缓存大小为 20000 页（约 80MB）,增加内存缓存，减少磁盘 I/O，提升查询速度
+            await conn.execute(text("PRAGMA temp_store=MEMORY")) # 将临时表和索引存储在内存中,避免创建临时文件，提升临时操作的速度,
+            await conn.execute(text("PRAGMA mmap_size=134217728")) # 设置内存映射大小为 128MB (134217728 字节),将数据库文件映射到内存，减少 read/write 系统调用
+            await conn.execute(text("PRAGMA optimize")) # 执行数据库优, 分析表并更新查询优化器统计信息，提升查询性能化
             # 确保 personas 表有 folder_id、sort_order、skills 列（前向兼容）
-            await self._ensure_persona_folder_columns(conn)
-            await self._ensure_persona_skills_column(conn)
-            await self._ensure_persona_custom_error_message_column(conn)
-            await self._ensure_platform_message_history_checkpoint_column(conn)
-            await conn.commit()
+            await self._ensure_persona_folder_columns(conn) # 确保 personas 表有 folder_id 和 sort_order 列,向前兼容，为旧版本数据库添加新字段
+            await self._ensure_persona_skills_column(conn) # 确保 personas 表有 skills 列,向前兼容，为旧数据库补充技能字段
+            await self._ensure_persona_custom_error_message_column(conn) # 确保 personas 表有 custom_error_message 列,向前兼容，为旧数据库添加自定义错误消息字段
+            await self._ensure_platform_message_history_checkpoint_column(conn) # 确保 platform_message_history 表有 llm_checkpoint_id 列,向前兼容，为旧数据库添加 llm_checkpoint_id 字段
+            await conn.commit() # 提交所有更改,确保表创建和 PRAGMA 设置持久化到数据库
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
         """确保 personas 表有 folder_id 和 sort_order 列。

@@ -4135,6 +4135,7 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+<<<<<<< HEAD
   /api/v1/stats/versions:
     get:
       tags: [Stats]
@@ -4145,6 +4146,8 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+=======
+>>>>>>> 40eeb785 (First commit)
   /api/v1/stats/first-notice:
     get:
       tags: [Stats]
