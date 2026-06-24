@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shlex
@@ -26,6 +27,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
 )
+
 
 
 def _file_send_allowed_roots(umo: str | None) -> tuple[Path, ...]:
@@ -316,6 +318,29 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     return f"error: invalid session: {session}"
             else:
                 return f"error: invalid session: {session}"
+
+        # 去重：按事件作用域记录已发送的消息指纹，
+        # 拦截同一 agent run 内的重复调用。
+        # 作用域限定在当前事件，不影响其他事件的合法重复发送。
+        dedup_key = str(target_session) + json.dumps(
+            messages, ensure_ascii=False, sort_keys=True
+        )
+        fingerprint = hashlib.md5(dedup_key.encode()).hexdigest()
+        existing = context.context.event.get_extra(
+            "_send_message_fingerprints"
+        )
+        sent_fingerprints = set(existing) if existing else set()
+        if fingerprint in sent_fingerprints:
+            logger.info(
+                f"[send_message_to_user] 当前事件内重复发送，已跳过。"
+                f" session={session}, target_session={target_session},"
+                f" fingerprint={fingerprint[:8]}"
+            )
+            return f"Message skipped (duplicate), session={target_session}"
+        sent_fingerprints.add(fingerprint)
+        context.context.event.set_extra(
+            "_send_message_fingerprints", sent_fingerprints
+        )
 
         await context.context.context.send_message(
             target_session,
