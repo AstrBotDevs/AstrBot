@@ -29,6 +29,22 @@ class KnowledgeBaseService:
     def _payload(data: object) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
 
+    @staticmethod
+    def _canonical_kb_payload(data: object) -> dict[str, Any]:
+        """Normalize knowledge base create/update payloads.
+
+        Args:
+            data: Request payload from v1 or legacy Dashboard routes.
+
+        Returns:
+            Payload using the service's canonical field names.
+        """
+        payload = KnowledgeBaseService._payload(data).copy()
+        if payload.get("kb_name") is None and payload.get("name") is not None:
+            payload["kb_name"] = payload["name"]
+        payload.pop("name", None)
+        return payload
+
     def get_kb_manager(self):
         return self.core_lifecycle.kb_manager
 
@@ -293,7 +309,7 @@ class KnowledgeBaseService:
 
     async def create_kb(self, data: object) -> tuple[dict[str, Any], str]:
         kb_manager = self.get_kb_manager()
-        payload = self._payload(data)
+        payload = self._canonical_kb_payload(data)
         kb_name = payload.get("kb_name")
         if not kb_name:
             raise KnowledgeBaseServiceError("知识库名称不能为空")
@@ -363,7 +379,7 @@ class KnowledgeBaseService:
         return await self.get_kb(kb_id)
 
     async def update_kb(self, data: object) -> tuple[dict[str, Any], str]:
-        payload = self._payload(data)
+        payload = self._canonical_kb_payload(data)
         kb_id = payload.get("kb_id")
         if not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
@@ -380,28 +396,20 @@ class KnowledgeBaseService:
             "top_k_sparse",
             "top_m_final",
         ]
-        if all(payload.get(key) is None for key in update_keys):
+        provided_updates = {key: payload[key] for key in update_keys if key in payload}
+        if not provided_updates:
             raise KnowledgeBaseServiceError("至少需要提供一个更新字段")
 
         current_kb = await self.get_kb_manager().get_kb(kb_id)
-        kb_name = payload.get("kb_name")
-        if kb_name is None:
-            if not current_kb:
-                raise KnowledgeBaseServiceError("知识库不存在")
-            kb_name = current_kb.kb.kb_name
+        if not current_kb:
+            raise KnowledgeBaseServiceError("知识库不存在")
+        current = current_kb.kb
+        update_data = {key: getattr(current, key) for key in update_keys}
+        update_data.update(provided_updates)
 
         kb_helper = await self.get_kb_manager().update_kb(
             kb_id=kb_id,
-            kb_name=kb_name,
-            description=payload.get("description"),
-            emoji=payload.get("emoji"),
-            embedding_provider_id=payload.get("embedding_provider_id"),
-            rerank_provider_id=payload.get("rerank_provider_id"),
-            chunk_size=payload.get("chunk_size"),
-            chunk_overlap=payload.get("chunk_overlap"),
-            top_k_dense=payload.get("top_k_dense"),
-            top_k_sparse=payload.get("top_k_sparse"),
-            top_m_final=payload.get("top_m_final"),
+            **update_data,
         )
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
@@ -762,11 +770,11 @@ class KnowledgeBaseService:
 
         if not query:
             raise KnowledgeBaseServiceError("缺少参数 query")
+        kb_manager = self.get_kb_manager()
         if not kb_names or not isinstance(kb_names, list):
             raise KnowledgeBaseServiceError("缺少参数 kb_names 或格式错误")
 
         top_k = payload.get("top_k", 5)
-        kb_manager = self.get_kb_manager()
         results = await kb_manager.retrieve(
             query=query,
             kb_names=kb_names,

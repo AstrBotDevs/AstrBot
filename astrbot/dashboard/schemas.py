@@ -205,14 +205,42 @@ class ImMessageRequest(OpenModel):
 
 
 class KnowledgeBaseRequest(OpenModel):
-    kb_id: str | None = None
-    name: str | None = None
+    kb_name: str | None = None
     description: str | None = None
+    emoji: str | None = None
     embedding_provider_id: str | None = None
     rerank_provider_id: str | None = None
     chunk_size: int | None = None
     chunk_overlap: int | None = None
+    top_k_dense: int | None = None
+    top_k_sparse: int | None = None
+    top_m_final: int | None = None
 
+    def canonical_payload(self) -> dict[str, Any]:
+        """Return the service-facing knowledge base payload.
+
+        Returns:
+            Dictionary accepted by KnowledgeBaseService.
+        """
+        data = self.model_dump(
+            exclude_unset=True,
+            include={
+                "kb_name",
+                "description",
+                "emoji",
+                "embedding_provider_id",
+                "rerank_provider_id",
+                "chunk_size",
+                "chunk_overlap",
+                "top_k_dense",
+                "top_k_sparse",
+                "top_m_final",
+            },
+        )
+        legacy_name = getattr(self, "name", None)
+        if data.get("kb_name") is None and legacy_name is not None:
+            data["kb_name"] = legacy_name
+        return data
 
 class KnowledgeBaseImportRequest(OpenModel):
     documents: list[dict[str, Any]] | None = None
