@@ -3,6 +3,7 @@ from astrbot import logger
 from ..message import Message
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
+from .round_utils import count_conversation_rounds
 from .token_counter import EstimateTokenCounter
 from .truncator import ContextTruncator
 
@@ -56,15 +57,36 @@ class ContextManager:
         try:
             result = messages
 
-            # 1. 基于轮次的截断 (Enforce max turns)
             if self.config.enforce_max_turns != -1:
-                result = self.truncator.truncate_by_turns(
-                    result,
-                    keep_most_recent_turns=self.config.enforce_max_turns,
-                    drop_turns=self.config.truncate_turns,
-                )
+                turn_count = count_conversation_rounds(result)
+                if turn_count > self.config.enforce_max_turns:
+                    if isinstance(self.compressor, LLMSummaryCompressor):
+                        logger.debug(
+                            "Turn limit (%s) exceeded (%s turns), "
+                            "trying LLM summary compression first.",
+                            self.config.enforce_max_turns,
+                            turn_count,
+                        )
+                        compressed = await self.compressor(result)
+                        if self.compressor.last_call_failed or compressed == result:
+                            logger.warning(
+                                "LLM summary compression failed; falling back "
+                                "to turn-based truncation.",
+                            )
+                            result = self.truncator.truncate_by_turns(
+                                result,
+                                keep_most_recent_turns=self.config.enforce_max_turns,
+                                drop_turns=self.config.truncate_turns,
+                            )
+                        else:
+                            result = compressed
+                    else:
+                        result = self.truncator.truncate_by_turns(
+                            result,
+                            keep_most_recent_turns=self.config.enforce_max_turns,
+                            drop_turns=self.config.truncate_turns,
+                        )
 
-            # 2. 基于 token 的压缩
             if self.config.max_context_tokens > 0:
                 total_tokens = self.token_counter.count_tokens(
                     result, trusted_token_usage
@@ -95,7 +117,17 @@ class ContextManager:
         """
         logger.debug("Compress triggered, starting compression...")
 
-        messages = await self.compressor(messages)
+        compressed = await self.compressor(messages)
+        if isinstance(self.compressor, LLMSummaryCompressor):
+            if self.compressor.last_call_failed:
+                logger.warning(
+                    "LLM summary compression failed; falling back to hard "
+                    "truncation to keep the request within the token limit.",
+                )
+            else:
+                messages = compressed
+        else:
+            messages = compressed
 
         # double check
         tokens_after_summary = self.token_counter.count_tokens(messages)
@@ -113,9 +145,23 @@ class ContextManager:
             messages, tokens_after_summary, self.config.max_context_tokens
         ):
             logger.info(
-                "Context still exceeds max tokens after compression, applying halving truncation..."
+                "Context still exceeds max tokens after compression, applying hard truncation..."
             )
-            # still need compress, truncate by half
-            messages = self.truncator.truncate_by_halving(messages)
+            while self.compressor.should_compress(
+                messages, tokens_after_summary, self.config.max_context_tokens
+            ):
+                truncated = self.truncator.truncate_by_dropping_oldest_turns(
+                    messages,
+                    drop_turns=self.config.truncate_turns,
+                )
+                if truncated == messages:
+                    truncated = self.truncator.truncate_by_halving(messages)
+                if truncated == messages:
+                    break
+                next_tokens = self.token_counter.count_tokens(truncated)
+                if next_tokens >= tokens_after_summary:
+                    break
+                messages = truncated
+                tokens_after_summary = next_tokens
 
         return messages

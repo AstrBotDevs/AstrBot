@@ -1,4 +1,5 @@
 from ..message import Message
+from .round_utils import count_conversation_rounds, split_into_rounds
 
 
 class ContextTruncator:
@@ -120,15 +121,20 @@ class ContextTruncator:
             return messages
 
         system_messages, non_system_messages = self._split_system_rest(messages)
+        rounds = split_into_rounds(non_system_messages)
 
-        if len(non_system_messages) // 2 <= keep_most_recent_turns:
+        if count_conversation_rounds(non_system_messages) <= keep_most_recent_turns:
             return messages
 
         num_to_keep = keep_most_recent_turns - drop_turns + 1
         if num_to_keep <= 0:
             truncated_contexts = []
         else:
-            truncated_contexts = non_system_messages[-num_to_keep * 2 :]
+            truncated_contexts = [
+                segment
+                for round_segments in rounds[-num_to_keep:]
+                for segment in round_segments
+            ]
 
         # Find the first user message
         index = next(
@@ -153,11 +159,16 @@ class ContextTruncator:
             return messages
 
         system_messages, non_system_messages = self._split_system_rest(messages)
+        rounds = split_into_rounds(non_system_messages)
 
-        if len(non_system_messages) // 2 <= drop_turns:
+        if count_conversation_rounds(non_system_messages) <= drop_turns:
             truncated_non_system = []
         else:
-            truncated_non_system = non_system_messages[drop_turns * 2 :]
+            truncated_non_system = [
+                segment
+                for round_segments in rounds[drop_turns:]
+                for segment in round_segments
+            ]
 
         # Find the first user message
         index = next(
