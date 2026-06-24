@@ -8,7 +8,7 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, file, plugin, mcp, skill. The config scope also
+    persona, im, config, chat, data, file, plugin, mcp, skill. The config scope also
     grants bot and provider access.
 servers:
   - url: http://localhost:6185
@@ -5127,8 +5127,8 @@ components:
           type: array
           items:
             type: string
-            enum: [bot, provider, persona, im, config, chat, file, plugin, mcp, skill]
-          example: [bot, provider, persona, im, config, chat, file, plugin, mcp, skill]
+            enum: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
+          example: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
         expires_at:
           type: string
           format: date-time
