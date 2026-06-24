@@ -303,21 +303,46 @@ class ProviderAnthropic(Provider):
             else:
                 new_messages.append(message)
 
-        # --- Orphaned tool_result sanitizer ---
-        # After context truncation, tool_result blocks may reference tool_use
-        # IDs that no longer exist. The Anthropic API rejects these with 400.
-        valid_tool_use_ids: set[str] = set()
-        for msg in new_messages:
-            if msg.get("role") == "assistant" and isinstance(msg.get("content"), list):
-                for block in msg["content"]:
-                    if isinstance(block, dict) and block.get("type") == "tool_use":
-                        valid_tool_use_ids.add(block.get("id", ""))
+        return system_prompt, new_messages
 
-        sanitized: list[dict] = []
-        for msg in new_messages:
-            if msg.get("role") == "user" and isinstance(msg.get("content"), list):
+    @staticmethod
+    def _sanitize_assistant_messages(payloads: dict) -> None:
+        """Remove orphaned tool results from Anthropic messages.
+
+        Args:
+            payloads: Anthropic request payload containing a messages list.
+
+        Returns:
+            None. The messages list is updated in place on ``payloads``.
+        """
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+
+        valid_tool_use_ids: set[str] = set()
+        for msg in messages:
+            if not isinstance(msg, dict) or msg.get("role") != "assistant":
+                continue
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    tool_use_id = block.get("id")
+                    if tool_use_id:
+                        valid_tool_use_ids.add(tool_use_id)
+
+        sanitized: list[Any] = []
+        for msg in messages:
+            if not isinstance(msg, dict):
+                sanitized.append(msg)
+                continue
+
+            content = msg.get("content")
+            if msg.get("role") == "user" and isinstance(content, list):
                 cleaned_content = [
-                    block for block in msg["content"]
+                    block
+                    for block in content
                     if not (
                         isinstance(block, dict)
                         and block.get("type") == "tool_result"
@@ -326,35 +351,44 @@ class ProviderAnthropic(Provider):
                 ]
                 if cleaned_content:
                     sanitized.append({**msg, "content": cleaned_content})
-            else:
-                sanitized.append(msg)
-        new_messages = sanitized
+                continue
 
-        # --- Merge consecutive same-role messages ---
-        # Stripping orphaned tool_results may leave adjacent messages with the
-        # same role, which violates Anthropic's strict alternation requirement.
-        merged: list[dict] = []
-        for msg in new_messages:
-            if merged and merged[-1].get("role") == msg.get("role"):
+            sanitized.append(msg)
+
+        merged: list[Any] = []
+        for msg in sanitized:
+            if not isinstance(msg, dict):
+                merged.append(msg)
+                continue
+
+            if (
+                msg.get("role")
+                and merged
+                and isinstance(merged[-1], dict)
+                and merged[-1].get("role") == msg.get("role")
+            ):
                 prev = merged[-1]
                 prev_content = prev.get("content") or []
                 if isinstance(prev_content, str):
                     prev_content = [{"type": "text", "text": prev_content}]
-                else:
+                elif isinstance(prev_content, list):
                     prev_content = list(prev_content)
+                else:
+                    prev_content = [prev_content]
 
                 cur_content = msg.get("content") or []
                 if isinstance(cur_content, str):
                     cur_content = [{"type": "text", "text": cur_content}]
-                else:
+                elif isinstance(cur_content, list):
                     cur_content = list(cur_content)
+                else:
+                    cur_content = [cur_content]
 
                 merged[-1] = {**prev, "content": prev_content + cur_content}
             else:
                 merged.append(msg)
-        new_messages = merged
 
-        return system_prompt, new_messages
+        payloads["messages"] = merged
 
     def _extract_usage(self, usage: Usage | None) -> TokenUsage:
         if usage is None:
@@ -424,6 +458,7 @@ class ProviderAnthropic(Provider):
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
+        self._sanitize_assistant_messages(payloads)
 
         try:
             completion = await retry_provider_request(
@@ -524,6 +559,7 @@ class ProviderAnthropic(Provider):
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
+        self._sanitize_assistant_messages(payloads)
 
         async with retry_provider_request_context(
             "Anthropic",
