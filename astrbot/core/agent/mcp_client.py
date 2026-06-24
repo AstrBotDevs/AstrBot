@@ -122,8 +122,8 @@ def _is_mcp_reconnect_error(exc: BaseException) -> bool:
 
     closed_resource_error = getattr(anyio_module, "ClosedResourceError", None)
     if isinstance(closed_resource_error, type) and isinstance(
-        exc, closed_resource_error
-    ):
+def _is_mcp_reconnect_error(exc: BaseException) -> bool:
+    if "anyio" in globals() and isinstance(exc, anyio.ClosedResourceError):
         return True
 
     message = str(exc).lower()
