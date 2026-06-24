@@ -981,6 +981,40 @@ def _jwt_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest.mark.asyncio
+async def test_public_versions_route_uses_static_folder(
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+    tmp_path: Path,
+):
+    static_folder = tmp_path / "dist"
+    assets_folder = static_folder / "assets"
+    assets_folder.mkdir(parents=True)
+    (static_folder / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    (assets_folder / "version").write_text("v9.8.7", encoding="utf-8")
+
+    app = create_dashboard_asgi_app(
+        core_lifecycle=fake_core_lifecycle,
+        db=fake_db,
+        jwt_secret=JWT_SECRET,
+        static_folder=str(static_folder),
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get("/api/v1/stats/versions")
+
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["webui_version"] == "v9.8.7"
+    assert data["data"]["astrbot_version"]
+    assert "astrbot_code_version" in data["data"]
+
+
 def test_fastapi_app_adapter_registers_on_app_state():
     app = FastAPI()
     adapter = FastAPIAppAdapter(app)

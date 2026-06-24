@@ -3094,6 +3094,10 @@ export type GetVersionResponse = (SuccessEnvelope);
 
 export type GetVersionError = unknown;
 
+export type GetPublicVersionsResponse = (SuccessEnvelope);
+
+export type GetPublicVersionsError = unknown;
+
 export type GetFirstNoticeData = {
     query?: {
         locale?: string;

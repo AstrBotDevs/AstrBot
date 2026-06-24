@@ -7,7 +7,7 @@ import { useRouter } from 'vue-router';
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
-import { authApi } from '@/api/v1';
+import { authApi, publicApi, type PublicVersionData } from '@/api/v1';
 
 const cardVisible = ref(false);
 const router = useRouter();
@@ -16,6 +16,10 @@ const customizer = useCustomizerStore();
 const { tm: t } = useModuleI18n('features/auth');
 const theme = useTheme();
 const authLoginRef = ref<InstanceType<typeof AuthLogin> | null>(null);
+const publicVersions = ref<PublicVersionData | null>(null);
+const versionDialogVisible = ref(false);
+type VersionItem = { key: string; label: string; value: string };
+type VersionWarning = { key: string; title: string; message: string };
 
 const logoTitle = computed(() => {
   if (authLoginRef.value?.stage === 'totp' || authLoginRef.value?.stage === 'recovery') {
@@ -41,7 +45,90 @@ const currentThemeIcon = computed(() => {
   return 'mdi-white-balance-sunny';
 });
 
+const versionValues = computed(() => {
+  const versions = publicVersions.value;
+  if (!versions) {
+    return { webui: '', runtime: '', code: '' };
+  }
+
+  return {
+    webui: String(versions.webui_version || '').trim(),
+    runtime: String(versions.astrbot_version || '').trim(),
+    code: String(versions.astrbot_code_version || '').trim(),
+  };
+});
+
+const normalizedVersionValues = computed(() => {
+  return {
+    webui: versionValues.value.webui.replace(/^v/i, ''),
+    runtime: versionValues.value.runtime.replace(/^v/i, ''),
+    code: versionValues.value.code.replace(/^v/i, ''),
+  };
+});
+
+const versionWarnings = computed(() => {
+  const normalized = normalizedVersionValues.value;
+  const warnings: VersionWarning[] = [];
+
+  if (normalized.webui && normalized.runtime && normalized.webui !== normalized.runtime) {
+    warnings.push({
+      key: 'webui-runtime',
+      title: t('versions.webuiMismatchTitle'),
+      message: t('versions.webuiMismatchMessage'),
+    });
+  }
+  if (normalized.runtime && normalized.code && normalized.runtime !== normalized.code) {
+    warnings.push({
+      key: 'runtime-code',
+      title: t('versions.runtimeMismatchTitle'),
+      message: t('versions.runtimeMismatchMessage'),
+    });
+  }
+
+  return warnings;
+});
+
+const versionItems = computed(() => {
+  const { webui, runtime, code } = versionValues.value;
+  const normalized = normalizedVersionValues.value;
+  const items: VersionItem[] = [];
+
+  if (webui) {
+    items.push({
+      key: 'webui',
+      label: t('versions.webui'),
+      value: webui,
+    });
+  }
+  if (runtime) {
+    items.push({
+      key: 'astrbot',
+      label: t('versions.astrbotRuntime'),
+      value: runtime,
+    });
+  }
+  if (runtime && code && normalized.runtime !== normalized.code) {
+    items.push({
+      key: 'astrbot-code',
+      label: t('versions.astrbotCode'),
+      value: code,
+    });
+  }
+
+  return items;
+});
+
 onMounted(async () => {
+  publicApi.versions()
+    .then((res) => {
+      publicVersions.value = res.data?.data || null;
+    })
+    .catch((error) => {
+      if (import.meta.env.DEV) {
+        console.warn('Failed to load public versions:', error);
+      }
+    });
+
   // 检查用户是否已登录，如果已登录则重定向
   if (authStore.has_token()) {
     const onboardingCompleted = await authStore.checkOnboardingCompleted();
@@ -140,7 +227,60 @@ onMounted(async () => {
       <v-card-text>
         <AuthLogin ref="authLoginRef" />
       </v-card-text>
+      <div v-if="versionItems.length" class="login-version-info">
+        <span v-for="item in versionItems" :key="item.key" class="login-version-item">
+          <span class="login-version-label">{{ item.label }}</span>
+          <span class="login-version-value">{{ item.value }}</span>
+        </span>
+        <v-btn
+          v-if="versionWarnings.length"
+          class="version-help-btn"
+          icon
+          variant="text"
+          size="x-small"
+          :aria-label="t('versions.mismatchTooltip')"
+          @click="versionDialogVisible = true"
+        >
+          <v-icon size="16">mdi-help-circle-outline</v-icon>
+          <v-tooltip activator="parent" location="top">
+            {{ t('versions.mismatchTooltip') }}
+          </v-tooltip>
+        </v-btn>
+      </div>
     </v-card>
+    <v-dialog v-model="versionDialogVisible" max-width="460">
+      <v-card class="version-dialog-card">
+        <v-card-title class="version-dialog-title">
+          <v-icon size="20" color="warning">mdi-alert-circle-outline</v-icon>
+          <span>{{ t('versions.dialogTitle') }}</span>
+        </v-card-title>
+        <v-card-text class="version-dialog-content">
+          <div
+            v-for="warning in versionWarnings"
+            :key="warning.key"
+            class="version-warning-block"
+          >
+            <div class="version-warning-title">{{ warning.title }}</div>
+            <div class="version-warning-message">{{ warning.message }}</div>
+          </div>
+        </v-card-text>
+        <v-card-actions class="version-dialog-actions">
+          <v-btn
+            href="https://docs.astrbot.app/faq.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="text"
+            prepend-icon="mdi-help-circle-outline"
+          >
+            {{ t('versions.faq') }}
+          </v-btn>
+          <v-spacer />
+          <v-btn color="primary" variant="text" @click="versionDialogVisible = false">
+            {{ t('versions.close') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -159,5 +299,72 @@ onMounted(async () => {
 .login-card {
   width: 400px;
   padding: 8px;
+}
+
+.login-version-info {
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.56);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  justify-content: center;
+  line-height: 1.45;
+  padding: 0 14px 10px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.login-version-item {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-version-label {
+  margin-right: 4px;
+}
+
+.version-help-btn {
+  color: rgba(var(--v-theme-warning), 0.95);
+  margin-left: -2px;
+}
+
+.version-dialog-card {
+  border-radius: 8px !important;
+}
+
+.version-dialog-title {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  font-size: 17px;
+  line-height: 1.35;
+  padding-bottom: 8px;
+}
+
+.version-dialog-content {
+  padding-top: 4px !important;
+}
+
+.version-warning-block + .version-warning-block {
+  margin-top: 14px;
+}
+
+.version-warning-title {
+  color: rgba(var(--v-theme-on-surface), 0.88);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.version-warning-message {
+  color: rgba(var(--v-theme-on-surface), 0.68);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.version-dialog-actions {
+  padding-top: 0;
 }
 </style>

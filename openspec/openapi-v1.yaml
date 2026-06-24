@@ -4135,6 +4135,16 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/stats/versions:
+    get:
+      tags: [Stats]
+      summary: Get public WebUI and AstrBot versions
+      operationId: getPublicVersions
+      security: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/stats/first-notice:
     get:
       tags: [Stats]
