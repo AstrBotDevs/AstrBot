@@ -90,10 +90,6 @@ class PipInstallRequest(OpenModel):
     mirror: str | None = None
 
 
-class MigrationRequest(OpenModel):
-    platform_id_map: dict[str, Any] | None = None
-
-
 class ChatProjectRequest(OpenModel):
     project_id: str | None = None
     title: str | None = None
@@ -187,7 +183,15 @@ class OpenApiChatRequest(OpenModel):
     message: Any = None
     session_id: str | None = None
     conversation_id: str | None = None
-    username: str | None = None
+    username: str | None = Field(
+        default=None,
+        description=(
+            "Caller-declared WebChat sender/session owner. This value is used "
+            "as the message sender identity and may participate in "
+            "sender-ID-based permission checks; trusted integrations should "
+            "validate or map it before accepting end-user input."
+        ),
+    )
     config_id: str | None = None
     config_name: str | None = None
     platform_id: str | None = None
@@ -414,10 +418,10 @@ class ProviderSourceRequest(OpenModel):
             self.config
             or self.model_dump(exclude={"source_id", "config"}, exclude_none=True)
         )
-        if fallback_id:
-            config["id"] = fallback_id
-        elif self.id and "id" not in config:
-            config["id"] = self.id
+        if not config.get("id"):
+            # 不覆盖已有 id；self.id（显式指定）优先于 fallback_id（旧值兜底）
+            if fallback := (self.id or fallback_id):
+                config["id"] = fallback
         return config
 
 

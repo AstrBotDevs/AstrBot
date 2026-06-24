@@ -85,6 +85,8 @@ from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
+    ExaGetContentsTool,
+    ExaWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
     KeenableExtractWebPageTool,
@@ -132,6 +134,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "web_search_tavily",
         "web_search_bocha",
         "web_search_brave",
+        "web_search_exa",
     }
 )
 WEB_SEARCH_CITATION_PROMPT = (
@@ -280,10 +283,11 @@ async def _apply_kb(
             )
             if not kb_result:
                 return
-            if req.system_prompt is not None:
-                req.system_prompt += (
-                    f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
-                )
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=f"[Related Knowledge Base Results]:\n{kb_result}",
+                ).mark_as_temp()
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while retrieving knowledge base: %s", exc)
     else:
@@ -496,14 +500,26 @@ async def _ensure_persona_and_skills(
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
     skills = _filter_skills_for_current_config(skills, cfg)
+    workspace_skills = (
+        skill_manager.list_workspace_skills(
+            _get_workspace_path_for_umo(event.unified_msg_origin)
+        )
+        if runtime == "local"
+        else []
+    )
 
-    if skills:
+    if skills or workspace_skills:
         if persona and persona.get("skills") is not None:
             if not persona["skills"]:
                 skills = []
             else:
                 allowed = set(persona["skills"])
                 skills = [skill for skill in skills if skill.name in allowed]
+        if workspace_skills and (not persona or persona.get("skills") != []):
+            skills_by_name = {skill.name: skill for skill in skills}
+            for skill in workspace_skills:
+                skills_by_name[skill.name] = skill
+            skills = [skills_by_name[name] for name in sorted(skills_by_name)]
         if skills:
             req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
             if runtime == "none":
@@ -1199,6 +1215,9 @@ async def _apply_web_search_tools(
     elif provider == "keenable":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(KeenableWebSearchTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(KeenableExtractWebPageTool))
+    elif provider == "exa":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
 
 
 def _apply_web_search_citation_prompt(
@@ -1608,6 +1627,7 @@ async def build_main_agent(
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
+        request_max_retries=config.provider_settings.get("request_max_retries", 5),
         tool_result_overflow_dir=(
             get_astrbot_system_tmp_path()
             if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")

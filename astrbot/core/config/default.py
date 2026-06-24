@@ -2,10 +2,12 @@
 
 import os
 
+from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.26.0-beta.1"
+VERSION = __version__
+
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -101,6 +103,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "default_provider_id": "",
         "fallback_chat_models": [],
+        "request_max_retries": 5,
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
@@ -113,6 +116,7 @@ DEFAULT_CONFIG = {
         "websearch_baidu_app_builder_key": "",
         "websearch_firecrawl_key": [],
         "websearch_keenable_key": [],
+        "websearch_exa_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -329,7 +333,7 @@ CONFIG_METADATA_2 = {
                 "description": "消息平台适配器",
                 "type": "list",
                 "config_template": {
-                    "QQ 官方机器人(WebSocket)": {
+                    "QQ 官方机器人(Websocket, 推荐)": {
                         "id": "default",
                         "type": "qq_official",
                         "enable": True,
@@ -2809,6 +2813,9 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                     },
+                    "request_max_retries": {
+                        "type": "int",
+                    },
                     "wake_prefix": {
                         "type": "string",
                     },
@@ -3168,6 +3175,11 @@ CONFIG_METADATA_3 = {
                         "_special": "select_providers",
                         "hint": "主聊天模型请求失败时，按顺序切换到这些模型。",
                     },
+                    "provider_settings.request_max_retries": {
+                        "description": "请求最大重试次数",
+                        "type": "int",
+                        "hint": "单次模型请求遇到可重试错误时的最大尝试次数。",
+                    },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",
                         "type": "string",
@@ -3286,6 +3298,7 @@ CONFIG_METADATA_3 = {
                             "brave",
                             "firecrawl",
                             "keenable",
+                            "exa",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3347,6 +3360,16 @@ CONFIG_METADATA_3 = {
                         "hint": "可选。Keenable 免费额度无需 Key（每小时 1000 次请求）；添加一个或多个 Key 可解除该限制。获取地址：https://keenable.ai",
                         "condition": {
                             "provider_settings.websearch_provider": "keenable",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_exa_key": {
+                        "description": "Exa API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。Get a key at https://dashboard.exa.ai",
+                        "condition": {
+                            "provider_settings.websearch_provider": "exa",
                             "provider_settings.web_search": True,
                         },
                     },

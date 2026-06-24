@@ -86,6 +86,9 @@ export type ChatProjectRequest = {
 };
 
 export type ChatRequest = {
+    /**
+     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     */
     username?: string;
     session_id?: string;
     /**
@@ -191,7 +194,7 @@ export type ConversationRef = {
 
 export type CreateApiKeyRequest = {
     name: string;
-    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'plugin' | 'mcp' | 'skill')>;
+    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill')>;
     expires_at?: string;
     expires_in_days?: number;
 };
@@ -320,13 +323,6 @@ export type MessagePart = {
 
 export type type = 'text' | 'plain' | 'image' | 'file' | 'audio' | 'record' | 'video' | 'reply';
 
-export type MigrationRequest = {
-    platform_id_map?: {
-        [key: string]: unknown;
-    };
-    [key: string]: unknown;
-};
-
 export type ModelScopeSyncRequest = {
     access_token?: string;
 };
@@ -346,6 +342,8 @@ export type NeoReleaseActionRequest = {
 };
 
 export type ParameterAttachmentId = string;
+
+export type ParameterAttachmentIdQuery = string;
 
 export type ParameterBotId = string;
 
@@ -1502,6 +1500,24 @@ export type UploadFileData = {
 export type UploadFileResponse = (SuccessEnvelope);
 
 export type UploadFileError = unknown;
+
+export type UploadOpenApiFileData = {
+    body: FileUploadRequest;
+};
+
+export type UploadOpenApiFileResponse = (SuccessEnvelope);
+
+export type UploadOpenApiFileError = unknown;
+
+export type DownloadOpenApiFileData = {
+    query: {
+        attachment_id: string;
+    };
+};
+
+export type DownloadOpenApiFileResponse = ((Blob | File));
+
+export type DownloadOpenApiFileError = unknown;
 
 export type GetFileByNameData = {
     query: {
@@ -3298,14 +3314,6 @@ export type InstallPipPackageData = {
 export type InstallPipPackageResponse = (SuccessEnvelope);
 
 export type InstallPipPackageError = unknown;
-
-export type RunMigrationsData = {
-    body?: MigrationRequest;
-};
-
-export type RunMigrationsResponse = (SuccessEnvelope);
-
-export type RunMigrationsError = unknown;
 
 export type ListCronJobsData = {
     query?: {

@@ -27,6 +27,7 @@ from astrbot.core.utils.network_utils import (
 )
 
 from ..register import register_provider_adapter
+from .request_retry import retry_provider_request, retry_provider_request_context
 
 
 @register_provider_adapter(
@@ -229,7 +230,8 @@ class ProviderAnthropic(Provider):
                     if isinstance(last_message, dict)
                     else None
                 )
-                can_append_to_previous_tool_results = (
+
+                if (
                     last_message is not None
                     and last_message.get("role") == "user"
                     and isinstance(last_content, list)
@@ -238,10 +240,6 @@ class ProviderAnthropic(Provider):
                         isinstance(block, dict) and block.get("type") == "tool_result"
                         for block in last_content
                     )
-                )
-
-                if can_append_to_previous_tool_results and isinstance(
-                    last_content, list
                 ):
                     last_content.append(tool_result_block)
                 else:
@@ -356,7 +354,13 @@ class ProviderAnthropic(Provider):
         logger.warning(f"未知的 tool_choice 值: {tool_choice}，已回退为 'auto'")
         return {"type": "auto"}
 
-    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+    ) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
@@ -371,8 +375,12 @@ class ProviderAnthropic(Provider):
         self._apply_thinking_config(payloads)
 
         try:
-            completion = await self.client.messages.create(
-                **payloads, stream=False, extra_body=extra_body
+            completion = await retry_provider_request(
+                "Anthropic",
+                lambda: self.client.messages.create(
+                    **payloads, stream=False, extra_body=extra_body
+                ),
+                max_attempts=request_max_retries,
             )
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
@@ -441,6 +449,8 @@ class ProviderAnthropic(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -464,8 +474,10 @@ class ProviderAnthropic(Provider):
             payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
 
-        async with self.client.messages.stream(
-            **payloads, extra_body=extra_body
+        async with retry_provider_request_context(
+            "Anthropic",
+            lambda: self.client.messages.stream(**payloads, extra_body=extra_body),
+            max_attempts=request_max_retries,
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
@@ -604,6 +616,7 @@ class ProviderAnthropic(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -653,7 +666,11 @@ class ProviderAnthropic(Provider):
 
         llm_response = None
         try:
-            llm_response = await self._query(payloads, func_tool)
+            llm_response = await self._query(
+                payloads,
+                func_tool,
+                request_max_retries=request_max_retries,
+            )
         except Exception as e:
             raise e
 
@@ -672,6 +689,7 @@ class ProviderAnthropic(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ):
         if contexts is None:
@@ -718,7 +736,11 @@ class ProviderAnthropic(Provider):
                 else system_prompt
             )
 
-        async for llm_response in self._query_stream(payloads, func_tool):
+        async for llm_response in self._query_stream(
+            payloads,
+            func_tool,
+            request_max_retries=request_max_retries,
+        ):
             yield llm_response
 
     def _detect_image_mime_type(self, data: bytes) -> str:
@@ -830,7 +852,10 @@ class ProviderAnthropic(Provider):
 
     async def get_models(self) -> list[str]:
         models_str = []
-        models = await self.client.models.list()
+        models = await retry_provider_request(
+            "Anthropic",
+            lambda: self.client.models.list(),
+        )
         models = sorted(models.data, key=lambda x: x.id)
         for model in models:
             models_str.append(model.id)

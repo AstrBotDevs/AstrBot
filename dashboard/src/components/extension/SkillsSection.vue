@@ -1195,12 +1195,9 @@ export default {
       }
 
       try {
-        const formData = new FormData();
-        for (const item of attemptedItems) {
-          formData.append("files", item.file);
-        }
-
-        const res = await skillApi.uploadBatch(formData);
+        const res = await skillApi.uploadBatch(
+          attemptedItems.map((item) => item.file),
+        );
 
         const payload = res?.data?.data || {};
         applyUploadResults(attemptedItems, payload);

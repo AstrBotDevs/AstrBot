@@ -2,10 +2,12 @@ import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 import * as openApiV1 from './generated/openapi-v1';
 import {
+  type BackupChunkUploadRequest,
   client as openApiV1Client,
   type BackupExportRequest,
   type BackupRenameRequest,
   type BackupUploadInitRequest,
+  type BackupUploadRequest,
   type BackupUploadSessionRequest,
   type BotConfigRequest,
   type BotRegistrationRequest,
@@ -33,7 +35,6 @@ import {
   type LoginRequest,
   type ListConversationsData,
   type McpServerConfig,
-  type MigrationRequest,
   type ModelScopeSyncRequest,
   type PipInstallRequest,
   type PluginVersionSupportRequest,
@@ -65,6 +66,9 @@ export interface ApiEnvelope<T> {
   data: T;
 }
 
+export const UPGRADE_RECOVERY_EVENT = 'astrbot-upgrade-recovery';
+export const UPGRADE_RECOVERY_TOKEN_KEY = 'astrbot-upgrade-recovery-token';
+
 export type OpenConfig = DynamicConfig;
 
 export interface ProviderSchemaData {
@@ -95,12 +99,15 @@ export interface ProviderEmbeddingDimensionData {
 export interface VersionData {
   version?: string;
   dashboard_version?: string;
-  need_migration?: boolean;
   change_pwd_hint?: boolean;
   md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
   [key: string]: unknown;
 }
+
+type StartTimeData = {
+  start_time?: number | string | null;
+};
 
 export interface CommandListData {
   items?: any[];
@@ -169,11 +176,78 @@ const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
   rerank: 'rerank',
 };
 
-type V1Response<T> = Promise<AxiosResponse<ApiEnvelope<T>>>;
+type V1Response<T> = Promise<
+  AxiosResponse<ApiEnvelope<T>> & { legacyFallback?: boolean }
+>;
 type ListConversationsQuery = NonNullable<ListConversationsData['query']>;
 
 function typed<T>(response: Promise<unknown>): V1Response<T> {
   return response as unknown as V1Response<T>;
+}
+
+export function isLegacyFallbackError(error: unknown): boolean {
+  const axiosError = error as {
+    response?: { status?: number; data?: { message?: string } | string };
+    message?: string;
+  };
+  if (axiosError.response?.status === 404) {
+    return true;
+  }
+
+  const data = axiosError.response?.data;
+  const message =
+    typeof data === 'string' ? data : data?.message || axiosError.message || '';
+  return message.toLowerCase().includes('missing api key');
+}
+
+function withLegacyFallback<T>(
+  primary: Promise<unknown>,
+  legacy: () => Promise<AxiosResponse<ApiEnvelope<T>>>,
+): V1Response<T> {
+  const legacyRequest = () =>
+    legacy().then((response) => {
+      const legacyResponse = response as AxiosResponse<ApiEnvelope<T>> & {
+        legacyFallback?: boolean;
+      };
+      legacyResponse.legacyFallback = true;
+      return legacyResponse;
+    });
+
+  return typed<T>(primary).then((response) => {
+    const message = response.data?.message || '';
+    if (
+      response.data?.status === 'error' &&
+      message.toLowerCase().includes('missing api key')
+    ) {
+      return legacyRequest();
+    }
+    return response;
+  }).catch((error) => {
+    if (isLegacyFallbackError(error)) {
+      return legacyRequest();
+    }
+    throw error;
+  });
+}
+
+function firstSuccessfulResponse<T>(
+  requests: Array<Promise<AxiosResponse<ApiEnvelope<T>>>>,
+): V1Response<T> {
+  return new Promise<AxiosResponse<ApiEnvelope<T>>>((resolve, reject) => {
+    let pending = requests.length;
+    let firstError: unknown;
+    requests.forEach((request) => {
+      request.then(resolve).catch((error) => {
+        if (firstError === undefined) {
+          firstError = error;
+        }
+        pending -= 1;
+        if (pending === 0) {
+          reject(firstError);
+        }
+      });
+    });
+  });
 }
 
 function generatedOptions(
@@ -189,7 +263,21 @@ function generatedQuery<T extends object>(
   return params as (T & Record<string, unknown>) | undefined;
 }
 
-function generatedFormData(formData: FormData) {
+function generatedFormData(formData: FormData | Record<string, unknown>) {
+  if (typeof FormData !== 'undefined' && formData instanceof FormData) {
+    const body: Record<string, unknown> = {};
+    formData.forEach((value, key) => {
+      const existing = body[key];
+      if (existing === undefined) {
+        body[key] = value;
+      } else if (Array.isArray(existing)) {
+        existing.push(value);
+      } else {
+        body[key] = [existing, value];
+      }
+    });
+    return body as any;
+  }
   return formData as any;
 }
 
@@ -491,26 +579,39 @@ export const providerApi = {
 
 export const authApi = {
   login(payload: LoginRequest) {
-    return typed<any>(openApiV1.login({ body: payload }));
+    return withLegacyFallback<any>(openApiV1.login({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<any>>('/api/auth/login', payload),
+    );
   },
   logout() {
-    return typed<OpenConfig>(openApiV1.logout());
+    return withLegacyFallback<OpenConfig>(openApiV1.logout(), () =>
+      httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/logout'),
+    );
   },
   setupStatus() {
-    return typed<any>(openApiV1.getAuthSetupStatus());
+    return withLegacyFallback<any>(openApiV1.getAuthSetupStatus(), () =>
+      httpClient.get<ApiEnvelope<any>>('/api/auth/setup-status'),
+    );
   },
   setup(payload: SetupAuthRequest) {
-    return typed<OpenConfig>(openApiV1.setupAuth({ body: payload }));
+    return withLegacyFallback<OpenConfig>(openApiV1.setupAuth({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/setup', payload),
+    );
   },
   setupTotp(payload?: TotpSetupRequest) {
-    return typed<any>(openApiV1.setupTotp({ body: payload }));
+    return withLegacyFallback<any>(openApiV1.setupTotp({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<any>>('/api/auth/totp/setup', payload),
+    );
   },
   recoverTotp() {
-    return typed<any>(openApiV1.recoverTotp());
+    return withLegacyFallback<any>(openApiV1.recoverTotp(), () =>
+      httpClient.post<ApiEnvelope<any>>('/api/auth/totp/recovery'),
+    );
   },
   updateAccount(payload: UpdateAccountRequest) {
-    return typed<OpenConfig>(
+    return withLegacyFallback<OpenConfig>(
       openApiV1.updateAuthAccount({ body: payload }),
+      () => httpClient.post<ApiEnvelope<OpenConfig>>('/api/auth/account/edit', payload),
     );
   },
 };
@@ -547,35 +648,46 @@ export const traceApi = {
 
 export const updatesApi = {
   check() {
-    return typed<any>(openApiV1.checkUpdate());
+    return withLegacyFallback<any>(openApiV1.checkUpdate(), () =>
+      httpClient.get<ApiEnvelope<any>>('/api/update/check'),
+    );
   },
   releases(type?: 'core' | 'dashboard') {
-    return typed<any[]>(
+    return withLegacyFallback<any[]>(
       openApiV1.listReleases({
         query: type ? { type } : undefined,
       }),
+      () =>
+        httpClient.get<ApiEnvelope<any[]>>('/api/update/releases', {
+          params: type ? { type } : undefined,
+        }),
     );
   },
   core(payload?: UpdateRequest) {
-    return typed<OpenConfig>(openApiV1.updateCore({ body: payload }));
+    return withLegacyFallback<OpenConfig>(openApiV1.updateCore({ body: payload }), () =>
+      httpClient.post<ApiEnvelope<OpenConfig>>('/api/update/do', payload),
+    );
   },
   dashboard(payload?: UpdateRequest) {
-    return typed<OpenConfig>(
+    return withLegacyFallback<OpenConfig>(
       openApiV1.updateDashboard({ body: payload }),
+      () => httpClient.post<ApiEnvelope<OpenConfig>>('/api/update/dashboard', payload),
     );
   },
   progress(taskId: string) {
-    return typed<any>(
+    return withLegacyFallback<any>(
       openApiV1.getUpdateProgress({ path: { task_id: taskId } }),
+      () =>
+        httpClient.get<ApiEnvelope<any>>('/api/update/progress', {
+          params: { id: taskId },
+        }),
     );
   },
   installPip(payload: PipInstallRequest) {
-    return typed<OpenConfig>(
+    return withLegacyFallback<OpenConfig>(
       openApiV1.installPipPackage({ body: payload }),
+      () => httpClient.post<ApiEnvelope<OpenConfig>>('/api/update/pip-install', payload),
     );
-  },
-  runMigrations(payload?: MigrationRequest) {
-    return typed<OpenConfig>(openApiV1.runMigrations({ body: payload }));
   },
 };
 
@@ -591,7 +703,7 @@ export const backupApi = {
       openApiV1.getBackupProgress({ path: { task_id: taskId } }),
     );
   },
-  upload(formData: FormData) {
+  upload(formData: FormData | BackupUploadRequest) {
     return typed<any>(
       openApiV1.uploadBackup({ body: generatedFormData(formData) }),
     );
@@ -599,7 +711,7 @@ export const backupApi = {
   initUpload(payload: BackupUploadInitRequest) {
     return typed<any>(openApiV1.initBackupUpload({ body: payload }));
   },
-  uploadChunk(formData: FormData) {
+  uploadChunk(formData: FormData | BackupChunkUploadRequest) {
     return typed<any>(
       openApiV1.uploadBackupChunk({ body: generatedFormData(formData) }),
     );
@@ -1327,9 +1439,9 @@ export const skillApi = {
   list(params?: { enabled?: boolean; source?: string }) {
     return typed<any>(openApiV1.listSkills({ query: params }));
   },
-  uploadBatch(formData: FormData) {
+  uploadBatch(files: File[]) {
     return typed<any>(
-      openApiV1.uploadSkillsBatch({ body: generatedFormData(formData) }),
+      openApiV1.uploadSkillsBatch({ body: { files } }),
     );
   },
   setEnabled(skillName: string, enabled: boolean) {
@@ -1564,7 +1676,9 @@ export const statsApi = {
     );
   },
   version() {
-    return typed<VersionData>(openApiV1.getVersion());
+    return withLegacyFallback<VersionData>(openApiV1.getVersion(), () =>
+      httpClient.get<ApiEnvelope<VersionData>>('/api/stat/version'),
+    );
   },
   firstNotice(locale?: string) {
     return typed<{ content?: string | null }>(
@@ -1574,15 +1688,28 @@ export const statsApi = {
     );
   },
   testGhproxy(payload: GhproxyTestRequest) {
-    return typed<{ latency?: number }>(
+    return withLegacyFallback<{ latency?: number }>(
       openApiV1.testGhproxyConnection({ body: payload }),
+      () =>
+        httpClient.post<ApiEnvelope<{ latency?: number }>>(
+          '/api/stat/test-ghproxy-connection',
+          payload,
+        ),
     );
   },
   startTime() {
-    return typed<{ start_time?: number | string | null }>(openApiV1.getStartTime());
+    const v1Request = typed<StartTimeData>(openApiV1.getStartTime());
+    const legacyRequest = httpClient.get<ApiEnvelope<StartTimeData>>(
+      '/api/stat/start-time',
+    );
+
+    // Restart polling must also work after downgrading to backends without v1 stats routes.
+    return firstSuccessfulResponse<StartTimeData>([v1Request, legacyRequest]);
   },
   restart() {
-    return typed<OpenConfig>(openApiV1.restartCore());
+    return withLegacyFallback<OpenConfig>(openApiV1.restartCore(), () =>
+      httpClient.post<ApiEnvelope<OpenConfig>>('/api/stat/restart-core'),
+    );
   },
   storage() {
     return typed<OpenConfig>(openApiV1.getStorageStatus());
