@@ -130,6 +130,7 @@ class LLMSummaryCompressor:
         instruction_text: str | None = None,
         compression_threshold: float = 0.82,
         token_counter: TokenCounter | None = None,
+        max_recent_rounds: int | None = None,
     ) -> None:
         """Initialize the LLM summary compressor.
 
@@ -139,11 +140,17 @@ class LLMSummaryCompressor:
                 exact context. Clamped to 0-0.3.
             instruction_text: Custom instruction for summary generation.
             compression_threshold: The compression trigger threshold (default: 0.82).
+            token_counter: Optional custom token counter.
+            max_recent_rounds: Maximum exact recent rounds to preserve after
+                summarization. If None, only the token ratio limits recent rounds.
         """
         self.provider = provider
         self.keep_recent_ratio = min(max(float(keep_recent_ratio), 0.0), 0.3)
         self.compression_threshold = compression_threshold
         self.token_counter = token_counter or EstimateTokenCounter()
+        self.max_recent_rounds = (
+            None if max_recent_rounds is None else max(1, int(max_recent_rounds))
+        )
         self.last_call_failed = False
 
         self.instruction_text = instruction_text or (
@@ -233,6 +240,14 @@ class LLMSummaryCompressor:
             if latest_old_round and latest_old_round[-1] is messages[-1]:
                 old_rounds = old_rounds[:-1]
                 recent_rounds = [latest_old_round, *recent_rounds]
+
+        if (
+            self.max_recent_rounds is not None
+            and len(recent_rounds) > self.max_recent_rounds
+        ):
+            excess_count = len(recent_rounds) - self.max_recent_rounds
+            old_rounds = old_rounds + recent_rounds[:excess_count]
+            recent_rounds = recent_rounds[excess_count:]
 
         if not old_rounds:
             if recent_rounds and messages and messages[-1].role == "user":

@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from astrbot.core.agent.context.config import ContextConfig
 from astrbot.core.agent.context.manager import ContextManager
+from astrbot.core.agent.context.round_utils import count_conversation_rounds
 from astrbot.core.agent.message import AudioURLPart, ImageURLPart, Message, TextPart
 from astrbot.core.provider.entities import LLMResponse
 
@@ -510,6 +511,24 @@ class TestContextManager:
         assert provider.last_text_chat_kwargs is not None
         assert len(result) < len(messages)
         assert result[-1] is messages[-1]
+
+    @pytest.mark.asyncio
+    async def test_llm_enforce_max_turns_caps_recent_rounds(self):
+        """LLM summary should cap exact recent rounds for max-turn enforcement."""
+        provider = MockProvider()
+        config = ContextConfig(
+            enforce_max_turns=2,
+            llm_compress_provider=provider,  # type: ignore[arg-type]
+            llm_compress_keep_recent_ratio=0.3,
+            custom_token_counter=MessageCountTokenCounter(),
+        )
+        manager = ContextManager(config)
+        messages = self.create_messages(20)
+
+        result = await manager.process(messages)
+
+        assert provider.last_text_chat_kwargs is not None
+        assert count_conversation_rounds(result) <= config.enforce_max_turns
 
     @pytest.mark.asyncio
     async def test_enforce_max_turns_counts_tool_chain_as_one_round(self):

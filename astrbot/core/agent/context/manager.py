@@ -37,6 +37,11 @@ class ContextManager:
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,
                 instruction_text=config.llm_compress_instruction,
                 token_counter=self.token_counter,
+                max_recent_rounds=(
+                    max(1, config.enforce_max_turns - 1)
+                    if config.enforce_max_turns != -1
+                    else None
+                ),
             )
         else:
             self.compressor = TruncateByTurnsCompressor(
@@ -60,6 +65,7 @@ class ContextManager:
             if self.config.enforce_max_turns != -1:
                 turn_count = count_conversation_rounds(result)
                 if turn_count > self.config.enforce_max_turns:
+                    should_truncate_by_turns = True
                     if isinstance(self.compressor, LLMSummaryCompressor):
                         logger.debug(
                             "Turn limit (%s) exceeded (%s turns), "
@@ -73,14 +79,10 @@ class ContextManager:
                                 "LLM summary compression failed; falling back "
                                 "to turn-based truncation.",
                             )
-                            result = self.truncator.truncate_by_turns(
-                                result,
-                                keep_most_recent_turns=self.config.enforce_max_turns,
-                                drop_turns=self.config.truncate_turns,
-                            )
                         else:
                             result = compressed
-                    else:
+                            should_truncate_by_turns = False
+                    if should_truncate_by_turns:
                         result = self.truncator.truncate_by_turns(
                             result,
                             keep_most_recent_turns=self.config.enforce_max_turns,
