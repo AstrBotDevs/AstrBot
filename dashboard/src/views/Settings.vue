@@ -513,6 +513,7 @@ const availableScopes = [
     { value: 'im', label: 'im' },
     { value: 'config', label: 'config' },
     { value: 'chat', label: 'chat' },
+    { value: 'data', label: 'data' },
     { value: 'file', label: 'file' },
     { value: 'plugin', label: 'plugin' },
     { value: 'mcp', label: 'mcp' },
