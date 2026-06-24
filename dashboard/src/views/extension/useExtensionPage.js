@@ -185,8 +185,144 @@ export const useExtensionPage = () => {
   const refreshingMarket = ref(false);
   const sortBy = ref("default"); // default, stars, author, updated
   const sortOrder = ref("desc"); // desc (降序) or asc (升序)
+  const sortInstalledBy = ref("default"); // default, name, author, updated, updateStatus
+  const sortInstalledOrder = ref("desc");
   const randomPluginNames = ref([]);
   const marketCategoryFilter = ref("all");
+
+  // 批量选择相关
+  const selectedPluginNames = ref(new Set());
+  const batchUninstallConfirmDialog = ref(false);
+
+  // Derive selection state from selectedPluginNames to avoid manual sync bugs
+  const selectedCount = computed(() => selectedPluginNames.value.size);
+  const selectModeActive = computed(() => selectedCount.value > 0);
+
+  const selectableInstalledPlugins = computed(() =>
+    filteredPlugins.value.filter((plugin) => !plugin?.reserved),
+  );
+
+  const isAllSelected = computed(() => {
+    const selectable = selectableInstalledPlugins.value;
+    return selectable.length > 0 && selectedPluginNames.value.size === selectable.length;
+  });
+
+  const setSelectedPlugins = (names) => {
+    selectedPluginNames.value = new Set(names);
+  };
+
+  const clearSelection = () => {
+    setSelectedPlugins([]);
+  };
+
+  const toggleSelectPlugin = (pluginName) => {
+    if (!pluginName) return;
+    // Never allow selecting reserved (system) plugins
+    const plugin = filteredPlugins.value.find((p) => p.name === pluginName);
+    if (!plugin || plugin.reserved) return;
+
+    const next = new Set(selectedPluginNames.value);
+    if (next.has(pluginName)) {
+      next.delete(pluginName);
+    } else {
+      next.add(pluginName);
+    }
+    selectedPluginNames.value = next;
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllSelected.value) {
+      clearSelection();
+    } else {
+      setSelectedPlugins(selectableInstalledPlugins.value.map((p) => p.name));
+    }
+  };
+
+  // Shared helper for batch operations.
+  // Calls raw API methods directly to avoid the side-effects of wrapper functions
+  // (toast flooding, redundant getExtensions/checkAndPromptConflicts calls per item).
+  const runBatchAction = async ({ filterFn, apiCall, emptyMessageKey, partialMessageKey, successMessageKey }) => {
+    const targets = filteredPlugins.value.filter(
+      (p) => selectedPluginNames.value.has(p.name) && filterFn(p),
+    );
+    if (targets.length === 0) {
+      if (emptyMessageKey) {
+        toast(tm(emptyMessageKey), "info");
+      }
+      return;
+    }
+    let successCount = 0;
+    let failCount = 0;
+    for (const ext of targets) {
+      try {
+        const res = await apiCall(ext);
+        if (res.data?.status === "ok") {
+          successCount += 1;
+        } else {
+          console.error(`Batch action failed for ${ext.name}:`, res.data?.message);
+          failCount += 1;
+        }
+      } catch (e) {
+        console.error(`Batch action failed for ${ext.name}:`, e);
+        failCount += 1;
+      }
+    }
+    // Single refresh after all operations complete
+    await getExtensions({ withLoading: false });
+    clearSelection();
+    if (failCount > 0) {
+      toast(
+        tm(partialMessageKey, { success: successCount, failed: failCount }),
+        "warning",
+      );
+    } else {
+      toast(tm(successMessageKey, { count: successCount }), "success");
+    }
+  };
+
+  const batchEnable = async () =>
+    runBatchAction({
+      filterFn: (p) => !p.activated,
+      apiCall: (p) => pluginApi.setEnabled(p.name, true),
+      emptyMessageKey: "batch.noDisabledPlugins",
+      partialMessageKey: "batch.enablePartial",
+      successMessageKey: "batch.enableSuccess",
+    });
+
+  const batchDisable = async () =>
+    runBatchAction({
+      filterFn: (p) => p.activated,
+      apiCall: (p) => pluginApi.setEnabled(p.name, false),
+      emptyMessageKey: "batch.noEnabledPlugins",
+      partialMessageKey: "batch.disablePartial",
+      successMessageKey: "batch.disableSuccess",
+    });
+
+  const requestBatchUninstall = () => {
+    const targets = filteredPlugins.value.filter(
+      (p) => selectedPluginNames.value.has(p.name),
+    );
+    if (targets.length === 0) {
+      toast(tm("batch.noPluginsToUninstall"), "info");
+      return;
+    }
+    batchUninstallConfirmDialog.value = true;
+  };
+
+  const executeBatchUninstall = async () => {
+    batchUninstallConfirmDialog.value = false;
+    await runBatchAction({
+      filterFn: () => true,
+      apiCall: (p) => pluginApi.uninstall(p.name, { delete_config: false, delete_data: false }),
+      emptyMessageKey: "",
+      partialMessageKey: "batch.uninstallPartial",
+      successMessageKey: "batch.uninstallSuccess",
+    });
+  };
+
+  const cancelBatchUninstall = () => {
+    batchUninstallConfirmDialog.value = false;
+  };
 
   // 插件市场拼音搜索
 
@@ -1804,6 +1940,22 @@ export const useExtensionPage = () => {
     refreshingMarket,
     sortBy,
     sortOrder,
+    sortInstalledBy,
+    sortInstalledOrder,
+    selectedPluginNames,
+    selectModeActive,
+    selectedCount,
+    selectableInstalledPlugins,
+    isAllSelected,
+    toggleSelectPlugin,
+    toggleSelectAll,
+    clearSelection,
+    batchEnable,
+    batchDisable,
+    requestBatchUninstall,
+    executeBatchUninstall,
+    cancelBatchUninstall,
+    batchUninstallConfirmDialog,
     randomPluginNames,
     normalizeStr,
     toPinyinText,

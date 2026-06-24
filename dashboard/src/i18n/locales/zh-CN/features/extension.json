@@ -426,6 +426,27 @@
     "goToManage": "前往处理",
     "later": "稍后处理"
   },
+  "batch": {
+    "selected": "已选中 {count} 个插件",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "clearSelection": "取消选择",
+    "enable": "批量启用",
+    "disable": "批量禁用",
+    "uninstall": "批量卸载",
+    "noEnabledPlugins": "没有已启用的插件需要禁用",
+    "noDisabledPlugins": "没有已禁用的插件需要启用",
+    "enableSuccess": "成功启用 {count} 个插件",
+    "enablePartial": "{success} 个启用成功，{failed} 个失败",
+    "disableSuccess": "成功禁用 {count} 个插件",
+    "disablePartial": "{success} 个禁用成功，{failed} 个失败",
+    "uninstallSuccess": "成功卸载 {count} 个插件",
+    "uninstallPartial": "{success} 个卸载成功，{failed} 个失败",
+    "noPluginsToUninstall": "没有选中的插件可以卸载",
+    "uninstallConfirmTitle": "批量卸载确认",
+    "uninstallConfirmMessage": "确定要卸载选中的 {count} 个插件吗？此操作不可撤销。",
+    "uninstallConfirm": "确认卸载"
+  },
   "pluginChangelog": {
     "menuTitle": "查看更新日志"
   }
