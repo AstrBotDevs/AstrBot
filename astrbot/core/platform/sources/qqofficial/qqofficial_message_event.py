@@ -696,7 +696,6 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             result = await self.bot.api._http.request(route, json=payload)
             if result is None:
                 err_msg = "发送消息API返回None，触发重试"
-                logger.warning(f"[QQOfficial] post_c2c_message: {err_msg}")
                 raise APIReturnNoneError(err_msg)
             return result
 
