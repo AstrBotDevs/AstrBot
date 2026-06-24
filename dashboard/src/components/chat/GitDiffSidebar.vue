@@ -9,7 +9,18 @@ import {
   useSpcodeGitDiff,
   DEFAULT_SCOPE,
   type GitDiffScope,
+  type GitDiffFetchState,
 } from "@/composables/useSpcodeGitDiff";
+import { useSpcodeGitStatus } from "@/composables/useSpcodeGitStatus";
+import {
+  isNewFileScope,
+  type SpcodeGitStatusFile,
+} from "@/composables/parseSpcodeGitStatus";
+import type {
+  SpcodeGitDiffFile,
+  SpcodeGitDiffSnapshot,
+  FileStatus,
+} from "@/composables/parseSpcodeGitDiff";
 import { useSpcodeWorktrees } from "@/composables/useSpcodeWorktrees";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useSpcodeFileRestore, type RestoreResult } from "@/composables/useSpcodeFileRestore";
@@ -256,6 +267,12 @@ watch(
 );
 
 const composable = useSpcodeGitDiff(selectedWorktree, selectedScope);
+// git-status is fetched alongside git-diff ONLY for the unstaged view.
+// The endpoint is complementary (branch / untracked / intent-to-add)
+// and is not relevant to staged or all-scope views. Lifecycle
+// (refresh + 10s polling + dispose) is wired in the modelValue / viewMode
+// watcher and onBeforeUnmount below.
+const gitStatus = useSpcodeGitStatus(selectedWorktree);
 const spcodeStatus = useSpcodeProjectStatus();
 const expandedSet = ref<Set<string>>(new Set());
 
@@ -384,7 +401,16 @@ watch(
     if (open && isDiff) {
       isFetching.value = true;
       try {
-        await composable.refresh();
+        // Fetch diff + status in parallel. The git-status call is
+        // intentionally NOT awaited via `await` in the polling branch
+        // (a slow status call should not delay the diff refresh), but
+        // here we DO await both so the initial load is consistent
+        // before the first render. Fire-and-forget would risk showing
+        // an empty "new files" section on first paint.
+        await Promise.all([
+          composable.refresh(),
+          gitStatus.refresh(),
+        ]);
       } finally {
         isFetching.value = false;
       }
@@ -394,6 +420,9 @@ watch(
       // a tab switch (e.g. diff → files) or after the sidebar closes.
       if (props.modelValue && viewMode.value === "diff") {
         composable.startPolling(10_000);
+        // git-status polling rides on the same cadence so the
+        // "new files" section stays in sync with diff changes.
+        gitStatus.startPolling(10_000);
       }
       gitLog.stopPolling();
     } else if (open && isHistory) {
@@ -408,13 +437,105 @@ watch(
         gitLog.startPolling(10_000);
       }
       composable.stopPolling();
+      gitStatus.stopPolling();
+      gitLog.stopPolling();
     } else {
       composable.stopPolling();
+      gitStatus.stopPolling();
       gitLog.stopPolling();
     }
   },
   { immediate: true },
 );
+
+// Refresh git-status when the user switches INTO the unstaged view
+// (the composable only watches `worktreeRef` for refetch triggers; we
+// need scope-driven refresh too). Without this the user could see a
+// stale untracked list after toggling between staged/all/unstaged.
+watch(
+  () => selectedScope.value,
+  (scope) => {
+    if (scope === "unstaged" && props.modelValue && viewMode.value === "diff") {
+      void gitStatus.refresh();
+    }
+  },
+);
+
+// ── Merged unstaged view (git-diff + git-status new files) ─────────
+// When the user is on the unstaged view we want brand-new files
+// (`untracked` + `intent_to_add`) to appear alongside modified files
+// in one list, with the new files rendered with a distinct color.
+// We achieve this by:
+//   1. Building a `newFilePaths` Set from git-status's untracked +
+//      intent_to_add entries. The set is the source of truth for
+//      "is this row a new file"; the body content consults it.
+//   2. When the diff snapshot is `ok`, we splice a synthesized entry
+//      for each new file into the snapshot's `files` array so the body
+//      iterates a single list. New files use `status: "A"` (matches
+//      semantic meaning: "added to project") and carry a stub slice
+//      (no diff content available from git-status).
+//   3. We only do the merge when `selectedScope === "unstaged"`. For
+//      staged / all views we pass the original state untouched, so
+//      the existing behavior is preserved.
+const EMPTY_PATH_SET: ReadonlySet<string> = new Set<string>();
+
+const newFilePaths = computed<ReadonlySet<string>>(() => {
+  if (selectedScope.value !== "unstaged") return EMPTY_PATH_SET;
+  const s = gitStatus.state.value;
+  if (s.kind !== "ok") return EMPTY_PATH_SET;
+  const paths: string[] = [];
+  for (const f of s.snapshot.files) {
+    if (isNewFileScope(f.scope)) paths.push(f.path);
+  }
+  return new Set(paths);
+});
+
+/** Build a SpcodeGitDiffFile-shaped stub for an untracked/intent-to-add
+ *  entry. No diff slice is available (git-status does not return
+ *  patches), so `slice` is null. `status: "A"` keeps the ICON_MAP
+ *  fallback sane; the row's visual code is overridden by `isNewFile`. */
+function newFileStub(f: SpcodeGitStatusFile): SpcodeGitDiffFile {
+  return {
+    path: f.path,
+    status: "A" as FileStatus,
+    additions: 0,
+    deletions: 0,
+    slice: null,
+    isBinary: false,
+  };
+}
+
+/**
+ * State passed to <GitDiffBodyContent>. In the unstaged view it is the
+ * composable's state with new files spliced into `snapshot.files`. In
+ * any other scope we pass the composable's state untouched. The error
+ * path is also untouched — new-file data should never mask a real
+ * git-diff error.
+ */
+const diffBodyState = computed<GitDiffFetchState>(() => {
+  const base = composable.state.value;
+  if (selectedScope.value !== "unstaged") return base;
+  if (base.kind !== "ok") return base;
+  const snapshot: SpcodeGitDiffSnapshot = base.snapshot;
+  const statusSnap = gitStatus.state.value;
+  if (statusSnap.kind !== "ok") return base;
+  const existing = new Set(snapshot.files.map((f) => f.path));
+  const stubs: SpcodeGitDiffFile[] = [];
+  for (const f of statusSnap.snapshot.files) {
+    if (isNewFileScope(f.scope) && !existing.has(f.path)) {
+      stubs.push(newFileStub(f));
+      existing.add(f.path);
+    }
+  }
+  if (stubs.length === 0) return base;
+  return {
+    kind: "ok",
+    snapshot: {
+      ...snapshot,
+      files: [...snapshot.files, ...stubs],
+    },
+  };
+});
 
 // Reset selectedWorktree to null (main) when project is unloaded or
 // the loaded directory changes — the previous path may no longer be valid.
@@ -552,7 +673,7 @@ async function onConfirmRestore(): Promise<void> {
 //   2. 成功 → 用响应 `files` 覆盖 stagedFiles,refresh diff,toast success
 //   3. 失败 → toast (携带 stderr 的 reason 走 <pre> 块),不破坏本地状态
 //   4. aborted → 静默(切 worktree / 卸载项目 / 组件卸载)
-function isAborted(result: { ok: boolean; reason: string }): boolean {
+function isAborted(result: { ok: boolean; reason?: string }): boolean {
   return !result.ok && result.reason === "aborted";
 }
 
@@ -623,8 +744,13 @@ async function onUnstageFile(path: string): Promise<void> {
 }
 
 // Spec §6.7.1:unstagedCount 派生(分 scope)。
+// Reads from diffBodyState (not composable.state) so the "Stage all"
+// button in the unstaged view includes untracked / intent-to-add
+// files that were merged in from /spcode/git-status. Without this
+// the user would see "Stage all (3)" but only the 2 diff rows get
+// staged, leaving the new file behind.
 const unstagedCount = computed(() => {
-  const s = composable.state.value;
+  const s = diffBodyState.value;
   if (s.kind !== "ok") return 0;
   const total = s.snapshot.files.length;
   if (selectedScope.value === "staged") return 0;
@@ -785,6 +911,7 @@ function onLogLoadMore(): void {
 onBeforeUnmount(() => {
   onMouseUp();
   composable.dispose();
+  gitStatus.dispose();
   fileRestore.dispose();
   worktreesComposable.dispose();
   gitStage.dispose();
@@ -1117,7 +1244,7 @@ const currentRoot = computed<string | null>(() => {
                 />
         <GitDiffBodyContent
                   v-else-if="viewMode === 'diff'"
-                  :state="composable.state.value"
+                  :state="diffBodyState"
                   :expanded="expandedSet"
                   :is-dark="!!isDark"
                   :on-restore="onFileRestore"
@@ -1126,6 +1253,7 @@ const currentRoot = computed<string | null>(() => {
                   :on-unstage="onUnstageFile"
                   :is-staging="gitStage.isStaging"
                   :is-unstaging="gitUnstage.isUnstaging"
+                  :new-file-paths="newFilePaths"
                   @toggle="toggleFile"
                   @retry="onManualRefresh"
                   @restore="onFileRestore"

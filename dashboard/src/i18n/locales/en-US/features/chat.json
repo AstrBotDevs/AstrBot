@@ -340,8 +340,8 @@
       }
     },
     "diffSidebar": {
-      "chip": "Git Diff",
-      "chipTooltip": "View Git changes",
+      "chip": "Workspace",
+      "chipTooltip": "Browse workspace files, changes, and history",
       "title": "Project changes",
       "refreshTooltip": "Refresh",
       "loading": "Loading…",
@@ -349,6 +349,10 @@
       "truncated": "⚠ diff truncated (showing first {shown} / {max} bytes, may be incomplete)",
       "binaryFile": "Binary file changed (no text preview)",
       "noContent": "Content truncated or incomplete",
+      "newFile": {
+        "badge": "New file",
+        "bodyHint": "Untracked new file (sourced from git status). Stage it to see the diff."
+      },
       "worktreeTabs": {
         "label": "Worktrees",
         "ariaLabel": "Select worktree to view diff",

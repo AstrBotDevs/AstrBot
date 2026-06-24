@@ -2,7 +2,12 @@
      Spec: docs/superpowers/specs/2026-06-22-chatui-git-diff-file-restore-design.md §4, §6.1-§6.2
      Refactored: outer row <button> -> <div role="button" tabindex=0> to allow
      nesting a real <button> for the restore action (HTML5 forbids
-     button-in-button nesting; see spec §2 decision #4). -->
+     button-in-button nesting; see spec §2 decision #4).
+     Updated: 2026-06-24 — add `isNewFile` prop so the sidebar can render
+     untracked / intent-to-add files (sourced from git-status) with a
+     distinct color (teal accent) and a "新增文件" badge instead of the
+     +/- diff stats. Spec: docs/superpowers/specs/2026-06-17-chatui-git-diff-sidebar-design.md
+     §4.2.3 (merged untracked). -->
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { SpcodeGitDiffFile, FileStatus } from '@/composables/parseSpcodeGitDiff'
@@ -30,6 +35,11 @@ const props = defineProps<{
   onUnstage?: (path: string) => void
   isStaging?: boolean
   isUnstaging?: boolean
+  // When true, render as a "new file" (untracked / intent-to-add) instead
+  // of a regular diff row: distinct teal accent, no +/- stats, no
+  // DiffPreview body. Sourced from /spcode/git-status and merged into the
+  // unstaged view by GitDiffSidebar.
+  isNewFile?: boolean
 }>()
 const emit = defineEmits<{
   (e: 'toggle'): void
@@ -58,6 +68,14 @@ const showRestoreButton = computed(() => {
       spcodeStatus.status.value.umo,
   )
 })
+
+/**
+ * New-file variant uses a teal accent so it is visually distinct from
+ * diff rows (which use the FileStatus-derived color). Keeps the row
+ * expandable but renders a stub body (no diff patch to show).
+ */
+const newFileIcon = 'mdi-file-plus-outline'
+const newFileColor = 'teal'
 
 function onRowKeydown(e: KeyboardEvent): void {
   // Spec §6.5: Enter / Space toggles the row.
@@ -89,7 +107,10 @@ function onUnstageClick(e: MouseEvent): void {
 </script>
 
 <template>
-  <div class="git-diff-file-item" :class="{ expanded: expanded }">
+  <div
+    class="git-diff-file-item"
+    :class="{ expanded: expanded, 'is-new-file': isNewFile }"
+  >
     <div
       class="git-diff-file-row"
       role="button"
@@ -98,9 +119,20 @@ function onUnstageClick(e: MouseEvent): void {
       @click="emit('toggle')"
       @keydown="onRowKeydown"
     >
-      <v-icon :size="16" :color="iconInfo.color">{{ iconInfo.icon }}</v-icon>
+      <v-icon
+        v-if="isNewFile"
+        :size="16"
+        :color="newFileColor"
+      >{{ newFileIcon }}</v-icon>
+      <v-icon v-else :size="16" :color="iconInfo.color">{{ iconInfo.icon }}</v-icon>
       <span class="git-diff-file-path">{{ file.path }}</span>
-      <span class="git-diff-file-stats">
+      <!-- New files: replace +/- stats with a "新增文件" badge so users
+           see at a glance that this row is sourced from git-status
+           rather than git-diff. -->
+      <span v-if="isNewFile" class="git-diff-new-file-badge">
+        {{ tm('spcodeProjectLoad.diffSidebar.newFile.badge') }}
+      </span>
+      <span v-else class="git-diff-file-stats">
         <span class="git-diff-add">+{{ file.additions }}</span>
         <span class="git-diff-del">−{{ file.deletions }}</span>
       </span>
@@ -172,8 +204,16 @@ function onUnstageClick(e: MouseEvent): void {
       >mdi-chevron-down</v-icon>
     </div>
     <div v-if="expanded" class="git-diff-file-body">
+      <!-- New files have no diff patch — render a stub explaining where
+           the row came from and how to start tracking it. -->
+      <div v-if="isNewFile" class="git-diff-new-file-body">
+        <v-icon :size="14" :color="newFileColor">{{ newFileIcon }}</v-icon>
+        <span class="git-diff-new-file-body-text">
+          {{ tm('spcodeProjectLoad.diffSidebar.newFile.bodyHint') }}
+        </span>
+      </div>
       <v-alert
-        v-if="file.isBinary"
+        v-else-if="file.isBinary"
         type="info"
         density="compact"
         variant="tonal"
@@ -290,4 +330,41 @@ function onUnstageClick(e: MouseEvent): void {
   padding: 12px; text-align: center; color: rgba(var(--v-theme-on-surface), 0.45); font-size: 12px;
 }
 .git-diff-binary-alert { font-size: 13px; }
+
+/* ── New-file variant ────────────────────────────────────────────────
+ * Sourced from /spcode/git-status (scope=untracked | intent_to_add).
+ * Uses a teal left border + faint tinted background so the row reads as
+ * "different" without overpowering diff content. The badge in the row
+ * uses the same teal so the visual code is consistent. */
+.git-diff-file-item.is-new-file .git-diff-file-row {
+  border-left: 3px solid rgb(0, 150, 136);
+  padding-left: 9px; /* compensate for the 3px border so total padding stays 12px */
+}
+.git-diff-file-item.is-new-file .git-diff-file-row:hover {
+  /* Teal-tinted hover for new files (vs neutral grey for diff rows). */
+  background: rgba(0, 150, 136, 0.08);
+}
+.git-diff-new-file-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: rgb(0, 150, 136);
+  background: rgba(0, 150, 136, 0.12);
+  flex-shrink: 0;
+}
+.git-diff-new-file-body {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  font-size: 12px;
+}
+.git-diff-new-file-body-text {
+  font-family: inherit;
+}
 </style>

@@ -24,6 +24,12 @@ const props = defineProps<{
   onUnstage?: (path: string) => void
   isStaging?: Ref<Set<string>>
   isUnstaging?: Ref<Set<string>>
+  // Paths that should render as "new file" rows (teal accent + "新增
+  // 文件" badge) instead of regular diff rows. Populated by GitDiffSidebar
+  // from /spcode/git-status (scope=untracked | intent_to_add) when the
+  // unstaged view is active. Pass-through prop so the body content stays
+  // scope-agnostic (the merge happens at the sidebar level).
+  newFilePaths?: ReadonlySet<string>
 }>()
 const emit = defineEmits<{
   (e: 'toggle', path: string): void
@@ -129,6 +135,7 @@ const files = computed(() => {
       :on-unstage="onUnstage"
       :is-staging="isStagingForPath(f.path)"
       :is-unstaging="isUnstagingForPath(f.path)"
+      :is-new-file="newFilePaths?.has(f.path) ?? false"
       @toggle="emit('toggle', f.path)"
       @restore="emit('restore', $event)"
       @stage="emit('stage', $event)"
