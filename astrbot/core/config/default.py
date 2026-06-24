@@ -136,7 +136,7 @@ DEFAULT_CONFIG = {
         ),
         "llm_compress_keep_recent_ratio": 0.15,
         "llm_compress_provider_id": "",
-        "max_context_length": -1, # 默认不限制
+        "max_context_length": -1,  # 默认不限制
         "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
