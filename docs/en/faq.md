@@ -27,7 +27,9 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### Forgot Dashboard Password
 
-If you forgot your AstrBot dashboard password, find the `"dashboard"` field in `AstrBot/data/cmd_config.json`, for example:
+If you forgot your AstrBot dashboard password, you can use the CLI tool `astrbot password` to change the password.
+
+Another approach you can take is to find the `"dashboard"` field in `AstrBot/data/cmd_config.json`, for example:
 
 ```json
   "dashboard": {
