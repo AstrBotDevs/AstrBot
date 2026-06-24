@@ -546,9 +546,12 @@ def make_sandbox_overflow_writer(
     """Build a callback that writes tool-result overflow content directly into the sandbox.
 
     The returned callable has the signature
-    ``(content: str, tool_call_id: str) -> Awaitable[str]`` and returns the
-    sandbox-side absolute path so that ``astrbot_file_read_tool`` can read the
-    overflow file inside the sandbox container.
+    ``(content: str, tool_call_id: str) -> Awaitable[str]`` and returns a
+    sandbox-relative path that ``astrbot_file_read_tool`` can resolve inside
+    the sandbox container.
+
+    Bay's filesystem API requires relative paths, so we write to a file under
+    the sandbox working directory rather than an absolute ``/tmp/...`` path.
     """
 
     async def _write(content: str, tool_call_id: str) -> str:
@@ -559,7 +562,7 @@ def make_sandbox_overflow_writer(
             ).strip("._")
             or "tool_call"
         )
-        sandbox_path = f"/tmp/astrbot_overflow_{safe_id}_{uuid.uuid4().hex[:8]}.txt"
+        sandbox_path = f"astrbot_overflow_{safe_id}_{uuid.uuid4().hex[:8]}.txt"
         booter = await get_booter(context, unified_msg_origin)
         await booter.fs.write_file(sandbox_path, content)
         logger.debug(
