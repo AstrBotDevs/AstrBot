@@ -3,7 +3,6 @@
 import os
 
 from astrbot import __version__
-from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 VERSION = __version__
@@ -173,21 +172,17 @@ DEFAULT_CONFIG = {
         "computer_use_runtime": "none",
         "computer_use_require_admin": True,
         "sandbox": {
-            "booter": "shipyard_neo",
-            "shipyard_endpoint": "",
-            "shipyard_access_token": "",
-            "shipyard_ttl": 3600,
-            "shipyard_max_sessions": 10,
-            "shipyard_neo_endpoint": "",
-            "shipyard_neo_access_token": "",
-            "shipyard_neo_profile": "python-default",
-            "shipyard_neo_ttl": 3600,
-            "cua_image": CUA_DEFAULT_CONFIG["image"],
-            "cua_os_type": CUA_DEFAULT_CONFIG["os_type"],
-            "cua_idle_timeout": CUA_DEFAULT_CONFIG["idle_timeout"],
-            "cua_telemetry_enabled": CUA_DEFAULT_CONFIG["telemetry_enabled"],
-            "cua_local": CUA_DEFAULT_CONFIG["local"],
-            "cua_api_key": CUA_DEFAULT_CONFIG["api_key"],
+            "booter": "",
+            "sandbox_lease_timeout": 600,
+            "sandbox_idle_timeout": 1800,
+            "sandbox_ttl": 3600,
+            "max_sandboxes": 10,
+            "member_permissions": {
+                "create": False,
+                "set_retention_policy": False,
+                "takeover": False,
+                "destroy": False,
+            },
         },
         "image_compress_enabled": True,
         "image_compress_options": {
@@ -3392,143 +3387,80 @@ CONFIG_METADATA_3 = {
                         "hint": "开启后，需要 AstrBot 管理员权限才能调用使用电脑能力。在平台配置->管理员中可添加管理员。使用 /sid 指令查看管理员 ID。",
                     },
                     "provider_settings.sandbox.booter": {
-                        "description": "沙箱环境驱动器",
+                        "description": "沙箱驱动",
                         "type": "string",
-                        "options": ["shipyard_neo", "shipyard", "cua"],
-                        "labels": ["Shipyard Neo", "Shipyard", "CUA"],
+                        "options": [],
+                        "labels": [],
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                         },
                     },
-                    "provider_settings.sandbox.shipyard_neo_endpoint": {
-                        "description": "Shipyard Neo API Endpoint",
-                        "type": "string",
-                        "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_neo_access_token": {
-                        "description": "Shipyard Neo Access Token",
-                        "type": "string",
-                        "hint": "Bay 的 API Key（sk-bay-...）。留空时自动从 credentials.json 发现。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_neo_profile": {
-                        "description": "Shipyard Neo Profile",
-                        "type": "string",
-                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。留空时自动选择能力更完整的 profile。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_neo_ttl": {
-                        "description": "Shipyard Neo Sandbox TTL",
+                    "provider_settings.sandbox.sandbox_lease_timeout": {
+                        "description": "沙箱占用超时",
                         "type": "int",
-                        "hint": "Shipyard Neo 沙箱生存时间（秒）。",
+                        "hint": "单位为秒。每次 Agent 成功访问沙盒时，都会自动将本会话的沙盒租约续到当前时间 + 此时长。默认 600 秒；到期后当前会话不再绑定该沙盒，其他会话可接管。`0` 表示租约不会自动过期，需手动释放。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard_neo",
                         },
                     },
-                    "provider_settings.sandbox.cua_image": {
-                        "description": "CUA Image",
-                        "type": "string",
-                        "hint": "CUA 沙箱镜像/系统类型，默认 linux。可填写 linux、macos、windows、android，具体取决于 CUA SDK 支持。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
-                        },
-                    },
-                    "provider_settings.sandbox.cua_os_type": {
-                        "description": "CUA OS Type",
-                        "type": "string",
-                        "options": ["linux", "macos", "windows", "android"],
-                        "labels": ["Linux", "macOS", "Windows", "Android"],
-                        "hint": "CUA 沙箱操作系统类型，默认 linux。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
-                        },
-                    },
-                    "provider_settings.sandbox.cua_idle_timeout": {
-                        "description": "CUA Idle Timeout",
+                    "provider_settings.sandbox.sandbox_idle_timeout": {
+                        "description": "沙箱空闲回收时间",
                         "type": "int",
-                        "hint": "Idle timeout for CUA sandbox sessions in seconds. When greater than 0, AstrBot proactively shuts down an idle CUA sandbox after that amount of inactivity; 0 disables it.",
+                        "hint": "单位为秒。`0` 表示不启用空闲回收，此时才会启用沙箱存活时间。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
                         },
                     },
-                    "provider_settings.sandbox.cua_telemetry_enabled": {
-                        "description": "CUA Telemetry",
+                    "provider_settings.sandbox.sandbox_ttl": {
+                        "description": "沙箱存活时间",
+                        "type": "int",
+                        "hint": "单位为秒。仅在空闲回收时间为 `0` 时生效；`0` 表示不自动销毁。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.max_sandboxes": {
+                        "description": "最大沙箱数量",
+                        "type": "int",
+                        "hint": "全局托管沙箱数量上限，默认 10。`0` 表示不限制。",
+                        "condition": {
+                            "provider_settings.computer_use_runtime": "sandbox",
+                        },
+                    },
+                    "provider_settings.sandbox.member_permissions.create": {
+                        "description": "允许普通用户创建沙箱",
                         "type": "bool",
-                        "hint": "是否允许 CUA SDK 发送遥测数据。默认关闭。",
+                        "hint": "允许普通用户创建新的托管沙箱。普通用户的创建请求仍会受到最大沙箱数量限制。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
+                            "provider_settings.computer_use_require_admin": False,
                         },
                     },
-                    "provider_settings.sandbox.cua_local": {
-                        "description": "CUA Local Sandbox",
+                    "provider_settings.sandbox.member_permissions.set_retention_policy": {
+                        "description": "允许普通用户修改沙箱保留策略",
                         "type": "bool",
-                        "hint": "是否优先使用 CUA 本地沙箱。默认开启，避免云端沙箱要求 CUA_API_KEY。关闭后可使用 CUA 云端沙箱。",
+                        "hint": "允许普通用户在临时沙箱和持久沙箱策略之间切换。持久沙箱会保留环境以便后续复用。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
+                            "provider_settings.computer_use_require_admin": False,
                         },
                     },
-                    "provider_settings.sandbox.cua_api_key": {
-                        "description": "CUA API Key",
-                        "type": "string",
-                        "hint": "CUA 云端沙箱 API Key。仅在关闭本地沙箱时需要。也可以通过 CUA_API_KEY 环境变量提供。",
-                        "obvious_hint": True,
+                    "provider_settings.sandbox.member_permissions.takeover": {
+                        "description": "允许普通用户强占沙箱",
+                        "type": "bool",
+                        "hint": "允许普通用户强制接管被其他会话占用的沙箱。此操作会转移沙箱控制权，建议谨慎开启。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "cua",
-                            "provider_settings.sandbox.cua_local": False,
+                            "provider_settings.computer_use_require_admin": False,
                         },
                     },
-                    "provider_settings.sandbox.shipyard_endpoint": {
-                        "description": "Shipyard API Endpoint",
-                        "type": "string",
-                        "hint": "Shipyard 服务的 API 访问地址。",
+                    "provider_settings.sandbox.member_permissions.destroy": {
+                        "description": "允许普通用户删除沙箱",
+                        "type": "bool",
+                        "hint": "允许普通用户删除自己可访问的托管沙箱。删除后沙箱环境和对应记录都会被移除。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
-                        },
-                        "_special": "check_shipyard_connection",
-                    },
-                    "provider_settings.sandbox.shipyard_access_token": {
-                        "description": "Shipyard Access Token",
-                        "type": "string",
-                        "hint": "用于访问 Shipyard 服务的访问令牌。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_ttl": {
-                        "description": "Shipyard Session TTL",
-                        "type": "int",
-                        "hint": "Shipyard 会话的生存时间（秒）。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
-                        },
-                    },
-                    "provider_settings.sandbox.shipyard_max_sessions": {
-                        "description": "Shipyard Max Sessions",
-                        "type": "int",
-                        "hint": "Shipyard 最大会话数量。",
-                        "condition": {
-                            "provider_settings.computer_use_runtime": "sandbox",
-                            "provider_settings.sandbox.booter": "shipyard",
+                            "provider_settings.computer_use_require_admin": False,
                         },
                     },
                 },

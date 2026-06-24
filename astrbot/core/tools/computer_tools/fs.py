@@ -814,6 +814,8 @@ class FileDownloadTool(FunctionTool):
 
             if also_send_to_user:
                 try:
+                    # Keep the user-facing filename stable; the local temp path
+                    # still carries a random prefix to avoid collisions.
                     name = _remote_basename(remote_path) or os.path.basename(local_path)
                     if Path(local_path).suffix.lower() in _IMAGE_FILE_SUFFIXES:
                         message_component = Image.fromFileSystem(local_path)

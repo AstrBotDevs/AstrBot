@@ -5,6 +5,7 @@ import socket
 import time
 from pathlib import Path
 from typing import Any, Protocol, cast
+from urllib.parse import urlsplit
 
 import jwt
 import psutil
@@ -301,6 +302,9 @@ class AstrBotDashboard:
             if not isinstance(username, str) or not username.strip():
                 raise jwt.InvalidTokenError("missing username in token payload")
             current_request.state.dashboard_g.username = username
+            sandbox_origin_error = self._sandbox_cookie_origin_error(current_request)
+            if sandbox_origin_error is not None:
+                return sandbox_origin_error
         except jwt.ExpiredSignatureError:
             r = JSONResponse(error("Token 过期"))
             r.status_code = 401
@@ -340,6 +344,40 @@ class AstrBotDashboard:
                     r.status_code = 429
                     return r
         return None
+
+    def _sandbox_cookie_origin_error(
+        self, current_request: Request
+    ) -> JSONResponse | None:
+        if current_request.method not in {"POST", "PATCH", "DELETE"}:
+            return None
+        if not current_request.url.path.startswith("/api/sandbox"):
+            return None
+        auth_header = current_request.headers.get("Authorization", "").strip()
+        if auth_header.startswith("Bearer "):
+            return None
+
+        origin = current_request.headers.get("Origin", "").strip()
+        referer = current_request.headers.get("Referer", "").strip()
+        candidate = origin or referer
+        if not candidate:
+            return None
+        if self._is_same_dashboard_origin(candidate, current_request):
+            return None
+
+        response = JSONResponse(error("Origin is not allowed"))
+        response.status_code = 403
+        return response
+
+    @staticmethod
+    def _is_same_dashboard_origin(candidate: str, current_request: Request) -> bool:
+        parsed_candidate = urlsplit(candidate)
+        if not parsed_candidate.scheme or not parsed_candidate.netloc:
+            return False
+        parsed_request = current_request.url
+        return (
+            parsed_candidate.scheme == parsed_request.scheme
+            and parsed_candidate.netloc == parsed_request.netloc
+        )
 
     def _get_request_client_ip(self, current_request) -> str:
         if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False)):

@@ -1,0 +1,348 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_sandbox_management_page_exists():
+    assert (ROOT / "dashboard/src/views/SandboxManagementPage.vue").is_file()
+
+
+def test_main_routes_include_sandboxes_page():
+    content = (ROOT / "dashboard/src/router/MainRoutes.ts").read_text(encoding="utf-8")
+
+    assert "name: 'Sandboxes'" in content
+    assert "path: '/sandboxes'" in content
+    assert "SandboxManagementPage.vue" in content
+
+
+def test_sidebar_includes_sandboxes_navigation():
+    content = (
+        ROOT / "dashboard/src/layouts/full/vertical-sidebar/sidebarItem.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "core.navigation.sandboxes" in content
+    assert "to: '/sandboxes'" in content
+
+
+def test_sandbox_management_page_uses_current_sandbox_api_prefix():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "/api/sandboxes" not in content
+    assert "/api/sandbox" in content
+
+
+def test_sandbox_management_page_does_not_gate_destroy_by_provider_capability():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "hasCapability(item, 'destroy')" not in content
+
+
+def test_sandbox_management_page_disables_destroy_for_occupied_sandboxes():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "case 'destroy':" in content
+    assert "return status !== 'stopping' && !item.controller_session_id" in content
+
+
+def test_sandbox_management_page_replaces_console_history_after_command_updates():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "consoleHistory.value = [...consoleHistory.value]" in content
+
+
+def test_sandbox_management_page_release_is_not_limited_to_dashboard_controller():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "item.controller_session_id === 'dashboard'" not in content
+    assert "case 'release':" in content
+    assert "return status !== 'stopping' && !!item.controller_session_id" in content
+
+
+def test_sandbox_management_page_uses_backend_create_record_without_local_status_guess():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "status: 'creating' as const" not in content
+    assert "startCreatePolling(created.sandbox_id, created)" in content
+    assert "upsertSandboxRecord(placeholder)" in content
+    assert (
+        "const index = sandboxes.value.findIndex((item) => item.sandbox_id === record.sandbox_id)"
+        in content
+    )
+    assert "next[index] = record" in content
+    assert "sandboxes.value = next" in content
+
+
+def test_sandbox_management_page_keeps_create_button_available_while_other_sandboxes_are_creating():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'prepend-icon="mdi-plus" @click="createDialog = true"' in content
+    assert 'prepend-icon="mdi-plus" :disabled="creatingRequestPending"' not in content
+    assert ':disabled="createFlowActive"' not in content
+    assert ':disabled="!hasProviderOptions || creatingRequestPending"' in content
+
+
+def test_sandbox_management_page_tracks_multiple_pending_creates_instead_of_single_id():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "pendingCreateSandboxes" in content
+    assert "pendingCreateSandboxId" not in content
+
+
+def test_sandbox_management_page_loads_provider_options_from_api():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "const providerOptions = [" not in content
+    assert "axios.get('/api/sandbox/providers'" in content
+    assert "providerOptions.value = providers.map(" in content
+    assert "defaultProviderId" in content
+    assert (
+        "providerOptions.value.find((option) => option.value === defaultProviderId)"
+        in content
+    )
+
+
+def test_sandbox_management_page_does_not_show_legacy_provider_hint():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "tm('create.providerHint')" not in content
+
+
+def test_sandbox_management_page_does_not_allow_configure_while_creating_or_restoring():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "case 'configure':" in content
+    assert (
+        "return status !== 'creating' && status !== 'restoring' && status !== 'stopping'"
+        in content
+    )
+
+
+def test_sandbox_management_page_does_not_toast_running_after_create():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "toast(tm('messages.createReady'))" not in content
+
+
+def test_sandbox_management_page_destroy_closes_dialog_before_backend_cleanup():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "const targetId = target.sandbox_id" in content
+    assert "destroyDialog.value = false" in content
+    assert "startDestroyPolling(targetId)" in content
+    assert "const res = await axios.delete(sandboxApiPath(targetId)" in content
+    assert "status: 'stopping'" not in content
+    assert "upsertSandboxRecord(stoppingRecord)" not in content
+    assert "destroying" not in content
+    assert (
+        "const sandbox = res.data.data?.sandbox as SandboxRecord | undefined" in content
+    )
+    assert "upsertSandboxRecord(sandbox)" in content
+    assert "void loadSandboxes({ silent: true })" in content
+    assert "destroyQueued" not in content
+
+
+def test_sandbox_management_page_starts_destroy_polling_only_after_backend_accepts():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "if (res.data.status === 'ok') {\n      startDestroyPolling(targetId)"
+        in content
+    )
+    assert "stopDestroyPollingForSandbox(targetId)" in content
+
+
+def test_sandbox_management_page_polls_until_destroyed_sandbox_disappears():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function startDestroyPolling" in content
+    assert "pendingDestroySandboxes" in content
+    assert (
+        "const record = result.records.find((item) => item.sandbox_id === trackedSandboxId)"
+        in content
+    )
+    assert "if (!record) {" in content
+    assert "finishDestroyPolling(trackedSandboxId)" in content
+    assert "removeSandboxRecord(sandboxId)" in content
+    assert "startDestroyPolling(targetId)" in content
+
+
+def test_sandbox_management_page_splits_running_into_busy_and_available_labels():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "return hasController(item) ? 'busy' : 'available'" in content
+
+
+def test_sandbox_management_page_shows_controller_session_in_status_tooltip():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'v-tooltip v-if="item.controller_session_id" activator="parent"' in content
+    assert "{{ item.controller_session_id }}" in content
+    assert 'class="text-caption text-medium-emphasis mt-1"' not in content
+
+
+def test_sandbox_management_page_confirms_dangerous_console_commands():
+    page = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+    console_utils = (ROOT / "dashboard/src/views/sandbox/consoleUtils.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert "import { isDangerousConsoleCommand } from './sandbox/consoleUtils'" in page
+    assert "isDangerousConsoleCommand(command) && !window.confirm" in page
+    assert "window.confirm(tm('console.dangerConfirm'" in page
+    assert "function isDangerousConsoleCommand" in console_utils
+    assert "rm\\s+(?:-" in console_utils
+    assert "(?:--\\s+)?" in console_utils
+
+
+def test_sandbox_management_page_displays_console_cwd_relative_to_sandbox_home():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "if (cwd === '/workspace') return '~'" in content
+    assert (
+        "if (cwd.startsWith('/workspace/')) return `~${cwd.slice('/workspace'.length)}`"
+        in content
+    )
+    assert "cwd.match(/^\\/home\\/[^/]+(.*)$/)" in content
+    assert "return suffix ? `~${suffix}` : '~'" in content
+
+
+def test_sandbox_management_page_strips_console_cwd_markers_from_output():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function stripConsoleCwdMarkers" in content
+    assert "stripConsoleCwdMarkers(stdout)" in content
+    assert "stripConsoleCwdMarkers(visibleStdout)" in content
+    assert "!line.includes('__ASTRBOT_CWD__')" in content
+
+
+def test_sandbox_management_page_records_console_api_errors_in_history():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "throw new Error(res.data.message || tm('messages.operationFailed'))" in content
+    )
+    assert "entry.stderr = normalizeTerminalOutput(e?.message || String(e))" in content
+
+
+def test_sandbox_management_page_console_cwd_prefix_does_not_hide_failed_cd():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "? `cd ${quoteForShell(cwd)}; `" in content
+    assert "? `cd ${quoteForShell(cwd)} && `" not in content
+
+
+def test_sandbox_management_page_surfaces_unknown_status_key():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "tm('labels.unknownStatus', { status: key })" in content
+
+
+def test_sandbox_management_page_localizes_max_sandbox_limit_errors():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+    zh = (ROOT / "dashboard/src/i18n/locales/zh-CN/features/sandbox.json").read_text(
+        encoding="utf-8"
+    )
+    en = (ROOT / "dashboard/src/i18n/locales/en-US/features/sandbox.json").read_text(
+        encoding="utf-8"
+    )
+    ru = (ROOT / "dashboard/src/i18n/locales/ru-RU/features/sandbox.json").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function localizedSandboxError" in content
+    assert "Sandbox limit reached" in content
+    assert "messages.maxSandboxesReached" in content
+    assert "maxSandboxesReached" in zh
+    assert "maxSandboxesReached" in en
+    assert "maxSandboxesReached" in ru
+
+
+def test_sandbox_management_page_does_not_render_legacy_booter_type():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "booter_type" not in content
+    assert "showBooterTypeCaption" not in content
+    assert "provider-summary" not in content
+
+
+def test_sandbox_management_page_has_dedicated_capabilities_column():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "key: 'capabilities'" in content
+    assert 'v-for="capability in item.capabilities || []"' in content
+    assert "tm('headers.capabilities')" in content
+
+
+def test_sandbox_i18n_uses_status_and_idle_labels():
+    zh = (ROOT / "dashboard/src/i18n/locales/zh-CN/features/sandbox.json").read_text(
+        encoding="utf-8"
+    )
+    en = (ROOT / "dashboard/src/i18n/locales/en-US/features/sandbox.json").read_text(
+        encoding="utf-8"
+    )
+    ru = (ROOT / "dashboard/src/i18n/locales/ru-RU/features/sandbox.json").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"status": "状态"' in zh
+    assert '"available": "空闲"' in zh
+    assert '"unknownStatus": "未知状态：{status}"' in zh
+    assert '"status": "Status"' in en
+    assert '"available": "Idle"' in en
+    assert '"unknownStatus": "Unknown status: {status}"' in en
+    assert '"dangerConfirm"' in zh
+    assert '"dangerConfirm"' in en
+    assert '"unknownStatus"' in ru
+    assert '"dangerConfirm"' in ru

@@ -15,7 +15,7 @@ from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
-from astrbot.core.agent.tool import ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
@@ -24,10 +24,13 @@ from astrbot.core.astr_main_agent_resources import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
+    SANDBOX_GUI_PROMPT,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
+from astrbot.core.computer import computer_client
+from astrbot.core.computer.sandbox_tool_binding import tool_available_in_runtime
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
@@ -47,32 +50,18 @@ from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
-    AnnotateExecutionTool,
-    BrowserBatchExecTool,
-    BrowserExecTool,
-    CreateSkillCandidateTool,
-    CreateSkillPayloadTool,
-    CuaKeyboardTypeTool,
-    CuaMouseClickTool,
-    CuaScreenshotTool,
-    EvaluateSkillCandidateTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
     FileReadTool,
     FileUploadTool,
     FileWriteTool,
-    GetExecutionHistoryTool,
-    GetSkillPayloadTool,
     GrepTool,
-    ListSkillCandidatesTool,
-    ListSkillReleasesTool,
     LocalPythonTool,
-    PromoteSkillCandidateTool,
     PythonTool,
-    RollbackSkillReleaseTool,
-    RunBrowserSkillTool,
-    SyncSkillReleaseTool,
+    SandboxLifecycleTool,
+    SandboxOperationTool,
+    SandboxQueryTool,
     normalize_umo_for_workspace,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
@@ -81,6 +70,7 @@ from astrbot.core.tools.knowledge_base_tools import (
     retrieve_knowledge_base,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.registry import get_builtin_tool_config_rule
 from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
@@ -455,6 +445,34 @@ def _filter_skills_for_current_config(
     return filtered
 
 
+def _tool_available_for_current_runtime(tool: FunctionTool, cfg: dict) -> bool:
+    runtime = str(cfg.get("computer_use_runtime", "local"))
+    if not tool_available_in_runtime(tool, runtime):
+        return False
+    rule = get_builtin_tool_config_rule(tool.name)
+    if rule is None:
+        return True
+    conditions = rule.evaluate({"provider_settings": cfg})
+    runtime_conditions = [
+        condition
+        for condition in conditions
+        if str(condition.get("key")) == "provider_settings.computer_use_runtime"
+    ]
+    if not runtime_conditions:
+        return True
+    return all(bool(condition.get("matched")) for condition in runtime_conditions)
+
+
+def _filter_tools_for_current_config(
+    toolset: ToolSet, cfg: dict, session_id: str
+) -> ToolSet:
+    filtered = ToolSet()
+    for tool in toolset:
+        if _tool_available_for_current_runtime(tool, cfg):
+            filtered.add_tool(tool)
+    return filtered
+
+
 async def _ensure_persona_and_skills(
     req: ProviderRequest,
     cfg: dict,
@@ -483,6 +501,7 @@ async def _ensure_persona_and_skills(
 
     if req.system_prompt is None:
         req.system_prompt = ""
+    session_id = event.unified_msg_origin
 
     if persona:
         # Inject persona system prompt
@@ -496,7 +515,12 @@ async def _ensure_persona_and_skills(
     # Inject skills prompt
     runtime = cfg.get("computer_use_runtime", "local")
     skill_manager = SkillManager()
-    skills = skill_manager.list_skills(active_only=True, runtime=runtime)
+    current_provider = computer_client.get_current_sandbox_provider_id(session_id)
+    skills = skill_manager.list_skills(
+        active_only=True,
+        runtime=runtime,
+        provider_id=current_provider,
+    )
     skills = _filter_skills_for_current_config(skills, cfg)
     workspace_skills = (
         skill_manager.list_workspace_skills(
@@ -527,10 +551,20 @@ async def _ensure_persona_and_skills(
                     "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
                 )
     tmgr = plugin_context.get_llm_tool_manager()
+    persona_tools_configured = bool(persona and persona.get("tools") is not None)
+    req._persona_tools_configured = persona_tools_configured
+    req._persona_allowed_tool_names = (
+        {str(tool_name) for tool_name in persona.get("tools", [])}
+        if persona_tools_configured
+        else None
+    )
 
     # inject toolset in the persona
     if (persona and persona.get("tools") is None) or not persona:
         persona_toolset = tmgr.get_full_tool_set()
+        persona_toolset = _filter_tools_for_current_config(
+            persona_toolset, cfg, session_id
+        )
         for tool in list(persona_toolset):
             if not tool.active:
                 persona_toolset.remove_tool(tool.name)
@@ -539,7 +573,11 @@ async def _ensure_persona_and_skills(
         if persona["tools"]:
             for tool_name in persona["tools"]:
                 tool = tmgr.get_func(tool_name)
-                if tool and tool.active:
+                if (
+                    tool
+                    and tool.active
+                    and _tool_available_for_current_runtime(tool, cfg)
+                ):
                     persona_toolset.add_tool(tool)
     if not req.func_tool:
         req.func_tool = persona_toolset
@@ -561,13 +599,15 @@ async def _ensure_persona_and_skills(
                 if a.get("enabled", True) is False:
                     continue
                 persona_tools = None
+                persona_tools_configured = False
                 pid = a.get("persona_id")
                 if pid:
                     persona = plugin_context.persona_manager.get_persona_v3_by_id(pid)
                     if persona is not None:
                         persona_tools = persona.get("tools")
+                        persona_tools_configured = "tools" in persona
                 tools = a.get("tools", [])
-                if persona_tools is not None:
+                if persona_tools_configured:
                     tools = persona_tools
                 if tools is None:
                     assigned_tools.update(
@@ -575,6 +615,7 @@ async def _ensure_persona_and_skills(
                             tool.name
                             for tool in tmgr.func_list
                             if not isinstance(tool, HandoffTool)
+                            and _tool_available_for_current_runtime(tool, cfg)
                         ]
                     )
                     continue
@@ -992,7 +1033,9 @@ async def _decorate_llm_request(
     _apply_workspace_extra_prompt(event, req)
 
 
-def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
+def _plugin_tool_fix(
+    event: AstrMessageEvent, req: ProviderRequest, cfg: dict | None = None
+) -> None:
     """根据事件中的插件设置，过滤请求中的工具列表。
 
     注意：没有 handler_module_path 的工具（如 MCP 工具）会被保留，
@@ -1019,6 +1062,10 @@ def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
             if plugin.name in event.plugins_name or plugin.reserved:
                 new_tool_set.add_tool(tool)
         req.func_tool = new_tool_set
+
+    if req.func_tool is not None and cfg is not None:
+        session_id = req.session_id or event.unified_msg_origin
+        req.func_tool = _filter_tools_for_current_config(req.func_tool, cfg, session_id)
 
 
 async def _handle_webchat(
@@ -1078,100 +1125,40 @@ def _apply_llm_safety_mode(config: MainAgentBuildConfig, req: ProviderRequest) -
 def _apply_sandbox_tools(
     config: MainAgentBuildConfig,
     req: ProviderRequest,
-    session_id: str,
 ) -> None:
     if req.func_tool is None:
         req.func_tool = ToolSet()
     if req.system_prompt is None:
         req.system_prompt = ""
-    booter = config.sandbox_cfg.get("booter", "shipyard_neo")
-    if booter == "shipyard":
-        ep = config.sandbox_cfg.get("shipyard_endpoint", "")
-        at = config.sandbox_cfg.get("shipyard_access_token", "")
-        if not ep or not at:
-            logger.error("Shipyard sandbox configuration is incomplete.")
-            return
-        os.environ["SHIPYARD_ENDPOINT"] = ep
-        os.environ["SHIPYARD_ACCESS_TOKEN"] = at
+    allowed_tool_names = getattr(req, "_persona_allowed_tool_names", None)
+    persona_tools_configured = bool(getattr(req, "_persona_tools_configured", False))
 
     tool_mgr = llm_tools
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileDownloadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    if booter == "shipyard_neo":
-        # Neo-specific path rule: filesystem tools operate relative to sandbox
-        # workspace root. Do not prepend "/workspace".
-        req.system_prompt += (
-            "\n[Shipyard Neo File Path Rule]\n"
-            "When using sandbox filesystem tools (upload/download/read/write/list/delete), "
-            "always pass paths relative to the sandbox workspace root. "
-            "Example: use `baidu_homepage.png` instead of `/workspace/baidu_homepage.png`.\n"
+    added_tool = False
+
+    def add_sandbox_tool(tool_cls) -> None:
+        nonlocal added_tool
+        tool = tool_mgr.get_builtin_tool(tool_cls)
+        if persona_tools_configured and tool.name not in allowed_tool_names:
+            return
+        req.func_tool.add_tool(tool)
+        added_tool = True
+
+    add_sandbox_tool(ExecuteShellTool)
+    add_sandbox_tool(SandboxQueryTool)
+    add_sandbox_tool(SandboxLifecycleTool)
+    add_sandbox_tool(SandboxOperationTool)
+    add_sandbox_tool(PythonTool)
+    add_sandbox_tool(FileUploadTool)
+    add_sandbox_tool(FileDownloadTool)
+    add_sandbox_tool(FileReadTool)
+    add_sandbox_tool(FileWriteTool)
+    add_sandbox_tool(FileEditTool)
+    add_sandbox_tool(GrepTool)
+    if added_tool:
+        req.system_prompt = (
+            f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}{SANDBOX_GUI_PROMPT}\n"
         )
-
-        req.system_prompt += (
-            "\n[Neo Skill Lifecycle Workflow]\n"
-            "When user asks to create/update a reusable skill in Neo mode, use lifecycle tools instead of directly writing local skill folders.\n"
-            "Preferred sequence:\n"
-            "1) Use `astrbot_create_skill_payload` to store canonical payload content and get `payload_ref`.\n"
-            "2) Use `astrbot_create_skill_candidate` with `skill_key` + `source_execution_ids` (and optional `payload_ref`) to create a candidate.\n"
-            "3) Use `astrbot_promote_skill_candidate` to release: `stage=canary` for trial; `stage=stable` for production.\n"
-            "For stable release, set `sync_to_local=true` to sync `payload.skill_markdown` into local `SKILL.md`.\n"
-            "Do not treat ad-hoc generated files as reusable Neo skills unless they are captured via payload/candidate/release.\n"
-            "To update an existing skill, create a new payload/candidate and promote a new release version; avoid patching old local folders directly.\n"
-        )
-
-        # Determine sandbox capabilities from an already-booted session.
-        # If no session exists yet (first request), capabilities is None
-        # and we register all tools conservatively.
-        from astrbot.core.computer.computer_client import session_booter
-
-        sandbox_capabilities: list[str] | None = None
-        existing_booter = session_booter.get(session_id)
-        if existing_booter is not None:
-            sandbox_capabilities = getattr(existing_booter, "capabilities", None)
-
-        # Browser tools: only register if profile supports browser
-        # (or if capabilities are unknown because sandbox hasn't booted yet)
-        if sandbox_capabilities is None or "browser" in sandbox_capabilities:
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserExecTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(BrowserBatchExecTool))
-            req.func_tool.add_tool(tool_mgr.get_builtin_tool(RunBrowserSkillTool))
-
-        # Neo-specific tools (always available for shipyard_neo)
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetExecutionHistoryTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(AnnotateExecutionTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillPayloadTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetSkillPayloadTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillCandidatesTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(EvaluateSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(PromoteSkillCandidateTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSkillReleasesTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(RollbackSkillReleaseTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(SyncSkillReleaseTool))
-
-    if booter == "cua":
-        req.system_prompt += (
-            "\n[CUA Desktop Control]\n"
-            "Use `astrbot_execute_shell` with `background=true` to launch GUI apps. "
-            'Use Firefox for browser tasks, for example `firefox "https://example.com"`. '
-            "After each visible step, call `astrbot_cua_screenshot` with "
-            "`send_to_user=true` and `return_image_to_llm=true` so the user can "
-            "monitor progress. When typing, inspect the screenshot first and confirm "
-            "the target field is focused and empty or safe to append to. Use "
-            "`astrbot_cua_mouse_click` for coordinates and `astrbot_cua_keyboard_type` "
-            "for text input; use text=`\\n` for Enter.\n"
-        )
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaScreenshotTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaMouseClickTool))
-        req.func_tool.add_tool(tool_mgr.get_builtin_tool(CuaKeyboardTypeTool))
-
-    req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
 
 
 def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:
@@ -1528,14 +1515,14 @@ async def build_main_agent(
     if not req.session_id:
         req.session_id = event.unified_msg_origin
 
-    _plugin_tool_fix(event, req)
+    _plugin_tool_fix(event, req, config.provider_settings)
     await _apply_web_search_tools(event, req, plugin_context)
 
     if config.llm_safety_mode:
         _apply_llm_safety_mode(config, req)
 
     if config.computer_use_runtime == "sandbox":
-        _apply_sandbox_tools(config, req, req.session_id)
+        _apply_sandbox_tools(config, req)
     elif config.computer_use_runtime == "local":
         _apply_local_env_tools(req, plugin_context)
 

@@ -1,7 +1,6 @@
 """Tests for astr_main_agent module."""
 
 import datetime
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1008,6 +1007,219 @@ class TestEnsurePersonaAndSkills:
 
         assert req.func_tool is not None
 
+    def test_apply_sandbox_tools_respects_explicit_empty_persona_tool_list(self):
+        module = ama
+        req = ProviderRequest(func_tool=ToolSet())
+        req._persona_tools_configured = True
+        req._persona_allowed_tool_names = set()
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            provider_settings={"computer_use_runtime": "sandbox"},
+        )
+
+        module._apply_sandbox_tools(config, req)
+
+        assert req.func_tool is not None
+        assert req.func_tool.empty()
+
+    @pytest.mark.asyncio
+    async def test_ensure_persona_keeps_all_sandbox_provider_tools_in_sandbox_runtime(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        provider_tool = FunctionTool(
+            name="provider_a_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="provider screenshot",
+        )
+        provider_tool.sandbox_provider_id = "provider_a"
+        generic_tool = FunctionTool(
+            name="regular_tool",
+            parameters={"type": "object", "properties": {}},
+            description="regular",
+        )
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet([provider_tool, generic_tool])
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(
+            req,
+            {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "provider_b"},
+            },
+            mock_context,
+            mock_event,
+        )
+
+        assert req.func_tool is not None
+        assert "regular_tool" in req.func_tool.names()
+        assert "provider_a_screenshot" in req.func_tool.names()
+
+    @pytest.mark.asyncio
+    async def test_ensure_persona_keeps_current_sandbox_provider_tools(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        provider_tool = FunctionTool(
+            name="provider_a_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="provider screenshot",
+        )
+        provider_tool.sandbox_provider_id = "provider_a"
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet([provider_tool])
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        with patch(
+            "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
+            return_value="provider_a",
+        ):
+            await module._ensure_persona_and_skills(
+                req,
+                {
+                    "computer_use_runtime": "sandbox",
+                    "sandbox": {"booter": "provider_a"},
+                },
+                mock_context,
+                mock_event,
+            )
+
+        assert req.func_tool is not None
+        assert "provider_a_screenshot" in req.func_tool.names()
+
+    @pytest.mark.asyncio
+    async def test_ensure_persona_keeps_all_provider_tools_with_bound_sandbox(
+        self, monkeypatch, mock_event, mock_context
+    ):
+        module = ama
+        provider_a_tool = FunctionTool(
+            name="provider_a_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="Provider A screenshot",
+        )
+        provider_a_tool.sandbox_provider_id = "provider_a"
+        provider_b_tool = FunctionTool(
+            name="provider_b_tool",
+            parameters={"type": "object", "properties": {}},
+            description="Provider B tool",
+        )
+        provider_b_tool.sandbox_provider_id = "provider_b"
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.get_full_tool_set.return_value = ToolSet(
+            [provider_a_tool, provider_b_tool]
+        )
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+
+        from astrbot.core.computer.computer_client import sandbox_manager
+
+        monkeypatch.setattr(
+            sandbox_manager.registry,
+            "get_current_sandbox_id",
+            lambda session_id: (
+                "provider-b-1" if session_id == mock_event.unified_msg_origin else None
+            ),
+        )
+        monkeypatch.setattr(
+            sandbox_manager.registry,
+            "get_sandbox",
+            lambda sandbox_id: (
+                {"sandbox_id": sandbox_id, "provider": "provider_b"}
+                if sandbox_id == "provider-b-1"
+                else None
+            ),
+        )
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(
+            req,
+            {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "provider_a"},
+            },
+            mock_context,
+            mock_event,
+        )
+
+        assert req.func_tool is not None
+        assert "provider_b_tool" in req.func_tool.names()
+        assert "provider_a_screenshot" in req.func_tool.names()
+
+    @pytest.mark.asyncio
+    async def test_handoff_all_tools_filters_other_sandbox_provider_tools(
+        self, mock_event, mock_context
+    ):
+        module = ama
+        provider_tool = FunctionTool(
+            name="provider_a_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="provider screenshot",
+        )
+        provider_tool.sandbox_provider_id = "provider_a"
+        generic_tool = FunctionTool(
+            name="regular_tool",
+            parameters={"type": "object", "properties": {}},
+            description="regular",
+        )
+        tmgr = mock_context.get_llm_tool_manager.return_value
+        tmgr.func_list = [provider_tool, generic_tool]
+        tmgr.get_full_tool_set.return_value = ToolSet([provider_tool, generic_tool])
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=(None, None, None, False)
+        )
+        mock_context.persona_manager.get_persona_v3_by_id = MagicMock(
+            return_value={"name": "default", "tools": None}
+        )
+        handoff = MagicMock()
+        handoff.name = "transfer_to_planner"
+        mock_context.subagent_orchestrator = MagicMock(handoffs=[handoff])
+        mock_context.get_config.return_value = {
+            "subagent_orchestrator": {
+                "main_enable": True,
+                "remove_main_duplicate_tools": True,
+                "agents": [
+                    {
+                        "name": "planner",
+                        "enabled": True,
+                        "persona_id": "default",
+                    }
+                ],
+            }
+        }
+
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(
+            req,
+            {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {"booter": "provider_b"},
+            },
+            mock_context,
+            mock_event,
+        )
+
+        assert req.func_tool is not None
+        assert "transfer_to_planner" in req.func_tool.names()
+        assert "regular_tool" not in req.func_tool.names()
+        assert "provider_a_screenshot" not in req.func_tool.names()
+
     @pytest.mark.asyncio
     async def test_persona_empty_tools_keeps_late_builtin_tools(
         self, mock_event, mock_context, mock_provider
@@ -1311,6 +1523,89 @@ class TestPluginToolFix:
             module._plugin_tool_fix(mock_event, req)
 
         assert "transfer_to_demo_agent" in req.func_tool.names()
+
+    def test_plugin_tool_fix_keeps_provider_specific_tools_in_sandbox_runtime(
+        self, mock_event
+    ):
+        module = ama
+        provider_tool = FunctionTool(
+            name="astrbot_cua_mouse_click",
+            description="provider-specific",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+        provider_tool.sandbox_provider_id = "cua"
+        generic_tool = FunctionTool(
+            name="astrbot_sandbox_query",
+            description="generic",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+
+        tool_set = ToolSet()
+        tool_set.add_tool(provider_tool)
+        tool_set.add_tool(generic_tool)
+        req = ProviderRequest(func_tool=tool_set, session_id="session-a")
+        mock_event.plugins_name = ["other_plugin"]
+        mock_event.unified_msg_origin = "session-a"
+
+        with (
+            patch("astrbot.core.astr_main_agent.star_map"),
+            patch(
+                "astrbot.core.computer.computer_client.get_current_sandbox_provider_id",
+                return_value=None,
+            ),
+        ):
+            module._plugin_tool_fix(
+                mock_event,
+                req,
+                {"computer_use_runtime": "sandbox"},
+            )
+
+        assert "astrbot_sandbox_query" in req.func_tool.names()
+        assert "astrbot_cua_mouse_click" in req.func_tool.names()
+
+    def test_plugin_tool_fix_hides_provider_specific_tools_outside_sandbox_runtime(
+        self, mock_event
+    ):
+        module = ama
+        cua_tool = FunctionTool(
+            name="astrbot_cua_keyboard_type",
+            description="cua",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+        cua_tool.sandbox_provider_id = "cua"
+        neo_tool = FunctionTool(
+            name="astrbot_execute_browser",
+            description="neo",
+            parameters={"type": "object", "properties": {}},
+            handler_module_path=None,
+            active=True,
+        )
+        neo_tool.sandbox_provider_id = "shipyard_neo"
+
+        tool_set = ToolSet()
+        tool_set.add_tool(cua_tool)
+        tool_set.add_tool(neo_tool)
+        req = ProviderRequest(func_tool=tool_set, session_id="session-a")
+        mock_event.plugins_name = ["other_plugin"]
+        mock_event.unified_msg_origin = "session-a"
+
+        with (
+            patch("astrbot.core.astr_main_agent.star_map"),
+        ):
+            module._plugin_tool_fix(
+                mock_event,
+                req,
+                {"computer_use_runtime": "local"},
+            )
+
+        assert "astrbot_cua_keyboard_type" not in req.func_tool.names()
+        assert "astrbot_execute_browser" not in req.func_tool.names()
 
 
 class TestBuildMainAgent:
@@ -2357,7 +2652,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         assert req.func_tool is not None
         assert isinstance(req.func_tool, ToolSet)
@@ -2372,13 +2667,16 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", func_tool=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         tool_names = req.func_tool.names()
         assert "astrbot_execute_shell" in tool_names
         assert "astrbot_execute_ipython" in tool_names
         assert "astrbot_upload_file" in tool_names
         assert "astrbot_download_file" in tool_names
+        assert "astrbot_sandbox_query" in tool_names
+        assert "astrbot_sandbox_lifecycle" in tool_names
+        assert "astrbot_sandbox_operation" in tool_names
 
     def test_apply_sandbox_tools_adds_sandbox_prompt(self, mock_context):
         """Test that sandbox mode prompt is added to system_prompt."""
@@ -2390,103 +2688,10 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         assert "sandboxed environment" in req.system_prompt
-
-    def test_apply_sandbox_tools_with_cua_adds_gui_guidance(self, mock_context):
-        """Test that CUA sandbox guidance nudges reliable GUI workflows."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={"booter": "cua"},
-        )
-        req = ProviderRequest(prompt="Test", system_prompt="Original prompt")
-
-        module._apply_sandbox_tools(config, req, "session-123")
-
-        assert req.func_tool is not None
-        tool_names = req.func_tool.names()
-        assert "astrbot_cua_screenshot" in tool_names
-        assert "astrbot_cua_mouse_click" in tool_names
-        assert "astrbot_cua_keyboard_type" in tool_names
-        assert "astrbot_cua_key_press" not in tool_names
-
-        assert "Firefox" in req.system_prompt
-        assert "background=true" in req.system_prompt
-        assert 'firefox "https://example.com"' in req.system_prompt
-        assert "astrbot_cua_screenshot" in req.system_prompt
-        assert "astrbot_cua_key_press" not in req.system_prompt
-        assert "return_image_to_llm" in req.system_prompt
-        assert "astrbot_execute_shell" in req.system_prompt
-        assert "\\n" in req.system_prompt
-        assert "send_to_user=true" in req.system_prompt
-        assert "focused and empty or safe to append" in req.system_prompt
-
-    def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
-        """Test sandbox tools with shipyard booter configuration."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "https://shipyard.example.com",
-                "shipyard_access_token": "test-token",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        monkeypatch.delenv("SHIPYARD_ENDPOINT", raising=False)
-        monkeypatch.delenv("SHIPYARD_ACCESS_TOKEN", raising=False)
-
-        module._apply_sandbox_tools(config, req, "session-123")
-
-        assert os.environ.get("SHIPYARD_ENDPOINT") == "https://shipyard.example.com"
-        assert os.environ.get("SHIPYARD_ACCESS_TOKEN") == "test-token"
-
-    def test_apply_sandbox_tools_shipyard_missing_endpoint(self, mock_context):
-        """Test that shipyard config is skipped when endpoint is missing."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "",
-                "shipyard_access_token": "test-token",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123")
-
-        mock_logger.error.assert_called_once()
-        assert (
-            "Shipyard sandbox configuration is incomplete"
-            in mock_logger.error.call_args[0][0]
-        )
-
-    def test_apply_sandbox_tools_shipyard_missing_access_token(self, mock_context):
-        """Test that shipyard config is skipped when access token is missing."""
-        module = ama
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="sandbox",
-            sandbox_cfg={
-                "booter": "shipyard",
-                "shipyard_endpoint": "https://shipyard.example.com",
-                "shipyard_access_token": "",
-            },
-        )
-        req = ProviderRequest(prompt="Test", func_tool=None)
-
-        with patch("astrbot.core.astr_main_agent.logger") as mock_logger:
-            module._apply_sandbox_tools(config, req, "session-123")
-
-        mock_logger.error.assert_called_once()
+        assert "send screenshots to the user to show progress" not in req.system_prompt
 
     def test_apply_sandbox_tools_preserves_existing_toolset(self, mock_context):
         """Test that existing tools are preserved when adding sandbox tools."""
@@ -2502,7 +2707,7 @@ class TestApplySandboxTools:
         existing_toolset.add_tool(existing_tool)
         req = ProviderRequest(prompt="Test", func_tool=existing_toolset)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         assert "existing_tool" in req.func_tool.names()
         assert "astrbot_execute_shell" in req.func_tool.names()
@@ -2517,7 +2722,7 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         assert req.system_prompt.startswith("Base prompt")
         assert "sandboxed environment" in req.system_prompt
@@ -2532,7 +2737,140 @@ class TestApplySandboxTools:
         )
         req = ProviderRequest(prompt="Test", system_prompt=None)
 
-        module._apply_sandbox_tools(config, req, "session-123")
+        module._apply_sandbox_tools(config, req)
 
         assert isinstance(req.system_prompt, str)
         assert "sandboxed environment" in req.system_prompt
+        assert "check the current sandbox first" in req.system_prompt
+        assert "listing sandbox providers" in req.system_prompt
+        assert "inspect each sandbox's access field" in req.system_prompt
+        assert "Never treat status=running alone as reusable" in req.system_prompt
+        assert "access.status=occupied" in req.system_prompt
+        assert "fresh or separate environment" in req.system_prompt
+        assert "send screenshots to the user to show progress" not in req.system_prompt
+        assert (
+            "astrbot_sandbox_operation with action=capture_screenshot"
+            in req.system_prompt
+        )
+        assert "send_to_user=true" in req.system_prompt
+        assert "send_message_to_user separately" in req.system_prompt
+        assert "automatically renews this session's lease" in req.system_prompt
+        assert "now plus the configured sandbox lease timeout" in req.system_prompt
+        assert "lease_expires_in_seconds" in req.system_prompt
+        assert "no longer has a current sandbox" in req.system_prompt
+
+    def test_apply_sandbox_tools_does_not_scan_provider_tool_names(self, mock_context):
+        module = ama
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="sandbox",
+            sandbox_cfg={"booter": "provider_a"},
+        )
+        req = ProviderRequest(prompt="Test", system_prompt="Base prompt")
+        req.session_id = "session-a"
+
+        with (
+            patch(
+                "astrbot.core.computer.computer_client.list_sandbox_providers",
+                return_value=[
+                    {
+                        "provider_id": "provider_a",
+                        "tool_names": ["provider_a_screenshot"],
+                    }
+                ],
+            ),
+            patch(
+                "astrbot.core.provider.register.llm_tools.get_func",
+                side_effect=AssertionError("provider tools must be registered once"),
+            ),
+        ):
+            module._apply_sandbox_tools(config, req)
+
+        assert "provider_a_screenshot" not in req.func_tool.names()
+        assert "send screenshots to the user to show progress" not in req.system_prompt
+
+    def test_registered_provider_tools_are_included_by_persona_toolset(
+        self, mock_context
+    ):
+        module = ama
+        cfg = {"computer_use_runtime": "sandbox"}
+        toolset = ToolSet()
+
+        provider_tool = FunctionTool(
+            name="provider_a_screenshot",
+            parameters={"type": "object", "properties": {}},
+            description="Provider A screenshot",
+        )
+        provider_tool.sandbox_provider_id = "provider_a"
+        toolset.add_tool(provider_tool)
+
+        filtered = module._filter_tools_for_current_config(toolset, cfg, "session-a")
+
+        assert "provider_a_screenshot" in filtered.names()
+
+    def test_filter_tools_for_current_config_applies_builtin_runtime_rules(self):
+        module = ama
+        toolset = ToolSet()
+        toolset.add_tool(module.LocalPythonTool())
+        toolset.add_tool(module.SandboxLifecycleTool())
+
+        sandbox_filtered = module._filter_tools_for_current_config(
+            toolset, {"computer_use_runtime": "sandbox"}, "session-a"
+        )
+        none_filtered = module._filter_tools_for_current_config(
+            toolset, {"computer_use_runtime": "none"}, "session-a"
+        )
+
+        assert "astrbot_execute_python" not in sandbox_filtered.names()
+        assert "astrbot_sandbox_lifecycle" in sandbox_filtered.names()
+        assert "astrbot_execute_python" not in none_filtered.names()
+        assert "astrbot_sandbox_lifecycle" not in none_filtered.names()
+
+    def test_handoff_runtime_computer_tools_include_sandbox_lifecycle_tools(self):
+        tool_mgr = MagicMock()
+
+        class NamedTool:
+            def __init__(self, name):
+                self.name = name
+                self.active = True
+
+        def get_builtin_tool(cls, **kwargs):
+            del kwargs
+            return cls()
+
+        tool_mgr.get_builtin_tool.side_effect = get_builtin_tool
+        tool_mgr.get_func.side_effect = lambda name: NamedTool(name)
+
+        with patch(
+            "astrbot.core.computer.computer_client.list_sandbox_providers",
+            return_value=[],
+        ):
+            tools = ama.FunctionToolExecutor._get_runtime_computer_tools(
+                "sandbox", tool_mgr, "provider_a"
+            )
+
+        assert "astrbot_sandbox_query" in tools
+        assert "astrbot_sandbox_lifecycle" in tools
+        assert "astrbot_sandbox_operation" in tools
+
+    def test_runtime_computer_tools_are_cached_per_runtime_and_booter(self):
+        tool_mgr = MagicMock()
+
+        def get_builtin_tool(cls, **kwargs):
+            del kwargs
+            return cls()
+
+        tool_mgr.get_builtin_tool.side_effect = get_builtin_tool
+        tool_mgr.get_func.side_effect = lambda name: None
+        ama.FunctionToolExecutor._runtime_computer_tools_cache.clear()
+
+        first = ama.FunctionToolExecutor._get_runtime_computer_tools(
+            "sandbox", tool_mgr, "provider_a"
+        )
+        call_count = tool_mgr.get_builtin_tool.call_count
+        second = ama.FunctionToolExecutor._get_runtime_computer_tools(
+            "sandbox", tool_mgr, "provider_a"
+        )
+
+        assert first is second
+        assert tool_mgr.get_builtin_tool.call_count == call_count

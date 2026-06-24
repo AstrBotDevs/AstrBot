@@ -90,6 +90,11 @@ const MainRoutes = {
       component: () => import('@/views/SubAgentPage.vue')
     },
     {
+      name: 'Sandboxes',
+      path: '/sandboxes',
+      component: () => import('@/views/SandboxManagementPage.vue')
+    },
+    {
       name: 'CronJobs',
       path: '/cron',
       component: () => import('@/views/CronJobPage.vue')

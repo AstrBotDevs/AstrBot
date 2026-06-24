@@ -55,6 +55,11 @@
       "permissionMember": "全部用户",
       "permissionEveryone": "全部用户",
       "permissionBuiltin": "系统内置",
+      "originBuiltin": "内置",
+      "originMcp": "MCP",
+      "originPlugin": "插件",
+      "originSandbox": "沙盒",
+      "originUnknown": "未知",
       "actions": "操作"
     },
     "configTags": {

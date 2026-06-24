@@ -1504,19 +1504,9 @@ export default {
     };
 
     const loadNeoAvailability = async () => {
-      try {
-        const res = await systemConfigApi.get();
-        const config = res?.data?.data?.config || {};
-        const providerSettings = config?.provider_settings || {};
-        const currentRuntime =
-          providerSettings?.computer_use_runtime || "local";
-        const booter = providerSettings?.sandbox?.booter || "";
-        neoEnabled.value =
-          currentRuntime === "sandbox" && booter === "shipyard_neo";
-      } catch (_err) {
-        neoEnabled.value = false;
-      }
-
+      // Core no longer ships /api/skills/neo/* routes; Neo skill management is
+      // provided by external sandbox provider plugins instead of this page.
+      neoEnabled.value = false;
       neoUnavailableMessage.value = tm("skills.neoRuntimeRequired");
       if (!neoEnabled.value && mode.value === "neo") {
         mode.value = "local";

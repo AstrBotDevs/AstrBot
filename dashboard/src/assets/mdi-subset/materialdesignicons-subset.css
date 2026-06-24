@@ -324,6 +324,10 @@
   content: "\F1C2B";
 }
 
+.mdi-cube-outline::before {
+  content: "\F01A7";
+}
+
 .mdi-cursor-default-click::before {
   content: "\F0CFD";
 }
