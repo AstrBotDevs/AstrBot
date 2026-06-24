@@ -1773,6 +1773,12 @@ async def test_plugin_page_content_issues_scoped_asset_token(
     css_response = await anonymous_client.get(css_url.group(1))
     assert css_response.status_code == 200
 
+    stale_cookie_response = await anonymous_client.get(
+        app_js_url.group(1),
+        headers={"Cookie": f"{DASHBOARD_JWT_COOKIE_NAME}=stale.dashboard.token"},
+    )
+    assert stale_cookie_response.status_code == 200
+
     out_of_scope_response = await anonymous_client.get(
         f"/api/plugin/get?asset_token={asset_token}"
     )
