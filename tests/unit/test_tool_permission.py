@@ -174,16 +174,19 @@ async def test_check_permission_passes_for_member_when_configured_member():
 
 
 @pytest.mark.asyncio
-async def test_guarded_tool_delegates_when_permission_passes():
+async def test_guarded_tool_delegates_handler_with_event_when_permission_passes():
     _clear_tool_permissions()
     mgr = FunctionToolManager()
 
     called = False
+    received_event = None
 
-    async def handler(ctx, **kw):
+    async def handler(event, **kw):
         nonlocal called
+        nonlocal received_event
         called = True
-        return "ok"
+        received_event = event
+        return f"ok:{event.get_sender_id()}:{kw['value']}"
 
     wrapped = FunctionTool(
         name="delegated",
@@ -194,9 +197,10 @@ async def test_guarded_tool_delegates_when_permission_passes():
     guarded = _PermissionGuardedTool(wrapped, mgr)
     context = _make_context(role="member")
 
-    result = await guarded.call(context)
+    result = await guarded.call(context, value="sentinel")
     assert called
-    assert result == "ok"
+    assert received_event is context.context.event
+    assert result == "ok:user_123:sentinel"
 
 
 @pytest.mark.asyncio
@@ -280,7 +284,8 @@ async def test_guarded_tool_handles_async_generator_handler():
     _clear_tool_permissions()
     mgr = FunctionToolManager()
 
-    async def gen_handler(ctx, **kw):  # type: ignore[misc]
+    async def gen_handler(event, **kw):  # type: ignore[misc]
+        assert event is context.context.event
         yield "A"
         yield "B"
         yield "C"

@@ -249,9 +249,10 @@ class _PermissionGuardedTool(FunctionTool):
         if error is not None:
             return error
 
-        # Delegate to handler first (plugin tools).
+        # @filter.llm_tool decorated tools have a handler attribute, which is the actual callable.
         if self._wrapped.handler is not None:
-            result = self._wrapped.handler(context, **kwargs)
+            event = context.context.event
+            result = self._wrapped.handler(event, **kwargs)
             if _inspect.isasyncgen(result):
                 last: Any = None
                 async for item in result:
@@ -261,11 +262,12 @@ class _PermissionGuardedTool(FunctionTool):
                 return await result
             return result
 
-        # Fall back to overridden call() on subclasses (e.g. MCPTool).
+        # If the tool has a "call" method that is not the default FunctionTool.call, invoke it.
         call_override = getattr(type(self._wrapped), "call", None)
         if call_override is not None and call_override is not FunctionTool.call:
             return await self._wrapped.call(context, **kwargs)
 
+        # Compatibility fallback: if the tool has a "run" method, invoke it. This is for legacy tools that don't use the new handler/call interface.
         run = getattr(self._wrapped, "run", None)
         if run is not None:
             event = context.context.event
