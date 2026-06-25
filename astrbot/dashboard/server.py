@@ -25,6 +25,7 @@ from astrbot.core.utils.io import (
     get_dashboard_dist_version,
     get_local_ip_addresses,
     is_dashboard_dist_compatible,
+    normalize_host_list,
     should_use_bundled_dashboard_dist,
 )
 from astrbot.dashboard.asgi_runtime import (
@@ -556,12 +557,9 @@ class AstrBotDashboard:
         host_raw = (
             os.environ.get("DASHBOARD_HOST")
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
-            or dashboard_config.get("host", "0.0.0.0")
+            or dashboard_config.get("host", ["0.0.0.0"])
         )
-        if isinstance(host_raw, list):
-            hosts = host_raw
-        else:
-            hosts = [h.strip() for h in str(host_raw).split(",")]
+        hosts = normalize_host_list(host_raw)
         enable = dashboard_config.get("enable", True)
         ssl_config = dashboard_config.get("ssl", {})
         if not isinstance(ssl_config, dict):
@@ -591,17 +589,23 @@ class AstrBotDashboard:
             )
 
         if not set(hosts).issubset(local_hosts):
-            try:
-                ip_addr = get_local_ip_addresses()
-            except Exception as _:
-                pass
-
-        bound_v6 = all(":" in h for h in hosts)
-        bound_v4 = all(":" not in h for h in hosts)
-        if bound_v6 and not bound_v4:
-            ip_addr = [ip for ip in ip_addr if ":" in ip]
-        elif bound_v4 and not bound_v6:
-            ip_addr = [ip for ip in ip_addr if ":" not in ip]
+            if all_interfaces & set(hosts):
+                try:
+                    ip_addr = get_local_ip_addresses()
+                except Exception as _:
+                    ip_addr = []
+                has_v4_wildcard = "0.0.0.0" in hosts
+                has_v6_wildcard = "::" in hosts
+                if has_v4_wildcard and not has_v6_wildcard:
+                    specific_v6 = [h for h in hosts if ":" in h and h != "::"]
+                    ip_addr = [ip for ip in ip_addr if ":" not in ip] + specific_v6
+                elif has_v6_wildcard and not has_v4_wildcard:
+                    specific_v4 = [h for h in hosts if ":" not in h and h != "0.0.0.0"]
+                    ip_addr = [ip for ip in ip_addr if ":" in ip] + specific_v4
+            else:
+                ip_addr = [h for h in hosts if h not in local_hosts]
+        else:
+            ip_addr = []
         if isinstance(port, str):
             port = int(port)
 

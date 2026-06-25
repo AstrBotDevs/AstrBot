@@ -12,6 +12,7 @@ from astrbot import logger
 from astrbot.core import DEMO_MODE
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db import BaseDatabase
+from astrbot.core.utils.io import normalize_host_list
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
     is_md5_dashboard_password,
@@ -427,15 +428,14 @@ class AuthService:
     def can_skip_default_password_auth(self) -> bool:
         if not self.env_flag_enabled(SKIP_DEFAULT_PASSWORD_AUTH_ENV):
             return False
-        host = (
+        host_raw = (
             os.environ.get("DASHBOARD_HOST")
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
             or self.config["dashboard"].get("host", "")
         )
-        if isinstance(host, list):
-            hosts = host
-        else:
-            hosts = [h.strip() for h in str(host).split(",")]
+        hosts = normalize_host_list(host_raw)
+        if not hosts:
+            return False
         return all(
             str(h).strip().lower() in LOCAL_DASHBOARD_HOSTS for h in hosts
         )

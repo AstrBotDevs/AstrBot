@@ -79,6 +79,7 @@ class AstrBotConfig(dict):
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
 
+        dashboard_conf = conf.get("dashboard")
         if isinstance(dashboard_conf, dict):
             host_val = dashboard_conf.get("host")
             if isinstance(host_val, str) and host_val:
