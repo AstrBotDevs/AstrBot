@@ -229,6 +229,13 @@ watch(
   { flush: "post" },
 );
 
+// Closed-over by the worktree-list watcher below. Tracks the previous
+// worktree path set so we can detect *topology* changes (paths
+// added/removed) and skip the validation sweep on no-op polling
+// ticks. Declared before the watcher so the closure binding is
+// unambiguous; Vue's `<script setup>` does not hoist `let`.
+let prevWorktreePaths: ReadonlySet<string> | null = null;
+
 // When the worktree list first loads, validate the persisted worktree
 // AND cross-validate the persisted currentPath against the new root.
 // This is the only place where fileBrowserCurrentPath is overwritten
@@ -240,6 +247,44 @@ watch(
   (s) => {
     if (s.kind !== "ok") return;
     const wtList = s.snapshot.worktrees;
+    const newPaths = new Set(wtList.map((w) => w.path));
+
+    // Topology-only change detection.
+    //
+    // Pre-polling, this watcher was event-driven: a worktree-list
+    // mutation triggered a one-shot sanity sweep (reset stale
+    // selectedWorktree, re-validate currentPath, clear stale
+    // preview). The 30s polling added in 2026-06-25 turned it into
+    // a periodic callback — `state.value` is replaced on every
+    // tick, even when the response is byte-for-byte identical.
+    // Running the full sweep on every tick had a concrete user-
+    // visible cost: `fileBrowserPreviewPath.value = null` (below)
+    // unmounted <FileBrowserFilePreview> and reset the right pane
+    // to the "select from left" hint, so the user lost their
+    // scroll position mid-read.
+    //
+    // We only care about the WORKTREE SET (paths added/removed) —
+    // a worktree's branch / head_sha / locked / prunable flipping
+    // does not invalidate which files are accessible in the
+    // current preview, so they must not trigger a reset. We track
+    // the previous path set in a closure and skip the sweep when
+    // the set is unchanged. The initial run (prevWorktreePaths ===
+    // null) always runs, preserving the original hydration behavior
+    // (validate persisted selectedWorktree / currentPath against
+    // the freshly-loaded list).
+    // Local alias so the type-narrowed `prev` is used in the every()
+    // callback without a non-null assertion. After the `=== null`
+    // check, `prev` is guaranteed non-null for the size/every
+    // comparisons (TypeScript can't see this through the
+    // short-circuit on its own).
+    const prev = prevWorktreePaths;
+    const topologyChanged =
+      prev === null ||
+      prev.size !== newPaths.size ||
+      ![...newPaths].every((p) => prev.has(p));
+    prevWorktreePaths = newPaths;
+    if (!topologyChanged) return;
+
     // Validate selectedWorktree
     if (
       selectedWorktree.value &&
@@ -259,9 +304,11 @@ watch(
     if (fileBrowserCurrentPath.value !== validated) {
       fileBrowserCurrentPath.value = validated;
     }
-    // Preview path is transient and almost certainly invalid in a new
-    // worktree context; clear it so the right pane shows the
-    // "select from left" hint instead of a stale file.
+    // Preview path is transient and almost certainly invalid in a
+    // worktree-set change context (the file it points to is in a
+    // worktree that no longer exists in the new list). Clear it so
+    // the right pane shows the "select from left" hint instead of a
+    // stale file. Skipped on no-op polls by the topology guard above.
     if (fileBrowserPreviewPath.value !== null) {
       fileBrowserPreviewPath.value = null;
     }
