@@ -12,6 +12,7 @@ from astrbot.core import logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.provider.provider import EmbeddingProvider, RerankProvider
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.dashboard.schemas import KnowledgeBaseRequest
 from astrbot.dashboard.utils import generate_tsne_visualization
 
 
@@ -33,17 +34,14 @@ class KnowledgeBaseService:
     def _canonical_kb_payload(data: object) -> dict[str, Any]:
         """Normalize knowledge base create/update payloads.
 
-        Args:
-            data: Request payload from v1 or legacy Dashboard routes.
-
-        Returns:
-            Payload using the service's canonical field names.
+        Uses KnowledgeBaseRequest to handle the legacy ``name`` →
+        ``kb_name`` migration while preserving operational fields
+        like ``kb_id``.
         """
-        payload = KnowledgeBaseService._payload(data).copy()
-        if payload.get("kb_name") is None and payload.get("name") is not None:
-            payload["kb_name"] = payload["name"]
-        payload.pop("name", None)
-        return payload
+        raw = KnowledgeBaseService._payload(data)
+        canonical = KnowledgeBaseRequest(**raw).canonical_payload()
+        raw.update(canonical)
+        return raw
 
     def get_kb_manager(self):
         return self.core_lifecycle.kb_manager
@@ -404,7 +402,7 @@ class KnowledgeBaseService:
         if not current_kb:
             raise KnowledgeBaseServiceError("知识库不存在")
         current = current_kb.kb
-        update_data = {key: getattr(current, key) for key in update_keys}
+        update_data = {key: getattr(current, key, None) for key in update_keys}
         update_data.update(provided_updates)
 
         kb_helper = await self.get_kb_manager().update_kb(
