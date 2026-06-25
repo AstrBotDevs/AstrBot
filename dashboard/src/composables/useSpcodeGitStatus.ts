@@ -120,6 +120,29 @@ export function useSpcodeGitStatus(
     { flush: "post" },
   );
 
+  // Refetch when the project umo or directory changes (e.g. initial
+  // project load, project switch). Without these, git-status stays
+  // "idle" on first open when no (additional) worktrees exist,
+  // causing diffBodyState to skip the untracked-files merge.
+  watch(
+    () => spcodeStatus.status.value.umo,
+    (newUmo, oldUmo) => {
+      if (!isMounted) return;
+      if (newUmo && newUmo !== oldUmo) {
+        void refresh();
+      }
+    },
+  );
+  watch(
+    () => spcodeStatus.status.value.directory,
+    (newDir, oldDir) => {
+      if (!isMounted) return;
+      if (newDir && newDir !== oldDir && spcodeStatus.status.value.umo) {
+        void refresh();
+      }
+    },
+  );
+
   function dispose(): void {
     isMounted = false;
     stopPolling();
