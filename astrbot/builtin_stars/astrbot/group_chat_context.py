@@ -346,7 +346,7 @@ def _resolve_provider_cache_identity(
     if configured_provider_id:
         return configured_provider_id
 
-    provider_config = provider.provider_config or {}
+    provider_config = provider.provider_config if isinstance(provider.provider_config, dict) else {}
     provider_id = provider_config.get("id", "")
     if isinstance(provider_id, str) and provider_id:
         return provider_id
