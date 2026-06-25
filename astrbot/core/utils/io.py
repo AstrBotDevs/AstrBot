@@ -367,6 +367,12 @@ def get_local_ip_addresses():
         for addr in addrs:
             if addr.family == socket.AF_INET:  # 使用 socket.AF_INET 代替 psutil.AF_INET
                 network_ips.append(addr.address)
+            elif addr.family == socket.AF_INET6:
+                address = addr.address
+                scope_idx = address.find("%")
+                if scope_idx != -1:
+                    address = address[:scope_idx]
+                network_ips.append(address)
 
     return network_ips
 

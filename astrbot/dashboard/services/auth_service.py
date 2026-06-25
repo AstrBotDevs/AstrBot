@@ -432,7 +432,13 @@ class AuthService:
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
             or self.config["dashboard"].get("host", "")
         )
-        return str(host).strip().lower() in LOCAL_DASHBOARD_HOSTS
+        if isinstance(host, list):
+            hosts = host
+        else:
+            hosts = [h.strip() for h in str(host).split(",")]
+        return all(
+            str(h).strip().lower() in LOCAL_DASHBOARD_HOSTS for h in hosts
+        )
 
     @staticmethod
     def env_flag_enabled(name: str) -> bool:
