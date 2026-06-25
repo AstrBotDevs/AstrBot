@@ -872,9 +872,10 @@ class PluginService:
     ) -> tuple[dict, str]:
         self._ensure_not_demo()
         logger.info(f"正在安装用户上传的插件 {upload_file.filename}")
+        filename = str(upload_file.filename or "plugin.zip").replace("\\", "/")
         file_path = os.path.join(
             get_astrbot_temp_path(),
-            f"plugin_upload_{upload_file.filename}",
+            f"plugin_upload_{os.path.basename(filename) or 'plugin.zip'}",
         )
         await upload_file.save(file_path)
         try:

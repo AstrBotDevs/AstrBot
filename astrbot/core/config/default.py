@@ -115,6 +115,7 @@ DEFAULT_CONFIG = {
         "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
         "websearch_firecrawl_key": [],
+        "websearch_exa_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -135,8 +136,8 @@ DEFAULT_CONFIG = {
         ),
         "llm_compress_keep_recent_ratio": 0.15,
         "llm_compress_provider_id": "",
-        "max_context_length": 50,
-        "dequeue_context_length": 10,
+        "max_context_length": -1,  # 默认不限制
+        "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -3348,6 +3349,7 @@ CONFIG_METADATA_3 = {
                             "bocha",
                             "brave",
                             "firecrawl",
+                            "exa",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3399,6 +3401,16 @@ CONFIG_METADATA_3 = {
                         "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
                         "condition": {
                             "provider_settings.websearch_provider": "baidu_ai_search",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_exa_key": {
+                        "description": "Exa API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。Get a key at https://dashboard.exa.ai",
+                        "condition": {
+                            "provider_settings.websearch_provider": "exa",
                             "provider_settings.web_search": True,
                         },
                     },
