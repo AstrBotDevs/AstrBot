@@ -864,6 +864,42 @@ function onFileRestore(path: string): void {
   confirmDialogOpen.value = true;
 }
 
+/** Handles the "view file" button on a diff row: switches the sidebar
+ *  to the Files tab and navigates to the file's parent directory with
+ *  the file opened in the preview pane.
+ *
+ *  `path` arrives as a repo-relative path from git-diff (e.g.
+ *  "dashboard/src/components/chat/GitDiffSidebar.vue"). The
+ *  /spcode/file-browser backend requires absolute paths, and
+ *  FileBrowserBreadcrumb's `normCurrent.startsWith(normRoot)` guard
+ *  returns [] (no segments rendered) when the two don't share a
+ *  common prefix — so passing the relative path through verbatim
+ *  silently breaks the multi-level breadcrumb and misroutes the
+ *  directory listing. Anchor to currentRoot (the active worktree or
+ *  project root) before computing the parent. */
+function onOpenFile(path: string): void {
+  const root = currentRoot.value;
+  // No project / worktree resolved yet → nothing to navigate to.
+  // Skip silently rather than writing a relative path that would
+  // corrupt the persisted currentPath.
+  if (!root) return;
+  // Detect separator from the root, since `root` comes from the
+  // backend (Windows: `\`) and `path` comes from git (POSIX: `/`).
+  const sep = root.includes("\\") ? "\\" : "/";
+  const cleanRoot = root.replace(/[\\/]+$/, "");
+  const cleanPath = path.replace(/^[\\/]+/, "").replace(/\//g, sep);
+  const absolute = cleanPath ? `${cleanRoot}${sep}${cleanPath}` : cleanRoot;
+  // Parent directory of the absolute path, using the same separator
+  // style as the root. Falls back to the root when `path` had no
+  // separator (top-level file like "README.md").
+  const parent = absolute.includes(sep)
+    ? absolute.substring(0, absolute.lastIndexOf(sep))
+    : cleanRoot;
+  viewMode.value = "files";
+  fileBrowserCurrentPath.value = parent;
+  fileBrowserPreviewPath.value = absolute;
+}
+
 function onCancelRestore(): void {
   confirmDialogOpen.value = false;
   confirmTargetPath.value = null;
@@ -1622,11 +1658,13 @@ const currentRoot = computed<string | null>(() => {
           :is-staging="gitStage.isStaging"
           :is-unstaging="gitUnstage.isUnstaging"
           :new-file-paths="newFilePaths"
+          :on-open-file="onOpenFile"
           @toggle="toggleFile"
           @retry="onManualRefresh"
           @restore="onFileRestore"
           @stage="onStageFile"
           @unstage="onUnstageFile"
+          @open-file="onOpenFile"
         />
         <!-- Spec 2026-06-24 §6.5:History view 渲染 GitLogView。
              Spec 2026-06-25 §3.1:GitLogView 也接收 gitShow 句柄用于

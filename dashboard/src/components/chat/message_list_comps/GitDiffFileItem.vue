@@ -45,12 +45,16 @@ const props = defineProps<{
   // visual style as a regular diff row (no teal border, no special
   // badge); only the left icon differs — see `iconInfo` below.
   isNewFile?: boolean;
+  /** When provided, renders a "view" button to open the file in
+   *  the workspace File Browser. Clicking it emits 'open-file'. */
+  onOpenFile?: (path: string) => void;
 }>();
 const emit = defineEmits<{
   (e: "toggle"): void;
   (e: "restore", path: string): void;
   (e: "stage", path: string): void;
   (e: "unstage", path: string): void;
+  (e: "open-file", path: string): void;
 }>();
 
 const ICON_MAP: Record<FileStatus, { icon: string; color: string }> = {
@@ -107,6 +111,11 @@ function onUnstageClick(e: MouseEvent): void {
   e.stopPropagation();
   if (props.isUnstaging) return;
   emit("unstage", props.file.path);
+}
+
+function onOpenFileClick(e: MouseEvent): void {
+  e.stopPropagation();
+  emit("open-file", props.file.path);
 }
 </script>
 
@@ -215,6 +224,25 @@ function onUnstageClick(e: MouseEvent): void {
           :width="2"
         />
         <v-icon v-else :size="16">mdi-restore</v-icon>
+      </button>
+      <!-- "View file" button: opens the file in the workspace File Browser. -->
+      <button
+        v-if="onOpenFile"
+        type="button"
+        class="git-diff-file-open"
+        :aria-label="
+          tm('spcodeProjectLoad.diffSidebar.openFile.buttonAria', {
+            path: file.path,
+          })
+        "
+        :title="
+          tm('spcodeProjectLoad.diffSidebar.openFile.buttonAria', {
+            path: file.path,
+          })
+        "
+        @click="onOpenFileClick"
+      >
+        <v-icon :size="16">mdi-file-eye-outline</v-icon>
       </button>
       <v-icon
         :size="16"
@@ -342,6 +370,38 @@ function onUnstageClick(e: MouseEvent): void {
   opacity: 0.3;
 }
 .git-diff-file-restore.is-loading {
+  opacity: 1;
+}
+
+/* "View file" button: opens the file in the workspace File Browser. */
+.git-diff-file-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: rgb(var(--v-theme-info));
+  cursor: pointer;
+  opacity: 0.5;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    border-color 0.12s ease;
+  flex-shrink: 0;
+}
+.git-diff-file-row:hover .git-diff-file-open {
+  opacity: 1;
+}
+.git-diff-file-open:hover {
+  background: rgba(var(--v-theme-info), 0.1);
+}
+.git-diff-file-open:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
   opacity: 1;
 }
 

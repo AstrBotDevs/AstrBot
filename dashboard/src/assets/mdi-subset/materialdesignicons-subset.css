@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 314 icons */
+/* Auto-generated MDI subset – 315 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -498,6 +498,10 @@
 
 .mdi-file-excel-box::before {
   content: "\F021C";
+}
+
+.mdi-file-eye-outline::before {
+  content: "\F0DCB";
 }
 
 .mdi-file-music-outline::before {

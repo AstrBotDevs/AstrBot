@@ -30,6 +30,8 @@ const props = defineProps<{
   // unstaged view is active. Pass-through prop so the body content stays
   // scope-agnostic (the merge happens at the sidebar level).
   newFilePaths?: ReadonlySet<string>
+  /** Passed through to GitDiffFileItem for the "view file" button. */
+  onOpenFile?: (path: string) => void
 }>()
 const emit = defineEmits<{
   (e: 'toggle', path: string): void
@@ -37,6 +39,7 @@ const emit = defineEmits<{
   (e: 'restore', path: string): void
   (e: 'stage', path: string): void
   (e: 'unstage', path: string): void
+  (e: 'open-file', path: string): void
 }>()
 
 const spcodeStatus = useSpcodeProjectStatus()
@@ -136,10 +139,12 @@ const files = computed(() => {
       :is-staging="isStagingForPath(f.path)"
       :is-unstaging="isUnstagingForPath(f.path)"
       :is-new-file="newFilePaths?.has(f.path) ?? false"
+      :on-open-file="onOpenFile"
       @toggle="emit('toggle', f.path)"
       @restore="emit('restore', $event)"
       @stage="emit('stage', $event)"
       @unstage="emit('unstage', $event)"
+      @open-file="emit('open-file', $event)"
     />
     <div v-if="state.kind === 'error' && errorInfo" class="git-diff-banner-error">
       <span>{{ localizedReason(errorInfo.reason) }}</span>

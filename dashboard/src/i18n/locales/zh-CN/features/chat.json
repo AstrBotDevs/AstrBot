@@ -401,11 +401,14 @@
             "file_not_found": "文件不存在",
             "not_modified": "文件无未暂存改动",
             "untracked_file": "未跟踪的文件无法恢复（请用 git rm --cached 或 git add）",
-            "git_error": "Git 执行失败（{stderr}）"
-          }
-        }
-      },
-      "gitWorkflow": {
+                "git_error": "Git 执行失败（{stderr}）"
+                }
+              }
+            },
+            "openFile": {
+              "buttonAria": "在文件浏览器中打开 {path}"
+            },
+            "gitWorkflow": {
         "stage": {
           "buttonAria": "暂存 {path}",
           "unstageButtonAria": "取消暂存 {path}",

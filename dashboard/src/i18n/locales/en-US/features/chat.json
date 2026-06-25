@@ -405,6 +405,9 @@
           }
         }
       },
+      "openFile": {
+        "buttonAria": "Open {path} in file browser"
+      },
       "gitWorkflow": {
         "stage": {
           "buttonAria": "Stage {path}",
