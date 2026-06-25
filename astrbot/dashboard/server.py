@@ -595,6 +595,13 @@ class AstrBotDashboard:
                 ip_addr = get_local_ip_addresses()
             except Exception as _:
                 pass
+
+        bound_v6 = all(":" in h for h in hosts)
+        bound_v4 = all(":" not in h for h in hosts)
+        if bound_v6 and not bound_v4:
+            ip_addr = [ip for ip in ip_addr if ":" in ip]
+        elif bound_v4 and not bound_v6:
+            ip_addr = [ip for ip in ip_addr if ":" not in ip]
         if isinstance(port, str):
             port = int(port)
 
