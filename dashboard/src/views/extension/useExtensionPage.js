@@ -1315,7 +1315,8 @@ export const useExtensionPage = () => {
   const comparePluginVersions = (left, right) => {
     const leftVersion = parsePluginVersion(left);
     const rightVersion = parsePluginVersion(right);
-    if (!leftVersion || !rightVersion) return null;
+    if (!rightVersion) return null;
+    if (!leftVersion) return -1;
 
     const length = Math.max(leftVersion.parts.length, rightVersion.parts.length);
     for (let i = 0; i < length; i += 1) {
