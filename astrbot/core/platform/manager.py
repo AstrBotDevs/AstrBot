@@ -47,7 +47,7 @@ class PlatformManager:
         return sanitized, sanitized != platform_id
 
     def _start_platform_task(self, task_name: str, inst: Platform) -> None:
-        run_task = asyncio.create_task(inst.run(), name=task_name)
+        run_task = asyncio.create_task(inst.run(), name=task_name) # 调用平台的 run 方法
         wrapper_task = asyncio.create_task(
             self._task_wrapper(run_task, platform=inst),
             name=f"{task_name}_wrapper",
@@ -90,7 +90,7 @@ class PlatformManager:
             try:
                 if ensure_platform_webhook_config(platform):
                     self.astrbot_config.save_config()
-                await self.load_platform(platform)
+                await self.load_platform(platform) # 里面会初始化platform实例，然后使用self.platform_insts.append()方法添加到self.platform_insts列表中
             except Exception as e:
                 logger.error(f"初始化 {platform} 平台适配器失败: {e}")
 
