@@ -152,7 +152,7 @@ class WebChatMessageEvent(AstrMessageEvent):
         message_id = self.message_obj.message_id
         request_id = str(message_id)
         conversation_id = _extract_conversation_id(self.session_id)
-        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(
+        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue( # 这里获取 back_queue，跟 astrbot\dashboard\services\chat_service.py 的 ChatService 类的 build_chat_stream方法的 back_queue 一致，从这里推送llm的result，然后被那边接收，进行消息的回传
             request_id,
             conversation_id,
         )

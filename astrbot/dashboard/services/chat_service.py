@@ -51,7 +51,7 @@ async def track_conversation(convs: dict, conv_id: str):
 
 async def poll_webchat_stream_result(back_queue, username: str):
     try:
-        result = await asyncio.wait_for(back_queue.get(), timeout=1)
+        result = await asyncio.wait_for(back_queue.get(), timeout=1) # 使用back_queue监听，意味着模型调用结果放在 back_queue 中
     except asyncio.TimeoutError:
         return None, False
     except asyncio.CancelledError:
@@ -693,15 +693,15 @@ class ChatService:
     ) -> AsyncIterator[str]:
         if "message" not in post_data and "files" not in post_data:
             raise ChatServiceError("Missing key: message or files")
-        if "session_id" not in post_data and "conversation_id" not in post_data:
+        if "session_id" not in post_data and "conversation_id" not in post_data: # {'message': [{'type': 'plain', 'text': '你好'}], 'session_id': '8be47862-3fdd-48c9-aada-1b11e03ced50', 'enable_streaming': True, 'selected_provider': 'lm_studio/qwen3.5-2b', 'selected_model': 'qwen3.5-2b', '_skip_user_history': False}
             raise ChatServiceError("Missing key: session_id or conversation_id")
 
         message = post_data.get("message", post_data.get("files", []))
         session_id = post_data.get("session_id", post_data.get("conversation_id"))
-        selected_provider = post_data.get("selected_provider")
-        selected_model = post_data.get("selected_model")
+        selected_provider = post_data.get("selected_provider") # 'lm_studio/qwen3.5-2b'
+        selected_model = post_data.get("selected_model") # 'qwen3.5-2b'
         enable_streaming = post_data.get("enable_streaming", True)
-        platform_history_id = post_data.get("_platform_history_id") or "webchat"
+        platform_history_id = post_data.get("_platform_history_id") or "webchat" # 'webchat'
         thread_selected_text = post_data.get("_thread_selected_text")
 
         if not session_id:
@@ -714,10 +714,10 @@ class ChatService:
                 "Message content is empty (reply only is not allowed)"
             )
 
-        message_id = str(uuid.uuid4())
+        message_id = str(uuid.uuid4()) # 'de84fbbb-203e-4414-8a1a-c189ccae6363'
         llm_checkpoint_id = post_data.get("_llm_checkpoint_id") or str(uuid.uuid4())
-        skip_user_history = bool(post_data.get("_skip_user_history"))
-        back_queue = webchat_queue_mgr.get_or_create_back_queue(
+        skip_user_history = bool(post_data.get("_skip_user_history")) # False
+        back_queue = webchat_queue_mgr.get_or_create_back_queue( # 获取消息处理的queue back_queue: 0x216a3eb6e10
             message_id,
             webchat_conv_id,
         )
@@ -801,7 +801,7 @@ class ChatService:
 
                 async with track_conversation(self.running_convs, webchat_conv_id):
                     while True:
-                        result, should_break = await poll_webchat_stream_result(
+                        result, should_break = await poll_webchat_stream_result( # TODO 这里监听模型调用结果
                             back_queue, username
                         )
                         if should_break:
@@ -936,15 +936,15 @@ class ChatService:
                         exc_info=True,
                     )
                 webchat_queue_mgr.remove_back_queue(message_id)
-
-        chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)
+        # chat_queue: 地址：Queue at 0x216a351c7d0, 这里的 chat_queue 跟 astrbot\core\platform\sources\webchat\webchat_queue_mgr.py 的 WebChatQueueMgr 类的 _listen_to_queue 方法中的 queue 是同一个。这里推入信息之后，会被_listen_to_queue 方法监听。
+        chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id) # 这个queue跟back_queue不一样，后者用来接收模型的返回结果，然后传递给前端，这个是用来激活platform消息处理的。而且这里面会启动监听器。
         await chat_queue.put( # TODO 这里将信息放入queue
             (
                 username,
-                webchat_conv_id,
+                webchat_conv_id, # '8be47862-3fdd-48c9-aada-1b11e03ced50'
                 {
                     "message": message_parts,
-                    "selected_provider": selected_provider,
+                    "selected_provider": selected_provider, 
                     "selected_model": selected_model,
                     "enable_streaming": enable_streaming,
                     "message_id": message_id,
@@ -954,7 +954,7 @@ class ChatService:
             ),
         )
 
-        message_parts_for_storage = strip_message_parts_path_fields(message_parts)
+        message_parts_for_storage = strip_message_parts_path_fields(message_parts) # [{'type': 'plain', 'text': '你好'}]
         if not skip_user_history:
             saved_user_record = await self.platform_history_mgr.insert(
                 platform_id=platform_history_id,

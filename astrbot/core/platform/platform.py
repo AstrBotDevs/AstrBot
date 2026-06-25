@@ -146,7 +146,7 @@ class Platform(abc.ABC):
 
     def commit_event(self, event: AstrMessageEvent) -> None:
         """提交一个事件到事件队列。"""
-        self._event_queue.put_nowait(event)
+        self._event_queue.put_nowait(event) # 对总线的_envent_queue 进行put，队列监控到信息之后，就会进入处理流程
 
     def create_event(self, message: AstrBotMessage) -> AstrMessageEvent:
         """Creates a message event for this platform.

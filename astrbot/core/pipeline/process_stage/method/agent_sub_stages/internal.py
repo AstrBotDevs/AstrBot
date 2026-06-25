@@ -222,7 +222,7 @@ class InternalAgentSubStage(Stage):
                         provider_wake_prefix=provider_wake_prefix,
                         streaming_response=streaming_response,
                     )
-
+                    # TODO 构建主代理
                     build_result: MainAgentBuildResult | None = await build_main_agent(
                         event=event,
                         plugin_context=self.ctx.plugin_manager.context,
@@ -334,7 +334,7 @@ class InternalAgentSubStage(Stage):
                             )
 
                     elif streaming_response and not stream_to_general:
-                        # 流式响应
+                        # TODO 流式响应，这里设置 set_async_stream(run_agent())，其里面调用llm处理请求
                         event.set_result(
                             MessageEventResult()
                             .set_result_content_type(ResultContentType.STREAMING_RESULT)

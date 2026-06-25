@@ -38,7 +38,7 @@ class EventBus:
 
     async def dispatch(self) -> None:
         while True:
-            event: AstrMessageEvent = await self.event_queue.get()
+            event: AstrMessageEvent = await self.event_queue.get() # 这里会监控 event_queue，监听新信息
             conf_info = self.astrbot_config_mgr.get_conf_info(event.unified_msg_origin)
             conf_id = conf_info["id"]
             conf_name = conf_info.get("name") or conf_id

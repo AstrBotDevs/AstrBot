@@ -201,7 +201,7 @@ class WebChatAdapter(Platform):
         return components, text_parts
 
     async def convert_message(self, data: tuple) -> AstrBotMessage:
-        username, cid, payload = data
+        username, cid, payload = data # username = 'astrbot', cid = '8be47862-3fdd-48c9-aada-1b11e03ced50', payload = {'message': [{'type': 'plain', 'text': '你好'}], 'selected_provider': 'lm_studio/qwen3.5-2b', 'selected_model': 'qwen3.5-2b', 'enable_streaming': True, 'message_id': 'de84fbbb-203e-4414-8a1a-c189ccae6363', 'llm_checkpoint_id': 'f66a6a1a-2763-404e-84cd-3cfc8a424cb9', 'thread_selected_text': None}
 
         abm = AstrBotMessage()
         abm.self_id = "webchat"
@@ -209,13 +209,13 @@ class WebChatAdapter(Platform):
 
         abm.type = MessageType.FRIEND_MESSAGE
 
-        abm.session_id = f"webchat!{username}!{cid}"
+        abm.session_id = f"webchat!{username}!{cid}" # 设置session_id
 
         abm.message_id = payload.get("message_id")
 
         # 处理消息段列表
         message_parts = payload.get("message", [])
-        abm.message, message_str_parts = await self._parse_message_parts(message_parts)
+        abm.message, message_str_parts = await self._parse_message_parts(message_parts) # message_str_parts = ['你好']
 
         logger.debug(f"WebChatAdapter: {abm.message}")
 
@@ -273,7 +273,7 @@ class WebChatAdapter(Platform):
         return message_event
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
-        self.commit_event(self.create_event(message))
+        self.commit_event(self.create_event(message)) # 这里将信息提交，放到event_bus中的event_queue中，就进入了处理流程
 
     async def terminate(self) -> None:
         self._shutdown_event.set()

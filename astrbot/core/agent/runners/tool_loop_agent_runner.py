@@ -512,7 +512,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     has_stream_output = False
                     with attempt:
                         try:
-                            async for resp in self._iter_llm_responses(
+                            async for resp in self._iter_llm_responses( # TODO 调用llm模型，获取流式响应
                                 include_model=idx == 0
                             ):
                                 if resp.is_chunk:

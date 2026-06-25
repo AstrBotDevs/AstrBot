@@ -143,7 +143,7 @@ class WebChatQueueMgr:
         callback: Callable[[tuple], Awaitable[None]],
     ):
         # 存储传入的回调函数，用于后续处理队列中的消息
-        self._listener_callback = callback
+        self._listener_callback = callback # 将 callback 函数存储在 _listener_callback 属性中
         # 遍历当前所有已有队列的对话ID列表
         for conversation_id in list(self.queues.keys()):
             # 为每个对话启动监听任务（如果尚未启动）
@@ -236,14 +236,14 @@ class WebChatQueueMgr:
                     # 跳出循环，结束协程
                     break
                 # 如果 get_task 先完成，则获取队列中的数据
-                data = get_task.result()
+                data = get_task.result() # ('astrbot', '8be47862-3fdd-48c9-aada-1b11e03ced50', {'message': [{'type': 'plain', 'text': '你好'}], 'selected_provider': 'lm_studio/qwen3.5-2b', 'selected_model': 'qwen3.5-2b', 'enable_streaming': True, 'message_id': 'de84fbbb-203e-4414-8a1a-c189ccae6363', 'llm_checkpoint_id': 'f66a6a1a-2763-404e-84cd-3cfc8a424cb9', 'thread_selected_text': None})
                 # 在调用回调前，再次检查回调是否还存在（可能在等待期间被清除）
                 if self._listener_callback is None:
                     # 如果回调不存在，则跳过处理，继续下一次循环
                     continue
                 try:
                     # TODO 调用监听器回调函数处理获取到的数据，这是一个异步调用
-                    await self._listener_callback(data)
+                    await self._listener_callback(data) # 调用每个设置的 callback() 方法
                 except Exception as e:
                     # 捕获并记录回调函数中发生的任何异常，避免监听任务崩溃
                     logger.error(

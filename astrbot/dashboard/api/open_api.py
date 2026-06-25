@@ -69,7 +69,7 @@ async def _build_streaming_chat_response(
     username: str,
     post_data: dict[str, Any],
 ) -> StreamingResponse | JSONResponse:
-    try:
+    try: # TODO: 处理流式响应
         stream = await chat_service.build_chat_stream(username, post_data)
     except ChatServiceError as exc:
         return _open_api_error(str(exc))
@@ -91,7 +91,7 @@ async def _open_api_chat_response(
     open_api_service: OpenApiService,
     chat_service: ChatService,
 ) -> StreamingResponse | JSONResponse:
-    if auth.via != "api_key":
+    if auth.via != "api_key": # TODO 如果不是 API Key 认证，直接返回流式响应
         return await _build_streaming_chat_response(
             chat_service,
             auth.username,
@@ -182,7 +182,8 @@ async def chat(
     auth: AuthContext = Depends(require_chat_scope),
     service: OpenApiService = Depends(get_service),
     chat_service: ChatService = Depends(get_chat_service),
-):
+): 
+    """这个接口接收聊天请求"""
     return await _open_api_chat_response(
         _model_dict(payload),
         auth,

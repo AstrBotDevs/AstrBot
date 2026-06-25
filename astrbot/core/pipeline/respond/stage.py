@@ -170,7 +170,7 @@ class RespondStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
-        result = event.get_result()
+        result = event.get_result() # 这里获取比如astrbot\core\pipeline\process_stage\method\agent_sub_stages\internal.py中的InternalAgentSubStage类在process()方法中使用event.set_result()设置的内容，其中包含run_agent()方法
         if result is None:
             return
         if event.get_extra("_streaming_finished", False):
@@ -184,7 +184,7 @@ class RespondStage(Stage):
             f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
         )
 
-        if result.result_content_type == ResultContentType.STREAMING_RESULT:
+        if result.result_content_type == ResultContentType.STREAMING_RESULT: # 流式结果
             if result.async_stream is None:
                 logger.warning("async_stream 为空，跳过发送。")
                 return
@@ -197,7 +197,7 @@ class RespondStage(Stage):
                 == "realtime_segmenting"
             )
             logger.info(f"应用流式输出({event.get_platform_id()})")
-            await event.send_streaming(result.async_stream, realtime_segmenting)
+            await event.send_streaming(result.async_stream, realtime_segmenting) # TODO 这里调用 run_agent()方法，比如astrbot\core\pipeline\process_stage\method\agent_sub_stages\internal.py中的InternalAgentSubStage类在process()方法中使用event.set_result()设置的内容，其中包含run_agent()方法
             return
         if len(result.chain) > 0:
             # 检查路径映射
