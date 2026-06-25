@@ -933,11 +933,15 @@ class ProviderOpenAIOfficial(Provider):
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
         is_gemini = "gemini" in model
-        deepseek_reasoning_models = {"deepseek-v4-pro", "deepseek-v4-flash"}
+        _deepseek_v4_markers = ("deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4")
         is_deepseek_v4_reasoning = (
-            model in deepseek_reasoning_models
+            any(marker in model for marker in _deepseek_v4_markers)
             or "api.deepseek.com" in self.client.base_url.host
         )
+        if is_deepseek_v4_reasoning and (
+            "deepseek-chat" in model or "deepseek-reasoner" in model
+        ):
+            is_deepseek_v4_reasoning = False
         # MiMo 推理模型（MiMo-V2.5-Pro / MiMo-V2.5 / MiMo-V2-Pro / MiMo-V2-Omni / MiMo-V2-Flash）
         # 要求 assistant 历史消息必须回传 reasoning_content，否则返回 400
         mimo_reasoning_models = {
