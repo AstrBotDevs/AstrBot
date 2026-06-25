@@ -1294,7 +1294,7 @@ CONFIG_METADATA_2 = {
                     "DeepSeek": {
                         "id": "deepseek",
                         "provider": "deepseek",
-                        "type": "openai_chat_completion",
+                        "type": "deepseek_chat_completion",
                         "provider_type": "chat_completion",
                         "enable": True,
                         "key": [],

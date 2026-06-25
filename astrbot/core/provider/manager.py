@@ -387,6 +387,10 @@ class ProviderManager:
                 from .sources.openrouter_source import (
                     ProviderOpenRouter as ProviderOpenRouter,
                 )
+            case "deepseek_chat_completion":
+                from .sources.deepseek_source import (
+                    ProviderDeepSeek as ProviderDeepSeek,
+                )
             case "anthropic_chat_completion":
                 from .sources.anthropic_source import (
                     ProviderAnthropic as ProviderAnthropic,
