@@ -77,6 +77,7 @@ class ImageCaptionCache:
                 )
                 return cached_caption
 
+        try:
             caption = await caption_factory()
             self._entries[cache_key] = _ImageCaptionCacheEntry(
                 caption=caption,
@@ -84,6 +85,8 @@ class ImageCaptionCache:
             )
             self._cleanup_expired_entries()
             return caption
+        finally:
+            self._locks.pop(cache_key, None)
 
     def _get(self, cache_key: str) -> str | None:
         entry = self._entries.get(cache_key)
