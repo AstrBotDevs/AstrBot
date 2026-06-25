@@ -636,7 +636,7 @@ async def _request_img_caption_with_provider(
             prompt=prompt,
             image_urls=image_urls,
         )
-        return llm_resp.completion_text
+        return llm_resp.completion_text if llm_resp else ""
 
     return await image_caption_cache.get_or_create(
         provider_id=provider_id,
