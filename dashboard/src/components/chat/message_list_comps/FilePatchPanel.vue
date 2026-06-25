@@ -20,6 +20,7 @@
 // panel testable in isolation and avoids prop-drilling handlers.
 
 import { computed } from "vue";
+import { storeToRefs } from "pinia";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
 import type { GitShowFileFetchState } from "@/composables/useSpcodeGitShow";
@@ -27,15 +28,15 @@ import type { GitShowFileView } from "@/composables/parseSpcodeGitShow";
 import DiffPreview from "./DiffPreview.vue";
 
 const { tm } = useModuleI18n("features/chat");
-// v3.9 (2026-06-25, elecvoid243): read `isDark` from the customizer
-// store's getter (the same one Chat.vue / ChatInput use). Reading it
-// in place rather than accepting a prop avoids one layer of
-// prop-drilling and matches how the rest of the dashboard resolves
-// the active theme. An optional `isDark` prop is still accepted for
-// callers that want to override (e.g. tests or preview tooling) —
-// when provided it wins.
-const customizer = useCustomizerStore();
-const isDarkFromStore = computed(() => customizer.isDark);
+// v3.9 (2026-06-25, elecvoid243): bind `isDark` directly to the
+// customizer store's getter via `storeToRefs` so the binding is
+// always a reactive Ref (not a function-call getter that has to be
+// re-evaluated every render). Earlier iterations that did
+// `customizer.uiTheme === "PurpleThemeDark"` inside a computed
+// returned false at first render even though the rest of the
+// dashboard saw the dark theme — using storeToRefs bypasses that
+// reactivity gap.
+const { isDark: isDarkFromStore } = storeToRefs(useCustomizerStore());
 
 const props = defineProps<{
   /** Commit SHA (for keys / i18n context; the parent owns the state). */
@@ -153,7 +154,7 @@ const fallbackKind = computed<"binary" | "unknown" | null>(() => {
         :max-lines="200"
         :max-chars="20000"
         :collapsible="true"
-        :is-dark="isDark ?? isDarkFromStore"
+        :is-dark="isDarkFromStore"
       />
     </div>
   </div>
