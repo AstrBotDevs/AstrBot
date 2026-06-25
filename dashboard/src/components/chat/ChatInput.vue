@@ -478,6 +478,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   "update:prompt": [value: string];
   send: [];
+  "send-command": [command: string];
   stop: [];
   toggleStreaming: [];
   removeImage: [index: number];
@@ -1055,7 +1056,7 @@ function handleProjectLoadSubmit(text: string): void {
  *   current state via the singleton composable).
  */
 function handlePlanModeToggle(): void {
-  // Read current state and decide which command to inject. We
+  // Read current state and decide which command to dispatch. We
   // intentionally do NOT short-circuit on `active === null` —
   // unknown umo is treated as build (the chip will display "Build")
   // and clicking it dispatches /plan, which matches what the user
@@ -1063,16 +1064,14 @@ function handlePlanModeToggle(): void {
   const isPlan = spcodePlanMode.status.value.active === true;
   const cmd = isPlan ? "/build" : "/plan";
   // Optimistic flip: chip will turn warning/green the moment the
-  // localPrompt setter runs (next tick) instead of waiting for the
+  // event is dispatched (next tick) instead of waiting for the
   // bot's response.
   spcodePlanMode.setActive(!isPlan);
-  // Set localPrompt first. The `update:prompt` emit propagates the
-  // new text to Chat.vue's `draft.value` synchronously thanks to
-  // Vue 3 reactivity, so the subsequent `emit("send")` sees the
-  // updated value in `sendCurrentMessage` → `draft.value` →
-  // `sendMessageStream({ ... prompt })`.
-  localPrompt.value = cmd;
-  emit("send");
+  // Emit a dedicated command event instead of overwriting the prompt
+  // and emitting "send". The parent Chat.vue handles "send-command"
+  // by sending only the toggle command while leaving the user's
+  // draft, reply target, and staged attachments untouched.
+  emit("send-command", cmd);
 }
 
 function handleCompositionStart() {

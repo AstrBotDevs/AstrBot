@@ -322,6 +322,7 @@
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             @send="sendCurrentMessage"
+            @send-command="sendSystemCommand"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"
             @remove-image="removeImage"
@@ -471,6 +472,7 @@
             :reply-to="chatInputReplyTarget"
             :send-shortcut="sendShortcut"
             @send="sendCurrentMessage"
+            @send-command="sendSystemCommand"
             @stop="stopCurrentSession"
             @toggle-streaming="toggleStreaming"
             @remove-image="removeImage"
@@ -698,6 +700,7 @@ const savingMessageEdit = ref(false);
 const projectSessions = ref<Session[]>([]);
 const loadingSessions = ref(false);
 const draft = ref("");
+const commandSending = ref(false);
 const messagesContainer = ref<HTMLElement | null>(null);
 const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const shouldStickToBottom = ref(true);
@@ -1442,6 +1445,73 @@ async function sendCurrentMessage() {
   } finally {
     sending.value = false;
     await focusChatInput();
+  }
+}
+
+/**
+ * Send a system command (e.g. /plan, /build) as a chat message without
+ * touching the user's draft, reply target, or staged attachments.
+ *
+ * The chip emits "send-command" so the parent can dispatch the toggle
+ * command while the user's current input remains untouched. This mirrors
+ * the existing sendMessageStream pattern used in sendCurrentMessage
+ * but intentionally skips:
+ *   - draft.value = ""
+ *   - replyTarget reset
+ *   - clearStaged({ revokeUrls: false })
+ *   - updateTitleFromText
+ *   - focusChatInput (let the user keep their cursor)
+ *
+ * Args:
+ *   command: The command text to send (e.g. "/plan", "/build").
+ */
+async function sendSystemCommand(command: string) {
+  if (!command.trim()) return;
+
+  // Prevent overlapping system-command sends. The chip remains disabled
+  // via the parent's `:disabled="sending"` binding on ChatInput, but
+  // direct double-click on the chip edge can still reach here.
+  if (commandSending.value) return;
+  commandSending.value = true;
+
+  try {
+    let sessionId = currSessionId.value;
+    if (!sessionId) {
+      sessionId = await newSession();
+    }
+
+    const messageId =
+      crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+
+    const outgoingParts: MessagePart[] = [
+      { type: "plain", text: command },
+    ];
+
+    const selection = inputRef.value?.getCurrentSelection();
+
+    const { userRecord, botRecord } = createLocalExchange({
+      sessionId,
+      messageId,
+      parts: outgoingParts,
+    });
+
+    scrollToBottom();
+
+    sendMessageStream({
+      sessionId,
+      messageId,
+      parts: outgoingParts,
+      transport: transportMode.value,
+      enableStreaming: enableStreaming.value,
+      selectedProvider: selection?.providerId || "",
+      selectedModel: selection?.modelName || "",
+      userRecord,
+      botRecord,
+    });
+  } catch (error) {
+    console.error("Failed to send system command:", error);
+  } finally {
+    commandSending.value = false;
   }
 }
 
