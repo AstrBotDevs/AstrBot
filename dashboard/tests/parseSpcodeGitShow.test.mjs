@@ -294,3 +294,110 @@ test("parseSpcodeGitShow: missing required field falls back to defaults", () => 
   assert.deepEqual(r.snapshot.commit.parents, []);
   assert.equal(r.snapshot.maxFiles, 500);
 });
+
+// ── v3.9 (2026-06-25): optional ``data.file`` single-file patch view ──
+// Backend only writes ``data.file`` when ?path= is supplied; in the
+// default commit list view the field is absent. The parser must
+// normalise "absent" to ``null`` and surface the parsed view otherwise.
+test("parseSpcodeGitShow v3.9: file field is null when absent", () => {
+  const r = parseSpcodeGitShow({ status: "ok", data: { ...baseData } });
+  assert.equal(r.kind, "ok");
+  assert.equal(r.snapshot.file, null);
+});
+
+test("parseSpcodeGitShow v3.9: file field parses modified (M) text patch", () => {
+  const r = parseSpcodeGitShow({
+    status: "ok",
+    data: {
+      ...baseData,
+      file: {
+        path: "src/auth.py",
+        old_path: null,
+        status: "M",
+        additions: 3,
+        deletions: 1,
+        is_binary: false,
+        patch: "diff --git a/src/auth.py b/src/auth.py\n@@ -1,3 +1,4 @@\n+x\n",
+      },
+    },
+  });
+  assert.equal(r.kind, "ok");
+  const f = r.snapshot.file;
+  assert.ok(f, "file view should be present");
+  assert.equal(f.path, "src/auth.py");
+  assert.equal(f.status, "M");
+  assert.equal(f.additions, 3);
+  assert.equal(f.deletions, 1);
+  assert.equal(f.isBinary, false);
+  assert.equal(f.oldPath, null);
+  assert.match(f.patch, /^diff --git/);
+});
+
+test("parseSpcodeGitShow v3.9: file field parses binary (patch=null)", () => {
+  const r = parseSpcodeGitShow({
+    status: "ok",
+    data: {
+      ...baseData,
+      file: {
+        path: "assets/logo.png",
+        old_path: null,
+        status: "A",
+        additions: 0,
+        deletions: 0,
+        is_binary: true,
+        patch: null,
+      },
+    },
+  });
+  assert.equal(r.kind, "ok");
+  const f = r.snapshot.file;
+  assert.ok(f);
+  assert.equal(f.isBinary, true);
+  assert.equal(f.patch, null);
+});
+
+test("parseSpcodeGitShow v3.9: rename file view surfaces oldPath", () => {
+  const r = parseSpcodeGitShow({
+    status: "ok",
+    data: {
+      ...baseData,
+      file: {
+        path: "src/new_name.py",
+        old_path: "src/old_name.py",
+        status: "R",
+        additions: 1,
+        deletions: 1,
+        is_binary: false,
+        patch: "diff --git a/src/old_name.py b/src/new_name.py\n",
+      },
+    },
+  });
+  assert.equal(r.kind, "ok");
+  const f = r.snapshot.file;
+  assert.ok(f);
+  assert.equal(f.status, "R");
+  assert.equal(f.oldPath, "src/old_name.py");
+});
+
+test("parseSpcodeGitShow v3.9: unknown status (path not in commit)", () => {
+  const r = parseSpcodeGitShow({
+    status: "ok",
+    data: {
+      ...baseData,
+      file: {
+        path: "nope.txt",
+        old_path: null,
+        status: "unknown",
+        additions: 0,
+        deletions: 0,
+        is_binary: false,
+        patch: null,
+      },
+    },
+  });
+  assert.equal(r.kind, "ok");
+  const f = r.snapshot.file;
+  assert.ok(f);
+  assert.equal(f.status, "unknown");
+  assert.equal(f.patch, null);
+});

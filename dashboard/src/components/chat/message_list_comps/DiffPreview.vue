@@ -11,13 +11,19 @@
       @click="toggleCollapsed"
     >
       <div class="diff-header-left">
-        <v-icon size="16" class="diff-header-icon">mdi-file-document-edit-outline</v-icon>
+        <v-icon size="16" class="diff-header-icon"
+          >mdi-file-document-edit-outline</v-icon
+        >
         <span v-if="filePath" class="diff-file-path">{{ filePath }}</span>
       </div>
       <div class="diff-header-right">
         <template v-if="statsAdds || statsDels">
-          <span v-if="statsAdds" class="diff-stats diff-stats-add">+{{ statsAdds }}</span>
-          <span v-if="statsDels" class="diff-stats diff-stats-del">−{{ statsDels }}</span>
+          <span v-if="statsAdds" class="diff-stats diff-stats-add"
+            >+{{ statsAdds }}</span
+          >
+          <span v-if="statsDels" class="diff-stats diff-stats-del"
+            >−{{ statsDels }}</span
+          >
         </template>
         <v-icon
           v-if="collapsible"
@@ -38,14 +44,11 @@
     <!-- Diff hunks — hidden when collapsed -->
     <div v-if="!isCollapsed" class="diff-body">
       <div v-if="truncated" class="diff-truncation-warning">
-        ⚠ Diff truncated (showing first {{ maxChars.toLocaleString() }} characters)
+        ⚠ Diff truncated (showing first
+        {{ maxChars.toLocaleString() }} characters)
       </div>
 
-      <div
-        v-for="(hunk, hi) in parsedHunks"
-        :key="hi"
-        class="diff-hunk"
-      >
+      <div v-for="(hunk, hi) in parsedHunks" :key="hi" class="diff-hunk">
         <div class="hunk-header">
           {{ hunk.header }}
         </div>
@@ -63,9 +66,15 @@
       </div>
 
       <div v-if="collapsedOverflow > 0" class="diff-overflow-bar">
-        <button type="button" class="diff-show-more" @click="showAllLines = true">
-          Show all {{ totalLines.toLocaleString() }} lines
-          ({{ collapsedOverflow }} more)
+        <button
+          type="button"
+          class="diff-show-more"
+          @click="showAllLines = true"
+        >
+          Show all {{ totalLines.toLocaleString() }} lines ({{
+            collapsedOverflow
+          }}
+          more)
         </button>
       </div>
     </div>

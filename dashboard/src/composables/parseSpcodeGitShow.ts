@@ -44,6 +44,34 @@ export interface SpcodeGitShowRawData {
   count: number;
   truncated: boolean;
   max_files: number;
+
+  // v3.9 (2026-06-25): 单文件 patch 视图(可选;仅在 ?path= 给出时存在)
+  // binary 文件 patch=null;path 不在该 ref 中时 status="unknown"
+  file?: SpcodeGitShowRawFileView;
+}
+
+export interface GitShowFileView {
+  path: string;
+  status: GitShowFileStatus;
+  additions: number;
+  deletions: number;
+  /** 仅 R / C 有值 */
+  oldPath: string | null;
+  /** binary 文件 patch 始终为 null,前端渲染 "binary file" 占位 */
+  isBinary: boolean;
+  /** unified diff 文本(含 diff --git / --- / +++ / hunk 头);
+   *  null 时 (binary 或 unknown) 渲染 fallback 占位 */
+  patch: string | null;
+}
+
+export interface SpcodeGitShowRawFileView {
+  path: string;
+  old_path?: string | null;
+  status: string; // "M" | "A" | "D" | "R" | "C" | "unknown"
+  additions: number;
+  deletions: number;
+  is_binary: boolean;
+  patch: string | null; // unified diff 文本;binary 或 unknown 时为 null
 }
 
 // ─── Public types ──────────────────────────────────────────────────
@@ -92,6 +120,9 @@ export interface GitShowData {
   count: number;
   truncated: boolean;
   maxFiles: number;
+
+  // v3.9 (2026-06-25): 单文件 patch 视图(可选,仅在 ?path= 给出时存在)
+  file: GitShowFileView | null;
 }
 
 export type ParseResult<T> =
@@ -174,6 +205,29 @@ export function parseSpcodeGitShow(raw: unknown): ParseResult<GitShowData> {
         status === "R" || status === "C" ? asNumberOrNull(f0.similarity) : null,
     };
   });
+
+  // v3.9: 解析可选的单文件 patch 视图(?path= 时存在)
+  // 后端在 data.file 字段;不存在 → null。前端把它跟 file list 解耦
+  // (file list 总是返回,file 视图是 lazy fetch 单独的 per-file state)。
+  let fileView: GitShowFileView | null = null;
+  if (d.file && typeof d.file === "object") {
+    const f0 = d.file as Partial<SpcodeGitShowRawFileView>;
+    const fileStatus = normalizeStatus(f0.status);
+    fileView = {
+      path: asString(f0.path),
+      status: fileStatus,
+      additions: asNumber(f0.additions),
+      deletions: asNumber(f0.deletions),
+      oldPath:
+        fileStatus === "R" || fileStatus === "C"
+          ? asStringOrNull(f0.old_path)
+          : null,
+      isBinary: asBoolean(f0.is_binary),
+      // binary 或 path 不匹配时后端给 null;空字符串也归一为 null
+      patch: asStringOrNull(f0.patch),
+    };
+  }
+
   return {
     kind: "ok",
     snapshot: {
@@ -201,6 +255,7 @@ export function parseSpcodeGitShow(raw: unknown): ParseResult<GitShowData> {
       count: asNumber(d.count),
       truncated: asBoolean(d.truncated),
       maxFiles: asNumber(d.max_files, 500),
+      file: fileView,
     },
   };
 }

@@ -34,6 +34,7 @@ import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import {
   parseSpcodeGitShow,
   type GitShowData,
+  type GitShowFileView,
   type ParseResult,
 } from "./parseSpcodeGitShow";
 
@@ -42,6 +43,15 @@ export type GitShowFetchState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "ok"; data: GitShowData; notModified?: boolean }
+  | { kind: "error"; reason: string };
+
+/** v3.9 (2026-06-25): per-(sha, path) state for the single-file
+ *  patch view. Mirrors GitShowFetchState's shape; the snapshot is a
+ *  GitShowFileView (or null when the backend signals an error). */
+export type GitShowFileFetchState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ok"; data: GitShowFileView; notModified?: boolean }
   | { kind: "error"; reason: string };
 
 export interface UseSpcodeGitShow {
@@ -55,6 +65,15 @@ export interface UseSpcodeGitShow {
   getState: (refName: string) => GitShowFetchState;
   /** True while a fetch for this ref is in flight. */
   isLoading: (refName: string) => boolean;
+  /** v3.9: Fetch (or no-op) for a single file's patch within a
+   *  commit. Idempotent; per-(sha, path) cached. */
+  fetchFile: (refName: string, filePath: string) => Promise<void>;
+  /** v3.9: Read cached single-file patch view. */
+  getFileData: (refName: string, filePath: string) => GitShowFileView | null;
+  /** v3.9: Read per-(sha, path) state. */
+  getFileState: (refName: string, filePath: string) => GitShowFileFetchState;
+  /** v3.9: True while a single-file fetch is in flight. */
+  isFileLoading: (refName: string, filePath: string) => boolean;
   /** Clear every cached ref and ETag entry. Does NOT abort in-flight. */
   invalidateAll: () => void;
   /** Clear the ETag map only (e.g. on worktree / umo change). Keeps
@@ -84,6 +103,13 @@ export function useSpcodeGitShow(
   const dataMap = ref<Map<string, GitShowData>>(new Map());
   const etagMap = new Map<string, string>();
   const inflight = new Map<string, AbortController>();
+  // v3.9: per-(sha, path) parallel state for the single-file patch
+  // view. Kept in separate maps so the commit-level cache (dataMap)
+  // remains untouched when a user expands / collapses file rows.
+  const fileStateMap = ref<Map<string, GitShowFileFetchState>>(new Map());
+  const fileDataMap = ref<Map<string, GitShowFileView>>(new Map());
+  const fileEtagMap = new Map<string, string>();
+  const fileInflight = new Map<string, AbortController>();
   let isMounted = true;
   const spcodeStatus = useSpcodeProjectStatus();
 
@@ -106,6 +132,22 @@ export function useSpcodeGitShow(
     const m = new Map(dataMap.value);
     m.delete(refName);
     dataMap.value = m;
+  }
+  // v3.9: per-(sha, path) setters mirror the commit-level helpers
+  // above; key format is `${sha}\u0001${path}` (NUL byte — illegal
+  // in git paths — guarantees no collision with single-component keys).
+  function setFileState(key: string, next: GitShowFileFetchState): void {
+    const m = new Map(fileStateMap.value);
+    m.set(key, next);
+    fileStateMap.value = m;
+  }
+  function setFileData(key: string, next: GitShowFileView): void {
+    const m = new Map(fileDataMap.value);
+    m.set(key, next);
+    fileDataMap.value = m;
+  }
+  function fileKey(sha: string, filePath: string): string {
+    return `${sha}\u0001${filePath}`;
   }
 
   // Reactive Set of refs that have data. Kept in sync with dataMap.
@@ -209,6 +251,102 @@ export function useSpcodeGitShow(
     }
   }
 
+  // ──────────────────────────────────────────────────────────
+  // v3.9: per-(sha, path) single-file patch fetch
+  // Mirrors `fetch()` but keyed on (ref + path) and hitting the same
+  // /spcode/git-show endpoint with ?path=<file>. The response shape
+  // is the standard envelope + data.file. Idempotency, abort handling
+  // and ETag follow the same rules as the commit-level fetch above.
+  // ──────────────────────────────────────────────────────────
+  async function fetchFile(refName: string, filePath: string): Promise<void> {
+    if (!isMounted) return;
+    if (!refName || !filePath) return;
+    const key = fileKey(refName, filePath);
+    if (fileInflight.has(key)) return;
+    const current = fileStateMap.value.get(key);
+    if (current?.kind === "ok") return;
+
+    const umo = spcodeStatus.status.value.umo;
+    if (!umo) {
+      setFileState(key, { kind: "error", reason: "no_project_loaded" });
+      return;
+    }
+
+    const ctrl = new AbortController();
+    fileInflight.set(key, ctrl);
+    setFileState(key, { kind: "loading" });
+
+    const worktree = toValue(worktreeRef);
+    const etagKeyFull = `${etagKey({ umo, worktree, ref: refName })}|${filePath}`;
+    const etag = fileEtagMap.get(etagKeyFull);
+
+    try {
+      const resp = await pluginExtensionApi.get<unknown>(
+        "spcode/git-show",
+        {
+          params: {
+            umo,
+            ...(worktree ? { worktree } : {}),
+            ref: refName,
+            path: filePath,
+            max_files: 1, // 单文件视图,后端不需要 N 个文件列表
+          },
+          headers: etag ? { "If-None-Match": etag } : {},
+          validateStatus: (s) => (s >= 200 && s < 300) || s === 304,
+          signal: ctrl.signal,
+        },
+      );
+      if (!isMounted) return;
+      fileInflight.delete(key);
+
+      if (resp.status === 304) {
+        const prev = fileDataMap.value.get(key);
+        if (prev) {
+          setFileState(key, { kind: "ok", data: prev, notModified: true });
+        }
+        return;
+      }
+
+      const parsed: ParseResult<GitShowData> = parseSpcodeGitShow(resp.data);
+      if (parsed.kind !== "ok") {
+        setFileState(key, { kind: "error", reason: "unknown" });
+        return;
+      }
+      const snap = parsed.snapshot;
+      if (!snap.success) {
+        setFileState(key, { kind: "error", reason: snap.reason ?? "unknown" });
+        return;
+      }
+      if (!snap.file) {
+        // 后端成功但没有 file 字段(理论不应发生;保守兜底)
+        setFileState(key, { kind: "error", reason: "unknown" });
+        return;
+      }
+
+      const headers = resp.headers as
+        | Record<string, string>
+        | undefined;
+      const newEtag = headers?.["etag"] ?? headers?.["ETag"];
+      if (newEtag) fileEtagMap.set(etagKeyFull, newEtag);
+
+      setFileData(key, snap.file);
+      setFileState(key, { kind: "ok", data: snap.file, notModified: false });
+    } catch (err) {
+      if (!isMounted) return;
+      fileInflight.delete(key);
+      if ((err as { name?: string })?.name === "CanceledError") {
+        return;
+      }
+      const anyErr = err as { code?: string; message?: string };
+      const reason =
+        anyErr.code === "ERR_NETWORK" ||
+        /network/i.test(anyErr.message ?? "")
+          ? "network"
+          : "unknown";
+      setFileState(key, { kind: "error", reason });
+    }
+  }
+
   function getData(refName: string): GitShowData | null {
     return dataMap.value.get(refName) ?? null;
   }
@@ -219,14 +357,32 @@ export function useSpcodeGitShow(
     return getState(refName).kind === "loading";
   }
 
+  // v3.9: per-(sha, path) read accessors. Same idempotency / shape
+  // contract as their commit-level counterparts above.
+  function getFileData(refName: string, filePath: string): GitShowFileView | null {
+    return fileDataMap.value.get(fileKey(refName, filePath)) ?? null;
+  }
+  function getFileState(refName: string, filePath: string): GitShowFileFetchState {
+    return fileStateMap.value.get(fileKey(refName, filePath)) ?? { kind: "idle" };
+  }
+  function isFileLoading(refName: string, filePath: string): boolean {
+    return getFileState(refName, filePath).kind === "loading";
+  }
+
   function invalidateAll(): void {
     stateMap.value = new Map();
     dataMap.value = new Map();
     etagMap.clear();
+    // v3.9: also drop per-file cache; the next expand will re-fetch
+    fileStateMap.value = new Map();
+    fileDataMap.value = new Map();
+    fileEtagMap.clear();
   }
 
   function invalidateEtag(): void {
     etagMap.clear();
+    // v3.9: ETag-only drop for files; data is kept to avoid flash
+    fileEtagMap.clear();
   }
 
   // Worktree / umo change: clear ETag only, keep cached data so the
@@ -251,6 +407,12 @@ export function useSpcodeGitShow(
     etagMap.clear();
     stateMap.value = new Map();
     dataMap.value = new Map();
+    // v3.9: also abort / drop the per-file fetches
+    for (const ctrl of fileInflight.values()) ctrl.abort();
+    fileInflight.clear();
+    fileEtagMap.clear();
+    fileStateMap.value = new Map();
+    fileDataMap.value = new Map();
   }
 
   return {
@@ -259,6 +421,10 @@ export function useSpcodeGitShow(
     getData,
     getState,
     isLoading,
+    fetchFile,
+    getFileData,
+    getFileState,
+    isFileLoading,
     invalidateAll,
     invalidateEtag,
     dispose,

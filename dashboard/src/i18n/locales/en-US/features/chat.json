@@ -489,7 +489,7 @@
             "daysAgo": "{n}d ago",
             "exactDate": "{date}"
           },
-          "filesStat": "{files} files, +{add} −{del}",
+          "filesStat": "{files} files,",
           "expandCommit": "Expand commit details",
           "collapseCommit": "Collapse commit details",
           "showFiles": "Show changed files",
@@ -508,7 +508,14 @@
             "C": "Copied",
             "unknown": "Changed"
           },
-          "renameFrom": "{old} → {new} ({similarity}% similar)"
+          "renameFrom": "{old} → {new} ({similarity}% similar)",
+          "expandFile": "Show patch",
+          "collapseFile": "Hide patch",
+          "expandFileAria": "Show patch for {path}",
+          "loadingPatch": "Loading patch…",
+          "errorPatch": "Failed to load patch",
+          "binaryFile": "Binary file (no diff to display)",
+          "emptyPatch": "No diff available for this file"
         },
         "error": {
           "reason": {

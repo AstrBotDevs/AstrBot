@@ -476,7 +476,7 @@
             "daysAgo": "{n} дн назад",
             "exactDate": "{date}"
           },
-          "filesStat": "{files} файлов, +{add} −{del}",
+          "filesStat": "{files} файлов,",
           "expandCommit": "Развернуть детали коммита",
           "collapseCommit": "Свернуть детали коммита",
           "showFiles": "Показать изменённые файлы",
@@ -495,7 +495,14 @@
             "C": "Скопирован",
             "unknown": "Изменён"
           },
-          "renameFrom": "{old} → {new} ({similarity}% совпадение)"
+          "renameFrom": "{old} → {new} ({similarity}% совпадение)",
+          "expandFile": "Показать патч",
+          "collapseFile": "Скрыть патч",
+          "expandFileAria": "Показать патч для {path}",
+          "loadingPatch": "Загрузка патча…",
+          "errorPatch": "Не удалось загрузить патч",
+          "binaryFile": "Двоичный файл (нет diff для отображения)",
+          "emptyPatch": "Для этого файла нет diff"
         },
         "error": {
           "reason": {

@@ -401,14 +401,14 @@
             "file_not_found": "文件不存在",
             "not_modified": "文件无未暂存改动",
             "untracked_file": "未跟踪的文件无法恢复（请用 git rm --cached 或 git add）",
-                "git_error": "Git 执行失败（{stderr}）"
-                }
-              }
-            },
-            "openFile": {
-              "buttonAria": "在文件浏览器中打开 {path}"
-            },
-            "gitWorkflow": {
+            "git_error": "Git 执行失败（{stderr}）"
+          }
+        }
+      },
+      "openFile": {
+        "buttonAria": "在文件浏览器中打开 {path}"
+      },
+      "gitWorkflow": {
         "stage": {
           "buttonAria": "暂存 {path}",
           "unstageButtonAria": "取消暂存 {path}",
@@ -489,7 +489,7 @@
             "daysAgo": "{n} 天前",
             "exactDate": "{date}"
           },
-          "filesStat": "{files} 个文件，+{add} −{del}",
+          "filesStat": "{files} 个文件，",
           "expandCommit": "展开 commit 详情",
           "collapseCommit": "折叠 commit 详情",
           "showFiles": "查看变更文件",
@@ -508,7 +508,14 @@
             "C": "复制",
             "unknown": "变更"
           },
-          "renameFrom": "{old} → {new}（相似度 {similarity}%）"
+          "renameFrom": "{old} → {new}（相似度 {similarity}%）",
+          "expandFile": "展开 patch",
+          "collapseFile": "折叠 patch",
+          "expandFileAria": "查看 {path} 的变更",
+          "loadingPatch": "正在加载 patch…",
+          "errorPatch": "加载 patch 失败",
+          "binaryFile": "二进制文件（无可显示 diff）",
+          "emptyPatch": "该文件无可用 diff"
         },
         "error": {
           "reason": {
