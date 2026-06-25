@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import locale
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -42,6 +43,67 @@ _BLOCKED_COMMAND_PATTERNS = [
 def _is_safe_command(command: str) -> bool:
     cmd = f" {command.strip().lower()} "
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
+
+
+def _self_pids() -> frozenset[int]:
+    """Return the PIDs that must never be killed by the local shell tool.
+
+    Includes the current AstrBot process, its parent, and the process group
+    leader so that indirect kills (for example ``kill -9 -$PGID``) are also
+    blocked. On Windows ``os.getpgrp`` is unavailable, so the set only
+    contains the current process and its parent in that case.
+    """
+    pids: set[int] = {os.getpid(), os.getppid()}
+    getpgrp = getattr(os, "getpgrp", None)
+    if getpgrp is not None:
+        try:
+            pgid = getpgrp()
+        except (OSError, AttributeError):
+            pgid = 0
+        if pgid and pgid > 0:
+            pids.add(pgid)
+    return frozenset(pids)
+
+
+# Commands that, in the local runtime, would match the running AstrBot /
+# Python process when invoked without an explicit PID. They are refused
+# regardless of the argument so an agent cannot iterate the process list
+# (for example via ``pgrep`` + ``pkill``) to discover the protected PID.
+_SELF_KILL_NAME_PATTERNS = (
+    "taskkill",  # Windows: kill by PID / IM / window title
+    "stop-process",  # PowerShell: kill by name or PID
+    "pkill",  # Unix: kill by pattern match
+    "killall",  # Unix: kill by exact process name
+    "pgrep",  # Unix: process lookup (often paired with pkill)
+)
+
+
+def _would_kill_self(command: str) -> bool:
+    """Best-effort detection of commands that target the host AstrBot process.
+
+    Complements the substring blacklist in :data:`_BLOCKED_COMMAND_PATTERNS` by
+    inspecting command tokens for kill patterns that target protected PIDs and
+    for name-based kill commands that would match the running Python process.
+
+    This is intentionally conservative for the local runtime where the shell
+    command runs in the same OS instance as AstrBot. The sandbox runtime is
+    not affected because its commands execute in an isolated container.
+    """
+    lowered = command.lower()
+    protected = _self_pids()
+
+    # Explicit numeric PID kill, e.g. `kill 1234`, `kill -15 1234`,
+    # `kill -TERM 1234`. `kill -9` is already covered by the blacklist but
+    # is matched here as well for any other signal number.
+    for match in re.finditer(r"\bkill\b\s+((?:-\w+\s+)*)(\d+)", lowered):
+        try:
+            pid = int(match.group(2))
+        except ValueError:
+            continue
+        if pid in protected:
+            return True
+
+    return any(keyword in lowered for keyword in _SELF_KILL_NAME_PATTERNS)
 
 
 def _decode_bytes_with_fallback(
@@ -96,6 +158,10 @@ class LocalShellComponent(ShellComponent):
     ) -> dict[str, Any]:
         if not _is_safe_command(command):
             raise PermissionError("Blocked unsafe shell command.")
+        if _would_kill_self(command):
+            raise PermissionError(
+                "Blocked: refusing to terminate the AstrBot host process."
+            )
 
         def _run() -> dict[str, Any]:
             run_env = os.environ.copy()
