@@ -17,7 +17,6 @@ from .openai_source import ProviderOpenAIOfficial
 @register_provider_adapter(
     "deepseek_chat_completion",
     "DeepSeek Chat Completion 提供商适配器",
-    prompt_renderer_family="openai",
 )
 class ProviderDeepSeek(ProviderOpenAIOfficial):
     _FORCE_OMIT_TOOL_CHOICE_KEY = "_deepseek_force_omit_tool_choice"
