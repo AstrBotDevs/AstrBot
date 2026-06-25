@@ -580,7 +580,11 @@ class AstrBotDashboard:
             logger.info("WebUI disabled.")
             return None
 
-        logger.info("Starting WebUI at %s://%s:%s", scheme, hosts, port)
+        bound_urls = [
+            f"{scheme}://[{h}]:{port}" if ":" in h else f"{scheme}://{h}:{port}"
+            for h in hosts
+        ]
+        logger.info("Starting WebUI at %s", ", ".join(bound_urls))
         all_interfaces = {"0.0.0.0", "::"}
         local_hosts = {"localhost", "127.0.0.1", "::1"}
         if all_interfaces & set(hosts):
