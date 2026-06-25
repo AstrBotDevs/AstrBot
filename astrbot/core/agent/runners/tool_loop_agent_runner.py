@@ -191,9 +191,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
         if llm_resp.completion_text:
             parts.append(TextPart(text=llm_resp.completion_text))
-        if len(parts) == 0:
-            logger.warning("LLM returned empty assistant message with no tool calls.")
-        self.run_context.messages.append(Message(role="assistant", content=parts))
+
+        # 只有 ThinkPart、没有正文/工具调用的消息，发出去时 content 会变空，
+        # 会被下游服务端拒收，因此不存。
+        has_real_content = any(not isinstance(p, ThinkPart) for p in parts)
+        if not has_real_content:
+            logger.warning(
+                "LLM response has no text/tool_calls, only reasoning; skipping this turn."
+            )
+        else:
+            self.run_context.messages.append(Message(role="assistant", content=parts))
 
         try:
             await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
