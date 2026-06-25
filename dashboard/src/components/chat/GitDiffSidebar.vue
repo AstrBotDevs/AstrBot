@@ -204,6 +204,16 @@ const hasMultipleWorktrees = computed(() => worktreeList.value.length > 1);
 const mainWorktreePath = computed(
   () => worktreeList.value.find((w) => w.isMain)?.path ?? null,
 );
+// Path of the loaded project's root directory (from
+// /spcode/project-status, independent of git). Used as a fallback
+// root for the file browser when the project is NOT a git project
+// (worktree list is empty → no main worktree path). Without this
+// fallback, fileBrowserCurrentPath would collapse to "" and
+// useSpcodeFileBrowser's watcher would skip the fetch
+// (`if (!path) return`), leaving the Files view empty.
+const projectRoot = computed(
+  () => spcodeStatus.status.value.directory,
+);
 
 // Persist viewMode / selectedScope / selectedWorktree on every change.
 // fileBrowserCurrentPath uses persistCurrentPath (300ms debounce).
@@ -237,9 +247,14 @@ watch(
     ) {
       selectedWorktree.value = null;
     }
-    // Validate currentPath against the (possibly new) root
+    // Validate currentPath against the (possibly new) root.
+    // Fall back to projectRoot for non-git projects (no worktrees →
+    // no main worktree path); otherwise fileBrowserCurrentPath would
+    // collapse to "" and the file-browser fetch would be skipped.
     const root =
-      selectedWorktree.value ?? wtList.find((w) => w.isMain)?.path ?? null;
+      selectedWorktree.value ??
+      wtList.find((w) => w.isMain)?.path ??
+      projectRoot.value;
     const validated = validateCurrentPath(fileBrowserCurrentPath.value, root);
     if (fileBrowserCurrentPath.value !== validated) {
       fileBrowserCurrentPath.value = validated;
@@ -1299,10 +1314,13 @@ const truncatedMax = computed(() => {
   return 0;
 });
 
-// Root path for FileBrowserView: the active worktree (or main if none).
-// We pass this to FileBrowserView so it can render the breadcrumb.
+// Root path for FileBrowserView: the active worktree, then the main
+// worktree, then the loaded project's root directory. We pass this
+// to FileBrowserView so it can render the breadcrumb. The projectRoot
+// fallback ensures non-git projects still get a meaningful root for
+// the breadcrumb (and a non-empty path for the file-browser fetch).
 const currentRoot = computed<string | null>(() => {
-  return selectedWorktree.value ?? mainWorktreePath.value;
+  return selectedWorktree.value ?? mainWorktreePath.value ?? projectRoot.value;
 });
 </script>
 
