@@ -366,6 +366,16 @@
             "Full（完整参数）"
           ]
         },
+        "repeated_tool_call_notice": {
+          "enable": {
+            "description": "连续工具调用提醒",
+            "hint": "当模型连续调用同一个工具达到阈值时，会向模型注入 SYSTEM NOTICE，提醒其检查是否陷入重复调用。"
+          },
+          "threshold": {
+            "description": "触发连续调用提醒的次数",
+            "hint": "同一个工具连续调用达到该次数时开始提醒。默认 3。"
+          }
+        },
         "streaming_response": {
           "description": "流式输出"
         },

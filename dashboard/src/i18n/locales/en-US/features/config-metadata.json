@@ -364,6 +364,16 @@
             "Full schema"
           ]
         },
+        "repeated_tool_call_notice": {
+          "enable": {
+            "description": "Repeated Tool Call Notice",
+            "hint": "When enabled, a SYSTEM NOTICE is injected to the model once it calls the same tool consecutively past the threshold, reminding it to check whether it is stuck in a loop."
+          },
+          "threshold": {
+            "description": "Trigger Threshold for Repeated Tool Calls",
+            "hint": "Number of consecutive calls to the same tool required before the notice is injected. Defaults to 3."
+          }
+        },
         "streaming_response": {
           "description": "Streaming Output"
         },
