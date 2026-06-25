@@ -24,8 +24,36 @@ export type WorktreesFetchState =
 export interface UseSpcodeWorktrees {
   state: Ref<WorktreesFetchState>
   refresh: () => Promise<void>
+  /**
+   * Start a polling timer that re-fetches the worktree list on a fixed
+   * cadence. Used by the orchestrator (GitDiffSidebar) to surface
+   * externally-driven worktree changes (e.g. the agent running
+   * `git worktree add` while the user is staring at the sidebar).
+   *
+   * Idempotent: re-calling while a timer is already running is a no-op.
+   */
+  startPolling: (intervalMs?: number) => void
+  /** Cancel the polling timer set by `startPolling`. Idempotent. */
+  stopPolling: () => void
   dispose: () => void
 }
+
+/**
+ * Polling cadence for the worktree list. Picked deliberately slower
+ * than the diff/status/log cadence (10s) for two reasons:
+ *
+ *   1. **Worktree churn is rare.** Most sessions add/remove worktrees
+ *      only at task boundaries (`/project load`, agent bootstrapping).
+ *      30s is frequent enough to catch that within one human attention
+ *      span, infrequent enough to avoid hitting the spcode plugin on
+ *      every tab switch.
+ *   2. **`git worktree list` is not free.** It shells out to git
+ *      (porcelain v1) and walks `.git/worktrees/` on every call. A
+ *      cheap refresh every 30s is the right cost/value trade-off;
+ *      running it every 10s would 3x the I/O for a list that changes
+ *      on the order of minutes, not seconds.
+ */
+const DEFAULT_POLL_MS = 30_000
 
 /**
  * Composable for the worktree list.
@@ -37,11 +65,22 @@ export interface UseSpcodeWorktrees {
  * The composable is per-instance (NOT a module-level singleton), matching
  * the useSpcodeGitDiff pattern. GitDiffSidebar instantiates one and
  * disposes it in onBeforeUnmount.
+ *
+ * **Polling** (added 2026-06-25, elecvoid243): the composable exposes
+ * `startPolling(intervalMs?)` / `stopPolling()` to support the
+ * "agent runs `git worktree add` while the user is looking at the
+ * sidebar" scenario. The orchestrator (GitDiffSidebar) starts
+ * polling at 30s cadence when the sidebar opens and stops it when
+ * the sidebar closes. We deliberately keep worktree polling
+ * decoupled from viewMode: the worktree list powers the tab
+ * switcher across all three tabs (diff / files / history), so
+ * tying its refresh cadence to a specific tab would be wrong.
  */
 export function useSpcodeWorktrees(): UseSpcodeWorktrees {
   const state = ref<WorktreesFetchState>({ kind: 'idle' })
   const spcodeStatus = useSpcodeProjectStatus()
   let abortController: AbortController | null = null
+  let pollTimer: ReturnType<typeof setInterval> | null = null
   let isMounted = true
 
   async function refresh(): Promise<void> {
@@ -118,13 +157,28 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
     },
   )
 
+  function startPolling(intervalMs: number = DEFAULT_POLL_MS): void {
+    if (pollTimer) return
+    pollTimer = setInterval(() => {
+      void refresh()
+    }, intervalMs)
+  }
+
+  function stopPolling(): void {
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  }
+
   function dispose(): void {
     isMounted = false
+    stopPolling()
     abortController?.abort()
     abortController = null
   }
 
-  return { state, refresh, dispose }
+  return { state, refresh, startPolling, stopPolling, dispose }
 }
 
 function classifyError(err: unknown): string {

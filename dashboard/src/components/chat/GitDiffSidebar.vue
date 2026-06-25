@@ -31,6 +31,7 @@ import { useSpcodeGitStage } from "@/composables/useSpcodeGitStage";
 import { useSpcodeGitUnstage } from "@/composables/useSpcodeGitUnstage";
 import { useSpcodeGitCommit } from "@/composables/useSpcodeGitCommit";
 import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
+import { useSpcodeGitShow } from "@/composables/useSpcodeGitShow";
 import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
 import { classifyReason } from "@/composables/parseSpcodeGitWorkflow";
 import { useModuleI18n } from "@/i18n/composables";
@@ -294,6 +295,11 @@ const gitStage = useSpcodeGitStage();
 const gitUnstage = useSpcodeGitUnstage();
 const gitCommit = useSpcodeGitCommit();
 const gitLog = useSpcodeGitLog(selectedWorktree);
+// git-show: per-commit file list (spec 2026-06-25). One composable
+// instance shared by every expanded commit in GitLogView; the
+// composable maintains a per-SHA cache internally, so re-expanding
+// a previously seen commit is an ETag-validated no-op.
+const gitShow = useSpcodeGitShow(selectedWorktree);
 
 // Spec §3.4 决策 #22/#23:切 worktree 保留,切 project / unload 清空。
 const stagedFiles = ref<Set<string>>(new Set<string>());
@@ -434,14 +440,27 @@ async function onManualRefresh(): Promise<void> {
   isFetching.value = true;
   try {
     // View-mode-aware dispatch (option B): in files view the button
-    // reloads the workspace (directory listing + file preview); in
-    // diff view it reloads the git diff data. The previous behavior
+    // reloads the workspace (directory listing + file preview);
+    // otherwise it reloads the git diff data. The previous behavior
     // (always reload git diff) was a UX trap in files view — the
     // user could see the spinner but no visible data would change.
+    //
+    // Worktree list refreshes in PARALLEL regardless of viewMode:
+    //   - It's cheap (one porcelain v1 call) so there's no UX cost.
+    //   - The worktree tab switcher IS visible across all three
+    //     tabs, so leaving it stale would surprise the user
+    //     (e.g. they just added a worktree in a terminal and want
+    //     to see it in the sidebar immediately).
+    // We add it as a side-effect, NOT a replacement, so the
+    // view-mode branch keeps its original target.
+    const worktreeRefresh = worktreesComposable.refresh();
     if (viewMode.value === "files") {
-      await fileBrowserRef.value?.refresh();
+      await Promise.all([
+        fileBrowserRef.value?.refresh() ?? Promise.resolve(),
+        worktreeRefresh,
+      ]);
     } else {
-      await composable.refresh();
+      await Promise.all([composable.refresh(), worktreeRefresh]);
     }
   } finally {
     isFetching.value = false;
@@ -453,6 +472,41 @@ async function onManualRefresh(): Promise<void> {
 onMounted(() => {
   void worktreesComposable.refresh();
 });
+
+// ── Worktree polling (added 2026-06-25, elecvoid243) ──────────────
+// Spec: "当且仅当侧边栏打开时才触发轮询" — the agent can run
+// `git worktree add` / `git worktree remove` while the user is
+// staring at the sidebar, and the tab switcher must reflect that
+// within a reasonable delay. We poll at 30s (the composable's
+// DEFAULT_POLL_MS) so the user doesn't see a stale list after the
+// agent bootstraps a new worktree.
+//
+// DECOUPLING NOTE: this watcher is intentionally separate from the
+// viewMode-aware polling watcher below. Rationale:
+//   - The worktree list powers the tab switcher for ALL three tabs
+//     (diff / files / history), not just the diff tab.
+//   - The user shouldn't have to switch to the diff tab to "wake
+//     up" the worktree refresh — that's a footgun.
+//   - Mixing the worktree polling lifecycle into the diff/history
+//     branch logic would create cross-concern coupling (a
+//     future tab addition would need to remember to start/stop
+//     worktree polling, easy to forget).
+//
+// `immediate: true` covers the "sidebar is open at mount" case
+// (which is the common case in this dashboard — the sidebar is
+// always mounted, just sometimes closed). For the "starts closed
+// then opens" path, modelValue flipping true starts the timer.
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) {
+      worktreesComposable.startPolling(30_000);
+    } else {
+      worktreesComposable.stopPolling();
+    }
+  },
+  { immediate: true },
+);
 
 // Spec: polling starts ONLY when the sidebar is open AND the user is
 // viewing the Git Diff tab. The Files ("workspace") tab never polls —
@@ -1156,6 +1210,10 @@ onBeforeUnmount(() => {
   gitUnstage.dispose();
   gitCommit.dispose();
   gitLog.dispose();
+  // git-show composable holds per-SHA caches + inflight AbortControllers.
+  // dispose() aborts in-flight requests and drops the maps; safe to
+  // call after gitLog.dispose() since the two are independent.
+  gitShow.dispose();
   if (persistCurrentPathTimer) {
     clearTimeout(persistCurrentPathTimer);
     persistCurrentPathTimer = null;
@@ -1505,12 +1563,15 @@ const currentRoot = computed<string | null>(() => {
           @stage="onStageFile"
           @unstage="onUnstageFile"
         />
-        <!-- Spec 2026-06-24 §6.5:History view 渲染 GitLogView。 -->
+        <!-- Spec 2026-06-24 §6.5:History view 渲染 GitLogView。
+             Spec 2026-06-25 §3.1:GitLogView 也接收 gitShow 句柄用于
+             在 commit 展开时拉取 /spcode/git-show 并渲染变更文件列表。 -->
         <GitLogView
           v-else-if="viewMode === 'history'"
           :state="gitLog.state.value"
           :has-more="logHasMore"
           :is-loading="logIsLoading"
+          :git-show="gitShow"
           @apply="onLogApply"
           @load-more="onLogLoadMore"
           @refresh="() => gitLog.refresh()"

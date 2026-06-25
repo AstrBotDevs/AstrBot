@@ -478,7 +478,24 @@
           },
           "filesStat": "{files} файлов, +{add} −{del}",
           "expandCommit": "Развернуть детали коммита",
-          "collapseCommit": "Свернуть детали коммита"
+          "collapseCommit": "Свернуть детали коммита",
+          "showFiles": "Показать изменённые файлы",
+          "hideFiles": "Скрыть изменённые файлы",
+          "showFilesAria": "Показать файлы, изменённые в этом коммите",
+          "loadingFiles": "Загрузка файлов…",
+          "errorFiles": "Не удалось загрузить файлы",
+          "errorFilesAria": "Повторить загрузку файлов",
+          "noFiles": "Файлы не изменялись",
+          "filesTruncated": "Показаны первые {shown} из {total} файлов (макс. {max} за запрос)",
+          "fileStatus": {
+            "M": "Изменён",
+            "A": "Добавлен",
+            "D": "Удалён",
+            "R": "Переименован",
+            "C": "Скопирован",
+            "unknown": "Изменён"
+          },
+          "renameFrom": "{old} → {new} ({similarity}% совпадение)"
         },
         "error": {
           "reason": {
@@ -500,7 +517,9 @@
             "nothing_to_commit": "Нет подготовленных изменений",
             "hook_rejected": "pre-commit / commit-msg хук отклонил",
             "identity_not_set": "Сначала выполните `git config --global user.email ...`",
-            "empty_repository": "В репозитории ещё нет коммитов"
+            "empty_repository": "В репозитории ещё нет коммитов",
+            "ref_not_found": "Коммит не найден",
+            "commit_too_large": "Коммит слишком большой; используйте diff-эндпоинт для полного патча"
           }
         }
       }

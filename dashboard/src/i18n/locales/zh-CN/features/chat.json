@@ -488,7 +488,24 @@
           },
           "filesStat": "{files} 个文件，+{add} −{del}",
           "expandCommit": "展开 commit 详情",
-          "collapseCommit": "折叠 commit 详情"
+          "collapseCommit": "折叠 commit 详情",
+          "showFiles": "查看变更文件",
+          "hideFiles": "隐藏变更文件",
+          "showFilesAria": "查看本 commit 修改的文件",
+          "loadingFiles": "正在加载文件列表…",
+          "errorFiles": "加载文件失败",
+          "errorFilesAria": "重试加载文件",
+          "noFiles": "本 commit 未修改任何文件",
+          "filesTruncated": "仅显示前 {shown} 个文件（共 {total} 个，每次最多 {max}）",
+          "fileStatus": {
+            "M": "修改",
+            "A": "新增",
+            "D": "删除",
+            "R": "重命名",
+            "C": "复制",
+            "unknown": "变更"
+          },
+          "renameFrom": "{old} → {new}（相似度 {similarity}%）"
         },
         "error": {
           "reason": {
@@ -510,7 +527,9 @@
             "nothing_to_commit": "没有可提交的暂存改动",
             "hook_rejected": "pre-commit / commit-msg 钩子拒绝",
             "identity_not_set": "请先 `git config --global user.email ...`",
-            "empty_repository": "仓库还没有任何提交"
+            "empty_repository": "仓库还没有任何提交",
+            "ref_not_found": "找不到该 commit",
+            "commit_too_large": "该 commit 过大，请使用 diff 端点查看完整 patch"
           }
         }
       }

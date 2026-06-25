@@ -488,7 +488,24 @@
           },
           "filesStat": "{files} files, +{add} −{del}",
           "expandCommit": "Expand commit details",
-          "collapseCommit": "Collapse commit details"
+          "collapseCommit": "Collapse commit details",
+          "showFiles": "Show changed files",
+          "hideFiles": "Hide changed files",
+          "showFilesAria": "Show files changed in this commit",
+          "loadingFiles": "Loading files…",
+          "errorFiles": "Failed to load files",
+          "errorFilesAria": "Retry loading files",
+          "noFiles": "No files changed",
+          "filesTruncated": "Showing first {shown} of {total} files (max {max} per request)",
+          "fileStatus": {
+            "M": "Modified",
+            "A": "Added",
+            "D": "Deleted",
+            "R": "Renamed",
+            "C": "Copied",
+            "unknown": "Changed"
+          },
+          "renameFrom": "{old} → {new} ({similarity}% similar)"
         },
         "error": {
           "reason": {
@@ -510,7 +527,9 @@
             "nothing_to_commit": "No staged changes to commit",
             "hook_rejected": "pre-commit / commit-msg hook rejected",
             "identity_not_set": "Run `git config --global user.email ...` first",
-            "empty_repository": "Repository has no commits yet"
+            "empty_repository": "Repository has no commits yet",
+            "ref_not_found": "Commit not found",
+            "commit_too_large": "Commit is too large; use the diff endpoint to view the full patch"
           }
         }
       }
