@@ -211,7 +211,11 @@ function handlePlanModeToggle(): void {
   const isPlan = spcodePlanMode.status.value.active === true;
   const cmd = isPlan ? "/build" : "/plan";
   spcodePlanMode.setActive(!isPlan);
-  emit("send-command", cmd);  // ← 替换掉原 localPrompt.value = cmd + emit("send")
+  // Intentionally do NOT write localPrompt here — preserving the
+  // user's draft is the entire point of this fix. The parent's
+  // send-command listener dispatches `cmd` as a standalone message
+  // without touching the prompt or staged attachments.
+  emit("send-command", cmd);
 }
 ```
 
@@ -227,7 +231,7 @@ function handlePlanModeToggle(): void {
 <ChatInput
   ...
   @send="sendCurrentMessage"
-  @send-command="sendCommandMessage"   ← NEW
+  @send-command="sendCommandMessage"   ← NEW(kebab-case,与 emit 声明保持一致)
   ...
 />
 ```
@@ -279,7 +283,7 @@ async function sendCommandMessage(text: string): Promise<void> {
 <ChatInput
   ...
   @send="sendCurrentMessage"
-  @send-command="sendCommandMessage"   ← NEW
+  @send-command="sendCommandMessage"   ← NEW(kebab-case,与 emit 声明保持一致)
   ...
 />
 ```
@@ -313,7 +317,7 @@ async function sendCommandMessage(text: string): Promise<void> {
 }
 ```
 
-注意:`StandaloneChat.sendCurrentMessage` 不重置 `sending` 标志(用的是 `initializing`),`sendCommandMessage` 同样不切这个 flag——命令发送不阻塞用户继续编辑,与"`sendCurrentMessage` 之后焦点回到输入框"语义不同。
+注意:`StandaloneChat` 中**没有** `sending` ref(那是 `useMessages` 的);`sendCurrentMessage` 也不主动切 `initializing`——`initializing` 由 `ensureSession()` 内部的 try/finally 托管。`sendCommandMessage` 同样不切任何 flag,命令发送不阻塞用户继续编辑,与"`sendCurrentMessage` 之后焦点回到输入框"语义不同。
 
 ---
 
@@ -321,9 +325,9 @@ async function sendCommandMessage(text: string): Promise<void> {
 
 ### 5.1 错误流
 
-| 失败点 | 现有行为 | 本方案行为 |
-|--------|----------|------------|
-| `ensureSession()` 抛错 | `sendCurrentMessage` 中由 try/catch 兜底,console.error | `sendCommandMessage` 同样让异常上抛,bot 气泡区不会变;前端 console 报错 |
+| 失败点 | 现有行为(`sendCurrentMessage`) | 本方案行为(`sendCommandMessage`) |
+|--------|-----------------------------------|-----------------------------------|
+| `ensureSession()` / `newSession()` 抛错 | **异常上抛**,无内部 try/catch(无 console.error 兜底) | **异常上抛**,与现有行为对称 |
 | SSE 连接失败 | bot 气泡追加错误信息,`activeConnections` 清掉 | 同左(`sendMessageStream` 内部 .catch 处理) |
 | spcode 插件后端拒绝 `/plan` | bot 端不切换;`useSpcodePlanMode().refresh()` 下次拉回正确状态 | **不变**——本次不引入新错误路径 |
 | 用户在响应中连点 3 次 chip | 3 条 `/plan` 消息排队发送 | 3 条 `/plan` / `/build` 消息发送(等价于状态切换 3 次);spcode 后端幂等,最终态正确;`refresh()` 在每次 stream end 后拉权威值 |
@@ -362,7 +366,7 @@ async function sendCommandMessage(text: string): Promise<void> {
 | `useSpcodePlanMode` composable | **零**改动;`status` / `setActive` / `refresh` / `reset` 行为完全保留 |
 | `SpcodePlanModeChip` 组件 | **零**改动;它仍然只 emit `toggle`,对 `localPrompt` 无感知 |
 | `ChatInput` 现有 emits | **零**删除;`send-command` 是新增 |
-| 其他把 `<ChatInput>` 当宿主的组件 | 需补 `@send-command` 监听(本 spec 覆盖 3 个 mount 点;若有第 4 个,需另行加) |
+| 其他把 `<ChatInput>` 当宿主的组件 | 需补 `@send-command` 监听(本 spec 覆盖 3 个 mount 点;若有第 4 个,需另行加) — 已用 `findstr /s /n /C:"ChatInput" dashboard\src\*.vue` 全仓扫描,2026-06-25 共 3 个 mount 点(Chat.vue × 2 + StandaloneChat.vue × 1) |
 | 其它 panel(右侧 sidebar、thread panel) | **零**影响 |
 
 ---
@@ -378,9 +382,9 @@ async function sendCommandMessage(text: string): Promise<void> {
 | T3 | 输入框有文字 + staged 一张图,点 chip | bot 收到 `/plan`(无图),文字保留,staged 图片保留 | Network body 仅含 plain `/plan`,无 image attachment;`stagedImagesUrl` 不变 |
 | T4 | 输入框有文字 + 3 个 pending file comments,点 chip | bot 收到 `/plan`,文字保留,comments 保留 | `fileComments.totalCount` 不变 |
 | T5 | 流式响应中点 chip | 启动新流,bot 气泡按时间序出现,文字保留 | DevTools Network 看到两次 `POST /chat` |
-| T6 | 连续点 chip 3 次 | bot 收到 3 条命令(乐观翻转 3 次),最终态与最后一次点击一致 | 视觉 chip 颜色:绿→橙→绿(假设从 build 起步) |
+| T6 | 连续点 chip 3 次 | bot 收到 3 条命令(乐观翻转 3 次),最终态与最后一次点击一致 | 视觉 chip 颜色:绿→橙→绿→橙(假设从 build 起步,3 次点击产生 3 个状态切换) |
 | T7 | 切换 session 后看 chip 状态 | chip 状态被 `useSpcodePlanMode().refresh()` 拉回正确值 | DevTools Network `GET /spcode/plan-mode?umo=...` |
-| T8 | 输入框 IME 合成中点 chip | 命令照常发,文字不被打断,IME 不错位 | 拼音输入中点击,拼音候选不消失 |
+| T8 | 输入框 IME 合成中点 chip | 命令照常发,文字不被打断,IME 不错位 | chip 的 `@click` handler 绑在 `v-chip` 元素上,与 textarea 是兄弟节点;chip 点击**不触发** `localPrompt.value` 的任何写入,textarea 的 IME `compositionstart`/`compositionend` 生命周期不被外部 mutation 干扰。验证:拼音输入中点击,拼音候选不消失,commit 后文字位置正确 |
 | T9 | 在 ProjectView 内点 chip | 行为同上(ProjectView 内的 ChatInput 走 `Chat.vue:308` mount) | 切到 project 视图后重复 T2 |
 
 ### 7.2 自动化测试
