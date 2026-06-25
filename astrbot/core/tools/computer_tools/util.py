@@ -8,6 +8,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
 
 def normalize_umo_for_workspace(umo: str) -> str:
     normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", umo.strip())
+    if not normalized.strip("._-"):
+        return "unknown"
     return normalized or "unknown"
 
 
