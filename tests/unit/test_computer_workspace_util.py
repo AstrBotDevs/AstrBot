@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from astrbot.core.tools.computer_tools import util as computer_util
 
 
@@ -15,13 +17,38 @@ def test_normalize_umo_for_workspace_preserves_normal_session_names() -> None:
 
 
 def test_normalize_umo_for_workspace_rejects_dot_only_values() -> None:
-    assert computer_util.normalize_umo_for_workspace(".") == "unknown"
-    assert computer_util.normalize_umo_for_workspace("..") == "unknown"
-    assert computer_util.normalize_umo_for_workspace("...") == "unknown"
-    assert computer_util.normalize_umo_for_workspace(" _._ ") == "unknown"
+    assert (
+        computer_util.normalize_umo_for_workspace(".")
+        == computer_util.UNKNOWN_WORKSPACE_NAME
+    )
+    assert (
+        computer_util.normalize_umo_for_workspace("..")
+        == computer_util.UNKNOWN_WORKSPACE_NAME
+    )
+    assert (
+        computer_util.normalize_umo_for_workspace("...")
+        == computer_util.UNKNOWN_WORKSPACE_NAME
+    )
+    assert (
+        computer_util.normalize_umo_for_workspace(" _._ ")
+        == computer_util.UNKNOWN_WORKSPACE_NAME
+    )
 
 
-def test_workspace_root_for_dot_only_umo_stays_under_workspaces(
+@pytest.mark.parametrize(
+    "unsafe_umo",
+    [
+        ".",
+        "..",
+        "...",
+        " _._ ",
+        "/",
+        "//",
+        " / / ",
+    ],
+)
+def test_workspace_root_for_unsafe_umo_stays_under_workspaces(
+    unsafe_umo: str,
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -32,7 +59,9 @@ def test_workspace_root_for_dot_only_umo_stays_under_workspaces(
         lambda: str(workspaces_root),
     )
 
-    root = computer_util.workspace_root("..")
+    root = computer_util.workspace_root(unsafe_umo)
 
-    assert root == (workspaces_root / "unknown").resolve(strict=False)
+    assert root == (workspaces_root / computer_util.UNKNOWN_WORKSPACE_NAME).resolve(
+        strict=False
+    )
     assert root.is_relative_to(workspaces_root.resolve(strict=False))
