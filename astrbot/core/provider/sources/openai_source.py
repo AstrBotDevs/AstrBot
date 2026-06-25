@@ -440,6 +440,7 @@ class ProviderOpenAIOfficial(Provider):
         ``content`` 和 ``tool_calls`` 时返回 400。把 ``""`` / ``None`` / ``[]``
         都视作空内容：无 tool_calls 时整条过滤掉；有 tool_calls 时将 content
         设为 ``None`` 以符合 OpenAI 规范。就地修改 ``payloads["messages"]``。
+        reasoning_content 不算数，不能替代 content/tool_calls。
         """
         messages = payloads.get("messages")
         if not isinstance(messages, list):
@@ -456,9 +457,8 @@ class ProviderOpenAIOfficial(Provider):
 
             content = msg.get("content")
             tool_calls = msg.get("tool_calls")
-            reasoning_content = msg.get("reasoning_content")
 
-            if _is_empty(content) and not tool_calls and not reasoning_content:
+            if _is_empty(content) and not tool_calls:
                 logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
                 continue
 
