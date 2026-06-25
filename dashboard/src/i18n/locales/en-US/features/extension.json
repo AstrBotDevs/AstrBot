@@ -405,6 +405,7 @@
     },
     "status": {
       "hasUpdate": "New version available",
+      "localVersionAhead": "Installed version is newer than the current source (source {version})",
       "disabled": "This extension is disabled",
       "handlersCount": " handlers",
       "supportPlatform": "Supported Platform",

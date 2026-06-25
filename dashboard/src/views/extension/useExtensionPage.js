@@ -658,12 +658,20 @@ export const useExtensionPage = () => {
 
       if (matchedPlugin) {
         extension.online_version = matchedPlugin.version;
+        const onlineVersion = String(matchedPlugin.version || "").trim();
+        const versionComparison = comparePluginVersions(
+          extension.version,
+          onlineVersion,
+        );
+
+        extension.version_source_ahead =
+          typeof versionComparison === "number" && versionComparison > 0;
         extension.has_update =
-          extension.version !== matchedPlugin.version &&
-          matchedPlugin.version !== tm("status.unknown");
+          typeof versionComparison === "number" && versionComparison < 0;
       } else {
         extension.online_version = "";
         extension.has_update = false;
+        extension.version_source_ahead = false;
       }
     });
   };
@@ -1283,6 +1291,72 @@ export const useExtensionPage = () => {
   };
 
   const normalizeAstrBotVersionSpec = (value) => String(value || "").trim();
+
+  const parsePluginVersion = (value) => {
+    const version = String(value || "").trim().replace(/^v/i, "");
+    const match = version.match(
+      /^([0-9]+(?:\.[0-9]+)*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+(.+))?$/,
+    );
+    if (!match) return null;
+
+    return {
+      parts: match[1].split(".").map((part) => Number.parseInt(part, 10)),
+      prerelease: match[2]
+        ? match[2].split(".").map((part) => {
+            if (/^\d+$/.test(part)) {
+              return Number.parseInt(part, 10);
+            }
+            return part;
+          })
+        : null,
+    };
+  };
+
+  const comparePluginVersions = (left, right) => {
+    const leftVersion = parsePluginVersion(left);
+    const rightVersion = parsePluginVersion(right);
+    if (!leftVersion || !rightVersion) return null;
+
+    const length = Math.max(leftVersion.parts.length, rightVersion.parts.length);
+    for (let i = 0; i < length; i += 1) {
+      const leftPart = leftVersion.parts[i] || 0;
+      const rightPart = rightVersion.parts[i] || 0;
+      if (leftPart > rightPart) return 1;
+      if (leftPart < rightPart) return -1;
+    }
+
+    if (leftVersion.prerelease === null && rightVersion.prerelease !== null) {
+      return 1;
+    }
+    if (leftVersion.prerelease !== null && rightVersion.prerelease === null) {
+      return -1;
+    }
+    if (leftVersion.prerelease === null && rightVersion.prerelease === null) {
+      return 0;
+    }
+
+    const prereleaseLength = Math.max(
+      leftVersion.prerelease.length,
+      rightVersion.prerelease.length,
+    );
+    for (let i = 0; i < prereleaseLength; i += 1) {
+      const leftPart = leftVersion.prerelease[i];
+      const rightPart = rightVersion.prerelease[i];
+
+      if (leftPart === undefined && rightPart !== undefined) return -1;
+      if (leftPart !== undefined && rightPart === undefined) return 1;
+      if (typeof leftPart === "number" && typeof rightPart === "string") {
+        return -1;
+      }
+      if (typeof leftPart === "string" && typeof rightPart === "number") {
+        return 1;
+      }
+      if (leftPart > rightPart) return 1;
+      if (leftPart < rightPart) return -1;
+    }
+
+    return 0;
+  };
 
   const normalizeVersionParts = (value) => {
     const version = String(value || "")

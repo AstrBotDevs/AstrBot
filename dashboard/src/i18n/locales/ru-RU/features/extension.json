@@ -400,6 +400,7 @@
         },
         "status": {
             "hasUpdate": "Доступно обновление",
+            "localVersionAhead": "Установленная версия новее текущего источника (источник {version})",
             "disabled": "Плагин выключен",
             "handlersCount": "действий",
             "supportPlatform": "Платформы",
