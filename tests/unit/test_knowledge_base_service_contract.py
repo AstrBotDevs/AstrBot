@@ -264,3 +264,21 @@ def test_knowledge_base_request_uses_legacy_name_as_input_alias():
 
     assert payload == {"kb_name": "Legacy Name"}
 
+
+@pytest.mark.asyncio
+async def test_create_kb_raises_when_kb_name_is_missing():
+    kb_manager = MagicMock()
+    service = make_service(kb_manager)
+
+    with pytest.raises(KnowledgeBaseServiceError, match="知识库名称不能为空"):
+        await service.create_kb({"embedding_provider_id": "embedding-1"})
+
+
+@pytest.mark.asyncio
+async def test_create_kb_raises_when_embedding_provider_is_missing():
+    kb_manager = MagicMock()
+    service = make_service(kb_manager)
+
+    with pytest.raises(KnowledgeBaseServiceError, match="缺少参数 embedding_provider_id"):
+        await service.create_kb({"kb_name": "Test KB"})
+

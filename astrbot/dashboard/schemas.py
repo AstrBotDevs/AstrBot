@@ -205,7 +205,7 @@ class ImMessageRequest(OpenModel):
 
 
 class KnowledgeBaseRequest(OpenModel):
-    kb_name: str | None = None
+    kb_name: str | None = Field(None, alias="name")
     description: str | None = None
     emoji: str | None = None
     embedding_provider_id: str | None = None
@@ -216,13 +216,15 @@ class KnowledgeBaseRequest(OpenModel):
     top_k_sparse: int | None = None
     top_m_final: int | None = None
 
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
     def canonical_payload(self) -> dict[str, Any]:
         """Return the service-facing knowledge base payload.
 
         Returns:
             Dictionary accepted by KnowledgeBaseService.
         """
-        data = self.model_dump(
+        return self.model_dump(
             exclude_unset=True,
             include={
                 "kb_name",
@@ -236,11 +238,14 @@ class KnowledgeBaseRequest(OpenModel):
                 "top_k_sparse",
                 "top_m_final",
             },
+            by_alias=False,
         )
-        legacy_name = getattr(self, "name", None)
-        if data.get("kb_name") is None and legacy_name is not None:
-            data["kb_name"] = legacy_name
-        return data
+
+
+class KnowledgeBaseCreateRequest(KnowledgeBaseRequest):
+    kb_name: str = Field(..., alias="name")
+    embedding_provider_id: str
+
 
 class KnowledgeBaseImportRequest(OpenModel):
     documents: list[dict[str, Any]] | None = None
