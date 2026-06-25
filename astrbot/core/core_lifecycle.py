@@ -302,12 +302,12 @@ class AstrBotCoreLifecycle:
         for task in self.star_context._register_tasks:
             extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
 
-        tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])]
+        tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])] # [<Task pending name='event_bus' coro=<EventBus.dispatch() running at C:\Users\17875\Master\projects\github\AstrBot\astrbot\core\event_bus.py:39>>]
         if cron_task:
             tasks_.append(cron_task)
         if temp_dir_cleaner_task:
             tasks_.append(temp_dir_cleaner_task)
-        for task in tasks_:
+        for task in tasks_: # 为每个任务创建 task
             self.curr_tasks.append(
                 asyncio.create_task(self._task_wrapper(task), name=task.get_name()),
             )

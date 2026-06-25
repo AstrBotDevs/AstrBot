@@ -302,6 +302,7 @@ export function useMessages(options: UseMessagesOptions) {
       );
       return;
     }
+    // TODO 使用startSseStream
     startSseStream(
       sessionId,
       messageId,
@@ -514,6 +515,7 @@ export function useMessages(options: UseMessagesOptions) {
     skipUserHistory = false,
     llmCheckpointId: string | null = null,
   ) {
+    console.log("使用startSseStream", chatApi.sendStreamUrl())
     const abort = new AbortController();
     activeConnections[sessionId] = {
       sessionId,
@@ -568,6 +570,7 @@ export function useMessages(options: UseMessagesOptions) {
     selectedProvider: string,
     selectedModel: string,
   ) {
+    console.log("使用starWeb")
     const ws = getOrCreateChatWebSocket(sessionId);
 
     activeConnections[sessionId] = {

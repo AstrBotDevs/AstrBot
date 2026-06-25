@@ -176,7 +176,7 @@ class AstrBotDashboard:
         core_lifecycle: AstrBotCoreLifecycle,
         db: BaseDatabase,
         shutdown_event: asyncio.Event,
-        webui_dir: str | None = None,
+        webui_dir: str | None = None,  # 项目目录的 AstrBot\\data\\dist 路径
     ) -> None:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
@@ -225,7 +225,7 @@ class AstrBotDashboard:
 
         self._rate_limiter_registry = _RateLimiterRegistry()
         self._init_jwt_secret()
-        self.asgi_app = create_dashboard_asgi_app(
+        self.asgi_app = create_dashboard_asgi_app( # 启动dashboard页面
             core_lifecycle=core_lifecycle,
             db=db,
             jwt_secret=self._jwt_secret,
