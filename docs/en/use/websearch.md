@@ -14,11 +14,11 @@ When using a large language model that supports function calling with the web se
 
 And other prompts with search intent to trigger the model to invoke the search tool.
 
-AstrBot currently supports 5 web search providers: `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, and `Firecrawl`.
+AstrBot currently supports 6 web search providers: `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`, and `Exa`.
 
 ![image](https://files.astrbot.app/docs/source/images/websearch/image.png)
 
-Go to `Configuration`, scroll down to find Web Search, where you can select `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, or `Firecrawl`.
+Go to `Configuration`, scroll down to find Web Search, where you can select `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`, or `Exa`.
 
 ### Tavily
 
@@ -39,6 +39,10 @@ Get an API Key from Brave Search, then fill it in the corresponding configuratio
 ### Firecrawl
 
 Go to [Firecrawl](https://firecrawl.dev) to get an API Key, then fill it in the corresponding configuration item.
+
+### Exa
+
+Go to [Exa](https://dashboard.exa.ai) to get an API Key, then fill it in the corresponding configuration item. Exa is an AI-native search engine that supports keyword and semantic search with category filters, domain restrictions, and date ranges.
 
 If you use Tavily as your web search source, you will get a better experience optimization on AstrBot ChatUI, including citation source display and more:
 
