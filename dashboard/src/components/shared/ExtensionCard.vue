@@ -269,6 +269,20 @@ const openWebui = () => {
               {{ extension.online_version }}
             </v-chip>
             <v-chip
+              v-else-if="extension?.version_source_ahead && extension?.online_version"
+              color="info"
+              label
+              size="small"
+              variant="outlined"
+            >
+              <v-icon icon="mdi-information-outline" start></v-icon>
+              {{
+                tm("card.status.localVersionAhead", {
+                  version: extension.online_version,
+                })
+              }}
+            </v-chip>
+            <v-chip
               v-for="tag in extension.tags"
               :key="tag"
               :color="tag === 'danger' ? 'error' : 'primary'"

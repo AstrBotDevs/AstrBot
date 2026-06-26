@@ -405,6 +405,7 @@
     },
     "status": {
       "hasUpdate": "有新版本可用",
+      "localVersionAhead": "当前插件版本比当前插件源更新（源版本 {version}）",
       "disabled": "该插件已经被禁用",
       "handlersCount": "个行为",
       "supportPlatform": "支持平台",
