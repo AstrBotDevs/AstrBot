@@ -57,8 +57,11 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
     #     return 0
     with wave.open(wav_path, "rb") as wav:
         rate = wav.getframerate()
-        duration = pilk.encode(wav_path, output_path, pcm_rate=rate, tencent=True)
-        return duration
+        frame_count = wav.getnframes()
+        fallback_duration = frame_count / rate if rate else 0
+
+    duration = pilk.encode(wav_path, output_path, pcm_rate=rate, tencent=True)
+    return duration or fallback_duration
 
 
 async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:

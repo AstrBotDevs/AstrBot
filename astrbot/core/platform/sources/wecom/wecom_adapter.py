@@ -28,7 +28,11 @@ from astrbot.api.platform import (
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import convert_audio_to_wav
+from astrbot.core.utils.media_utils import (
+    MEDIA_MIME_EXTENSIONS,
+    convert_audio_to_wav,
+    detect_image_mime_type_async,
+)
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .wecom_event import WecomPlatformEvent
@@ -389,12 +393,7 @@ class WecomPlatformAdapter(Platform):
             )
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
-
-            def _write_file(p: str, c: bytes) -> None:
-                with open(p, "wb") as f:
-                    f.write(c)
-
-            await asyncio.to_thread(_write_file, path, resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
                 path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
@@ -455,13 +454,13 @@ class WecomPlatformAdapter(Platform):
                 media_id,
             )
             temp_dir = get_astrbot_temp_path()
-            path = os.path.join(temp_dir, f"weixinkefu_{media_id}.jpg")
-
-            def _write_file(p: str, c: bytes) -> None:
-                with open(p, "wb") as f:
-                    f.write(c)
-
-            await asyncio.to_thread(_write_file, path, resp.content)
+            mime_type = await detect_image_mime_type_async(
+                resp.content,
+                default_mime_type=None,
+            )
+            suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
+            path = os.path.join(temp_dir, f"weixinkefu_{media_id}{suffix}")
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
             abm.message = [Image(file=path, url=path)]
         elif msgtype == "voice":
             media_id = msg.get("voice", {}).get("media_id", "")
@@ -473,12 +472,7 @@ class WecomPlatformAdapter(Platform):
 
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixinkefu_{media_id}.amr")
-
-            def _write_file(p: str, c: bytes) -> None:
-                with open(p, "wb") as f:
-                    f.write(c)
-
-            await asyncio.to_thread(_write_file, path, resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
                 path_wav = os.path.join(temp_dir, f"weixinkefu_{media_id}.wav")

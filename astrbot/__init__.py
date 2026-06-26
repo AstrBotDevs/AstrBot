@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 try:
     __version__ = _pkg_version("astrbot")
 except PackageNotFoundError:
-    __version__ = "4.26.0"
+    __version__ = "4.26.1"
 
 
 if TYPE_CHECKING:
