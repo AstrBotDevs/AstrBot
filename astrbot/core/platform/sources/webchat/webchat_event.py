@@ -1,13 +1,19 @@
+import asyncio
 import base64
 import json
 import os
 import shutil
 import uuid
+from pathlib import Path
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Json, Plain, Record
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.media_utils import (
+    MEDIA_MIME_EXTENSIONS,
+    detect_image_mime_type_async,
+)
 
 from .webchat_queue_mgr import webchat_queue_mgr
 
@@ -78,11 +84,16 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(comp, Image):
                 # save image to local
-                filename = f"{str(uuid.uuid4())}.jpg"
-                path = os.path.join(attachments_dir, filename)
                 image_base64 = await comp.convert_to_base64()
-                with open(path, "wb") as f:
-                    f.write(base64.b64decode(image_base64))
+                image_bytes = base64.b64decode(image_base64)
+                mime_type = await detect_image_mime_type_async(
+                    image_bytes,
+                    default_mime_type=None,
+                )
+                suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
+                filename = f"{str(uuid.uuid4())}{suffix}"
+                path = os.path.join(attachments_dir, filename)
+                await asyncio.to_thread(Path(path).write_bytes, image_bytes)
                 data = f"[IMAGE]{filename}"
                 await web_chat_back_queue.put(
                     {
@@ -97,8 +108,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                 filename = f"{str(uuid.uuid4())}.wav"
                 path = os.path.join(attachments_dir, filename)
                 record_base64 = await comp.convert_to_base64()
-                with open(path, "wb") as f:
-                    f.write(base64.b64decode(record_base64))
+                record_bytes = base64.b64decode(record_base64)
+                await asyncio.to_thread(Path(path).write_bytes, record_bytes)
                 data = f"[RECORD]{filename}"
                 await web_chat_back_queue.put(
                     {
