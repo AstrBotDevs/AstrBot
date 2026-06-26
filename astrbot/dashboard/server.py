@@ -543,7 +543,7 @@ class AstrBotDashboard:
 
         return True, resolved_ssl_config
 
-    async def run(self) -> None | None:
+    async def run(self) -> None:
         if self._webui_fallback:
             logger.warning(
                 "前端未内置或未初始化, 回退到仅启动后端. 请访问在线面板: dash.astrbot.men",
