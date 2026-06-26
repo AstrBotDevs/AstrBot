@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import subprocess
 
+import pytest
+
 from astrbot.core.computer.booters import local as local_booter
 from astrbot.core.computer.booters.local import LocalShellComponent
 
@@ -19,6 +21,11 @@ class _FakePopen:
 
     def wait(self, timeout=None):
         pass
+
+
+class _FakeTaskkillResult:
+    def __init__(self, returncode: int):
+        self.returncode = returncode
 
 
 def test_local_shell_component_decodes_utf8_output(monkeypatch):
@@ -93,3 +100,37 @@ def test_local_shell_component_falls_back_to_utf8_replace(monkeypatch):
     result = asyncio.run(LocalShellComponent().exec("dummy"))
 
     assert result["stdout"] == "\ufffdabc"
+
+
+def test_local_shell_component_falls_back_when_windows_taskkill_fails(monkeypatch):
+    class TimeoutPopen:
+        pid = 12345
+
+        def __init__(self):
+            self.killed = False
+            self.wait_timeout = None
+
+        def communicate(self, timeout=None):
+            raise subprocess.TimeoutExpired(cmd="dummy", timeout=timeout)
+
+        def kill(self):
+            self.killed = True
+
+        def wait(self, timeout=None):
+            self.wait_timeout = timeout
+
+    proc = TimeoutPopen()
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: proc)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: _FakeTaskkillResult(returncode=1),
+    )
+    monkeypatch.setattr(local_booter.sys, "platform", "win32")
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        asyncio.run(LocalShellComponent().exec("dummy", timeout=1))
+
+    assert proc.killed
+    assert proc.wait_timeout == 5
