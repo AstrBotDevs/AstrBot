@@ -657,10 +657,23 @@ export const useExtensionPage = () => {
       const matchedPlugin = repoKey ? onlinePlugin : onlinePluginByName;
 
       if (matchedPlugin) {
-        extension.online_version = matchedPlugin.version;
+        const localVersion = String(extension.version || "").trim();
+        const onlineVersion = String(matchedPlugin.version || "").trim();
+        const isKnownVersion =
+          /^v?\d+/.test(localVersion) &&
+          /^v?\d+/.test(onlineVersion) &&
+          onlineVersion !== tm("status.unknown");
+        const versionCompare = isKnownVersion
+          ? compareVersions(localVersion, onlineVersion)
+          : 0;
+
+        extension.online_version = onlineVersion;
         extension.has_update =
-          matchedPlugin.version !== tm("status.unknown") &&
-          compareVersions(extension.version, matchedPlugin.version) < 0;
+          isKnownVersion &&
+          (versionCompare < 0 ||
+            (versionCompare === 0 &&
+              localVersion.includes("-") &&
+              !onlineVersion.includes("-")));
       } else {
         extension.online_version = "";
         extension.has_update = false;
