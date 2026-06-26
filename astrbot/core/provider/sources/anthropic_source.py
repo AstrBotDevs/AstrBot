@@ -306,57 +306,18 @@ class ProviderAnthropic(Provider):
         return system_prompt, new_messages
 
     @staticmethod
-    def _sanitize_assistant_messages(payloads: dict) -> None:
-        """Remove orphaned tool results from Anthropic messages.
+    def _merge_consecutive_anthropic_messages(messages: list[Any]) -> list[Any]:
+        """Merge adjacent Anthropic messages with the same role.
 
         Args:
-            payloads: Anthropic request payload containing a messages list.
+            messages: Anthropic messages to merge.
 
         Returns:
-            None. The messages list is updated in place on ``payloads``.
+            Merged Anthropic messages. When merging user messages, tool result
+            blocks are moved before other blocks to satisfy Anthropic ordering.
         """
-        messages = payloads.get("messages")
-        if not isinstance(messages, list):
-            return
-
-        valid_tool_use_ids: set[str] = set()
-        for msg in messages:
-            if not isinstance(msg, dict) or msg.get("role") != "assistant":
-                continue
-            content = msg.get("content")
-            if not isinstance(content, list):
-                continue
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "tool_use":
-                    tool_use_id = block.get("id")
-                    if tool_use_id:
-                        valid_tool_use_ids.add(tool_use_id)
-
-        sanitized: list[Any] = []
-        for msg in messages:
-            if not isinstance(msg, dict):
-                sanitized.append(msg)
-                continue
-
-            content = msg.get("content")
-            if msg.get("role") == "user" and isinstance(content, list):
-                cleaned_content = [
-                    block
-                    for block in content
-                    if not (
-                        isinstance(block, dict)
-                        and block.get("type") == "tool_result"
-                        and block.get("tool_use_id") not in valid_tool_use_ids
-                    )
-                ]
-                if cleaned_content:
-                    sanitized.append({**msg, "content": cleaned_content})
-                continue
-
-            sanitized.append(msg)
-
         merged: list[Any] = []
-        for msg in sanitized:
+        for msg in messages:
             if not isinstance(msg, dict):
                 merged.append(msg)
                 continue
@@ -384,11 +345,90 @@ class ProviderAnthropic(Provider):
                 else:
                     cur_content = [cur_content]
 
-                merged[-1] = {**prev, "content": prev_content + cur_content}
+                combined_content = prev_content + cur_content
+                if msg.get("role") == "user":
+                    tool_results = [
+                        block
+                        for block in combined_content
+                        if isinstance(block, dict)
+                        and block.get("type") == "tool_result"
+                    ]
+                    if tool_results:
+                        combined_content = tool_results + [
+                            block
+                            for block in combined_content
+                            if not (
+                                isinstance(block, dict)
+                                and block.get("type") == "tool_result"
+                            )
+                        ]
+
+                merged[-1] = {**prev, "content": combined_content}
             else:
                 merged.append(msg)
 
-        payloads["messages"] = merged
+        return merged
+
+    @staticmethod
+    def _sanitize_assistant_messages(payloads: dict) -> None:
+        """Remove orphaned tool results from Anthropic messages.
+
+        Args:
+            payloads: Anthropic request payload containing a messages list.
+
+        Returns:
+            None. The messages list is updated in place on ``payloads``.
+        """
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+
+        merged = ProviderAnthropic._merge_consecutive_anthropic_messages(messages)
+        sanitized: list[Any] = []
+        pending_tool_use_ids: set[str] = set()
+        for msg in merged:
+            if not isinstance(msg, dict):
+                sanitized.append(msg)
+                pending_tool_use_ids = set()
+                continue
+
+            role = msg.get("role")
+            content = msg.get("content")
+            if role == "assistant":
+                pending_tool_use_ids = set()
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_use":
+                            tool_use_id = block.get("id")
+                            if tool_use_id:
+                                pending_tool_use_ids.add(tool_use_id)
+                sanitized.append(msg)
+                continue
+
+            if role == "user" and isinstance(content, list):
+                tool_results: list[Any] = []
+                other_blocks: list[Any] = []
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        tool_use_id = block.get("tool_use_id")
+                        if tool_use_id in pending_tool_use_ids:
+                            tool_results.append(block)
+                            pending_tool_use_ids.remove(tool_use_id)
+                        continue
+                    other_blocks.append(block)
+
+                cleaned_content = tool_results + other_blocks
+                if cleaned_content:
+                    sanitized.append({**msg, "content": cleaned_content})
+                pending_tool_use_ids = set()
+                continue
+
+            sanitized.append(msg)
+            pending_tool_use_ids = set()
+
+        payloads["messages"] = ProviderAnthropic._merge_consecutive_anthropic_messages(
+            sanitized
+        )
 
     def _extract_usage(self, usage: Usage | None) -> TokenUsage:
         if usage is None:
