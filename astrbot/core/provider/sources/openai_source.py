@@ -938,10 +938,8 @@ class ProviderOpenAIOfficial(Provider):
             any(marker in model for marker in _deepseek_v4_markers)
             or "api.deepseek.com" in self.client.base_url.host
         )
-        if is_deepseek_v4_reasoning and (
-            "deepseek-chat" in model or "deepseek-reasoner" in model
-        ):
-            is_deepseek_v4_reasoning = False
+        # deepseek-chat and deepseek-reasoner now point to V4 models (per official website)
+
         # MiMo 推理模型（MiMo-V2.5-Pro / MiMo-V2.5 / MiMo-V2-Pro / MiMo-V2-Omni / MiMo-V2-Flash）
         # 要求 assistant 历史消息必须回传 reasoning_content，否则返回 400
         mimo_reasoning_models = {
