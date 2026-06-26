@@ -779,6 +779,7 @@ CONFIG_METADATA_2 = {
                         "description": "Telegram 回复时引用消息",
                         "type": "string",
                         "options": ["off", "private", "group", "all"],
+                        "labels": ["关闭", "仅私聊", "仅群聊", "私聊和群聊"],
                         "hint": "机器人回复时是否引用（reply to）触发该回复的原消息。off：关闭；private：仅私聊；group：仅群聊；all：私聊和群聊都引用。默认 off。",
                     },
                     "id": {
