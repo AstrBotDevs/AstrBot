@@ -18,7 +18,7 @@ interface AuthStore {
     password: string,
     code?: string,
     trustDeviceToken?: boolean,
-  ): Promise<undefined | "totp_required">;
+  ): Promise<undefined | "totp_required" | "upgrade_recovery_required">;
   logout(): void;
   has_token(): boolean;
 }

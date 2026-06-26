@@ -31,7 +31,7 @@ export function getPlatformIcon(name) {
   } else if (name === "kook") {
     return new URL("@/assets/images/platform_logos/kook.png", import.meta.url).href;
   } else if (name === "vocechat") {
-    return new URL("@/assets/images/platform_logos/vocechat.png", import.meta.url).href;
+    return new URL("@/assets/images/platform_logos/qq.png", import.meta.url).href;
   } else if (name === "satori" || name === "Satori") {
     return new URL("@/assets/images/platform_logos/satori.png", import.meta.url).href;
   } else if (name === "misskey") {
