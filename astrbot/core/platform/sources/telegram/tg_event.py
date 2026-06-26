@@ -351,10 +351,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain) -> None:
         is_group = self.get_message_type() == MessageType.GROUP_MESSAGE
-        # 根据配置范围决定是否默认引用触发该回复的原消息
+        # 根据配置范围决定是否默认引用触发该回复的原消息。
+        # 当配置为 off 时，清除消息链中已有的 Reply 组件（来自全局管道
+        # 「回复时引用发送人消息」等设置），确保 Telegram 平台完全不引用。
         should_reply = self.reply_to_message == "all" or self.reply_to_message == (
             "group" if is_group else "private"
         )
+        if not should_reply:
+            message.chain = [c for c in message.chain if not isinstance(c, Reply)]
         default_reply_to_message_id = (
             self.message_obj.message_id if should_reply else None
         )
