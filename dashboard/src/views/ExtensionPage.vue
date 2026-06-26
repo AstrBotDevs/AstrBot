@@ -181,16 +181,30 @@ const selectedInstalledPlugin = computed(() => {
   return data.find((plugin) => plugin.name === selectedPluginId.value) || null;
 });
 
+const normalizeRepoUrl = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/\/+$/, "")
+    .toLowerCase()
+    .replace(/\.git$/, "");
+
 const selectedMarketPlugin = computed(() => {
   const market = Array.isArray(pluginMarketData.value)
     ? pluginMarketData.value
     : [];
   const installedPlugin = selectedInstalledPlugin.value;
-  const repo = installedPlugin?.repo?.toLowerCase();
+  const marketNameMatch =
+    market.find((item) => item.name === selectedPluginId.value) || null;
+
+  if (selectedDetailTab.value === "market" || !installedPlugin) {
+    return marketNameMatch;
+  }
+
+  const repo = normalizeRepoUrl(installedPlugin.repo);
+  if (!repo) return null;
+
   return (
-    market.find((item) => item.name === selectedPluginId.value) ||
-    market.find((item) => repo && item.repo?.toLowerCase() === repo) ||
-    null
+    market.find((item) => normalizeRepoUrl(item?.repo) === repo) || null
   );
 });
 
