@@ -65,6 +65,26 @@ async def test_process_buffer_strips_segment_leading_blank_lines(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_process_buffer_skips_sleep_when_stripped_segment_is_empty(monkeypatch):
+    event = CollectingMessageEvent()
+    sleep_calls = []
+
+    async def sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr(
+        "astrbot.core.platform.astr_message_event.asyncio.sleep",
+        sleep,
+    )
+
+    buffer = await event.process_buffer("   tail", re.compile(r"\s+"))
+
+    assert buffer == "tail"
+    assert event.sent_messages == []
+    assert sleep_calls == []
+
+
+@pytest.mark.asyncio
 async def test_aiocqhttp_streaming_fallback_strips_tail_buffer(monkeypatch):
     event = CollectingAiocqhttpMessageEvent(
         "",
