@@ -602,7 +602,7 @@ class ChatService:
                         target_path = (
                             attachments_dir / f"{uuid.uuid4().hex}{detected_suffix}"
                         )
-                    file_path.rename(target_path)
+                    await asyncio.to_thread(file_path.rename, target_path)
                     file_path = target_path
         attachment = await self.db.insert_attachment(
             path=str(file_path),

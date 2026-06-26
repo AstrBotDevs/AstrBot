@@ -1607,7 +1607,6 @@ class WeixinOCAdapter(Platform):
                 return
             if not isinstance(msg, dict):
                 continue
-            print(msg)
             await self._handle_inbound_message(msg)
         if should_save_state:
             await self._save_account_state()

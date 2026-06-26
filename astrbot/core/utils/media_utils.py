@@ -446,8 +446,11 @@ async def _materialize_media_ref(
     suffix = default_suffix or DEFAULT_MEDIA_SUFFIXES.get(media_type, ".bin")
 
     if media_ref.startswith(("http://", "https://")):
-        parsed = urlparse(media_ref)
-        target_suffix = Path(parsed.path).suffix or suffix
+        if media_type == "image":
+            target_suffix = suffix
+        else:
+            parsed = urlparse(media_ref)
+            target_suffix = Path(parsed.path).suffix or suffix
         target_path = _temp_media_path(media_type, target_suffix)
         cleanup_paths.append(target_path)
         try:
@@ -468,7 +471,7 @@ async def _materialize_media_ref(
                     detected_path = target_path.with_suffix(detected_suffix)
                     if detected_path.exists():
                         detected_path = _temp_media_path(media_type, detected_suffix)
-                    target_path.rename(detected_path)
+                    await asyncio.to_thread(target_path.rename, detected_path)
                     cleanup_paths[-1] = detected_path
                     target_path = detected_path
         return _LocalMediaFile(
@@ -495,7 +498,7 @@ async def _materialize_media_ref(
         target_path = _temp_media_path(media_type, target_suffix)
         cleanup_paths.append(target_path)
         try:
-            target_path.write_bytes(media_bytes)
+            await asyncio.to_thread(target_path.write_bytes, media_bytes)
         except Exception:
             _cleanup_paths(cleanup_paths)
             raise
@@ -521,7 +524,7 @@ async def _materialize_media_ref(
         target_path = _temp_media_path(media_type, target_suffix)
         cleanup_paths.append(target_path)
         try:
-            target_path.write_bytes(media_bytes)
+            await asyncio.to_thread(target_path.write_bytes, media_bytes)
         except Exception:
             _cleanup_paths(cleanup_paths)
             raise
@@ -562,7 +565,7 @@ async def _materialize_media_ref(
             target_path = _temp_media_path(media_type, target_suffix)
             cleanup_paths.append(target_path)
             try:
-                target_path.write_bytes(media_bytes)
+                await asyncio.to_thread(target_path.write_bytes, media_bytes)
             except Exception:
                 _cleanup_paths(cleanup_paths)
                 raise

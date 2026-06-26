@@ -1,8 +1,10 @@
+import asyncio
 import base64
 import json
 import os
 import shutil
 import uuid
+from pathlib import Path
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -91,8 +93,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
                 filename = f"{str(uuid.uuid4())}{suffix}"
                 path = os.path.join(attachments_dir, filename)
-                with open(path, "wb") as f:
-                    f.write(image_bytes)
+                await asyncio.to_thread(Path(path).write_bytes, image_bytes)
                 data = f"[IMAGE]{filename}"
                 await web_chat_back_queue.put(
                     {
@@ -107,8 +108,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                 filename = f"{str(uuid.uuid4())}.wav"
                 path = os.path.join(attachments_dir, filename)
                 record_base64 = await comp.convert_to_base64()
-                with open(path, "wb") as f:
-                    f.write(base64.b64decode(record_base64))
+                record_bytes = base64.b64decode(record_base64)
+                await asyncio.to_thread(Path(path).write_bytes, record_bytes)
                 data = f"[RECORD]{filename}"
                 await web_chat_back_queue.put(
                     {
