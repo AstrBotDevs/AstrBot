@@ -387,6 +387,11 @@ def _read_dashboard_dist_version(dist_dir: str | Path) -> str | None:
     return None
 
 
+def get_dashboard_dist_version(dist_dir: str | Path) -> str | None:
+    """Read the version marker from a given dashboard dist directory."""
+    return _read_dashboard_dist_version(dist_dir)
+
+
 def get_bundled_dashboard_dist_path() -> Path:
     return Path(get_astrbot_path()) / "astrbot" / "dashboard" / "dist"
 
@@ -512,5 +517,10 @@ async def download_dashboard(
             show_progress=True,
             progress_callback=progress_callback,
         )
+    extract_dashboard(zip_path, extract_path)
+
+
+def extract_dashboard(zip_path: str | Path, extract_path: str | Path) -> None:
+    """Extract a downloaded dashboard archive."""
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_path)

@@ -135,4 +135,3 @@ def test_sandbox_and_local_path_resolution_with_show_sandbox_path_false(tmp_path
     assert local_skill_path.is_relative_to(mock_paths.skills)
     assert local_skill_path == mock_paths.skills / "custom-local" / "SKILL.md"
     assert by_name["python-sandbox"].path == "/app/skills/python-sandbox/SKILL.md"
-

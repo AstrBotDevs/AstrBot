@@ -69,6 +69,11 @@ def hash_legacy_dashboard_password(raw_password: str) -> str:
     return hashlib.md5(raw_password.encode("utf-8")).hexdigest()
 
 
+def hash_md5_dashboard_password(raw_password: str) -> str:
+    """Backward-compatible alias for legacy md5 hashing."""
+    return hash_legacy_dashboard_password(raw_password)
+
+
 def validate_dashboard_password(raw_password: str) -> None:
     """Validate whether dashboard password meets the minimal complexity policy."""
     if not isinstance(raw_password, str) or raw_password == "":
@@ -244,3 +249,8 @@ def is_legacy_dashboard_password(stored_hash: str) -> bool:
     ):
         return True
     return False
+
+
+def is_md5_dashboard_password(stored_hash: str) -> bool:
+    """Backward-compatible alias for md5-format password check."""
+    return _is_legacy_md5_hash(stored_hash)

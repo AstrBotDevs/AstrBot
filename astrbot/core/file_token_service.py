@@ -2,6 +2,7 @@ import asyncio
 import platform
 import time
 import uuid
+from typing import Any
 from urllib.parse import unquote, urlparse
 
 import anyio
@@ -36,6 +37,7 @@ class FileTokenService:
         self,
         file_path: str,
         expire_seconds: float | None = None,
+        **kwargs: Any,
     ) -> str:
         """向令牌服务注册一个文件｡
 
@@ -73,9 +75,19 @@ class FileTokenService:
                 )
 
             file_token = str(uuid.uuid4())
-            expire_time = time.time() + (
-                expire_seconds if expire_seconds is not None else self.default_timeout
+            timeout = kwargs.pop("timeout", None)
+            if kwargs:
+                unknown_kwargs = ", ".join(sorted(kwargs.keys()))
+                raise ValueError(f"Unexpected arguments: {unknown_kwargs}")
+
+            resolved_expire = (
+                expire_seconds
+                if expire_seconds is not None
+                else timeout
+                if timeout is not None
+                else self.default_timeout
             )
+            expire_time = time.time() + resolved_expire
             # 存储转换后的真实路径
             self.staged_files[file_token] = (local_path, expire_time)
             return file_token

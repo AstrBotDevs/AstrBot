@@ -3,7 +3,8 @@ from __future__ import annotations
 import os
 from collections.abc import Sequence
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+
+from astrbot.core.utils.media_utils import file_uri_to_path, is_file_uri
 
 ALLOWED_IMAGE_EXTENSIONS = {
     ".png",
@@ -20,23 +21,9 @@ ALLOWED_IMAGE_EXTENSIONS = {
 
 
 def resolve_file_url_path(image_ref: str) -> str:
-    parsed = urlparse(image_ref)
-    if parsed.scheme != "file":
+    if not is_file_uri(image_ref):
         return image_ref
-
-    path = unquote(parsed.path or "")
-    netloc = unquote(parsed.netloc or "")
-
-    # Keep support for file://<host>/path and file://<path> forms.
-    if netloc and netloc.lower() != "localhost":
-        path = f"//{netloc}{path}" if path else netloc
-    elif not path and netloc:
-        path = netloc
-
-    if os.name == "nt" and len(path) > 2 and path[0] == "/" and path[2] == ":":
-        path = path[1:]
-
-    return path or image_ref
+    return file_uri_to_path(image_ref)
 
 
 def _is_path_within_roots(path: str, roots: Sequence[str]) -> bool:
@@ -69,7 +56,7 @@ def is_supported_image_ref(
         return True
 
     file_path = (
-        resolve_file_url_path(image_ref) if lowered.startswith("file://") else image_ref
+        resolve_file_url_path(image_ref) if is_file_uri(image_ref) else image_ref
     )
     ext = os.path.splitext(file_path)[1].lower()
     if ext in ALLOWED_IMAGE_EXTENSIONS:

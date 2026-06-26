@@ -56,8 +56,8 @@ const {
   dangerConfirmDialog,
   selectedDangerPlugin,
   selectedMarketInstallPlugin,
-  installCompat,
-  versionCompatibilityDialog,
+  installSupport,
+  versionSupportDialog,
   showUninstallDialog,
   uninstallTarget,
   showSourceDialog,
@@ -138,7 +138,7 @@ const {
   saveCustomSource,
   trimExtensionName,
   checkAlreadyInstalled,
-  showVersionCompatibilityWarning,
+  showVersionSupportWarning,
   continueInstallIgnoringVersionWarning,
   cancelInstallOnVersionWarning,
   newExtension,
@@ -154,7 +154,7 @@ const {
   selectedUpdateDownloadUrl,
   selectedUpdateSourceUrl,
   updateUsesGithubSource,
-  checkInstallCompatibility,
+  checkInstallVersionSupport,
   refreshPluginMarket,
   handleLocaleChange,
   searchDebounceTimer,
@@ -587,25 +587,25 @@ const updateDialogPluginLogo = computed(() => {
   </v-dialog>
 
   <!-- 版本不兼容警告对话框 -->
-  <v-dialog v-model="versionCompatibilityDialog.show" width="520" persistent>
+  <v-dialog v-model="versionSupportDialog.show" width="520" persistent>
     <v-card>
       <v-card-title class="text-h5 d-flex align-center">
         <v-icon color="warning" class="mr-2">mdi-alert</v-icon>
-        {{ tm("dialogs.versionCompatibility.title") }}
+        {{ tm("dialogs.versionSupport.title") }}
       </v-card-title>
       <v-card-text>
-        <div class="mb-2">{{ tm("dialogs.versionCompatibility.message") }}</div>
+        <div class="mb-2">{{ tm("dialogs.versionSupport.message") }}</div>
         <div class="text-medium-emphasis">
-          {{ versionCompatibilityDialog.message }}
+          {{ versionSupportDialog.message }}
         </div>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="grey" @click="cancelInstallOnVersionWarning">
-          {{ tm("dialogs.versionCompatibility.cancel") }}
+          {{ tm("dialogs.versionSupport.cancel") }}
         </v-btn>
         <v-btn color="warning" @click="continueInstallIgnoringVersionWarning">
-          {{ tm("dialogs.versionCompatibility.confirm") }}
+          {{ tm("dialogs.versionSupport.confirm") }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -686,15 +686,15 @@ const updateDialogPluginLogo = computed(() => {
             <v-alert
               v-if="
                 selectedInstallPlugin.astrbot_version &&
-                installCompat.checked &&
-                !installCompat.compatible
+                installSupport.checked &&
+                !installSupport.supported
               "
               type="warning"
               variant="tonal"
               density="comfortable"
               class="market-install-alert mt-2 mb-3"
             >
-              {{ installCompat.message }}
+              {{ installSupport.message }}
             </v-alert>
           </div>
 
@@ -822,15 +822,15 @@ const updateDialogPluginLogo = computed(() => {
                   <v-alert
                     v-if="
                       selectedInstallPlugin.astrbot_version &&
-                      installCompat.checked &&
-                      !installCompat.compatible
+                      installSupport.checked &&
+                      !installSupport.supported
                     "
                     type="warning"
                     variant="tonal"
                     density="comfortable"
                     class="market-install-alert mt-2 mb-3"
                   >
-                    {{ installCompat.message }}
+                    {{ installSupport.message }}
                   </v-alert>
                 </div>
 
@@ -879,7 +879,7 @@ const updateDialogPluginLogo = computed(() => {
           variant="text"
           :loading="loading_"
           :disabled="loading_"
-          @click="newExtension"
+          @click="newExtension()"
           >{{ tm("buttons.install") }}</v-btn
         >
       </div>

@@ -5,6 +5,10 @@ from typing import Any
 import astrbot.core.message.components as Comp
 from astrbot import logger
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.utils.media_utils import (
+    describe_media_ref,
+    resolve_media_ref_to_base64_data,
+)
 
 from .deerflow_stream_utils import extract_text
 
@@ -91,6 +95,88 @@ def build_user_content(prompt: str, image_urls: list[str]) -> Any:
             "Skipped %d DeerFlow image inputs that were neither URL/data URI nor valid base64.",
             skipped_invalid_images,
         )
+    return content
+
+
+async def build_user_content_resolved(prompt: str, image_urls: list[str]) -> Any:
+    """Build DeerFlow user content after resolving all supported image refs.
+
+    Args:
+        prompt: User text to include before image blocks.
+        image_urls: Image references from plugins or message attachments. Supports
+            local paths, HTTP(S), file URIs, base64://, data URIs, and bare base64.
+
+    Returns:
+        Plain text when no images are present; otherwise a multimodal content list.
+    """
+
+    if not image_urls:
+        return prompt
+
+    content: list[dict[str, Any]] = []
+    skipped_invalid_images = 0
+    any_valid_image = False
+    if prompt:
+        content.append({"type": "text", "text": prompt})
+
+    for image_url in image_urls:
+        if not isinstance(image_url, str):
+            skipped_invalid_images += 1
+            logger.debug(
+                "Skipped DeerFlow image input because value is not a string: %r",
+                type(image_url).__name__,
+            )
+            continue
+        image_ref = image_url.strip()
+        if not image_ref:
+            skipped_invalid_images += 1
+            logger.debug("Skipped DeerFlow image input because value is empty.")
+            continue
+        try:
+            image_data = await resolve_media_ref_to_base64_data(
+                image_ref,
+                media_type="image",
+            )
+        except Exception as exc:
+            skipped_invalid_images += 1
+            logger.debug(
+                "Skipped DeerFlow image input %s: %s",
+                describe_media_ref(image_ref),
+                exc,
+            )
+            continue
+        if not image_data:
+            skipped_invalid_images += 1
+            logger.debug(
+                "Skipped DeerFlow image input %s because it could not be resolved.",
+                describe_media_ref(image_ref),
+            )
+            continue
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": image_data.to_data_url()},
+            },
+        )
+        any_valid_image = True
+
+    if skipped_invalid_images:
+        note_text = (
+            "Note: some images could not be processed and were ignored."
+            if any_valid_image
+            else "Note: none of the provided images could be processed."
+        )
+        content.insert(0, {"type": "text", "text": note_text})
+        if not any_valid_image:
+            logger.warning(
+                "All %d provided DeerFlow image inputs were rejected as invalid or unsupported.",
+                skipped_invalid_images,
+            )
+        else:
+            logger.info(
+                "%d DeerFlow image input(s) were rejected as invalid or unsupported.",
+                skipped_invalid_images,
+            )
     return content
 
 

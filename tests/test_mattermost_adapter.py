@@ -63,6 +63,7 @@ async def test_mattermost_convert_message_strips_leading_self_mention():
 @pytest.mark.asyncio
 async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
     client = MattermostClient("https://chat.example.com", "test_token")
+    wav_path = str(tmp_path / "mattermost_voice.wav")
 
     file_infos = {
         "img": {"name": "image.png", "mime_type": "image/png"},
@@ -79,9 +80,24 @@ async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
         return b"payload"
     client.download_file = fake_download_file
 
-    with patch(
-        "astrbot.core.platform.sources.mattermost.client.get_astrbot_temp_path",
-        MagicMock(return_value=str(tmp_path)),
+    class FakeMediaResolver:
+        def __init__(self, media_ref: str, **kwargs) -> None:
+            assert media_ref.endswith("mattermost_audio.ogg")
+            assert kwargs["media_type"] == "audio"
+
+        async def to_path(self, **kwargs) -> str:
+            assert kwargs["target_format"] == "wav"
+            return wav_path
+
+    with (
+        patch(
+            "astrbot.core.platform.sources.mattermost.client.get_astrbot_temp_path",
+            MagicMock(return_value=str(tmp_path)),
+        ),
+        patch(
+            "astrbot.core.platform.sources.mattermost.client.MediaResolver",
+            FakeMediaResolver,
+        ),
     ):
         components, temp_paths = await client.parse_post_attachments(
             ["img", "audio", "video", "doc"]
@@ -90,6 +106,8 @@ async def test_mattermost_parse_post_attachments_maps_media_types(tmp_path):
     assert len(components) == 4
     assert isinstance(components[0], Comp.Image)
     assert isinstance(components[1], Comp.Record)
+    assert components[1].file == wav_path
+    assert components[1].url == wav_path
     assert isinstance(components[2], Comp.Video)
     assert isinstance(components[3], Comp.File)
     assert len(temp_paths) == 4

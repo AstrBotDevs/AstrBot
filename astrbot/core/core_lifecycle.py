@@ -753,6 +753,12 @@ class AstrBotCoreLifecycle:
                     name = task.get_name() if hasattr(task, "get_name") else str(task)
                     logger.error(f"任务 {name} 发生错误: {e}")
 
+        # 释放数据库引擎连接池
+        try:
+            await self.db.engine.dispose()
+        except Exception as e:
+            logger.warning(f"释放数据库引擎失败: {e}")
+
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
         await self.provider_manager.terminate()

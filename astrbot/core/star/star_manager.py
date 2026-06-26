@@ -67,6 +67,10 @@ class PluginVersionIncompatibleError(Exception):
     """Raised when plugin astrbot_version is incompatible with current AstrBot."""
 
 
+class PluginVersionUnsupportedError(PluginVersionIncompatibleError):
+    """Backward-compatible alias for plugin version compatibility errors."""
+
+
 class PluginDependencyInstallError(Exception):
     """Raised when plugin dependency installation fails."""
 

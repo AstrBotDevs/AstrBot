@@ -163,6 +163,20 @@
       "scanTitle": "Scan with DingTalk on your phone",
       "created": "Setup Complete"
     },
+    "qqOfficial": {
+      "title": "QQ Official Bot QR Binding",
+      "scanTitle": "Scan with QQ on your phone",
+      "created": "Binding Complete",
+      "status": {
+        "idle": "Not Started",
+        "starting": "Getting QR Code",
+        "pending": "Waiting for Scan",
+        "created": "Binding Complete - remember to click the save button!",
+        "denied": "Canceled",
+        "expired": "Expired",
+        "error": "Binding Failed"
+      }
+    },
     "start": "Start Setup",
     "created": "Setup Complete",
     "startFailed": "Failed to start QR setup",

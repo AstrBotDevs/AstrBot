@@ -28,7 +28,7 @@ from astrbot.core.db.po import (
     ConversationV2,
 )
 from astrbot.core.utils.version_comparator import VersionComparator
-from astrbot.dashboard.routes.backup import (
+from astrbot.dashboard.services.backup_service import (
     generate_unique_filename,
     secure_filename,
 )

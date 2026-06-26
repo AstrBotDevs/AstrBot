@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from typing import TYPE_CHECKING, Any
+
+try:
+    __version__ = _pkg_version("astrbot")
+except PackageNotFoundError:
+    __version__ = "4.26.0"
+
 
 if TYPE_CHECKING:
     from .core import logger as logger
@@ -18,4 +26,5 @@ def __getattr__(name: str) -> Any:
         from .core import logger
 
         return logger
+
     raise AttributeError(name)

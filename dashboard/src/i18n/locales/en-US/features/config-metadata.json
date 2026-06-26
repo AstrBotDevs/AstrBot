@@ -39,6 +39,10 @@
           "description": "Fallback chat model IDs",
           "hint": "When the primary chat model request fails, fallback to these chat models in order."
         },
+        "request_max_retries": {
+          "description": "Request Max Retries",
+          "hint": "Maximum attempts for a single model request when retryable errors occur."
+        },
         "default_image_caption_provider_id": {
           "description": "Default Image Caption Model",
           "hint": "Leave empty to disable; useful for non-multimodal models"
@@ -129,6 +133,10 @@
         },
         "web_search_link": {
           "description": "Display Source Citations"
+        },
+        "websearch_exa_key": {
+          "description": "Exa API Key",
+          "hint": "Multiple keys can be added for rotation. Get a key at https://dashboard.exa.ai"
         }
       }
     },
@@ -603,7 +611,7 @@
       },
       "unified_webhook_mode": {
         "description": "Unified Webhook Mode",
-        "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/platform/webhook/{webhook_uuid}."
+        "hint": "When enabled, use AstrBot unified webhook entry without opening a separate port. Callback URL is /api/v1/webhooks/platforms/{webhook_uuid}."
       },
       "webhook_uuid": {
         "description": "Webhook UUID",
@@ -1362,7 +1370,7 @@
         "description": "API Base URL"
       },
       "openai_embedding": {
-        "hint": "If testing fails, try adding /v1 at the end to be compatible with some OpenAI API versions."
+        "hint": "If testing fails, try adding /v1 at the end for some OpenAI API versions."
       },
       "gemini_embedding": {
         "hint": "Gemini Embedding does not require manually adding /v1beta."
@@ -1571,6 +1579,30 @@
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
+      },
+      "elevenlabs-tts-voice-id": {
+        "description": "Voice ID",
+        "hint": "ElevenLabs voice ID. Browse and copy voice IDs at https://elevenlabs.io/app/voice-library. Default 'JBFqnCBsd6RMkjVDRZzb' (George)."
+      },
+      "elevenlabs-tts-output-format": {
+        "description": "Output format",
+        "hint": "Audio output format, e.g. 'mp3_44100_128', 'mp3_22050_32', 'wav_44100', or 'opus_48000_128'. Raw PCM/u-law/a-law formats are not supported. Default 'mp3_44100_128'."
+      },
+      "elevenlabs-tts-stability": {
+        "description": "Stability",
+        "hint": "Voice stability, range [0, 1]. Higher is more consistent, lower is more expressive. Leave empty to use the server default."
+      },
+      "elevenlabs-tts-similarity-boost": {
+        "description": "Similarity boost",
+        "hint": "How closely the output matches the original voice, range [0, 1]. Leave empty to use the server default."
+      },
+      "elevenlabs-tts-style": {
+        "description": "Style exaggeration",
+        "hint": "Style exaggeration of the voice, range [0, 1]. Higher values increase latency. Leave empty to use the server default."
+      },
+      "elevenlabs-tts-use-speaker-boost": {
+        "description": "Speaker boost",
+        "hint": "Boost similarity to the original speaker. May slightly increase latency."
       },
       "mimo-tts-voice": {
         "description": "Voice",

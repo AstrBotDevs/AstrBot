@@ -11,6 +11,7 @@ from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Any, Generic, TextIO
 
+import httpx
 from tenacity import (
     before_sleep_log,
     retry,
@@ -36,12 +37,22 @@ except (ModuleNotFoundError, ImportError):
         "Warning: Missing 'mcp' dependency, MCP services will be unavailable.",
     )
 
+streamable_http_client_legacy = None
+streamable_http_client = None
+
 try:
-    from mcp.client.streamable_http import streamablehttp_client
-except (ModuleNotFoundError, ImportError):
-    logger.warning(
-        "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
+    from mcp.client.streamable_http import (
+        streamablehttp_client as streamable_http_client_legacy,
     )
+except (ModuleNotFoundError, ImportError):
+    try:
+        from mcp.client.streamable_http import (
+            streamable_http_client as streamable_http_client,
+        )
+    except (ModuleNotFoundError, ImportError):
+        logger.warning(
+            "Warning: Missing 'mcp' dependency or MCP library version too old, Streamable HTTP connection unavailable.",
+        )
 
 
 class TenacityLogger:
@@ -71,6 +82,23 @@ def _prepare_config(config: dict) -> dict:
         config = config["mcpServers"][first_key]
     config.pop("active", None)
     return config
+
+
+def validate_mcp_stdio_config(config: dict) -> None:
+    """Validate MCP stdio configuration in a backward-compatible way."""
+    cfg = _prepare_config(config.copy())
+    if "url" in cfg:
+        return
+
+    command = cfg.get("command")
+    if not isinstance(command, str) or not command.strip():
+        raise ValueError("MCP stdio server requires a non-empty command.")
+
+    args = cfg.get("args")
+    if args is not None and (
+        not isinstance(args, list) or not all(isinstance(arg, str) for arg in args)
+    ):
+        raise ValueError("MCP stdio args must be a list of strings.")
 
 
 def _prepare_stdio_env(config: dict) -> dict:
@@ -183,11 +211,9 @@ def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
         properties = normalized.get("properties")
         if isinstance(properties, dict):
-            original_properties = (
-                node.get("properties")
-                if isinstance(node.get("properties"), dict)
-                else {}
-            )
+            original_properties = node.get("properties")
+            if not isinstance(original_properties, dict):
+                original_properties = {}
             required = normalized.get("required")
             required_list = required[:] if isinstance(required, list) else []
 
@@ -318,17 +344,38 @@ class MCPClient:
                 )
                 self.session = session
             else:
-                timeout = timedelta(seconds=cfg.get("timeout", 30))
-                sse_read_timeout = timedelta(
-                    seconds=cfg.get("sse_read_timeout", 60 * 5),
-                )
-                self._streams_context = streamablehttp_client(
-                    url=cfg["url"],
-                    headers=cfg.get("headers", {}),
-                    timeout=timeout,
-                    sse_read_timeout=sse_read_timeout,
-                    terminate_on_close=cfg.get("terminate_on_close", True),
-                )
+                timeout_seconds = cfg.get("timeout", 30)
+                sse_read_timeout_seconds = cfg.get("sse_read_timeout", 60 * 5)
+                if streamable_http_client_legacy:
+                    timeout = timedelta(seconds=timeout_seconds)
+                    sse_read_timeout = timedelta(seconds=sse_read_timeout_seconds)
+                    self._streams_context = streamable_http_client_legacy(
+                        url=cfg["url"],
+                        headers=cfg.get("headers", {}),
+                        timeout=timeout,
+                        sse_read_timeout=sse_read_timeout,
+                        terminate_on_close=cfg.get("terminate_on_close", True),
+                    )
+                elif streamable_http_client:
+                    http_client = await self.exit_stack.enter_async_context(
+                        httpx.AsyncClient(
+                            headers=cfg.get("headers", {}),
+                            timeout=httpx.Timeout(
+                                timeout_seconds,
+                                read=sse_read_timeout_seconds,
+                            ),
+                            follow_redirects=True,
+                        ),
+                    )
+                    self._streams_context = streamable_http_client(
+                        url=cfg["url"],
+                        http_client=http_client,
+                        terminate_on_close=cfg.get("terminate_on_close", True),
+                    )
+                else:
+                    raise RuntimeError(
+                        "Streamable HTTP transport is not available in the installed MCP library version."
+                    )
                 read_s, write_s, _ = await self.exit_stack.enter_async_context(
                     self._streams_context,
                 )
