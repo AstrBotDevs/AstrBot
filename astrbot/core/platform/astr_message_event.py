@@ -269,8 +269,9 @@ class AstrMessageEvent(abc.ABC):
             match = re.search(pattern, buffer)
             if not match:
                 break
-            matched_text = match.group()
-            await self.send(MessageChain([Plain(matched_text)]))
+            matched_text = match.group().strip()
+            if matched_text:
+                await self.send(MessageChain([Plain(matched_text)]))
             buffer = buffer[match.end() :]
             await asyncio.sleep(1.5)  # 限速
         return buffer
