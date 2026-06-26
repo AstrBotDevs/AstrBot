@@ -447,11 +447,11 @@ async def _materialize_media_ref(
 
     if media_ref.startswith(("http://", "https://")):
         if media_type == "image":
-            target_suffix = suffix
+            target_path = _temp_media_path("image", ".bin")
         else:
             parsed = urlparse(media_ref)
             target_suffix = Path(parsed.path).suffix or suffix
-        target_path = _temp_media_path(media_type, target_suffix)
+            target_path = _temp_media_path(media_type, target_suffix)
         cleanup_paths.append(target_path)
         try:
             await download_file(media_ref, str(target_path))
@@ -468,9 +468,7 @@ async def _materialize_media_ref(
                 mime_type = detected_mime_type
                 detected_suffix = _extension_from_mime_type(detected_mime_type)
                 if detected_suffix and target_path.suffix.lower() != detected_suffix:
-                    detected_path = target_path.with_suffix(detected_suffix)
-                    if detected_path.exists():
-                        detected_path = _temp_media_path(media_type, detected_suffix)
+                    detected_path = _temp_media_path("image", detected_suffix)
                     await asyncio.to_thread(target_path.rename, detected_path)
                     cleanup_paths[-1] = detected_path
                     target_path = detected_path
