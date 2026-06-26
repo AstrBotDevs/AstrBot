@@ -118,18 +118,43 @@ class LocalShellComponent(ShellComponent):
             # `command` is intentionally executed through the current shell so
             # local computer-use behavior matches existing tool semantics.
             # Safety relies on `_is_safe_command()` and the allowed-root checks.
-            result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+            proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
                 command,
                 shell=shell,
                 cwd=working_dir,
                 env=run_env,
-                timeout=timeout or 300,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout or 300)
+            except subprocess.TimeoutExpired:
+                should_kill_parent = sys.platform != "win32"
+                if sys.platform == "win32":
+                    try:
+                        taskkill_result = subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=5,
+                        )
+                        should_kill_parent = taskkill_result.returncode != 0
+                    except Exception:
+                        should_kill_parent = True
+                if should_kill_parent:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+                raise
             return {
-                "stdout": _decode_shell_output(result.stdout),
-                "stderr": _decode_shell_output(result.stderr),
-                "exit_code": result.returncode,
+                "stdout": _decode_shell_output(stdout),
+                "stderr": _decode_shell_output(stderr),
+                "exit_code": proc.returncode,
             }
 
         return await asyncio.to_thread(_run)
