@@ -1,7 +1,9 @@
 import asyncio
+import base64
 import json
 import os
 import uuid
+from io import BytesIO
 
 import lark_oapi as lark
 from lark_oapi.api.cardkit.v1 import (
@@ -28,8 +30,9 @@ from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Json, Plain, Record, Video
 from astrbot.api.message_components import Image as AstrBotImage
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.io import download_image_by_url
 from astrbot.core.utils.media_utils import (
-    MediaResolver,
     convert_audio_to_opus,
     convert_video_format,
     get_media_duration,
@@ -71,6 +74,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
         Returns:
             是否发送成功
+
         """
         if lark_client.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
@@ -86,7 +90,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     .msg_type(msg_type)
                     .uuid(str(uuid.uuid4()))
                     .reply_in_thread(False)
-                    .build()
+                    .build(),
                 )
                 .build()
             )
@@ -112,7 +116,7 @@ class LarkMessageEvent(AstrMessageEvent):
                     .content(content)
                     .msg_type(msg_type)
                     .uuid(str(uuid.uuid4()))
-                    .build()
+                    .build(),
                 )
                 .build()
             )
@@ -142,8 +146,9 @@ class LarkMessageEvent(AstrMessageEvent):
 
         Returns:
             成功返回file_key，失败返回None
+
         """
-        if not path or not os.path.exists(path):
+        if not path or not await asyncio.to_thread(os.path.exists, path):
             logger.error(f"[Lark] 文件不存在: {path}")
             return None
 
@@ -152,36 +157,40 @@ class LarkMessageEvent(AstrMessageEvent):
             return None
 
         try:
-            with open(path, "rb") as file_obj:
-                body_builder = (
-                    CreateFileRequestBody.builder()
-                    .file_type(file_type)
-                    .file_name(os.path.basename(path))
-                    .file(file_obj)
+
+            def _read_file(p: str) -> bytes:
+                with open(p, "rb") as f:
+                    return f.read()
+
+            file_bytes = await asyncio.to_thread(_read_file, path)
+            file_obj = BytesIO(file_bytes)
+            body_builder = (
+                CreateFileRequestBody.builder()
+                .file_type(file_type)
+                .file_name(os.path.basename(path))
+                .file(file_obj)
+            )
+            if duration is not None:
+                body_builder.duration(duration)
+
+            request = (
+                CreateFileRequest.builder().request_body(body_builder.build()).build()
+            )
+            response = await lark_client.im.v1.file.acreate(request)
+
+            if not response.success():
+                logger.error(
+                    f"[Lark] 无法上传文件({response.code}): {response.msg}",
                 )
-                if duration is not None:
-                    body_builder.duration(duration)
+                return None
 
-                request = (
-                    CreateFileRequest.builder()
-                    .request_body(body_builder.build())
-                    .build()
-                )
-                response = await lark_client.im.v1.file.acreate(request)
+            if response.data is None:
+                logger.error("[Lark] 上传文件成功但未返回数据(data is None)")
+                return None
 
-                if not response.success():
-                    logger.error(
-                        f"[Lark] 无法上传文件({response.code}): {response.msg}"
-                    )
-                    return None
-
-                if response.data is None:
-                    logger.error("[Lark] 上传文件成功但未返回数据(data is None)")
-                    return None
-
-                file_key = response.data.file_key
-                logger.debug(f"[Lark] 文件上传成功: {file_key}")
-                return file_key
+            file_key = response.data.file_key
+            logger.debug(f"[Lark] 文件上传成功: {file_key}")
+            return file_key
 
         except Exception as e:
             logger.error(f"[Lark] 无法打开或上传文件: {e}")
@@ -197,38 +206,64 @@ class LarkMessageEvent(AstrMessageEvent):
             elif isinstance(comp, At):
                 _stage.append({"tag": "at", "user_id": comp.qq, "style": []})
             elif isinstance(comp, AstrBotImage):
-                if not comp.file:
-                    logger.error("[Lark] 图片路径为空，无法上传")
+                file_path = ""
+                image_file = None
+
+                if comp.file and comp.file.startswith("file:///"):
+                    file_path = comp.file.replace("file:///", "")
+                elif comp.file and comp.file.startswith("http"):
+                    image_file_path = await download_image_by_url(comp.file)
+                    file_path = image_file_path or ""
+                elif comp.file and comp.file.startswith("base64://"):
+                    base64_str = comp.file.removeprefix("base64://")
+                    image_data = base64.b64decode(base64_str)
+                    # save as temp file
+                    temp_dir = get_astrbot_temp_path()
+                    file_path = os.path.join(
+                        temp_dir,
+                        f"lark_image_{uuid.uuid4().hex[:8]}.jpg",
+                    )
+
+                    def _write_file(p: str, d: bytes) -> None:
+                        with open(p, "wb") as f:
+                            f.write(d)
+
+                    await asyncio.to_thread(_write_file, file_path, image_data)
+                else:
+                    file_path = comp.file or ""
+
+                if image_file is None:
+                    if not file_path:
+                        logger.error("[Lark] 图片路径为空，无法上传")
+                        continue
+                    try:
+
+                        def _read_image(p: str) -> bytes:
+                            with open(p, "rb") as f:
+                                return f.read()
+
+                        image_bytes = await asyncio.to_thread(_read_image, file_path)
+                        image_file = BytesIO(image_bytes)
+                    except Exception as e:
+                        logger.error(f"[Lark] 无法打开图片文件: {e}")
+                        continue
+
+                request = (
+                    CreateImageRequest.builder()
+                    .request_body(
+                        CreateImageRequestBody.builder()
+                        .image_type("message")
+                        .image(image_file)
+                        .build(),
+                    )
+                    .build()
+                )
+
+                if lark_client.im is None:
+                    logger.error("[Lark] API Client im 模块未初始化，无法上传图片")
                     continue
 
-                try:
-                    async with MediaResolver(
-                        comp.file,
-                        media_type="image",
-                    ).as_path() as image:
-                        with image.open("rb") as image_file:
-                            request = (
-                                CreateImageRequest.builder()
-                                .request_body(
-                                    CreateImageRequestBody.builder()
-                                    .image_type("message")
-                                    .image(image_file)
-                                    .build(),
-                                )
-                                .build()
-                            )
-
-                            if lark_client.im is None:
-                                logger.error(
-                                    "[Lark] API Client im 模块未初始化，无法上传图片"
-                                )
-                                continue
-
-                            response = await lark_client.im.v1.image.acreate(request)
-                except Exception as e:
-                    logger.error(f"[Lark] 无法打开或上传图片文件: {e}")
-                    continue
-
+                response = await lark_client.im.v1.image.acreate(request)
                 if not response.success():
                     logger.error(f"无法上传飞书图片({response.code}): {response.msg}")
                     continue
@@ -288,7 +323,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 {
                     "tag": "markdown",
                     "content": reasoning_content,
-                }
+                },
             ],
         }
 
@@ -302,8 +337,8 @@ class LarkMessageEvent(AstrMessageEvent):
                         reasoning_content=reasoning_content,
                         title=title,
                         expanded=False,
-                    )
-                ]
+                    ),
+                ],
             },
         }
 
@@ -322,7 +357,7 @@ class LarkMessageEvent(AstrMessageEvent):
                         reasoning_content=reasoning_content,
                         title=str(comp.data.get("title", "💭 Thinking")),
                         expanded=bool(comp.data.get("expanded", False)),
-                    )
+                    ),
                 )
             elif isinstance(comp, Plain):
                 if comp.text:
@@ -360,9 +395,9 @@ class LarkMessageEvent(AstrMessageEvent):
                     CreateCardRequestBody.builder()
                     .type("card_json")
                     .data(json.dumps(card_json, ensure_ascii=False))
-                    .build()
+                    .build(),
                 )
-                .build()
+                .build(),
             )
         except Exception as e:
             logger.error(f"[Lark] 创建卡片失败: {e}")
@@ -427,6 +462,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型，如 'open_id', 'chat_id'（用于主动发送）
+
         """
         if lark_client.im is None:
             logger.error("[Lark] API Client im 模块未初始化")
@@ -535,17 +571,29 @@ class LarkMessageEvent(AstrMessageEvent):
         # 发送附件
         for file_comp in file_components:
             await LarkMessageEvent._send_file_message(
-                file_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                file_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
             )
 
         for audio_comp in audio_components:
             await LarkMessageEvent._send_audio_message(
-                audio_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                audio_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
             )
 
         for media_comp in media_components:
             await LarkMessageEvent._send_media_message(
-                media_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                media_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
             )
 
     async def send(self, message: MessageChain) -> None:
@@ -573,10 +621,13 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
+
         """
         file_path = file_comp.file or ""
         file_key = await LarkMessageEvent._upload_lark_file(
-            lark_client, path=file_path, file_type="stream"
+            lark_client,
+            path=file_path,
+            file_type="stream",
         )
         if not file_key:
             return
@@ -607,6 +658,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
+
         """
         # 获取音频文件路径
         try:
@@ -615,7 +667,10 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.error(f"[Lark] 无法获取音频文件路径: {e}")
             return
 
-        if not original_audio_path or not os.path.exists(original_audio_path):
+        if not original_audio_path or not await asyncio.to_thread(
+            os.path.exists,
+            original_audio_path,
+        ):
             logger.error(f"[Lark] 音频文件不存在: {original_audio_path}")
             return
 
@@ -645,9 +700,12 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
         # 清理转换后的临时音频文件
-        if converted_audio_path and os.path.exists(converted_audio_path):
+        if converted_audio_path and await asyncio.to_thread(
+            os.path.exists,
+            converted_audio_path,
+        ):
             try:
-                os.remove(converted_audio_path)
+                await asyncio.to_thread(os.remove, converted_audio_path)
                 logger.debug(f"[Lark] 已删除转换后的音频文件: {converted_audio_path}")
             except Exception as e:
                 logger.warning(f"[Lark] 删除转换后的音频文件失败: {e}")
@@ -680,6 +738,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id: 回复的消息ID（用于回复消息）
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
+
         """
         # 获取视频文件路径
         try:
@@ -688,7 +747,10 @@ class LarkMessageEvent(AstrMessageEvent):
             logger.error(f"[Lark] 无法获取视频文件路径: {e}")
             return
 
-        if not original_video_path or not os.path.exists(original_video_path):
+        if not original_video_path or not await asyncio.to_thread(
+            os.path.exists,
+            original_video_path,
+        ):
             logger.error(f"[Lark] 视频文件不存在: {original_video_path}")
             return
 
@@ -718,9 +780,12 @@ class LarkMessageEvent(AstrMessageEvent):
         )
 
         # 清理转换后的临时视频文件
-        if converted_video_path and os.path.exists(converted_video_path):
+        if converted_video_path and await asyncio.to_thread(
+            os.path.exists,
+            converted_video_path,
+        ):
             try:
-                os.remove(converted_video_path)
+                await asyncio.to_thread(os.remove, converted_video_path)
                 logger.debug(f"[Lark] 已删除转换后的视频文件: {converted_video_path}")
             except Exception as e:
                 logger.warning(f"[Lark] 删除转换后的视频文件失败: {e}")
@@ -784,8 +849,8 @@ class LarkMessageEvent(AstrMessageEvent):
                         "tag": "markdown",
                         "content": "",
                         "element_id": "markdown_1",
-                    }
-                ]
+                    },
+                ],
             },
         }
 
@@ -795,7 +860,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 CreateCardRequestBody.builder()
                 .type("card_json")
                 .data(json.dumps(card_json, ensure_ascii=False))
-                .build()
+                .build(),
             )
             .build()
         )
@@ -808,7 +873,7 @@ class LarkMessageEvent(AstrMessageEvent):
 
         if not response.success():
             logger.error(
-                f"[Lark] 创建流式卡片实体失败({response.code}): {response.msg}"
+                f"[Lark] 创建流式卡片实体失败({response.code}): {response.msg}",
             )
             return None
 
@@ -861,7 +926,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 .content(content)
                 .sequence(sequence)
                 .uuid(str(uuid.uuid4()))
-                .build()
+                .build(),
             )
             .build()
         )
@@ -901,7 +966,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 .settings(settings_json)
                 .sequence(sequence)
                 .uuid(str(uuid.uuid4()))
-                .build()
+                .build(),
             )
             .build()
         )
@@ -931,7 +996,7 @@ class LarkMessageEvent(AstrMessageEvent):
             await self.send(buffer)
 
         asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
         self._has_send_oper = True
 
@@ -984,7 +1049,7 @@ class LarkMessageEvent(AstrMessageEvent):
                 buffer.squash_plain()
                 await self.send(buffer)
             asyncio.create_task(
-                Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+                Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
             )
             self._has_send_oper = True
 
@@ -1031,7 +1096,7 @@ class LarkMessageEvent(AstrMessageEvent):
                             card_id = await self._create_streaming_card()
                             if not card_id:
                                 logger.warning(
-                                    "[Lark] 无法创建流式卡片，回退到非流式发送"
+                                    "[Lark] 无法创建流式卡片，回退到非流式发送",
                                 )
                                 await _consume_rest_and_fallback(generator, delta)
                                 return
@@ -1042,7 +1107,7 @@ class LarkMessageEvent(AstrMessageEvent):
                             )
                             if not sent:
                                 logger.error(
-                                    "[Lark] 发送流式卡片消息失败，回退到非流式发送"
+                                    "[Lark] 发送流式卡片消息失败，回退到非流式发送",
                                 )
                                 await _consume_rest_and_fallback(generator, delta)
                                 return
@@ -1062,8 +1127,9 @@ class LarkMessageEvent(AstrMessageEvent):
             if not fallback_used:
                 asyncio.create_task(
                     Metric.upload(
-                        msg_event_tick=1, adapter_name=self.platform_meta.name
-                    )
+                        msg_event_tick=1,
+                        adapter_name=self.platform_meta.name,
+                    ),
                 )
                 self._has_send_oper = True
             return
@@ -1072,6 +1138,6 @@ class LarkMessageEvent(AstrMessageEvent):
 
         # 内联父类 send_streaming 的副作用
         asyncio.create_task(
-            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name)
+            Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
         self._has_send_oper = True

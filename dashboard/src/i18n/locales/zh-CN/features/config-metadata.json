@@ -11,13 +11,7 @@
         },
         "agent_runner_type": {
           "description": "执行器",
-          "labels": [
-            "内置 Agent",
-            "Dify",
-            "Coze",
-            "阿里云百炼应用",
-            "DeerFlow"
-          ]
+          "labels": ["内置 Agent", "Dify", "Coze", "阿里云百炼应用", "DeerFlow"]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent 执行器提供商 ID"
@@ -180,6 +174,14 @@
           "booter": {
             "description": "沙箱环境驱动器"
           },
+          "bwrap_rw_binds": {
+            "description": "Bubblewrap 读写挂载目录",
+            "hint": "额外的读写挂载目录（回车添加，可添加多个。默认 /tmp, /var/tmp 已经是读写，整个宿主机系统默认是只读挂载于沙箱内的相同位置）。"
+          },
+          "bwrap_ro_binds": {
+            "description": "Bubblewrap 额外只读挂载目录",
+            "hint": "Bubblewrap 沙箱额外的只读挂载目录（回车添加，可添加多个。宿主机系统目录/usr, /etc, /opt默认只读挂载于沙箱内的相同位置）。"
+          },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
             "hint": "Shipyard Neo(Bay) 服务的 API 地址，默认 http://127.0.0.1:8114。"
@@ -265,10 +267,7 @@
         },
         "context_limit_reached_strategy": {
           "description": "历史超限或上下文接近上限时的处理方式",
-          "labels": [
-            "按对话轮数截断",
-            "由 LLM 压缩上下文"
-          ],
+          "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
           "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
         },
         "llm_compress_instruction": {
@@ -360,11 +359,8 @@
         },
         "tool_schema_mode": {
           "description": "工具调用模式",
-          "hint": "skills-like 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
-          "labels": [
-            "Skills-like（两阶段）",
-            "Full（完整参数）"
-          ]
+          "hint": "lazy-tool-load 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
+          "labels": ["Lazy-tool-load（两阶段）", "Full（完整参数）"]
         },
         "streaming_response": {
           "description": "流式输出"
@@ -372,10 +368,7 @@
         "unsupported_streaming_strategy": {
           "description": "不支持流式回复的平台",
           "hint": "选择在不支持流式回复的平台上的处理方式。实时分段回复会在系统接收流式响应检测到诸如标点符号等分段点时,立即发送当前已接收的内容",
-          "labels": [
-            "实时分段回复",
-            "关闭流式回复"
-          ]
+          "labels": ["实时分段回复", "关闭流式回复"]
         },
         "wake_prefix": {
           "description": "LLM 聊天额外唤醒前缀",
@@ -422,7 +415,7 @@
       },
       "appid": {
         "description": "appid",
-        "hint": "必填项。当前消息平台的 AppID。如何获取请参考对应平台接入文档。"
+        "hint": "必填项。QQ 官方机器人平台的 appid。如何获取请参考文档。"
       },
       "callback_server_host": {
         "description": "回调服务器主机",
@@ -477,10 +470,7 @@
       },
       "lark_connection_mode": {
         "description": "订阅方式",
-        "labels": [
-          "长连接模式",
-          "推送至服务器模式"
-        ]
+        "labels": ["长连接模式", "推送至服务器模式"]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
@@ -969,10 +959,7 @@
           "split_mode": {
             "description": "分段模式",
             "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.findall(r'<regex>', text)",
-            "labels": [
-              "正则表达式",
-              "分段词列表"
-            ]
+            "labels": ["正则表达式", "分段词列表"]
           },
           "regex": {
             "description": "分段正则表达式",
@@ -1114,8 +1101,8 @@
         },
         "ssl": {
           "enable": {
-            "description": "启用 WebUI HTTPS",
-            "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。"
+            "description": "启用 AstrBot 面板 HTTPS",
+            "hint": "启用后，AstrBot 面板 将直接使用 HTTPS 提供服务。"
           },
           "cert_file": {
             "description": "SSL 证书文件路径",
@@ -1251,12 +1238,7 @@
       "modalities": {
         "description": "模型能力",
         "hint": "模型支持的模态及能力。",
-        "labels": [
-          "文本",
-          "图像",
-          "音频",
-          "工具使用"
-        ]
+        "labels": ["文本", "图像", "音频", "工具使用"]
       },
       "custom_headers": {
         "description": "自定义请求头",

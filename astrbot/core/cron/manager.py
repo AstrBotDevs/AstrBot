@@ -1,6 +1,5 @@
 import asyncio
 import json
-import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -9,6 +8,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from astrbot import logger
 from astrbot.core.agent.tool import ToolSet
@@ -24,74 +24,8 @@ if TYPE_CHECKING:
     from astrbot.core.star.context import Context
 
 
-_CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
-_CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
-
-
-def _normalize_crontab_day_of_week(day_of_week: str) -> str:
-    """Normalize standard crontab weekdays for APScheduler.
-
-    APScheduler treats numeric weekdays as Monday=0, while standard crontab and
-    AstrBot's WebUI use Sunday=0/7. Numeric weekday fields are expanded to
-    weekday names so the scheduled day remains unambiguous.
-
-    Args:
-        day_of_week: The day-of-week field from a five-part crontab expression.
-
-    Returns:
-        A day-of-week field compatible with APScheduler.
-
-    Raises:
-        ValueError: If a numeric weekday value or step is outside the supported
-            crontab range.
-    """
-    normalized_parts: list[str] = []
-    for raw_part in day_of_week.split(","):
-        part = raw_part.strip().lower()
-        match = _CRONTAB_WEEKDAY_PATTERN.fullmatch(part)
-        if not match:
-            normalized_parts.append(part)
-            continue
-
-        wildcard, start_text, end_text, step_text = match.groups()
-        step = int(step_text or "1")
-        if step < 1:
-            raise ValueError("day_of_week step must be greater than 0")
-
-        if wildcard:
-            if step == 1:
-                normalized_parts.append("*")
-                continue
-            values = range(0, 7, step)
-        else:
-            start = int(start_text)
-            end = int(end_text) if end_text is not None else None
-            if start < 0 or start > 7 or (end is not None and (end < 0 or end > 7)):
-                raise ValueError("day_of_week values must be between 0 and 7")
-            if end is not None and start > end:
-                raise ValueError("day_of_week range start must not exceed end")
-            if end is None:
-                end = 7 if step_text else start
-            values = range(start, end + 1, step)
-
-        weekdays: list[int] = []
-        for value in values:
-            weekday = 0 if value == 7 else value
-            if weekday not in weekdays:
-                weekdays.append(weekday)
-
-        if len(weekdays) == 7:
-            normalized_parts.append("*")
-        else:
-            normalized_parts.extend(_CRONTAB_WEEKDAY_NAMES[value] for value in weekdays)
-
-    return ",".join(normalized_parts)
-
-
 class CronJobSchedulingError(Exception):
     """Raised when a cron job fails to be scheduled."""
-
-    pass
 
 
 class CronJobManager:
@@ -105,7 +39,7 @@ class CronJobManager:
         self._started = False
 
     async def start(self, ctx: "Context") -> None:
-        self.ctx: Context = ctx  # star context
+        self.ctx: Context = ctx
         async with self._lock:
             if self._started:
                 return
@@ -140,7 +74,8 @@ class CronJobManager:
         self,
         *,
         name: str,
-        cron_expression: str,
+        cron_expression: str | None = None,
+        interval_seconds: int | None = None,
         handler: Callable[..., Any | Awaitable[Any]],
         description: str | None = None,
         timezone: str | None = None,
@@ -148,12 +83,19 @@ class CronJobManager:
         enabled: bool = True,
         persistent: bool = False,
     ) -> CronJob:
+        if (cron_expression is None) == (interval_seconds is None):
+            raise ValueError(
+                "cron_expression and interval_seconds must have exactly one value",
+            )
+        payload_data = dict(payload or {})
+        if interval_seconds is not None:
+            payload_data["interval_seconds"] = interval_seconds
         job = await self.db.create_cron_job(
             name=name,
             job_type="basic",
             cron_expression=cron_expression,
             timezone=timezone,
-            payload=payload or {},
+            payload=payload_data,
             description=description,
             enabled=enabled,
             persistent=persistent,
@@ -176,7 +118,6 @@ class CronJobManager:
         run_once: bool = False,
         run_at: datetime | None = None,
     ) -> CronJob:
-        # If run_once with run_at, store run_at in payload for later reference.
         if run_once and run_at:
             payload = {**payload, "run_at": run_at.isoformat()}
         job = await self.db.create_cron_job(
@@ -242,21 +183,18 @@ class CronJobManager:
                     run_at = run_at.replace(tzinfo=tzinfo)
                 trigger = DateTrigger(run_date=run_at, timezone=tzinfo)
             else:
-                if not job.cron_expression:
-                    raise ValueError("recurring job missing cron_expression")
-                minute, hour, day, month, day_of_week = job.cron_expression.split()
-                normalized_cron_expression = " ".join(
-                    [
-                        minute,
-                        hour,
-                        day,
-                        month,
-                        _normalize_crontab_day_of_week(day_of_week),
-                    ]
-                )
-                trigger = CronTrigger.from_crontab(
-                    normalized_cron_expression, timezone=tzinfo
-                )
+                interval_seconds = None
+                if isinstance(job.payload, dict):
+                    payload_interval = job.payload.get("interval_seconds")
+                    if isinstance(payload_interval, int):
+                        interval_seconds = payload_interval
+                if interval_seconds is not None:
+                    trigger = IntervalTrigger(seconds=interval_seconds, timezone=tzinfo)
+                else:
+                    trigger = CronTrigger.from_crontab(
+                        job.cron_expression,
+                        timezone=tzinfo,
+                    )
             self.scheduler.add_job(
                 self._run_job,
                 id=job.job_id,
@@ -267,8 +205,9 @@ class CronJobManager:
             )
             asyncio.create_task(
                 self.db.update_cron_job(
-                    job.job_id, next_run_time=self._get_next_run_time(job.job_id)
-                )
+                    job.job_id,
+                    next_run_time=self._get_next_run_time(job.job_id),
+                ),
             )
         except (ValueError, TypeError) as e:
             logger.exception("Failed to schedule cron job %s", job.job_id)
@@ -295,7 +234,10 @@ class CronJobManager:
             return
         start_time = datetime.now(timezone.utc)
         await self.db.update_cron_job(
-            job_id, status="running", last_run_at=start_time, last_error=None
+            job_id,
+            status="running",
+            last_run_at=start_time,
+            last_error=None,
         )
         status = "completed"
         last_error = None
@@ -306,7 +248,7 @@ class CronJobManager:
                 await self._run_active_agent_job(job, start_time=start_time)
             else:
                 raise ValueError(f"Unknown cron job type: {job.job_type}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             status = "failed"
             last_error = str(e)
             logger.error(f"Cron job {job_id} failed: {e!s}", exc_info=True)
@@ -343,7 +285,6 @@ class CronJobManager:
             )
         )
         note = payload.get("note") or job.description or job.name
-
         extras = {
             "cron_job": {
                 "id": job.job_id,
@@ -360,7 +301,6 @@ class CronJobManager:
             },
             "cron_payload": payload,
         }
-
         await self._woke_main_agent(
             message=note,
             session_str=session_str,
@@ -383,9 +323,11 @@ class CronJobManager:
             build_main_agent,
         )
         from astrbot.core.astr_main_agent_resources import (
+            CONVERSATION_HISTORY_INJECT_PREFIX,
+            CRON_TASK_WOKE_USER_PROMPT,
             PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT,
         )
-        from astrbot.core.tools.message_tools import SendMessageToUserTool
+        from astrbot.core.tools.send_message import SEND_MESSAGE_TO_USER_TOOL
 
         try:
             session = (
@@ -393,10 +335,9 @@ class CronJobManager:
                 if isinstance(session_str, MessageSession)
                 else MessageSession.from_str(session_str)
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Invalid session for cron job: {e}")
             return
-
         cron_event = CronMessageEvent(
             context=self.ctx,
             session=session,
@@ -404,8 +345,6 @@ class CronJobManager:
             extras=extras or {},
             message_type=session.message_type,
         )
-
-        # judge user's role
         umo = cron_event.unified_msg_origin
         cfg = self.ctx.get_config(umo=umo)
         cron_payload = extras.get("cron_payload", {}) if extras else {}
@@ -415,9 +354,9 @@ class CronJobManager:
             cron_event.role = "admin" if sender_id in admin_ids else "member"
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
-
         tool_call_timeout = cfg.get("provider_settings", {}).get(
-            "tool_call_timeout", 120
+            "tool_call_timeout",
+            120,
         )
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
@@ -427,57 +366,42 @@ class CronJobManager:
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
         req.conversation = conv
-        # finetine the messages
         context = json.loads(conv.history)
         if context:
             req.contexts = context
             context_dump = req._print_friendly_context()
             req.contexts = []
             req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"---\n"
-                f"{context_dump}\n"
-                f"---\n"
+                CONVERSATION_HISTORY_INJECT_PREFIX + f"---\n{context_dump}\n---\n"
             )
         cron_job_str = json.dumps(extras.get("cron_job", {}), ensure_ascii=False)
         req.system_prompt += PROACTIVE_AGENT_CRON_WOKE_SYSTEM_PROMPT.format(
-            cron_job=cron_job_str
+            cron_job=cron_job_str,
         )
-        req.prompt = (
-            "You are now responding to a scheduled task. "
-            "Proceed according to your system instructions. "
-            "Output using same language as previous conversation. "
-            "After completing your task, summarize and output your actions and results."
-        )
+        req.prompt = CRON_TASK_WOKE_USER_PROMPT
         if delivery_session_str:
             if not req.func_tool:
                 req.func_tool = ToolSet()
-            req.func_tool.add_tool(
-                self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
-            )
-
+            req.func_tool.add_tool(SEND_MESSAGE_TO_USER_TOOL)
         result = await build_main_agent(
-            event=cron_event, plugin_context=self.ctx, config=config, req=req
+            event=cron_event,
+            plugin_context=self.ctx,
+            config=config,
+            req=req,
         )
         if not result:
             logger.error("Failed to build main agent for cron job.")
             return
-
         runner = result.agent_runner
         async for _ in runner.step_until_done(30):
-            # agent will send message to user via using tools
             pass
         llm_resp = runner.get_final_llm_resp()
         cron_meta = extras.get("cron_job", {}) if extras else {}
-        summary_note = (
-            f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')} "
-            f" triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
-        )
+        summary_note = f"[CronJob] {cron_meta.get('name') or cron_meta.get('id', 'unknown')}: {cron_meta.get('description', '')}  triggered at {cron_meta.get('run_started_at', 'unknown time')}, "
         if llm_resp and llm_resp.role == "assistant":
             summary_note += (
                 f"I finished this job, here is the result: {llm_resp.completion_text}"
             )
-
         await persist_agent_history(
             self.ctx.conversation_manager,
             event=cron_event,

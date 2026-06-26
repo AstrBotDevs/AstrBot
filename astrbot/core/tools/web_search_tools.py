@@ -69,7 +69,7 @@ class _KeyRotator:
         keys = provider_settings.get(self.setting_name, [])
         if not keys:
             raise ValueError(
-                f"Error: {self.provider_name} API key is not configured in AstrBot."
+                f"Error: {self.provider_name} API key is not configured in AstrBot.",
             )
 
         async with self.lock:
@@ -92,7 +92,7 @@ def normalize_legacy_web_search_config(cfg) -> None:
 
     changed = False
     if provider_settings.get(
-        "websearch_provider"
+        "websearch_provider",
     ) == "default" and provider_settings.get("web_search", False):
         provider_settings["web_search"] = False
         changed = True
@@ -141,7 +141,7 @@ def _search_result_payload(results: list[SearchResult]) -> str:
                 "url": f"{result.url}",
                 "snippet": f"{result.snippet}",
                 "index": index,
-            }
+            },
         )
         _cache_favicon(result.url, result.favicon)
     return json.dumps({"results": ret_ls}, ensure_ascii=False)
@@ -156,27 +156,29 @@ async def _tavily_search(
         "Authorization": f"Bearer {tavily_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
             "https://api.tavily.com/search",
             json=payload,
             headers=header,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Tavily web search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            return [
-                SearchResult(
-                    title=item.get("title"),
-                    url=item.get("url"),
-                    snippet=item.get("content"),
-                    favicon=item.get("favicon"),
-                )
-                for item in data.get("results", [])
-            ]
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"Tavily web search failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        return [
+            SearchResult(
+                title=item.get("title"),
+                url=item.get("url"),
+                snippet=item.get("content"),
+                favicon=item.get("favicon"),
+            )
+            for item in data.get("results", [])
+        ]
 
 
 async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
@@ -185,24 +187,26 @@ async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
         "Authorization": f"Bearer {tavily_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
             "https://api.tavily.com/extract",
             json=payload,
             headers=header,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Tavily web search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            results: list[dict] = data.get("results", [])
-            if not results:
-                raise ValueError(
-                    "Error: Tavily web searcher does not return any results."
-                )
-            return results
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"Tavily web search failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        results: list[dict] = data.get("results", [])
+        if not results:
+            raise ValueError(
+                "Error: Tavily web searcher does not return any results.",
+            )
+        return results
 
 
 async def _bocha_search(
@@ -218,28 +222,30 @@ async def _bocha_search(
         # See: https://github.com/aio-libs/aiohttp/issues/11898
         "Accept-Encoding": "gzip, deflate",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
             "https://api.bochaai.com/v1/web-search",
             json=payload,
             headers=header,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"BoCha web search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            rows = data["data"]["webPages"]["value"]
-            return [
-                SearchResult(
-                    title=item.get("name"),
-                    url=item.get("url"),
-                    snippet=item.get("snippet"),
-                    favicon=item.get("siteIcon"),
-                )
-                for item in rows
-            ]
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"BoCha web search failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        rows = data["data"]["webPages"]["value"]
+        return [
+            SearchResult(
+                title=item.get("name"),
+                url=item.get("url"),
+                snippet=item.get("snippet"),
+                favicon=item.get("siteIcon"),
+            )
+            for item in rows
+        ]
 
 
 async def _brave_search(
@@ -251,27 +257,29 @@ async def _brave_search(
         "Accept": "application/json",
         "X-Subscription-Token": brave_key,
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.get(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.get(
             "https://api.search.brave.com/res/v1/web/search",
             params=payload,
             headers=header,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Brave web search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            rows = data.get("web", {}).get("results", [])
-            return [
-                SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    snippet=item.get("description", ""),
-                )
-                for item in rows
-            ]
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"Brave web search failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        rows = data.get("web", {}).get("results", [])
+        return [
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                snippet=item.get("description", ""),
+            )
+            for item in rows
+        ]
 
 
 async def _firecrawl_search(
@@ -283,35 +291,37 @@ async def _firecrawl_search(
         "Authorization": f"Bearer {firecrawl_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
             "https://api.firecrawl.dev/v2/search",
             json=payload,
             headers=header,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Firecrawl web search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            rows = data.get("data", [])
-            if isinstance(rows, dict):
-                rows = rows.get("web", [])
-            return [
-                SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    snippet=(
-                        item.get("description")
-                        or item.get("snippet")
-                        or item.get("markdown")
-                        or ""
-                    ),
-                )
-                for item in rows
-                if item.get("url")
-            ]
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"Firecrawl web search failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        rows = data.get("data", [])
+        if isinstance(rows, dict):
+            rows = rows.get("web", [])
+        return [
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                snippet=(
+                    item.get("description")
+                    or item.get("snippet")
+                    or item.get("markdown")
+                    or ""
+                ),
+            )
+            for item in rows
+            if item.get("url")
+        ]
 
 
 async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
@@ -320,24 +330,26 @@ async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
         "Authorization": f"Bearer {firecrawl_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
             "https://api.firecrawl.dev/v2/scrape",
             json=payload,
             headers=header,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Firecrawl web scraper failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            result = data.get("data", {})
-            if not result:
-                raise ValueError(
-                    "Error: Firecrawl web scraper does not return any results."
-                )
-            return result
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"Firecrawl web scraper failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        result = data.get("data", {})
+        if not result:
+            raise ValueError(
+                "Error: Firecrawl web scraper does not return any results.",
+            )
+        return result
 
 
 async def _baidu_search(
@@ -353,29 +365,31 @@ async def _baidu_search(
         "X-Appbuilder-Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
+    async with (
+        aiohttp.ClientSession(trust_env=True) as session,
+        session.post(
             "https://qianfan.baidubce.com/v2/ai_search/web_search",
             json=payload,
             headers=headers,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Baidu AI Search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            references = data.get("references", [])
-            return [
-                SearchResult(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    snippet=item.get("content", ""),
-                    favicon=item.get("icon"),
-                )
-                for item in references
-                if item.get("url")
-            ]
+        ) as response,
+    ):
+        if response.status != 200:
+            reason = await response.text()
+            raise Exception(
+                f"Baidu AI Search failed: {reason}, status: {response.status}",
+            )
+        data = await response.json()
+        references = data.get("references", [])
+        return [
+            SearchResult(
+                title=item.get("title", ""),
+                url=item.get("url", ""),
+                snippet=item.get("content", ""),
+                favicon=item.get("icon"),
+            )
+            for item in references
+            if item.get("url")
+        ]
 
 
 @builtin_tool(config=_TAVILY_WEB_SEARCH_TOOL_CONFIG)
@@ -421,7 +435,7 @@ class TavilyWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -480,7 +494,7 @@ class TavilyExtractWebPageTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["url"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -546,7 +560,7 @@ class BochaWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -600,7 +614,7 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -609,10 +623,8 @@ class BraveWebSearchTool(FunctionTool[AstrAgentContext]):
             return "Error: Brave API key is not configured in AstrBot."
 
         count = int(kwargs.get("count", 10))
-        if count < 1:
-            count = 1
-        if count > 20:
-            count = 20
+        count = max(count, 1)
+        count = min(count, 20)
 
         payload = {
             "q": kwargs["query"],
@@ -661,7 +673,7 @@ class FirecrawlWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -715,7 +727,7 @@ class FirecrawlExtractWebPageTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["url"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -775,7 +787,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["query"],
-        }
+        },
     )
 
     async def call(self, context, **kwargs) -> ToolExecResult:
@@ -784,10 +796,8 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
             return "Error: Baidu AI Search API key is not configured in AstrBot."
 
         top_k = int(kwargs.get("top_k", 10))
-        if top_k < 1:
-            top_k = 1
-        if top_k > 50:
-            top_k = 50
+        top_k = max(top_k, 1)
+        top_k = min(top_k, 50)
 
         payload = {
             "messages": [{"role": "user", "content": str(kwargs["query"])[:72]}],
@@ -803,7 +813,7 @@ class BaiduWebSearchTool(FunctionTool[AstrAgentContext]):
         if site:
             sites = [s.strip() for s in site.replace("|", ",").split(",") if s.strip()]
             if sites:
-                payload["search_filter"] = {"match": {"site": sites[:100]}}
+                payload["search_filter"] = {"match": {"site": sites[:100]}}  # type: ignore
 
         results = await _baidu_search(provider_settings, payload)
         if not results:
@@ -1031,6 +1041,7 @@ class ExaGetContentsTool(FunctionTool[AstrAgentContext]):
 
 
 __all__ = [
+    "WEB_SEARCH_TOOL_NAMES",
     "BaiduWebSearchTool",
     "BochaWebSearchTool",
     "BraveWebSearchTool",
@@ -1038,6 +1049,5 @@ __all__ = [
     "ExaWebSearchTool",
     "TavilyExtractWebPageTool",
     "TavilyWebSearchTool",
-    "WEB_SEARCH_TOOL_NAMES",
     "normalize_legacy_web_search_config",
 ]

@@ -1,152 +1,127 @@
 <script setup lang="ts">
-import AuthLogin from '../authForms/AuthLogin.vue';
-import LanguageSwitcher from '@/components/shared/LanguageSwitcher.vue';
-import { computed, onMounted, ref } from 'vue';
-import { useAuthStore } from '@/stores/auth';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { useTheme } from "vuetify";
+import DiamondBg from "@/components/auth/DiamondBg.vue";
+import DailyQuote from "@/components/shared/DailyQuote.vue";
+import LanguageSwitcher from "@/components/shared/LanguageSwitcher.vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { useApiStore } from "@/stores/api";
+import { useAuthStore } from "@/stores/auth";
 import { useCustomizerStore } from "@/stores/customizer";
-import { useModuleI18n } from '@/i18n/composables';
-import { useTheme } from 'vuetify';
-import { authApi, publicApi, type PublicVersionData } from '@/api/v1';
+import axios, { getApiBaseUrlValidationError, normalizeConfiguredApiBaseUrl } from "@/utils/request";
+import { useToast } from "@/utils/toast";
+// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
+import AuthLogin from "../authForms/AuthLogin.vue";
+
+const vuetifyTheme = useTheme();
+const isDark = computed(() => vuetifyTheme.global.name.value === "BlueBusinessDarkTheme");
 
 const cardVisible = ref(false);
 const router = useRouter();
 const authStore = useAuthStore();
+const apiStore = useApiStore();
 const customizer = useCustomizerStore();
-const { tm: t } = useModuleI18n('features/auth');
-const theme = useTheme();
+const { locale } = useI18n();
+const { tm: t } = useModuleI18n("features/auth");
+const toast = useToast();
 const authLoginRef = ref<InstanceType<typeof AuthLogin> | null>(null);
-const publicVersions = ref<PublicVersionData | null>(null);
-const versionDialogVisible = ref(false);
-type VersionItem = { key: string; label: string; value: string };
-type VersionWarning = { key: string; title: string; message: string };
 
-const logoTitle = computed(() => {
-  if (authLoginRef.value?.stage === 'totp' || authLoginRef.value?.stage === 'recovery') {
-    return t('logo.totpTitle');
+const isTotpStage = computed(() => authLoginRef.value?.stage === "totp" || authLoginRef.value?.stage === "recovery");
+
+const logoTitle = computed(() => (isTotpStage.value ? t("logo.totpTitle") : t("logo.title")));
+
+const serverConfigDialog = ref(false);
+const apiUrl = ref(normalizeConfiguredApiBaseUrl(apiStore.apiBaseUrl));
+
+// URL parameter handling for shareable config
+function applyUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  const apiUrlParam = params.get("api_url");
+  const usernameParam = params.get("username");
+  if (apiUrlParam) {
+    const normalized = normalizeConfiguredApiBaseUrl(apiUrlParam);
+    apiUrl.value = normalized;
+    const validationError = getApiBaseUrlValidationError(normalized);
+    if (!validationError) {
+      apiStore.setApiBaseUrl(normalized);
+    }
   }
-  return t('logo.title');
-});
-
-const themeOptions = [
-  { mode: 'light'  as const, icon: 'mdi-white-balance-sunny', labelKey: 'theme.light'  },
-  { mode: 'dark'   as const, icon: 'mdi-weather-night',       labelKey: 'theme.dark'   },
-  { mode: 'system' as const, icon: 'mdi-sync',                labelKey: 'theme.system' },
-] as const;
-
-function setThemeMode(mode: 'light' | 'dark' | 'system') {
-  customizer.SET_THEME_MODE(mode);
-  theme.global.name.value = customizer.uiTheme;
+  if (usernameParam) {
+    window.dispatchEvent(
+      new CustomEvent("astrbot-url-param-username", {
+        detail: { username: usernameParam },
+      }),
+    );
+  }
 }
 
-const currentThemeIcon = computed(() => {
-  if (customizer.themeMode === 'dark') return 'mdi-weather-night';
-  if (customizer.themeMode === 'system') return 'mdi-sync';
-  return 'mdi-white-balance-sunny';
-});
+function getShareableUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("api_url", apiUrl.value);
+  return url.toString();
+}
 
-const versionValues = computed(() => {
-  const versions = publicVersions.value;
-  if (!versions) {
-    return { webui: '', runtime: '', code: '' };
+async function copyShareableUrl() {
+  try {
+    await navigator.clipboard.writeText(getShareableUrl());
+    toast.success(t("linkCopied"));
+  } catch {
+    toast.error(t("linkCopyFailed"));
+  }
+}
+
+const showAddPreset = ref(false);
+const newPresetName = ref("");
+const newPresetUrl = ref("");
+
+function saveApiUrl() {
+  const normalized = normalizeConfiguredApiBaseUrl(apiUrl.value);
+  const validationError = getApiBaseUrlValidationError(normalized);
+  if (validationError) {
+    toast.error(validationError);
+    return;
   }
 
-  return {
-    webui: String(versions.webui_version || '').trim(),
-    runtime: String(versions.astrbot_version || '').trim(),
-    code: String(versions.astrbot_code_version || '').trim(),
-  };
-});
+  apiStore.setApiBaseUrl(normalized);
+  serverConfigDialog.value = false;
+  window.location.reload();
+}
 
-const normalizedVersionValues = computed(() => {
-  return {
-    webui: versionValues.value.webui.replace(/^v/i, ''),
-    runtime: versionValues.value.runtime.replace(/^v/i, ''),
-    code: versionValues.value.code.replace(/^v/i, ''),
-  };
-});
+function savePreset() {
+  if (!newPresetName.value || !newPresetUrl.value) return;
+  apiStore.addPreset({
+    name: newPresetName.value,
+    url: newPresetUrl.value,
+  });
+  showAddPreset.value = false;
+  newPresetName.value = "";
+  newPresetUrl.value = "";
+}
 
-const versionWarnings = computed(() => {
-  const normalized = normalizedVersionValues.value;
-  const warnings: VersionWarning[] = [];
+function isCustomPreset(name: string) {
+  return apiStore.customPresets.some((p) => p.name === name);
+}
 
-  if (normalized.webui && normalized.runtime && normalized.webui !== normalized.runtime) {
-    warnings.push({
-      key: 'webui-runtime',
-      title: t('versions.webuiMismatchTitle'),
-      message: t('versions.webuiMismatchMessage'),
-    });
-  }
-  if (normalized.runtime && normalized.code && normalized.runtime !== normalized.code) {
-    warnings.push({
-      key: 'runtime-code',
-      title: t('versions.runtimeMismatchTitle'),
-      message: t('versions.runtimeMismatchMessage'),
-    });
-  }
-
-  return warnings;
-});
-
-const versionItems = computed(() => {
-  const { webui, runtime, code } = versionValues.value;
-  const normalized = normalizedVersionValues.value;
-  const items: VersionItem[] = [];
-
-  if (webui) {
-    items.push({
-      key: 'webui',
-      label: t('versions.webui'),
-      value: webui,
-    });
-  }
-  if (runtime) {
-    items.push({
-      key: 'astrbot',
-      label: t('versions.astrbotRuntime'),
-      value: runtime,
-    });
-  }
-  if (runtime && code && normalized.runtime !== normalized.code) {
-    items.push({
-      key: 'astrbot-code',
-      label: t('versions.astrbotCode'),
-      value: code,
-    });
-  }
-
-  return items;
-});
+// 主题切换函数
+function toggleTheme() {
+  customizer.TOGGLE_DARK_MODE();
+}
 
 onMounted(async () => {
-  publicApi.versions()
-    .then((res) => {
-      publicVersions.value = res.data?.data || null;
-    })
-    .catch((error) => {
-      if (import.meta.env.DEV) {
-        console.warn('Failed to load public versions:', error);
-      }
-    });
+  // 应用URL参数（用于分享预设配置）
+  applyUrlParams();
 
   // 检查用户是否已登录，如果已登录则重定向
   if (authStore.has_token()) {
-    const onboardingCompleted = await authStore.checkOnboardingCompleted();
-    if (onboardingCompleted) {
-      router.push('/dashboard/default');
-    } else {
-      router.push('/welcome');
-    }
+    router.push(authStore.returnUrl || "/");
     return;
   }
 
   try {
-    const setupStatus = await authApi.setupStatus();
-    if (
-      setupStatus.data?.data?.setup_required &&
-      setupStatus.data?.data?.skip_default_password_auth
-    ) {
-      router.push('/auth/setup');
+    const setupStatus = await axios.get("/api/auth/setup-status");
+    if (setupStatus.data?.data?.setup_required && setupStatus.data?.data?.skip_default_password_auth) {
+      router.push("/auth/setup");
       return;
     }
   } catch {
@@ -162,121 +137,218 @@ onMounted(async () => {
 
 <template>
   <div class="login-page-container">
+    <DiamondBg v-if="isDark" />
     <v-card class="login-card" elevation="1">
-      <v-card-title>
+      <v-card-title :key="locale">
         <div class="d-flex justify-space-between align-center w-100">
-          <img width="80" src="@/assets/images/icon-no-shadow.svg" alt="AstrBot Logo">
+          <img
+            width="80"
+            src="@/assets/images/icon-no-shadow.svg"
+            alt="AstrBot Logo"
+          />
           <div class="d-flex align-center gap-1">
             <LanguageSwitcher />
-            <v-divider vertical class="mx-1"
-              style="height: 24px !important; opacity: 0.9 !important; align-self: center !important; border-color: rgba(var(--v-theme-primary), 0.45) !important;"></v-divider>
+            <v-divider
+              vertical
+              class="mx-1"
+              style="
+                height: 24px !important;
+                opacity: 0.9 !important;
+                align-self: center !important;
+                border-color: rgba(var(--v-theme-primary), 0.45) !important;
+              "
+            />
 
-            <!-- 主题切换下拉菜单 -->
-            <v-menu
-              open-on-click
-              location="bottom center"
-              offset="6"
+            <v-btn
+              icon
+              variant="text"
+              size="small"
+              @click="serverConfigDialog = true"
             >
-              <template v-slot:activator="{ props: themeMenuProps }">
-                <v-btn
-                  v-bind="themeMenuProps"
-                  class="theme-toggle-btn"
-                  icon
-                  variant="text"
-                  size="small"
-                >
-                  <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
-                    {{ currentThemeIcon }}
-                  </v-icon>
-                  <v-tooltip activator="parent" location="top">
-                    {{ t('theme.title') }}
-                  </v-tooltip>
-                </v-btn>
-              </template>
+              <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
+                mdi-server
+              </v-icon>
+              <v-tooltip activator="parent" location="top">
+                {{ t("serverConfig.tooltip") }}
+              </v-tooltip>
+            </v-btn>
 
-              <v-card
-                class="styled-menu-card"
-                style="min-width: 150px"
-                elevation="8"
-                rounded="lg"
-              >
-                <v-list density="compact" class="styled-menu-list pa-1">
-                  <v-list-item
-                    v-for="option in themeOptions"
-                    :key="option.mode"
-                    @click="setThemeMode(option.mode)"
-                    :class="{
-                      'styled-menu-item-active': customizer.themeMode === option.mode,
-                    }"
-                    class="styled-menu-item"
-                    rounded="md"
-                  >
-                    <template v-slot:prepend>
-                      <v-icon size="16" style="margin-right: 8px; opacity: 0.85;">{{ option.icon }}</v-icon>
-                    </template>
-                    <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
-                  </v-list-item>
-                </v-list>
-              </v-card>
-            </v-menu>
+            <v-btn
+              class="theme-toggle-btn"
+              icon
+              variant="text"
+              size="small"
+              @click="toggleTheme"
+            >
+              <v-icon size="18" :color="'rgb(var(--v-theme-primary))'">
+                {{
+                  customizer.isDarkTheme
+                    ? "mdi-weather-night"
+                    : "mdi-white-balance-sunny"
+                }}
+              </v-icon>
+              <v-tooltip activator="parent" location="top">
+                {{
+                  customizer.isDarkTheme
+                    ? t("theme.switchToLight")
+                    : t("theme.switchToDark")
+                }}
+              </v-tooltip>
+            </v-btn>
           </div>
         </div>
-        <div class="ml-2" style="font-size: 26px;">{{ logoTitle }}</div>
-        <div v-if="authLoginRef?.stage !== 'totp' && authLoginRef?.stage !== 'recovery'" class="mt-2 ml-2" style="font-size: 14px; color: grey;">{{ t('logo.subtitle') }}</div>
+        <div class="ml-2" style="font-size: 26px">
+          {{ logoTitle }}
+        </div>
+        <div
+          v-if="!isTotpStage"
+          class="mt-2 ml-2"
+          style="font-size: 14px; color: var(--v-theme-on-surface-variant)"
+        >
+          <DailyQuote />
+        </div>
       </v-card-title>
       <v-card-text>
-        <AuthLogin ref="authLoginRef" />
+        <AuthLogin
+          ref="authLoginRef"
+          @open-server-config="serverConfigDialog = true"
+        />
       </v-card-text>
-      <div v-if="versionItems.length" class="login-version-info">
-        <span v-for="item in versionItems" :key="item.key" class="login-version-item">
-          <span class="login-version-label">{{ item.label }}</span>
-          <span class="login-version-value">{{ item.value }}</span>
-        </span>
-        <v-btn
-          v-if="versionWarnings.length"
-          class="version-help-btn"
-          icon
-          variant="text"
-          size="x-small"
-          :aria-label="t('versions.mismatchTooltip')"
-          @click="versionDialogVisible = true"
-        >
-          <v-icon size="16">mdi-help-circle-outline</v-icon>
-          <v-tooltip activator="parent" location="top">
-            {{ t('versions.mismatchTooltip') }}
-          </v-tooltip>
-        </v-btn>
-      </div>
     </v-card>
-    <v-dialog v-model="versionDialogVisible" max-width="460">
-      <v-card class="version-dialog-card">
-        <v-card-title class="version-dialog-title">
-          <v-icon size="20" color="warning">mdi-alert-circle-outline</v-icon>
-          <span>{{ t('versions.dialogTitle') }}</span>
-        </v-card-title>
-        <v-card-text class="version-dialog-content">
-          <div
-            v-for="warning in versionWarnings"
-            :key="warning.key"
-            class="version-warning-block"
+
+    <v-dialog v-model="serverConfigDialog" max-width="450">
+      <v-card>
+        <v-card-title>{{ t("serverConfig.title") }}</v-card-title>
+        <v-card-text class="pt-0">
+          <div class="text-body-2 text-medium-emphasis mb-4">
+            {{ t("serverConfig.description") }}
+          </div>
+
+          <!-- Presets section -->
+          <div class="mb-4">
+            <div class="d-flex justify-space-between align-center mb-2">
+              <div class="text-caption text-medium-emphasis">
+                {{ t("serverConfig.presetLabel") }}
+              </div>
+            </div>
+
+            <v-chip-group
+              v-if="
+                apiStore.presets.length > 0 || apiStore.customPresets.length > 0
+              "
+              column
+              class="mb-2"
+            >
+              <v-chip
+                v-for="preset in apiStore.presets"
+                :key="preset.name"
+                size="small"
+                :variant="apiUrl === preset.url ? 'flat' : 'tonal'"
+                :color="apiUrl === preset.url ? 'primary' : undefined"
+                :closable="isCustomPreset(preset.name)"
+                @click="apiUrl = preset.url"
+                @click:close="apiStore.removePreset(preset.name)"
+              >
+                {{ preset.name }}
+              </v-chip>
+            </v-chip-group>
+
+            <!-- Add preset inline form -->
+            <div v-if="showAddPreset" class="preset-add-form rounded pa-3 mb-2">
+              <div class="d-flex align-center gap-2 mb-2">
+                <v-text-field
+                  v-model="newPresetName"
+                  :label="t('presetName')"
+                  density="compact"
+                  hide-details
+                  variant="outlined"
+                  class="flex-1"
+                />
+                <v-text-field
+                  v-model="newPresetUrl"
+                  :label="t('presetUrl')"
+                  density="compact"
+                  hide-details
+                  variant="outlined"
+                  class="flex-1"
+                />
+                <v-btn
+                  size="small"
+                  color="primary"
+                  variant="flat"
+                  icon
+                  @click="savePreset"
+                >
+                  <v-icon size="18">mdi-check</v-icon>
+                </v-btn>
+                <v-btn
+                  size="small"
+                  variant="text"
+                  icon
+                  @click="showAddPreset = false"
+                >
+                  <v-icon size="18">mdi-close</v-icon>
+                </v-btn>
+              </div>
+            </div>
+
+            <v-btn
+              v-if="!showAddPreset"
+              size="x-small"
+              variant="tonal"
+              prepend-icon="mdi-plus"
+              @click="showAddPreset = true"
+            >
+              {{ t("addPreset") }}
+            </v-btn>
+          </div>
+
+          <!-- API URL field -->
+          <v-text-field
+            v-model="apiUrl"
+            :label="t('serverConfig.label')"
+            :placeholder="t('serverConfig.placeholder')"
+            :hint="t('serverConfig.hint')"
+            persistent-hint
+            variant="outlined"
+            density="compact"
+            class="mb-3"
+          />
+
+          <!-- Share link button -->
+          <v-btn
+            variant="tonal"
+            size="small"
+            block
+            class="mb-3"
+            prepend-icon="mdi-share-variant"
+            @click="copyShareableUrl"
           >
-            <div class="version-warning-title">{{ warning.title }}</div>
-            <div class="version-warning-message">{{ warning.message }}</div>
+            {{ t("shareLink") }}
+          </v-btn>
+
+          <!-- Auto theme switch -->
+          <div
+            class="d-flex align-center justify-space-between preset-auto-switch"
+          >
+            <div class="text-caption">{{ t("autoTheme") }}</div>
+            <v-switch
+              v-model="customizer.autoSwitchTheme"
+              color="primary"
+              density="compact"
+              hide-details
+              inset
+              @update:model-value="customizer.SET_AUTO_SYNC(Boolean($event))"
+            />
           </div>
         </v-card-text>
-        <v-card-actions class="version-dialog-actions">
-          <v-btn
-            href="https://docs.astrbot.app/faq.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            variant="text"
-            prepend-icon="mdi-help-circle-outline"
-          >
-            {{ t('versions.faq') }}
-          </v-btn>
+        <v-card-actions>
           <v-spacer />
-          <v-btn color="primary" variant="text" @click="versionDialogVisible = false">
-            {{ t('versions.close') }}
+          <v-btn variant="text" @click="serverConfigDialog = false">
+            {{ t("serverConfig.cancel") }}
+          </v-btn>
+          <v-btn color="primary" variant="flat" @click="saveApiUrl">
+            {{ t("serverConfig.save") }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -296,75 +368,65 @@ onMounted(async () => {
   align-items: center;
 }
 
+// Dark mode: radial mask + DiamondBg
+.v-theme--bluebusinessdarktheme .login-page-container {
+  background-color: rgb(var(--v-theme-containerBg));
+  mask-image: radial-gradient(
+    ellipse 60% 70% at 50% 50%,
+    black 30%,
+    transparent 70%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 60% 70% at 50% 50%,
+    black 30%,
+    transparent 70%
+  );
+}
+
+// Light mode: pure white
+.v-theme--bluebusinesstheme .login-page-container {
+  background-color: #ffffff;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+
 .login-card {
   width: 400px;
   padding: 8px;
+  background: var(--v-theme-surface) !important;
+  backdrop-filter: blur(28px) saturate(1.1);
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
+  box-shadow:
+    0 0 80px rgba(var(--v-theme-on-surface), 0.3),
+    0 0 120px rgba(var(--v-theme-on-surface), 0.15),
+    inset 0 0 20px rgba(0, 0, 0, 0.1);
 }
 
-.login-version-info {
-  align-items: center;
-  color: rgba(var(--v-theme-on-surface), 0.56);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  justify-content: center;
-  line-height: 1.45;
-  padding: 0 14px 10px;
-  text-align: center;
-  font-size: 12px;
+// Light mode: clean white card
+.v-theme--bluebusinesstheme .login-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 49, 83, 0.12) !important;
+  box-shadow: 0 4px 24px rgba(0, 49, 83, 0.08) !important;
+  backdrop-filter: none;
 }
 
-.login-version-item {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+// Dark mode: preset add form
+.v-theme--bluebusinessdarktheme .preset-add-form {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(0, 242, 255, 0.15);
 }
 
-.login-version-label {
-  margin-right: 4px;
+// Light mode: preset add form
+.v-theme--bluebusinesstheme .preset-add-form {
+  background: rgba(0, 49, 83, 0.04);
+  border: 1px solid rgba(0, 49, 83, 0.12);
 }
 
-.version-help-btn {
-  color: rgba(var(--v-theme-warning), 0.95);
-  margin-left: -2px;
-}
-
-.version-dialog-card {
-  border-radius: 8px !important;
-}
-
-.version-dialog-title {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  font-size: 17px;
-  line-height: 1.35;
-  padding-bottom: 8px;
-}
-
-.version-dialog-content {
-  padding-top: 4px !important;
-}
-
-.version-warning-block + .version-warning-block {
-  margin-top: 14px;
-}
-
-.version-warning-title {
-  color: rgba(var(--v-theme-on-surface), 0.88);
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.version-warning-message {
-  color: rgba(var(--v-theme-on-surface), 0.68);
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.version-dialog-actions {
-  padding-top: 0;
+// Auto switch row
+.preset-auto-switch {
+  padding: 8px 12px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.02);
 }
 </style>

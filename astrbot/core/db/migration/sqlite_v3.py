@@ -10,14 +10,14 @@ from astrbot.core.db.po import Platform, Stats
 class Conversation:
     """LLM 对话存储
 
-    对于网页聊天，history 存储了包括指令、回复、图片等在内的所有消息。
-    对于其他平台的聊天，不存储非 LLM 的回复（因为考虑到已经存储在各自的平台上）。
+    对于网页聊天,history 存储了包括指令､回复､图片等在内的所有消息｡
+    对于其他平台的聊天,不存储非 LLM 的回复(因为考虑到已经存储在各自的平台上)｡
     """
 
     user_id: str
     cid: str
     history: str = ""
-    """字符串格式的列表。"""
+    """字符串格式的列表｡"""
     created_at: int = 0
     updated_at: int = 0
     title: str = ""
@@ -227,7 +227,9 @@ class SQLiteDatabase:
         return Stats(platform)
 
     def get_conversation_by_user_id(
-        self, user_id: str, cid: str
+        self,
+        user_id: str,
+        cid: str,
     ) -> Conversation | None:
         try:
             c = self.conn.cursor()
@@ -288,7 +290,7 @@ class SQLiteDatabase:
         return conversations
 
     def update_conversation(self, user_id: str, cid: str, history: str) -> None:
-        """更新对话，并且同时更新时间"""
+        """更新对话,并且同时更新时间"""
         updated_at = int(time.time())
         self._exec_sql(
             """
@@ -306,7 +308,10 @@ class SQLiteDatabase:
         )
 
     def update_conversation_persona_id(
-        self, user_id: str, cid: str, persona_id: str
+        self,
+        user_id: str,
+        cid: str,
+        persona_id: str,
     ) -> None:
         self._exec_sql(
             """
@@ -328,7 +333,7 @@ class SQLiteDatabase:
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[dict[str, Any]], int]:
-        """获取所有对话，支持分页，按更新时间降序排序"""
+        """获取所有对话,支持分页,按更新时间降序排序"""
         try:
             c = self.conn.cursor()
         except sqlite3.ProgrammingError:
@@ -344,7 +349,7 @@ class SQLiteDatabase:
             # 计算偏移量
             offset = (page - 1) * page_size
 
-            # 获取分页数据，按更新时间降序排序
+            # 获取分页数据,按更新时间降序排序
             c.execute(
                 """
                 SELECT user_id, cid, created_at, updated_at, title, persona_id
@@ -361,7 +366,7 @@ class SQLiteDatabase:
 
             for row in rows:
                 user_id, cid, created_at, updated_at, title, persona_id = row
-                # 确保 cid 是字符串类型且至少有8个字符，否则使用一个默认值
+                # 确保 cid 是字符串类型且至少有8个字符,否则使用一个默认值
                 safe_cid = str(cid) if cid else "unknown"
                 display_cid = safe_cid[:8] if len(safe_cid) >= 8 else safe_cid
 
@@ -379,7 +384,7 @@ class SQLiteDatabase:
             return conversations, total_count
 
         except Exception as _:
-            # 返回空列表和0，确保即使出错也有有效的返回值
+            # 返回空列表和0,确保即使出错也有有效的返回值
             return [], 0
         finally:
             c.close()
@@ -467,7 +472,7 @@ class SQLiteDatabase:
                 ORDER BY updated_at DESC
                 LIMIT ? OFFSET ?
             """
-            query_params = params + [page_size, offset]
+            query_params = [*params, page_size, offset]
 
             # 获取分页数据
             c.execute(data_sql, query_params)
@@ -477,7 +482,7 @@ class SQLiteDatabase:
 
             for row in rows:
                 user_id, cid, created_at, updated_at, title, persona_id = row
-                # 确保 cid 是字符串类型，否则使用一个默认值
+                # 确保 cid 是字符串类型,否则使用一个默认值
                 safe_cid = str(cid) if cid else "unknown"
                 display_cid = safe_cid[:8] if len(safe_cid) >= 8 else safe_cid
 
@@ -495,7 +500,7 @@ class SQLiteDatabase:
             return conversations, total_count
 
         except Exception as _:
-            # 返回空列表和0，确保即使出错也有有效的返回值
+            # 返回空列表和0,确保即使出错也有有效的返回值
             return [], 0
         finally:
             c.close()

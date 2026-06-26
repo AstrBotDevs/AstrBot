@@ -17,9 +17,9 @@ from astrbot.core.platform import (
     PlatformMetadata,
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.platform.register import register_platform_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-from ...register import register_platform_adapter
 from .message_parts_helper import (
     message_chain_to_storage_message_parts,
     parse_webchat_message_parts,
@@ -89,7 +89,7 @@ class WebChatAdapter(Platform):
     ) -> None:
         conversation_id = _extract_conversation_id(session.session_id)
         active_request_ids = self._webchat_queue_mgr.list_back_request_ids(
-            conversation_id
+            conversation_id,
         )
         stream_request_ids = [
             req_id for req_id in active_request_ids if not req_id.startswith("ws_sub_")
@@ -154,7 +154,8 @@ class WebChatAdapter(Platform):
         )
 
     async def _get_message_history(
-        self, message_id: int
+        self,
+        message_id: int,
     ) -> PlatformMessageHistory | None:
         return await db_helper.get_platform_message_history_by_id(message_id)
 
@@ -173,6 +174,7 @@ class WebChatAdapter(Platform):
 
         Returns:
             tuple[list, list[str]]: (消息组件列表, 纯文本列表)
+
         """
 
         async def get_reply_parts(
@@ -235,15 +237,7 @@ class WebChatAdapter(Platform):
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    def create_event(self, message: AstrBotMessage) -> WebChatMessageEvent:
-        """Creates a WebChat message event.
-
-        Args:
-            message: AstrBot message object to wrap.
-
-        Returns:
-            Created WebChat message event.
-        """
+    async def handle_msg(self, message: AstrBotMessage) -> None:
         message_event = WebChatMessageEvent(
             message_str=message.message_str,
             message_obj=message,
@@ -251,29 +245,21 @@ class WebChatAdapter(Platform):
             session_id=message.session_id,
         )
 
-        raw_message = getattr(message, "raw_message", None)
-        if isinstance(raw_message, tuple) and len(raw_message) >= 3:
-            payload = raw_message[2]
-            if isinstance(payload, dict):
-                message_event.set_extra(
-                    "selected_provider", payload.get("selected_provider")
-                )
-                message_event.set_extra("selected_model", payload.get("selected_model"))
-                message_event.set_extra(
-                    "enable_streaming", payload.get("enable_streaming", True)
-                )
-                message_event.set_extra("action_type", payload.get("action_type"))
-                message_event.set_extra(
-                    "llm_checkpoint_id", payload.get("llm_checkpoint_id")
-                )
-                message_event.set_extra(
-                    "thread_selected_text", payload.get("thread_selected_text")
-                )
+        _, _, payload = message.raw_message  # type: ignore
+        message_event.set_extra("selected_provider", payload.get("selected_provider"))
+        message_event.set_extra("selected_model", payload.get("selected_model"))
+        message_event.set_extra(
+            "enable_streaming",
+            payload.get("enable_streaming", True),
+        )
+        message_event.set_extra("action_type", payload.get("action_type"))
+        message_event.set_extra("llm_checkpoint_id", payload.get("llm_checkpoint_id"))
+        message_event.set_extra(
+            "thread_selected_text",
+            payload.get("thread_selected_text"),
+        )
 
-        return message_event
-
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        self.commit_event(self.create_event(message))
+        self.commit_event(message_event)
 
     async def terminate(self) -> None:
         self._shutdown_event.set()

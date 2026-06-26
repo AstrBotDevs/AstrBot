@@ -1,63 +1,24 @@
 {
-  "page": {
-    "title": "Settings"
-  },
-  "sections": {
-    "general": {
-      "title": "General"
-    },
-    "appearance": {
-      "title": "Appearance"
-    },
-    "network": {
-      "title": "Network"
-    },
-    "security": {
-      "title": "Security"
-    },
-    "maintenance": {
-      "title": "Maintenance"
-    },
-    "openapi": {
-      "title": "OpenAPI"
-    }
-  },
-  "systemConfig": {
-    "restartRequired": "System config saved. Some changes only take effect after restarting AstrBot.",
-    "groups": {
-      "runtime": {
-        "title": "Runtime Basics",
-        "subtitle": "Timezone and externally reachable callback URL."
-      },
-      "network": {
-        "title": "Proxy & Dependency Sources",
-        "subtitle": "Runtime proxy, Python dependency install options, and PyPI source."
-      },
-      "webuiSecurity": {
-        "title": "WebUI Security",
-        "subtitle": "HTTPS, trusted proxy headers, login rate limits, and TOTP."
-      },
-      "logs": {
-        "title": "Logs",
-        "subtitle": "Console logs, file logs, and Trace file logging."
-      },
-      "tempStorage": {
-        "title": "Cache",
-        "subtitle": "Automatic cleanup threshold for the temporary directory."
-      },
-      "t2iRendering": {
-        "title": "Text-to-Image",
-        "subtitle": "Rendering strategy, endpoint, and custom templates for text-to-image."
-      }
-    },
-    "messages": {
-      "loadFailed": "Failed to load system config",
-      "saveSuccess": "System config saved",
-      "saveFailed": "Failed to save system config"
-    }
-  },
   "network": {
     "title": "Network",
+    "proxy": {
+      "title": "Proxy",
+      "subtitle": "Configure proxy for network requests"
+    },
+    "server": {
+      "title": "Server Address",
+      "subtitle": "Configure backend API URL",
+      "label": "API Base URL",
+      "placeholder": "e.g. http://localhost:6185",
+      "hint": "Empty for default (relative path)",
+      "save": "Save & Reload",
+      "presets": "Presets",
+      "preset": {
+        "add": "Add Preset",
+        "name": "Name",
+        "url": "URL"
+      }
+    },
     "githubProxy": {
       "title": "GitHub Proxy Address",
       "subtitle": "Set the GitHub proxy address used when downloading plugins or updating AstrBot. This is effective in mainland China's network environment. Can be customized, input takes effect in real time. All addresses do not guarantee stability. If errors occur when updating plugins/projects, please first check if the proxy address is working properly.",
@@ -78,18 +39,39 @@
     "subtitle": "Customize theme primary and secondary colors. Changes apply immediately and are stored locally in your browser.",
     "customize": {
       "title": "Theme Colors",
+      "colors": "Custom Colors",
+      "preset": "Color Scheme",
       "primary": "Primary Color",
       "secondary": "Secondary Color",
-      "reset": "Reset to Default"
+      "reset": "Reset to Default",
+      "presetApplied": "Theme applied",
+      "light": "Light Mode",
+      "dark": "Dark Mode",
+      "auto": "System Mode",
+      "autoSwitchDesc": "Theme will automatically switch based on your browser's appearance setting when enable system mode"
     }
+  },
+  "reset": {
+    "title": "Reset to Default",
+    "subtitle": "Reset theme colors to default settings",
+    "button": "Reset"
   },
   "system": {
     "title": "System",
     "restart": {
       "title": "Restart",
       "subtitle": "Restart AstrBot",
-      "confirm": "Restart AstrBot now? The WebUI may be temporarily unavailable during restart.",
       "button": "Restart"
+    },
+    "logout": {
+      "title": "Log Out",
+      "subtitle": "Log out of the current account",
+      "button": "Log Out"
+    },
+    "migration": {
+      "title": "Data Migration to v4.0.0",
+      "subtitle": "If you encounter data compatibility issues, you can manually start the database migration assistant",
+      "button": "Start Migration Assistant"
     },
     "backup": {
       "title": "Backup & Restore",
@@ -100,7 +82,6 @@
       "title": "Log & Cache Cleanup",
       "subtitle": "Review disk usage for logs and caches, then clean them from the UI without shell commands.",
       "refresh": "Refresh Usage",
-      "clean": "Clean",
       "cleanAll": "Clean All",
       "panel": {
         "title": "Cleanup Details",
@@ -143,6 +124,10 @@
     }
   },
   "backup": {
+    "title": "Backup",
+    "subtitle": "Manage data backups",
+    "operate": "Backup Operations",
+    "open": "Open Backup Manager",
     "dialog": {
       "title": "Backup Manager"
     },
@@ -153,8 +138,8 @@
     },
     "export": {
       "title": "Create Backup",
-      "description": "Export all data as a ZIP backup file, including database, knowledge base, config, attachments and skills.",
-      "includes": "Backup includes: Main database, Knowledge bases (metadata + vector index + documents), Config files, Attachment files, Skills",
+      "description": "Export all data as a ZIP backup file, including database, knowledge base, config and attachments.",
+      "includes": "Backup includes: Main database, Knowledge bases (metadata + vector index + documents), Config files, Attachment files",
       "button": "Start Export",
       "processing": "Exporting...",
       "wait": "Please wait, packaging data...",
@@ -194,9 +179,9 @@
         "currentVersion": "Current Version",
         "backupTime": "Backup Time",
         "matchTitle": "✅ Version Match",
-        "matchMessage": "Import will clear and overwrite all existing data, including:\n• Main database (conversations, settings, etc.)\n• Knowledge bases\n• Plugins and plugin data\n• Configuration files\n• Skills\n\nThis action cannot be undone! Do you want to continue?",
+        "matchMessage": "Import will clear and overwrite all existing data, including:\n• Main database (conversations, settings, etc.)\n• Knowledge bases\n• Plugins and plugin data\n• Configuration files\n\nThis action cannot be undone! Do you want to continue?",
         "minorDiffTitle": "⚠️ Version Difference Warning",
-        "minorDiffMessage": "Minor version differences can usually be imported, but there may be some data structure changes.\nImport will clear and overwrite all existing data!\n\nDo you want to continue?",
+        "minorDiffMessage": "Minor version differences are usually compatible, but there may be some data structure changes.\nImport will clear and overwrite all existing data!\n\nDo you want to continue?",
         "majorDiffTitle": "⛔ Cannot Import",
         "majorDiffMessage": "Major version numbers are different. Cross-major-version import may cause data corruption.\nPlease use the same major version of AstrBot for import."
       }
@@ -223,6 +208,14 @@
     "subtitle": "Create API keys for external developers to call open HTTP APIs.",
     "name": "Key Name",
     "expiresInDays": "Expiration",
+    "expiry": {
+      "7days": "7 days",
+      "30days": "30 days",
+      "90days": "90 days",
+      "180days": "180 days",
+      "365days": "365 days",
+      "permanent": "Permanent"
+    },
     "expiryOptions": {
       "day1": "1 day",
       "day7": "7 days",

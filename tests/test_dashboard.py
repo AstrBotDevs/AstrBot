@@ -373,8 +373,6 @@ async def _restore_dashboard_password_state(
         core_lifecycle_td.astrbot_config,
         bool(dashboard_config.get("pbkdf2_password")),
     )
-
-
 @pytest_asyncio.fixture(scope="module")
 async def authenticated_header(
     app: FastAPIAppAdapter, core_lifecycle_td: AstrBotCoreLifecycle
@@ -385,11 +383,12 @@ async def authenticated_header(
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+
             "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
     data = await response.get_json()
-    assert data["status"] == "ok"
+    assert data["status"] == "ok", str(data)
     token = data["data"]["token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -415,6 +414,7 @@ async def test_auth_login(
         "/api/auth/login",
         json={
             "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+
             "password": _resolve_dashboard_password(core_lifecycle_td),
         },
     )
@@ -3255,7 +3255,7 @@ async def test_batch_upload_skills_accepts_valid_skill_archive(
         _fake_sync_skills_to_active_sandboxes,
     )
     monkeypatch.setattr(
-        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        "astrbot.core.utils.astrbot_path.get_astrbot_data_path",
         lambda: str(data_dir),
     )
     monkeypatch.setattr(

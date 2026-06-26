@@ -1,25 +1,27 @@
-import { defineStore } from 'pinia';
-import config, { type ThemeMode, resolveUiTheme } from '@/config';
+import { defineStore } from "pinia";
+import config from "@/config";
+import vuetify from "@/plugins/vuetify";
+import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
 
-const DARK_THEMES: ReadonlySet<string> = new Set(['PurpleThemeDark']);
+const DARK_THEMES: ReadonlySet<string> = new Set([DARK_THEME_NAME]);
 
-
-export const useCustomizerStore = defineStore('customizer', {
+export const useCustomizerStore = defineStore("customizer", {
   state: () => ({
     Sidebar_drawer: config.Sidebar_drawer,
     Customizer_drawer: config.Customizer_drawer,
     mini_sidebar: config.mini_sidebar,
-    fontTheme: 'Noto Sans SC',
+    fontTheme: "Poppins",
     uiTheme: config.uiTheme,
-    themeMode: config.themeMode as ThemeMode,
     inputBg: config.inputBg,
+    viewMode: (localStorage.getItem("viewMode") as "bot" | "chat") || "bot", // 'bot' 或 'chat'
     chatSidebarOpen: false, // chat mode mobile sidebar state
+    autoSwitchTheme: localStorage.getItem("autoSwitchTheme") === "true", // 自动同步主题
   }),
 
   getters: {
-    isDark: (state) => state.uiTheme ? DARK_THEMES.has(state.uiTheme) : false,
+    isDarkTheme: (state) => state.uiTheme === DARK_THEME_NAME,
+    isDark: (state) => (state.uiTheme ? DARK_THEMES.has(state.uiTheme) : false),
   },
-
   actions: {
     SET_SIDEBAR_DRAWER() {
       this.Sidebar_drawer = !this.Sidebar_drawer;
@@ -30,23 +32,36 @@ export const useCustomizerStore = defineStore('customizer', {
     SET_FONT(payload: string) {
       this.fontTheme = payload;
     },
-
     SET_UI_THEME(payload: string) {
       this.uiTheme = payload;
-      localStorage.setItem('uiTheme', payload);
-      const mode: ThemeMode = payload === 'PurpleThemeDark' ? 'dark' : 'light';
-      this.themeMode = mode;
-      localStorage.setItem('themeMode', mode);
-    },
+      localStorage.setItem("uiTheme", payload);
 
-    SET_THEME_MODE(mode: ThemeMode) {
-      this.themeMode = mode;
-      localStorage.setItem('themeMode', mode);
-      const uiTheme = resolveUiTheme(mode);
-      this.uiTheme = uiTheme;
-      localStorage.setItem('uiTheme', uiTheme);
+      if (typeof vuetify.theme?.change === "function") {
+        vuetify.theme.change(payload);
+      } else if (vuetify.theme?.global) {
+        vuetify.theme.global.name.value = payload;
+      }
     },
-
+    SET_VIEW_MODE(payload: "bot" | "chat") {
+      this.viewMode = payload;
+      localStorage.setItem("viewMode", payload);
+    },
+    SET_AUTO_SYNC(payload: boolean) {
+      this.autoSwitchTheme = payload;
+      localStorage.setItem("autoSwitchTheme", String(payload));
+    },
+    // 手动切换主题（同时关闭自动同步）
+    TOGGLE_DARK_MODE() {
+      this.SET_AUTO_SYNC(false);
+      const newTheme = this.isDarkTheme ? LIGHT_THEME_NAME : DARK_THEME_NAME;
+      this.SET_UI_THEME(newTheme);
+    },
+    // 应用系统主题（用于自动同步）
+    APPLY_SYSTEM_THEME() {
+      if (typeof window === "undefined") return;
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      this.SET_UI_THEME(prefersDark ? DARK_THEME_NAME : LIGHT_THEME_NAME);
+    },
     TOGGLE_CHAT_SIDEBAR() {
       this.chatSidebarOpen = !this.chatSidebarOpen;
     },

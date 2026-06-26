@@ -1,12 +1,19 @@
 import json
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import Column, Text, bindparam
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.dialects import sqlite
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.schema import CreateTable
 from sqlmodel import Field, MetaData, SQLModel, col, func, select, text
 
 from astrbot.core import logger
@@ -27,7 +34,7 @@ class BaseDocModel(SQLModel, table=False):
 class Document(BaseDocModel, table=True):
     """SQLModel for documents table."""
 
-    __tablename__ = "documents"  # type: ignore
+    __tablename__ = "documents"
 
     id: int | None = Field(
         default=None,
@@ -46,7 +53,7 @@ class DocumentStorage:
         self.db_path = db_path
         self.DATABASE_URL = f"sqlite+aiosqlite:///{db_path}"
         self.engine: AsyncEngine | None = None
-        self.async_session_maker: sessionmaker | None = None
+        self.async_session_maker: async_sessionmaker[AsyncSession] | None = None
         self.sqlite_init_path = os.path.join(
             os.path.dirname(__file__),
             "sqlite_init.sql",
@@ -59,9 +66,9 @@ class DocumentStorage:
     async def initialize(self) -> None:
         """Initialize the SQLite database and create the documents table if it doesn't exist."""
         await self.connect()
-        async with self.engine.begin() as conn:  # type: ignore
-            # Create tables using SQLModel
-            await conn.run_sync(BaseDocModel.metadata.create_all)
+        assert self.engine is not None, "Database connection is not initialized."
+        async with self.engine.begin() as conn:
+            await self._ensure_documents_table(conn)
 
             try:
                 await conn.execute(
@@ -99,6 +106,56 @@ class DocumentStorage:
 
             await self._initialize_fts5(conn)
             await conn.commit()
+
+    async def _ensure_documents_table(self, executor) -> None:
+        """Create the document table from the SQLModel definition."""
+        result = await executor.execute(
+            text(
+                """
+                SELECT 1
+                FROM sqlite_master
+                WHERE type='table' AND name=:table_name
+                LIMIT 1
+                """,
+            ),
+            {"table_name": Document.__tablename__},
+        )
+        if result.scalar_one_or_none() is not None:
+            await self._ensure_doc_id_unique_index(executor)
+            return
+
+        create_table = CreateTable(Document.__table__, if_not_exists=True)  # type: ignore[attr-defined]
+
+        await executor.execute(
+            text(str(create_table.compile(dialect=sqlite.dialect()))),
+        )
+        await self._ensure_doc_id_unique_index(executor)
+
+    async def _ensure_doc_id_unique_index(self, executor) -> None:
+        duplicate_result = await executor.execute(
+            text(
+                """
+                SELECT doc_id
+                FROM documents
+                GROUP BY doc_id
+                HAVING COUNT(*) > 1
+                LIMIT 1
+                """,
+            ),
+        )
+        if duplicate_result.scalar_one_or_none() is not None:
+            logger.warning(
+                "Skipping documents.doc_id unique index migration because duplicate "
+                f"doc_id values already exist in {self.db_path}.",
+            )
+            return
+
+        await executor.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "idx_documents_doc_id_unique ON documents(doc_id)",
+            ),
+        )
 
     async def _initialize_fts5(self, executor) -> None:
         try:
@@ -204,16 +261,18 @@ class DocumentStorage:
                 echo=False,
                 future=True,
             )
-            self.async_session_maker = sessionmaker(
-                self.engine,  # type: ignore
-                class_=AsyncSession,
+            self.async_session_maker = async_sessionmaker(
+                self.engine,
                 expire_on_commit=False,
-            )  # type: ignore
+            )
 
     @asynccontextmanager
-    async def get_session(self):
+    async def get_session(self) -> AsyncIterator[AsyncSession]:
         """Context manager for database sessions."""
-        async with self.async_session_maker() as session:  # type: ignore
+        assert self.async_session_maker is not None, (
+            "Database session maker is not initialized."
+        )
+        async with self.async_session_maker() as session:
             yield session
 
     @property
@@ -300,9 +359,10 @@ class DocumentStorage:
             )
             session.add(document)
             await session.flush()  # Flush to get the ID
+            assert document.id is not None, "Inserted document ID was not generated."
             if document.id is not None:
                 await self._insert_fts_row(session, int(document.id), text)
-            return document.id  # type: ignore
+            return document.id
 
     async def insert_documents_batch(
         self,
@@ -326,8 +386,8 @@ class DocumentStorage:
         async with self.get_session() as session, session.begin():
             import json
 
-            documents = []
-            for doc_id, text, metadata in zip(doc_ids, texts, metadatas):
+            documents: list[Document] = []
+            for doc_id, text, metadata in zip(doc_ids, texts, metadatas, strict=False):
                 document = Document(
                     doc_id=doc_id,
                     text=text,
@@ -339,8 +399,14 @@ class DocumentStorage:
                 session.add(document)
 
             await session.flush()  # Flush to get all IDs
+            document_ids: list[int] = []
+            for document in documents:
+                assert document.id is not None, (
+                    "Inserted document ID was not generated."
+                )
+                document_ids.append(document.id)
             await self._insert_fts_rows_batch(session, documents, texts)
-            return [doc.id for doc in documents]  # type: ignore
+            return document_ids
 
     async def delete_document_by_doc_id(self, doc_id: str) -> None:
         """Delete a document by its doc_id.
@@ -628,7 +694,7 @@ class DocumentStorage:
                 "rowid": int(doc.id),
                 "search_text": to_fts5_search_text(content, self.stopwords),
             }
-            for doc, content in zip(documents, contents)
+            for doc, content in zip(documents, contents, strict=False)
             if doc.id is not None
         ]
         if not fts_params:
@@ -735,7 +801,7 @@ class DocumentStorage:
 
         result = await session.execute(
             text(
-                f"SELECT rowid FROM {FTS_TABLE_NAME} WHERE rowid IN :rowids"
+                f"SELECT rowid FROM {FTS_TABLE_NAME} WHERE rowid IN :rowids",
             ).bindparams(bindparam("rowids", expanding=True)),
             {"rowids": rowids},
         )

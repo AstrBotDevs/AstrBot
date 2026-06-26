@@ -1,34 +1,21 @@
-"""Tencent Silk audio conversion helpers."""
-
 import asyncio
+import base64
 import os
 import subprocess
+import tempfile
 import wave
 from io import BytesIO
 
+import anyio
+import pysilk  # requires silk-python (core dependency)
+
 from astrbot.core import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
-    """Decode a Tencent Silk file to 24 kHz mono PCM WAV.
-
-    Args:
-        silk_path: Input Tencent Silk file path.
-        output_path: Output WAV file path.
-
-    Returns:
-        The output WAV file path.
-
-    Raises:
-        ImportError: Raised when ``silk-python`` is not installed.
-        pysilk.SilkError: Raised when the Silk payload cannot be decoded.
-        OSError: Raised when input or output files cannot be accessed.
-    """
-    import pysilk
-
-    with open(silk_path, "rb") as f:
-        input_data = f.read()
-        # QQ/Tencent voice payloads may include a leading 0x02 marker before SILK.
+    async with await anyio.open_file(silk_path, "rb") as f:
+        input_data = await f.read()
         if input_data.startswith(b"\x02"):
             input_data = input_data[1:]
         input_io = BytesIO(input_data)
@@ -45,54 +32,41 @@ async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
 
 
 async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
-    """Encode a WAV file to Tencent Silk.
-
-    Args:
-        wav_path: Input WAV file path.
-        output_path: Output Tencent Silk file path.
-
-    Returns:
-        Audio duration in seconds.
-
-    Raises:
-        Exception: Raised when ``silk-python`` is not installed.
-        OSError: Raised when input or output files cannot be accessed.
-        wave.Error: Raised when the input file is not a readable WAV file.
-    """
+    """返回 duration"""
     try:
-        import pysilk
-    except (ImportError, ModuleNotFoundError) as e:
+        import pilk
+    except (ImportError, ModuleNotFoundError) as _:
         raise Exception(
-            "pysilk is not installed. Install the silk-python package from the "
-            "dashboard platform logs page.",
-        ) from e
+            "pilk 模块未安装,请前往管理面板->平台日志->安装pip库 安装 pilk 这个库",
+        ) from None
+    # with wave.open(wav_path, 'rb') as wav:
+    #     wav_data = wav.readframes(wav.getnframes())
+    #     wav_data = BytesIO(wav_data)
+    #     output_io = BytesIO()
+    #     pysilk.encode(wav_data, output_io, 24000, 24000)
+    #     output_io.seek(0)
 
+    #     # 在首字节添加 \x02,去除结尾的\xff\xff
+    #     silk_data = output_io.read()
+    #     silk_data_with_prefix = b'\x02' + silk_data[:-2]
+
+    #     # return BytesIO(silk_data_with_prefix)
+    #     with open(output_path, "wb") as f:
+    #         f.write(silk_data_with_prefix)
+
+    #     return 0
     with wave.open(wav_path, "rb") as wav:
         rate = wav.getframerate()
-        frames = wav.getnframes()
-        pcm_data = wav.readframes(frames)
+        frame_count = wav.getnframes()
+        fallback_duration = frame_count / rate if rate else 0
 
-    input_io = BytesIO(pcm_data)
-    output_io = BytesIO()
-    # tencent=True makes pysilk emit the QQ-compatible 0x02-prefixed SILK stream.
-    pysilk.encode(input_io, output_io, rate, rate, tencent=True)
-    with open(output_path, "wb") as f:
-        f.write(output_io.getvalue())
-    return frames / rate if rate else 0
+    duration = pilk.encode(wav_path, output_path, pcm_rate=rate, tencent=True)
+    return duration or fallback_duration
 
 
 async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
-    """Convert an audio file to 24 kHz mono 16-bit PCM WAV.
-
-    Args:
-        input_path: Source audio file path.
-        output_path: Destination WAV file path.
-
-    Returns:
-        The output WAV file path.
-
-    Raises:
-        RuntimeError: Raised when conversion does not produce a non-empty WAV file.
+    """将 MP3 或其他音频格式转换为 PCM 16bit WAV,采样率24000Hz,单声道｡
+    若转换失败则抛出异常｡
     """
     try:
         from pyffmpeg import FFmpeg
@@ -100,13 +74,8 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
         ff = FFmpeg()
         ff.convert(input_file=input_path, output_file=output_path)
     except Exception as e:
-        logger.debug(
-            "pyffmpeg conversion failed: %s. Falling back to ffmpeg CLI.",
-            e,
-        )
+        logger.debug(f"pyffmpeg 转换失败: {e}, 尝试使用 ffmpeg 命令行进行转换")
 
-        # FFmpeg normalizes arbitrary audio input to the PCM WAV format required
-        # by Tencent Silk encoding.
         p = await asyncio.create_subprocess_exec(
             "ffmpeg",
             "-y",
@@ -132,6 +101,75 @@ async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
         logger.debug(f"[FFmpeg] stderr: {stderr.decode().strip()}")
         logger.info(f"[FFmpeg] return code: {p.returncode}")
 
-    if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+    if (
+        await anyio.Path(output_path).exists()
+        and (await anyio.Path(output_path).stat()).st_size > 0
+    ):
         return output_path
-    raise RuntimeError("Converted WAV file is missing or empty")
+    raise RuntimeError("生成的WAV文件不存在或为空")
+
+
+async def audio_to_tencent_silk_base64(audio_path: str) -> tuple[str, float]:
+    """将 MP3/WAV 文件转为 Tencent Silk 并返回 base64 编码与时长(秒)｡
+
+    参数:
+    - audio_path: 输入音频文件路径(.mp3 或 .wav)
+
+    返回:
+    - silk_b64: Base64 编码的 Silk 字符串
+    - duration: 音频时长(秒)
+    """
+    try:
+        import pilk
+    except ImportError as e:
+        raise Exception("未安装 pilk: pip install pilk") from e  # noqa
+
+    temp_dir = get_astrbot_temp_path()
+    await anyio.Path(temp_dir).mkdir(parents=True, exist_ok=True)
+
+    # 是否需要转换为 WAV
+    ext = os.path.splitext(audio_path)[1].lower()
+    temp_wav = tempfile.NamedTemporaryFile(
+        prefix="tencent_record_",
+        suffix=".wav",
+        delete=False,
+        dir=temp_dir,
+    ).name
+
+    if ext != ".wav":
+        await convert_to_pcm_wav(audio_path, temp_wav)
+        # 删除原文件
+        await anyio.Path(audio_path).unlink()
+        wav_path = temp_wav
+    else:
+        wav_path = audio_path
+
+    with wave.open(wav_path, "rb") as wav_file:
+        rate = wav_file.getframerate()
+
+    silk_path = tempfile.NamedTemporaryFile(
+        prefix="tencent_record_",
+        suffix=".silk",
+        delete=False,
+        dir=temp_dir,
+    ).name
+
+    try:
+        duration = await asyncio.to_thread(
+            pilk.encode,
+            wav_path,
+            silk_path,
+            pcm_rate=rate,
+            tencent=True,
+        )
+
+        async with await anyio.open_file(silk_path, "rb") as f:
+            silk_bytes = await f.read()
+            silk_b64 = base64.b64encode(silk_bytes).decode("utf-8")
+
+        return silk_b64, duration  # 已是秒
+    finally:
+        if await anyio.Path(wav_path).exists() and wav_path != audio_path:
+            await anyio.Path(wav_path).unlink()
+        if await anyio.Path(silk_path).exists():
+            await anyio.Path(silk_path).unlink()

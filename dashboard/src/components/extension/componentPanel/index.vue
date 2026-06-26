@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 组件管理页面 - 主入口
- * 
+ *
  * 模块化结构：
  * - types.ts: 类型定义
  * - composables/useComponentData.ts: 数据获取和状态管理
@@ -12,47 +12,38 @@
  * - components/RenameDialog.vue: 重命名对话框
  * - components/DetailsDialog.vue: 详情对话框
  */
-import { onMounted, ref, watch } from 'vue';
-import { useModuleI18n } from '@/i18n/composables';
-
-// Composables
-import { useComponentData } from './composables/useComponentData';
-import { useCommandFilters } from './composables/useCommandFilters';
-import { useCommandActions } from './composables/useCommandActions';
-import { useToolActions } from './composables/useToolActions';
-
+import { computed, onActivated, onMounted, ref, watch } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { normalizeTextInput } from "@/utils/inputValue";
+import axios from "@/utils/request";
 // Components
-import CommandFilters from './components/CommandFilters.vue';
-import CommandTable from './components/CommandTable.vue';
-import ToolTable from './components/ToolTable.vue';
-import RenameDialog from './components/RenameDialog.vue';
-import DetailsDialog from './components/DetailsDialog.vue';
+import CommandFilters from "./components/CommandFilters.vue";
+import CommandTable from "./components/CommandTable.vue";
+import DetailsDialog from "./components/DetailsDialog.vue";
+import RenameDialog from "./components/RenameDialog.vue";
+import ToolTable from "./components/ToolTable.vue";
+import { useCommandActions } from "./composables/useCommandActions";
+import { useCommandFilters } from "./composables/useCommandFilters";
+// Composables
+import { useComponentData } from "./composables/useComponentData";
 
 // Types
-import type { CommandItem, ToolItem } from './types';
+import type { CommandItem, ToolItem } from "./types";
 
-defineOptions({ name: 'ComponentPanel' });
+defineOptions({ name: "ComponentPanel" });
 const props = withDefaults(defineProps<{ active?: boolean }>(), {
-  active: true
+  active: true,
 });
 
-const { tm } = useModuleI18n('features/command');
-const { tm: tmTool } = useModuleI18n('features/tooluse');
+const { tm } = useModuleI18n("features/command");
+const { tm: tmTool } = useModuleI18n("features/tooluse");
 
-const viewMode = ref<'commands' | 'tools'>('commands');
+const viewMode = ref<"commands" | "tools">("commands");
+const toolSearch = ref("");
 
 // 数据管理
-const { 
-  loading, 
-  commands, 
-  tools,
-  toolsLoading,
-  summary, 
-  snackbar, 
-  toast, 
-  fetchCommands,
-  fetchTools 
-} = useComponentData();
+const { loading, commands, tools, toolsLoading, summary, snackbar, toast, fetchCommands, fetchTools } =
+  useComponentData();
 
 // 过滤逻辑
 const {
@@ -67,7 +58,7 @@ const {
   effectiveShowSystemPlugins,
   availablePlugins,
   filteredCommands,
-  toggleGroupExpand
+  toggleGroupExpand,
 } = useCommandFilters(commands);
 
 // 操作方法
@@ -78,63 +69,82 @@ const {
   updatePermission,
   openRenameDialog,
   confirmRename,
-  openDetailsDialog
-} = useCommandActions(toast, () => fetchCommands(tm('messages.loadFailed')));
+  openDetailsDialog,
+} = useCommandActions(toast, () => fetchCommands(tm("messages.loadFailed")));
 
-// 工具操作方法
-const {
-  toolSearch,
-  showBuiltinTools,
-  filteredTools,
-  toolSummary,
-  toggleTool,
-  updateToolPermission,
-} = useToolActions(tools, toast);
+const filteredTools = computed(() => {
+  const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
+  if (!query) return tools.value;
+  return tools.value.filter(
+    (tool) => tool.name?.toLowerCase().includes(query) || tool.description?.toLowerCase().includes(query),
+  );
+});
 
 // 处理切换指令状态
 const handleToggleCommand = async (cmd: CommandItem) => {
-  await toggleCommand(cmd, tm('messages.toggleSuccess'), tm('messages.toggleFailed'));
+  await toggleCommand(cmd, tm("messages.toggleSuccess"), tm("messages.toggleFailed"));
 };
 
-const handleUpdatePermission = async (cmd: CommandItem, permission: 'admin' | 'member') => {
-  await updatePermission(cmd, permission, tm('messages.updateSuccess'), tm('messages.updateFailed'));
+const handleUpdatePermission = async (cmd: CommandItem, permission: "admin" | "member") => {
+  await updatePermission(cmd, permission, tm("messages.updateSuccess"), tm("messages.updateFailed"));
 };
 
 const handleToggleTool = async (tool: ToolItem) => {
-  await toggleTool(tool, tmTool('messages.toggleToolReadonly'), tmTool('messages.toggleToolSuccess'), tmTool('messages.toggleToolError', { error: '' }));
-};
-
-const handleUpdateToolPermission = async (tool: ToolItem, permission: 'admin' | 'member') => {
-  await updateToolPermission(tool, permission, tmTool('messages.updateToolPermissionSuccess', { name: tool.name }), tmTool('messages.updateToolPermissionBuiltin'), tmTool('messages.updateToolPermissionFailed'));
+  const previous = tool.active;
+  tool.active = !tool.active;
+  try {
+    const res = await axios.post("/api/tools/toggle-tool", {
+      tool_key: tool.tool_key,
+      name: tool.name,
+      activate: tool.active,
+      runtime_kind: tool.runtime_kind,
+      plugin_id: tool.plugin_id,
+    });
+    if (res.data.status === "ok") {
+      toast(res.data.message || tmTool("messages.toggleToolSuccess"));
+    } else {
+      tool.active = previous;
+      toast(res.data.message || tmTool("messages.toggleToolError", { error: "" }), "error");
+    }
+  } catch (error: any) {
+    tool.active = previous;
+    toast(
+      error?.response?.data?.message || error?.message || tmTool("messages.toggleToolError", { error: "" }),
+      "error",
+    );
+  }
 };
 
 // 处理确认重命名
 const handleConfirmRename = async () => {
-  await confirmRename(tm('messages.renameSuccess'), tm('messages.renameFailed'));
+  await confirmRename(tm("messages.renameSuccess"), tm("messages.renameFailed"));
 };
 
 // 生命周期
 onMounted(async () => {
   await Promise.all([
-    fetchCommands(tm('messages.loadFailed')),
-    fetchTools(tmTool('messages.getToolsError', { error: '' }))
+    fetchCommands(tm("messages.loadFailed")),
+    fetchTools(tmTool("messages.getToolsError", { error: "" })),
   ]);
 });
 
-watch(() => props.active, async (isActive) => {
-  if (!isActive) return;
-  if (viewMode.value === 'commands') {
-    await fetchCommands(tm('messages.loadFailed'));
-  } else {
-    await fetchTools(tmTool('messages.getToolsError', { error: '' }));
-  }
-});
+watch(
+  () => props.active,
+  async (isActive) => {
+    if (!isActive) return;
+    if (viewMode.value === "commands") {
+      await fetchCommands(tm("messages.loadFailed"));
+    } else {
+      await fetchTools(tmTool("messages.getToolsError", { error: "" }));
+    }
+  },
+);
 
 watch(viewMode, async (mode) => {
-  if (mode === 'commands') {
-    await fetchCommands(tm('messages.loadFailed'));
+  if (mode === "commands") {
+    await fetchCommands(tm("messages.loadFailed"));
   } else {
-    await fetchTools(tmTool('messages.getToolsError', { error: '' }));
+    await fetchTools(tmTool("messages.getToolsError", { error: "" }));
   }
 });
 </script>
@@ -143,65 +153,85 @@ watch(viewMode, async (mode) => {
   <v-row>
     <v-col cols="12">
       <v-card variant="flat" style="background-color: transparent">
-        <v-card-text style="padding: 20px 12px; padding-top: 0px;">
-          <div class="d-flex justify-space-between align-center mb-6 flex-wrap ga-3">
-            <v-btn-toggle v-model="viewMode" color="primary" variant="outlined" density="comfortable" mandatory>
+        <v-card-text style="padding: 20px 12px; padding-top: 0px">
+          <div
+            class="d-flex justify-space-between align-center mb-6 flex-wrap ga-3"
+          >
+            <v-btn-toggle
+              v-model="viewMode"
+              color="primary"
+              variant="outlined"
+              density="comfortable"
+              mandatory
+            >
               <v-btn value="commands">
-                <v-icon size="18" class="mr-1">mdi-console-line</v-icon>
-                {{ tm('type.command') }}
+                <v-icon size="18" class="mr-1"> mdi-console-line </v-icon>
+                {{ tm("type.command") }}
               </v-btn>
               <v-btn value="tools">
-                <v-icon size="18" class="mr-1">mdi-function-variant</v-icon>
-                {{ tmTool('functionTools.title') }}
+                <v-icon size="18" class="mr-1"> mdi-function-variant </v-icon>
+                {{ tmTool("functionTools.title") }}
               </v-btn>
             </v-btn-toggle>
             <v-progress-linear
               v-if="viewMode === 'commands' && loading"
               indeterminate
               color="primary"
-              style="max-width: 220px; flex: 1;"
+              style="max-width: 220px; flex: 1"
             />
             <v-progress-linear
               v-else-if="viewMode === 'tools' && toolsLoading"
               indeterminate
               color="primary"
-              style="max-width: 220px; flex: 1;"
+              style="max-width: 220px; flex: 1"
             />
           </div>
 
           <div v-if="viewMode === 'commands'">
             <CommandFilters
               :plugin-filter="pluginFilter"
-              @update:plugin-filter="pluginFilter = $event"
               :type-filter="typeFilter"
-              @update:type-filter="typeFilter = $event"
               :permission-filter="permissionFilter"
-              @update:permission-filter="permissionFilter = $event"
               :status-filter="statusFilter"
-              @update:status-filter="statusFilter = $event"
               :show-system-plugins="showSystemPlugins"
-              @update:show-system-plugins="showSystemPlugins = $event"
               :search-query="searchQuery"
-              @update:search-query="searchQuery = $event"
               :available-plugins="availablePlugins"
               :has-system-plugin-conflict="hasSystemPluginConflict"
               :effective-show-system-plugins="effectiveShowSystemPlugins"
+              @update:plugin-filter="pluginFilter = $event"
+              @update:type-filter="typeFilter = $event"
+              @update:permission-filter="permissionFilter = $event"
+              @update:status-filter="statusFilter = $event"
+              @update:show-system-plugins="showSystemPlugins = $event"
+              @update:search-query="searchQuery = $event"
             >
               <template #stats>
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="primary" class="mr-1">mdi-console-line</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.total') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-primary">{{ filteredCommands.length }}</span>
+                  <v-icon size="18" color="primary" class="mr-1">
+                    mdi-console-line
+                  </v-icon>
+                  <span class="text-body-2 text-medium-emphasis mr-1"
+                    >{{ tm("summary.total") }}:</span
+                  >
+                  <span class="text-body-1 font-weight-bold text-primary">{{
+                    filteredCommands.length
+                  }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <v-divider vertical class="mx-1" style="height: 20px" />
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="error" class="mr-1">mdi-close-circle-outline</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tm('summary.disabled') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-error">{{ summary.disabled }}</span>
+                  <v-icon size="18" color="error" class="mr-1">
+                    mdi-close-circle-outline
+                  </v-icon>
+                  <span class="text-body-2 text-medium-emphasis mr-1"
+                    >{{ tm("summary.disabled") }}:</span
+                  >
+                  <span class="text-body-1 font-weight-bold text-error">{{
+                    summary.disabled
+                  }}</span>
                 </div>
               </template>
             </CommandFilters>
-            
+
             <v-alert
               v-if="summary.conflicts > 0"
               type="error"
@@ -210,18 +240,20 @@ watch(viewMode, async (mode) => {
               prominent
               border="start"
             >
-              <template v-slot:prepend>
-                <v-icon size="28">mdi-alert-circle</v-icon>
+              <template #prepend>
+                <v-icon size="28"> mdi-alert-circle </v-icon>
               </template>
               <v-alert-title class="text-subtitle-1 font-weight-bold">
-                {{ tm('conflictAlert.title') }}
+                {{ tm("conflictAlert.title") }}
               </v-alert-title>
               <div class="text-body-2 mt-1">
-                {{ tm('conflictAlert.description', { count: summary.conflicts }) }}
+                {{
+                  tm("conflictAlert.description", { count: summary.conflicts })
+                }}
               </div>
               <div class="text-body-2 mt-2">
-                <v-icon size="16" class="mr-1">mdi-lightbulb-outline</v-icon>
-                {{ tm('conflictAlert.hint') }}
+                <v-icon size="16" class="mr-1"> mdi-lightbulb-outline </v-icon>
+                {{ tm("conflictAlert.hint") }}
               </div>
             </v-alert>
 
@@ -238,46 +270,43 @@ watch(viewMode, async (mode) => {
           </div>
 
           <div v-else>
-            <div class="d-flex flex-wrap align-center ga-4 mb-4">
-              <div style="min-width: 240px; max-width: 380px; flex: 1;">
+            <div class="d-flex flex-wrap align-center ga-3 mb-4">
+              <div style="min-width: 240px; max-width: 380px; flex: 1">
                 <v-text-field
-                  v-model="toolSearch"
+                  :model-value="toolSearch"
                   prepend-inner-icon="mdi-magnify"
                   :label="tmTool('functionTools.search')"
                   variant="outlined"
                   density="compact"
                   hide-details
                   clearable
+                  @update:model-value="toolSearch = normalizeTextInput($event)"
                 />
               </div>
-
-              <div class="d-flex align-center ga-4">
+              <div class="d-flex align-center ga-2">
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="primary" class="mr-1">mdi-function-variant</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.total') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-primary">{{ toolSummary.total }}</span>
+                  <v-icon size="18" color="primary" class="mr-1">
+                    mdi-function-variant
+                  </v-icon>
+                  <span class="text-body-2 text-medium-emphasis mr-1"
+                    >{{ tm("summary.total") }}:</span
+                  >
+                  <span class="text-body-1 font-weight-bold text-primary">{{
+                    filteredTools.length
+                  }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px;" />
+                <v-divider vertical class="mx-1" style="height: 20px" />
                 <div class="d-flex align-center">
-                  <v-icon size="18" color="success" class="mr-1">mdi-check-circle-outline</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.active') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-success">{{ toolSummary.active }}</span>
+                  <v-icon size="18" color="success" class="mr-1">
+                    mdi-check-circle-outline
+                  </v-icon>
+                  <span class="text-body-2 text-medium-emphasis mr-1"
+                    >{{ tm("status.enabled") }}:</span
+                  >
+                  <span class="text-body-1 font-weight-bold text-success">{{
+                    filteredTools.filter((t) => t.active).length
+                  }}</span>
                 </div>
-                <v-divider vertical class="mx-1" style="height: 20px;" />
-                <div class="d-flex align-center">
-                  <v-icon size="18" color="error" class="mr-1">mdi-close-circle-outline</v-icon>
-                  <span class="text-body-2 text-medium-emphasis mr-1">{{ tmTool('functionTools.summary.inactive') }}:</span>
-                  <span class="text-body-1 font-weight-bold text-error">{{ toolSummary.inactive }}</span>
-                </div>
-
-                <v-divider vertical class="mx-1" style="height: 20px;" />
-                <v-checkbox
-                  v-model="showBuiltinTools"
-                  :label="tmTool('functionTools.filter.showBuiltin')"
-                  density="compact"
-                  hide-details
-                  class="builtin-tools-checkbox"
-                />
               </div>
             </div>
 
@@ -285,7 +314,6 @@ watch(viewMode, async (mode) => {
               :items="filteredTools"
               :loading="toolsLoading"
               @toggle-tool="handleToggleTool"
-              @update-permission="handleUpdateToolPermission"
             />
           </div>
         </v-card-text>
@@ -296,35 +324,30 @@ watch(viewMode, async (mode) => {
   <!-- 重命名对话框 -->
   <RenameDialog
     :show="renameDialog.show"
-    @update:show="renameDialog.show = $event"
     :new-name="renameDialog.newName"
-    @update:new-name="renameDialog.newName = $event"
     :aliases="renameDialog.aliases"
-    @update:aliases="renameDialog.aliases = $event"
     :command="renameDialog.command"
     :loading="renameDialog.loading"
+    @update:show="renameDialog.show = $event"
+    @update:new-name="renameDialog.newName = $event"
+    @update:aliases="renameDialog.aliases = $event"
     @confirm="handleConfirmRename"
   />
 
   <!-- 详情对话框 -->
   <DetailsDialog
     :show="detailsDialog.show"
-    @update:show="detailsDialog.show = $event"
     :command="detailsDialog.command"
+    @update:show="detailsDialog.show = $event"
   />
 
   <!-- Snackbar -->
-  <v-snackbar :timeout="2000" elevation="24" :color="snackbar.color" v-model="snackbar.show">
+  <v-snackbar
+    v-model="snackbar.show"
+    :timeout="2000"
+    elevation="24"
+    :color="snackbar.color"
+  >
     {{ snackbar.message }}
   </v-snackbar>
 </template>
-
-<style scoped>
-.builtin-tools-checkbox {
-  flex: none;
-}
-
-.builtin-tools-checkbox :deep(.v-selection-control) {
-  min-height: auto;
-}
-</style>

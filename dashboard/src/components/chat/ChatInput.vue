@@ -17,7 +17,6 @@
         boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
         backgroundColor: isDark ? '#2d2d2d' : 'transparent',
         position: 'relative',
-        transition: 'min-height 0.2s ease, padding 0.2s ease',
       }"
     >
       <!-- 拖拽上传遮罩 -->
@@ -47,84 +46,14 @@
           />
         </div>
       </transition>
-
-      <transition name="attachments">
-        <div class="attachments-preview" v-if="hasStagedAttachments">
-          <div
-            v-for="(img, index) in stagedImagesUrl"
-            :key="'img-' + index"
-            class="attachment-card image-preview"
-          >
-            <img :src="img" class="preview-image" alt="attachment preview" />
-            <v-btn
-              @click="$emit('removeImage', index)"
-              class="remove-attachment-btn"
-              icon="mdi-close"
-              size="x-small"
-              color="error"
-              variant="tonal"
-            />
-          </div>
-
-          <div v-if="stagedAudioUrl" class="attachment-card audio-preview">
-            <div class="attachment-icon attachment-icon--audio">
-              <v-icon icon="mdi-microphone" size="24"></v-icon>
-            </div>
-            <span class="attachment-name">{{ tm("voice.recording") }}</span>
-            <v-btn
-              @click="$emit('removeAudio')"
-              class="remove-attachment-btn"
-              icon="mdi-close"
-              size="x-small"
-              color="error"
-              variant="tonal"
-            />
-          </div>
-
-          <div
-            v-for="(file, index) in stagedFiles"
-            :key="'file-' + index"
-            class="attachment-card file-preview"
-          >
-            <div
-              class="attachment-icon"
-              :style="{ color: filePresentation(file).color }"
-            >
-              <v-icon :icon="filePresentation(file).icon" size="24"></v-icon>
-              <span class="attachment-ext">{{
-                filePresentation(file).label
-              }}</span>
-            </div>
-            <span class="attachment-name">{{ file.original_name }}</span>
-            <v-btn
-              @click="$emit('removeFile', index)"
-              class="remove-attachment-btn"
-              icon="mdi-close"
-              size="x-small"
-              color="error"
-              variant="tonal"
-            />
-          </div>
-        </div>
-      </transition>
-
-      <CommandSuggestion
-        :visible="showCommandSuggestion"
-        :commands="filteredCommands"
-        :selected-index="selectedCommandIndex"
-        :is-dark="isDark"
-        @select="handleCommandSelect"
-        @update-selected-index="selectedCommandIndex = $event"
-      />
       <textarea
         ref="inputField"
         v-model="localPrompt"
         @keydown="handleKeyDown"
-        @input="handleInput"
         @compositionstart="handleCompositionStart"
         @compositionend="handleCompositionEnd"
         @compositioncancel="handleCompositionEnd"
-        @blur="handleBlur"
+        @blur="clearCompositionState()"
         :disabled="disabled"
         placeholder="Ask AstrBot..."
         class="chat-textarea"
@@ -145,7 +74,6 @@
           font-family: inherit;
           font-size: 16px;
           background-color: var(--v-theme-surface);
-          transition: height 0.16s ease;
         "
       ></textarea>
       <div
@@ -305,30 +233,80 @@
         </div>
       </div>
     </div>
+
+    <!-- 附件预览区 -->
+    <div
+      class="attachments-preview"
+      v-if="
+        stagedImagesUrl.length > 0 ||
+        stagedAudioUrl ||
+        (stagedFiles && stagedFiles.length > 0)
+      "
+    >
+      <div
+        v-for="(img, index) in stagedImagesUrl"
+        :key="'img-' + index"
+        class="image-preview"
+      >
+        <img :src="img" class="preview-image" />
+        <v-btn
+          @click="$emit('removeImage', index)"
+          class="remove-attachment-btn"
+          icon="mdi-close"
+          size="small"
+          color="error"
+          variant="text"
+        />
+      </div>
+
+      <div v-if="stagedAudioUrl" class="audio-preview">
+        <v-chip color="primary" variant="tonal" class="audio-chip">
+          <v-icon start icon="mdi-microphone" size="small"></v-icon>
+          {{ tm("voice.recording") }}
+        </v-chip>
+        <v-btn
+          @click="$emit('removeAudio')"
+          class="remove-attachment-btn"
+          icon="mdi-close"
+          size="small"
+          color="error"
+          variant="text"
+        />
+      </div>
+
+      <div
+        v-for="(file, index) in stagedFiles"
+        :key="'file-' + index"
+        class="file-preview"
+      >
+        <v-chip color="primary" variant="tonal" class="file-chip">
+          <v-icon start icon="mdi-file-document-outline" size="small"></v-icon>
+          <span class="file-name-preview">{{ file.original_name }}</span>
+        </v-chip>
+        <v-btn
+          @click="$emit('removeFile', index)"
+          class="remove-attachment-btn"
+          icon="mdi-close"
+          size="small"
+          color="error"
+          variant="text"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import {
-  ref,
-  computed,
-  watch,
-  nextTick,
-  onMounted,
-  onBeforeUnmount,
-} from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useDisplay } from "vuetify";
+import StyledMenu from "@/components/shared/StyledMenu.vue";
+import type { Session } from "@/composables/useSessions";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
-import { commandApi } from "@/api/v1";
-import type { CommandItem } from "@/components/extension/componentPanel/types";
 import ConfigSelector from "./ConfigSelector.vue";
+// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import ProviderModelMenu from "./ProviderModelMenu.vue";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import CommandSuggestion from "./CommandSuggestion.vue";
-import type { Session } from "@/composables/useSessions";
-import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
 interface StagedFileInfo {
   attachment_id: string;
@@ -385,157 +363,24 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-const isDark = computed(
-  () => useCustomizerStore().uiTheme === "PurpleThemeDark",
-);
+const isDark = computed(() => useCustomizerStore().uiTheme === "PurpleThemeDark");
 
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
-const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
-  null,
-);
+const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(null);
 const showProviderSelector = ref(true);
 const isReplyClosing = ref(false);
-const isDragging = ref(false);
 const isComposing = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
+const isDragging = ref(false);
 let dragLeaveTimeout: number | null = null;
-
-// 命令提示相关状态
-const allCommands = ref<CommandItem[]>([]);
-const showCommandSuggestion = ref(false);
-const selectedCommandIndex = ref(0);
-const commandSuggestionLoading = ref(false);
-const wakePrefixes = ref<string[]>(["/"]);
-const currentConfigId = ref((props.configId as string) || "default");
-
-/** 检查文本是否以任意一个唤醒词前缀开头 */
-function hasWakePrefix(text: string): boolean {
-  return wakePrefixes.value.some((p) => text.startsWith(p));
-}
-
-/** 去掉文本开头匹配的任意唤醒词前缀，返回剥离后的文本 */
-function stripWakePrefix(text: string): string {
-  let result = text;
-  for (const p of wakePrefixes.value) {
-    if (result.startsWith(p)) {
-      result = result.slice(p.length);
-      break; // 只剥离第一个匹配的前缀
-    }
-  }
-  return result;
-}
-
-function normalizeCommandSearchText(value: string) {
-  return stripWakePrefix(value.trim()).toLowerCase();
-}
-
-/** 从所有指令中展平获取启用的普通指令和子指令 */
-const enabledCommands = computed(() => {
-  const result: SuggestionCommand[] = [];
-  const seen = new Set<string>();
-  // 使用第一个唤醒词前缀作为指令的展示前缀
-  const displayPrefix = wakePrefixes.value[0] || "/";
-
-  function addCommand(cmd: CommandItem) {
-    if (!cmd.enabled) return;
-    if (cmd.type === "group") {
-      // 指令组本身不加入，但其子指令加入
-      cmd.sub_commands?.forEach(addCommand);
-      return;
-    }
-    // 统一添加唤醒词前缀（子命令的 effective_command 如 "music play" 需要变成 "/music play"）
-    const displayCmd = hasWakePrefix(cmd.effective_command)
-      ? cmd.effective_command
-      : `${displayPrefix}${cmd.effective_command}`;
-    if (!seen.has(displayCmd)) {
-      seen.add(displayCmd);
-      result.push({
-        handler_full_name: cmd.handler_full_name,
-        effective_command: displayCmd,
-        description: cmd.description,
-        plugin_display_name: cmd.plugin_display_name,
-        enabled: cmd.enabled,
-        reserved: cmd.reserved,
-      });
-    }
-    // 同时加入别名（别名也需要加上唤醒词前缀）
-    cmd.aliases?.forEach((alias) => {
-      const aliasBase = cmd.parent_signature
-        ? `${cmd.parent_signature} ${alias}`
-        : alias;
-      const aliasKey = hasWakePrefix(aliasBase)
-        ? aliasBase
-        : `${displayPrefix}${aliasBase}`;
-      if (!seen.has(aliasKey)) {
-        seen.add(aliasKey);
-        result.push({
-          handler_full_name: cmd.handler_full_name,
-          effective_command: aliasKey,
-          description: cmd.description,
-          plugin_display_name: cmd.plugin_display_name,
-          enabled: cmd.enabled,
-          reserved: cmd.reserved,
-        });
-      }
-    });
-  }
-
-  allCommands.value.forEach(addCommand);
-  return result;
-});
-
-function sortSystemPluginCommandsFirst(commands: SuggestionCommand[]) {
-  return [...commands].sort((a, b) => Number(b.reserved) - Number(a.reserved));
-}
-
-/** 根据当前输入过滤候选指令 */
-const filteredCommands = computed(() => {
-  const text = props.prompt;
-  if (!text || !hasWakePrefix(text)) return [];
-
-  const query = normalizeCommandSearchText(text);
-  if (!query) return sortSystemPluginCommandsFirst(enabledCommands.value);
-
-  const startsWithMatches: SuggestionCommand[] = [];
-  const containsMatches: SuggestionCommand[] = [];
-
-  for (const cmd of enabledCommands.value) {
-    const commandText = normalizeCommandSearchText(cmd.effective_command);
-    const pluginText = normalizeCommandSearchText(cmd.plugin_display_name || "");
-    const descriptionText = normalizeCommandSearchText(cmd.description || "");
-    const matchesCommand = commandText.includes(query);
-    const matchesMetadata =
-      pluginText.includes(query) || descriptionText.includes(query);
-
-    if (commandText.startsWith(query)) {
-      startsWithMatches.push(cmd);
-    } else if (matchesCommand || matchesMetadata) {
-      containsMatches.push(cmd);
-    }
-  }
-
-  return [
-    ...sortSystemPluginCommandsFirst(startsWithMatches),
-    ...sortSystemPluginCommandsFirst(containsMatches),
-  ];
-});
 
 const localPrompt = computed({
   get: () => props.prompt,
-  set: (value) => {
-    // Suppress v-model sync during IME composition to avoid a reactive
-    // feedback loop. Vue's :value binding overwrites the native textarea
-    // DOM state mid-composition, which interferes with IME insertion at
-    // non-terminal cursor positions (alternating character loss).
-    // The final value is synced manually in handleCompositionEnd.
-    if (!isComposing.value) emit("update:prompt", value);
-  },
+  set: (value) => emit("update:prompt", value),
 });
 
-const sessionPlatformId = computed(
-  () => props.currentSession?.platform_id || "webchat",
-);
+const sessionPlatformId = computed(() => props.currentSession?.platform_id || "webchat");
 const sessionIsGroup = computed(() => Boolean(props.currentSession?.is_group));
 
 const canSend = computed(() => {
@@ -547,53 +392,22 @@ const canSend = computed(() => {
   );
 });
 
-const hasStagedAttachments = computed(() => {
-  return (
-    props.stagedImagesUrl.length > 0 ||
-    props.stagedAudioUrl ||
-    (props.stagedFiles && props.stagedFiles.length > 0)
-  );
-});
-
-const fileTypeStyles: Record<
-  string,
-  { color: string; icon: string; label: string }
-> = {
+const fileTypeStyles: Record<string, { color: string; icon: string; label: string }> = {
   pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
   txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
   md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
-  markdown: {
-    color: "#1976d2",
-    icon: "mdi-language-markdown-outline",
-    label: "MD",
-  },
   doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
   docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
   xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
   xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
   csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
-  ppt: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPT" },
-  pptx: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPTX" },
   zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
-  rar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "RAR" },
-  "7z": { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "7Z" },
-  tar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "TAR" },
-  gz: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "GZ" },
-  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
-  yaml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YAML" },
-  yml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YML" },
+  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
   js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
   ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
   html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
   css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
-  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
-  java: { color: "#b07219", icon: "mdi-language-java", label: "JAVA" },
-  mp3: { color: "#00897b", icon: "mdi-file-music-outline", label: "MP3" },
-  wav: { color: "#00897b", icon: "mdi-file-music-outline", label: "WAV" },
-  flac: { color: "#00897b", icon: "mdi-file-music-outline", label: "FLAC" },
-  mp4: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MP4" },
-  mov: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MOV" },
-  webm: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "WEBM" },
+  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
 };
 
 function fileExtension(file: StagedFileInfo) {
@@ -636,7 +450,7 @@ function autoResize() {
   const el = inputField.value;
   if (!el) return;
   el.style.height = "auto";
-  el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
 }
 
 watch(localPrompt, () => {
@@ -644,36 +458,6 @@ watch(localPrompt, () => {
 });
 
 function handleKeyDown(e: KeyboardEvent) {
-  // 命令提示激活时，拦截方向键和 Enter/Esc
-  if (showCommandSuggestion.value && filteredCommands.value.length > 0) {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      selectedCommandIndex.value =
-        (selectedCommandIndex.value + 1) % filteredCommands.value.length;
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      selectedCommandIndex.value =
-        (selectedCommandIndex.value - 1 + filteredCommands.value.length) %
-        filteredCommands.value.length;
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const cmd = filteredCommands.value[selectedCommandIndex.value];
-      if (cmd) {
-        handleCommandSelect(cmd);
-      }
-      return;
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      showCommandSuggestion.value = false;
-      return;
-    }
-  }
-
   const isEnter = e.key === "Enter";
   if (!isEnter) {
     // Ctrl+B 录音
@@ -695,10 +479,7 @@ function handleKeyDown(e: KeyboardEvent) {
     return;
   }
 
-  const isSendHotkey =
-    e.ctrlKey ||
-    e.metaKey ||
-    (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
+  const isSendHotkey = e.ctrlKey || e.metaKey || (props.sendShortcut === "enter" ? !e.shiftKey : e.shiftKey);
 
   if (isSendHotkey) {
     e.preventDefault();
@@ -714,59 +495,6 @@ function handleKeyDown(e: KeyboardEvent) {
   }
 }
 
-/** 处理输入变化，控制命令提示显示 */
-function handleInput() {
-  const text = props.prompt;
-  if (text && hasWakePrefix(text) && !isComposing.value) {
-    showCommandSuggestion.value = filteredCommands.value.length > 0;
-    selectedCommandIndex.value = 0;
-  } else {
-    showCommandSuggestion.value = false;
-  }
-}
-
-/** 处理 blur 事件，延迟关闭命令提示以允许点击 */
-function handleBlur() {
-  clearCompositionState();
-  // 延迟关闭，避免点击候选项时面板已消失
-  setTimeout(() => {
-    showCommandSuggestion.value = false;
-  }, 200);
-}
-
-/** 选择命令，填入输入框 */
-function handleCommandSelect(cmd: SuggestionCommand) {
-  localPrompt.value = cmd.effective_command + " ";
-  showCommandSuggestion.value = false;
-  nextTick(() => {
-    inputField.value?.focus();
-    autoResize();
-  });
-}
-
-/** 获取指令列表 */
-async function fetchCommands() {
-  if (commandSuggestionLoading.value) return;
-  commandSuggestionLoading.value = true;
-  try {
-    const cid = currentConfigId.value;
-    const res = await commandApi.list(cid && cid !== "default" ? cid : undefined);
-    if (res.data.status === "ok") {
-      allCommands.value = res.data.data.items || [];
-      // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
-      const prefixes: string[] = res.data.data.wake_prefix || [];
-      if (prefixes && prefixes.length > 0) {
-        wakePrefixes.value = prefixes;
-      }
-    }
-  } catch (err) {
-    // 静默失败，不影响聊天功能
-    console.warn("Failed to fetch commands for suggestion:", err);
-  } finally {
-    commandSuggestionLoading.value = false;
-  }
-}
-
 function handleCompositionStart() {
   isComposing.value = true;
   lastCompositionEndAt.value = null;
@@ -775,30 +503,6 @@ function handleCompositionStart() {
 function handleCompositionEnd(e: CompositionEvent) {
   lastCompositionEndAt.value = e.timeStamp;
   clearCompositionState({ keepLastEndAt: true });
-
-  // Manually sync the final composited text to the parent component
-  // after the IME commits. The v-model setter is suppressed during
-  // composition (see localPrompt computed), so we must explicitly
-  // propagate the DOM value once composition ends.
-  //
-  // Capture the DOM value at compositionend to guard against a race
-  // where props.prompt is externally updated between now and nextTick.
-  const endValue = inputField.value?.value;
-
-  nextTick(() => {
-    const el = inputField.value;
-    // Only sync if the DOM hasn't been changed externally in the meantime.
-    if (el && el.value === endValue && el.value !== props.prompt) {
-      emit("update:prompt", el.value);
-      // Re-evaluate command suggestions that were suppressed during IME
-      // composition (handleInput checks isComposing). Only needed when
-      // the value actually changed. Runs in a nested nextTick so
-      // props.prompt reflects the emit above.
-      nextTick(() => {
-        handleInput();
-      });
-    }
-  });
 }
 
 function clearCompositionState({ keepLastEndAt = false } = {}) {
@@ -877,18 +581,10 @@ function handleRecordClick() {
   }
 }
 
-function handleConfigChange(payload: {
-  configId: string;
-  agentRunnerType: string;
-}) {
+function handleConfigChange(payload: { configId: string; agentRunnerType: string }) {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
   const isInternal = runnerType === "internal" || runnerType === "local";
   showProviderSelector.value = isInternal;
-  // 配置切换后重新获取指令列表和唤醒词
-  if (payload.configId && payload.configId !== currentConfigId.value) {
-    currentConfigId.value = payload.configId;
-    fetchCommands();
-  }
 }
 
 function getCurrentSelection() {
@@ -908,15 +604,13 @@ onMounted(() => {
     inputField.value.addEventListener("paste", handlePaste);
   }
   document.addEventListener("keyup", handleKeyUp);
-  // 预加载指令列表
-  fetchCommands();
 });
 
 onBeforeUnmount(() => {
+  clearCompositionState();
   if (inputField.value) {
     inputField.value.removeEventListener("paste", handlePaste);
   }
-  clearCompositionState();
   document.removeEventListener("keyup", handleKeyUp);
 });
 
@@ -1152,89 +846,45 @@ defineExpose({
 
 .attachments-preview {
   display: flex;
-  gap: 10px;
-  margin: 10px 12px 0;
-  padding: 2px 2px 4px;
-  flex-wrap: nowrap;
-  align-items: center;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  max-height: 72px;
+  gap: 8px;
+  margin-top: 8px;
+  max-width: 900px;
+  margin: 8px auto 0;
+  flex-wrap: wrap;
 }
 
-.attachment-card {
+.image-preview,
+.audio-preview,
+.file-preview {
   position: relative;
   display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  width: 220px;
-  height: 64px;
-  flex: 0 0 auto;
-  min-width: 0;
-  padding: 8px 34px 8px 10px;
-  overflow: hidden;
-  color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-radius: 12px;
-}
-
-.image-preview {
-  width: 64px;
-  flex-basis: 64px;
-  padding: 0;
-  background: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .preview-image {
-  width: 100%;
-  height: 100%;
+  width: 60px;
+  height: 60px;
   object-fit: cover;
-  border-radius: 11px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.attachment-icon {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  flex-shrink: 0;
-  min-width: 34px;
+.audio-chip,
+.file-chip {
+  height: 36px;
+  border-radius: 18px;
 }
 
-.attachment-icon--audio {
-  color: #00897b;
-}
-
-.attachment-ext {
-  max-width: 58px;
+.file-name-preview {
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 12px;
-}
-
-.attachment-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  line-height: 18px;
 }
 
 .remove-attachment-btn {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px !important;
-  height: 22px !important;
-  min-width: 22px !important;
+  top: -8px;
+  right: -8px;
   opacity: 0.8;
   transition: opacity 0.2s;
 }
@@ -1245,27 +895,6 @@ defineExpose({
 
 .fade-in {
   animation: fadeIn 0.3s ease-in-out;
-}
-
-.attachments-enter-active,
-.attachments-leave-active {
-  overflow: hidden;
-  transition:
-    max-height 0.2s ease,
-    margin 0.2s ease,
-    padding 0.2s ease,
-    opacity 0.16s ease,
-    transform 0.2s ease;
-}
-
-.attachments-enter-from,
-.attachments-leave-to {
-  max-height: 0;
-  margin-top: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  opacity: 0;
-  transform: translateY(6px);
 }
 
 @keyframes fadeIn {
@@ -1305,21 +934,6 @@ defineExpose({
     font-size: 16px !important;
     line-height: 20px !important;
     padding: 8px 14px 7px !important;
-  }
-
-  .attachments-preview {
-    margin: 8px 10px 0;
-    gap: 8px;
-  }
-
-  .attachment-card {
-    width: min(220px, calc(100vw - 28px));
-    height: 58px;
-  }
-
-  .image-preview {
-    width: 58px;
-    flex-basis: 58px;
   }
 }
 </style>

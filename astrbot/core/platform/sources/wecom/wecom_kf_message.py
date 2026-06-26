@@ -30,7 +30,7 @@ class WeChatKFMessage(BaseWeChatAPI):
 
     https://work.weixin.qq.com/api/doc/90000/90135/94677
 
-    支持：
+    支持:
     * 文本消息
     * 图片消息
     * 语音消息
@@ -43,14 +43,14 @@ class WeChatKFMessage(BaseWeChatAPI):
     """
 
     def send(self, user_id, open_kfid, msgid="", msg=None):
-        """当微信客户处于“新接入待处理”或“由智能助手接待”状态下，可调用该接口给用户发送消息。
-        注意仅当微信客户在主动发送消息给客服后的48小时内，企业可发送消息给客户，最多可发送5条消息；若用户继续发送消息，企业可再次下发消息。
-        支持发送消息类型：文本、图片、语音、视频、文件、图文、小程序、菜单消息、地理位置。
+        """当微信客户处于“新接入待处理”或“由智能助手接待”状态下,可调用该接口给用户发送消息｡
+        注意仅当微信客户在主动发送消息给客服后的48小时内,企业可发送消息给客户,最多可发送5条消息;若用户继续发送消息,企业可再次下发消息｡
+        支持发送消息类型:文本､图片､语音､视频､文件､图文､小程序､菜单消息､地理位置｡
 
         :param user_id: 指定接收消息的客户UserID
         :param open_kfid: 指定发送消息的客服帐号ID
         :param msgid: 指定消息ID
-        :param tag_ids: 标签ID列表。
+        :param tag_ids: 标签ID列表｡
         :param msg: 发送消息的 dict 对象
         :type msg: dict | None
         :return: 接口调用结果

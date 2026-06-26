@@ -2,11 +2,10 @@ import os
 import zipfile
 
 from astrbot.core import logger
+from astrbot.core.star.star import StarMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_path
 from astrbot.core.utils.io import ensure_dir, remove_dir
-
-from ..star.star import StarMetadata
-from ..updator import RepoZipUpdator
+from astrbot.core.zip_updator import RepoZipUpdator
 
 
 class PluginUpdator(RepoZipUpdator):
@@ -31,18 +30,21 @@ class PluginUpdator(RepoZipUpdator):
         return plugin_path
 
     async def update(
-        self, plugin: StarMetadata, proxy="", download_url: str = ""
+        self,
+        plugin: StarMetadata,
+        proxy="",
+        download_url: str = "",
     ) -> str:
         repo_url = plugin.repo
 
         if not repo_url and not download_url:
             raise Exception(
-                f"Plugin {plugin.name} does not specify a repository URL or download URL."
+                f"Plugin {plugin.name} does not specify a repository URL or download URL.",
             )
 
         if not plugin.root_dir_name:
             raise Exception(
-                f"Plugin {plugin.name} does not specify a root directory name."
+                f"Plugin {plugin.name} does not specify a root directory name.",
             )
 
         plugin_path = os.path.join(self.plugin_store_path, plugin.root_dir_name)
@@ -52,7 +54,7 @@ class PluginUpdator(RepoZipUpdator):
         )
         if download_url:
             logger.info(
-                f"Downloading plugin update archive for {plugin.name}: {download_url}"
+                f"Downloading plugin update archive for {plugin.name}: {download_url}",
             )
             await self._download_file(download_url, plugin_path + ".zip")
         elif repo_url:
@@ -77,3 +79,6 @@ class PluginUpdator(RepoZipUpdator):
             z.extractall(target_dir)
 
         self._finalize_extracted_archive(zip_path, target_dir, update_dir)
+
+    # Backward compatibility alias
+    update_plugin = update

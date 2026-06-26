@@ -39,4 +39,3 @@ Explanation:
 > The file containing the plugin class must be named `main.py`.
 
 All handler functions must be written within the plugin class. To keep content concise, in subsequent sections, we may omit the plugin class definition.
-

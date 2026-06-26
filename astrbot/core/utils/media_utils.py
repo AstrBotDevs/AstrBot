@@ -643,13 +643,7 @@ class MediaResolver:
                         wav_path = Path(await ensure_wav(str(resolved_path)))
                         if wav_path != resolved_path:
                             intermediate_cleanup_paths.append(wav_path)
-                        duration = await wav_to_tencent_silk(
-                            str(wav_path), str(silk_path)
-                        )
-                        if duration <= 0:
-                            raise ValueError(
-                                "Tencent Silk conversion returned empty duration"
-                            )
+                        await wav_to_tencent_silk(str(wav_path), str(silk_path))
                     except Exception:
                         _cleanup_paths([*intermediate_cleanup_paths, silk_path])
                         raise

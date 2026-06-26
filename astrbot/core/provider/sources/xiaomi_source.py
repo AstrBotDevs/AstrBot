@@ -1,7 +1,6 @@
 from astrbot import logger
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
-
-from ..register import register_provider_adapter
 
 XIAOMI_MODELS = [
     "mimo-v2.5-pro",
@@ -13,7 +12,8 @@ XIAOMI_MODELS = [
 
 
 @register_provider_adapter(
-    "xiaomi_chat_completion", "Xiaomi API 提供商适配器 (OpenAI 兼容)"
+    "xiaomi_chat_completion",
+    "Xiaomi API 提供商适配器 (OpenAI 兼容)",
 )
 class ProviderXiaomi(ProviderOpenAIOfficial):
     """Xiaomi provider using OpenAI-compatible API.

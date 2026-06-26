@@ -3,18 +3,14 @@ import json
 import logging
 import time
 from binascii import Error as BinasciiError
-from typing import cast
 
+import quart
 from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Token
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from astrbot.api import logger
-from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 
-from ..qqofficial.qqofficial_platform_adapter import _ensure_group_message_create_parser
-
-# remove logger handler
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 
@@ -72,14 +68,16 @@ def _verify_qq_webhook_signature(
 
 class QQOfficialWebhook:
     def __init__(
-        self, config: dict, event_queue: asyncio.Queue, botpy_client: Client
+        self,
+        config: dict,
+        event_queue: asyncio.Queue,
+        botpy_client: Client,
     ) -> None:
         self.appid = config["appid"]
         self.secret = config["secret"]
         self.port = config.get("port", 6196)
         self.is_sandbox = config.get("is_sandbox", False)
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
-
         if isinstance(self.port, str):
             self.port = int(self.port)
 
@@ -91,8 +89,7 @@ class QQOfficialWebhook:
         )
         self.api: BotAPI = BotAPI(http=self.http)
         self.token = Token(self.appid, self.secret)
-
-        self.server = FastAPIWebhookServer("qq-official-webhook")
+        self.server = quart.Quart(__name__)
         self.server.add_url_rule(
             "/astrbot-qo-webhook/callback",
             view_func=self.callback,
@@ -108,13 +105,12 @@ class QQOfficialWebhook:
 
         # Deduplication cache for webhook retry callbacks.
         self._seen_event_ids: dict[str, float] = {}
-        self._dedup_ttl: int = 60  # seconds
+        self._dedup_ttl: int = 60
 
     async def initialize(self) -> None:
         logger.info("正在登录到 QQ 官方机器人...")
         self.user = await self.http.login(self.token)
         logger.info(f"已登录 QQ 官方机器人账号: {self.user}")
-        # 直接注入到 botpy 的 Client，移花接木！
         self.client.api = self.api
         self.client.http = self.http
         self._setup_connection()
@@ -122,7 +118,6 @@ class QQOfficialWebhook:
     def _setup_connection(self) -> None:
         if self._connection is not None:
             return
-        _ensure_group_message_create_parser()
         self.client.api = self.api
         self.client.http = self.http
 
@@ -150,7 +145,6 @@ class QQOfficialWebhook:
             "plain_token",
             "",
         )
-        # sign
         signature = private_key.sign(msg.encode()).hex()
         response = {
             "plain_token": validation_payload.get("plain_token"),
@@ -158,22 +152,19 @@ class QQOfficialWebhook:
         }
         return response
 
-    def pop_extra_data(self, message_id: str) -> dict:
-        """Pop and return extra fields cached from the raw webhook payload for a given message ID."""
-        return self._extra_data_cache.pop(message_id, {})
-
-    async def callback(self, request):
+    async def callback(self):
         """内部服务器的回调入口"""
-        return await self.handle_callback(request)
+        return await self.handle_callback(quart.request)
 
-    async def handle_callback(self, request) -> dict | tuple[dict[str, str], int]:
-        """处理 webhook 回调，可被统一 webhook 入口复用
+    async def handle_callback(self, request) -> dict:
+        """处理 webhook 回调,可被统一 webhook 入口复用
 
         Args:
-            request: FastAPI webhook request 对象
+            request: Quart 请求对象
 
         Returns:
             响应数据
+
         """
         body = await request.get_data()
         if not _verify_qq_webhook_signature(
@@ -194,21 +185,15 @@ class QQOfficialWebhook:
             return {"error": "Invalid JSON"}, 400
 
         logger.debug(f"收到 qq_official_webhook 回调: {msg}")
-
         event = msg.get("t")
         opcode = msg.get("op")
         data = msg.get("d")
-
         if opcode == 13:
-            # validation
-            signed = await self.webhook_validation(cast(dict, data))
-            logger.debug(f"webhook validation response: {signed}")
+            signed = await self.webhook_validation(data)
             return signed
-
         event_id = msg.get("id")
         if event_id:
             now = time.monotonic()
-            # Lazily evict expired entries to prevent unbounded growth.
             expired = [
                 k
                 for k, ts in self._seen_event_ids.items()
@@ -220,7 +205,6 @@ class QQOfficialWebhook:
                 logger.debug(f"Duplicate webhook event {event_id!r}, skipping.")
                 return {"opcode": 12}
             self._seen_event_ids[event_id] = now
-
         if event and opcode == BotWebSocket.WS_DISPATCH_EVENT:
             event = msg["t"].lower()
             if self._connection is None:
@@ -229,7 +213,6 @@ class QQOfficialWebhook:
                     "creating parser connection lazily.",
                 )
                 self._setup_connection()
-            connection = cast(ConnectionSession, self._connection)
 
             # Extract extra fields from raw payload before botpy parses and discards them
             if data:
@@ -244,19 +227,16 @@ class QQOfficialWebhook:
                     if extra:
                         self._extra_data_cache[msg_id] = extra
             try:
-                func = connection.parser[event]
+                func = self._connection.parser[event]
             except KeyError:
                 logger.error("_parser unknown event %s.", event)
-                if data:
-                    self._extra_data_cache.pop(data.get("id", ""), None)
             else:
                 func(msg)
-
         return {"opcode": 12}
 
     async def start_polling(self) -> None:
         logger.info(
-            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器。",
+            f"将在 {self.callback_server_host}:{self.port} 端口启动 QQ 官方机器人 webhook 适配器｡",
         )
         await self.server.run_task(
             host=self.callback_server_host,

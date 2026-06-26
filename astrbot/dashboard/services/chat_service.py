@@ -56,7 +56,7 @@ async def track_conversation(convs: dict, conv_id: str):
 async def poll_webchat_stream_result(back_queue, username: str):
     try:
         result = await asyncio.wait_for(back_queue.get(), timeout=1)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return None, False
     except asyncio.CancelledError:
         logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")

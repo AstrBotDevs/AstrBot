@@ -80,6 +80,7 @@ if TYPE_CHECKING:
     from .whitelist_check.stage import WhitelistCheckStage
 
 __all__ = [
+    "STAGES_ORDER",
     "ContentSafetyCheckStage",
     "EventResultType",
     "MessageEventResult",
@@ -89,7 +90,6 @@ __all__ = [
     "RespondStage",
     "ResultDecorateStage",
     "SessionStatusCheckStage",
-    "STAGES_ORDER",
     "WakingCheckStage",
     "WhitelistCheckStage",
 ]

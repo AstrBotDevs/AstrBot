@@ -2,8 +2,9 @@ import json
 import os
 import shlex
 import uuid
-from pathlib import Path
+from typing import TypedDict
 
+import anyio
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
@@ -15,56 +16,38 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
-from astrbot.core.tools.computer_tools.fs import _remote_basename
-from astrbot.core.tools.computer_tools.util import (
-    check_admin_permission,
-    is_local_runtime,
-    workspace_root,
-)
+from astrbot.core.tools.computer_tools.util import check_admin_permission
 from astrbot.core.tools.registry import builtin_tool
-from astrbot.core.utils.astrbot_path import (
-    get_astrbot_system_tmp_path,
-    get_astrbot_temp_path,
-)
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 
-def _file_send_allowed_roots(umo: str | None) -> tuple[Path, ...]:
-    roots = []
-    if umo:
-        roots.append(workspace_root(umo))
-    roots.extend(
-        [
-            Path(get_astrbot_temp_path()).resolve(strict=False),
-            Path(get_astrbot_system_tmp_path()).resolve(strict=False),
-        ]
-    )
-    return tuple(roots)
+class MessageComponentPayload(TypedDict, total=False):
+    type: str
+    text: str
+    path: str
+    url: str
+    mention_user_id: str
 
 
-def _is_path_within(path: Path, roots: tuple[Path, ...]) -> bool:
-    return any(path == root or path.is_relative_to(root) for root in roots)
+def _normalize_message_component(raw_msg: object) -> MessageComponentPayload | None:
+    if not isinstance(raw_msg, dict):
+        return None
 
-
-def _is_restricted_local_env(context: ContextWrapper[AstrAgentContext]) -> bool:
-    if not is_local_runtime(context):
-        return False
-    cfg = context.context.context.get_config(
-        umo=context.context.event.unified_msg_origin
-    )
-    provider_settings = cfg.get("provider_settings", {})
-    require_admin = provider_settings.get("computer_use_require_admin", True)
-    return require_admin and context.context.event.role != "admin"
-
-
-def _can_send_local_file(
-    context: ContextWrapper[AstrAgentContext],
-    local_path: Path,
-) -> bool:
-    umo = context.context.event.unified_msg_origin
-    allowed_roots = _file_send_allowed_roots(umo)
-    if _is_path_within(local_path, allowed_roots):
-        return True
-    return is_local_runtime(context) and not _is_restricted_local_env(context)
+    normalized: MessageComponentPayload = {}
+    for key, value in raw_msg.items():
+        if not isinstance(key, str):
+            continue
+        if key == "type" and isinstance(value, str):
+            normalized["type"] = value
+        elif key == "text" and isinstance(value, str):
+            normalized["text"] = value
+        elif key == "path" and isinstance(value, str):
+            normalized["path"] = value
+        elif key == "url" and isinstance(value, str):
+            normalized["url"] = value
+        elif key == "mention_user_id" and isinstance(value, str):
+            normalized["mention_user_id"] = value
+    return normalized
 
 
 @builtin_tool
@@ -123,7 +106,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 },
             },
             "required": ["messages"],
-        }
+        },
     )
 
     async def _resolve_path_from_sandbox(
@@ -133,38 +116,23 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         *,
         component_type: str = "file",
     ) -> tuple[str, bool]:
-        path = str(path).strip()
-        if not path:
-            raise FileNotFoundError(f"{component_type} path is empty")
-
-        # Relative host paths are resolved only inside the user's workspace.
+        path = str(path)
+        # if the path is relative, check if the file exists in user's local workspace
         if not os.path.isabs(path):
             unified_msg_origin = context.context.event.unified_msg_origin
             if unified_msg_origin:
+                from astrbot.core.tools.computer_tools.util import workspace_root
+
                 try:
                     ws_path = workspace_root(unified_msg_origin)
-                    ws_candidate = (ws_path / path).resolve(strict=False)
+                    ws_candidate = (ws_path / path).resolve()
                     if ws_candidate.is_file() and ws_candidate.is_relative_to(ws_path):
                         return str(ws_candidate), False
                 except Exception:
                     pass
-        else:
-            local_candidate = Path(path).expanduser().resolve(strict=False)
-            if local_candidate.is_file():
-                if _can_send_local_file(context, local_candidate):
-                    return str(local_candidate), False
-                if is_local_runtime(context):
-                    allowed = ", ".join(
-                        str(root)
-                        for root in _file_send_allowed_roots(
-                            context.context.event.unified_msg_origin
-                        )
-                    )
-                    raise PermissionError(
-                        "Local file send is restricted for this user. "
-                        f"Allowed directories: {allowed}. "
-                        f"Blocked path: {local_candidate}."
-                    )
+        # check if the file exists in local environment (only allow absolute paths to prevent traversal)
+        elif await anyio.Path(path).is_file():
+            return path, False
 
         try:
             sb = await get_booter(
@@ -174,9 +142,10 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             quoted_path = shlex.quote(path)
             result = await sb.shell.exec(f"test -f {quoted_path} && echo '_&exists_'")
             if "_&exists_" in json.dumps(result):
-                name = _remote_basename(path) or os.path.basename(path)
+                name = os.path.basename(path)
                 local_path = os.path.join(
-                    get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
+                    get_astrbot_temp_path(),
+                    f"sandbox_{uuid.uuid4().hex[:4]}_{name}",
                 )
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
@@ -188,7 +157,9 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         raise FileNotFoundError(f"{component_type} path does not exist: {path}")
 
     async def call(
-        self, context: ContextWrapper[AstrAgentContext], **kwargs
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        **kwargs,
     ) -> ToolExecResult:
         # Security: only AstrBot admins can send messages to other sessions.
         # Non-admin users are always restricted to their own session.
@@ -197,7 +168,8 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         session = kwargs.get("session") or current_session
         if session != current_session:
             if permission_error := check_admin_permission(
-                context, "Send message to another session"
+                context,
+                "Send message to another session",
             ):
                 return permission_error
         messages = kwargs.get("messages")
@@ -206,25 +178,28 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         components: list[Comp.BaseMessageComponent] = []
         for idx, msg in enumerate(messages):
-            if not isinstance(msg, dict):
+            normalized_msg = _normalize_message_component(msg)
+            if normalized_msg is None:
                 return f"error: messages[{idx}] should be an object."
 
-            msg_type = str(msg.get("type", "")).lower()
+            msg_type = normalized_msg.get("type", "").lower()
             if not msg_type:
                 return f"error: messages[{idx}].type is required."
 
             try:
                 if msg_type == "plain":
-                    text = str(msg.get("text", "")).strip()
+                    text = normalized_msg.get("text", "").strip()
                     if not text:
                         return f"error: messages[{idx}].text is required for plain component."
                     components.append(Comp.Plain(text=text))
                 elif msg_type == "image":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = normalized_msg.get("path")
+                    url = normalized_msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="image"
+                            context,
+                            path,
+                            component_type="image",
                         )
                         components.append(Comp.Image.fromFileSystem(path=local_path))
                     elif url:
@@ -232,11 +207,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for image component."
                 elif msg_type == "record":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = normalized_msg.get("path")
+                    url = normalized_msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="record"
+                            context,
+                            path,
+                            component_type="record",
                         )
                         components.append(Comp.Record.fromFileSystem(path=local_path))
                     elif url:
@@ -244,11 +221,13 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for record component."
                 elif msg_type == "video":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = normalized_msg.get("path")
+                    url = normalized_msg.get("url")
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="video"
+                            context,
+                            path,
+                            component_type="video",
                         )
                         components.append(Comp.Video.fromFileSystem(path=local_path))
                     elif url:
@@ -256,17 +235,19 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for video component."
                 elif msg_type == "file":
-                    path = msg.get("path")
-                    url = msg.get("url")
+                    path = normalized_msg.get("path")
+                    url = normalized_msg.get("url")
                     name = (
-                        msg.get("text")
-                        or (_remote_basename(path) if path else "")
+                        normalized_msg.get("text")
+                        or (os.path.basename(path) if path else "")
                         or (os.path.basename(url) if url else "")
                         or "file"
                     )
                     if path:
                         local_path, _ = await self._resolve_path_from_sandbox(
-                            context, path, component_type="file"
+                            context,
+                            path,
+                            component_type="file",
                         )
                         components.append(Comp.File(name=name, file=local_path))
                     elif url:
@@ -274,7 +255,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                     else:
                         return f"error: messages[{idx}] must include path or url for file component."
                 elif msg_type == "mention_user":
-                    mention_user_id = msg.get("mention_user_id")
+                    mention_user_id = normalized_msg.get("mention_user_id")
                     if not mention_user_id:
                         return f"error: messages[{idx}].mention_user_id is required for mention_user component."
                     components.append(Comp.At(qq=mention_user_id))
@@ -283,8 +264,6 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                         f"error: unsupported message type '{msg_type}' at index {idx}."
                     )
             except FileNotFoundError as exc:
-                return f"error: {exc}"
-            except PermissionError as exc:
                 return f"error: {exc}"
             except Exception as exc:
                 return f"error: failed to build messages[{idx}] component: {exc}"

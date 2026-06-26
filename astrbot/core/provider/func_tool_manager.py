@@ -204,7 +204,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                         return True, ""
                     return False, f"HTTP {response.status}: {response.reason}"
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return False, f"连接超时: {timeout}秒"
     except Exception as e:
         return False, f"{e!s}"
@@ -672,7 +672,7 @@ class FunctionToolManager:
                 self._init_mcp_client(name, cfg),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise MCPInitTimeoutError(
                 f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
             ) from exc
@@ -728,7 +728,7 @@ class FunctionToolManager:
                 asyncio.gather(*lifecycle_tasks, return_exceptions=True),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pending_names = [
                 runtime.name
                 for runtime in runtimes
