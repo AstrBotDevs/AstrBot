@@ -25,6 +25,7 @@ from astrbot.core.db.po import (
     Preference,
     ProviderStat,
     SessionProjectRelation,
+    ShipyardNeoPersist,
     SQLModel,
     UmoAlias,
     WebChatThread,
@@ -1866,6 +1867,56 @@ class SQLiteDatabase(BaseDatabase):
                 query = query.where(col(UmoAlias.umo).in_(umos))
             result = await session.execute(query)
             return list(result.scalars().all())
+
+    # ====
+    # Shipyard Neo Persist Management
+    # ====
+
+    async def upsert_shipyard_neo_persist(self, persist_id: str, cargo_id: str) -> ShipyardNeoPersist:
+        """Create or update the persistent mapping for a Shipyard Neo cargo."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    select(ShipyardNeoPersist).where(
+                        col(ShipyardNeoPersist.persist_id) == persist_id,
+                    ),
+                )
+                persist = result.scalar_one_or_none()
+                if persist:
+                    persist.cargo_id = cargo_id
+                    persist.updated_at = datetime.now(timezone.utc)
+                else:
+                    persist = ShipyardNeoPersist(
+                        persist_id=persist_id,
+                        cargo_id=cargo_id,
+                    )
+                    session.add(persist)
+                await session.flush()
+                await session.refresh(persist)
+                return persist
+
+    async def get_shipyard_neo_persist(self, persist_id: str) -> ShipyardNeoPersist | None:
+        """Get the persistent mapping for a Shipyard Neo cargo."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(ShipyardNeoPersist).where(
+                    col(ShipyardNeoPersist.persist_id) == persist_id,
+                ),
+            )
+            return result.scalar_one_or_none()
+
+    async def delete_shipyard_neo_persist(self, persist_id: str) -> None:
+        """Delete the persistent mapping for a Shipyard Neo cargo."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            await session.execute(
+                delete(ShipyardNeoPersist).where(
+                    col(ShipyardNeoPersist.persist_id) == persist_id,
+                ),
+            )
+            await session.commit()
 
     # ====
     # ChatUI Project Management

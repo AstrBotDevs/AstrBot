@@ -528,6 +528,18 @@ class CommandConflict(TimestampMixin, SQLModel, table=True):
     )
 
 
+class ShipyardNeoPersist(TimestampMixin, SQLModel, table=True):
+    """Mapping persist_id to cargo_id for Shipyard Neo booters."""
+
+    __tablename__ = "shipyard_neo_persist"  # type: ignore
+
+    id: int | None = Field(
+        default=None, primary_key=True, sa_column_kwargs={"autoincrement": True}
+    )
+    persist_id: str = Field(nullable=False, max_length=255, unique=True)
+    cargo_id: str = Field(nullable=False, max_length=255)
+
+
 @dataclass
 class Conversation:
     """LLM 对话类

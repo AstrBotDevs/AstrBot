@@ -192,6 +192,10 @@
             "description": "Shipyard Neo Profile",
             "hint": "Shipyard Neo 沙箱 profile，例如 python-default。留空时自动选择能力更完整的 profile。"
           },
+          "shipyard_neo_persist_id": {
+            "description": "Shipyard Neo 文件持久化ID",
+            "hint": "具有相同文件持久化ID的沙箱会复用同一个存储卷，从而实现文件持久化。适用于需要跨会话保存文件的场景。留空则不启用文件持久化。"
+          },
           "shipyard_neo_ttl": {
             "description": "Shipyard Neo Sandbox 存活时间(秒)",
             "hint": "Shipyard Neo 沙箱的生存时间（秒）。"
