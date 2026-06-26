@@ -659,8 +659,8 @@ export const useExtensionPage = () => {
       if (matchedPlugin) {
         extension.online_version = matchedPlugin.version;
         extension.has_update =
-          extension.version !== matchedPlugin.version &&
-          matchedPlugin.version !== tm("status.unknown");
+          matchedPlugin.version !== tm("status.unknown") &&
+          compareVersions(extension.version, matchedPlugin.version) < 0;
       } else {
         extension.online_version = "";
         extension.has_update = false;
