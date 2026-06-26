@@ -8,6 +8,10 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Json, Plain, Record
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.media_utils import (
+    MEDIA_MIME_EXTENSIONS,
+    detect_image_mime_type_async,
+)
 
 from .webchat_queue_mgr import webchat_queue_mgr
 
@@ -78,11 +82,17 @@ class WebChatMessageEvent(AstrMessageEvent):
                 )
             elif isinstance(comp, Image):
                 # save image to local
-                filename = f"{str(uuid.uuid4())}.jpg"
-                path = os.path.join(attachments_dir, filename)
                 image_base64 = await comp.convert_to_base64()
+                image_bytes = base64.b64decode(image_base64)
+                mime_type = await detect_image_mime_type_async(
+                    image_bytes,
+                    default_mime_type=None,
+                )
+                suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
+                filename = f"{str(uuid.uuid4())}{suffix}"
+                path = os.path.join(attachments_dir, filename)
                 with open(path, "wb") as f:
-                    f.write(base64.b64decode(image_base64))
+                    f.write(image_bytes)
                 data = f"[IMAGE]{filename}"
                 await web_chat_back_queue.put(
                     {
