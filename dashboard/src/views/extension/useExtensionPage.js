@@ -659,6 +659,7 @@ export const useExtensionPage = () => {
       if (matchedPlugin) {
         const localVersion = String(extension.version || "").trim();
         const onlineVersion = String(matchedPlugin.version || "").trim();
+        // Only compare explicit version-like values to avoid false update states.
         const isKnownVersion =
           /^v?\d+/.test(localVersion) &&
           /^v?\d+/.test(onlineVersion) &&
@@ -671,6 +672,7 @@ export const useExtensionPage = () => {
         extension.has_update =
           isKnownVersion &&
           (versionCompare < 0 ||
+            // compareVersions ignores pre-release tags, so handle stable releases explicitly.
             (versionCompare === 0 &&
               localVersion.includes("-") &&
               !onlineVersion.includes("-")));
