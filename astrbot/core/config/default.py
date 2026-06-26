@@ -455,6 +455,7 @@ CONFIG_METADATA_2 = {
                         "telegram_command_auto_refresh": True,
                         "telegram_command_register_interval": 300,
                         "telegram_polling_restart_delay": 5.0,
+                        "telegram_reply_to_message": "off",
                     },
                     "Discord": {
                         "id": "discord",
@@ -773,6 +774,12 @@ CONFIG_METADATA_2 = {
                         "description": "Telegram 轮询重启延迟",
                         "type": "float",
                         "hint": "当轮询意外结束尝试自动重启时的延迟时间，理论上越短恢复越快，但过短（<0.1s）可能导致死循环针对 API 服务器的请求阻断。单位为秒。默认为 5s。",
+                    },
+                    "telegram_reply_to_message": {
+                        "description": "Telegram 回复时引用消息",
+                        "type": "string",
+                        "options": ["off", "private", "group", "all"],
+                        "hint": "机器人回复时是否引用（reply to）触发该回复的原消息。off：关闭；private：仅私聊；group：仅群聊；all：私聊和群聊都引用。默认 off。",
                     },
                     "id": {
                         "description": "机器人名称",
