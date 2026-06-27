@@ -54,6 +54,7 @@ import FileBrowserView from "@/components/chat/message_list_comps/FileBrowserVie
 import GitCommitBar from "@/components/chat/message_list_comps/GitCommitBar.vue";
 import GitCommitDialog from "@/components/chat/message_list_comps/GitCommitDialog.vue";
 import WorktreeCreateDialog from "@/components/chat/message_list_comps/WorktreeCreateDialog.vue";
+import LockReasonDialogBody from "@/components/chat/message_list_comps/LockReasonDialogBody.vue";
 import GitLogView from "@/components/chat/message_list_comps/GitLogView.vue";
 const { tm } = useModuleI18n("features/chat");
 
@@ -417,6 +418,7 @@ const isLocking = ref(false);
 const isUnlocking = ref(false);
 const isCreating = ref(false);
 const lastCreateError = ref<{ reason: string; stderr: string } | null>(null);
+const removeForceChecked = ref(false);
 
 // Context menu position + target (spec 2026-06-27 §2.3).
 const contextMenu = ref<{
@@ -2119,6 +2121,103 @@ const currentRoot = computed<string | null>(() => {
                   "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmAction",
                 )
               }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Worktree CREATE dialog (spec 2026-06-27 §2.2.A) -->
+      <WorktreeCreateDialog
+        v-model="createDialogOpen"
+        :is-submitting="isCreating"
+        @submit="onCreateSubmit"
+        @cancel="createDialogOpen = false"
+      />
+
+      <!-- Worktree REMOVE confirm dialog (spec 2026-06-27 §2.2.B) -->
+      <v-dialog v-model="removeDialogOpen" persistent max-width="480">
+        <v-card>
+          <v-card-title class="text-h6">
+            {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmTitle") }}
+          </v-card-title>
+          <v-card-text>
+            <p class="mb-2">
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmMessageWithPath",
+                  { path: removeDialogTarget?.path ?? "", branch: removeDialogTarget?.branch ?? "" },
+                )
+              }}
+            </p>
+            <p
+              v-if="dirtyCount !== null && dirtyCount > 0"
+              class="text-caption text-warning mb-2"
+            >
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.dirtyHint",
+                  { count: dirtyCount },
+                )
+              }}
+            </p>
+            <v-checkbox
+              v-if="dirtyCount !== null && dirtyCount > 0"
+              v-model="removeForceChecked"
+              density="compact"
+              :label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.force', { count: dirtyCount })"
+              color="warning"
+              hide-details
+            />
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" :disabled="isRemoving" @click="removeDialogOpen = false">
+              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.cancel") }}
+            </v-btn>
+            <v-btn
+              variant="flat"
+              color="warning"
+              :loading="isRemoving"
+              @click="onConfirmRemove(removeForceChecked)"
+            >
+              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirm") }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Worktree LOCK dialog (spec 2026-06-27 §2.2.C) -->
+      <v-dialog v-model="lockDialogOpen" persistent max-width="480">
+        <LockReasonDialogBody
+          v-if="lockDialogOpen"
+          :target-branch="lockDialogTarget?.branch ?? null"
+          :is-locking="isLocking"
+          @submit="onLockSubmit"
+          @cancel="lockDialogOpen = false"
+        />
+      </v-dialog>
+
+      <!-- Worktree UNLOCK confirm dialog (spec 2026-06-27 §2.2.D) -->
+      <v-dialog v-model="confirmUnlockOpen" persistent max-width="440">
+        <v-card>
+          <v-card-title class="text-h6">
+            {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmTitle") }}
+          </v-card-title>
+          <v-card-text>
+            {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmMessage") }}
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" :disabled="isUnlocking" @click="onCancelUnlock">
+              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.cancel") }}
+            </v-btn>
+            <v-btn
+              variant="flat"
+              color="primary"
+              :loading="isUnlocking"
+              @click="onConfirmUnlock"
+            >
+              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirm") }}
             </v-btn>
           </v-card-actions>
         </v-card>
