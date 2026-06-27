@@ -3,9 +3,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from astrbot.core.provider.sources.mimo_api_common import MiMoAPIError, build_headers
+from astrbot.core.provider.sources.mimo_api_common import (
+    MiMoAPIError,
+    build_headers,
+    prepare_audio_input,
+)
 from astrbot.core.provider.sources.mimo_stt_api_source import ProviderMiMoSTTAPI
 from astrbot.core.provider.sources.mimo_tts_api_source import ProviderMiMoTTSAPI
+
+MIMO_STT_TEST_AUDIO_DATA_URL = "data:audio/wav;base64,ZmFrZQ=="
 
 
 def _make_tts_provider(overrides: dict | None = None) -> ProviderMiMoTTSAPI:
@@ -190,7 +196,7 @@ async def test_mimo_tts_get_audio_handles_empty_choices():
 
 
 @pytest.mark.asyncio
-async def test_mimo_stt_payload_includes_audio_and_prompt(monkeypatch):
+async def test_mimo_stt_payload_includes_audio_only(monkeypatch):
     provider = _make_stt_provider(
         {
             "mimo-stt-system-prompt": "system prompt",
@@ -201,7 +207,7 @@ async def test_mimo_stt_payload_includes_audio_and_prompt(monkeypatch):
     captured: dict = {}
 
     async def fake_prepare_audio_input(_audio_source: str):
-        return "ZmFrZQ==", []
+        return MIMO_STT_TEST_AUDIO_DATA_URL, []
 
     class _Response:
         status_code = 200
@@ -227,13 +233,85 @@ async def test_mimo_stt_payload_includes_audio_and_prompt(monkeypatch):
     result = await provider.get_text("/tmp/test.wav")
 
     assert result == "transcribed text"
-    assert captured["json"]["messages"][0]["content"] == "system prompt"
-    assert captured["json"]["messages"][1]["content"][0]["type"] == "input_audio"
-    assert (
-        captured["json"]["messages"][1]["content"][0]["input_audio"]["data"]
-        == "ZmFrZQ=="
+    assert captured["json"]["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_audio",
+                    "input_audio": {
+                        "data": MIMO_STT_TEST_AUDIO_DATA_URL,
+                    },
+                },
+            ],
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_mimo_stt_prepare_audio_input_returns_data_url(monkeypatch):
+    class _ResolvedAudio:
+        base64_data = "ZmFrZQ=="
+        mime_type = "audio/wav"
+        format = "wav"
+
+        def to_data_url(self):
+            return MIMO_STT_TEST_AUDIO_DATA_URL
+
+    class _Resolver:
+        def __init__(self, audio_source, **kwargs):
+            assert audio_source == "/tmp/test.wav"
+            assert kwargs == {
+                "media_type": "audio",
+                "default_suffix": ".wav",
+            }
+
+        async def to_base64_data(self, **kwargs):
+            assert kwargs == {
+                "strict": True,
+                "target_format": "wav",
+            }
+            return _ResolvedAudio()
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.mimo_api_common.MediaResolver",
+        _Resolver,
     )
-    assert captured["json"]["messages"][1]["content"][1]["text"] == "user prompt"
+
+    audio_data, cleanup_paths = await prepare_audio_input("/tmp/test.wav")
+
+    assert audio_data == MIMO_STT_TEST_AUDIO_DATA_URL
+    assert cleanup_paths == []
+
+
+@pytest.mark.asyncio
+async def test_mimo_stt_get_text_uses_reasoning_content(monkeypatch):
+    provider = _make_stt_provider()
+
+    async def fake_prepare_audio_input(_audio_source: str):
+        return MIMO_STT_TEST_AUDIO_DATA_URL, []
+
+    class _Response:
+        status_code = 200
+        text = '{"choices":[{"message":{"content":"","reasoning_content":"转写结果"}}]}'
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [
+                    {"message": {"content": "", "reasoning_content": "转写结果"}}
+                ]
+            }
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.mimo_stt_api_source.prepare_audio_input",
+        fake_prepare_audio_input,
+    )
+    provider.client = SimpleNamespace(post=_fake_post(_Response()))
+
+    assert await provider.get_text("/tmp/test.wav") == "转写结果"
 
 
 @pytest.mark.asyncio
@@ -241,7 +319,7 @@ async def test_mimo_stt_get_text_handles_empty_choices(monkeypatch):
     provider = _make_stt_provider()
 
     async def fake_prepare_audio_input(_audio_source: str):
-        return "ZmFrZQ==", []
+        return MIMO_STT_TEST_AUDIO_DATA_URL, []
 
     class _Response:
         status_code = 200
@@ -252,6 +330,33 @@ async def test_mimo_stt_get_text_handles_empty_choices(monkeypatch):
 
         def json(self):
             return {"choices": []}
+
+    monkeypatch.setattr(
+        "astrbot.core.provider.sources.mimo_stt_api_source.prepare_audio_input",
+        fake_prepare_audio_input,
+    )
+    provider.client = SimpleNamespace(post=_fake_post(_Response()))
+
+    with pytest.raises(MiMoAPIError, match="returned empty transcription"):
+        await provider.get_text("/tmp/test.wav")
+
+
+@pytest.mark.asyncio
+async def test_mimo_stt_get_text_handles_null_message(monkeypatch):
+    provider = _make_stt_provider()
+
+    async def fake_prepare_audio_input(_audio_source: str):
+        return MIMO_STT_TEST_AUDIO_DATA_URL, []
+
+    class _Response:
+        status_code = 200
+        text = '{"choices":[{"message":null}]}'
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": None}]}
 
     monkeypatch.setattr(
         "astrbot.core.provider.sources.mimo_stt_api_source.prepare_audio_input",

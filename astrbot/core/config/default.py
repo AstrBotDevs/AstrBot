@@ -1594,8 +1594,6 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "api_base": "https://api.xiaomimimo.com/v1",
                         "model": "mimo-v2-omni",
-                        "mimo-stt-system-prompt": "You are a speech transcription assistant. Transcribe the spoken content from the audio exactly and return only the transcription text.",
-                        "mimo-stt-user-prompt": "Please transcribe the content of the audio and return only the transcription text.",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -2597,16 +2595,6 @@ CONFIG_METADATA_2 = {
                         "description": "超时时间",
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
-                    },
-                    "mimo-stt-system-prompt": {
-                        "description": "系统提示词",
-                        "type": "string",
-                        "hint": "用于指导 MiMo STT 转录行为的 system prompt。",
-                    },
-                    "mimo-stt-user-prompt": {
-                        "description": "用户提示词",
-                        "type": "string",
-                        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。",
                     },
                     "openai-tts-voice": {
                         "description": "voice",

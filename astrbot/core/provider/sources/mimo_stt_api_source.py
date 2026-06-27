@@ -4,8 +4,6 @@ from ..register import register_provider_adapter
 from .mimo_api_common import (
     DEFAULT_MIMO_API_BASE,
     DEFAULT_MIMO_STT_MODEL,
-    DEFAULT_MIMO_STT_SYSTEM_PROMPT,
-    DEFAULT_MIMO_STT_USER_PROMPT,
     MiMoAPIError,
     build_api_url,
     build_headers,
@@ -32,14 +30,6 @@ class ProviderMiMoSTTAPI(STTProvider):
         self.api_base = provider_config.get("api_base", DEFAULT_MIMO_API_BASE)
         self.proxy = provider_config.get("proxy", "")
         self.timeout = normalize_timeout(provider_config.get("timeout", 20))
-        self.system_prompt = provider_config.get(
-            "mimo-stt-system-prompt",
-            DEFAULT_MIMO_STT_SYSTEM_PROMPT,
-        )
-        self.user_prompt = provider_config.get(
-            "mimo-stt-user-prompt",
-            DEFAULT_MIMO_STT_USER_PROMPT,
-        )
         self.set_model(provider_config.get("model", DEFAULT_MIMO_STT_MODEL))
         self.client = create_http_client(self.timeout, self.proxy)
 
@@ -49,10 +39,6 @@ class ProviderMiMoSTTAPI(STTProvider):
             "model": self.model_name,
             "messages": [
                 {
-                    "role": "system",
-                    "content": self.system_prompt,
-                },
-                {
                     "role": "user",
                     "content": [
                         {
@@ -60,10 +46,6 @@ class ProviderMiMoSTTAPI(STTProvider):
                             "input_audio": {
                                 "data": audio_data_url,
                             },
-                        },
-                        {
-                            "type": "text",
-                            "text": self.user_prompt,
                         },
                     ],
                 },
@@ -88,9 +70,10 @@ class ProviderMiMoSTTAPI(STTProvider):
             data = response.json()
             choices = data.get("choices") or []
             first_choice = choices[0] if choices else {}
-            content = first_choice.get("message", {}).get("content", "")
+            message = (first_choice or {}).get("message") or {}
+            content = message.get("content") or message.get("reasoning_content") or ""
             if not isinstance(content, str) or not content.strip():
-                raise MiMoAPIError(f"MiMo STT API returned empty transcription: {data}")
+                raise MiMoAPIError("MiMo STT API returned empty transcription")
             return content.strip()
         finally:
             cleanup_files(cleanup_paths)

@@ -11,13 +11,6 @@ DEFAULT_MIMO_TTS_MODEL = "mimo-v2-tts"
 DEFAULT_MIMO_TTS_VOICE = "mimo_default"
 DEFAULT_MIMO_TTS_SEED_TEXT = "Hello, MiMo, have you had lunch?"
 DEFAULT_MIMO_STT_MODEL = "mimo-v2-omni"
-DEFAULT_MIMO_STT_SYSTEM_PROMPT = (
-    "You are a speech transcription assistant. "
-    "Transcribe the spoken content from the audio exactly and return only the transcription text."
-)
-DEFAULT_MIMO_STT_USER_PROMPT = (
-    "Please transcribe the content of the audio and return only the transcription text."
-)
 
 
 class MiMoAPIError(Exception):
@@ -74,7 +67,7 @@ async def prepare_audio_input(audio_source: str) -> tuple[str, list[Path]]:
     )
     if audio_data is None:
         raise ValueError(f"Invalid audio data: {describe_media_ref(audio_source)}")
-    return audio_data.base64_data, []
+    return audio_data.to_data_url(), []
 
 
 def cleanup_files(paths: list[Path]) -> None:

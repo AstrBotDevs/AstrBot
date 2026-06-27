@@ -1586,14 +1586,6 @@
         "description": "Timeout",
         "hint": "Timeout in seconds."
       },
-      "mimo-stt-system-prompt": {
-        "description": "System prompt",
-        "hint": "System prompt used to guide MiMo STT transcription behavior."
-      },
-      "mimo-stt-user-prompt": {
-        "description": "User prompt",
-        "hint": "Additional user prompt sent to MiMo STT to constrain the returned transcription format."
-      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS voice. OpenAI defaults: 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'."
