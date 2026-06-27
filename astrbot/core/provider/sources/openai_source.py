@@ -477,7 +477,40 @@ class ProviderOpenAIOfficial(Provider):
 
             cleaned.append(msg)
 
-        payloads["messages"] = cleaned
+        # Drop orphaned or duplicate tool messages whose assistant(tool_calls)
+        # was removed by context truncation / compression.
+        pending_tool_call_ids: set[str] = set()
+        final: list = []
+        removed_tool_messages = 0
+        for msg in cleaned:
+            if not isinstance(msg, dict):
+                final.append(msg)
+                pending_tool_call_ids = set()
+                continue
+            role = msg.get("role")
+            if role == "assistant" and msg.get("tool_calls"):
+                pending_tool_call_ids = {
+                    tc["id"]
+                    for tc in msg["tool_calls"]
+                    if isinstance(tc, dict) and "id" in tc
+                }
+                final.append(msg)
+            elif role == "tool":
+                tool_call_id = msg.get("tool_call_id")
+                if tool_call_id in pending_tool_call_ids:
+                    final.append(msg)
+                    pending_tool_call_ids.remove(tool_call_id)
+                else:
+                    removed_tool_messages += 1
+            else:
+                pending_tool_call_ids = set()
+                final.append(msg)
+        if removed_tool_messages:
+            logger.debug(
+                "Filtered %d orphaned or duplicate tool message(s)",
+                removed_tool_messages,
+            )
+        payloads["messages"] = final
 
     async def _query(
         self,
