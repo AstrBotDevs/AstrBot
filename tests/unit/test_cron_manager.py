@@ -1,6 +1,7 @@
 """Tests for CronJobManager."""
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -12,6 +13,9 @@ from astrbot.core.cron.manager import (
     _normalize_crontab_day_of_week,
 )
 from astrbot.core.db.po import CronJob
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
+from astrbot.core.provider.entites import ProviderRequest
 
 
 @pytest.fixture
@@ -224,7 +228,7 @@ class TestUpdateJob:
     """Tests for update_job method."""
 
     @pytest.mark.asyncio
-    async def test_update_job(self, cron_manager, mock_db, sample_cron_job):
+    async def test_update_job(self, cron_manager, mock_db):
         """Test updating a cron job."""
         updated_job = CronJob(
             job_id="test-job-id",
@@ -532,6 +536,81 @@ class TestRunBasicJob:
 
         with pytest.raises(RuntimeError, match="handler not found"):
             await cron_manager._run_basic_job(sample_cron_job)
+
+
+class TestActiveAgentFallback:
+    """Tests for active-agent cron fallback delivery."""
+
+    @pytest.mark.asyncio
+    async def test_fallback_sends_final_text_when_agent_did_not_send_message(
+        self, cron_manager, mock_context
+    ):
+        cron_manager.ctx = mock_context
+        mock_context.send_message = AsyncMock(return_value=True)
+        session = MessageSession(
+            "test-platform",
+            MessageType.FRIEND_MESSAGE,
+            "session-1",
+        )
+        req = ProviderRequest()
+        llm_resp = SimpleNamespace(
+            role="assistant",
+            completion_text="定时任务完成。",
+        )
+
+        sent = await cron_manager._send_active_agent_fallback_if_needed(
+            session=session,
+            req=req,
+            llm_resp=llm_resp,
+            cron_meta={"id": "job-1", "name": "job"},
+        )
+
+        assert sent is True
+        mock_context.send_message.assert_awaited_once()
+        assert mock_context.send_message.await_args.args[0] == session
+        assert (
+            mock_context.send_message.await_args.args[1].chain[0].text
+            == "定时任务完成。"
+        )
+
+    @pytest.mark.asyncio
+    async def test_fallback_skips_when_agent_already_sent_message(
+        self, cron_manager, mock_context
+    ):
+        cron_manager.ctx = mock_context
+        mock_context.send_message = AsyncMock(return_value=True)
+        session = MessageSession(
+            "test-platform",
+            MessageType.FRIEND_MESSAGE,
+            "session-1",
+        )
+        req = ProviderRequest()
+        req.tool_calls_result = [
+            SimpleNamespace(
+                tool_calls_result=[
+                    SimpleNamespace(
+                        content=(
+                            "Message sent to session "
+                            "test-platform:FriendMessage:session-1"
+                        )
+                    )
+                ]
+            )
+        ]
+        llm_resp = SimpleNamespace(
+            role="assistant",
+            completion_text="定时任务完成。",
+        )
+
+        sent = await cron_manager._send_active_agent_fallback_if_needed(
+            session=session,
+            req=req,
+            llm_resp=llm_resp,
+            cron_meta={"id": "job-1", "name": "job"},
+        )
+
+        assert sent is False
+        mock_context.send_message.assert_not_awaited()
 
 
 class TestGetNextRunTime:

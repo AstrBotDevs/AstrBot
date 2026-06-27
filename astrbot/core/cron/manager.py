@@ -15,6 +15,7 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
@@ -484,9 +485,84 @@ class CronJobManager:
             req=req,
             summary_note=summary_note,
         )
+        await self._send_active_agent_fallback_if_needed(
+            session=session,
+            req=req,
+            llm_resp=llm_resp,
+            cron_meta=cron_meta,
+        )
         if not llm_resp:
             logger.warning("Cron job agent got no response")
             return
+
+    async def _send_active_agent_fallback_if_needed(
+        self,
+        *,
+        session: MessageSession,
+        req: ProviderRequest,
+        llm_resp,
+        cron_meta: dict,
+    ) -> bool:
+        if self._agent_sent_message_to_user(req):
+            logger.info(
+                "cron active agent fallback skipped agent_sent=True session=%s job_id=%s",
+                session,
+                cron_meta.get("id"),
+            )
+            return False
+
+        text = str(getattr(llm_resp, "completion_text", "") or "").strip()
+        if not llm_resp or getattr(llm_resp, "role", "") != "assistant" or not text:
+            logger.warning(
+                "cron active agent fallback skipped no assistant text session=%s job_id=%s",
+                session,
+                cron_meta.get("id"),
+            )
+            return False
+
+        logger.info(
+            "cron active agent fallback send start session=%s job_id=%s",
+            session,
+            cron_meta.get("id"),
+        )
+        try:
+            ok = await self.ctx.send_message(session, MessageChain().message(text))
+            logger.info(
+                "cron active agent fallback send done ok=%s session=%s job_id=%s",
+                ok,
+                session,
+                cron_meta.get("id"),
+            )
+            return bool(ok)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "cron active agent fallback send exception session=%s job_id=%s err=%r",
+                session,
+                cron_meta.get("id"),
+                e,
+                exc_info=True,
+            )
+            raise
+
+    @staticmethod
+    def _agent_sent_message_to_user(req: ProviderRequest) -> bool:
+        results = getattr(req, "tool_calls_result", None)
+        if not results:
+            return False
+        if not isinstance(results, list):
+            results = [results]
+
+        for result in results:
+            call_results = getattr(result, "tool_calls_result", None) or []
+            for call_result in call_results:
+                content = getattr(call_result, "content", "")
+                if isinstance(content, list):
+                    content = " ".join(
+                        str(getattr(part, "text", part)) for part in content
+                    )
+                if "Message sent to session" in str(content):
+                    return True
+        return False
 
 
 __all__ = ["CronJobManager"]
