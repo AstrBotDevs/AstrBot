@@ -1000,7 +1000,10 @@ async function loadDirtyFor(wt: SpcodeGitWorktree): Promise<void> {
   const umo = spcodeStatus.status.value.umo;
   if (!umo) return;
   try {
-    const resp = await pluginExtensionApi.get<{ data: { files_changed?: number } }>(
+    // Backend body is { status, data: { files_changed } }; axios unwraps
+    // to ApiEnvelope<T> (see @/api/v1.ts), so resp.data is the envelope
+    // and we read resp.data.data.files_changed.
+    const resp = await pluginExtensionApi.get<{ files_changed?: number }>(
       "spcode/git-status",
       { params: { umo, worktree: wt.path } },
     );
@@ -1028,7 +1031,8 @@ async function onConfirmRemove(force: boolean): Promise<void> {
     // spec §7.5: 若被删的是当前 worktree,回退到主 worktree
     if (selectedWorktree.value === target.path) {
       selectedWorktree.value = null;
-      fileBrowserCurrentPath.value = mainWorktreePath.value ?? projectRoot.value;
+      // projectRoot.value is string|null; coerce to string with final fallback
+      fileBrowserCurrentPath.value = mainWorktreePath.value ?? projectRoot.value ?? "";
     }
     removeDialogOpen.value = false;
     removeDialogTarget.value = null;
@@ -1842,17 +1846,19 @@ const currentRoot = computed<string | null>(() => {
           <v-icon size="14">mdi-plus</v-icon>
         </button>
 
-        <!-- Context menu (spec 2026-06-27 §2.3) -->
+        <!-- Context menu (spec 2026-06-27 §2.3)
+             position-x/position-y is a Vuetify 3 v-menu feature; works
+             with the default 'connected' location strategy. -->
         <v-menu
           v-model="contextMenu.open"
-          :location-strategy="'absolute'"
           :position-x="contextMenu.x"
           :position-y="contextMenu.y"
         >
           <v-list density="compact">
             <template v-if="contextMenu.wt && !contextMenu.wt.isMain">
+              <!-- wt.locked is string|null; coerce to boolean for :disabled -->
               <v-list-item
-                :disabled="contextMenu.wt.locked"
+                :disabled="!!contextMenu.wt.locked"
                 @click="onLockClick(contextMenu.wt!)"
               >
                 <template #prepend>
@@ -1867,7 +1873,7 @@ const currentRoot = computed<string | null>(() => {
                 }}</v-list-item-title>
               </v-list-item>
               <v-list-item
-                :disabled="contextMenu.wt.locked"
+                :disabled="!!contextMenu.wt.locked"
                 @click="onRemoveClick(contextMenu.wt!)"
               >
                 <template #prepend>
