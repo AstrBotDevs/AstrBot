@@ -317,10 +317,23 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
             else:
                 return f"error: invalid session: {session}"
 
-        await context.context.context.send_message(
-            target_session,
-            MessageChain(chain=components),
-        )
+        message_chain = MessageChain(chain=components)
+        await context.context.context.send_message(target_session, message_chain)
+        if str(target_session) == current_session:
+            context.context.event._has_send_oper = True
+            sent_plain_text = message_chain.get_plain_text().strip()
+            if sent_plain_text:
+                sent_plain_texts = context.context.event.get_extra(
+                    "_send_message_to_user_current_session_plain_texts",
+                    [],
+                )
+                if not isinstance(sent_plain_texts, list):
+                    sent_plain_texts = []
+                sent_plain_texts.append(sent_plain_text)
+                context.context.event.set_extra(
+                    "_send_message_to_user_current_session_plain_texts",
+                    sent_plain_texts,
+                )
         return f"Message sent to session {target_session}"
 
 
