@@ -5,7 +5,20 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
-from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
+from astrbot.core.config.default import (
+    FORWARD_NODE_HARD_LIMIT_DEFAULT,
+    FORWARD_NODE_MAX_LENGTH_DEFAULT,
+)
+from astrbot.core.message.components import (
+    At,
+    Image,
+    Json,
+    Node,
+    Nodes,
+    Plain,
+    Record,
+    Reply,
+)
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -42,6 +55,34 @@ class ResultDecorateStage(Stage):
         self.forward_threshold = ctx.astrbot_config["platform_settings"][
             "forward_threshold"
         ]
+
+        # Long-reply auto-forward node splitting settings
+        try:
+            self.forward_node_max_length = int(
+                ctx.astrbot_config["platform_settings"].get(
+                    "forward_node_max_length", FORWARD_NODE_MAX_LENGTH_DEFAULT
+                )
+            )
+        except (TypeError, ValueError):
+            self.forward_node_max_length = FORWARD_NODE_MAX_LENGTH_DEFAULT
+        try:
+            self.forward_node_hard_limit = int(
+                ctx.astrbot_config["platform_settings"].get(
+                    "forward_node_hard_limit", FORWARD_NODE_HARD_LIMIT_DEFAULT
+                )
+            )
+        except (TypeError, ValueError):
+            self.forward_node_hard_limit = FORWARD_NODE_HARD_LIMIT_DEFAULT
+        if self.forward_node_max_length <= 0:
+            self.forward_node_max_length = FORWARD_NODE_MAX_LENGTH_DEFAULT
+        if self.forward_node_hard_limit <= 0:
+            self.forward_node_hard_limit = FORWARD_NODE_HARD_LIMIT_DEFAULT
+        if self.forward_node_max_length > self.forward_node_hard_limit:
+            logger.warning(
+                "forward_node_max_length is greater than forward_node_hard_limit; "
+                "falling back to hard limit as target length."
+            )
+            self.forward_node_max_length = self.forward_node_hard_limit
 
         trigger_probability = ctx.astrbot_config["provider_tts_settings"].get(
             "trigger_probability",
@@ -87,6 +128,20 @@ class ResultDecorateStage(Stage):
             "segmented_reply"
         ]["content_cleanup_rule"]
 
+        # Natural breakpoints for forward node splitting: reuse segmented_reply.split_words plus newline
+        _forward_split_words = list(self.split_words) if self.split_words else []
+        if "\n" not in _forward_split_words:
+            _forward_split_words.append("\n")
+        if _forward_split_words:
+            _escaped = sorted(
+                [re.escape(word) for word in _forward_split_words],
+                key=len,
+                reverse=True,
+            )
+            self.forward_split_pattern = re.compile(f"(?:{'|'.join(_escaped)})+")
+        else:
+            self.forward_split_pattern = None
+
         # exception
         self.content_safe_check_reply = ctx.astrbot_config["content_safety"][
             "also_use_in_response"
@@ -122,6 +177,89 @@ class ResultDecorateStage(Stage):
             elif seg and seg.strip():
                 result.append(seg)
         return result if result else [text]
+
+    @staticmethod
+    def _find_forward_split_pos(
+        text: str,
+        target_len: int,
+        hard_limit: int,
+        split_pattern: re.Pattern | None,
+    ) -> int:
+        """Find a split position for forward node plain text.
+
+        Prefer natural breakpoints between target_len and hard_limit.
+        If none exists, fall back to the nearest breakpoint before target_len.
+        If still none, hard-cut at hard_limit.
+        """
+        search_end = min(hard_limit, len(text))
+        if len(text) <= target_len:
+            return len(text)
+
+        if split_pattern is not None:
+            previous_end = 0
+            for match in split_pattern.finditer(text, 0, search_end):
+                if match.end() >= target_len:
+                    return match.end()
+                if match.end() > 0:
+                    previous_end = match.end()
+            if previous_end > 0:
+                return previous_end
+
+        if len(text) > hard_limit:
+            return hard_limit
+        return search_end
+
+    def _build_forward_nodes(
+        self,
+        chain: list,
+        uin: str,
+        name: str,
+    ) -> Nodes:
+        """Split a message chain into multiple forward nodes.
+
+        Non-Plain components are kept in the node where they appear.
+        Each node's total plain text length will not exceed forward_node_hard_limit.
+        """
+        nodes = Nodes([])
+        current_content: list = []
+        current_text_len = 0
+        target_len = self.forward_node_max_length
+        hard_limit = self.forward_node_hard_limit
+
+        def flush_current():
+            nonlocal current_content, current_text_len
+            if current_content:
+                nodes.nodes.append(Node(uin=uin, name=name, content=current_content))
+            current_content = []
+            current_text_len = 0
+
+        for comp in chain:
+            if isinstance(comp, Plain):
+                rest = comp.text or ""
+                while rest:
+                    if current_text_len >= target_len:
+                        flush_current()
+
+                    remaining_target = max(1, target_len - current_text_len)
+                    remaining_hard = max(1, hard_limit - current_text_len)
+                    split_pos = self._find_forward_split_pos(
+                        rest,
+                        remaining_target,
+                        remaining_hard,
+                        self.forward_split_pattern,
+                    )
+                    split_pos = max(1, min(split_pos, remaining_hard, len(rest)))
+                    current_content.append(Plain(rest[:split_pos]))
+                    current_text_len += split_pos
+                    rest = rest[split_pos:]
+
+                    if rest:
+                        flush_current()
+            else:
+                current_content.append(comp)
+
+        flush_current()
+        return nodes
 
     async def process(
         self,
@@ -393,14 +531,21 @@ class ResultDecorateStage(Stage):
                     if isinstance(comp, Plain):
                         word_cnt += len(comp.text)
                 if word_cnt > self.forward_threshold:
-                    node = Node(
-                        uin=event.get_self_id(),
-                        name="AstrBot",
-                        content=[*result.chain],
-                    )
-                    result.chain = [node]
+                    # Skip if the chain already contains forward nodes.
+                    if not any(
+                        isinstance(comp, (Node, Nodes)) for comp in result.chain
+                    ):
+                        nodes = self._build_forward_nodes(
+                            result.chain,
+                            event.get_self_id(),
+                            "AstrBot",
+                        )
+                        result.chain = [nodes]
 
-            # at 回复 / 引用回复仅适用于纯文本或图文消息
+            # at 回复 / 引用回复仅适用于纯文本或图文消息。
+            # After forward conversion result.chain is [Nodes], so mention/quote
+            # decorations are not applied to forwarded messages. This matches the
+            # pre-existing single-Node behavior and keeps pipeline order stable.
             can_decorate = all(
                 isinstance(item, (Plain, Image)) for item in result.chain
             )
