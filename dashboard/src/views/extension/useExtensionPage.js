@@ -167,6 +167,10 @@ export const useExtensionPage = () => {
   const showSourceManagerDialog = ref(false);
   const sourceName = ref("");
   const sourceUrl = ref("");
+  const sourceResolving = ref(false);
+  const sourceResolvedUrl = ref("");
+  const sourceResolveVisible = ref(false);
+  const sourceMarketMeta = ref(null);
   const customSources = ref([]);
   const selectedSource = ref(null);
   const showRemoveSourceDialog = ref(false);
@@ -1175,6 +1179,10 @@ export const useExtensionPage = () => {
     originalSourceUrl.value = "";
     sourceName.value = "";
     sourceUrl.value = "";
+    sourceResolvedUrl.value = "";
+    sourceResolveVisible.value = false;
+    sourceMarketMeta.value = null;
+    sourceResolving.value = false;
     showSourceDialog.value = true;
   };
 
@@ -1194,13 +1202,12 @@ export const useExtensionPage = () => {
     refreshPluginMarket();
   };
 
-  const sourceSelectItems = computed(() => [
-    { title: tm("market.defaultSource"), value: "__default__" },
-    ...customSources.value.map((source) => ({
-      title: source.name,
-      value: source.url,
-    })),
-  ]);
+  const sourceResolveCurrent = computed(
+    () =>
+      Boolean(sourceResolvedUrl.value) &&
+      normalizeRegistryUrl(sourceResolvedUrl.value) ===
+        normalizeRegistryUrl(sourceUrl.value),
+  );
 
   const openPluginSourceBindingDialog = async (extension) => {
     if (!extension) return;
@@ -1346,6 +1353,10 @@ export const useExtensionPage = () => {
     originalSourceUrl.value = source.url;
     sourceName.value = source.name;
     sourceUrl.value = source.url;
+    sourceResolvedUrl.value = source.url;
+    sourceResolveVisible.value = false;
+    sourceMarketMeta.value = null;
+    sourceResolving.value = false;
     showSourceDialog.value = true;
   };
 
@@ -1377,15 +1388,14 @@ export const useExtensionPage = () => {
     }
   };
 
-  const saveCustomSource = () => {
+  const resolveCustomSource = async () => {
     const normalizedUrl = sourceUrl.value.trim();
 
-    if (!sourceName.value.trim() || !normalizedUrl) {
-      toast(tm("messages.fillSourceNameAndUrl"), "error");
+    if (!normalizedUrl) {
+      toast(tm("messages.fillSourceUrl"), "error");
       return;
     }
 
-    // 检查URL格式
     try {
       new URL(normalizedUrl);
     } catch (e) {
@@ -1393,35 +1403,110 @@ export const useExtensionPage = () => {
       return;
     }
 
+    const normalizedRegistryUrl = normalizeRegistryUrl(normalizedUrl);
+    const originalRegistryUrl = normalizeRegistryUrl(originalSourceUrl.value);
+    if (
+      (!editingSource.value || normalizedRegistryUrl !== originalRegistryUrl) &&
+      customSources.value.some(
+        (source) => normalizeRegistryUrl(source.url) === normalizedRegistryUrl,
+      )
+    ) {
+      toast(tm("market.sourceExists"), "error");
+      return;
+    }
+
+    sourceResolving.value = true;
+    try {
+      const res = await pluginApi.market({
+        custom_registry: normalizedRegistryUrl,
+        force_refresh: true,
+      });
+      if (res.data.status !== "ok") {
+        toast(res.data.message || tm("messages.sourceResolveFailed"), "error");
+        return;
+      }
+
+      const meta = res.data.data?.$meta;
+      sourceMarketMeta.value =
+        meta && typeof meta === "object" && !Array.isArray(meta) ? meta : null;
+
+      const metaName = String(sourceMarketMeta.value?.name || "").trim();
+      if (metaName && !sourceName.value.trim()) {
+        sourceName.value = metaName;
+      }
+      sourceResolvedUrl.value = normalizedRegistryUrl;
+      sourceResolveVisible.value = true;
+      toast(tm("market.sourceResolved"), "success");
+    } catch (error) {
+      toast(
+        resolveErrorMessage(error, tm("messages.sourceResolveFailed")),
+        "error",
+      );
+    } finally {
+      sourceResolving.value = false;
+    }
+  };
+
+  const saveCustomSource = () => {
+    const normalizedUrl = sourceUrl.value.trim();
+
+    if (!normalizedUrl) {
+      toast(tm("messages.fillSourceUrl"), "error");
+      return;
+    }
+
+    try {
+      new URL(normalizedUrl);
+    } catch (e) {
+      toast(tm("messages.invalidUrl"), "error");
+      return;
+    }
+
+    if (!sourceResolveCurrent.value) {
+      toast(tm("messages.resolveSourceFirst"), "error");
+      return;
+    }
+
+    if (!sourceName.value.trim()) {
+      toast(tm("messages.fillSourceName"), "error");
+      return;
+    }
+
+    const normalizedRegistryUrl = normalizeRegistryUrl(normalizedUrl);
+    const originalRegistryUrl = normalizeRegistryUrl(originalSourceUrl.value);
+
     if (editingSource.value) {
-      // 编辑模式：更新现有源
       const index = customSources.value.findIndex(
-        (s) => s.url === originalSourceUrl.value,
+        (s) => normalizeRegistryUrl(s.url) === originalRegistryUrl,
       );
       if (index !== -1) {
         customSources.value[index] = {
           name: sourceName.value.trim(),
-          url: normalizedUrl,
+          url: normalizedRegistryUrl,
         };
 
-        // 如果编辑的是当前选中的源，更新选中源
-        if (selectedSource.value === originalSourceUrl.value) {
-          selectedSource.value = normalizedUrl;
+        if (
+          normalizeRegistryUrl(selectedSource.value) === originalRegistryUrl
+        ) {
+          selectedSource.value = normalizedRegistryUrl;
           localStorage.setItem("selectedPluginSource", selectedSource.value);
-          // 重新加载插件市场数据
           refreshPluginMarket();
         }
       }
     } else {
-      // 添加模式：检查是否已存在
-      if (customSources.value.some((source) => source.url === normalizedUrl)) {
+      if (
+        customSources.value.some(
+          (source) =>
+            normalizeRegistryUrl(source.url) === normalizedRegistryUrl,
+        )
+      ) {
         toast(tm("market.sourceExists"), "error");
         return;
       }
 
       customSources.value.push({
         name: sourceName.value.trim(),
-        url: normalizedUrl,
+        url: normalizedRegistryUrl,
       });
     }
 
@@ -1436,6 +1521,10 @@ export const useExtensionPage = () => {
     // 重置表单
     sourceName.value = "";
     sourceUrl.value = "";
+    sourceResolvedUrl.value = "";
+    sourceResolveVisible.value = false;
+    sourceMarketMeta.value = null;
+    sourceResolving.value = false;
     editingSource.value = false;
     originalSourceUrl.value = "";
     showSourceDialog.value = false;
@@ -2028,6 +2117,10 @@ export const useExtensionPage = () => {
     showSourceManagerDialog,
     sourceName,
     sourceUrl,
+    sourceResolving,
+    sourceResolveVisible,
+    sourceMarketMeta,
+    sourceResolveCurrent,
     customSources,
     selectedSource,
     showRemoveSourceDialog,
@@ -2100,10 +2193,10 @@ export const useExtensionPage = () => {
     addCustomSource,
     openSourceManagerDialog,
     selectPluginSource,
-    sourceSelectItems,
     editCustomSource,
     removeCustomSource,
     confirmRemoveSource,
+    resolveCustomSource,
     saveCustomSource,
     openPluginSourceBindingDialog,
     closePluginSourceBindingDialog,

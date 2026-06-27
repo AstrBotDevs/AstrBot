@@ -490,6 +490,8 @@ class PluginService:
         text = str(repo_url or "").strip().rstrip("/")
         if not text:
             return ""
+        if not text.startswith(("http://", "https://")):
+            text = f"https://{text}"
         parsed = urlparse(text)
         if parsed.netloc.lower() not in {"github.com", "www.github.com"}:
             return ""
@@ -572,6 +574,7 @@ class PluginService:
             logger.warning("插件安装成功，但无法记录安装来源：缺少插件元数据。")
             return
 
+        registry_name = await self.resolve_registry_name(payload.get("registry_url"))
         records = await self.get_plugin_install_sources()
         records[plugin.root_dir_name] = self.build_install_source_record(
             plugin,
@@ -579,7 +582,7 @@ class PluginService:
             fallback_method=fallback_method,
             repo_url=repo_url,
             download_url=download_url,
-            registry_name=await self.resolve_registry_name(payload.get("registry_url")),
+            registry_name=registry_name,
         )
         await self.save_plugin_install_sources(records)
 
@@ -1195,6 +1198,13 @@ class PluginService:
                 return plugin
             if record_repo_identifier and plugin_identifier == record_repo_identifier:
                 return plugin
+            plugin_repo_identifier = self.repo_identifier_from_url(plugin.get("repo"))
+            if (
+                record_repo_identifier
+                and plugin_repo_identifier
+                and plugin_repo_identifier == record_repo_identifier
+            ):
+                return plugin
             plugin_repo = str(plugin.get("repo") or "").strip().rstrip("/").lower()
             if record_repo and plugin_repo == record_repo:
                 return plugin
@@ -1403,6 +1413,7 @@ class PluginService:
                 public_message="插件仓库地址与所选插件源不一致，无法更换插件源。",
             )
 
+        registry_name = await self.resolve_registry_name(registry_url)
         records = await self.get_plugin_install_sources()
         old_record = self.resolve_plugin_install_source(plugin, records)
         installed_at = (
@@ -1416,7 +1427,7 @@ class PluginService:
             "root_dir_name": plugin.root_dir_name,
             "install_method": "market",
             "registry_url": registry_url,
-            "registry_name": await self.resolve_registry_name(registry_url),
+            "registry_name": registry_name,
             "market_plugin_id": market_plugin_id,
             "repo": repo_url,
             "download_url": str(market_plugin.get("download_url") or "").strip(),

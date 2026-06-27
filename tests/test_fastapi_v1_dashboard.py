@@ -1806,7 +1806,7 @@ async def test_plugin_service_market_install_uses_registry_entry(
                 "author": "AstrBotDevs",
                 "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo",
                 "download_url": "https://cdn.example/market-plugin.zip",
-            }
+            },
         }, None
 
     async def fake_install_plugin(
@@ -1918,7 +1918,7 @@ async def test_plugin_service_bind_market_source_validates_and_persists(
                 "author": "AstrBotDevs",
                 "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo.git",
                 "download_url": "https://cdn.example/plugin.zip",
-            }
+            },
         }, None
 
     async def fake_get_plugin_install_sources():
@@ -1982,7 +1982,7 @@ async def test_plugin_service_bind_market_source_rejects_repo_mismatch(
             "astrbot-plugin-demo": {
                 "author": "AstrBotDevs",
                 "repo": "https://github.com/SomeoneElse/astrbot-plugin-demo",
-            }
+            },
         }, None
 
     monkeypatch.setattr(plugin_service, "find_plugin_by_name", lambda name: plugin)
@@ -1997,6 +1997,104 @@ async def test_plugin_service_bind_market_source_rejects_repo_mismatch(
         )
 
     assert "插件仓库地址与所选插件源不一致" in str(exc_info.value)
+
+
+def test_plugin_service_repo_identifier_accepts_github_url_without_scheme(
+    asgi_app: FastAPI,
+):
+    plugin_service = asgi_app.state.services.plugins
+
+    assert (
+        plugin_service.repo_identifier_from_url("github.com/AstrBotDevs/demo.git")
+        == "AstrBotDevs/demo"
+    )
+
+
+def test_plugin_service_resolves_market_entry_by_repo_identifier(
+    asgi_app: FastAPI,
+):
+    plugin_service = asgi_app.state.services.plugins
+    record = {
+        "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo.git",
+    }
+    market_data = {
+        "$meta": {"schema_version": 1},
+        "astrbot-plugin-demo": {
+            "author": "AstrBotDevs",
+            "repo": "https://www.github.com/AstrBotDevs/astrbot-plugin-demo",
+        },
+    }
+
+    entry = plugin_service.resolve_market_plugin_entry(market_data, record)
+
+    assert entry is not None
+    assert entry["author"] == "AstrBotDevs"
+    assert entry["name"] == "astrbot-plugin-demo"
+    assert entry["repo"] == "https://www.github.com/AstrBotDevs/astrbot-plugin-demo"
+
+
+@pytest.mark.asyncio
+async def test_plugin_service_persist_install_source_resolves_registry_before_read(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    plugin = SimpleNamespace(
+        name="astrbot_plugin_demo",
+        root_dir_name="astrbot_plugin_demo",
+        repo="https://github.com/AstrBotDevs/astrbot-plugin-demo",
+    )
+    events = []
+    captured = {}
+
+    async def fake_resolve_registry_name(registry_url):
+        events.append(("resolve", registry_url))
+        return "Custom"
+
+    async def fake_get_plugin_install_sources():
+        events.append(("get", None))
+        return {}
+
+    async def fake_save_plugin_install_sources(records):
+        events.append(("save", None))
+        captured["records"] = records
+
+    monkeypatch.setattr(plugin_service, "find_plugin_by_name", lambda name: plugin)
+    monkeypatch.setattr(
+        plugin_service,
+        "resolve_registry_name",
+        fake_resolve_registry_name,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "get_plugin_install_sources",
+        fake_get_plugin_install_sources,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "save_plugin_install_sources",
+        fake_save_plugin_install_sources,
+    )
+
+    await plugin_service.persist_plugin_install_source(
+        {"name": "astrbot_plugin_demo"},
+        {
+            "registry_url": "https://example.com/plugins.json",
+            "install_method": "market",
+            "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
+        },
+        fallback_method="url",
+        repo_url="https://github.com/AstrBotDevs/astrbot-plugin-demo",
+        download_url="",
+    )
+
+    assert events == [
+        ("resolve", "https://example.com/plugins.json"),
+        ("get", None),
+        ("save", None),
+    ]
+    record = captured["records"]["astrbot_plugin_demo"]
+    assert record["registry_name"] == "Custom"
 
 
 def test_plugin_service_missing_install_source_defaults_to_official_market(
