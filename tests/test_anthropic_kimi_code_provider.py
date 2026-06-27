@@ -451,6 +451,192 @@ def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
     ]
 
 
+def test_sanitize_assistant_messages_removes_orphaned_tool_results_and_merges():
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "First answer."}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "missing_call",
+                        "content": "stale result",
+                    }
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Second answer."}],
+            },
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "First answer."},
+                {"type": "text", "text": "Second answer."},
+            ],
+        }
+    ]
+
+
+def test_sanitize_assistant_messages_keeps_valid_tool_results_only():
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_00",
+                        "name": "read_file",
+                        "input": {"path": "/tmp/one.txt"},
+                    },
+                    {
+                        "type": "tool_use",
+                        "id": "",
+                        "name": "bad_tool",
+                        "input": {},
+                    },
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_00",
+                        "content": "one",
+                    },
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "",
+                        "content": "empty id should not be valid",
+                    },
+                ],
+            },
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"][1]["content"] == [
+        {"type": "tool_result", "tool_use_id": "call_00", "content": "one"}
+    ]
+
+
+def test_sanitize_assistant_messages_removes_stale_duplicate_tool_result():
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_00",
+                        "name": "read_file",
+                        "input": {"path": "/tmp/one.txt"},
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_00",
+                        "content": "one",
+                    }
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Done."}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_00",
+                        "content": "stale duplicate",
+                    }
+                ],
+            },
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "call_00",
+                    "name": "read_file",
+                    "input": {"path": "/tmp/one.txt"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "call_00", "content": "one"}
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Done."}],
+        },
+    ]
+
+
+def test_sanitize_assistant_messages_puts_tool_results_before_user_text():
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_00",
+                        "name": "read_file",
+                        "input": {"path": "/tmp/one.txt"},
+                    }
+                ],
+            },
+            {"role": "user", "content": "continue"},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_00",
+                        "content": "one",
+                    }
+                ],
+            },
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"][1]["content"] == [
+        {"type": "tool_result", "tool_use_id": "call_00", "content": "one"},
+        {"type": "text", "text": "continue"},
+    ]
+
+
 # ---- tool_choice 转换测试 ----
 
 
