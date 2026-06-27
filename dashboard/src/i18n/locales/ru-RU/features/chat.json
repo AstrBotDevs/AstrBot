@@ -238,6 +238,14 @@
     "sendMessageFailed": "Ошибка отправки сообщения, попробуйте еще раз",
     "createSessionFailed": "Ошибка создания сессии, обновите страницу"
   },
+  "diffPreview": {
+    "viewMode": {
+      "label": "Режим просмотра",
+      "unified": "Единый",
+      "split": "Разделённый",
+      "ariaLabel": "Переключить режим просмотра diff"
+    }
+  },
   "spcodeProjectLoad": {
     "menuItem": "Загрузить каталог проекта",
     "dialog": {

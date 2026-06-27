@@ -1,7 +1,18 @@
+<!-- Author: elecvoid243, 2026-06-28
+     Added viewMode toggle (Unified / Split) for diff rendering.
+     The split mode aligns del/add lines into a two-column layout
+     (old on the left, new on the right), matching the standard
+     side-by-side diff view (e.g. GitHub's split diff).
+
+     All five call sites (ToolCallCard, GitDiffFileItem,
+     FilePatchPanel, FileDiffResult, ThemeAwareMarkdownCodeBlock)
+     automatically pick up the new toggle since it lives inside
+     DiffPreview itself. The user choice is persisted to
+     localStorage so it survives reloads. -->
 <template>
   <div
     class="diff-preview"
-    :class="{ 'is-dark': isDark, collapsed: isCollapsed }"
+    :class="{ 'is-dark': isDark, collapsed: isCollapsed, 'is-split': viewMode === 'split' }"
   >
     <!-- Summary header — always visible, clickable to toggle -->
     <button
@@ -25,6 +36,36 @@
             >−{{ statsDels }}</span
           >
         </template>
+        <!-- Unified / Split segmented toggle. Sits inside the header
+             so it is always reachable, even when the body is collapsed.
+             Stops propagation so clicking a button does not also toggle
+             the body collapse. -->
+        <div
+          class="diff-view-toggle"
+          role="group"
+          :aria-label="viewModeAriaLabel"
+        >
+          <button
+            type="button"
+            class="diff-view-toggle-btn"
+            :class="{ active: viewMode === 'unified' }"
+            :aria-pressed="viewMode === 'unified'"
+            :title="unifiedLabel"
+            @click.stop="setViewMode('unified')"
+          >
+            <v-icon size="14">mdi-format-align-justify</v-icon>
+          </button>
+          <button
+            type="button"
+            class="diff-view-toggle-btn"
+            :class="{ active: viewMode === 'split' }"
+            :aria-pressed="viewMode === 'split'"
+            :title="splitLabel"
+            @click.stop="setViewMode('split')"
+          >
+            <v-icon size="14">mdi-view-split-vertical</v-icon>
+          </button>
+        </div>
         <v-icon
           v-if="collapsible"
           size="18"
@@ -48,22 +89,57 @@
         {{ maxChars.toLocaleString() }} characters)
       </div>
 
-      <div v-for="(hunk, hi) in parsedHunks" :key="hi" class="diff-hunk">
-        <div class="hunk-header">
-          {{ hunk.header }}
+      <!-- Unified mode: the original single-column layout -->
+      <template v-if="viewMode === 'unified'">
+        <div v-for="(hunk, hi) in parsedHunks" :key="hi" class="diff-hunk">
+          <div class="hunk-header">
+            {{ hunk.header }}
+          </div>
+          <div
+            v-for="(line, li) in hunk.lines"
+            :key="li"
+            class="diff-line"
+            :class="line.type"
+          >
+            <span class="line-number old">{{ line.oldNo }}</span>
+            <span class="line-number new">{{ line.newNo }}</span>
+            <span class="line-prefix">{{ line.prefix }}</span>
+            <span class="line-content">{{ line.content }}</span>
+          </div>
         </div>
+      </template>
+
+      <!-- Split mode: two-column layout, del/add lines are paired
+           into rows by alignHunkLines. A row with a missing side
+           keeps the cell empty so the visual columns stay aligned. -->
+      <template v-else>
         <div
-          v-for="(line, li) in hunk.lines"
-          :key="li"
-          class="diff-line"
-          :class="line.type"
+          v-for="(hunk, hi) in splitHunks"
+          :key="hi"
+          class="diff-hunk diff-hunk-split"
         >
-          <span class="line-number old">{{ line.oldNo }}</span>
-          <span class="line-number new">{{ line.newNo }}</span>
-          <span class="line-prefix">{{ line.prefix }}</span>
-          <span class="line-content">{{ line.content }}</span>
+          <div class="hunk-header">
+            {{ hunk.header }}
+          </div>
+          <div
+            v-for="(row, ri) in hunk.rows"
+            :key="ri"
+            class="diff-row-split"
+            :class="row.kind"
+          >
+            <div class="diff-cell left">
+              <span class="line-number">{{ row.left?.oldNo ?? '' }}</span>
+              <span class="line-prefix">{{ row.left?.prefix ?? '' }}</span>
+              <span class="line-content">{{ row.left?.content ?? '' }}</span>
+            </div>
+            <div class="diff-cell right">
+              <span class="line-number">{{ row.right?.newNo ?? '' }}</span>
+              <span class="line-prefix">{{ row.right?.prefix ?? '' }}</span>
+              <span class="line-content">{{ row.right?.content ?? '' }}</span>
+            </div>
+          </div>
         </div>
-      </div>
+      </template>
 
       <div v-if="collapsedOverflow > 0" class="diff-overflow-bar">
         <button
@@ -83,6 +159,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -98,6 +175,26 @@ interface DiffHunk {
   header: string;
   lines: DiffLine[];
 }
+
+// A single visual row in split mode: holds the old-side line (or null
+// when the row is a pure addition) and the new-side line (or null
+// when the row is a pure deletion). `kind` drives the background tint
+// so the user can tell ctx / modified / del-only / add-only apart at
+// a glance.
+type SplitRowKind = "ctx" | "modified" | "del-only" | "add-only";
+
+interface SplitRow {
+  left: DiffLine | null;
+  right: DiffLine | null;
+  kind: SplitRowKind;
+}
+
+interface SplitHunk {
+  header: string;
+  rows: SplitRow[];
+}
+
+type ViewMode = "unified" | "split";
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -121,6 +218,8 @@ const props = withDefaults(
   },
 );
 
+const { tm } = useModuleI18n("features/chat");
+
 // ── State ──────────────────────────────────────────────────────────
 
 const isCollapsed = ref(false);
@@ -128,6 +227,43 @@ const showAllLines = ref(false);
 const effectiveMaxLines = computed(() =>
   showAllLines.value ? Infinity : props.maxLines,
 );
+
+const VIEW_MODE_STORAGE_KEY = "astrbot.diff.viewMode";
+
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* no-op */
+  }
+}
+
+// Restore the previously chosen view mode (Unified by default so
+// existing users see no change on first load after this feature
+// lands).
+const viewMode = ref<ViewMode>(
+  safeGetItem(VIEW_MODE_STORAGE_KEY) === "split" ? "split" : "unified",
+);
+
+function setViewMode(mode: ViewMode): void {
+  if (viewMode.value === mode) return;
+  viewMode.value = mode;
+  safeSetItem(VIEW_MODE_STORAGE_KEY, mode);
+}
+
+// i18n labels for the toggle. The tm() values are evaluated lazily
+// (inside computeds) so locale changes propagate without reload.
+const unifiedLabel = computed(() => tm("diffPreview.viewMode.unified"));
+const splitLabel = computed(() => tm("diffPreview.viewMode.split"));
+const viewModeAriaLabel = computed(() => tm("diffPreview.viewMode.ariaLabel"));
 
 const toggleCollapsed = () => {
   if (props.collapsible) {
@@ -160,6 +296,79 @@ const collapsedOverflow = computed(() => {
   const fullTotal = fullHunks.reduce((sum, h) => sum + h.lines.length, 0);
   return Math.max(0, fullTotal - totalLines.value);
 });
+
+// ── Split-view alignment ──────────────────────────────────────────
+
+// Walk each parsed hunk and pair its del/add lines into rows of
+// {left, right}. The hunk header is preserved unchanged. Truncation
+// is applied here (after pairing) so we never split a del/add pair
+// across the cutoff — paired rows stay together or are dropped
+// together.
+const splitHunks = computed<SplitHunk[]>(() => {
+  const out: SplitHunk[] = [];
+  let consumed = 0;
+  const cap = effectiveMaxLines.value;
+  for (const hunk of parsedHunks.value) {
+    const allRows = alignHunkLines(hunk.lines);
+    const rows: SplitRow[] = [];
+    for (const row of allRows) {
+      if (consumed >= cap) break;
+      // ctx rows count as 1 line; a modified/del-only/add-only row
+      // also counts as 1 visual row in the split layout.
+      rows.push(row);
+      consumed++;
+    }
+    out.push({ header: hunk.header, rows });
+  }
+  return out;
+});
+
+// Pair del/add lines inside a single hunk into visual rows.
+//
+// Algorithm (matches GitHub's split view):
+//   - ctx lines are emitted as-is (both sides the same).
+//   - dels are buffered.
+//   - adds are buffered.
+//   - when one of the buffers is non-empty and the other changes
+//     type (or a ctx / hunk boundary is reached), flushPair() pairs
+//     min(dels, adds) into "modified" rows, then drains leftover
+//     dels into "del-only" rows (right=null) and leftover adds into
+//     "add-only" rows (left=null).
+function alignHunkLines(lines: DiffLine[]): SplitRow[] {
+  const rows: SplitRow[] = [];
+  let dels: DiffLine[] = [];
+  let adds: DiffLine[] = [];
+
+  const flush = (): void => {
+    const pairCount = Math.min(dels.length, adds.length);
+    for (let i = 0; i < pairCount; i++) {
+      rows.push({ left: dels[i], right: adds[i], kind: "modified" });
+    }
+    for (let i = pairCount; i < dels.length; i++) {
+      rows.push({ left: dels[i], right: null, kind: "del-only" });
+    }
+    for (let i = pairCount; i < adds.length; i++) {
+      rows.push({ left: null, right: adds[i], kind: "add-only" });
+    }
+    dels = [];
+    adds = [];
+  };
+
+  for (const line of lines) {
+    if (line.type === "ctx") {
+      flush();
+      rows.push({ left: line, right: line, kind: "ctx" });
+    } else if (line.type === "del") {
+      dels.push(line);
+    } else if (line.type === "add") {
+      adds.push(line);
+    }
+    // header-file lines are skipped — they never appear inside a
+    // hunk's `lines` array in practice (the parser filters them).
+  }
+  flush();
+  return rows;
+}
 
 // ── Stats ──────────────────────────────────────────────────────────
 
@@ -281,12 +490,15 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
 .diff-preview {
   --diff-add-bg: rgba(70, 200, 70, 0.12);
   --diff-add-border: rgba(70, 200, 70, 0.35);
+  --diff-add-bg-strong: rgba(70, 200, 70, 0.22);
   --diff-del-bg: rgba(255, 100, 100, 0.12);
   --diff-del-border: rgba(255, 100, 100, 0.35);
+  --diff-del-bg-strong: rgba(255, 100, 100, 0.22);
   --diff-hunk-bg: #e8f0fe;
   --diff-hunk-border: rgba(100, 150, 220, 0.3);
   --diff-line-no: rgba(0, 0, 0, 0.35);
   --diff-border: rgba(0, 0, 0, 0.08);
+  --diff-divider: rgba(0, 0, 0, 0.12);
 
   margin: 4px 0;
   border: 1px solid var(--diff-border);
@@ -300,12 +512,15 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
 .diff-preview.is-dark {
   --diff-add-bg: rgba(70, 200, 70, 0.16);
   --diff-add-border: rgba(70, 200, 70, 0.3);
+  --diff-add-bg-strong: rgba(70, 200, 70, 0.3);
   --diff-del-bg: rgba(255, 100, 100, 0.16);
   --diff-del-border: rgba(255, 100, 100, 0.3);
+  --diff-del-bg-strong: rgba(255, 100, 100, 0.3);
   --diff-hunk-bg: rgba(100, 150, 255, 0.12);
   --diff-hunk-border: rgba(100, 150, 255, 0.2);
   --diff-line-no: rgba(255, 255, 255, 0.35);
   --diff-border: rgba(255, 255, 255, 0.1);
+  --diff-divider: rgba(255, 255, 255, 0.14);
 }
 
 /* ── Header ─────────────────────────────────────────────────────── */
@@ -388,6 +603,54 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
   color: #f47067;
 }
 
+/* ── View-mode segmented toggle ─────────────────────────────────── */
+
+.diff-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--diff-border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0 4px;
+  background: transparent;
+}
+
+.diff-view-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.diff-view-toggle-btn + .diff-view-toggle-btn {
+  border-left: 1px solid var(--diff-border);
+}
+
+.diff-view-toggle-btn:hover {
+  color: rgba(var(--v-theme-on-surface), 0.85);
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.diff-view-toggle-btn:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: -2px;
+}
+
+.diff-view-toggle-btn.active {
+  background: rgba(var(--v-theme-primary), 0.15);
+  color: rgb(var(--v-theme-primary));
+}
+
 .diff-chevron {
   color: rgba(var(--v-theme-on-surface), 0.45);
   transition: transform 0.2s ease;
@@ -420,7 +683,7 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
   border-bottom: 1px solid var(--diff-border);
 }
 
-/* ── Hunk ────────────────────────────────────────────────────────── */
+/* ── Hunk (unified) ──────────────────────────────────────────────── */
 
 .diff-hunk + .diff-hunk {
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.04);
@@ -435,7 +698,7 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
   border-bottom: 1px solid var(--diff-hunk-border);
 }
 
-/* ── Diff line ───────────────────────────────────────────────────── */
+/* ── Diff line (unified) ─────────────────────────────────────────── */
 
 .diff-line {
   display: flex;
@@ -467,7 +730,7 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
   border-left: 3px solid transparent;
 }
 
-/* ── Line numbers ────────────────────────────────────────────────── */
+/* ── Line numbers (unified) ──────────────────────────────────────── */
 
 .line-number {
   width: 36px;
@@ -483,7 +746,7 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
   padding-left: 8px;
 }
 
-/* ── Prefix and content ──────────────────────────────────────────── */
+/* ── Prefix and content (unified) ────────────────────────────────── */
 
 .line-prefix {
   width: 14px;
@@ -514,6 +777,112 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
   word-break: break-all;
   min-width: 0;
   padding-left: 4px;
+}
+
+/* ── Split-view rows ─────────────────────────────────────────────── */
+
+/* In split mode the .diff-hunk itself becomes a vertical stack of
+   .diff-row-split; the inner cells lay out as 1fr | 1fr. We omit
+   horizontal padding (12px) here because the cells handle their own. */
+.diff-hunk-split {
+  /* nothing special — the per-row grid does the work */
+}
+
+.diff-row-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 20px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.03);
+}
+
+.diff-row-split:first-of-type {
+  border-top: 0;
+}
+
+.diff-row-split .diff-cell {
+  display: flex;
+  align-items: baseline;
+  padding: 1px 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.diff-row-split .diff-cell + .diff-cell {
+  border-left: 1px solid var(--diff-divider);
+}
+
+/* ctx rows: both sides transparent. Use a subtle alternating shade so
+   the eye can track the row across the divider. */
+.diff-row-split.ctx .diff-cell {
+  background: transparent;
+}
+
+/* modified rows: stronger tint on both sides to signal "this row
+   changed". The right cell uses the add tint, the left uses the del
+   tint — matching GitHub's split view exactly. */
+.diff-row-split.modified .diff-cell.left {
+  background: var(--diff-del-bg-strong);
+}
+.diff-row-split.modified .diff-cell.right {
+  background: var(--diff-add-bg-strong);
+}
+
+/* del-only: left tinted, right blank. The blank cell still renders
+   a faint background so the row visually contains two halves. */
+.diff-row-split.del-only .diff-cell.left {
+  background: var(--diff-del-bg-strong);
+}
+.diff-row-split.del-only .diff-cell.right {
+  background: var(--diff-del-bg);
+  opacity: 0.4;
+}
+
+/* add-only: right tinted, left blank. */
+.diff-row-split.add-only .diff-cell.left {
+  background: var(--diff-add-bg);
+  opacity: 0.4;
+}
+.diff-row-split.add-only .diff-cell.right {
+  background: var(--diff-add-bg-strong);
+}
+
+/* In split mode the line numbers and prefix are slightly tighter
+   because we have 4 such spans per row (2 sides × old/new) but the
+   cell is half the width. Keep them readable. */
+.diff-row-split .line-number {
+  width: 30px;
+  padding-right: 6px;
+  padding-left: 0;
+}
+
+.diff-row-split .line-prefix {
+  width: 12px;
+}
+
+.diff-row-split .line-content {
+  padding-left: 4px;
+}
+
+/* Prefix color carries over from unified rules via class hooks; in
+   split we also need to color the side that holds an add/del. The
+   `.left`/`.right` cell can't be styled via .add/.del directly
+   (the line is nested), so we re-derive the color from the row kind. */
+.diff-row-split.modified .diff-cell.left .line-prefix,
+.diff-row-split.del-only .diff-cell.left .line-prefix {
+  color: #cf222e;
+}
+.diff-preview.is-dark .diff-row-split.modified .diff-cell.left .line-prefix,
+.diff-preview.is-dark .diff-row-split.del-only .diff-cell.left .line-prefix {
+  color: #f47067;
+}
+
+.diff-row-split.modified .diff-cell.right .line-prefix,
+.diff-row-split.add-only .diff-cell.right .line-prefix {
+  color: #2da44e;
+}
+.diff-preview.is-dark .diff-row-split.modified .diff-cell.right .line-prefix,
+.diff-preview.is-dark .diff-row-split.add-only .diff-cell.right .line-prefix {
+  color: #57ab5a;
 }
 
 /* ── Show more ───────────────────────────────────────────────────── */

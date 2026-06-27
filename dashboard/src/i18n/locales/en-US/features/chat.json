@@ -248,6 +248,14 @@
     "partialFailure": "{failed} of {total} conversations failed to delete",
     "requestFailed": "Failed to delete conversations. Please try again."
   },
+  "diffPreview": {
+    "viewMode": {
+      "label": "View mode",
+      "unified": "Unified",
+      "split": "Split",
+      "ariaLabel": "Switch diff view mode"
+    }
+  },
   "spcodeProjectLoad": {
     "menuItem": "Load Project Directory",
     "dialog": {

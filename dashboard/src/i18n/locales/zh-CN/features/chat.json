@@ -248,6 +248,14 @@
     "partialFailure": "{total} 个对话中有 {failed} 个删除失败",
     "requestFailed": "删除对话失败，请重试。"
   },
+  "diffPreview": {
+    "viewMode": {
+      "label": "视图模式",
+      "unified": "统一",
+      "split": "分栏",
+      "ariaLabel": "切换 diff 视图模式"
+    }
+  },
   "spcodeProjectLoad": {
     "menuItem": "加载项目目录",
     "dialog": {
