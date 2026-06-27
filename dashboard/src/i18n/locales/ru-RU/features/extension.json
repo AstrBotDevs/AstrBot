@@ -207,7 +207,7 @@
             "deleteConfig": "Удалить файл конфигурации плагина",
             "deleteData": "Удалить сохраненные данные плагина",
             "configHint": "Конфиг находится в data/config",
-            "dataHint": "Данные находятся в data/plugin_data и data/plugins_data"
+            "dataHint": "Данные находятся в data/plugin_data и data/plugins_data, а также KV-данные в базе данных"
         },
         "install": {
             "title": "Установка плагина",

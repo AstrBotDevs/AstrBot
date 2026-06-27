@@ -162,6 +162,60 @@ class TestStarBase:
         assert len(star_registry) >= initial_count
 
 
+class TestStarMetadataPluginId:
+    """Tests for StarMetadata.plugin_id derived view.
+
+    Regression: previously `plugin_id` was set in `__post_init__`, which only
+    fires at dataclass construction. The plugin load flow constructs
+    StarMetadata empty (no name/author) and fills them via attribute
+    assignment later, so `plugin_id` stayed None and crashed the downstream
+    `plugin_id.split("/")`. Now it's a property recomputed on every access.
+    """
+
+    def test_plugin_id_defaults_to_unknown_when_empty(self):
+        from astrbot.core.star.star import StarMetadata
+
+        assert StarMetadata().plugin_id == "unknown/unknown"
+
+    def test_plugin_id_uses_name_and_author(self):
+        from astrbot.core.star.star import StarMetadata
+
+        metadata = StarMetadata(name="Hello", author="AstrBot")
+        assert metadata.plugin_id == "astrbot/hello"
+
+    def test_plugin_id_recomputes_after_attribute_assignment(self):
+        from astrbot.core.star.star import StarMetadata
+
+        metadata = StarMetadata()
+        metadata.name = "A"
+        metadata.author = "B"
+        assert metadata.plugin_id == "b/a"
+
+    def test_plugin_id_lowercases_and_escapes_slash(self):
+        from astrbot.core.star.star import StarMetadata
+
+        metadata = StarMetadata(name="A/B", author="C")
+        assert metadata.plugin_id == "c/a_b"
+
+    def test_plugin_id_reflects_latest_name_after_change(self):
+        from astrbot.core.star.star import StarMetadata
+
+        metadata = StarMetadata(name="old", author="author")
+        assert metadata.plugin_id == "author/old"
+        metadata.name = "new"
+        assert metadata.plugin_id == "author/new"
+
+    def test_plugin_id_only_name_set(self):
+        from astrbot.core.star.star import StarMetadata
+
+        assert StarMetadata(name="OnlyName").plugin_id == "unknown/onlyname"
+
+    def test_plugin_id_only_author_set(self):
+        from astrbot.core.star.star import StarMetadata
+
+        assert StarMetadata(author="OnlyAuthor").plugin_id == "onlyauthor/unknown"
+
+
 class TestNoCircularImports:
     """Test that there are no circular import issues."""
 
