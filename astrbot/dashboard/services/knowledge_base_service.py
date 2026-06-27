@@ -268,7 +268,9 @@ class KnowledgeBaseService:
         kbs = await kb_manager.list_kbs()
         total = len(kbs)
 
-        # Apply pagination after building the full list (list_kbs returns all)
+        # Clamp page and page_size to at least 1 before calculating offsets/slices.
+        page = max(page, 1)
+        page_size = max(page_size, 1)
         start = (page - 1) * page_size
         end = start + page_size
         paged_kbs = kbs[start:end]
@@ -443,6 +445,7 @@ class KnowledgeBaseService:
         kb_id: str | None,
         page: int,
         page_size: int,
+        search: str | None = None,
     ) -> dict[str, Any]:
         if not kb_id:
             raise KnowledgeBaseServiceError("缺少参数 kb_id")
@@ -450,9 +453,20 @@ class KnowledgeBaseService:
         if not kb_helper:
             raise KnowledgeBaseServiceError("知识库不存在")
 
+        if search is not None:
+            search = search.strip()
+            if not search:
+                search = None
+
+        page = max(page, 1)
+        page_size = max(page_size, 1)
         offset = (page - 1) * page_size
-        doc_list = await kb_helper.list_documents(offset=offset, limit=page_size)
-        total = kb_helper.kb.doc_count or 0
+        doc_list = await kb_helper.list_documents(
+            offset=offset,
+            limit=page_size,
+            search=search,
+        )
+        total = await kb_helper.count_documents(search=search)
         return {
             "items": [doc.model_dump() for doc in doc_list],
             "page": page,
@@ -466,11 +480,13 @@ class KnowledgeBaseService:
         kb_id: str | None,
         page,
         page_size,
+        search: str | None = None,
     ) -> dict[str, Any]:
         return await self.list_documents(
             kb_id=kb_id,
             page=self._to_int(page, 1),
             page_size=self._to_int(page_size, 100),
+            search=search,
         )
 
     async def upload_document(

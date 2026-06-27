@@ -11,7 +11,7 @@
 
     <!-- 文档列表 -->
     <v-card variant="outlined">
-      <v-data-table-server :headers="headers" :items="documents" :loading="loading" :search="searchQuery"
+      <v-data-table-server :headers="headers" :items="documents" :loading="loading"
         :items-per-page="pageSize" :page="page" :items-length="total"
         @update:page="onPageChange" @update:items-per-page="onItemsPerPageChange">
         <template #item.doc_name="{ item }">
@@ -238,7 +238,7 @@
 
 <script setup lang="ts">
 import TavilyKeyDialog from './TavilyKeyDialog.vue'
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
@@ -347,7 +347,8 @@ const loadDocuments = async () => {
   try {
     const response = await knowledgeApi.documents(props.kbId, {
       page: page.value,
-      page_size: pageSize.value
+      page_size: pageSize.value,
+      search: searchQuery.value.trim() || undefined,
     })
     if (response.data.status === 'ok') {
       const data = response.data.data
@@ -807,6 +808,12 @@ const onTavilyKeySet = () => {
   showSnackbar('Tavily API Key 配置成功', 'success')
   checkTavilyConfig()
 }
+
+// Reset to page 1 and reload when search text changes
+watch(searchQuery, () => {
+  page.value = 1
+  loadDocuments()
+})
 
 onMounted(() => {
   loadDocuments()

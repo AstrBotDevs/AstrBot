@@ -2640,6 +2640,10 @@ export type ListKnowledgeDocumentsData = {
     query?: {
         page?: number;
         page_size?: number;
+        /**
+         * Filter documents by name (case-insensitive partial match).
+         */
+        search?: string;
     };
 };
 
