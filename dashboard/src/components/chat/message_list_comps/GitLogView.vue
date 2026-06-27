@@ -294,7 +294,7 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
       {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.truncated") }}
     </div>
 
-    <!-- Filter bar (spec §6.5.1) -->
+        <!-- Filter bar (spec §6.5.1; search boxes → 12px, buttons → small) -->
     <div class="git-log-filter">
       <v-text-field
         v-model="localFilter.ref"
@@ -376,7 +376,7 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
       />
       <div class="git-log-filter-actions">
         <v-btn
-          size="x-small"
+          size="small"
           variant="flat"
           color="primary"
           :loading="isLoading"
@@ -387,7 +387,7 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
           }}
         </v-btn>
         <v-btn
-          size="x-small"
+          size="small"
           variant="text"
           :disabled="isLoading"
           @click="onReset"
@@ -711,18 +711,14 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
 }
 .git-log-filter-field {
   /* Match the commit subject (.git-log-item-subject) so the filter
-     row visually aligns with the history list below it. The wrapper
-     font-size alone is not enough — Vuetify's <v-text-field> renders
-     the actual input + label inside child elements that need their
-     own selectors (`.v-field__input`, `.v-label`). Without the
-     :deep() overrides the input would inherit the page default
-     (~14-16px), which is what makes the boxes feel oversized next
-     to the 13px commit rows. */
-  font-size: 13px;
+     row visually aligns with the history list below it. Reduced to
+     12px (from 13px) to feel proportional next to the commit rows
+     that use 11.5-13px text. */
+  font-size: 12px;
 }
 .git-log-filter-field :deep(.v-field__input),
 .git-log-filter-field :deep(.v-label) {
-  font-size: 13px;
+  font-size: 12px;
 }
 .git-log-filter-n {
   max-width: 80px;
