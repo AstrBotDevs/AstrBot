@@ -8,7 +8,7 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, plugin, mcp, skill. The config scope also
+    persona, im, config, chat, data, file, plugin, mcp, skill. The config scope also
     grants bot and provider access.
 servers:
   - url: http://localhost:6185
@@ -18,6 +18,7 @@ security:
   - ApiKeyAuth: []
 
 tags:
+  - name: Open API
   - name: Auth
   - name: API Keys
   - name: System Config
@@ -1551,6 +1552,37 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/file:
+    post:
+      tags: [Open API]
+      summary: Upload a file
+      operationId: uploadOpenApiFile
+      x-astrbot-scope: file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/FileUploadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    get:
+      tags: [Open API]
+      summary: Download an uploaded file by attachment ID
+      operationId: downloadOpenApiFile
+      x-astrbot-scope: file
+      parameters:
+        - $ref: "#/components/parameters/AttachmentIdQuery"
+      responses:
+        "200":
+          description: File content or an error envelope
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
   /api/v1/files/content:
     get:
       tags: [Files]
@@ -2130,6 +2162,24 @@ paths:
       x-astrbot-scope: plugin
       parameters:
         - $ref: "#/components/parameters/PluginId"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/{plugin_id}/source:
+    post:
+      tags: [Plugins]
+      summary: Bind an installed plugin to a marketplace source
+      operationId: bindPluginSource
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginSourceBindRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -4103,6 +4153,16 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/stats/versions:
+    get:
+      tags: [Stats]
+      summary: Get public WebUI and AstrBot versions
+      operationId: getPublicVersions
+      security: []
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/stats/first-notice:
     get:
       tags: [Stats]
@@ -4485,22 +4545,6 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/migrations:
-    post:
-      tags: [Updates]
-      summary: Run pending migrations
-      operationId: runMigrations
-      x-astrbot-scope: system
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MigrationRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
   /api/v1/cron/jobs:
     get:
       tags: [Cron]
@@ -4839,6 +4883,12 @@ components:
       required: true
       schema:
         type: string
+    AttachmentIdQuery:
+      name: attachment_id
+      in: query
+      required: true
+      schema:
+        type: string
     BotId:
       name: bot_id
       in: path
@@ -5105,8 +5155,8 @@ components:
           type: array
           items:
             type: string
-            enum: [bot, provider, persona, im, config, chat, plugin, mcp, skill]
-          example: [bot, provider, persona, im, config, chat, plugin, mcp, skill]
+            enum: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
+          example: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
         expires_at:
           type: string
           format: date-time
@@ -5244,6 +5294,7 @@ components:
       properties:
         username:
           type: string
+          description: Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
         session_id:
           type: string
         conversation_id:
@@ -5409,6 +5460,16 @@ components:
         reinstall:
           type: boolean
           default: false
+      additionalProperties: false
+
+    PluginSourceBindRequest:
+      type: object
+      properties:
+        registry_url:
+          type: string
+          nullable: true
+        market_plugin_id:
+          type: string
       additionalProperties: false
 
     PluginBatchUpdateRequest:
@@ -5982,14 +6043,6 @@ components:
         mirror:
           type: string
       additionalProperties: false
-
-    MigrationRequest:
-      type: object
-      properties:
-        platform_id_map:
-          type: object
-          additionalProperties: true
-      additionalProperties: true
 
     GhproxyTestRequest:
       type: object

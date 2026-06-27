@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 import zipfile
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from mcp.types import CallToolResult, ImageContent
@@ -39,6 +41,100 @@ def _make_context(
     )
     astr_ctx = SimpleNamespace(context=config_holder, event=event)
     return ContextWrapper(context=astr_ctx)
+
+
+def _make_sandbox_context(
+    *,
+    role: str = "admin",
+    umo: str = "qq:friend:user-1",
+):
+    config_holder = SimpleNamespace(
+        get_config=lambda umo=None: {
+            "provider_settings": {
+                "computer_use_require_admin": True,
+                "computer_use_runtime": "sandbox",
+            }
+        }
+    )
+    event = SimpleNamespace(
+        role=role,
+        unified_msg_origin=umo,
+        send=AsyncMock(),
+    )
+    astr_ctx = SimpleNamespace(context=config_holder, event=event)
+    return ContextWrapper(context=astr_ctx)
+
+
+@pytest.mark.asyncio
+async def test_sandbox_file_download_handles_windows_remote_filename(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        fs_tools,
+        "get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    async def _download_file(_remote_path, local_path):
+        assert local_path.endswith("report.txt")
+        assert "\\" not in local_path
+
+    booter = SimpleNamespace(download_file=AsyncMock(side_effect=_download_file))
+
+    async def _fake_get_booter(_ctx, _umo):
+        return booter
+
+    monkeypatch.setattr(fs_tools, "get_booter", _fake_get_booter)
+
+    context = _make_sandbox_context()
+    result = await fs_tools.FileDownloadTool().call(
+        context,
+        remote_path=r"C:\Users\AstrBot\report.txt",
+        also_send_to_user=True,
+    )
+
+    assert "report.txt" in result
+    sent_chain = context.context.event.send.await_args.args[0]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "report.txt"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_file_download_strips_trailing_remote_slash(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        fs_tools,
+        "get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    booter = SimpleNamespace(download_file=AsyncMock())
+
+    async def _fake_get_booter(_ctx, _umo):
+        return booter
+
+    monkeypatch.setattr(fs_tools, "get_booter", _fake_get_booter)
+
+    context = _make_sandbox_context()
+    result = await fs_tools.FileDownloadTool().call(
+        context,
+        remote_path="reports/export/",
+        also_send_to_user=True,
+    )
+
+    assert "export" in result
+    sent_chain = context.context.event.send.await_args.args[0]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "export"
 
 
 def _setup_local_fs_tools(
@@ -97,6 +193,13 @@ def _setup_local_fs_tools(
 
 def _make_large_text() -> str:
     return "".join(f"line-{index:05d}-{'x' * 48}\n" for index in range(6000))
+
+
+def _make_hardlink_or_skip(source, link) -> None:
+    try:
+        os.link(source, link)
+    except (AttributeError, OSError) as exc:
+        pytest.skip(f"hard links are unavailable on this filesystem: {exc}")
 
 
 def _make_epub_bytes(*, chapter_count: int = 1) -> bytes:
@@ -266,6 +369,36 @@ async def test_restricted_local_member_cannot_write_plugin_provided_skill(
     assert "Write access is restricted for this user." in result
     assert "data/plugins/*/skills" not in result
     assert plugin_skill.read_text(encoding="utf-8") == "# Demo Skill\n"
+
+
+@pytest.mark.asyncio
+async def test_restricted_local_member_rejects_workspace_hardlink_alias(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_file = outside_dir / "secret.txt"
+    outside_file.write_text("outside-secret\n", encoding="utf-8")
+    hardlink_path = workspace / "linked.txt"
+    _make_hardlink_or_skip(outside_file, hardlink_path)
+
+    read_result = await fs_tools.FileReadTool().call(
+        _make_context(role="member"),
+        path="linked.txt",
+    )
+    write_result = await fs_tools.FileWriteTool().call(
+        _make_context(role="member"),
+        path="linked.txt",
+        content="changed\n",
+    )
+
+    assert "multiple hard links" in read_result
+    assert "may alias content outside allowed directories" in read_result
+    assert "multiple hard links" in write_result
+    assert "may alias content outside allowed directories" in write_result
+    assert outside_file.read_text(encoding="utf-8") == "outside-secret\n"
 
 
 def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():

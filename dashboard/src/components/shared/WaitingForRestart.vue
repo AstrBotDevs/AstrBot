@@ -31,6 +31,11 @@ export default {
         }
     },
     methods: {
+        reloadWithCacheBuster() {
+            const url = new URL(window.location.href)
+            url.searchParams.set('_r', Date.now().toString())
+            window.location.replace(url.toString())
+        },
         async check(initialStartTime = null) {
             this.newStartTime = -1
             this.cnt = 0
@@ -83,8 +88,7 @@ export default {
                     this.newStartTime = newStartTime
                     console.log('wfr: restarted')
                     this.visible = false
-                    // reload
-                    window.location.reload()
+                    this.reloadWithCacheBuster()
                 }
             } catch (_error) {
                 // backend may be unavailable during restart window

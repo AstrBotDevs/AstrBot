@@ -29,7 +29,11 @@ from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.media_utils import (
+    MEDIA_MIME_EXTENSIONS,
+    MediaResolver,
+    detect_image_mime_type_async,
+)
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .wecom_event import WecomPlatformEvent
@@ -287,13 +291,7 @@ class WecomPlatformAdapter(Platform):
         message_obj.message_id = uuid.uuid4().hex
         message_obj.raw_message = {"_proactive_send": True}
 
-        event = WecomPlatformEvent(
-            message_str=message_obj.message_str,
-            message_obj=message_obj,
-            platform_meta=self.meta(),
-            session_id=message_obj.session_id,
-            client=self.client,
-        )
+        event = self.create_event(message_obj)
         await event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
@@ -394,8 +392,7 @@ class WecomPlatformAdapter(Platform):
             )
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
                 path_wav = await MediaResolver(
@@ -459,9 +456,13 @@ class WecomPlatformAdapter(Platform):
                 media_id,
             )
             temp_dir = get_astrbot_temp_path()
-            path = os.path.join(temp_dir, f"weixinkefu_{media_id}.jpg")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            mime_type = await detect_image_mime_type_async(
+                resp.content,
+                default_mime_type=None,
+            )
+            suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
+            path = os.path.join(temp_dir, f"weixinkefu_{media_id}{suffix}")
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
             abm.message = [Image(file=path, url=path)]
         elif msgtype == "voice":
             media_id = msg.get("voice", {}).get("media_id", "")
@@ -473,8 +474,7 @@ class WecomPlatformAdapter(Platform):
 
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixinkefu_{media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
                 path_wav = await MediaResolver(
@@ -516,15 +516,25 @@ class WecomPlatformAdapter(Platform):
             return
         await self.handle_msg(abm)
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = WecomPlatformEvent(
+    def create_event(self, message: AstrBotMessage) -> WecomPlatformEvent:
+        """Creates a WeCom message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created WeCom message event.
+        """
+        return WecomPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     def get_client(self) -> WeChatClient:
         return self.client

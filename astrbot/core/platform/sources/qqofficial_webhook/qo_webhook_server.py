@@ -12,6 +12,8 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from astrbot.api import logger
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 
+from ..qqofficial.qqofficial_platform_adapter import _ensure_group_message_create_parser
+
 # remove logger handler
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
@@ -120,6 +122,7 @@ class QQOfficialWebhook:
     def _setup_connection(self) -> None:
         if self._connection is not None:
             return
+        _ensure_group_message_create_parser()
         self.client.api = self.api
         self.client.http = self.http
 
@@ -163,7 +166,7 @@ class QQOfficialWebhook:
         """内部服务器的回调入口"""
         return await self.handle_callback(request)
 
-    async def handle_callback(self, request) -> dict:
+    async def handle_callback(self, request) -> dict | tuple[dict[str, str], int]:
         """处理 webhook 回调，可被统一 webhook 入口复用
 
         Args:
@@ -226,6 +229,7 @@ class QQOfficialWebhook:
                     "creating parser connection lazily.",
                 )
                 self._setup_connection()
+            connection = cast(ConnectionSession, self._connection)
 
             # Extract extra fields from raw payload before botpy parses and discards them
             if data:
@@ -240,7 +244,7 @@ class QQOfficialWebhook:
                     if extra:
                         self._extra_data_cache[msg_id] = extra
             try:
-                func = self._connection.parser[event]
+                func = connection.parser[event]
             except KeyError:
                 logger.error("_parser unknown event %s.", event)
                 if data:

@@ -54,6 +54,8 @@ ALL_OPEN_API_SCOPES = (
     "im",
     "config",
     "chat",
+    "data",
+    "file",
     "plugin",
     "mcp",
     "skill",

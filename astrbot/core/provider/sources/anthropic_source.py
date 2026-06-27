@@ -27,6 +27,7 @@ from astrbot.core.utils.network_utils import (
 )
 
 from ..register import register_provider_adapter
+from .request_retry import retry_provider_request, retry_provider_request_context
 
 
 @register_provider_adapter(
@@ -229,7 +230,8 @@ class ProviderAnthropic(Provider):
                     if isinstance(last_message, dict)
                     else None
                 )
-                can_append_to_previous_tool_results = (
+
+                if (
                     last_message is not None
                     and last_message.get("role") == "user"
                     and isinstance(last_content, list)
@@ -238,10 +240,6 @@ class ProviderAnthropic(Provider):
                         isinstance(block, dict) and block.get("type") == "tool_result"
                         for block in last_content
                     )
-                )
-
-                if can_append_to_previous_tool_results and isinstance(
-                    last_content, list
                 ):
                     last_content.append(tool_result_block)
                 else:
@@ -307,6 +305,131 @@ class ProviderAnthropic(Provider):
 
         return system_prompt, new_messages
 
+    @staticmethod
+    def _merge_consecutive_anthropic_messages(messages: list[Any]) -> list[Any]:
+        """Merge adjacent Anthropic messages with the same role.
+
+        Args:
+            messages: Anthropic messages to merge.
+
+        Returns:
+            Merged Anthropic messages. When merging user messages, tool result
+            blocks are moved before other blocks to satisfy Anthropic ordering.
+        """
+        merged: list[Any] = []
+        for msg in messages:
+            if not isinstance(msg, dict):
+                merged.append(msg)
+                continue
+
+            if (
+                msg.get("role")
+                and merged
+                and isinstance(merged[-1], dict)
+                and merged[-1].get("role") == msg.get("role")
+            ):
+                prev = merged[-1]
+                prev_content = prev.get("content") or []
+                if isinstance(prev_content, str):
+                    prev_content = [{"type": "text", "text": prev_content}]
+                elif isinstance(prev_content, list):
+                    prev_content = list(prev_content)
+                else:
+                    prev_content = [prev_content]
+
+                cur_content = msg.get("content") or []
+                if isinstance(cur_content, str):
+                    cur_content = [{"type": "text", "text": cur_content}]
+                elif isinstance(cur_content, list):
+                    cur_content = list(cur_content)
+                else:
+                    cur_content = [cur_content]
+
+                combined_content = prev_content + cur_content
+                if msg.get("role") == "user":
+                    tool_results = [
+                        block
+                        for block in combined_content
+                        if isinstance(block, dict)
+                        and block.get("type") == "tool_result"
+                    ]
+                    if tool_results:
+                        combined_content = tool_results + [
+                            block
+                            for block in combined_content
+                            if not (
+                                isinstance(block, dict)
+                                and block.get("type") == "tool_result"
+                            )
+                        ]
+
+                merged[-1] = {**prev, "content": combined_content}
+            else:
+                merged.append(msg)
+
+        return merged
+
+    @staticmethod
+    def _sanitize_assistant_messages(payloads: dict) -> None:
+        """Remove orphaned tool results from Anthropic messages.
+
+        Args:
+            payloads: Anthropic request payload containing a messages list.
+
+        Returns:
+            None. The messages list is updated in place on ``payloads``.
+        """
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+
+        merged = ProviderAnthropic._merge_consecutive_anthropic_messages(messages)
+        sanitized: list[Any] = []
+        pending_tool_use_ids: set[str] = set()
+        for msg in merged:
+            if not isinstance(msg, dict):
+                sanitized.append(msg)
+                pending_tool_use_ids = set()
+                continue
+
+            role = msg.get("role")
+            content = msg.get("content")
+            if role == "assistant":
+                pending_tool_use_ids = set()
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_use":
+                            tool_use_id = block.get("id")
+                            if tool_use_id:
+                                pending_tool_use_ids.add(tool_use_id)
+                sanitized.append(msg)
+                continue
+
+            if role == "user" and isinstance(content, list):
+                tool_results: list[Any] = []
+                other_blocks: list[Any] = []
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        tool_use_id = block.get("tool_use_id")
+                        if tool_use_id in pending_tool_use_ids:
+                            tool_results.append(block)
+                            pending_tool_use_ids.remove(tool_use_id)
+                        continue
+                    other_blocks.append(block)
+
+                cleaned_content = tool_results + other_blocks
+                if cleaned_content:
+                    sanitized.append({**msg, "content": cleaned_content})
+                pending_tool_use_ids = set()
+                continue
+
+            sanitized.append(msg)
+            pending_tool_use_ids = set()
+
+        payloads["messages"] = ProviderAnthropic._merge_consecutive_anthropic_messages(
+            sanitized
+        )
+
     def _extract_usage(self, usage: Usage | None) -> TokenUsage:
         if usage is None:
             return TokenUsage()
@@ -356,7 +479,13 @@ class ProviderAnthropic(Provider):
         logger.warning(f"未知的 tool_choice 值: {tool_choice}，已回退为 'auto'")
         return {"type": "auto"}
 
-    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+    ) -> LLMResponse:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
                 payloads["tools"] = tool_list
@@ -369,10 +498,15 @@ class ProviderAnthropic(Provider):
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
+        self._sanitize_assistant_messages(payloads)
 
         try:
-            completion = await self.client.messages.create(
-                **payloads, stream=False, extra_body=extra_body
+            completion = await retry_provider_request(
+                "Anthropic",
+                lambda: self.client.messages.create(
+                    **payloads, stream=False, extra_body=extra_body
+                ),
+                max_attempts=request_max_retries,
             )
         except httpx.RequestError as e:
             proxy = self.provider_config.get("proxy", "")
@@ -441,6 +575,8 @@ class ProviderAnthropic(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         if tools:
             if tool_list := tools.get_func_desc_anthropic_style():
@@ -463,9 +599,12 @@ class ProviderAnthropic(Provider):
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
         self._apply_thinking_config(payloads)
+        self._sanitize_assistant_messages(payloads)
 
-        async with self.client.messages.stream(
-            **payloads, extra_body=extra_body
+        async with retry_provider_request_context(
+            "Anthropic",
+            lambda: self.client.messages.stream(**payloads, extra_body=extra_body),
+            max_attempts=request_max_retries,
         ) as stream:
             assert isinstance(stream, anthropic.AsyncMessageStream)
             async for event in stream:
@@ -604,6 +743,7 @@ class ProviderAnthropic(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         if contexts is None:
@@ -653,7 +793,11 @@ class ProviderAnthropic(Provider):
 
         llm_response = None
         try:
-            llm_response = await self._query(payloads, func_tool)
+            llm_response = await self._query(
+                payloads,
+                func_tool,
+                request_max_retries=request_max_retries,
+            )
         except Exception as e:
             raise e
 
@@ -672,6 +816,7 @@ class ProviderAnthropic(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "any", "tool", "none"] | dict[str, str] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ):
         if contexts is None:
@@ -718,7 +863,11 @@ class ProviderAnthropic(Provider):
                 else system_prompt
             )
 
-        async for llm_response in self._query_stream(payloads, func_tool):
+        async for llm_response in self._query_stream(
+            payloads,
+            func_tool,
+            request_max_retries=request_max_retries,
+        ):
             yield llm_response
 
     def _detect_image_mime_type(self, data: bytes) -> str:
@@ -830,7 +979,10 @@ class ProviderAnthropic(Provider):
 
     async def get_models(self) -> list[str]:
         models_str = []
-        models = await self.client.models.list()
+        models = await retry_provider_request(
+            "Anthropic",
+            lambda: self.client.models.list(),
+        )
         models = sorted(models.data, key=lambda x: x.id)
         for model in models:
             models_str.append(model.id)

@@ -26,7 +26,9 @@
       "release": "😊 正式版"
     },
     "advancedSettings": "高级设置",
+    "releases": "版本列表",
     "updateToLatest": "更新到最新版本",
+    "showPreReleases": "显示预发布版本",
     "preRelease": "预发布",
     "preReleaseWarning": {
       "title": "预发布版本提醒",
@@ -60,6 +62,9 @@
       "restart": "正在准备重启...",
       "restarting": "正在重启 AstrBot",
       "completed": "更新完成",
+      "successReady": "更新成功",
+      "autoReloadIn": "{seconds} 秒后自动刷新",
+      "reloadNow": "立即刷新",
       "failed": "更新失败"
     },
     "redirectConfirm": {

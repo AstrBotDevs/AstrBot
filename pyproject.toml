@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.25.5"
+version = "4.26.1"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }
@@ -23,13 +23,13 @@ dependencies = [
   "deprecated>=1.2.18",
   "dingtalk-stream>=0.22.1",
   "docstring-parser>=0.16",
-  "faiss-cpu>=1.12.0",
+  "faiss-cpu>=1.14.3",
   "fastapi>=0.124.0",
   "filelock>=3.18.0",
   "google-genai>=1.56.0",
   "httpx[socks]>=0.28.1",
   "lark-oapi>=1.4.15",
-  "mcp>=1.8.0",
+  "mcp>=1.8.0,<2",
   "openai>=1.78.0",
   "ormsgpack>=1.9.1",
   "pillow>=11.2.1",
@@ -121,7 +121,7 @@ exclude = ["dashboard", "node_modules", "dist", "data", "tests"]
 allow-direct-references = true
 
 # Include bundled dashboard dist even though it is not tracked by VCS.
-[tool.hatch.build.targets.wheel]
+[tool.hatch.build]
 artifacts = ["astrbot/dashboard/dist/**"]
 
 # Custom build hook: builds the Vue dashboard and copies dist into the package.

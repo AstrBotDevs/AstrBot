@@ -473,7 +473,7 @@ class FakePersonaManager:
     async def update_persona(self, persona_id: str, **kwargs) -> None:
         persona = self.personas[persona_id]
         for key, value in kwargs.items():
-            if value is not None:
+            if key in ("tools", "skills", "custom_error_message") or value is not None:
                 setattr(persona, key, value)
 
     async def delete_persona(self, persona_id: str) -> None:
@@ -538,6 +538,12 @@ class FakeAstrBotUpdator:
         return []
 
     async def update(self, *_args, **_kwargs) -> None:
+        return None
+
+    async def download_update_package(self, *_args, **kwargs):
+        return kwargs.get("path", "temp.zip")
+
+    def apply_update_package(self, *_args, **_kwargs) -> None:
         return None
 
 
@@ -975,6 +981,40 @@ def _jwt_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest.mark.asyncio
+async def test_public_versions_route_uses_static_folder(
+    fake_core_lifecycle,
+    fake_db: FakeDb,
+    tmp_path: Path,
+):
+    static_folder = tmp_path / "dist"
+    assets_folder = static_folder / "assets"
+    assets_folder.mkdir(parents=True)
+    (static_folder / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    (assets_folder / "version").write_text("v9.8.7", encoding="utf-8")
+
+    app = create_dashboard_asgi_app(
+        core_lifecycle=fake_core_lifecycle,
+        db=fake_db,
+        jwt_secret=JWT_SECRET,
+        static_folder=str(static_folder),
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get("/api/v1/stats/versions")
+
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["webui_version"] == "v9.8.7"
+    assert data["data"]["astrbot_version"]
+    assert "astrbot_code_version" in data["data"]
+
+
 def test_fastapi_app_adapter_registers_on_app_state():
     app = FastAPI()
     adapter = FastAPIAppAdapter(app)
@@ -1017,6 +1057,7 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert "/api/v1/conversations" in spec["paths"]
     assert "/api/v1/mcp/servers" in spec["paths"]
     assert "/api/v1/skills" in spec["paths"]
+    assert "/api/v1/file" in spec["paths"]
 
 
 def test_static_openapi_v1_paths_include_api_version():
@@ -1133,6 +1174,12 @@ async def test_v1_openapi_uses_pydantic_request_bodies(
     assert system_config_update["requestBody"]["content"]["application/json"]["schema"][
         "$ref"
     ].endswith("/ConfigContentRequest")
+
+    open_api_file_upload = spec["paths"]["/api/v1/file"]["post"]
+    assert open_api_file_upload["requestBody"]["content"]["multipart/form-data"][
+        "schema"
+    ]["$ref"].endswith("/Body_uploadOpenApiFile")
+    assert open_api_file_upload["x-astrbot-scope"] == "file"
 
 
 @pytest.mark.asyncio
@@ -1708,6 +1755,9 @@ async def test_v1_plugin_url_install_accepts_download_url_and_missing_body(
             "url": "https://github.com/AstrBotDevs/astrbot-plugin-demo",
             "download_url": "https://cdn.example/plugin.zip",
             "ignore_version_check": True,
+            "install_method": "market",
+            "registry_url": "https://example.com/plugins.json",
+            "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
         },
         headers=_jwt_headers(),
     )
@@ -1724,12 +1774,415 @@ async def test_v1_plugin_url_install_accepts_download_url_and_missing_body(
         "download_url": "https://cdn.example/plugin.zip",
         "proxy": None,
         "ignore_version_check": True,
+        "install_method": "market",
+        "registry_url": "https://example.com/plugins.json",
+        "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
     }
     assert empty_body_response.status_code == 200
     empty_body_data = empty_body_response.json()
     assert empty_body_data["status"] == "error"
     assert empty_body_data["message"] == "插件操作失败，请查看服务端日志。"
     assert "missing url" not in str(empty_body_data)
+
+
+@pytest.mark.asyncio
+async def test_plugin_service_market_install_uses_registry_entry(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    captured = {}
+
+    async def fake_get_online_plugins(*, custom_registry, force_refresh):
+        captured["registry_url"] = custom_registry
+        captured["force_refresh"] = force_refresh
+        return {
+            "$meta": {
+                "schema_version": 1,
+                "name": "Test Market",
+                "version": "2026.06.27",
+            },
+            "astrbot-plugin-demo": {
+                "author": "AstrBotDevs",
+                "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo",
+                "download_url": "https://cdn.example/market-plugin.zip",
+            },
+        }, None
+
+    async def fake_install_plugin(
+        repo_url,
+        proxy="",
+        ignore_version_check=False,
+        download_url="",
+    ):
+        captured["repo_url"] = repo_url
+        captured["proxy"] = proxy
+        captured["ignore_version_check"] = ignore_version_check
+        captured["download_url"] = download_url
+        return {"name": "astrbot_plugin_demo"}
+
+    async def fake_persist_plugin_install_source(
+        plugin_info,
+        payload,
+        *,
+        fallback_method,
+        repo_url,
+        download_url,
+    ):
+        captured["persist_payload"] = payload
+        captured["persist_fallback_method"] = fallback_method
+        captured["persist_repo_url"] = repo_url
+        captured["persist_download_url"] = download_url
+
+    async def fake_sync_skills_after_plugin_change():
+        captured["synced"] = True
+
+    monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
+    monkeypatch.setattr(
+        plugin_service.plugin_manager,
+        "install_plugin",
+        fake_install_plugin,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "persist_plugin_install_source",
+        fake_persist_plugin_install_source,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "sync_skills_after_plugin_change",
+        fake_sync_skills_after_plugin_change,
+    )
+
+    result, message = await plugin_service.install_plugin(
+        {
+            "url": "https://github.com/SomeoneElse/wrong-plugin",
+            "download_url": "https://cdn.example/wrong-plugin.zip",
+            "install_method": "market",
+            "registry_url": "https://example.com/plugins.json",
+            "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
+            "proxy": "https://proxy.example",
+            "ignore_version_check": True,
+        }
+    )
+
+    assert result == {"name": "astrbot_plugin_demo"}
+    assert message == "安装成功。"
+    assert captured["registry_url"] == "https://example.com/plugins.json"
+    assert captured["force_refresh"] is False
+    assert captured["repo_url"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
+    assert captured["download_url"] == "https://cdn.example/market-plugin.zip"
+    assert captured["proxy"] == "https://proxy.example"
+    assert captured["ignore_version_check"] is True
+    assert captured["persist_fallback_method"] == "github"
+    assert (
+        captured["persist_repo_url"]
+        == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
+    )
+    assert captured["persist_download_url"] == "https://cdn.example/market-plugin.zip"
+    assert (
+        captured["persist_payload"]["registry_url"]
+        == "https://example.com/plugins.json"
+    )
+    assert (
+        captured["persist_payload"]["market_plugin_id"]
+        == "AstrBotDevs/astrbot-plugin-demo"
+    )
+    assert captured["synced"] is True
+
+
+@pytest.mark.asyncio
+async def test_plugin_service_bind_market_source_validates_and_persists(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    plugin = SimpleNamespace(
+        name="astrbot_plugin_demo",
+        root_dir_name="astrbot_plugin_demo",
+        repo="https://github.com/AstrBotDevs/astrbot-plugin-demo",
+    )
+    captured = {}
+
+    async def fake_get_online_plugins(*, custom_registry, force_refresh):
+        captured["registry_url"] = custom_registry
+        captured["force_refresh"] = force_refresh
+        return {
+            "$meta": {
+                "schema_version": 1,
+                "name": "Test Market",
+                "version": "2026.06.27",
+            },
+            "astrbot-plugin-demo": {
+                "author": "AstrBotDevs",
+                "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo.git",
+                "download_url": "https://cdn.example/plugin.zip",
+            },
+        }, None
+
+    async def fake_get_plugin_install_sources():
+        return {"astrbot_plugin_demo": {"installed_at": "2026-06-26T00:00:00+00:00"}}
+
+    async def fake_save_plugin_install_sources(records):
+        captured["records"] = records
+
+    monkeypatch.setattr(plugin_service, "find_plugin_by_name", lambda name: plugin)
+    monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
+    monkeypatch.setattr(
+        plugin_service,
+        "get_plugin_install_sources",
+        fake_get_plugin_install_sources,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "save_plugin_install_sources",
+        fake_save_plugin_install_sources,
+    )
+
+    record, message = await plugin_service.bind_plugin_market_source(
+        {
+            "name": "astrbot_plugin_demo",
+            "registry_url": "https://example.com/plugins.json",
+            "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
+        }
+    )
+
+    assert message == "插件源已更新。"
+    assert captured["registry_url"] == "https://example.com/plugins.json"
+    assert captured["force_refresh"] is False
+    assert record["install_method"] == "market"
+    assert record["registry_url"] == "https://example.com/plugins.json"
+    assert record["market_plugin_id"] == "AstrBotDevs/astrbot-plugin-demo"
+    assert record["repo"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo.git"
+    assert record["download_url"] == "https://cdn.example/plugin.zip"
+    assert record["installed_at"] == "2026-06-26T00:00:00+00:00"
+    assert captured["records"]["astrbot_plugin_demo"] == record
+
+
+@pytest.mark.asyncio
+async def test_plugin_service_bind_market_source_rejects_repo_mismatch(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    plugin = SimpleNamespace(
+        name="astrbot_plugin_demo",
+        root_dir_name="astrbot_plugin_demo",
+        repo="https://github.com/AstrBotDevs/astrbot-plugin-demo",
+    )
+
+    async def fake_get_online_plugins(*, custom_registry, force_refresh):
+        return {
+            "$meta": {
+                "schema_version": 1,
+                "name": "Test Market",
+                "version": "2026.06.27",
+            },
+            "astrbot-plugin-demo": {
+                "author": "AstrBotDevs",
+                "repo": "https://github.com/SomeoneElse/astrbot-plugin-demo",
+            },
+        }, None
+
+    monkeypatch.setattr(plugin_service, "find_plugin_by_name", lambda name: plugin)
+    monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
+
+    with pytest.raises(Exception) as exc_info:
+        await plugin_service.bind_plugin_market_source(
+            {
+                "name": "astrbot_plugin_demo",
+                "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
+            }
+        )
+
+    assert "插件仓库地址与所选插件源不一致" in str(exc_info.value)
+
+
+def test_plugin_service_repo_identifier_accepts_github_url_without_scheme(
+    asgi_app: FastAPI,
+):
+    plugin_service = asgi_app.state.services.plugins
+
+    assert (
+        plugin_service.repo_identifier_from_url("github.com/AstrBotDevs/demo.git")
+        == "AstrBotDevs/demo"
+    )
+
+
+def test_plugin_service_resolves_market_entry_by_repo_identifier(
+    asgi_app: FastAPI,
+):
+    plugin_service = asgi_app.state.services.plugins
+    record = {
+        "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo.git",
+    }
+    market_data = {
+        "$meta": {"schema_version": 1},
+        "astrbot-plugin-demo": {
+            "author": "AstrBotDevs",
+            "repo": "https://www.github.com/AstrBotDevs/astrbot-plugin-demo",
+        },
+    }
+
+    entry = plugin_service.resolve_market_plugin_entry(market_data, record)
+
+    assert entry is not None
+    assert entry["author"] == "AstrBotDevs"
+    assert entry["name"] == "astrbot-plugin-demo"
+    assert entry["repo"] == "https://www.github.com/AstrBotDevs/astrbot-plugin-demo"
+
+
+@pytest.mark.asyncio
+async def test_plugin_service_persist_install_source_resolves_registry_before_read(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    plugin = SimpleNamespace(
+        name="astrbot_plugin_demo",
+        root_dir_name="astrbot_plugin_demo",
+        repo="https://github.com/AstrBotDevs/astrbot-plugin-demo",
+    )
+    events = []
+    captured = {}
+
+    async def fake_resolve_registry_name(registry_url):
+        events.append(("resolve", registry_url))
+        return "Custom"
+
+    async def fake_get_plugin_install_sources():
+        events.append(("get", None))
+        return {}
+
+    async def fake_save_plugin_install_sources(records):
+        events.append(("save", None))
+        captured["records"] = records
+
+    monkeypatch.setattr(plugin_service, "find_plugin_by_name", lambda name: plugin)
+    monkeypatch.setattr(
+        plugin_service,
+        "resolve_registry_name",
+        fake_resolve_registry_name,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "get_plugin_install_sources",
+        fake_get_plugin_install_sources,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "save_plugin_install_sources",
+        fake_save_plugin_install_sources,
+    )
+
+    await plugin_service.persist_plugin_install_source(
+        {"name": "astrbot_plugin_demo"},
+        {
+            "registry_url": "https://example.com/plugins.json",
+            "install_method": "market",
+            "market_plugin_id": "AstrBotDevs/astrbot-plugin-demo",
+        },
+        fallback_method="url",
+        repo_url="https://github.com/AstrBotDevs/astrbot-plugin-demo",
+        download_url="",
+    )
+
+    assert events == [
+        ("resolve", "https://example.com/plugins.json"),
+        ("get", None),
+        ("save", None),
+    ]
+    record = captured["records"]["astrbot_plugin_demo"]
+    assert record["registry_name"] == "Custom"
+
+
+def test_plugin_service_missing_install_source_defaults_to_official_market(
+    asgi_app: FastAPI,
+):
+    plugin_service = asgi_app.state.services.plugins
+    plugin = SimpleNamespace(
+        name="astrbot_plugin_demo",
+        root_dir_name="astrbot_plugin_demo",
+        repo="https://github.com/AstrBotDevs/astrbot-plugin-demo",
+        reserved=False,
+    )
+
+    record = plugin_service.resolve_effective_plugin_install_source(plugin, {})
+
+    assert record["install_method"] == "market"
+    assert record["registry_url"] is None
+    assert record["registry_name"] == "Default"
+    assert record["repo"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
+    assert record["name"] == "astrbot_plugin_demo"
+    assert record["marketplace_name"] == "astrbot-plugin-demo"
+
+
+@pytest.mark.asyncio
+async def test_plugin_service_update_missing_source_uses_default_registry(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    plugin_service = asgi_app.state.services.plugins
+    plugin = SimpleNamespace(
+        name="astrbot_plugin_demo",
+        root_dir_name="astrbot_plugin_demo",
+        repo="https://github.com/AstrBotDevs/astrbot-plugin-demo",
+        reserved=False,
+    )
+    captured = {}
+
+    async def fake_get_plugin_install_sources():
+        return {}
+
+    async def fake_save_plugin_install_sources(records):
+        captured["records"] = records
+
+    async def fake_get_online_plugins(*, custom_registry, force_refresh):
+        captured["registry_url"] = custom_registry
+        captured["force_refresh"] = force_refresh
+        return {
+            "$meta": {
+                "schema_version": 1,
+                "name": "Test Market",
+                "version": "2026.06.27",
+            },
+            "astrbot-plugin-demo": {
+                "author": "AstrBotDevs",
+                "repo": "https://github.com/AstrBotDevs/astrbot-plugin-demo",
+                "download_url": "https://cdn.example/plugin.zip",
+            },
+        }, None
+
+    monkeypatch.setattr(plugin_service, "find_plugin_by_name", lambda name: plugin)
+    monkeypatch.setattr(
+        plugin_service,
+        "get_plugin_install_sources",
+        fake_get_plugin_install_sources,
+    )
+    monkeypatch.setattr(
+        plugin_service,
+        "save_plugin_install_sources",
+        fake_save_plugin_install_sources,
+    )
+    monkeypatch.setattr(plugin_service, "get_online_plugins", fake_get_online_plugins)
+
+    update_info = await plugin_service.resolve_market_update_info("astrbot_plugin_demo")
+    await plugin_service.refresh_plugin_install_source_after_update(
+        "astrbot_plugin_demo",
+        update_info,
+    )
+
+    assert captured["registry_url"] is None
+    assert captured["force_refresh"] is False
+    assert update_info["repo"] == "https://github.com/AstrBotDevs/astrbot-plugin-demo"
+    assert update_info["download_url"] == "https://cdn.example/plugin.zip"
+    assert update_info["record"]["install_method"] == "market"
+    record = captured["records"]["astrbot_plugin_demo"]
+    assert record["registry_url"] is None
+    assert record["registry_name"] == "Default"
+    assert record["market_plugin_id"] == "AstrBotDevs/astrbot-plugin-demo"
+    assert record["download_url"] == "https://cdn.example/plugin.zip"
 
 
 @pytest.mark.asyncio
@@ -1886,9 +2339,10 @@ def test_astrbot_web_request_proxy_exposes_typed_methods():
 
     assert isinstance(plugin_request, PluginRequestProxy)
     assert get_type_hints(type(plugin_request).form)["return"] == PluginMultiDict[str]
-    assert get_type_hints(type(plugin_request).files)["return"] == PluginMultiDict[
-        PluginUploadFile
-    ]
+    assert (
+        get_type_hints(type(plugin_request).files)["return"]
+        == PluginMultiDict[PluginUploadFile]
+    )
 
 
 @pytest.mark.asyncio
@@ -2194,27 +2648,24 @@ async def test_v1_token_file_is_public(
 
 
 def test_v1_openapi_alias_websocket_routes_are_mounted(asgi_app):
-    websocket_paths = {
-        route.path
-        for route in asgi_app.router.routes
-        if "websocket" in route.__class__.__name__.lower()
-    }
-
-    assert "/api/v1/chat/ws" in websocket_paths
-    assert "/api/v1/live-chat/ws" in websocket_paths
-    assert "/api/v1/unified-chat/ws" in websocket_paths
+    assert str(asgi_app.url_path_for("chat_ws")) == "/api/v1/chat/ws"
+    assert str(asgi_app.url_path_for("live_chat_ws")) == "/api/v1/live-chat/ws"
+    assert str(asgi_app.url_path_for("unified_chat_ws")) == "/api/v1/unified-chat/ws"
 
 
 def test_dashboard_config_aliases_are_registered_on_fastapi(asgi_app):
-    http_paths = {
-        route.path
-        for route in asgi_app.router.routes
-        if "route" in route.__class__.__name__.lower()
-    }
-
-    assert "/api/config/platform/list" in http_paths
-    assert "/api/config/provider/list" in http_paths
-    assert "/api/config/provider_sources/update" in http_paths
+    assert (
+        str(asgi_app.url_path_for("dashboard_alias_platform_list"))
+        == "/api/config/platform/list"
+    )
+    assert (
+        str(asgi_app.url_path_for("dashboard_alias_provider_list"))
+        == "/api/config/provider/list"
+    )
+    assert (
+        str(asgi_app.url_path_for("update_dashboard_alias_provider_source"))
+        == "/api/config/provider_sources/update"
+    )
 
 
 @pytest.mark.asyncio
@@ -2470,6 +2921,29 @@ async def test_v1_safe_persona_routes_accept_slash_ids(
     assert delete_response.status_code == 200
     assert delete_response.json()["data"] == {"message": "人格删除成功"}
     assert persona_id not in persona_mgr.personas
+
+
+@pytest.mark.asyncio
+async def test_v1_persona_by_id_update_preserves_explicit_null_tools_and_skills(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    persona_id = "persona/foo"
+    headers = _jwt_headers()
+    persona = fake_core_lifecycle.persona_mgr.personas[persona_id]
+    persona.tools = ["tool-a"]
+    persona.skills = ["skill-a"]
+
+    response = await asgi_client.put(
+        "/api/v1/personas/by-id",
+        json={"persona_id": persona_id, "tools": None, "skills": None},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"message": "人格更新成功"}
+    assert persona.tools is None
+    assert persona.skills is None
 
 
 @pytest.mark.asyncio
