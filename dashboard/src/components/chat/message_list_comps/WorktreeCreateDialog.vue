@@ -41,15 +41,25 @@ function defaultPath(branchName: string, root: string): string {
   return `${root}${sep}.worktrees${sep}${branchName.replace(/\//g, "-")}`;
 }
 
-// Re-compute default path when branch changes (only if user hasn't manually edited path).
+// Track whether the user has manually edited the path field, so the
+// branch→path auto-suggestion stops overwriting their choice once
+// they've touched it.
+//
+// Important: we must NOT use `watch(path, ...)` to detect user edits,
+// because that watcher also fires for our own programmatic assignments
+// in the branch watcher below — which would mark the suggestion as
+// "user-edited" on the very first keystroke and freeze the path. We
+// detect real user input via the @update:model-value handler on the
+// v-text-field instead, which only fires for DOM input events.
 const userEditedPath = ref(false);
+function onPathUserInput(next: string): void {
+  path.value = next;
+  userEditedPath.value = true;
+}
 watch(branch, (b) => {
   if (!userEditedPath.value && b) {
     path.value = defaultPath(b, projectRoot.value);
   }
-});
-watch(path, () => {
-  userEditedPath.value = true;
 });
 
 // Field-level validation (aligns with backend 5-step preflight).
@@ -151,16 +161,20 @@ function onSubmit(): void {
           class="mt-3"
         />
 
-        <!-- Path (absolute) -->
-        <v-text-field
-          v-model="path"
-          :label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.create.path')"
-          :hint="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.create.pathHint')"
-          :error-messages="errors.path ? [errors.path] : []"
-          density="comfortable"
-          variant="outlined"
-          class="mt-2"
-        />
+        <!-- Path (absolute). Use @update:model-value instead of
+                     v-model so we can distinguish user typing from programmatic
+                     writes done by the branch→path watcher. See comment on
+                     onPathUserInput. -->
+                <v-text-field
+                  :model-value="path"
+                  :label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.create.path')"
+                  :hint="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.create.pathHint')"
+                  :error-messages="errors.path ? [errors.path] : []"
+                  density="comfortable"
+                  variant="outlined"
+                  class="mt-2"
+                  @update:model-value="onPathUserInput"
+                />
 
         <!-- Base (only in create mode) -->
         <v-text-field

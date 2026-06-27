@@ -1942,11 +1942,13 @@ const currentRoot = computed<string | null>(() => {
                   >
                     <v-list density="compact">
                       <template v-if="contextMenu.wt && !contextMenu.wt.isMain">
-                        <!-- wt.locked is string|null; coerce to boolean for :disabled -->
-                        <v-list-item
-                          :disabled="!!contextMenu.wt.locked"
-                          @click="onLockClick(contextMenu.wt!)"
-                        >
+                        <!-- Lock/unlock toggle: never disabled. When the worktree
+                             is locked this button reads "unlock" and the click
+                             opens the unlock confirm dialog; when unlocked it
+                             reads "lock" and opens the lock-reason dialog.
+                             Disabling it when locked would prevent the very
+                             action it represents. -->
+                        <v-list-item @click="onLockClick(contextMenu.wt!)">
                           <template #prepend>
                             <v-icon>{{
                               contextMenu.wt.locked ? "mdi-lock-open-variant" : "mdi-lock"
@@ -1958,6 +1960,8 @@ const currentRoot = computed<string | null>(() => {
                               : tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.lock")
                           }}</v-list-item-title>
                         </v-list-item>
+                        <!-- Remove: disabled only when locked (a locked worktree
+                             must be unlocked before it can be removed). -->
                         <v-list-item
                           :disabled="!!contextMenu.wt.locked"
                           @click="onRemoveClick(contextMenu.wt!)"
