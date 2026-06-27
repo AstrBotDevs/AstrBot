@@ -116,6 +116,7 @@ class TelegramPlatformAdapter(Platform):
         self._polling_restart_delay = delay
         self._polling_recovery_threshold = 3
         self._polling_failure_window = 60.0
+        self._polling_timeout = 30
         self._application_started = False
         self._build_application()
 
@@ -266,7 +267,10 @@ class TelegramPlatformAdapter(Platform):
                     await asyncio.sleep(self._polling_restart_delay)
                     continue
                 logger.info("Starting Telegram polling...")
-                await updater.start_polling(error_callback=self._on_polling_error)
+                await updater.start_polling(
+                    timeout=self._polling_timeout,
+                    error_callback=self._on_polling_error,
+                )
                 logger.info("Telegram Platform Adapter is running.")
                 while updater.running and not self._terminating:  # noqa: ASYNC110
                     if self._polling_recovery_requested.is_set():
@@ -315,6 +319,14 @@ class TelegramPlatformAdapter(Platform):
         if self._loop is None:
             return
 
+        if self._is_pool_timeout(error):
+            logger.warning(
+                "Telegram polling hit a connection pool timeout; scheduling "
+                "HTTP client rebuild.",
+            )
+            self._schedule_polling_recovery()
+            return
+
         now = self._loop.time()
         if now - self._last_polling_failure_at > self._polling_failure_window:
             self._consecutive_polling_failures = 0
@@ -330,12 +342,25 @@ class TelegramPlatformAdapter(Platform):
             self._consecutive_polling_failures,
             self._polling_failure_window,
         )
-        if self._loop.is_closed():
+        self._schedule_polling_recovery()
+
+    def _schedule_polling_recovery(self) -> None:
+        if self._loop is None or self._loop.is_closed():
             return
         try:
             self._loop.call_soon_threadsafe(self._polling_recovery_requested.set)
         except RuntimeError:
             return
+
+    @staticmethod
+    def _is_pool_timeout(error: Exception) -> bool:
+        current: BaseException | None = error
+        while current is not None:
+            if type(current).__name__ == "PoolTimeout":
+                return True
+            current = current.__cause__ or current.__context__
+
+        return "Pool timeout" in str(error)
 
     async def register_commands(self) -> None:
         """收集所有注册的指令并注册到 Telegram"""
