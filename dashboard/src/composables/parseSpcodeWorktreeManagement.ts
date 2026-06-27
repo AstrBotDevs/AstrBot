@@ -204,3 +204,88 @@ export function parseSpcodeWorktreeUnlock(
     }),
   };
 }
+
+// ── Reason classification (spec §4) ──────────────────────
+
+export interface ReasonMeta {
+  i18nKey: string;
+  color: "error" | "warning";
+  withStderr?: boolean;
+  withReason?: boolean;
+}
+
+export const WORKTREE_MGMT_REASON_CODES: Record<string, ReasonMeta> = {
+  // 前置类
+  feature_disabled:        { i18nKey: "error.reason.feature_disabled", color: "error" },
+  no_project_loaded:       { i18nKey: "error.reason.no_project_loaded", color: "error" },
+  worktree_invalid:        { i18nKey: "error.reason.worktree_invalid", color: "error" },
+  directory_missing:       { i18nKey: "error.reason.directory_missing", color: "error" },
+  not_a_git_repo:          { i18nKey: "error.reason.not_a_git_repo", color: "error" },
+  git_unavailable:         { i18nKey: "error.reason.git_unavailable", color: "error" },
+  git_error:               { i18nKey: "error.reason.git_error", color: "error", withStderr: true },
+  // body 类
+  invalid_body:            { i18nKey: "error.reason.invalid_body", color: "error" },
+  invalid_branch:          { i18nKey: "error.reason.invalid_branch", color: "error" },
+  invalid_param:           { i18nKey: "error.reason.invalid_param", color: "error" },
+  // 路径类
+  path_unsafe:             { i18nKey: "error.reason.path_unsafe", color: "error" },
+  // 业务类(ADD)
+  path_exists_nonempty:    { i18nKey: "error.reason.path_exists_nonempty", color: "warning" },
+  cannot_create_existing:  { i18nKey: "error.reason.cannot_create_existing", color: "warning" },
+  // 业务类(REMOVE/LOCK/UNLOCK)
+  worktree_not_found:      { i18nKey: "error.reason.worktree_not_found", color: "warning" },
+  cannot_remove_main:      { i18nKey: "error.reason.cannot_remove_main", color: "error" },
+  worktree_locked:         { i18nKey: "error.reason.worktree_locked", color: "warning" },
+  worktree_dirty:          { i18nKey: "error.reason.worktree_dirty", color: "warning" },
+  already_locked:          { i18nKey: "error.reason.already_locked", color: "warning" },
+  not_locked:              { i18nKey: "error.reason.not_locked", color: "warning" },
+  // 网络/未知
+  network:                 { i18nKey: "error.reason.network", color: "error" },
+  unknown:                 { i18nKey: "error.reason.unknown", color: "error", withReason: true },
+};
+
+/** Allowed reason codes per endpoint (spec §4.1). */
+export const ALLOWED_WORKTREE_REASONS: Record<WorktreeMgmtEndpoint, readonly string[]> = {
+  add: [
+    "feature_disabled", "no_project_loaded", "worktree_invalid",
+    "directory_missing", "not_a_git_repo", "git_unavailable", "git_error",
+    "invalid_body", "invalid_branch", "invalid_param", "path_unsafe",
+    "path_exists_nonempty", "cannot_create_existing",
+  ],
+  remove: [
+    "feature_disabled", "no_project_loaded", "worktree_invalid",
+    "directory_missing", "not_a_git_repo", "git_unavailable", "git_error",
+    "invalid_body", "path_unsafe",
+    "worktree_not_found", "cannot_remove_main", "worktree_locked", "worktree_dirty",
+  ],
+  lock: [
+    "feature_disabled", "no_project_loaded", "worktree_invalid",
+    "directory_missing", "not_a_git_repo", "git_unavailable", "git_error",
+    "invalid_body", "path_unsafe",
+    "worktree_not_found", "already_locked",
+  ],
+  unlock: [
+    "feature_disabled", "no_project_loaded", "worktree_invalid",
+    "directory_missing", "not_a_git_repo", "git_unavailable", "git_error",
+    "invalid_body", "path_unsafe",
+    "worktree_not_found", "not_locked",
+  ],
+};
+
+/** Classify a reason string to a ReasonMeta.
+ *  Returns `unknown` for null / undefined / unknown / endpoint-mismatched codes. */
+export function classifyWorktreeReason(
+  reason: string | null | undefined,
+  endpoint: WorktreeMgmtEndpoint,
+): ReasonMeta {
+  if (reason === null || reason === undefined) {
+    return WORKTREE_MGMT_REASON_CODES.unknown;
+  }
+  if (reason === "network") {
+    return WORKTREE_MGMT_REASON_CODES.network;
+  }
+  if (!(ALLOWED_WORKTREE_REASONS[endpoint] as readonly string[]).includes(reason)) {
+    return WORKTREE_MGMT_REASON_CODES.unknown;
+  }
+  return WORKTREE_MGMT_REASON_CODES[reason] ?? WORKTREE_MGMT_REASON_CODES.unknown;
+}
