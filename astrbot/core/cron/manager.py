@@ -416,13 +416,13 @@ class CronJobManager:
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
 
-        tool_call_timeout = cfg.get("provider_settings", {}).get(
-            "tool_call_timeout", 120
-        )
+        provider_settings = cfg.get("provider_settings", {}) or {}
+        tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
             streaming_response=False,
+            provider_settings=provider_settings,
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
