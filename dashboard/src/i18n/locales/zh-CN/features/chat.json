@@ -355,6 +355,62 @@
         "mainBadge": "主",
         "detachedBadge": "游离"
       },
+      "worktreeMgmt": {
+        "addButton": "新建 worktree",
+        "addButtonAria": "新建一个 git worktree",
+        "contextMenu": {
+          "ariaLabel": "worktree 管理",
+          "lock": "锁定…",
+          "unlock": "解锁",
+          "remove": "删除…",
+          "mainDisabled": "主 worktree 不可锁定/删除"
+        },
+        "create": {
+          "title": "新建 worktree",
+          "modeCreate": "创建新分支 (-b)",
+          "modeForce": "强制覆盖 (-B)",
+          "modeDetach": "分离 HEAD",
+          "modeForceWarning": "该操作将覆盖已存在分支",
+          "branch": "分支名",
+          "branchHint": "detach 模式可省略",
+          "branchRequired": "请输入分支名",
+          "path": "路径",
+          "pathHint": "绝对路径,父目录必须存在",
+          "pathRequired": "请输入路径",
+          "base": "起始点",
+          "baseHint": "仅创建新分支模式生效,默认 main",
+          "submit": "创建",
+          "cancel": "取消",
+          "success": "已创建 worktree {branch}"
+        },
+        "remove": {
+          "confirmTitle": "删除 worktree",
+          "confirmMessage": "确认删除 worktree {branch}?",
+          "confirmMessageWithPath": "确认删除 {path} ({branch})?",
+          "dirtyHint": "该 worktree 有 {count} 个未提交改动。",
+          "force": "强制删除(丢弃 {count} 个未提交改动)",
+          "confirm": "删除",
+          "cancel": "取消",
+          "success": "已删除 worktree {branch}"
+        },
+        "lock": {
+          "dialogTitle": "锁定 worktree",
+          "targetInfo": "锁定 worktree {branch}",
+          "reason": "锁定原因(可选)",
+          "reasonHint": "建议 200 字符以内",
+          "submit": "锁定",
+          "cancel": "取消",
+          "success": "已锁定 worktree {branch}",
+          "alreadyLocked": "该 worktree 已锁定"
+        },
+        "unlock": {
+          "confirmTitle": "解锁 worktree",
+          "confirmMessage": "确认解锁 worktree {branch}?",
+          "confirm": "解锁",
+          "cancel": "取消",
+          "success": "已解锁 worktree {branch}"
+        }
+      },
       "scopeBar": {
         "ariaLabel": "选择 diff 范围"
       },
@@ -374,7 +430,17 @@
           "not_a_git_repo": "当前目录不是 Git 仓库",
           "git_unavailable": "未检测到 git 可执行文件",
           "git_error": "Git 执行失败（{reason}）",
-          "generic": "获取改动失败（{reason}）"
+          "generic": "获取改动失败（{reason}）",
+          "invalid_branch": "分支名格式错误",
+          "invalid_param": "起始点格式错误",
+          "path_exists_nonempty": "目标路径已被占用",
+          "cannot_create_existing": "分支已存在,请勾选强制覆盖",
+          "worktree_not_found": "该 worktree 已不存在",
+          "cannot_remove_main": "主 worktree 不可删除",
+          "worktree_locked": "worktree 已锁定,请先解锁",
+          "worktree_dirty": "worktree 有未提交改动",
+          "already_locked": "该 worktree 已锁定",
+          "not_locked": "该 worktree 未锁定"
         }
       },
       "restore": {

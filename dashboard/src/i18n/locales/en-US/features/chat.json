@@ -355,6 +355,62 @@
         "mainBadge": "main",
         "detachedBadge": "detached"
       },
+      "worktreeMgmt": {
+        "addButton": "New worktree",
+        "addButtonAria": "Create a new git worktree",
+        "contextMenu": {
+          "ariaLabel": "Worktree management",
+          "lock": "Lock…",
+          "unlock": "Unlock",
+          "remove": "Remove…",
+          "mainDisabled": "Main worktree cannot be locked or removed"
+        },
+        "create": {
+          "title": "New worktree",
+          "modeCreate": "Create new branch (-b)",
+          "modeForce": "Force overwrite (-B)",
+          "modeDetach": "Detached HEAD",
+          "modeForceWarning": "This will overwrite the existing branch",
+          "branch": "Branch name",
+          "branchHint": "Optional in detach mode",
+          "branchRequired": "Branch name is required",
+          "path": "Path",
+          "pathHint": "Absolute path; parent directory must exist",
+          "pathRequired": "Path is required",
+          "base": "Base ref",
+          "baseHint": "Only used in create mode; defaults to main",
+          "submit": "Create",
+          "cancel": "Cancel",
+          "success": "Created worktree {branch}"
+        },
+        "remove": {
+          "confirmTitle": "Remove worktree",
+          "confirmMessage": "Remove worktree {branch}?",
+          "confirmMessageWithPath": "Remove {path} ({branch})?",
+          "dirtyHint": "This worktree has {count} uncommitted change(s).",
+          "force": "Force remove (discard {count} uncommitted change(s))",
+          "confirm": "Remove",
+          "cancel": "Cancel",
+          "success": "Removed worktree {branch}"
+        },
+        "lock": {
+          "dialogTitle": "Lock worktree",
+          "targetInfo": "Lock worktree {branch}",
+          "reason": "Lock reason (optional)",
+          "reasonHint": "Recommended under 200 characters",
+          "submit": "Lock",
+          "cancel": "Cancel",
+          "success": "Locked worktree {branch}",
+          "alreadyLocked": "This worktree is already locked"
+        },
+        "unlock": {
+          "confirmTitle": "Unlock worktree",
+          "confirmMessage": "Unlock worktree {branch}?",
+          "confirm": "Unlock",
+          "cancel": "Cancel",
+          "success": "Unlocked worktree {branch}"
+        }
+      },
       "scopeBar": {
         "ariaLabel": "Select diff scope"
       },
@@ -374,7 +430,17 @@
           "not_a_git_repo": "Current directory is not a Git repository",
           "git_unavailable": "Git executable not found",
           "git_error": "Git execution failed ({reason})",
-          "generic": "Failed to fetch changes ({reason})"
+          "generic": "Failed to fetch changes ({reason})",
+          "invalid_branch": "Invalid branch name format",
+          "invalid_param": "Invalid base ref format",
+          "path_exists_nonempty": "Target path is already in use",
+          "cannot_create_existing": "Branch already exists; enable force overwrite",
+          "worktree_not_found": "Worktree no longer exists",
+          "cannot_remove_main": "Main worktree cannot be removed",
+          "worktree_locked": "Worktree is locked; unlock first",
+          "worktree_dirty": "Worktree has uncommitted changes",
+          "already_locked": "Worktree is already locked",
+          "not_locked": "Worktree is not locked"
         }
       },
       "restore": {

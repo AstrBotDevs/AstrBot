@@ -9,7 +9,56 @@ import {
   parseSpcodeGitWorktrees,
   type SpcodeGitWorktreesSnapshot,
   type SpcodeGitWorktreesRawResponse,
+  type SpcodeGitWorktreeRaw,
 } from '@/composables/parseSpcodeWorktrees'
+import {
+  parseSpcodeWorktreeAdd,
+  parseSpcodeWorktreeRemove,
+  parseSpcodeWorktreeLock,
+  parseSpcodeWorktreeUnlock,
+} from '@/composables/parseSpcodeWorktreeManagement'
+
+// ── Worktree management (spec 2026-06-27 §1.1) ──────────────
+
+/** Parameters for the 4 mutation methods. All 4 share the same shape
+ *  (path + optional context) so the consumer can pattern-match
+ *  uniformly; the 4 parsers differ only in endpoint-specific
+ *  response field interpretation. */
+export interface WorktreeMgmtParams {
+  /** Absolute path of the worktree to act on. For `add`, the new
+   *  worktree's location; for the rest, the existing target. */
+  path: string;
+  /** Optional nested worktree context (rare; passed via ?worktree=
+   *  query param to the backend). Aligns with §2.5 of the spcode spec. */
+  worktree?: string | null;
+  /** Session ID. Falls back to the composable's tracked umo if null. */
+  umo?: string | null;
+}
+
+/** ADD-specific params (extends WorktreeMgmtParams with create/force/detach/base). */
+export interface WorktreeAddParams extends WorktreeMgmtParams {
+  branch?: string;
+  create?: boolean;
+  force?: boolean;
+  detach?: boolean;
+  base?: string;
+}
+
+/** REMOVE-specific params (extends with force for dirty bypass). */
+export interface WorktreeRemoveParams extends WorktreeMgmtParams {
+  force?: boolean;
+}
+
+/** LOCK-specific params (extends with reason). */
+export interface WorktreeLockParams extends WorktreeMgmtParams {
+  reason?: string;
+}
+
+/** Discriminated union return type for all 4 mutations. Mirrors the
+ *  useSpcodeFileRestore pattern (ok / failure-with-reason+stderr). */
+export type WorktreeMgmtResult =
+  | { ok: true; snapshot: SpcodeGitWorktreesSnapshot }
+  | { ok: false; reason: string; stderr?: string };
 
 export type WorktreesFetchState =
   | { kind: 'idle' }
@@ -35,6 +84,26 @@ export interface UseSpcodeWorktrees {
   startPolling: (intervalMs?: number) => void
   /** Cancel the polling timer set by `startPolling`. Idempotent. */
   stopPolling: () => void
+  /**
+   * Add a new worktree. See `parseSpcodeWorktreeAdd` for the response
+   * shape; on success, the returned snapshot's `worktrees` array is
+   * the authoritative refreshed list and is swapped into `state` atomically.
+   */
+  add: (params: WorktreeAddParams) => Promise<WorktreeMgmtResult>
+  /**
+   * Remove an existing worktree. Frontend must NOT call this for the
+   * main worktree (ui-side disabled); backend will refuse with
+   * `cannot_remove_main` regardless. The `force` flag bypasses the
+   * dirty check only (locked check is structural and is not bypassed).
+   */
+  remove: (params: WorktreeRemoveParams) => Promise<WorktreeMgmtResult>
+  /** Lock a worktree. Optional `reason` is stored alongside the lock
+   *  (git 2.30+); backend allows locking the main worktree but the
+   *  UI hides the entry for it (see spec §11.2). */
+  lock: (params: WorktreeLockParams) => Promise<WorktreeMgmtResult>
+  /** Unlock a worktree. Non-idempotent: second unlock returns
+   *  `not_locked`. UI should disable when `locked=false`. */
+  unlock: (params: WorktreeMgmtParams) => Promise<WorktreeMgmtResult>
   dispose: () => void
 }
 
@@ -80,6 +149,10 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
   const state = ref<WorktreesFetchState>({ kind: 'idle' })
   const spcodeStatus = useSpcodeProjectStatus()
   let abortController: AbortController | null = null
+  // Single-flight guard for mutation methods (separate from the read
+  // path's `abortController` so a read in progress doesn't cancel a
+  // pending write or vice versa).
+  let mutationAbort: AbortController | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let isMounted = true
 
@@ -171,14 +244,198 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
     }
   }
 
+  // ── Worktree management methods (spec 2026-06-27 §3) ────────
+  //
+  // All 4 share the same shape: build a new AbortController (cancel
+  // any in-flight read), POST to the endpoint, parse the response,
+  // atomically swap `state.value` with the refreshed snapshot. The
+  // parsers are imported from parseSpcodeWorktreeManagement.ts.
+  //
+  // **Single-flight policy**: each call aborts the previous
+  // AbortController. This means rapid double-click → the first call
+  // resolves as `aborted` (handled by the `isMounted` guard), the
+  // second runs to completion. The orchestrator (GitDiffSidebar)
+  // guards UI buttons with `isXxx` flags to make double-clicks
+  // impossible at the UI level too (defense in depth).
+
+  async function add(params: WorktreeAddParams): Promise<WorktreeMgmtResult> {
+    if (!isMounted) return { ok: false, reason: "aborted" };
+    const umo = params.umo ?? spcodeStatus.status.value.umo;
+    if (!umo) return { ok: false, reason: "no_project_loaded" };
+    const ctrl = new AbortController();
+    mutationAbort?.abort();
+    mutationAbort = ctrl;
+    try {
+      const resp = await pluginExtensionApi.post<unknown>(
+        "spcode/git-worktree-add",
+        {
+          path: params.path,
+          branch: params.branch,
+          create: params.create,
+          force: params.force,
+          detach: params.detach,
+          base: params.base,
+        },
+        {
+          signal: ctrl.signal,
+          params: { umo, worktree: params.worktree ?? undefined },
+        },
+      );
+      if (!isMounted || ctrl.signal.aborted) return { ok: false, reason: "aborted" };
+      const parsed = parseSpcodeWorktreeAdd(resp.data);
+      if (parsed.kind !== "ok") return { ok: false, reason: "unknown" };
+      // Atomically replace state with the refreshed list.
+      // The cast is safe: parseSpcodeWorktreeManagement stored the
+      // raw snake_case array verbatim (Chunk 1 leaves re-naming to
+      // parseSpcodeGitWorktrees), so the data still has `head_sha` /
+      // `is_main` at runtime even though the TS type says camelCase.
+      const refreshed = parseSpcodeGitWorktrees({
+        loaded: parsed.snapshot.meta.loaded,
+        directory: parsed.snapshot.meta.directory,
+        umo: parsed.snapshot.meta.umo,
+        worktrees: parsed.snapshot.worktrees as unknown as SpcodeGitWorktreeRaw[],
+        reason: parsed.snapshot.meta.reason,
+        stderr: parsed.snapshot.meta.stderr,
+        elapsed_ms: parsed.snapshot.meta.elapsedMs,
+      });
+      state.value = { kind: "ok", snapshot: refreshed };
+      return { ok: true, snapshot: refreshed };
+    } catch (err) {
+      if (!isMounted) return { ok: false, reason: "aborted" };
+      if ((err as { name?: string })?.name === "CanceledError") {
+        return { ok: false, reason: "aborted" };
+      }
+      return { ok: false, reason: classifyMutationError(err) };
+    }
+  }
+
+  async function remove(params: WorktreeRemoveParams): Promise<WorktreeMgmtResult> {
+    if (!isMounted) return { ok: false, reason: "aborted" };
+    const umo = params.umo ?? spcodeStatus.status.value.umo;
+    if (!umo) return { ok: false, reason: "no_project_loaded" };
+    const ctrl = new AbortController();
+    mutationAbort?.abort();
+    mutationAbort = ctrl;
+    try {
+      const resp = await pluginExtensionApi.post<unknown>(
+        "spcode/git-worktree-remove",
+        { path: params.path, force: params.force },
+        {
+          signal: ctrl.signal,
+          params: { umo, worktree: params.worktree ?? undefined },
+        },
+      );
+      if (!isMounted || ctrl.signal.aborted) return { ok: false, reason: "aborted" };
+      const parsed = parseSpcodeWorktreeRemove(resp.data);
+      if (parsed.kind !== "ok") return { ok: false, reason: "unknown" };
+      const refreshed = parseSpcodeGitWorktrees({
+        loaded: parsed.snapshot.meta.loaded,
+        directory: parsed.snapshot.meta.directory,
+        umo: parsed.snapshot.meta.umo,
+        worktrees: parsed.snapshot.worktrees as unknown as SpcodeGitWorktreeRaw[],
+        reason: parsed.snapshot.meta.reason,
+        stderr: parsed.snapshot.meta.stderr,
+        elapsed_ms: parsed.snapshot.meta.elapsedMs,
+      });
+      state.value = { kind: "ok", snapshot: refreshed };
+      return { ok: true, snapshot: refreshed };
+    } catch (err) {
+      if (!isMounted) return { ok: false, reason: "aborted" };
+      if ((err as { name?: string })?.name === "CanceledError") {
+        return { ok: false, reason: "aborted" };
+      }
+      return { ok: false, reason: classifyMutationError(err) };
+    }
+  }
+
+  async function lock(params: WorktreeLockParams): Promise<WorktreeMgmtResult> {
+    if (!isMounted) return { ok: false, reason: "aborted" };
+    const umo = params.umo ?? spcodeStatus.status.value.umo;
+    if (!umo) return { ok: false, reason: "no_project_loaded" };
+    const ctrl = new AbortController();
+    mutationAbort?.abort();
+    mutationAbort = ctrl;
+    try {
+      const resp = await pluginExtensionApi.post<unknown>(
+        "spcode/git-worktree-lock",
+        { path: params.path, reason: params.reason },
+        {
+          signal: ctrl.signal,
+          params: { umo, worktree: params.worktree ?? undefined },
+        },
+      );
+      if (!isMounted || ctrl.signal.aborted) return { ok: false, reason: "aborted" };
+      const parsed = parseSpcodeWorktreeLock(resp.data);
+      if (parsed.kind !== "ok") return { ok: false, reason: "unknown" };
+      const refreshed = parseSpcodeGitWorktrees({
+        loaded: parsed.snapshot.meta.loaded,
+        directory: parsed.snapshot.meta.directory,
+        umo: parsed.snapshot.meta.umo,
+        worktrees: parsed.snapshot.worktrees as unknown as SpcodeGitWorktreeRaw[],
+        reason: parsed.snapshot.meta.reason,
+        stderr: parsed.snapshot.meta.stderr,
+        elapsed_ms: parsed.snapshot.meta.elapsedMs,
+      });
+      state.value = { kind: "ok", snapshot: refreshed };
+      return { ok: true, snapshot: refreshed };
+    } catch (err) {
+      if (!isMounted) return { ok: false, reason: "aborted" };
+      if ((err as { name?: string })?.name === "CanceledError") {
+        return { ok: false, reason: "aborted" };
+      }
+      return { ok: false, reason: classifyMutationError(err) };
+    }
+  }
+
+  async function unlock(params: WorktreeMgmtParams): Promise<WorktreeMgmtResult> {
+    if (!isMounted) return { ok: false, reason: "aborted" };
+    const umo = params.umo ?? spcodeStatus.status.value.umo;
+    if (!umo) return { ok: false, reason: "no_project_loaded" };
+    const ctrl = new AbortController();
+    mutationAbort?.abort();
+    mutationAbort = ctrl;
+    try {
+      const resp = await pluginExtensionApi.post<unknown>(
+        "spcode/git-worktree-unlock",
+        { path: params.path },
+        {
+          signal: ctrl.signal,
+          params: { umo, worktree: params.worktree ?? undefined },
+        },
+      );
+      if (!isMounted || ctrl.signal.aborted) return { ok: false, reason: "aborted" };
+      const parsed = parseSpcodeWorktreeUnlock(resp.data);
+      if (parsed.kind !== "ok") return { ok: false, reason: "unknown" };
+      const refreshed = parseSpcodeGitWorktrees({
+        loaded: parsed.snapshot.meta.loaded,
+        directory: parsed.snapshot.meta.directory,
+        umo: parsed.snapshot.meta.umo,
+        worktrees: parsed.snapshot.worktrees as unknown as SpcodeGitWorktreeRaw[],
+        reason: parsed.snapshot.meta.reason,
+        stderr: parsed.snapshot.meta.stderr,
+        elapsed_ms: parsed.snapshot.meta.elapsedMs,
+      });
+      state.value = { kind: "ok", snapshot: refreshed };
+      return { ok: true, snapshot: refreshed };
+    } catch (err) {
+      if (!isMounted) return { ok: false, reason: "aborted" };
+      if ((err as { name?: string })?.name === "CanceledError") {
+        return { ok: false, reason: "aborted" };
+      }
+      return { ok: false, reason: classifyMutationError(err) };
+    }
+  }
+
   function dispose(): void {
     isMounted = false
     stopPolling()
     abortController?.abort()
     abortController = null
+    mutationAbort?.abort()
+    mutationAbort = null
   }
 
-  return { state, refresh, startPolling, stopPolling, dispose }
+  return { state, refresh, startPolling, stopPolling, add, remove, lock, unlock, dispose }
 }
 
 function classifyError(err: unknown): string {
@@ -189,4 +446,14 @@ function classifyError(err: unknown): string {
     }
   }
   return 'unknown'
+}
+
+function classifyMutationError(err: unknown): string {
+  if (typeof err === "object" && err !== null) {
+    const anyErr = err as { code?: string; message?: string };
+    if (anyErr.code === "ERR_NETWORK" || /network/i.test(anyErr.message ?? "")) {
+      return "network";
+    }
+  }
+  return "unknown";
 }

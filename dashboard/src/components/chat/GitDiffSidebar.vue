@@ -4,7 +4,14 @@
      Layout mirrors ReasoningSidebar.vue so resizing the sidebar takes
      space from .chat-main (flex sibling) instead of overlaying it. -->
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount, computed, onMounted } from "vue";
+import {
+  ref,
+  watch,
+  onBeforeUnmount,
+  computed,
+  onMounted,
+  nextTick,
+} from "vue";
 import {
   useSpcodeGitDiff,
   DEFAULT_SCOPE,
@@ -21,7 +28,12 @@ import type {
   SpcodeGitDiffSnapshot,
   FileStatus,
 } from "@/composables/parseSpcodeGitDiff";
-import { useSpcodeWorktrees } from "@/composables/useSpcodeWorktrees";
+import type { SpcodeGitWorktree } from "@/composables/parseSpcodeWorktrees";
+import {
+  useSpcodeWorktrees,
+  type WorktreeAddParams,
+  type WorktreeLockParams,
+} from "@/composables/useSpcodeWorktrees";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import {
   useSpcodeFileRestore,
@@ -34,11 +46,15 @@ import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
 import { useSpcodeGitShow } from "@/composables/useSpcodeGitShow";
 import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
 import { classifyReason } from "@/composables/parseSpcodeGitWorkflow";
+import { classifyWorktreeReason } from "@/composables/parseSpcodeWorktreeManagement";
+import { pluginExtensionApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import GitDiffBodyContent from "@/components/chat/message_list_comps/GitDiffBodyContent.vue";
 import FileBrowserView from "@/components/chat/message_list_comps/FileBrowserView.vue";
 import GitCommitBar from "@/components/chat/message_list_comps/GitCommitBar.vue";
 import GitCommitDialog from "@/components/chat/message_list_comps/GitCommitDialog.vue";
+import WorktreeCreateDialog from "@/components/chat/message_list_comps/WorktreeCreateDialog.vue";
+import LockReasonDialogBody from "@/components/chat/message_list_comps/LockReasonDialogBody.vue";
 import GitLogView from "@/components/chat/message_list_comps/GitLogView.vue";
 const { tm } = useModuleI18n("features/chat");
 
@@ -387,6 +403,38 @@ const restoringFile = ref<string | null>(null);
 // Confirm dialog state.
 const confirmDialogOpen = ref(false);
 const confirmTargetPath = ref<string | null>(null);
+
+// ── Worktree management state (spec 2026-06-27 §2.4) ────────
+const createDialogOpen = ref(false);
+const removeDialogOpen = ref(false);
+const lockDialogOpen = ref(false);
+const confirmUnlockOpen = ref(false);
+const confirmUnlockPath = ref<string | null>(null);
+const lockDialogTarget = ref<{ path: string; branch: string | null } | null>(null);
+const removeDialogTarget = ref<{ path: string; branch: string | null } | null>(null);
+const dirtyCount = ref<number | null>(null);
+const isRemoving = ref(false);
+const isLocking = ref(false);
+const isUnlocking = ref(false);
+const isCreating = ref(false);
+const lastCreateError = ref<{ reason: string; stderr: string } | null>(null);
+const removeForceChecked = ref(false);
+
+// Context menu position + target (spec 2026-06-27 §2.3).
+const contextMenu = ref<{
+  open: boolean;
+  x: number;
+  y: number;
+  wt: SpcodeGitWorktree | null;
+}>({ open: false, x: 0, y: 0, wt: null });
+async function openContextMenu(
+  e: MouseEvent,
+  wt: SpcodeGitWorktree,
+): Promise<void> {
+  contextMenu.value = { open: false, x: e.clientX, y: e.clientY, wt };
+  await nextTick();
+  contextMenu.value.open = true;
+}
 
 // Snackbar state (success / warning / error). Spec §5.3 / §6.8:stderr
 // 单独字段,withStderr reason 携带,模板里 <pre> 块渲染。
@@ -833,6 +881,204 @@ function onWorktreeChange(path: string | null): void {
   selectedWorktree.value = path;
   selectedScope.value = DEFAULT_SCOPE;
   pendingScope.value = null;
+}
+
+// ── Worktree management handlers (spec 2026-06-27 §3) ────────
+
+function openCreateDialog(): void {
+  // 互斥：开 ADD 关其他
+  removeDialogOpen.value = false;
+  lockDialogOpen.value = false;
+  confirmUnlockOpen.value = false;
+  lastCreateError.value = null;
+  createDialogOpen.value = true;
+}
+
+async function onCreateSubmit(params: WorktreeAddParams): Promise<void> {
+  isCreating.value = true;
+  lastCreateError.value = null;
+  const result = await worktreesComposable.add(params);
+  isCreating.value = false;
+  if (isAborted(result)) {
+    createDialogOpen.value = false;
+    return;
+  }
+  if (result.ok) {
+    // spec §7.4: 自动切到新 worktree + 切到 Files 视图
+    const newWt = result.snapshot.worktrees.find(
+      (w) => w.path === result.snapshot.worktrees[0]?.path,
+    );
+    if (newWt) {
+      selectedWorktree.value = newWt.isMain ? null : newWt.path;
+      viewMode.value = "files";
+      fileBrowserCurrentPath.value = newWt.path;
+      fileBrowserPreviewPath.value = null;
+    }
+    createDialogOpen.value = false;
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.create.success", {
+        branch: params.branch ?? newWt?.branch ?? "",
+      }),
+      "success",
+    );
+  } else {
+    // 用 classifyWorktreeReason 走统一错误处理
+    const meta = classifyWorktreeReason(result.reason, "add");
+    const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
+    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
+    lastCreateError.value = { reason: result.reason, stderr: result.stderr ?? "" };
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+function onLockClick(wt: SpcodeGitWorktree): void {
+  contextMenu.value.open = false;
+  if (wt.locked) {
+    // 直接进入 unlock 流程
+    confirmUnlockPath.value = wt.path;
+    removeDialogOpen.value = false;
+    createDialogOpen.value = false;
+    lockDialogOpen.value = false;
+    confirmUnlockOpen.value = true;
+    return;
+  }
+  // Lock 流程：弹窗让用户填 reason
+  lockDialogTarget.value = { path: wt.path, branch: wt.branch };
+  removeDialogOpen.value = false;
+  createDialogOpen.value = false;
+  confirmUnlockOpen.value = false;
+  lockDialogOpen.value = true;
+}
+
+async function onLockSubmit(reason: string | null): Promise<void> {
+  const target = lockDialogTarget.value;
+  if (!target) return;
+  isLocking.value = true;
+  const params: WorktreeLockParams = {
+    path: target.path,
+    umo: spcodeStatus.status.value.umo,
+  };
+  if (reason) params.reason = reason;
+  const result = await worktreesComposable.lock(params);
+  isLocking.value = false;
+  if (isAborted(result)) {
+    lockDialogOpen.value = false;
+    return;
+  }
+  if (result.ok) {
+    lockDialogOpen.value = false;
+    lockDialogTarget.value = null;
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.lock.success", {
+        branch: target.branch ?? "",
+      }),
+      "success",
+    );
+  } else {
+    const meta = classifyWorktreeReason(result.reason, "lock");
+    const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
+    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+function onRemoveClick(wt: SpcodeGitWorktree): void {
+  contextMenu.value.open = false;
+  if (wt.isMain) return; // 双保险
+  if (wt.locked) return; // 双保险
+  removeDialogTarget.value = { path: wt.path, branch: wt.branch };
+  dirtyCount.value = null;
+  // Lazy load dirty count from /spcode/git-status
+  void loadDirtyFor(wt);
+  lockDialogOpen.value = false;
+  createDialogOpen.value = false;
+  confirmUnlockOpen.value = false;
+  removeDialogOpen.value = true;
+}
+
+async function loadDirtyFor(wt: SpcodeGitWorktree): Promise<void> {
+  const umo = spcodeStatus.status.value.umo;
+  if (!umo) return;
+  try {
+    const resp = await pluginExtensionApi.get<{ data: { files_changed?: number } }>(
+      "spcode/git-status",
+      { params: { umo, worktree: wt.path } },
+    );
+    dirtyCount.value = resp.data?.data?.files_changed ?? 0;
+  } catch {
+    dirtyCount.value = null; // 不阻塞 UI
+  }
+}
+
+async function onConfirmRemove(force: boolean): Promise<void> {
+  const target = removeDialogTarget.value;
+  if (!target) return;
+  isRemoving.value = true;
+  const result = await worktreesComposable.remove({
+    path: target.path,
+    force,
+    umo: spcodeStatus.status.value.umo,
+  });
+  isRemoving.value = false;
+  if (isAborted(result)) {
+    removeDialogOpen.value = false;
+    return;
+  }
+  if (result.ok) {
+    // spec §7.5: 若被删的是当前 worktree,回退到主 worktree
+    if (selectedWorktree.value === target.path) {
+      selectedWorktree.value = null;
+      fileBrowserCurrentPath.value = mainWorktreePath.value ?? projectRoot.value;
+    }
+    removeDialogOpen.value = false;
+    removeDialogTarget.value = null;
+    dirtyCount.value = null;
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.success", {
+        branch: target.branch ?? "",
+      }),
+      "success",
+    );
+  } else {
+    const meta = classifyWorktreeReason(result.reason, "remove");
+    const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
+    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+async function onConfirmUnlock(): Promise<void> {
+  const path = confirmUnlockPath.value;
+  if (!path) return;
+  isUnlocking.value = true;
+  const result = await worktreesComposable.unlock({
+    path,
+    umo: spcodeStatus.status.value.umo,
+  });
+  isUnlocking.value = false;
+  if (isAborted(result)) {
+    confirmUnlockOpen.value = false;
+    return;
+  }
+  if (result.ok) {
+    confirmUnlockOpen.value = false;
+    confirmUnlockPath.value = null;
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.success"),
+      "success",
+    );
+  } else {
+    const meta = classifyWorktreeReason(result.reason, "unlock");
+    const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
+    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+function onCancelUnlock(): void {
+  if (isUnlocking.value) return;
+  confirmUnlockOpen.value = false;
+  confirmUnlockPath.value = null;
 }
 
 // Spec 2026-06-20 §3.4: clicking a scope pill updates the ref and
@@ -1565,9 +1811,13 @@ const currentRoot = computed<string | null>(() => {
           ]"
           :title="wt.path"
           @click="onWorktreeChange(wt.isMain ? null : wt.path)"
+          @contextmenu.prevent="(e) => openContextMenu(e, wt)"
         >
           <v-icon v-if="wt.isMain" size="12" class="git-diff-sidebar-tab-icon"
             >mdi-home</v-icon
+          >
+          <v-icon v-else-if="wt.locked" size="12" class="git-diff-sidebar-tab-icon"
+            >mdi-lock</v-icon
           >
           <span class="git-diff-sidebar-tab-label">
             {{
@@ -1581,6 +1831,64 @@ const currentRoot = computed<string | null>(() => {
             tm("spcodeProjectLoad.diffSidebar.worktreeTabs.detachedBadge")
           }}</span>
         </button>
+        <!-- Add button (spec 2026-06-27 §2.1) -->
+        <button
+          type="button"
+          class="git-diff-sidebar-tab-add"
+          :aria-label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButtonAria')"
+          :title="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButton')"
+          @click="openCreateDialog"
+        >
+          <v-icon size="14">mdi-plus</v-icon>
+        </button>
+
+        <!-- Context menu (spec 2026-06-27 §2.3) -->
+        <v-menu
+          v-model="contextMenu.open"
+          :location-strategy="'absolute'"
+          :position-x="contextMenu.x"
+          :position-y="contextMenu.y"
+        >
+          <v-list density="compact">
+            <template v-if="contextMenu.wt && !contextMenu.wt.isMain">
+              <v-list-item
+                :disabled="contextMenu.wt.locked"
+                @click="onLockClick(contextMenu.wt!)"
+              >
+                <template #prepend>
+                  <v-icon>{{
+                    contextMenu.wt.locked ? "mdi-lock-open-variant" : "mdi-lock"
+                  }}</v-icon>
+                </template>
+                <v-list-item-title>{{
+                  contextMenu.wt.locked
+                    ? tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.unlock")
+                    : tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.lock")
+                }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item
+                :disabled="contextMenu.wt.locked"
+                @click="onRemoveClick(contextMenu.wt!)"
+              >
+                <template #prepend>
+                  <v-icon color="error">mdi-trash-can-outline</v-icon>
+                </template>
+                <v-list-item-title>{{
+                  tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.remove")
+                }}</v-list-item-title>
+              </v-list-item>
+            </template>
+            <template v-else>
+              <v-list-item disabled>
+                <v-list-item-title class="text-caption">
+                  {{
+                    tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.mainDisabled")
+                  }}
+                </v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-list>
+        </v-menu>
       </div>
 
       <!-- Diff-only sub-UI: scope bar + truncation warning -->
@@ -1813,6 +2121,103 @@ const currentRoot = computed<string | null>(() => {
                   "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmAction",
                 )
               }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Worktree CREATE dialog (spec 2026-06-27 §2.2.A) -->
+      <WorktreeCreateDialog
+        v-model="createDialogOpen"
+        :is-submitting="isCreating"
+        @submit="onCreateSubmit"
+        @cancel="createDialogOpen = false"
+      />
+
+      <!-- Worktree REMOVE confirm dialog (spec 2026-06-27 §2.2.B) -->
+      <v-dialog v-model="removeDialogOpen" persistent max-width="480">
+        <v-card>
+          <v-card-title class="text-h6">
+            {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmTitle") }}
+          </v-card-title>
+          <v-card-text>
+            <p class="mb-2">
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmMessageWithPath",
+                  { path: removeDialogTarget?.path ?? "", branch: removeDialogTarget?.branch ?? "" },
+                )
+              }}
+            </p>
+            <p
+              v-if="dirtyCount !== null && dirtyCount > 0"
+              class="text-caption text-warning mb-2"
+            >
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.dirtyHint",
+                  { count: dirtyCount },
+                )
+              }}
+            </p>
+            <v-checkbox
+              v-if="dirtyCount !== null && dirtyCount > 0"
+              v-model="removeForceChecked"
+              density="compact"
+              :label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.force', { count: dirtyCount })"
+              color="warning"
+              hide-details
+            />
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" :disabled="isRemoving" @click="removeDialogOpen = false">
+              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.cancel") }}
+            </v-btn>
+            <v-btn
+              variant="flat"
+              color="warning"
+              :loading="isRemoving"
+              @click="onConfirmRemove(removeForceChecked)"
+            >
+              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirm") }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Worktree LOCK dialog (spec 2026-06-27 §2.2.C) -->
+      <v-dialog v-model="lockDialogOpen" persistent max-width="480">
+        <LockReasonDialogBody
+          v-if="lockDialogOpen"
+          :target-branch="lockDialogTarget?.branch ?? null"
+          :is-locking="isLocking"
+          @submit="onLockSubmit"
+          @cancel="lockDialogOpen = false"
+        />
+      </v-dialog>
+
+      <!-- Worktree UNLOCK confirm dialog (spec 2026-06-27 §2.2.D) -->
+      <v-dialog v-model="confirmUnlockOpen" persistent max-width="440">
+        <v-card>
+          <v-card-title class="text-h6">
+            {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmTitle") }}
+          </v-card-title>
+          <v-card-text>
+            {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmMessage") }}
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" :disabled="isUnlocking" @click="onCancelUnlock">
+              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.cancel") }}
+            </v-btn>
+            <v-btn
+              variant="flat"
+              color="primary"
+              :loading="isUnlocking"
+              @click="onConfirmUnlock"
+            >
+              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirm") }}
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -2116,6 +2521,27 @@ const currentRoot = computed<string | null>(() => {
   white-space: nowrap;
 }
 
+.git-diff-sidebar-tab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  border: 1px dashed rgba(var(--v-theme-on-surface), 0.3);
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.12s ease;
+  margin-left: 2px;
+}
+.git-diff-sidebar-tab-add:hover {
+  border-style: solid;
+  border-color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.08);
+}
 .git-diff-sidebar-tab-badge {
   font-size: 10px;
   padding: 1px 5px;

@@ -5,6 +5,10 @@
 > **范围**：基于 `astrbot_plugin_spcode_toolkit` v2.14.0 新增的 4 个 worktree 写端点（ADD / REMOVE / LOCK / UNLOCK），在 `GitDiffSidebar.vue` 中提供对应的前端管理 UI
 > **遵循原则**：KISS / 复用现有 pattern / 不引入外部框架 / 与 spcode 文档错误矩阵保持一致
 
+> **实施状态**: ✅ 已完成 (2026-06-27)
+> **实施计划**: `docs/superpowers/plans/2026-06-27-git-worktree-frontend-management.md`
+> **相关 PR**: <TBD — 用户未要求 PR>
+
 ## 0. 现状摘要（基于代码阅读）
 
 | 关注点 | 现状 | 复用方式 |
