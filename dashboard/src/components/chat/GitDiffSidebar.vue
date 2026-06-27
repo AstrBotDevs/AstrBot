@@ -21,7 +21,11 @@ import type {
   SpcodeGitDiffSnapshot,
   FileStatus,
 } from "@/composables/parseSpcodeGitDiff";
-import { useSpcodeWorktrees } from "@/composables/useSpcodeWorktrees";
+import {
+  useSpcodeWorktrees,
+  type WorktreeAddParams,
+  type WorktreeLockParams,
+} from "@/composables/useSpcodeWorktrees";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import {
   useSpcodeFileRestore,
@@ -39,6 +43,7 @@ import GitDiffBodyContent from "@/components/chat/message_list_comps/GitDiffBody
 import FileBrowserView from "@/components/chat/message_list_comps/FileBrowserView.vue";
 import GitCommitBar from "@/components/chat/message_list_comps/GitCommitBar.vue";
 import GitCommitDialog from "@/components/chat/message_list_comps/GitCommitDialog.vue";
+import WorktreeCreateDialog from "@/components/chat/message_list_comps/WorktreeCreateDialog.vue";
 import GitLogView from "@/components/chat/message_list_comps/GitLogView.vue";
 const { tm } = useModuleI18n("features/chat");
 
@@ -387,6 +392,21 @@ const restoringFile = ref<string | null>(null);
 // Confirm dialog state.
 const confirmDialogOpen = ref(false);
 const confirmTargetPath = ref<string | null>(null);
+
+// ── Worktree management state (spec 2026-06-27 §2.4) ────────
+const createDialogOpen = ref(false);
+const removeDialogOpen = ref(false);
+const lockDialogOpen = ref(false);
+const confirmUnlockOpen = ref(false);
+const confirmUnlockPath = ref<string | null>(null);
+const lockDialogTarget = ref<{ path: string; branch: string | null } | null>(null);
+const removeDialogTarget = ref<{ path: string; branch: string | null } | null>(null);
+const dirtyCount = ref<number | null>(null);
+const isRemoving = ref(false);
+const isLocking = ref(false);
+const isUnlocking = ref(false);
+const isCreating = ref(false);
+const lastCreateError = ref<{ reason: string; stderr: string } | null>(null);
 
 // Snackbar state (success / warning / error). Spec §5.3 / §6.8:stderr
 // 单独字段,withStderr reason 携带,模板里 <pre> 块渲染。
