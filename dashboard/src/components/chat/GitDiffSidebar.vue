@@ -11,7 +11,6 @@ import {
   computed,
   onMounted,
   nextTick,
-  type Ref,
 } from "vue";
 import {
   useSpcodeGitDiff,
@@ -421,7 +420,12 @@ const isCreating = ref(false);
 const lastCreateError = ref<{ reason: string; stderr: string } | null>(null);
 const removeForceChecked = ref(false);
 
-// Context menu position + target (spec 2026-06-27 §2.3).
+// Context menu state (spec 2026-06-27 §2.3). Position is set from
+// MouseEvent.clientX/Y in openContextMenu and applied as fixed
+// `left/top` styles on the teleported wrapper (see contextMenuStyle).
+// The menu DOM lives in <body> via <Teleport>, so `position: fixed`
+// coordinates are viewport-relative — exactly what we want for a
+// right-click at the cursor.
 const contextMenu = ref<{
   open: boolean;
   x: number;
@@ -429,70 +433,72 @@ const contextMenu = ref<{
   wt: SpcodeGitWorktree | null;
 }>({ open: false, x: 0, y: 0, wt: null });
 
-// Vuetify 3 v-menu custom LocationStrategy that positions the menu at
-// the cursor coordinates set via position-x/position-y. The built-in
-// 'connected' strategy assumes an HTMLElement activator; when only
-// position-x/position-y are set, Vuetify passes [x, y] as the target,
-// which 'connected' ignores, causing the menu to fall back to (0, 0).
-//
-// Signature mirrors Vuetify 3 LocationStrategyFn
-// (vuetify/lib/components/index.d.mts:3718). We mirror the type locally
-// because it isn't re-exported from 'vuetify' top-level.
-interface CursorLocationStrategyData {
-  contentEl: Ref<HTMLElement | undefined>;
-  target: Ref<HTMLElement | [number, number] | undefined>;
-  isActive: Ref<boolean>;
-  isRtl: Ref<boolean>;
-}
-interface CursorStrategyProps {
-  locationStrategy: unknown;
-  location: string;
-  origin: string;
-  offset?: number | string | number[];
-  maxHeight?: number | string;
-  maxWidth?: number | string;
-  minHeight?: number | string;
-  minWidth?: number | string;
-}
-type CursorLocationStrategyFn = (
-  data: CursorLocationStrategyData,
-  props: CursorStrategyProps,
-  contentStyles: Ref<Record<string, string>>,
-) => undefined | { updateLocation: (e?: Event) => void };
+// Wrapper element ref for outside-click detection. We attach a
+// mousedown listener on document in onMounted; if the click target
+// isn't inside this element, we close the menu.
+const contextMenuEl = ref<HTMLElement | null>(null);
 
-const absoluteCursorLocationStrategy: CursorLocationStrategyFn = (
-  data,
-  _props,
-  contentStyles,
-) => {
-  // Vuetify sets data.target to [x, y] tuple when position-x/position-y
-  // are used on v-menu (no activator element). The default 'connected'
-  // strategy doesn't handle this shape, so we provide our own.
-  const applyPosition = (target: [number, number] | undefined): void => {
-    if (!target) return;
-    contentStyles.value = {
-      ...contentStyles.value,
-      left: `${target[0]}px`,
-      top: `${target[1]}px`,
-      position: "absolute",
-      transform: "none",
-    };
+// Edge-clamp the menu so it stays inside the viewport. If the user
+// right-clicks near the right/bottom edge, the menu would otherwise
+// overflow. We measure after mount via nextTick and adjust left/top.
+const contextMenuStyle = ref<Record<string, string>>({});
+function positionContextMenu(): void {
+  if (!contextMenu.value.open) return;
+  const el = contextMenuEl.value;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let left = contextMenu.value.x;
+  let top = contextMenu.value.y;
+  // Flip horizontally if overflow right edge.
+  if (left + rect.width > vw) {
+    left = Math.max(4, vw - rect.width - 4);
+  }
+  // Flip vertically if overflow bottom edge.
+  if (top + rect.height > vh) {
+    top = Math.max(4, vh - rect.height - 4);
+  }
+  contextMenuStyle.value = {
+    position: "fixed",
+    left: `${left}px`,
+    top: `${top}px`,
+    zIndex: "2400",
   };
-  applyPosition(data.target.value as [number, number] | undefined);
-  return {
-    updateLocation: (_e?: Event): void => {
-      applyPosition(data.target.value as [number, number] | undefined);
-    },
-  };
-};
+}
 
 async function openContextMenu(
   e: MouseEvent,
   wt: SpcodeGitWorktree,
 ): Promise<void> {
+  // Set state in two steps so Vue commits the DOM (the Teleport
+  // target) before we measure it in positionContextMenu. Without the
+  // first sync write + nextTick, contextMenuEl.value would be null
+  // when we read getBoundingClientRect().
   contextMenu.value = { open: false, x: e.clientX, y: e.clientY, wt };
   await nextTick();
   contextMenu.value.open = true;
+  await nextTick();
+  positionContextMenu();
+}
+
+// Close helpers. We attach document-level listeners (see onMounted)
+// and dispatch through these so menu items don't need to know about
+// the ref shape.
+function closeContextMenu(): void {
+  contextMenu.value.open = false;
+}
+function closeContextMenuOnOutside(e: MouseEvent): void {
+  if (!contextMenu.value.open) return;
+  const el = contextMenuEl.value;
+  if (el && e.target instanceof Node && !el.contains(e.target)) {
+    closeContextMenu();
+  }
+}
+function closeContextMenuOnEscape(e: KeyboardEvent): void {
+  if (e.key === "Escape" && contextMenu.value.open) {
+    closeContextMenu();
+  }
 }
 
 // Snackbar state (success / warning / error). Spec §5.3 / §6.8:stderr
@@ -640,6 +646,12 @@ async function onManualRefresh(): Promise<void> {
 // Spec §3.3: useSpcodeWorktrees does NOT depend on umo.
 onMounted(() => {
   void worktreesComposable.refresh();
+  // Listen on capture phase so we fire BEFORE any inner click handler
+  // that might preventDefault / stopPropagation. mousedown is the
+  // natural event for outside-click detection (mirrors what Vuetify
+  // v-menu does internally with its overlay).
+  document.addEventListener("mousedown", closeContextMenuOnOutside, true);
+  document.addEventListener("keydown", closeContextMenuOnEscape, true);
 });
 
 // ── Worktree polling (added 2026-06-25, elecvoid243) ──────────────
@@ -1622,10 +1634,12 @@ onBeforeUnmount(() => {
   // call after gitLog.dispose() since the two are independent.
   gitShow.dispose();
   if (persistCurrentPathTimer) {
-    clearTimeout(persistCurrentPathTimer);
-    persistCurrentPathTimer = null;
-  }
-});
+      clearTimeout(persistCurrentPathTimer);
+      persistCurrentPathTimer = null;
+    }
+    document.removeEventListener("mousedown", closeContextMenuOnOutside, true);
+    document.removeEventListener("keydown", closeContextMenuOnEscape, true);
+  });
 
 function toggleFile(path: string): void {
   const next = new Set(expandedSet.value);
@@ -1906,57 +1920,68 @@ const currentRoot = computed<string | null>(() => {
         </button>
 
         <!-- Context menu (spec 2026-06-27 §2.3)
-             Uses custom absoluteCursorLocationStrategy so position-x/y
-             (set from MouseEvent.clientX/clientY in openContextMenu)
-             actually position the menu at the cursor. The default
-             'connected' strategy ignores non-HTMLElement activators. -->
-        <v-menu
-          v-model="contextMenu.open"
-          :location-strategy="absoluteCursorLocationStrategy"
-          :position-x="contextMenu.x"
-          :position-y="contextMenu.y"
-        >
-          <v-list density="compact">
-            <template v-if="contextMenu.wt && !contextMenu.wt.isMain">
-              <!-- wt.locked is string|null; coerce to boolean for :disabled -->
-              <v-list-item
-                :disabled="!!contextMenu.wt.locked"
-                @click="onLockClick(contextMenu.wt!)"
-              >
-                <template #prepend>
-                  <v-icon>{{
-                    contextMenu.wt.locked ? "mdi-lock-open-variant" : "mdi-lock"
-                  }}</v-icon>
-                </template>
-                <v-list-item-title>{{
-                  contextMenu.wt.locked
-                    ? tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.unlock")
-                    : tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.lock")
-                }}</v-list-item-title>
-              </v-list-item>
-              <v-list-item
-                :disabled="!!contextMenu.wt.locked"
-                @click="onRemoveClick(contextMenu.wt!)"
-              >
-                <template #prepend>
-                  <v-icon color="error">mdi-trash-can-outline</v-icon>
-                </template>
-                <v-list-item-title>{{
-                  tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.remove")
-                }}</v-list-item-title>
-              </v-list-item>
-            </template>
-            <template v-else>
-              <v-list-item disabled>
-                <v-list-item-title class="text-caption">
-                  {{
-                    tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.mainDisabled")
-                  }}
-                </v-list-item-title>
-              </v-list-item>
-            </template>
-          </v-list>
-        </v-menu>
+                     Teleported to <body> and positioned with manual
+                     `position: fixed` styles so the menu opens exactly at the
+                     right-click cursor. Vuetify 3 v-menu's positioning pipeline
+                     (position-x/y + connectedLocationStrategy) is unreliable
+                     when the activator is a [x, y] tuple instead of an
+                     HTMLElement; the menu consistently fell back to the top-
+                     left corner of the viewport regardless of cursor position.
+                     Manual positioning gives us deterministic behavior and a
+                     single source of truth (contextMenuStyle computed). -->
+                <Teleport to="body">
+                  <div
+                    v-if="contextMenu.open"
+                    ref="contextMenuEl"
+                    class="worktree-context-menu"
+                    :style="contextMenuStyle"
+                    role="menu"
+                    :aria-label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.ariaLabel')"
+                    @click.stop
+                    @contextmenu.prevent
+                  >
+                    <v-list density="compact">
+                      <template v-if="contextMenu.wt && !contextMenu.wt.isMain">
+                        <!-- wt.locked is string|null; coerce to boolean for :disabled -->
+                        <v-list-item
+                          :disabled="!!contextMenu.wt.locked"
+                          @click="onLockClick(contextMenu.wt!)"
+                        >
+                          <template #prepend>
+                            <v-icon>{{
+                              contextMenu.wt.locked ? "mdi-lock-open-variant" : "mdi-lock"
+                            }}</v-icon>
+                          </template>
+                          <v-list-item-title>{{
+                            contextMenu.wt.locked
+                              ? tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.unlock")
+                              : tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.lock")
+                          }}</v-list-item-title>
+                        </v-list-item>
+                        <v-list-item
+                          :disabled="!!contextMenu.wt.locked"
+                          @click="onRemoveClick(contextMenu.wt!)"
+                        >
+                          <template #prepend>
+                            <v-icon color="error">mdi-trash-can-outline</v-icon>
+                          </template>
+                          <v-list-item-title>{{
+                            tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.remove")
+                          }}</v-list-item-title>
+                        </v-list-item>
+                      </template>
+                      <template v-else>
+                        <v-list-item disabled>
+                          <v-list-item-title class="text-caption">
+                            {{
+                              tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.mainDisabled")
+                            }}
+                          </v-list-item-title>
+                        </v-list-item>
+                      </template>
+                    </v-list>
+                  </div>
+                </Teleport>
       </div>
 
       <!-- Diff-only sub-UI: scope bar + truncation warning -->
@@ -2704,5 +2729,20 @@ const currentRoot = computed<string | null>(() => {
   .git-diff-sidebar-body {
     padding: 0 12px calc(12px + env(safe-area-inset-bottom));
   }
+}
+
+/* Context menu wrapper teleported to <body>. The wrapper itself is
+   hidden visually; only the inner v-list renders. We give it a small
+   minimum width so the menu items have room for icon + text. Scoped
+   styles work through Teleport because Vue rewrites the data-v hash
+   selector on both sides of the portal. */
+.worktree-context-menu {
+  min-width: 180px;
+  max-width: 280px;
+  border-radius: 6px;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
 }
 </style>
