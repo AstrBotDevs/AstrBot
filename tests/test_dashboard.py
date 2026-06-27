@@ -43,7 +43,10 @@ from astrbot.dashboard.password_state import (
 from astrbot.dashboard.server import AstrBotDashboard
 from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 from astrbot.dashboard.services.plugin_page_service import PluginPageService
-from astrbot.dashboard.services.plugin_service import PluginService
+from astrbot.dashboard.services.plugin_service import (
+    PLUGIN_UPDATE_DISABLED_MESSAGE,
+    PluginService,
+)
 from tests.fixtures.helpers import (
     MockPluginBuilder,
     create_mock_updater_install,
@@ -2300,6 +2303,10 @@ async def test_plugins(
         installed_at = target["installed_at"]
         assert installed_at is not None
         datetime.fromisoformat(installed_at)
+        assert target["install_source"]["install_method"] == "github"
+        assert target["install_source"]["repo"] == test_repo_url
+        assert target["updates_enabled"] is False
+        assert target["update_disabled_reason"] == PLUGIN_UPDATE_DISABLED_MESSAGE
 
         response = await test_client.get(
             f"/api/plugin/detail?name={test_plugin_name}",
@@ -2316,7 +2323,7 @@ async def test_plugins(
         exists = any(md.name == test_plugin_name for md in star_registry)
         assert exists is True, f"插件 {test_plugin_name} 未成功载入"
 
-        # 插件更新
+        # Git URL installs are intentionally not updatable from the marketplace.
         response = await test_client.post(
             "/api/plugin/update",
             json={"name": test_plugin_name},
@@ -2324,11 +2331,11 @@ async def test_plugins(
         )
         assert response.status_code == 200
         data = await response.get_json()
-        assert data["status"] == "ok"
+        assert data["status"] == "error"
+        assert data["message"] == PLUGIN_UPDATE_DISABLED_MESSAGE
 
-        # 验证更新标记文件
         plugin_dir = builder.get_plugin_path(test_plugin_name)
-        assert (plugin_dir / ".updated").exists()
+        assert not (plugin_dir / ".updated").exists()
 
         # 插件卸载
         response = await test_client.post(
