@@ -582,7 +582,7 @@ async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
         assert plugin_tool.active is False
         assert other_tool.active is True
         assert preferences["inactivated_plugins"] == [plugin.module_path]
-        assert preferences["inactivated_llm_tools"] == [plugin_tool.name]
+        assert preferences["inactivated_llm_tools"] == []
         assert plugin.activated is False
 
         await plugin_manager_pm.turn_on_plugin(plugin.root_dir_name)
@@ -593,6 +593,135 @@ async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
         assert preferences["inactivated_llm_tools"] == []
     finally:
         llm_tools.func_list = original_func_list
+
+
+@pytest.mark.asyncio
+async def test_turn_plugin_preserves_user_disabled_llm_tools(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    plugin = star_manager_module.StarMetadata(
+        name="demo_plugin",
+        root_dir_name="demo_plugin",
+        module_path="data.plugins.demo_plugin.main",
+    )
+    cast(Any, plugin_manager_pm.context).stars.append(plugin)
+    plugin_tool = star_manager_module.FunctionTool(
+        name="plugin_search",
+        description="plugin search",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="data.plugins.demo_plugin.main.tools.search",
+    )
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = [plugin_tool]
+    preferences = {
+        "inactivated_plugins": [],
+        "inactivated_llm_tools": [plugin_tool.name],
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    async def mock_terminate(star_metadata):
+        assert star_metadata is plugin
+
+    async def mock_reload(plugin_name):
+        assert plugin_name == plugin.root_dir_name
+        return True, None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "reload", mock_reload)
+
+    try:
+        await plugin_manager_pm.turn_off_plugin(plugin.root_dir_name)
+        await plugin_manager_pm.turn_on_plugin(plugin.root_dir_name)
+
+        assert plugin_tool.active is False
+        assert preferences["inactivated_plugins"] == []
+        assert preferences["inactivated_llm_tools"] == [plugin_tool.name]
+    finally:
+        llm_tools.func_list = original_func_list
+
+
+@pytest.mark.asyncio
+async def test_migrate_legacy_plugin_tool_inactivation_state(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    active_plugin = star_manager_module.StarMetadata(
+        name="active_plugin",
+        module_path="data.plugins.active_plugin.main",
+    )
+    inactive_plugin = star_manager_module.StarMetadata(
+        name="inactive_plugin",
+        module_path="data.plugins.inactive_plugin.main",
+    )
+    star_manager_module.star_registry.extend([active_plugin, inactive_plugin])
+    active_tool = star_manager_module.FunctionTool(
+        name="active_plugin_search",
+        description="active plugin search",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="data.plugins.active_plugin.main.tools.search",
+    )
+    inactive_tool = star_manager_module.FunctionTool(
+        name="inactive_plugin_search",
+        description="inactive plugin search",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="data.plugins.inactive_plugin.main.tools.search",
+    )
+    user_tool = star_manager_module.FunctionTool(
+        name="user_disabled_builtin",
+        description="user disabled builtin",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="astrbot.core.tools.user_disabled_builtin",
+    )
+    active_tool.active = False
+    inactive_tool.active = False
+    user_tool.active = False
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = [active_tool, inactive_tool, user_tool]
+    preferences = {
+        "inactivated_llm_tools": [
+            active_tool.name,
+            inactive_tool.name,
+            user_tool.name,
+        ],
+        star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY: False,
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+
+    try:
+        updated_tools = (
+            await plugin_manager_pm._migrate_legacy_plugin_tool_inactivation_state(
+                preferences["inactivated_llm_tools"],
+                [inactive_plugin.module_path],
+            )
+        )
+
+        assert updated_tools == [user_tool.name]
+        assert preferences["inactivated_llm_tools"] == [user_tool.name]
+        assert preferences[star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY] is True
+        assert active_tool.active is True
+        assert inactive_tool.active is False
+        assert user_tool.active is False
+    finally:
+        llm_tools.func_list = original_func_list
+        _clear_star_runtime_state()
 
 
 @pytest.mark.asyncio

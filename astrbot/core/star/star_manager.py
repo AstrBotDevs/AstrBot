@@ -94,6 +94,9 @@ class ImportDependencyRecoveryState:
     install_plan: MissingRequirementsPlan | None = None
 
 
+PLUGIN_TOOL_STATE_MIGRATION_KEY = "inactivated_llm_tools_plugin_state_migrated_v1"
+
+
 @contextlib.contextmanager
 def _temporary_filtered_requirements_file(
     *,
@@ -811,6 +814,106 @@ class PluginManager:
 
         self.failed_plugin_info = "\n".join(lines) + "\n"
 
+    @staticmethod
+    def _iter_concrete_llm_tools(func_tool: FunctionTool) -> list[FunctionTool]:
+        """Return concrete function tools that may belong to a plugin.
+
+        Args:
+            func_tool: A registered function tool, possibly a handoff tool.
+
+        Returns:
+            The concrete function tools to inspect for plugin ownership.
+        """
+        if isinstance(func_tool, HandoffTool):
+            return [
+                tool
+                for tool in (func_tool.agent.tools or [])
+                if isinstance(tool, FunctionTool)
+            ]
+        return [func_tool]
+
+    @staticmethod
+    def _is_plugin_llm_tool(
+        func_tool: FunctionTool,
+        plugin_module_path: str | None,
+    ) -> bool:
+        """Check whether a function tool belongs to a plugin module.
+
+        Args:
+            func_tool: Function tool to inspect.
+            plugin_module_path: Plugin module path.
+
+        Returns:
+            Whether the tool belongs to the plugin module.
+        """
+        module_path = func_tool.handler_module_path
+        return bool(
+            plugin_module_path
+            and module_path
+            and module_path.startswith(plugin_module_path)
+            and not module_path.endswith(("astrbot.builtin_stars", "data.plugins"))
+        )
+
+    @classmethod
+    def _iter_plugin_llm_tools(
+        cls,
+        plugin_module_path: str | None,
+    ) -> list[FunctionTool]:
+        """Return registered LLM tools owned by a plugin module.
+
+        Args:
+            plugin_module_path: Plugin module path.
+
+        Returns:
+            Matching function tools, including sub-tools inside handoff tools.
+        """
+        plugin_tools: list[FunctionTool] = []
+        for func_tool in llm_tools.func_list:
+            for concrete_tool in cls._iter_concrete_llm_tools(func_tool):
+                if cls._is_plugin_llm_tool(concrete_tool, plugin_module_path):
+                    plugin_tools.append(concrete_tool)
+        return plugin_tools
+
+    async def _migrate_legacy_plugin_tool_inactivation_state(
+        self,
+        inactivated_llm_tools: list,
+        inactivated_plugins: list,
+    ) -> list:
+        """Remove plugin-owned tools from the legacy manual tool blacklist.
+
+        Args:
+            inactivated_llm_tools: Persisted inactive tool names.
+            inactivated_plugins: Persisted inactive plugin module paths.
+
+        Returns:
+            Updated inactive tool names.
+        """
+        migrated = await sp.global_get(PLUGIN_TOOL_STATE_MIGRATION_KEY, False)
+        if migrated:
+            return inactivated_llm_tools
+
+        plugin_tool_names: set[str] = set()
+        inactive_plugin_paths = set(inactivated_plugins)
+        for star_metadata in star_registry:
+            if not star_metadata.module_path:
+                continue
+            plugin_disabled = star_metadata.module_path in inactive_plugin_paths
+            for func_tool in self._iter_plugin_llm_tools(star_metadata.module_path):
+                plugin_tool_names.add(func_tool.name)
+                if func_tool.name in inactivated_llm_tools:
+                    func_tool.active = not plugin_disabled
+
+        if not plugin_tool_names and inactivated_llm_tools:
+            return inactivated_llm_tools
+
+        updated_tools = [
+            name for name in inactivated_llm_tools if name not in plugin_tool_names
+        ]
+        if updated_tools != inactivated_llm_tools:
+            await sp.global_put("inactivated_llm_tools", updated_tools)
+        await sp.global_put(PLUGIN_TOOL_STATE_MIGRATION_KEY, True)
+        return updated_tools
+
     async def reload_failed_plugin(self, dir_name):
         """
         重新加载未注册（加载失败）的插件
@@ -1089,19 +1192,11 @@ class PluginManager:
                             handler.handler,
                             metadata.star_cls,  # type: ignore
                         )
+                    plugin_disabled = metadata.module_path in inactivated_plugins
+
                     # 绑定 llm_tool handler
                     for func_tool in llm_tools.func_list:
-                        if isinstance(func_tool, HandoffTool):
-                            need_apply = []
-                            sub_tools = func_tool.agent.tools
-                            if sub_tools:
-                                for sub_tool in sub_tools:
-                                    if isinstance(sub_tool, FunctionTool):
-                                        need_apply.append(sub_tool)
-                        else:
-                            need_apply = [func_tool]
-
-                        for ft in need_apply:
+                        for ft in self._iter_concrete_llm_tools(func_tool):
                             if (
                                 ft.handler
                                 and ft.handler.__module__ == metadata.module_path
@@ -1111,8 +1206,11 @@ class PluginManager:
                                     ft.handler,
                                     metadata.star_cls,  # type: ignore
                                 )
-                            if ft.name in inactivated_llm_tools:
-                                ft.active = False
+                            if self._is_plugin_llm_tool(ft, metadata.module_path):
+                                ft.active = (
+                                    not plugin_disabled
+                                    and ft.name not in inactivated_llm_tools
+                                )
 
                 else:
                     # v3.4.0 以前的方式注册插件
@@ -1258,6 +1356,14 @@ class PluginManager:
                     )
                 )
                 self._cleanup_plugin_state(root_dir_name, reserved)
+
+        if not specified_module_path and not specified_dir_name:
+            inactivated_llm_tools = (
+                await self._migrate_legacy_plugin_tool_inactivation_state(
+                    inactivated_llm_tools,
+                    inactivated_plugins,
+                )
+            )
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:
@@ -1706,7 +1812,7 @@ class PluginManager:
         """禁用一个插件。
         调用插件的 terminate() 方法，
         将插件的 module_path 加入到 data/shared_preferences.json 的 inactivated_plugins 列表中。
-        并且同时将插件启用的 llm_tool 禁用。
+        Disables the plugin's LLM tools only for the current runtime state.
         """
         async with self._pm_lock:
             plugin = self.context.get_registered_star(plugin_name)
@@ -1721,25 +1827,10 @@ class PluginManager:
             if plugin.module_path not in inactivated_plugins:
                 inactivated_plugins.append(plugin.module_path)
 
-            inactivated_llm_tools: list = list(
-                set(await sp.global_get("inactivated_llm_tools", [])),
-            )  # 后向兼容
-
-            # 禁用插件启用的 llm_tool
-            for func_tool in llm_tools.func_list:
-                mp = func_tool.handler_module_path
-                if (
-                    plugin.module_path
-                    and mp
-                    and mp.startswith(plugin.module_path)
-                    and not mp.endswith(("astrbot.builtin_stars", "data.plugins"))
-                ):
-                    func_tool.active = False
-                    if func_tool.name not in inactivated_llm_tools:
-                        inactivated_llm_tools.append(func_tool.name)
+            for func_tool in self._iter_plugin_llm_tools(plugin.module_path):
+                func_tool.active = False
 
             await sp.global_put("inactivated_plugins", inactivated_plugins)
-            await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
 
             plugin.activated = False
 
@@ -1800,19 +1891,8 @@ class PluginManager:
             inactivated_plugins.remove(plugin.module_path)
         await sp.global_put("inactivated_plugins", inactivated_plugins)
 
-        # 启用插件启用的 llm_tool
-        for func_tool in llm_tools.func_list:
-            mp = func_tool.handler_module_path
-            if (
-                plugin.module_path
-                and mp
-                and mp.startswith(plugin.module_path)
-                and not mp.endswith(("astrbot.builtin_stars", "data.plugins"))
-                and func_tool.name in inactivated_llm_tools
-            ):
-                inactivated_llm_tools.remove(func_tool.name)
-                func_tool.active = True
-        await sp.global_put("inactivated_llm_tools", inactivated_llm_tools)
+        for func_tool in self._iter_plugin_llm_tools(plugin.module_path):
+            func_tool.active = func_tool.name not in inactivated_llm_tools
 
         await self.reload(plugin_name)
 
