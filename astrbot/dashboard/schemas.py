@@ -504,6 +504,11 @@ class PluginInstallRequest(OpenModel):
     ignore_version_check: bool | None = None
 
 
+class PluginSourceBindRequest(OpenModel):
+    registry_url: str | None = None
+    market_plugin_id: str | None = None
+
+
 class PluginUpdateRequest(OpenModel):
     plugin_id: str | None = None
     plugin_ids: list[str] | None = None

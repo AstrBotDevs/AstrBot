@@ -74,6 +74,54 @@ async def test_media_resolver_to_path_detaches_for_component_lifetimes(
 
 
 @pytest.mark.asyncio
+async def test_image_from_base64_uses_detected_image_suffix(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    image_buffer = BytesIO()
+    PILImage.new("RGBA", (1, 1), (255, 0, 0, 128)).save(image_buffer, format="PNG")
+    image_base64 = base64.b64encode(image_buffer.getvalue()).decode()
+
+    image_path = await Image.fromBase64(image_base64).convert_to_file_path()
+
+    try:
+        assert Path(image_path).suffix == ".png"
+        with PILImage.open(image_path) as resolved_img:
+            assert resolved_img.format == "PNG"
+    finally:
+        Path(image_path).unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_http_image_without_suffix_uses_detected_image_suffix(
+    tmp_path,
+    monkeypatch,
+):
+    from PIL import Image as PILImage
+
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
+    image_buffer = BytesIO()
+    PILImage.new("RGBA", (1, 1), (255, 0, 0, 128)).save(image_buffer, format="PNG")
+
+    async def fake_download_file(_url: str, target_path: str) -> None:
+        Path(target_path).write_bytes(image_buffer.getvalue())
+
+    monkeypatch.setattr(media_utils, "download_file", fake_download_file)
+
+    image_path = await media_utils.MediaResolver(
+        "https://example.com/image?id=123",
+        media_type="image",
+    ).to_path()
+
+    try:
+        assert Path(image_path).suffix == ".png"
+        with PILImage.open(image_path) as resolved_img:
+            assert resolved_img.format == "PNG"
+    finally:
+        Path(image_path).unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
 async def test_resolve_audio_ref_to_base64_data_decodes_base64_scheme(
     tmp_path, monkeypatch
 ):
@@ -146,6 +194,18 @@ async def test_resolve_image_ref_to_base64_data_detects_png(tmp_path):
     assert resolved.to_data_url().startswith("data:image/png;base64,")
 
 
+def test_detect_image_mime_type_accepts_path(tmp_path):
+    from PIL import Image as PILImage
+
+    image_path = tmp_path / "image.png"
+    PILImage.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_path)
+
+    assert (
+        media_utils.detect_image_mime_type(image_path, default_mime_type=None)
+        == "image/png"
+    )
+
+
 @pytest.mark.asyncio
 async def test_resolve_image_ref_to_base64_data_decodes_data_uri(tmp_path, monkeypatch):
     from PIL import Image as PILImage
@@ -174,7 +234,7 @@ async def test_ensure_jpeg_converts_png_to_temp_jpg(tmp_path, monkeypatch):
     temp_dir = tmp_path / "temp"
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
     image_path = tmp_path / "image.png"
-    PILImage.new("RGBA", (2, 2), (255, 0, 0, 128)).save(image_path)
+    PILImage.new("RGB", (2, 2), (255, 0, 0)).save(image_path)
 
     converted_path = Path(await media_utils.ensure_jpeg(str(image_path)))
 
@@ -183,6 +243,43 @@ async def test_ensure_jpeg_converts_png_to_temp_jpg(tmp_path, monkeypatch):
     assert converted_path.exists()
     with PILImage.open(converted_path) as converted_img:
         assert converted_img.format == "JPEG"
+
+
+@pytest.mark.asyncio
+async def test_ensure_jpeg_keeps_alpha_png(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "transparent.png"
+    PILImage.new("RGBA", (2, 2), (255, 0, 0, 128)).save(image_path)
+
+    converted_path = await media_utils.ensure_jpeg(str(image_path))
+
+    assert converted_path == str(image_path)
+    assert not temp_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_ensure_jpeg_keeps_animated_gif(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "animated.gif"
+    PILImage.new("RGB", (2, 2), (255, 0, 0)).save(
+        image_path,
+        format="GIF",
+        save_all=True,
+        append_images=[PILImage.new("RGB", (2, 2), (0, 0, 255))],
+        duration=100,
+        loop=0,
+    )
+
+    converted_path = await media_utils.ensure_jpeg(str(image_path))
+
+    assert converted_path == str(image_path)
+    assert not temp_dir.exists()
 
 
 @pytest.mark.asyncio
@@ -198,6 +295,54 @@ async def test_ensure_jpeg_keeps_existing_jpg(tmp_path, monkeypatch):
 
     assert converted_path == str(image_path)
     assert not temp_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_compress_image_preserves_alpha_png(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "transparent.png"
+    PILImage.new("RGBA", (8, 8), (255, 0, 0, 128)).save(image_path)
+
+    compressed_path = Path(
+        await media_utils.compress_image(str(image_path), max_size=2)
+    )
+
+    try:
+        assert compressed_path != image_path
+        assert compressed_path.suffix == ".png"
+        assert compressed_path.parent == temp_dir
+        with PILImage.open(compressed_path) as compressed_img:
+            assert compressed_img.format == "PNG"
+            assert compressed_img.mode == "RGBA"
+            assert max(compressed_img.size) <= 2
+            assert compressed_img.getpixel((0, 0))[3] == 128
+    finally:
+        compressed_path.unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_compress_image_keeps_animated_gif(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    temp_dir = tmp_path / "temp"
+    monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(temp_dir))
+    image_path = tmp_path / "animated.gif"
+    PILImage.new("RGB", (8, 8), (255, 0, 0)).save(
+        image_path,
+        format="GIF",
+        save_all=True,
+        append_images=[PILImage.new("RGB", (8, 8), (0, 0, 255))],
+        duration=100,
+        loop=0,
+    )
+
+    compressed_path = await media_utils.compress_image(str(image_path), max_size=2)
+
+    assert compressed_path == str(image_path)
+    assert not list(temp_dir.iterdir())
 
 
 @pytest.mark.asyncio
