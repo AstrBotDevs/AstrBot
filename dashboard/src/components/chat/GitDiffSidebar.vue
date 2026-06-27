@@ -11,6 +11,7 @@ import {
   computed,
   onMounted,
   nextTick,
+  type Ref,
 } from "vue";
 import {
   useSpcodeGitDiff,
@@ -427,6 +428,64 @@ const contextMenu = ref<{
   y: number;
   wt: SpcodeGitWorktree | null;
 }>({ open: false, x: 0, y: 0, wt: null });
+
+// Vuetify 3 v-menu custom LocationStrategy that positions the menu at
+// the cursor coordinates set via position-x/position-y. The built-in
+// 'connected' strategy assumes an HTMLElement activator; when only
+// position-x/position-y are set, Vuetify passes [x, y] as the target,
+// which 'connected' ignores, causing the menu to fall back to (0, 0).
+//
+// Signature mirrors Vuetify 3 LocationStrategyFn
+// (vuetify/lib/components/index.d.mts:3718). We mirror the type locally
+// because it isn't re-exported from 'vuetify' top-level.
+interface CursorLocationStrategyData {
+  contentEl: Ref<HTMLElement | undefined>;
+  target: Ref<HTMLElement | [number, number] | undefined>;
+  isActive: Ref<boolean>;
+  isRtl: Ref<boolean>;
+}
+interface CursorStrategyProps {
+  locationStrategy: unknown;
+  location: string;
+  origin: string;
+  offset?: number | string | number[];
+  maxHeight?: number | string;
+  maxWidth?: number | string;
+  minHeight?: number | string;
+  minWidth?: number | string;
+}
+type CursorLocationStrategyFn = (
+  data: CursorLocationStrategyData,
+  props: CursorStrategyProps,
+  contentStyles: Ref<Record<string, string>>,
+) => undefined | { updateLocation: (e?: Event) => void };
+
+const absoluteCursorLocationStrategy: CursorLocationStrategyFn = (
+  data,
+  _props,
+  contentStyles,
+) => {
+  // Vuetify sets data.target to [x, y] tuple when position-x/position-y
+  // are used on v-menu (no activator element). The default 'connected'
+  // strategy doesn't handle this shape, so we provide our own.
+  const applyPosition = (target: [number, number] | undefined): void => {
+    if (!target) return;
+    contentStyles.value = {
+      ...contentStyles.value,
+      left: `${target[0]}px`,
+      top: `${target[1]}px`,
+      position: "absolute",
+      transform: "none",
+    };
+  };
+  applyPosition(data.target.value as [number, number] | undefined);
+  return {
+    updateLocation: (_e?: Event): void => {
+      applyPosition(data.target.value as [number, number] | undefined);
+    },
+  };
+};
+
 async function openContextMenu(
   e: MouseEvent,
   wt: SpcodeGitWorktree,
@@ -1847,10 +1906,13 @@ const currentRoot = computed<string | null>(() => {
         </button>
 
         <!-- Context menu (spec 2026-06-27 §2.3)
-             position-x/position-y is a Vuetify 3 v-menu feature; works
-             with the default 'connected' location strategy. -->
+             Uses custom absoluteCursorLocationStrategy so position-x/y
+             (set from MouseEvent.clientX/clientY in openContextMenu)
+             actually position the menu at the cursor. The default
+             'connected' strategy ignores non-HTMLElement activators. -->
         <v-menu
           v-model="contextMenu.open"
+          :location-strategy="absoluteCursorLocationStrategy"
           :position-x="contextMenu.x"
           :position-y="contextMenu.y"
         >
