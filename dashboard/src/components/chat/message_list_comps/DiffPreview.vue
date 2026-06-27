@@ -89,22 +89,51 @@
         {{ maxChars.toLocaleString() }} characters)
       </div>
 
-      <!-- Unified mode: the original single-column layout -->
+      <!-- Unified mode: the original single-column layout.
+           UI #8: hunk headers are now clickable buttons that fold /
+           unfold the hunk. State is local to the component so a
+           re-mount (file change) resets all folds — matches the
+           "expansion state is per-file" mental model. -->
       <template v-if="viewMode === 'unified'">
-        <div v-for="(hunk, hi) in parsedHunks" :key="hi" class="diff-hunk">
-          <div class="hunk-header">
-            {{ hunk.header }}
-          </div>
-          <div
-            v-for="(line, li) in hunk.lines"
-            :key="li"
-            class="diff-line"
-            :class="line.type"
+        <div
+          v-for="(hunk, hi) in parsedHunks"
+          :key="hi"
+          class="diff-hunk"
+          :class="{ 'is-hunk-folded': collapsedHunks.has(hi) }"
+        >
+          <button
+            type="button"
+            class="hunk-header"
+            :aria-expanded="!collapsedHunks.has(hi)"
+            @click="toggleHunk(hi)"
           >
-            <span class="line-number old">{{ line.oldNo }}</span>
-            <span class="line-number new">{{ line.newNo }}</span>
-            <span class="line-prefix">{{ line.prefix }}</span>
-            <span class="line-content">{{ line.content }}</span>
+            <v-icon
+              size="12"
+              class="hunk-chevron"
+              :class="{ expanded: !collapsedHunks.has(hi) }"
+            >
+              mdi-chevron-right
+            </v-icon>
+            <span class="hunk-header-text">{{ hunk.header }}</span>
+            <span class="hunk-header-count">
+              {{ hunk.lines.length }}
+            </span>
+          </button>
+          <div
+            v-show="!collapsedHunks.has(hi)"
+            class="diff-hunk-body"
+          >
+            <div
+              v-for="(line, li) in hunk.lines"
+              :key="li"
+              class="diff-line"
+              :class="line.type"
+            >
+              <span class="line-number old">{{ line.oldNo }}</span>
+              <span class="line-number new">{{ line.newNo }}</span>
+              <span class="line-prefix">{{ line.prefix }}</span>
+              <span class="line-content">{{ line.content }}</span>
+            </div>
           </div>
         </div>
       </template>
@@ -227,6 +256,19 @@ const showAllLines = ref(false);
 const effectiveMaxLines = computed(() =>
   showAllLines.value ? Infinity : props.maxLines,
 );
+
+// UI #8: per-hunk fold state. Local to the component, so re-mounting
+// the diff (e.g. switching files) resets all folds — matches the
+// "expansion state is per-file" mental model. We use a Set<number>
+// of hunk indices; small memory footprint even for 100+ hunks.
+const collapsedHunks = ref<Set<number>>(new Set());
+
+function toggleHunk(idx: number): void {
+  const next = new Set(collapsedHunks.value);
+  if (next.has(idx)) next.delete(idx);
+  else next.add(idx);
+  collapsedHunks.value = next;
+}
 
 const VIEW_MODE_STORAGE_KEY = "astrbot.diff.viewMode";
 
@@ -689,13 +731,64 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.04);
 }
 
+/* UI #8: hunk header is now a button (clickable to fold / unfold).
+   Reset default button styles and let it fill the full row. The
+   inner flex lays out: chevron | hunk text | line count badge. */
 .hunk-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
   padding: 4px 12px;
   font-size: 11px;
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.55);
   background: var(--diff-hunk-bg);
+  border: 0;
   border-bottom: 1px solid var(--diff-hunk-border);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  transition: background 0.12s ease;
+}
+
+.hunk-header:hover {
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.hunk-header:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: -2px;
+}
+
+.hunk-chevron {
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.hunk-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.hunk-header-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hunk-header-count {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 /* ── Diff line (unified) ─────────────────────────────────────────── */

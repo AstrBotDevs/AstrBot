@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 318 icons */
+/* Auto-generated MDI subset – 320 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -186,6 +186,10 @@
 
 .mdi-check-all::before {
   content: "\F012D";
+}
+
+.mdi-check-bold::before {
+  content: "\F0E1E";
 }
 
 .mdi-check-circle::before {
@@ -1218,6 +1222,10 @@
 
 .mdi-tune-variant::before {
   content: "\F1542";
+}
+
+.mdi-unfold-less-horizontal::before {
+  content: "\F054E";
 }
 
 .mdi-unfold-more-horizontal::before {

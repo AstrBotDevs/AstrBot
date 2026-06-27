@@ -265,6 +265,26 @@
       "loadedAtPrefix": "Загружен",
       "noProject": "Проект не загружен"
     },
+    "diffPreview": {
+      "summary": {
+        "fileCount": "{count} файлов · {dirs} папок"
+      },
+      "group": {
+        "root": "Корень",
+        "staged": "В индексе",
+        "unstaged": "Не в индексе"
+      },
+      "toolbar": {
+        "expandAll": "Развернуть все",
+        "collapseAll": "Свернуть все",
+        "selectedCount": "Выбрано: {count}",
+        "stageSelected": "В индекс ({count})",
+        "unstageSelected": "Из индекса ({count})",
+        "clearSelection": "Очистить выбор",
+        "selectAllInGroup": "Выбрать всё в {label}",
+        "selectFile": "Выбрать {path}"
+      }
+    },
     "fileBrowser": {
       "title": "Обзор рабочей области",
       "viewMode": {

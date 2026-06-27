@@ -1330,6 +1330,40 @@ async function onStageFile(path: string): Promise<void> {
   }
 }
 
+// UI #3: bulk-stage handler. Calls gitStage once with the full path
+// list (the backend already accepts an array), then mirrors the
+// single-file `onStageFile` success path. Error handling is the same:
+// reason-keyed i18n message + stderr in the snackbar's <pre> block.
+async function onStagePaths(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const umo = spcodeStatus.status.value.umo;
+  const worktree = selectedWorktree.value;
+  const result = await gitStage.stage({ files: paths, worktree, umo });
+  if (isAborted(result)) return;
+  if (result.ok) {
+    stagedFiles.value = new Set(result.snapshot.files);
+    await Promise.all([composable.refresh(), gitStatus.refresh()]);
+    showSnackbar(
+      tm(
+        "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.successAll",
+        { count: paths.length },
+      ),
+      "success",
+    );
+  } else {
+    const meta = reasonMeta("stage", result.reason);
+    const key = reasonKey("stage", result.reason);
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
+  }
+}
+
 async function onUnstageFile(path: string): Promise<void> {
   if (gitUnstage.isUnstaging.value.has(path)) return;
   const umo = spcodeStatus.status.value.umo;
@@ -1479,6 +1513,37 @@ async function onConfirmUnstageAll(): Promise<void> {
       tm("spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.successAll", {
         count: pendingUnstageAllCount.value,
       }),
+      "success",
+    );
+  } else {
+    const meta = reasonMeta("unstage", result.reason);
+    const key = reasonKey("unstage", result.reason);
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
+  }
+}
+
+// UI #3: bulk-unstage handler. Mirrors onStagePaths.
+async function onUnstagePaths(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const umo = spcodeStatus.status.value.umo;
+  const worktree = selectedWorktree.value;
+  const result = await gitUnstage.unstage({ files: paths, worktree, umo });
+  if (isAborted(result)) return;
+  if (result.ok) {
+    stagedFiles.value = new Set(result.snapshot.files);
+    await Promise.all([composable.refresh(), gitStatus.refresh()]);
+    showSnackbar(
+      tm(
+        "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.successAll",
+        { count: paths.length },
+      ),
       "success",
     );
   } else {
@@ -1749,42 +1814,25 @@ const currentRoot = computed<string | null>(() => {
                 : tm("spcodeProjectLoad.diffSidebar.title")
             }}
           </span>
-          <v-tooltip
-            v-if="viewMode === 'diff' && directoryPath"
-            location="bottom"
-            :open-delay="200"
-          >
-            <template #activator="{ props: tipProps }">
-              <v-icon
-                v-bind="tipProps"
-                size="14"
-                class="git-diff-sidebar-dir-icon"
-                >mdi-folder-outline</v-icon
-              >
-            </template>
-            <span class="git-diff-sidebar-dir">{{ directoryPath }}</span>
-          </v-tooltip>
+          <!-- UI #5: directory path is now shown as a compact breadcrumb-style
+               strip directly under the title, with an inline folder icon.
+               This keeps the header row uncluttered (title + actions only)
+               while still giving the user a visible project root in all
+               three view modes (not just diff). -->
         </div>
         <div class="git-diff-sidebar-actions">
-          <!-- Tooltip wraps the button (NOT the other way around).
-               v-tooltip inside v-btn with activator="parent" is a
-               known Vuetify-3 anti-pattern that interferes with the
-               button's internal icon slot — the icon then fails to
-               render and only the tonal background "circle" remains
-               visible. Using #activator + v-bind="tipProps" is the
-               standard pattern across this codebase (see
-               GitDiffChip.vue). mdi-restart reads as a more elegant
-               single-arc refresh glyph than mdi-refresh's chunky
-               stem; semantics ("do it again from scratch") are
-               appropriate for both view modes. -->
+          <!-- UI #5: refresh button dropped the `tonal` background and
+               dropped to `variant="text"` + `size="small"` so the header
+               reads as a lightweight toolbar instead of three chunky
+               "circle" buttons. Loading state is preserved (a small
+               spinner replaces the icon while the request is in flight). -->
           <v-tooltip location="bottom" :open-delay="200">
             <template #activator="{ props: tipProps }">
               <v-btn
                 v-bind="tipProps"
                 icon
                 size="small"
-                variant="tonal"
-                color="primary"
+                variant="text"
                 :loading="isFetching"
                 @click="onManualRefresh"
               >
@@ -1799,6 +1847,36 @@ const currentRoot = computed<string | null>(() => {
             variant="text"
             @click="emit('update:modelValue', false)"
           />
+        </div>
+      </div>
+
+      <!-- UI #5: a fixed path strip directly under the header. Visible in
+           all three view modes so the user always knows which project
+           (and which worktree) they are looking at. Two-line layout:
+             [folder] <project-root>           (top)
+             <worktree> · <branch>             (bottom, only when in a
+                                                non-main worktree)
+           The strip is muted (low-contrast) so it doesn't compete with
+           the title above or the diff content below. -->
+      <div
+        v-if="currentRoot"
+        class="git-diff-sidebar-path-strip"
+        :title="currentRoot"
+      >
+        <div class="git-diff-sidebar-path-line">
+          <v-icon size="12" class="git-diff-sidebar-path-icon"
+            >mdi-folder-outline</v-icon
+          >
+          <span class="git-diff-sidebar-path-text">{{ currentRoot }}</span>
+        </div>
+        <div
+          v-if="selectedWorktree && worktreeList.length > 0"
+          class="git-diff-sidebar-path-sub"
+        >
+          {{
+            worktreeList.find((w) => w.path === selectedWorktree)?.branch ??
+            tm("spcodeProjectLoad.diffSidebar.worktreeTabs.detachedBadge")
+          }}
         </div>
       </div>
 
@@ -2070,6 +2148,8 @@ const currentRoot = computed<string | null>(() => {
           @stage="onStageFile"
           @unstage="onUnstageFile"
           @open-file="onOpenFile"
+          @stage-paths="onStagePaths"
+          @unstage-paths="onUnstagePaths"
         />
         <!-- Spec 2026-06-24 §6.5:History view 渲染 GitLogView。
              Spec 2026-06-25 §3.1:GitLogView 也接收 gitShow 句柄用于
@@ -2405,12 +2485,18 @@ const currentRoot = computed<string | null>(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 .git-diff-sidebar-title {
   font-size: 16px;
   font-weight: 600;
   line-height: 1.4;
 }
+/* UI #5: removed the inline folder icon + tooltip (`.git-diff-sidebar-dir*`)
+   selectors — the project path is now rendered as a dedicated strip
+   directly below the header (see .git-diff-sidebar-path-strip). Kept the
+   dir selectors as no-op so any external style override (e.g. user
+   CSS, devtools experiments) doesn't break the layout. */
 .git-diff-sidebar-dir-icon {
   color: rgba(var(--v-theme-on-surface), 0.54);
 }
@@ -2420,7 +2506,50 @@ const currentRoot = computed<string | null>(() => {
 }
 .git-diff-sidebar-actions {
   display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Path strip (UI #5) ──────────────────────────────────────────── */
+
+.git-diff-sidebar-path-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 16px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  user-select: text;
+}
+
+.git-diff-sidebar-path-line {
+  display: flex;
+  align-items: center;
   gap: 4px;
+  min-width: 0;
+}
+
+.git-diff-sidebar-path-icon {
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  flex-shrink: 0;
+}
+
+.git-diff-sidebar-path-text {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl; /* keep the END (project root) visible on overflow */
+  text-align: left;
+}
+
+.git-diff-sidebar-path-sub {
+  font-size: 10.5px;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  margin-left: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── View-mode tab (spec 2026-06-20 §5.2) ──────────────────── */

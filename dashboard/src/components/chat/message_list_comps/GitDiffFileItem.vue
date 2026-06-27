@@ -48,6 +48,18 @@ const props = defineProps<{
   /** When provided, renders a "view" button to open the file in
    *  the workspace File Browser. Clicking it emits 'open-file'. */
   onOpenFile?: (path: string) => void;
+  // UI #3: multi-select support. The parent (GitDiffBodyContent)
+  // manages the global selected Set and re-derives `isSelected` for
+  // each row. `selectable` gates the checkbox visibility: it's true
+  // exactly when stage/unstage is meaningful (i.e. scope is unstaged
+  // or staged OR the file's path appears in the staged set inside
+  // the `all` scope). The parent passes this gate in so the file
+  // item stays scope-agnostic.
+  selectable?: boolean;
+  isSelected?: boolean;
+  /** Localized label for the checkbox; supplied by the parent so the
+   *  i18n key path stays centralized. */
+  selectableAriaLabel?: string;
 }>();
 const emit = defineEmits<{
   (e: "toggle"): void;
@@ -55,6 +67,9 @@ const emit = defineEmits<{
   (e: "stage", path: string): void;
   (e: "unstage", path: string): void;
   (e: "open-file", path: string): void;
+  // UI #3: emitted with the new boolean value when the checkbox
+  // changes. Parent toggles its Set membership accordingly.
+  (e: "select", selected: boolean): void;
 }>();
 
 const ICON_MAP: Record<FileStatus, { icon: string; color: string }> = {
@@ -117,6 +132,14 @@ function onOpenFileClick(e: MouseEvent): void {
   e.stopPropagation();
   emit("open-file", props.file.path);
 }
+
+/** Stable identifier for a file row. Used by the parent to dedupe
+ *  selection state when the same path appears in both staged and
+ *  unstaged views (which can't actually happen — git diff returns
+ *  each path once — but the helper makes the contract explicit). */
+function rowKey(): string {
+  return `${props.file.path}:${props.file.status}`;
+}
 </script>
 
 <template>
@@ -129,6 +152,26 @@ function onOpenFileClick(e: MouseEvent): void {
       @click="emit('toggle')"
       @keydown="onRowKeydown"
     >
+      <!-- UI #3: selection checkbox. Only rendered when the parent passes
+           `selectable` (true in unstaged / staged / all scopes where stage
+           or unstage is meaningful). The checkbox is a separate button so
+           clicking it does NOT toggle expansion. `aria-checked` mirrors
+           the is-selected prop for screen readers; the `aria-label`
+           localizes the checkbox text via the parent (i18n keys live in
+           GitDiffBodyContent for simplicity, not duplicated here). -->
+      <button
+        v-if="selectable"
+        type="button"
+        class="git-diff-file-check"
+        :class="{ 'is-checked': isSelected }"
+        :aria-checked="isSelected ? 'true' : 'false'"
+        :aria-label="selectableAriaLabel"
+        :title="selectableAriaLabel"
+        @click.stop="emit('select', !isSelected)"
+        @keydown.stop.enter.space.prevent="emit('select', !isSelected)"
+      >
+        <v-icon v-if="isSelected" :size="14">mdi-check-bold</v-icon>
+      </button>
       <v-icon :size="16" :color="iconInfo.color">{{ iconInfo.icon }}</v-icon>
       <span class="git-diff-file-path">{{ file.path }}</span>
       <!-- Stats: diff rows show real additions/deletions from the
@@ -403,6 +446,40 @@ function onOpenFileClick(e: MouseEvent): void {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: 2px;
   opacity: 1;
+}
+
+/* UI #3: selection checkbox at the start of the row. Square 16px,
+   visible by default (NOT hover-gated like the action buttons)
+   because checking is a primary action — the user needs to see the
+   checkbox on every row, not just on hover. */
+.git-diff-file-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: 1.5px solid rgba(var(--v-theme-on-surface), 0.35);
+  border-radius: 3px;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+.git-diff-file-check:hover {
+  border-color: rgb(var(--v-theme-primary));
+}
+.git-diff-file-check:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+.git-diff-file-check.is-checked {
+  background: rgb(var(--v-theme-primary));
+  border-color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
 }
 
 /* Spec §6.2: 行内 stage / unstage 按钮;与 restore 共享 opacity 0.5/1 模式。 */

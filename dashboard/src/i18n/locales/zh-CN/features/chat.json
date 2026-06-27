@@ -275,6 +275,26 @@
       "loadedAtPrefix": "加载于",
       "noProject": "未加载项目"
     },
+    "diffPreview": {
+      "summary": {
+        "fileCount": "{count} 个文件 · {dirs} 个目录"
+      },
+      "group": {
+        "root": "项目根",
+        "staged": "已暂存",
+        "unstaged": "未暂存"
+      },
+      "toolbar": {
+        "expandAll": "全部展开",
+        "collapseAll": "全部折叠",
+        "selectedCount": "已选 {count} 个",
+        "stageSelected": "暂存 ({count})",
+        "unstageSelected": "取消暂存 ({count})",
+        "clearSelection": "清空选择",
+        "selectAllInGroup": "选中 {label} 下的全部文件",
+        "selectFile": "选中 {path}"
+      }
+    },
     "fileBrowser": {
       "title": "工作区浏览",
       "viewMode": {

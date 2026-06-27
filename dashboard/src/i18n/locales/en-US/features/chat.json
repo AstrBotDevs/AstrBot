@@ -275,6 +275,26 @@
       "loadedAtPrefix": "Loaded at",
       "noProject": "No project loaded"
     },
+    "diffPreview": {
+      "summary": {
+        "fileCount": "{count} files · {dirs} dirs"
+      },
+      "group": {
+        "root": "Repo root",
+        "staged": "Staged",
+        "unstaged": "Unstaged"
+      },
+      "toolbar": {
+        "expandAll": "Expand all",
+        "collapseAll": "Collapse all",
+        "selectedCount": "{count} selected",
+        "stageSelected": "Stage ({count})",
+        "unstageSelected": "Unstage ({count})",
+        "clearSelection": "Clear selection",
+        "selectAllInGroup": "Select all in {label}",
+        "selectFile": "Select {path}"
+      }
+    },
     "fileBrowser": {
       "title": "Workspace Browser",
       "viewMode": {
