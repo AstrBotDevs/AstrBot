@@ -411,6 +411,10 @@ class ProviderManager:
                 from .sources.mimo_stt_api_source import (
                     ProviderMiMoSTTAPI as ProviderMiMoSTTAPI,
                 )
+            case "stepfun_asr":
+                from .sources.stepfun_asr_source import (
+                    ProviderStepFunASR as ProviderStepFunASR,
+                )
             case "openai_whisper_selfhost":
                 from .sources.whisper_selfhosted_source import (
                     ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,
