@@ -283,7 +283,14 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
       );
       if (!isMounted || ctrl.signal.aborted) return { ok: false, reason: "aborted" };
       const parsed = parseSpcodeWorktreeAdd(resp.data);
-      if (parsed.kind !== "ok") return { ok: false, reason: "unknown" };
+      // Propagate the parser's reason+stderr verbatim. Previously this
+      // branch hardcoded reason="unknown", which made every backend
+      // failure look identical to the user and dropped the actual
+      // git error message (relevant for failures like non-existent
+      // base ref → "fatal: not a tree object: <base>").
+      if (parsed.kind !== "ok") {
+        return { ok: false, reason: parsed.reason, stderr: parsed.stderr };
+      }
       // Atomically replace state with the refreshed list.
       // The cast is safe: parseSpcodeWorktreeManagement stored the
       // raw snake_case array verbatim (Chunk 1 leaves re-naming to
@@ -327,7 +334,9 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
       );
       if (!isMounted || ctrl.signal.aborted) return { ok: false, reason: "aborted" };
       const parsed = parseSpcodeWorktreeRemove(resp.data);
-      if (parsed.kind !== "ok") return { ok: false, reason: "unknown" };
+      if (parsed.kind !== "ok") {
+        return { ok: false, reason: parsed.reason, stderr: parsed.stderr };
+      }
       const refreshed = parseSpcodeGitWorktrees({
         loaded: parsed.snapshot.meta.loaded,
         directory: parsed.snapshot.meta.directory,
@@ -366,7 +375,9 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
       );
       if (!isMounted || ctrl.signal.aborted) return { ok: false, reason: "aborted" };
       const parsed = parseSpcodeWorktreeLock(resp.data);
-      if (parsed.kind !== "ok") return { ok: false, reason: "unknown" };
+      if (parsed.kind !== "ok") {
+        return { ok: false, reason: parsed.reason, stderr: parsed.stderr };
+      }
       const refreshed = parseSpcodeGitWorktrees({
         loaded: parsed.snapshot.meta.loaded,
         directory: parsed.snapshot.meta.directory,
@@ -405,7 +416,9 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
       );
       if (!isMounted || ctrl.signal.aborted) return { ok: false, reason: "aborted" };
       const parsed = parseSpcodeWorktreeUnlock(resp.data);
-      if (parsed.kind !== "ok") return { ok: false, reason: "unknown" };
+      if (parsed.kind !== "ok") {
+        return { ok: false, reason: parsed.reason, stderr: parsed.stderr };
+      }
       const refreshed = parseSpcodeGitWorktrees({
         loaded: parsed.snapshot.meta.loaded,
         directory: parsed.snapshot.meta.directory,

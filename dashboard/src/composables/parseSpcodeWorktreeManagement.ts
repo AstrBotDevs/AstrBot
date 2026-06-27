@@ -50,9 +50,15 @@ export interface SpcodeWorktreeMgmtRawResponse {
   elapsed_ms?: number;
 }
 
+// ParseResult: error branch carries both `reason` (the ReasonCode from
+// data.reason) and `stderr` (the raw git / handler error text from
+// data.stderr). The reason alone is not enough — most git failure modes
+// (e.g. non-existent base ref) surface as reason="git_error" with the
+// actual error message in stderr. Callers MUST propagate stderr
+// downstream so the snackbar can render it in the <pre> block.
 export type ParseResult<T> =
   | { kind: "ok"; snapshot: T }
-  | { kind: "error"; reason: string };
+  | { kind: "error"; reason: string; stderr: string };
 
 // ── Snapshot (consumer-facing) ────────────────────────────
 //
@@ -155,11 +161,29 @@ function buildSnapshot(
 // All 4 share the same envelope shape; only the endpoint-specific
 // field overrides differ. Each parser is 4-6 lines.
 
-/** Parse the envelope from POST /spcode/git-worktree-add. */
+/** Parse the envelope from POST /spcode/git-worktree-add.
+ *
+ * The 4 management endpoints share the same envelope shape, so all 4
+ * parsers run the same `data.reason` guard. If `reason` is non-null
+ * the backend classified the call as failed (per API spec
+ * docs/api/webapi-git-worktree-mgmt-api.md §2.3 / §3.1.5) — even though
+ * HTTP is 200. The handlers (useSpcodeWorktrees.add etc.) must surface
+ * this as a WorktreeMgmtResult with ok=false; otherwise the dialog
+ * shows "created successfully" while git silently failed.
+ *
+ * Bug fix 2026-06-27: prior to this commit, the parsers unconditionally
+ * returned `kind: "ok"` whenever the envelope was structurally valid,
+ * discarding `data.reason`. For the most common failure mode (user
+ * types a non-existent base ref) git returns `fatal: not a tree
+ * object: <base>`, the backend maps it to `reason: "git_error"`, and
+ * the UI displayed a green "created" toast — no error visible. */
 export function parseSpcodeWorktreeAdd(
   raw: unknown,
 ): ParseResult<SpcodeWorktreeMgmtSnapshot> {
   const d = unwrapEnvelope(raw) as SpcodeWorktreeMgmtRawData;
+  if (d.reason) {
+    return { kind: "error", reason: d.reason, stderr: asString(d.stderr) };
+  }
   return {
     kind: "ok",
     snapshot: buildSnapshot(d, { branch: d.branch ?? null }),
@@ -171,6 +195,9 @@ export function parseSpcodeWorktreeRemove(
   raw: unknown,
 ): ParseResult<SpcodeWorktreeMgmtSnapshot> {
   const d = unwrapEnvelope(raw) as SpcodeWorktreeMgmtRawData;
+  if (d.reason) {
+    return { kind: "error", reason: d.reason, stderr: asString(d.stderr) };
+  }
   return {
     kind: "ok",
     snapshot: buildSnapshot(d, { removedPath: d.removed_path ?? d.worktree }),
@@ -182,6 +209,9 @@ export function parseSpcodeWorktreeLock(
   raw: unknown,
 ): ParseResult<SpcodeWorktreeMgmtSnapshot> {
   const d = unwrapEnvelope(raw) as SpcodeWorktreeMgmtRawData;
+  if (d.reason) {
+    return { kind: "error", reason: d.reason, stderr: asString(d.stderr) };
+  }
   return {
     kind: "ok",
     snapshot: buildSnapshot(d, {
@@ -196,6 +226,9 @@ export function parseSpcodeWorktreeUnlock(
   raw: unknown,
 ): ParseResult<SpcodeWorktreeMgmtSnapshot> {
   const d = unwrapEnvelope(raw) as SpcodeWorktreeMgmtRawData;
+  if (d.reason) {
+    return { kind: "error", reason: d.reason, stderr: asString(d.stderr) };
+  }
   return {
     kind: "ok",
     snapshot: buildSnapshot(d, {

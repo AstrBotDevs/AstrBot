@@ -429,7 +429,7 @@
           "directory_missing": "Loaded directory no longer exists",
           "not_a_git_repo": "Current directory is not a Git repository",
           "git_unavailable": "Git executable not found",
-          "git_error": "Git execution failed ({reason})",
+          "git_error": "Git execution failed",
           "generic": "Failed to fetch changes ({reason})",
           "invalid_branch": "Invalid branch name format",
           "invalid_param": "Invalid base ref format",

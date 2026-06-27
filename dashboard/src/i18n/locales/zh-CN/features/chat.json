@@ -429,7 +429,7 @@
           "directory_missing": "已加载的目录不存在",
           "not_a_git_repo": "当前目录不是 Git 仓库",
           "git_unavailable": "未检测到 git 可执行文件",
-          "git_error": "Git 执行失败（{reason}）",
+          "git_error": "Git 执行失败",
           "generic": "获取改动失败（{reason}）",
           "invalid_branch": "分支名格式错误",
           "invalid_param": "起始点格式错误",
