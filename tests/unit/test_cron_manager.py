@@ -534,6 +534,72 @@ class TestRunBasicJob:
             await cron_manager._run_basic_job(sample_cron_job)
 
 
+class TestRunActiveAgentJob:
+    """Tests for active agent cron job execution."""
+
+    @pytest.mark.asyncio
+    async def test_woke_main_agent_passes_provider_settings(self, cron_manager):
+        """Test active cron agent keeps fallback chat model settings."""
+        provider_settings = {
+            "tool_call_timeout": 77,
+            "fallback_chat_models": ["fallback-provider"],
+        }
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": provider_settings,
+        }
+        cron_manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.history = "[]"
+
+        class FakeRunner:
+            def step_until_done(self, max_step):
+                async def gen():
+                    if False:
+                        yield None
+
+                return gen()
+
+            def get_final_llm_resp(self):
+                return None
+
+        captured = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            captured["config"] = config
+            return MagicMock(agent_runner=FakeRunner())
+
+        async def fake_persist_agent_history(*args, **kwargs):
+            return None
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                side_effect=fake_persist_agent_history,
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+
+        config = captured["config"]
+        assert config.tool_call_timeout == 77
+        assert config.provider_settings is provider_settings
+        assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
+
+
 class TestGetNextRunTime:
     """Tests for _get_next_run_time method."""
 
