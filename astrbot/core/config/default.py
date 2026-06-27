@@ -1168,8 +1168,8 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
-                    "OpenAI Response": {
-                        "id": "openai_response",
+                    "OpenAI Responses": {
+                        "id": "openai_responses",
                         "provider": "openai",
                         "type": "openai_responses",
                         "provider_type": "chat_completion",
