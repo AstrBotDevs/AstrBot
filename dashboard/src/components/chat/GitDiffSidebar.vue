@@ -4,7 +4,14 @@
      Layout mirrors ReasoningSidebar.vue so resizing the sidebar takes
      space from .chat-main (flex sibling) instead of overlaying it. -->
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount, computed, onMounted } from "vue";
+import {
+  ref,
+  watch,
+  onBeforeUnmount,
+  computed,
+  onMounted,
+  nextTick,
+} from "vue";
 import {
   useSpcodeGitDiff,
   DEFAULT_SCOPE,
@@ -21,6 +28,7 @@ import type {
   SpcodeGitDiffSnapshot,
   FileStatus,
 } from "@/composables/parseSpcodeGitDiff";
+import type { SpcodeGitWorktree } from "@/composables/parseSpcodeWorktrees";
 import {
   useSpcodeWorktrees,
   type WorktreeAddParams,
@@ -407,6 +415,22 @@ const isLocking = ref(false);
 const isUnlocking = ref(false);
 const isCreating = ref(false);
 const lastCreateError = ref<{ reason: string; stderr: string } | null>(null);
+
+// Context menu position + target (spec 2026-06-27 §2.3).
+const contextMenu = ref<{
+  open: boolean;
+  x: number;
+  y: number;
+  wt: SpcodeGitWorktree | null;
+}>({ open: false, x: 0, y: 0, wt: null });
+async function openContextMenu(
+  e: MouseEvent,
+  wt: SpcodeGitWorktree,
+): Promise<void> {
+  contextMenu.value = { open: false, x: e.clientX, y: e.clientY, wt };
+  await nextTick();
+  contextMenu.value.open = true;
+}
 
 // Snackbar state (success / warning / error). Spec §5.3 / §6.8:stderr
 // 单独字段,withStderr reason 携带,模板里 <pre> 块渲染。
@@ -1585,9 +1609,13 @@ const currentRoot = computed<string | null>(() => {
           ]"
           :title="wt.path"
           @click="onWorktreeChange(wt.isMain ? null : wt.path)"
+          @contextmenu.prevent="(e) => openContextMenu(e, wt)"
         >
           <v-icon v-if="wt.isMain" size="12" class="git-diff-sidebar-tab-icon"
             >mdi-home</v-icon
+          >
+          <v-icon v-else-if="wt.locked" size="12" class="git-diff-sidebar-tab-icon"
+            >mdi-lock</v-icon
           >
           <span class="git-diff-sidebar-tab-label">
             {{
@@ -1601,6 +1629,64 @@ const currentRoot = computed<string | null>(() => {
             tm("spcodeProjectLoad.diffSidebar.worktreeTabs.detachedBadge")
           }}</span>
         </button>
+        <!-- Add button (spec 2026-06-27 §2.1) -->
+        <button
+          type="button"
+          class="git-diff-sidebar-tab-add"
+          :aria-label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButtonAria')"
+          :title="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButton')"
+          @click="openCreateDialog"
+        >
+          <v-icon size="14">mdi-plus</v-icon>
+        </button>
+
+        <!-- Context menu (spec 2026-06-27 §2.3) -->
+        <v-menu
+          v-model="contextMenu.open"
+          :location-strategy="'absolute'"
+          :position-x="contextMenu.x"
+          :position-y="contextMenu.y"
+        >
+          <v-list density="compact">
+            <template v-if="contextMenu.wt && !contextMenu.wt.isMain">
+              <v-list-item
+                :disabled="contextMenu.wt.locked"
+                @click="onLockClick(contextMenu.wt!)"
+              >
+                <template #prepend>
+                  <v-icon>{{
+                    contextMenu.wt.locked ? "mdi-lock-open-variant" : "mdi-lock"
+                  }}</v-icon>
+                </template>
+                <v-list-item-title>{{
+                  contextMenu.wt.locked
+                    ? tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.unlock")
+                    : tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.lock")
+                }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item
+                :disabled="contextMenu.wt.locked"
+                @click="onRemoveClick(contextMenu.wt!)"
+              >
+                <template #prepend>
+                  <v-icon color="error">mdi-trash-can-outline</v-icon>
+                </template>
+                <v-list-item-title>{{
+                  tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.remove")
+                }}</v-list-item-title>
+              </v-list-item>
+            </template>
+            <template v-else>
+              <v-list-item disabled>
+                <v-list-item-title class="text-caption">
+                  {{
+                    tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.mainDisabled")
+                  }}
+                </v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-list>
+        </v-menu>
       </div>
 
       <!-- Diff-only sub-UI: scope bar + truncation warning -->
@@ -2136,6 +2222,27 @@ const currentRoot = computed<string | null>(() => {
   white-space: nowrap;
 }
 
+.git-diff-sidebar-tab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  border: 1px dashed rgba(var(--v-theme-on-surface), 0.3);
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.12s ease;
+  margin-left: 2px;
+}
+.git-diff-sidebar-tab-add:hover {
+  border-style: solid;
+  border-color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.08);
+}
 .git-diff-sidebar-tab-badge {
   font-size: 10px;
   padding: 1px 5px;
