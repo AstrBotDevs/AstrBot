@@ -63,6 +63,7 @@ const {
   sourceToRemove,
   editingSource,
   originalSourceUrl,
+  sourceBindingDialog,
   extension_url,
   dialog,
   upload_file,
@@ -122,11 +123,13 @@ const {
   addCustomSource,
   openSourceManagerDialog,
   selectPluginSource,
-  sourceSelectItems,
   editCustomSource,
   removeCustomSource,
   confirmRemoveSource,
   saveCustomSource,
+  openPluginSourceBindingDialog,
+  closePluginSourceBindingDialog,
+  confirmPluginSourceBinding,
   trimExtensionName,
   checkAlreadyInstalled,
   showVersionSupportWarning,
@@ -357,12 +360,97 @@ const togglePinnedExtension = (extension) => {
               @view-readme="viewReadme(extension)"
               @view-changelog="viewChangelog(extension)"
               @open-webui="openPluginWebui(extension)"
+              @change-source="openPluginSourceBindingDialog(extension)"
             >
             </ExtensionCard>
           </v-col>
         </v-row>
       </div>
     </v-fade-transition>
+
+    <v-dialog v-model="sourceBindingDialog.show" max-width="680">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon class="mr-2" icon="mdi-source-branch" />
+          {{ tm("dialogs.sourceBinding.title") }}
+        </v-card-title>
+        <v-card-text>
+          <div
+            v-if="sourceBindingDialog.extension"
+            class="text-body-2 text-medium-emphasis mb-3"
+          >
+            {{
+              sourceBindingDialog.extension.display_name ||
+              sourceBindingDialog.extension.name
+            }}
+          </div>
+
+          <v-progress-linear
+            v-if="sourceBindingDialog.loading"
+            color="primary"
+            indeterminate
+          />
+
+          <v-alert
+            v-else-if="sourceBindingDialog.candidates.length === 0"
+            type="info"
+            variant="tonal"
+            density="comfortable"
+          >
+            {{ tm("dialogs.sourceBinding.noCandidates") }}
+          </v-alert>
+
+          <v-radio-group
+            v-else
+            v-model="sourceBindingDialog.selectedKey"
+            hide-details
+          >
+            <v-radio
+              v-for="candidate in sourceBindingDialog.candidates"
+              :key="candidate.key"
+              :value="candidate.key"
+              color="primary"
+            >
+              <template #label>
+                <div class="py-2">
+                  <div class="font-weight-medium">
+                    {{ candidate.registry_name }}
+                  </div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ candidate.market_plugin_id }}
+                  </div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ candidate.repo }}
+                  </div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ tm("table.headers.version") }}: {{ candidate.version }}
+                  </div>
+                </div>
+              </template>
+            </v-radio>
+          </v-radio-group>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="closePluginSourceBindingDialog">
+            {{ tm("buttons.cancel") }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="sourceBindingDialog.saving"
+            :disabled="
+              sourceBindingDialog.loading ||
+              sourceBindingDialog.candidates.length === 0 ||
+              !sourceBindingDialog.selectedKey
+            "
+            @click="confirmPluginSourceBinding"
+          >
+            {{ tm("dialogs.sourceBinding.confirm") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-tooltip :text="tm('market.installPlugin')" location="left">
       <template v-slot:activator="{ props }">
