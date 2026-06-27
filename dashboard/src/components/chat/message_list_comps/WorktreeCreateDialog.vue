@@ -30,6 +30,33 @@ const branch = ref<string>("");
 const path = ref<string>("");
 const base = ref<string>("main");
 
+// Reset form state every time the dialog is opened.
+//
+// The parent renders <WorktreeCreateDialog v-model="createDialogOpen"/>
+// and toggles that ref to open/close. The component itself is mounted
+// once, so without this reset, the branch/path/base refs would carry
+// the previous session's input across dialog opens — leading to
+// confusion (user thinks they cleared the form, but it reopens with
+// last week's "feat/foo" branch pre-filled and the path field shows
+// a stale absolute path that may no longer be valid).
+//
+// We watch for the transition false → true on modelValue. We do NOT
+// reset on every change (that would clear the form mid-edit if the
+// parent toggled modelValue for any other reason).
+function resetForm(): void {
+  createMode.value = "create";
+  branch.value = "";
+  path.value = "";
+  base.value = "main";
+  userEditedPath.value = false;
+}
+watch(
+  () => props.modelValue,
+  (open, prev) => {
+    if (open && !prev) resetForm();
+  },
+);
+
 const projectRoot = computed(
   () => spcodeStatus.status.value.directory ?? "",
 );
@@ -149,7 +176,11 @@ function onSubmit(): void {
           </v-chip>
         </div>
 
-        <!-- Branch (disabled in detach mode) -->
+        <!-- Branch (disabled in detach mode). autocomplete="off" + a stable
+             name disables Chrome/Edge's autofill heuristics, which can
+             otherwise prefill the field with a branch name from a
+             previous session even after our resetForm() above. Vuetify
+             forwards the `autocomplete` prop to the inner <input>. -->
         <v-text-field
           v-model="branch"
           :label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.create.branch')"
@@ -159,24 +190,32 @@ function onSubmit(): void {
           density="comfortable"
           variant="outlined"
           class="mt-3"
+          autocomplete="off"
+          name="wtc-branch"
         />
 
         <!-- Path (absolute). Use @update:model-value instead of
-                     v-model so we can distinguish user typing from programmatic
-                     writes done by the branch→path watcher. See comment on
-                     onPathUserInput. -->
-                <v-text-field
-                  :model-value="path"
-                  :label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.create.path')"
-                  :hint="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.create.pathHint')"
-                  :error-messages="errors.path ? [errors.path] : []"
-                  density="comfortable"
-                  variant="outlined"
-                  class="mt-2"
-                  @update:model-value="onPathUserInput"
-                />
+             v-model so we can distinguish user typing from programmatic
+             writes done by the branch→path watcher. See comment on
+             onPathUserInput. autocomplete="off" prevents the browser
+             from saving / restoring absolute filesystem paths from a
+             previous session, which would be a security/UX problem
+             (paths can reveal project structure). -->
+        <v-text-field
+          :model-value="path"
+          :label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.create.path')"
+          :hint="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.create.pathHint')"
+          :error-messages="errors.path ? [errors.path] : []"
+          density="comfortable"
+          variant="outlined"
+          class="mt-2"
+          autocomplete="off"
+          name="wtc-path"
+          @update:model-value="onPathUserInput"
+        />
 
-        <!-- Base (only in create mode) -->
+        <!-- Base (only in create mode). Same autofill rationale as the
+             branch field above. -->
         <v-text-field
           v-if="createMode === 'create'"
           v-model="base"
@@ -185,6 +224,8 @@ function onSubmit(): void {
           density="comfortable"
           variant="outlined"
           class="mt-2"
+          autocomplete="off"
+          name="wtc-base"
         />
       </v-card-text>
       <v-card-actions>
