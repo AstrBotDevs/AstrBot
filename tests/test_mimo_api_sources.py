@@ -196,7 +196,7 @@ async def test_mimo_tts_get_audio_handles_empty_choices():
 
 
 @pytest.mark.asyncio
-async def test_mimo_stt_payload_includes_audio_and_prompt(monkeypatch):
+async def test_mimo_stt_payload_includes_audio_only(monkeypatch):
     provider = _make_stt_provider(
         {
             "mimo-stt-system-prompt": "system prompt",
@@ -233,13 +233,19 @@ async def test_mimo_stt_payload_includes_audio_and_prompt(monkeypatch):
     result = await provider.get_text("/tmp/test.wav")
 
     assert result == "transcribed text"
-    assert captured["json"]["messages"][0]["content"] == "system prompt"
-    assert captured["json"]["messages"][1]["content"][0]["type"] == "input_audio"
-    assert (
-        captured["json"]["messages"][1]["content"][0]["input_audio"]["data"]
-        == MIMO_STT_TEST_AUDIO_DATA_URL
-    )
-    assert captured["json"]["messages"][1]["content"][1]["text"] == "user prompt"
+    assert captured["json"]["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_audio",
+                    "input_audio": {
+                        "data": MIMO_STT_TEST_AUDIO_DATA_URL,
+                    },
+                },
+            ],
+        },
+    ]
 
 
 @pytest.mark.asyncio
