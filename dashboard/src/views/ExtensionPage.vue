@@ -60,14 +60,18 @@ const {
   dangerConfirmDialog,
   selectedDangerPlugin,
   selectedMarketInstallPlugin,
-  installCompat,
-  versionCompatibilityDialog,
+  installSupport,
+  versionSupportDialog,
   showUninstallDialog,
   uninstallTarget,
   showSourceDialog,
   showSourceManagerDialog,
   sourceName,
   sourceUrl,
+  sourceResolving,
+  sourceResolveVisible,
+  sourceMarketMeta,
+  sourceResolveCurrent,
   customSources,
   selectedSource,
   showRemoveSourceDialog,
@@ -137,14 +141,14 @@ const {
   addCustomSource,
   openSourceManagerDialog,
   selectPluginSource,
-  sourceSelectItems,
   editCustomSource,
   removeCustomSource,
   confirmRemoveSource,
+  resolveCustomSource,
   saveCustomSource,
   trimExtensionName,
   checkAlreadyInstalled,
-  showVersionCompatibilityWarning,
+  showVersionSupportWarning,
   continueInstallIgnoringVersionWarning,
   cancelInstallOnVersionWarning,
   newExtension,
@@ -160,7 +164,7 @@ const {
   selectedUpdateDownloadUrl,
   selectedUpdateSourceUrl,
   updateUsesGithubSource,
-  checkInstallCompatibility,
+  checkInstallVersionSupport,
   refreshPluginMarket,
   handleLocaleChange,
   searchDebounceTimer,
@@ -181,16 +185,30 @@ const selectedInstalledPlugin = computed(() => {
   return data.find((plugin) => plugin.name === selectedPluginId.value) || null;
 });
 
+const normalizeRepoUrl = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/\/+$/, "")
+    .toLowerCase()
+    .replace(/\.git$/, "");
+
 const selectedMarketPlugin = computed(() => {
   const market = Array.isArray(pluginMarketData.value)
     ? pluginMarketData.value
     : [];
   const installedPlugin = selectedInstalledPlugin.value;
-  const repo = installedPlugin?.repo?.toLowerCase();
+  const marketNameMatch =
+    market.find((item) => item.name === selectedPluginId.value) || null;
+
+  if (selectedDetailTab.value === "market" || !installedPlugin) {
+    return marketNameMatch;
+  }
+
+  const repo = normalizeRepoUrl(installedPlugin.repo);
+  if (!repo) return null;
+
   return (
-    market.find((item) => item.name === selectedPluginId.value) ||
-    market.find((item) => repo && item.repo?.toLowerCase() === repo) ||
-    null
+    market.find((item) => normalizeRepoUrl(item?.repo) === repo) || null
   );
 });
 
@@ -608,25 +626,25 @@ const updateDialogPluginLogo = computed(() => {
   </v-dialog>
 
   <!-- 版本不兼容警告对话框 -->
-  <v-dialog v-model="versionCompatibilityDialog.show" width="520" persistent>
+  <v-dialog v-model="versionSupportDialog.show" width="520" persistent>
     <v-card>
       <v-card-title class="text-h5 d-flex align-center">
         <v-icon color="warning" class="mr-2">mdi-alert</v-icon>
-        {{ tm("dialogs.versionCompatibility.title") }}
+        {{ tm("dialogs.versionSupport.title") }}
       </v-card-title>
       <v-card-text>
-        <div class="mb-2">{{ tm("dialogs.versionCompatibility.message") }}</div>
+        <div class="mb-2">{{ tm("dialogs.versionSupport.message") }}</div>
         <div class="text-medium-emphasis">
-          {{ versionCompatibilityDialog.message }}
+          {{ versionSupportDialog.message }}
         </div>
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
         <v-btn color="grey" @click="cancelInstallOnVersionWarning">
-          {{ tm("dialogs.versionCompatibility.cancel") }}
+          {{ tm("dialogs.versionSupport.cancel") }}
         </v-btn>
         <v-btn color="warning" @click="continueInstallIgnoringVersionWarning">
-          {{ tm("dialogs.versionCompatibility.confirm") }}
+          {{ tm("dialogs.versionSupport.confirm") }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -707,15 +725,15 @@ const updateDialogPluginLogo = computed(() => {
             <v-alert
               v-if="
                 selectedInstallPlugin.astrbot_version &&
-                installCompat.checked &&
-                !installCompat.compatible
+                installSupport.checked &&
+                !installSupport.supported
               "
               type="warning"
               variant="tonal"
               density="comfortable"
               class="market-install-alert mt-2 mb-3"
             >
-              {{ installCompat.message }}
+              {{ installSupport.message }}
             </v-alert>
           </div>
 
@@ -843,15 +861,15 @@ const updateDialogPluginLogo = computed(() => {
                   <v-alert
                     v-if="
                       selectedInstallPlugin.astrbot_version &&
-                      installCompat.checked &&
-                      !installCompat.compatible
+                      installSupport.checked &&
+                      !installSupport.supported
                     "
                     type="warning"
                     variant="tonal"
                     density="comfortable"
                     class="market-install-alert mt-2 mb-3"
                   >
-                    {{ installCompat.message }}
+                    {{ installSupport.message }}
                   </v-alert>
                 </div>
 
@@ -900,7 +918,7 @@ const updateDialogPluginLogo = computed(() => {
           variant="text"
           :loading="loading_"
           :disabled="loading_"
-          @click="newExtension"
+          @click="newExtension()"
           >{{ tm("buttons.install") }}</v-btn
         >
       </div>
@@ -914,19 +932,6 @@ const updateDialogPluginLogo = computed(() => {
         tm("market.sourceManagement")
       }}</v-card-title>
       <v-card-text>
-        <v-select
-          :model-value="selectedSource || '__default__'"
-          @update:model-value="
-            selectPluginSource($event === '__default__' ? null : $event)
-          "
-          :items="sourceSelectItems"
-          :label="tm('market.currentSource')"
-          variant="outlined"
-          prepend-inner-icon="mdi-source-branch"
-          hide-details
-          class="mb-4"
-        ></v-select>
-
         <div class="d-flex align-center justify-space-between mb-2">
           <div class="text-subtitle-2">{{ tm("market.availableSources") }}</div>
           <v-btn
@@ -1018,16 +1023,6 @@ const updateDialogPluginLogo = computed(() => {
       <v-card-text>
         <div class="pa-2">
           <v-text-field
-            v-model="sourceName"
-            :label="tm('market.sourceName')"
-            variant="outlined"
-            prepend-inner-icon="mdi-rename-box"
-            hide-details
-            class="mb-4"
-            placeholder="我的插件源"
-          ></v-text-field>
-
-          <v-text-field
             v-model="sourceUrl"
             :label="tm('market.sourceUrl')"
             variant="outlined"
@@ -1039,6 +1034,38 @@ const updateDialogPluginLogo = computed(() => {
           <div class="text-caption text-medium-emphasis mt-2">
             {{ tm("messages.enterJsonUrl") }}
           </div>
+
+          <v-alert
+            v-if="sourceResolveVisible && sourceResolveCurrent"
+            type="success"
+            variant="tonal"
+            density="compact"
+            class="mt-4"
+          >
+            <div class="text-body-2">{{ tm("market.sourceResolved") }}</div>
+            <div
+              v-if="sourceMarketMeta?.name || sourceMarketMeta?.version"
+              class="text-caption mt-1"
+            >
+              <span v-if="sourceMarketMeta?.name">{{
+                sourceMarketMeta.name
+              }}</span>
+              <span v-if="sourceMarketMeta?.version">
+                v{{ sourceMarketMeta.version }}
+              </span>
+            </div>
+          </v-alert>
+
+          <v-text-field
+            v-if="editingSource || sourceResolveCurrent"
+            v-model="sourceName"
+            :label="tm('market.sourceName')"
+            variant="outlined"
+            prepend-inner-icon="mdi-rename-box"
+            hide-details
+            class="mt-4"
+            placeholder="我的插件源"
+          ></v-text-field>
         </div>
       </v-card-text>
       <v-card-actions>
@@ -1046,9 +1073,20 @@ const updateDialogPluginLogo = computed(() => {
         <v-btn color="grey" variant="text" @click="showSourceDialog = false">{{
           tm("buttons.cancel")
         }}</v-btn>
-        <v-btn color="primary" variant="text" @click="saveCustomSource">{{
-          tm("buttons.save")
-        }}</v-btn>
+        <v-btn
+          color="primary"
+          variant="text"
+          :loading="sourceResolving"
+          :disabled="
+            sourceResolving || (!sourceResolveCurrent && !sourceUrl.trim())
+          "
+          @click="
+            sourceResolveCurrent ? saveCustomSource() : resolveCustomSource()
+          "
+          >{{
+            sourceResolveCurrent ? tm("buttons.save") : tm("buttons.next")
+          }}</v-btn
+        >
       </v-card-actions>
     </v-card>
   </v-dialog>

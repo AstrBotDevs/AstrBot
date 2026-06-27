@@ -333,7 +333,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import { providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
 import ItemCard from '@/components/shared/ItemCard.vue'
@@ -546,10 +546,10 @@ async function newProvider() {
   const wasUpdating = updatingMode.value
   try {
     if (wasUpdating) {
-      const res = await axios.post('/api/config/provider/update', {
-        id: newProviderOriginalId.value || newSelectedProviderName.value,
-        config: newSelectedProviderConfig.value
-      })
+      const res = await providerApi.update(
+        newProviderOriginalId.value || newSelectedProviderName.value,
+        newSelectedProviderConfig.value
+      )
       if (res.data.status === 'error') {
         showMessage(res.data.message || '更新失败!', 'error')
         return
@@ -559,7 +559,7 @@ async function newProvider() {
         updatingMode.value = false
       }
     } else {
-      const res = await axios.post('/api/config/provider/new', newSelectedProviderConfig.value)
+      const res = await providerApi.create(newSelectedProviderConfig.value)
       if (res.data.status === 'error') {
         showMessage(res.data.message || '添加失败!', 'error')
         return
@@ -593,7 +593,7 @@ async function copyProvider(providerToCopy) {
 
   loading.value = true
   try {
-    const res = await axios.post('/api/config/provider/new', newProviderConfig)
+    const res = await providerApi.create(newProviderConfig)
     showMessage(res.data.message || `成功复制并创建了 ${newProviderConfig.id}`)
     await loadConfig()
   } catch (err) {
@@ -607,10 +607,7 @@ async function toggleProviderEnable(provider, value) {
   provider.enable = value
 
   try {
-    const res = await axios.post('/api/config/provider/update', {
-      id: provider.id,
-      config: provider
-    })
+    const res = await providerApi.setEnabled(provider.id, { enabled: value })
 
     if (res.data.status === 'error') {
       throw new Error(res.data.message)
@@ -660,7 +657,7 @@ async function testSingleProvider(provider) {
     }
 
     const startTime = performance.now()
-    const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`)
+    const res = await providerApi.test(provider.id)
     if (!res.data || res.data.status !== 'ok') {
       throw new Error(res.data?.message || `Failed to check status for ${provider.id}`)
     }

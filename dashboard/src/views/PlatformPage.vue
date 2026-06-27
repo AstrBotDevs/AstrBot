@@ -228,7 +228,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { botApi, fileApi, systemConfigApi } from '@/api/v1';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
@@ -350,13 +350,13 @@ export default {
       const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[platform_id];
       if (template && template.logo_token) {
           // 通过文件服务访问插件提供的 logo
-        return `/api/file/${template.logo_token}`;
+        return fileApi.tokenUrl(template.logo_token);
       }
       return getPlatformIcon(platform_id);
     },
 
     getConfig() {
-      axios.get('/api/config/get').then((res) => {
+      systemConfigApi.runtime().then((res) => {
         this.config_data = res.data.data.config;
         this.fetched = true
         this.metadata = res.data.data.metadata;
@@ -372,7 +372,7 @@ export default {
     },
 
     async getPlatformStats() {
-      await axios.get('/api/platform/stats').then((res) => {
+      await botApi.stats().then((res) => {
         if (res.data.status === 'ok') {
           // 将数组转换为以 id 为 key 的对象，方便查找
           const stats = {};
@@ -549,7 +549,7 @@ export default {
         return;
       }
 
-      axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
+      botApi.delete(platform.id).then((res) => {
         this.getConfig();
         this.showSuccess(res.data.message || this.messages.deleteSuccess);
       }).catch((err) => {
@@ -560,10 +560,7 @@ export default {
     platformStatusChange(platform) {
       platform.enable = !platform.enable; // 切换状态
 
-      axios.post('/api/config/platform/update', {
-        id: platform.id,
-        config: platform
-      }).then((res) => {
+      botApi.setEnabled(platform.id, { enabled: platform.enable }).then((res) => {
         this.getConfig();
         this.showSuccess(res.data.message || this.messages.statusUpdateSuccess);
       }).catch((err) => {
@@ -598,9 +595,9 @@ export default {
         callbackBase = "http(s)://<your-domain-or-ip>";
       }
       if (callbackBase) {
-        return `${callbackBase.replace(/\/$/, '')}/api/platform/webhook/${webhookUuid}`;
+        return `${callbackBase.replace(/\/$/, '')}/api/v1/webhooks/platforms/${webhookUuid}`;
       }
-      return `/api/platform/webhook/${webhookUuid}`;
+      return `/api/v1/webhooks/platforms/${webhookUuid}`;
     },
 
     openWebhookDialog(webhookUuid) {

@@ -4,7 +4,7 @@
 
 ### Encountering 404 Error When Opening the Dashboard
 
-Download `dist.zip` from the [release](https://github.com/AstrBotDevs/AstrBot/releases) page, extract it, and move it to `AstrBot/data`. If it still doesn't work, try restarting your computer (based on community feedback).
+Download `AstrBot-vxxxxx-dashboard.zip` from the [release](https://github.com/AstrBotDevs/AstrBot/releases) page, extract it, and move it to `AstrBot/data`. If it still doesn't work, try restarting your computer (based on community feedback).
 
 ### First Login Account and Random Password
 
@@ -27,7 +27,9 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### Forgot Dashboard Password
 
-If you forgot your AstrBot dashboard password, find the `"dashboard"` field in `AstrBot/data/cmd_config.json`, for example:
+If you forgot your AstrBot dashboard password, you can use the CLI tool `astrbot password` to change the password.
+
+Another approach you can take is to find the `"dashboard"` field in `AstrBot/data/cmd_config.json`, for example:
 
 ```json
   "dashboard": {
@@ -79,6 +81,7 @@ Solution:
 1. Stop AstrBot.
 2. Delete the `dist` folder under AstrBot's `data` directory: `AstrBot/data/dist`.
 3. Restart AstrBot.
+4. Access the dashboard in your browser. Press `Ctrl+Shift+R` or `Ctrl+F5` (or `Cmd+Shift+R` on macOS) to force refresh the page.
 
 After restart, AstrBot will reload or download WebUI files that match the current version.
 
@@ -99,7 +102,7 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 ### No Permission to Execute Admin Commands
 
-1. `/reset, /persona, /dashboard_update, /op, /deop, /wl, /dewl` are the default admin commands. You can use the `/sid` command to get a user's ID, then add it to the admin ID list in Settings -> Other Settings.
+1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` are the default admin commands. You can use the `/sid` command to get a user's ID, then add it to the admin ID list in Settings -> Other Settings.
 
 ### Chinese Characters Garbled When Locally Rendering Markdown Images (t2i)
 

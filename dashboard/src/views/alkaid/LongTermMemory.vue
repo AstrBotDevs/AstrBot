@@ -253,7 +253,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { pluginExtensionApi } from '@/api/v1';
 // import * as d3 from "d3"; // npm install d3
 import { useModuleI18n } from '@/i18n/composables';
 import { normalizeTextInput } from '@/utils/inputValue';
@@ -368,7 +368,7 @@ export default {
         params.user_id = normalizedUserId;
       }
 
-      axios.get('/api/plug/alkaid/ltm/graph/search', { params })
+      pluginExtensionApi.get('alkaid/ltm/graph/search', { params })
         .then(response => {
           if (response.data.status === 'ok') {
             const data = response.data.data;
@@ -415,7 +415,7 @@ export default {
         need_summarize: this.needSummarize
       };
 
-      axios.post('/api/plug/alkaid/ltm/graph/add', payload)
+      pluginExtensionApi.post('alkaid/ltm/graph/add', payload)
         .then(response => {
           // 成功添加后刷新图表
           this.refreshGraph();
@@ -440,7 +440,7 @@ export default {
       this.isLoading = true;
       const params = userId ? { user_id: userId } : {};
 
-      axios.get('/api/plug/alkaid/ltm/graph', { params })
+      pluginExtensionApi.get('alkaid/ltm/graph', { params })
         .then(response => {
           const data = response.data.data || {};
           // 确保数据是数组类型，并且先检查data是否存在
@@ -499,7 +499,7 @@ export default {
     },
 
     ltmGetUserIds() {
-      axios.get('/api/plug/alkaid/ltm/user_ids')
+      pluginExtensionApi.get('alkaid/ltm/user_ids')
         .then(response => {
           // 确保返回的数据是数组类型
           const data = response.data.data;
@@ -546,7 +546,7 @@ export default {
       this.selectedEdgeFactData = null;
       this.parsedMetadata = null;
       
-      axios.get('/api/plug/alkaid/ltm/graph/fact', { 
+      pluginExtensionApi.get('alkaid/ltm/graph/fact', { 
         params: { fact_id: factId } 
       })
         .then(response => {
