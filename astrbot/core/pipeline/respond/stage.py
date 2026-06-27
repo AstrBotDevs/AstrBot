@@ -179,6 +179,29 @@ class RespondStage(Stage):
         if result.result_content_type == ResultContentType.STREAMING_FINISH:
             event.set_extra("_streaming_finished", True)
             return
+        sent_plain_texts = event.get_extra(
+            "_send_message_to_user_current_session_plain_texts",
+            [],
+        )
+        result_plain_text = result.get_plain_text().strip()
+        if (
+            result_plain_text
+            and isinstance(sent_plain_texts, list)
+            and result_plain_text in sent_plain_texts
+            and all(
+                comp.type
+                in {
+                    ComponentType.Plain,
+                    ComponentType.Reply,
+                    ComponentType.At,
+                }
+                for comp in result.chain
+            )
+        ):
+            logger.info(
+                "send_message_to_user already delivered the same text in this session, skip respond stage to avoid duplicate reply.",
+            )
+            return
 
         logger.info(
             f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",

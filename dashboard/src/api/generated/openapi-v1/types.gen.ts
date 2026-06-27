@@ -464,6 +464,11 @@ export type PluginGithubInstallRequest = {
     ignore_version_check?: boolean;
 };
 
+export type PluginSourceBindRequest = {
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
+};
+
 export type PluginSourceRequest = {
     id?: string;
     name?: string;
@@ -1878,6 +1883,17 @@ export type ReloadPluginData = {
 export type ReloadPluginResponse = (SuccessEnvelope);
 
 export type ReloadPluginError = unknown;
+
+export type BindPluginSourceData = {
+    body: PluginSourceBindRequest;
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type BindPluginSourceResponse = (SuccessEnvelope);
+
+export type BindPluginSourceError = unknown;
 
 export type SetPluginEnabledData = {
     body: EnabledPatch;

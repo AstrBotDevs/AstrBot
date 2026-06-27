@@ -10,6 +10,7 @@ import binascii
 import io
 import mimetypes
 import os
+import shutil
 import subprocess
 import uuid
 from collections.abc import AsyncIterator
@@ -1277,8 +1278,9 @@ async def ensure_jpeg(image_path: str, output_path: str | None = None) -> str:
 
     Returns:
         The original path when the source is already a JPEG file with a jpg/jpeg
-        suffix, cannot be found, has alpha transparency, or is animated; otherwise
-        the converted JPEG path.
+        suffix, cannot be found, has alpha transparency, or is animated. JPEG
+        files with another suffix are copied without re-encoding; other still
+        images are converted to JPEG.
 
     Raises:
         Exception: Raised by Pillow when the source file cannot be opened or saved as
@@ -1319,6 +1321,21 @@ async def ensure_jpeg(image_path: str, output_path: str | None = None) -> str:
         output_path = str(temp_dir / f"media_image_{uuid.uuid4().hex}.jpg")
     jpeg_output_path = output_path
 
+    try:
+        if image_format == "JPEG":
+            await asyncio.to_thread(shutil.copyfile, source_path, jpeg_output_path)
+            return jpeg_output_path
+    except Exception:
+        if output_path and os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except OSError as e:
+                logger.warning(
+                    "Failed to remove failed image output file: %s",
+                    e,
+                )
+        raise
+
     def convert_image_to_jpeg() -> str:
         converted_img: PILImage.Image | None = None
 
@@ -1329,7 +1346,12 @@ async def ensure_jpeg(image_path: str, output_path: str | None = None) -> str:
                     converted_img = opened_img.convert("RGB")
                     working_img = converted_img
 
-                working_img.save(jpeg_output_path, "JPEG")
+                working_img.save(
+                    jpeg_output_path,
+                    "JPEG",
+                    quality=IMAGE_COMPRESS_DEFAULT_QUALITY,
+                    subsampling=0,
+                )
                 return jpeg_output_path
             finally:
                 if converted_img is not None:

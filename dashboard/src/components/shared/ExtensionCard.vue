@@ -39,19 +39,32 @@ const emit = defineEmits([
   "view-changelog",
   "toggle-pin",
   "open-webui",
+  "change-source",
 ]);
-
-const hasPages = computed(() => {
-  return Array.isArray(props.extension?.pages) && props.extension.pages.length > 0;
-});
-
-const showUninstallDialog = ref(false);
 
 const attrs = useAttrs();
 
 // 国际化
 const { tm } = useModuleI18n("features/extension");
 const { pluginName, pluginDesc } = usePluginI18n();
+
+const hasPages = computed(() => {
+  return (
+    Array.isArray(props.extension?.pages) && props.extension.pages.length > 0
+  );
+});
+
+const updateDisabledReason = computed(() => {
+  return (
+    props.extension?.update_disabled_reason || tm("messages.updateDisabled")
+  );
+});
+
+const canUpdateExtension = computed(() => {
+  return props.marketMode || props.extension?.updates_enabled !== false;
+});
+
+const showUninstallDialog = ref(false);
 
 const supportPlatforms = computed(() => {
   const platforms = props.extension?.support_platforms;
@@ -97,11 +110,16 @@ const configure = () => {
 };
 
 const updateExtension = () => {
+  if (!canUpdateExtension.value) return;
   emit("update", props.extension);
 };
 
 const reloadExtension = () => {
   emit("reload", props.extension);
+};
+
+const changePluginSource = () => {
+  emit("change-source", props.extension);
 };
 
 const uninstallExtension = async () => {
@@ -138,7 +156,6 @@ const togglePin = () => {
 const openWebui = () => {
   emit("open-webui", props.extension);
 };
-
 </script>
 
 <template>
@@ -157,8 +174,8 @@ const openWebui = () => {
             ? '#f8f0dd'
             : '#ffffff'
           : marketMode
-            ? '#3a3425'
-            : '#282833',
+          ? '#3a3425'
+          : '#282833',
       color:
         useCustomizerStore().uiTheme === 'PurpleTheme'
           ? '#000000dd'
@@ -185,16 +202,17 @@ const openWebui = () => {
               <v-tooltip
                 location="top"
                 :text="
-                  localizedName?.length &&
-                  localizedName !== extension.name
+                  localizedName?.length && localizedName !== extension.name
                     ? `${localizedName} (${extension.name})`
                     : extension.name
                 "
               >
                 <template v-slot:activator="{ props: titleTooltipProps }">
-                  <span v-bind="titleTooltipProps" class="extension-title__text">{{
-                    localizedName
-                  }}</span>
+                  <span
+                    v-bind="titleTooltipProps"
+                    class="extension-title__text"
+                    >{{ localizedName }}</span
+                  >
                 </template>
               </v-tooltip>
               <span v-if="extension.version" class="extension-version">
@@ -250,7 +268,9 @@ const openWebui = () => {
                   </div>
                 </template>
                 <span>{{
-                  extension.activated ? tm("buttons.disable") : tm("buttons.enable")
+                  extension.activated
+                    ? tm("buttons.disable")
+                    : tm("buttons.enable")
                 }}</span>
               </v-tooltip>
             </template>
@@ -331,7 +351,11 @@ const openWebui = () => {
           </template>
         </v-tooltip>
 
-        <v-tooltip v-if="hasPages" location="top" :text="tm('buttons.openWebui')">
+        <v-tooltip
+          v-if="hasPages"
+          location="top"
+          :text="tm('buttons.openWebui')"
+        >
           <template v-slot:activator="{ props: actionProps }">
             <v-btn
               v-bind="actionProps"
@@ -383,20 +407,57 @@ const openWebui = () => {
             ></v-btn>
           </template>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-information" @click.stop="viewHandlers">
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-information"
+            @click.stop="viewHandlers"
+          >
             <v-list-item-title>{{ tm("buttons.viewInfo") }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-update" @click.stop="updateExtension">
+          <v-tooltip
+            location="left"
+            :disabled="canUpdateExtension"
+            :text="updateDisabledReason"
+          >
+            <template v-slot:activator="{ props: tooltipProps }">
+              <div v-bind="tooltipProps">
+                <v-list-item
+                  class="styled-menu-item"
+                  prepend-icon="mdi-update"
+                  :disabled="!canUpdateExtension"
+                  @click.stop="updateExtension"
+                >
+                  <v-list-item-title>{{
+                    extension.has_update
+                      ? tm("card.actions.updateTo") +
+                        " " +
+                        extension.online_version
+                      : tm("card.actions.reinstall")
+                  }}</v-list-item-title>
+                </v-list-item>
+              </div>
+            </template>
+          </v-tooltip>
+
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-source-branch"
+            @click.stop="changePluginSource"
+          >
             <v-list-item-title>{{
-              extension.has_update
-                ? tm("card.actions.updateTo") + " " + extension.online_version
-                : tm("card.actions.reinstall")
+              tm("card.actions.changeSource")
             }}</v-list-item-title>
           </v-list-item>
 
-          <v-list-item class="styled-menu-item" prepend-icon="mdi-delete" @click.stop="uninstallExtension">
-            <v-list-item-title class="text-error">{{ tm("card.actions.uninstallPlugin") }}</v-list-item-title>
+          <v-list-item
+            class="styled-menu-item"
+            prepend-icon="mdi-delete"
+            @click.stop="uninstallExtension"
+          >
+            <v-list-item-title class="text-error">{{
+              tm("card.actions.uninstallPlugin")
+            }}</v-list-item-title>
           </v-list-item>
         </StyledMenu>
       </template>

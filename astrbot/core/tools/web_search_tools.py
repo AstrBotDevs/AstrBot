@@ -73,6 +73,8 @@ class _KeyRotator:
             )
 
         async with self.lock:
+            if self.index >= len(keys):
+                self.index = 0
             key = keys[self.index]
             self.index = (self.index + 1) % len(keys)
             return key

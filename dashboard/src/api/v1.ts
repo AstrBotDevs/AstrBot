@@ -1294,6 +1294,14 @@ export const pluginApi = {
       openApiV1.installPluginFromUrl({ body: body as any }),
     );
   },
+  bindSource(pluginId: string, body: OpenConfig) {
+    return typed<OpenConfig>(
+      openApiV1.bindPluginSource({
+        path: { plugin_id: pluginId },
+        body: body as any,
+      }),
+    );
+  },
   page(pluginId: string, pageName: string) {
     return typed<any>(
       openApiV1.getPluginPageById({
