@@ -46,6 +46,8 @@ import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
 import { useSpcodeGitShow } from "@/composables/useSpcodeGitShow";
 import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
 import { classifyReason } from "@/composables/parseSpcodeGitWorkflow";
+import { classifyWorktreeReason } from "@/composables/parseSpcodeWorktreeManagement";
+import { pluginExtensionApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import GitDiffBodyContent from "@/components/chat/message_list_comps/GitDiffBodyContent.vue";
 import FileBrowserView from "@/components/chat/message_list_comps/FileBrowserView.vue";
@@ -877,6 +879,204 @@ function onWorktreeChange(path: string | null): void {
   selectedWorktree.value = path;
   selectedScope.value = DEFAULT_SCOPE;
   pendingScope.value = null;
+}
+
+// ── Worktree management handlers (spec 2026-06-27 §3) ────────
+
+function openCreateDialog(): void {
+  // 互斥：开 ADD 关其他
+  removeDialogOpen.value = false;
+  lockDialogOpen.value = false;
+  confirmUnlockOpen.value = false;
+  lastCreateError.value = null;
+  createDialogOpen.value = true;
+}
+
+async function onCreateSubmit(params: WorktreeAddParams): Promise<void> {
+  isCreating.value = true;
+  lastCreateError.value = null;
+  const result = await worktreesComposable.add(params);
+  isCreating.value = false;
+  if (isAborted(result)) {
+    createDialogOpen.value = false;
+    return;
+  }
+  if (result.ok) {
+    // spec §7.4: 自动切到新 worktree + 切到 Files 视图
+    const newWt = result.snapshot.worktrees.find(
+      (w) => w.path === result.snapshot.worktrees[0]?.path,
+    );
+    if (newWt) {
+      selectedWorktree.value = newWt.isMain ? null : newWt.path;
+      viewMode.value = "files";
+      fileBrowserCurrentPath.value = newWt.path;
+      fileBrowserPreviewPath.value = null;
+    }
+    createDialogOpen.value = false;
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.create.success", {
+        branch: params.branch ?? newWt?.branch ?? "",
+      }),
+      "success",
+    );
+  } else {
+    // 用 classifyWorktreeReason 走统一错误处理
+    const meta = classifyWorktreeReason(result.reason, "add");
+    const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
+    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
+    lastCreateError.value = { reason: result.reason, stderr: result.stderr ?? "" };
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+function onLockClick(wt: SpcodeGitWorktree): void {
+  contextMenu.value.open = false;
+  if (wt.locked) {
+    // 直接进入 unlock 流程
+    confirmUnlockPath.value = wt.path;
+    removeDialogOpen.value = false;
+    createDialogOpen.value = false;
+    lockDialogOpen.value = false;
+    confirmUnlockOpen.value = true;
+    return;
+  }
+  // Lock 流程：弹窗让用户填 reason
+  lockDialogTarget.value = { path: wt.path, branch: wt.branch };
+  removeDialogOpen.value = false;
+  createDialogOpen.value = false;
+  confirmUnlockOpen.value = false;
+  lockDialogOpen.value = true;
+}
+
+async function onLockSubmit(reason: string | null): Promise<void> {
+  const target = lockDialogTarget.value;
+  if (!target) return;
+  isLocking.value = true;
+  const params: WorktreeLockParams = {
+    path: target.path,
+    umo: spcodeStatus.status.value.umo,
+  };
+  if (reason) params.reason = reason;
+  const result = await worktreesComposable.lock(params);
+  isLocking.value = false;
+  if (isAborted(result)) {
+    lockDialogOpen.value = false;
+    return;
+  }
+  if (result.ok) {
+    lockDialogOpen.value = false;
+    lockDialogTarget.value = null;
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.lock.success", {
+        branch: target.branch ?? "",
+      }),
+      "success",
+    );
+  } else {
+    const meta = classifyWorktreeReason(result.reason, "lock");
+    const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
+    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+function onRemoveClick(wt: SpcodeGitWorktree): void {
+  contextMenu.value.open = false;
+  if (wt.isMain) return; // 双保险
+  if (wt.locked) return; // 双保险
+  removeDialogTarget.value = { path: wt.path, branch: wt.branch };
+  dirtyCount.value = null;
+  // Lazy load dirty count from /spcode/git-status
+  void loadDirtyFor(wt);
+  lockDialogOpen.value = false;
+  createDialogOpen.value = false;
+  confirmUnlockOpen.value = false;
+  removeDialogOpen.value = true;
+}
+
+async function loadDirtyFor(wt: SpcodeGitWorktree): Promise<void> {
+  const umo = spcodeStatus.status.value.umo;
+  if (!umo) return;
+  try {
+    const resp = await pluginExtensionApi.get<{ data: { files_changed?: number } }>(
+      "spcode/git-status",
+      { params: { umo, worktree: wt.path } },
+    );
+    dirtyCount.value = resp.data?.data?.files_changed ?? 0;
+  } catch {
+    dirtyCount.value = null; // 不阻塞 UI
+  }
+}
+
+async function onConfirmRemove(force: boolean): Promise<void> {
+  const target = removeDialogTarget.value;
+  if (!target) return;
+  isRemoving.value = true;
+  const result = await worktreesComposable.remove({
+    path: target.path,
+    force,
+    umo: spcodeStatus.status.value.umo,
+  });
+  isRemoving.value = false;
+  if (isAborted(result)) {
+    removeDialogOpen.value = false;
+    return;
+  }
+  if (result.ok) {
+    // spec §7.5: 若被删的是当前 worktree,回退到主 worktree
+    if (selectedWorktree.value === target.path) {
+      selectedWorktree.value = null;
+      fileBrowserCurrentPath.value = mainWorktreePath.value ?? projectRoot.value;
+    }
+    removeDialogOpen.value = false;
+    removeDialogTarget.value = null;
+    dirtyCount.value = null;
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.success", {
+        branch: target.branch ?? "",
+      }),
+      "success",
+    );
+  } else {
+    const meta = classifyWorktreeReason(result.reason, "remove");
+    const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
+    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+async function onConfirmUnlock(): Promise<void> {
+  const path = confirmUnlockPath.value;
+  if (!path) return;
+  isUnlocking.value = true;
+  const result = await worktreesComposable.unlock({
+    path,
+    umo: spcodeStatus.status.value.umo,
+  });
+  isUnlocking.value = false;
+  if (isAborted(result)) {
+    confirmUnlockOpen.value = false;
+    return;
+  }
+  if (result.ok) {
+    confirmUnlockOpen.value = false;
+    confirmUnlockPath.value = null;
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.success"),
+      "success",
+    );
+  } else {
+    const meta = classifyWorktreeReason(result.reason, "unlock");
+    const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
+    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
+    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+  }
+}
+
+function onCancelUnlock(): void {
+  if (isUnlocking.value) return;
+  confirmUnlockOpen.value = false;
+  confirmUnlockPath.value = null;
 }
 
 // Spec 2026-06-20 §3.4: clicking a scope pill updates the ref and
