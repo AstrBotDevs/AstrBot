@@ -458,12 +458,20 @@ class ProviderOpenAIOfficial(Provider):
             tool_calls = msg.get("tool_calls")
             reasoning_content = msg.get("reasoning_content")
 
-            if _is_empty(content) and not tool_calls and not reasoning_content:
-                logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                continue
+            if _is_empty(content) and not tool_calls:
+                if not reasoning_content:
+                    # 三者全空，真正的垃圾消息，丢弃
+                    logger.debug(f"过滤第 {idx} 条空 assistant 消息 (无 content | tool_calls | reasoning_content)")
+                    continue
+                else:
+                    # ⭐ 有 reasoning_content 但没有 content 和 tool_calls
+                    # 不能丢（推理模型需要 reasoning 历史）
+                    # 但 API 要求 content 或 tool_calls 至少有一个
+                    # → 设空字符串占位，满足校验
+                    msg["content"] = ""
 
-            if _is_empty(content) and tool_calls:
-                msg["content"] = None
+            elif _is_empty(content) and tool_calls:
+                msg["content"] = None   # 有 tool_calls，按 OpenAI 规范
 
             cleaned.append(msg)
 
@@ -872,8 +880,11 @@ class ProviderOpenAIOfficial(Provider):
         llm_response.raw_completion = completion
         llm_response.id = completion.id
 
-        if completion.usage:
-            llm_response.usage = self._extract_usage(completion.usage)
+        llm_response.usage = (
+            self._extract_usage(completion.usage)
+            if completion.usage
+            else TokenUsage()
+        )
 
         return llm_response
 
