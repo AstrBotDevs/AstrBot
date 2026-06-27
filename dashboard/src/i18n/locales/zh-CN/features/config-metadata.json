@@ -1262,6 +1262,33 @@
         "description": "自定义请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"
       },
+      "google_vertex_ai": {
+        "hint": "通过 Vertex AI 原生 Gemini API 调用 Google 模型。默认 API Base URL 为 https://aiplatform.googleapis.com/v1，地区默认为 global。在 Vertex AI API Key 与服务账号 JSON 选择其一使用即可。"
+      },
+      "vertex_ai_auth_type": {
+        "description": "密钥格式",
+        "hint": "在 Vertex AI API Key、服务账号 JSON 选择其一使用即可。服务账号 JSON 支持获取模型列表；API Key 仅用于对话生成，且仅支持 global 端点（地区设置将被忽略）。"
+      },
+      "vertex_ai_api_key": {
+        "description": "API Key",
+        "hint": "Vertex AI API Key。密钥格式选择 API Key 时填写；使用服务账号 JSON 时留空。"
+      },
+      "vertex_ai_project_id": {
+        "description": "Vertex AI 项目 ID",
+        "hint": "Google Cloud 项目 ID。留空时 AstrBot 会尝试从服务账号 JSON 中读取。"
+      },
+      "vertex_ai_location": {
+        "description": "Vertex AI 地区",
+        "hint": "模型所在地区，例如 global、us-central1。默认：global。使用 API Key 时此设置将被忽略。"
+      },
+      "vertex_ai_credentials_path": {
+        "description": "服务账号 JSON 路径",
+        "hint": "Google Cloud 服务账号 JSON 文件的绝对路径。如果在下方粘贴 JSON，可留空。"
+      },
+      "vertex_ai_credentials_json": {
+        "description": "服务账号 JSON",
+        "hint": "Google Cloud 服务账号 JSON 可在该网址创建获得 https://console.cloud.google.com/iam-admin/serviceaccounts"
+      },
       "ollama_disable_thinking": {
         "description": "关闭思考模式",
         "hint": "关闭 Ollama 思考模式。"
