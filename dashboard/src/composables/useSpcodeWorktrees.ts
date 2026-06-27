@@ -9,6 +9,7 @@ import {
   parseSpcodeGitWorktrees,
   type SpcodeGitWorktreesSnapshot,
   type SpcodeGitWorktreesRawResponse,
+  type SpcodeGitWorktreeRaw,
 } from '@/composables/parseSpcodeWorktrees'
 import {
   parseSpcodeWorktreeAdd,
@@ -148,6 +149,10 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
   const state = ref<WorktreesFetchState>({ kind: 'idle' })
   const spcodeStatus = useSpcodeProjectStatus()
   let abortController: AbortController | null = null
+  // Single-flight guard for mutation methods (separate from the read
+  // path's `abortController` so a read in progress doesn't cancel a
+  // pending write or vice versa).
+  let mutationAbort: AbortController | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let isMounted = true
 
@@ -239,6 +244,71 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
     }
   }
 
+  // ── Worktree management methods (spec 2026-06-27 §3) ────────
+  //
+  // All 4 share the same shape: build a new AbortController (cancel
+  // any in-flight read), POST to the endpoint, parse the response,
+  // atomically swap `state.value` with the refreshed snapshot. The
+  // parsers are imported from parseSpcodeWorktreeManagement.ts.
+  //
+  // **Single-flight policy**: each call aborts the previous
+  // AbortController. This means rapid double-click → the first call
+  // resolves as `aborted` (handled by the `isMounted` guard), the
+  // second runs to completion. The orchestrator (GitDiffSidebar)
+  // guards UI buttons with `isXxx` flags to make double-clicks
+  // impossible at the UI level too (defense in depth).
+
+  async function add(params: WorktreeAddParams): Promise<WorktreeMgmtResult> {
+    if (!isMounted) return { ok: false, reason: "aborted" };
+    const umo = params.umo ?? spcodeStatus.status.value.umo;
+    if (!umo) return { ok: false, reason: "no_project_loaded" };
+    const ctrl = new AbortController();
+    mutationAbort?.abort();
+    mutationAbort = ctrl;
+    try {
+      const resp = await pluginExtensionApi.post<unknown>(
+        "spcode/git-worktree-add",
+        {
+          path: params.path,
+          branch: params.branch,
+          create: params.create,
+          force: params.force,
+          detach: params.detach,
+          base: params.base,
+        },
+        {
+          signal: ctrl.signal,
+          params: { umo, worktree: params.worktree ?? undefined },
+        },
+      );
+      if (!isMounted || ctrl.signal.aborted) return { ok: false, reason: "aborted" };
+      const parsed = parseSpcodeWorktreeAdd(resp.data);
+      if (parsed.kind !== "ok") return { ok: false, reason: "unknown" };
+      // Atomically replace state with the refreshed list.
+      // The cast is safe: parseSpcodeWorktreeManagement stored the
+      // raw snake_case array verbatim (Chunk 1 leaves re-naming to
+      // parseSpcodeGitWorktrees), so the data still has `head_sha` /
+      // `is_main` at runtime even though the TS type says camelCase.
+      const refreshed = parseSpcodeGitWorktrees({
+        loaded: parsed.snapshot.meta.loaded,
+        directory: parsed.snapshot.meta.directory,
+        umo: parsed.snapshot.meta.umo,
+        worktrees: parsed.snapshot.worktrees as unknown as SpcodeGitWorktreeRaw[],
+        reason: parsed.snapshot.meta.reason,
+        stderr: parsed.snapshot.meta.stderr,
+        elapsed_ms: parsed.snapshot.meta.elapsedMs,
+      });
+      state.value = { kind: "ok", snapshot: refreshed };
+      return { ok: true, snapshot: refreshed };
+    } catch (err) {
+      if (!isMounted) return { ok: false, reason: "aborted" };
+      if ((err as { name?: string })?.name === "CanceledError") {
+        return { ok: false, reason: "aborted" };
+      }
+      return { ok: false, reason: classifyMutationError(err) };
+    }
+  }
+
   function dispose(): void {
     isMounted = false
     stopPolling()
@@ -257,4 +327,14 @@ function classifyError(err: unknown): string {
     }
   }
   return 'unknown'
+}
+
+function classifyMutationError(err: unknown): string {
+  if (typeof err === "object" && err !== null) {
+    const anyErr = err as { code?: string; message?: string };
+    if (anyErr.code === "ERR_NETWORK" || /network/i.test(anyErr.message ?? "")) {
+      return "network";
+    }
+  }
+  return "unknown";
 }
