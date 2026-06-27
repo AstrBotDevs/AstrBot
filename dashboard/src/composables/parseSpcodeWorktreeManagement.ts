@@ -149,3 +149,58 @@ function buildSnapshot(
     worktrees: (d.worktrees ?? []) as SpcodeGitWorktreesSnapshot["worktrees"],
   };
 }
+
+// ── Endpoint-specific parsers ─────────────────────────────
+//
+// All 4 share the same envelope shape; only the endpoint-specific
+// field overrides differ. Each parser is 4-6 lines.
+
+/** Parse the envelope from POST /spcode/git-worktree-add. */
+export function parseSpcodeWorktreeAdd(
+  raw: unknown,
+): ParseResult<SpcodeWorktreeMgmtSnapshot> {
+  const d = unwrapEnvelope(raw) as SpcodeWorktreeMgmtRawData;
+  return {
+    kind: "ok",
+    snapshot: buildSnapshot(d, { branch: d.branch ?? null }),
+  };
+}
+
+/** Parse the envelope from POST /spcode/git-worktree-remove. */
+export function parseSpcodeWorktreeRemove(
+  raw: unknown,
+): ParseResult<SpcodeWorktreeMgmtSnapshot> {
+  const d = unwrapEnvelope(raw) as SpcodeWorktreeMgmtRawData;
+  return {
+    kind: "ok",
+    snapshot: buildSnapshot(d, { removedPath: d.removed_path ?? d.worktree }),
+  };
+}
+
+/** Parse the envelope from POST /spcode/git-worktree-lock. */
+export function parseSpcodeWorktreeLock(
+  raw: unknown,
+): ParseResult<SpcodeWorktreeMgmtSnapshot> {
+  const d = unwrapEnvelope(raw) as SpcodeWorktreeMgmtRawData;
+  return {
+    kind: "ok",
+    snapshot: buildSnapshot(d, {
+      locked: true,
+      lockReason: d.lock_reason ?? null,
+    }),
+  };
+}
+
+/** Parse the envelope from POST /spcode/git-worktree-unlock. */
+export function parseSpcodeWorktreeUnlock(
+  raw: unknown,
+): ParseResult<SpcodeWorktreeMgmtSnapshot> {
+  const d = unwrapEnvelope(raw) as SpcodeWorktreeMgmtRawData;
+  return {
+    kind: "ok",
+    snapshot: buildSnapshot(d, {
+      locked: false,
+      lockReason: null,
+    }),
+  };
+}
