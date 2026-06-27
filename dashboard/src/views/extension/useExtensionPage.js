@@ -751,10 +751,23 @@ export const useExtensionPage = () => {
           }
 
           extension.update_market_plugin = matchedPlugin;
-          extension.online_version = matchedPlugin.version;
+          const localVersion = String(extension.version || "").trim();
+          const onlineVersion = String(matchedPlugin.version || "").trim();
+          const isKnownVersion =
+            /^v?\d+/.test(localVersion) &&
+            /^v?\d+/.test(onlineVersion) &&
+            onlineVersion !== tm("status.unknown");
+          const versionCompare = isKnownVersion
+            ? compareVersions(localVersion, onlineVersion)
+            : 0;
+
+          extension.online_version = onlineVersion;
           extension.has_update =
-            extension.version !== matchedPlugin.version &&
-            matchedPlugin.version !== tm("status.unknown");
+            isKnownVersion &&
+            (versionCompare < 0 ||
+              (versionCompare === 0 &&
+                localVersion.includes("-") &&
+                !onlineVersion.includes("-")));
         });
       }),
     );
