@@ -852,7 +852,10 @@ class PluginManager:
         return bool(
             plugin_module_path
             and module_path
-            and module_path.startswith(plugin_module_path)
+            and (
+                module_path == plugin_module_path
+                or module_path.startswith(f"{plugin_module_path}.")
+            )
             and not module_path.endswith(("astrbot.builtin_stars", "data.plugins"))
         )
 
@@ -906,7 +909,6 @@ class PluginManager:
                     func_tool.active = not plugin_disabled
 
         if not plugin_tool_names and inactivated_llm_tools:
-            await sp.global_put(PLUGIN_TOOL_STATE_MIGRATION_KEY, True)
             return inactivated_llm_tools
 
         updated_tools = [

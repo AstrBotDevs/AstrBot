@@ -596,6 +596,37 @@ async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
         cast(Any, plugin_manager_pm.context).stars.remove(plugin)
 
 
+def test_is_plugin_llm_tool_requires_module_boundary():
+    plugin_module_path = "data.plugins.weather.main"
+    plugin_tool = star_manager_module.FunctionTool(
+        name="weather",
+        description="weather",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path=plugin_module_path,
+    )
+    child_module_tool = star_manager_module.FunctionTool(
+        name="weather_child",
+        description="weather child",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="data.plugins.weather.main.tools.search",
+    )
+    prefixed_module_tool = star_manager_module.FunctionTool(
+        name="weather_prefixed",
+        description="weather prefixed",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="data.plugins.weather.main_extra.tools.search",
+    )
+
+    assert PluginManager._is_plugin_llm_tool(plugin_tool, plugin_module_path) is True
+    assert (
+        PluginManager._is_plugin_llm_tool(child_module_tool, plugin_module_path) is True
+    )
+    assert (
+        PluginManager._is_plugin_llm_tool(prefixed_module_tool, plugin_module_path)
+        is False
+    )
+
+
 @pytest.mark.asyncio
 async def test_turn_plugin_preserves_user_disabled_llm_tools(
     plugin_manager_pm: PluginManager,
@@ -727,6 +758,44 @@ async def test_migrate_legacy_plugin_tool_inactivation_state(
 
 
 @pytest.mark.asyncio
+async def test_migrate_legacy_plugin_tool_inactivation_state_defers_without_loaded_plugin_tools(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = []
+    preferences = {
+        "inactivated_llm_tools": ["legacy_plugin_tool"],
+        star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY: False,
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+
+    try:
+        updated_tools = (
+            await plugin_manager_pm._migrate_legacy_plugin_tool_inactivation_state(
+                preferences["inactivated_llm_tools"],
+                [],
+            )
+        )
+
+        assert updated_tools == ["legacy_plugin_tool"]
+        assert preferences["inactivated_llm_tools"] == ["legacy_plugin_tool"]
+        assert preferences[star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY] is False
+    finally:
+        llm_tools.func_list = original_func_list
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
 async def test_load_applies_manual_inactivation_to_non_plugin_tools(
     plugin_manager_pm: PluginManager,
     monkeypatch,
@@ -772,7 +841,7 @@ async def test_load_applies_manual_inactivation_to_non_plugin_tools(
         assert error is None
         assert manual_tool.active is False
         assert preferences["inactivated_llm_tools"] == [manual_tool.name]
-        assert preferences[star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY] is True
+        assert preferences[star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY] is False
     finally:
         llm_tools.func_list = original_func_list
 
