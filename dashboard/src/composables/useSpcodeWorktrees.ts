@@ -10,6 +10,54 @@ import {
   type SpcodeGitWorktreesSnapshot,
   type SpcodeGitWorktreesRawResponse,
 } from '@/composables/parseSpcodeWorktrees'
+import {
+  parseSpcodeWorktreeAdd,
+  parseSpcodeWorktreeRemove,
+  parseSpcodeWorktreeLock,
+  parseSpcodeWorktreeUnlock,
+} from '@/composables/parseSpcodeWorktreeManagement'
+
+// ── Worktree management (spec 2026-06-27 §1.1) ──────────────
+
+/** Parameters for the 4 mutation methods. All 4 share the same shape
+ *  (path + optional context) so the consumer can pattern-match
+ *  uniformly; the 4 parsers differ only in endpoint-specific
+ *  response field interpretation. */
+export interface WorktreeMgmtParams {
+  /** Absolute path of the worktree to act on. For `add`, the new
+   *  worktree's location; for the rest, the existing target. */
+  path: string;
+  /** Optional nested worktree context (rare; passed via ?worktree=
+   *  query param to the backend). Aligns with §2.5 of the spcode spec. */
+  worktree?: string | null;
+  /** Session ID. Falls back to the composable's tracked umo if null. */
+  umo?: string | null;
+}
+
+/** ADD-specific params (extends WorktreeMgmtParams with create/force/detach/base). */
+export interface WorktreeAddParams extends WorktreeMgmtParams {
+  branch?: string;
+  create?: boolean;
+  force?: boolean;
+  detach?: boolean;
+  base?: string;
+}
+
+/** REMOVE-specific params (extends with force for dirty bypass). */
+export interface WorktreeRemoveParams extends WorktreeMgmtParams {
+  force?: boolean;
+}
+
+/** LOCK-specific params (extends with reason). */
+export interface WorktreeLockParams extends WorktreeMgmtParams {
+  reason?: string;
+}
+
+/** Discriminated union return type for all 4 mutations. Mirrors the
+ *  useSpcodeFileRestore pattern (ok / failure-with-reason+stderr). */
+export type WorktreeMgmtResult =
+  | { ok: true; snapshot: SpcodeGitWorktreesSnapshot }
+  | { ok: false; reason: string; stderr?: string };
 
 export type WorktreesFetchState =
   | { kind: 'idle' }
@@ -35,6 +83,26 @@ export interface UseSpcodeWorktrees {
   startPolling: (intervalMs?: number) => void
   /** Cancel the polling timer set by `startPolling`. Idempotent. */
   stopPolling: () => void
+  /**
+   * Add a new worktree. See `parseSpcodeWorktreeAdd` for the response
+   * shape; on success, the returned snapshot's `worktrees` array is
+   * the authoritative refreshed list and is swapped into `state` atomically.
+   */
+  add: (params: WorktreeAddParams) => Promise<WorktreeMgmtResult>
+  /**
+   * Remove an existing worktree. Frontend must NOT call this for the
+   * main worktree (ui-side disabled); backend will refuse with
+   * `cannot_remove_main` regardless. The `force` flag bypasses the
+   * dirty check only (locked check is structural and is not bypassed).
+   */
+  remove: (params: WorktreeRemoveParams) => Promise<WorktreeMgmtResult>
+  /** Lock a worktree. Optional `reason` is stored alongside the lock
+   *  (git 2.30+); backend allows locking the main worktree but the
+   *  UI hides the entry for it (see spec §11.2). */
+  lock: (params: WorktreeLockParams) => Promise<WorktreeMgmtResult>
+  /** Unlock a worktree. Non-idempotent: second unlock returns
+   *  `not_locked`. UI should disable when `locked=false`. */
+  unlock: (params: WorktreeMgmtParams) => Promise<WorktreeMgmtResult>
   dispose: () => void
 }
 
