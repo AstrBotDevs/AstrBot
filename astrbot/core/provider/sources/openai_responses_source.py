@@ -43,14 +43,75 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         except TypeError:
             return str(arguments)
 
+    @classmethod
+    def _message_content_to_response_content(cls, content: Any, role: str) -> Any:
+        converted, _ = cls._message_content_to_response_content_and_reasoning_items(
+            content,
+            role,
+        )
+        return converted
+
     @staticmethod
-    def _message_content_to_response_content(content: Any, role: str) -> Any:
+    def _to_plain_data(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: ProviderOpenAIResponses._to_plain_data(item)
+                for key, item in value.items()
+                if item is not None
+            }
+        if isinstance(value, (list, tuple)):
+            return [ProviderOpenAIResponses._to_plain_data(item) for item in value]
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            return model_dump(mode="json", exclude_none=True)
+        return value
+
+    @classmethod
+    def _normalize_reasoning_item(cls, item: Any) -> dict[str, Any] | None:
+        if cls._get_field(item, "type") != "reasoning":
+            return None
+        data = cls._to_plain_data(item)
+        if not isinstance(data, dict) or not data.get("id"):
+            return None
+        data["type"] = "reasoning"
+        if "summary" not in data:
+            data["summary"] = []
+        return data
+
+    @classmethod
+    def _think_part_to_response_reasoning_items(
+        cls,
+        part: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        encrypted = part.get("encrypted")
+        if not isinstance(encrypted, str) or not encrypted.strip():
+            return []
+        try:
+            stored = json.loads(encrypted)
+        except json.JSONDecodeError:
+            return []
+
+        raw_items = stored if isinstance(stored, list) else [stored]
+        reasoning_items: list[dict[str, Any]] = []
+        for raw_item in raw_items:
+            reasoning_item = cls._normalize_reasoning_item(raw_item)
+            if reasoning_item is not None:
+                reasoning_items.append(reasoning_item)
+        return reasoning_items
+
+    @classmethod
+    def _message_content_to_response_content_and_reasoning_items(
+        cls,
+        content: Any,
+        role: str,
+    ) -> tuple[Any, list[dict[str, Any]]]:
         if isinstance(content, str) or content is None:
-            return content or ""
+            return content or "", []
         if not isinstance(content, list):
-            return content
+            return content, []
 
         converted: list[dict[str, Any]] = []
+        reasoning_items: list[dict[str, Any]] = []
         text_type = "output_text" if role == "assistant" else "input_text"
         for part in content:
             if not isinstance(part, dict):
@@ -74,10 +135,14 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             elif part_type in {"audio_url", "input_audio"}:
                 converted.append({"type": text_type, "text": "[Audio]"})
             elif part_type == "think":
+                if role == "assistant":
+                    reasoning_items.extend(
+                        cls._think_part_to_response_reasoning_items(part),
+                    )
                 continue
             else:
                 converted.append(part)
-        return converted
+        return converted, reasoning_items
 
     @staticmethod
     def _is_empty_response_content(content: Any) -> bool:
@@ -120,18 +185,25 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 },
             ]
 
-        content = cls._message_content_to_response_content(
-            message.get("content", ""),
-            role,
+        content, reasoning_items = (
+            cls._message_content_to_response_content_and_reasoning_items(
+                message.get("content", ""),
+                role,
+            )
         )
         item = {
             "role": role,
             "content": content,
         }
-        if role != "assistant" or not message.get("tool_calls"):
+        if role != "assistant":
             return [item]
 
-        items = [] if cls._is_empty_response_content(content) else [item]
+        items = list(reasoning_items)
+        if not cls._is_empty_response_content(content):
+            items.append(item)
+        if not message.get("tool_calls"):
+            return items
+
         items.extend(
             cls._chat_tool_call_to_response_function_call(tool_call)
             for tool_call in message["tool_calls"]
@@ -220,6 +292,56 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                         parts.append(text)
         return "".join(parts).strip()
 
+    @classmethod
+    def _extract_response_reasoning(
+        cls,
+        response: Any,
+    ) -> tuple[str | None, str | None]:
+        reasoning_items: list[dict[str, Any]] = []
+        text_parts: list[str] = []
+        for item in cls._iter_response_output_items(response):
+            reasoning_item = cls._normalize_reasoning_item(item)
+            if reasoning_item is None:
+                continue
+            reasoning_items.append(reasoning_item)
+
+            item_text_parts: list[str] = []
+            content = reasoning_item.get("content")
+            if isinstance(content, list):
+                for part in content:
+                    if not isinstance(part, dict):
+                        continue
+                    if part.get("type") != "reasoning_text":
+                        continue
+                    text = part.get("text")
+                    if isinstance(text, str) and text:
+                        item_text_parts.append(text)
+
+            if not item_text_parts:
+                summary = reasoning_item.get("summary")
+                if isinstance(summary, list):
+                    for part in summary:
+                        if not isinstance(part, dict):
+                            continue
+                        if part.get("type") != "summary_text":
+                            continue
+                        text = part.get("text")
+                        if isinstance(text, str) and text:
+                            item_text_parts.append(text)
+
+            text_parts.extend(item_text_parts)
+
+        if not reasoning_items:
+            return None, None
+
+        reasoning_text = "\n".join(text_parts).strip() or None
+        signature_payload: dict[str, Any] | list[dict[str, Any]]
+        if len(reasoning_items) == 1:
+            signature_payload = reasoning_items[0]
+        else:
+            signature_payload = reasoning_items
+        return reasoning_text, json.dumps(signature_payload, ensure_ascii=False)
+
     @staticmethod
     def _iter_response_output_items(response: Any) -> list[Any]:
         output = ProviderOpenAIResponses._get_field(response, "output", [])
@@ -280,6 +402,13 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         completion_text = self._extract_response_output_text(response)
         if completion_text:
             llm_response.result_chain = MessageChain().message(completion_text)
+        reasoning_content, reasoning_signature = self._extract_response_reasoning(
+            response,
+        )
+        if reasoning_content is not None:
+            llm_response.reasoning_content = reasoning_content
+        if reasoning_signature is not None:
+            llm_response.reasoning_signature = reasoning_signature
         llm_response.raw_completion = response
         llm_response.id = response_id
         usage = self._get_field(response, "usage")
@@ -427,6 +556,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
         )
 
         output_text = ""
+        reasoning_text = ""
         final_response = None
         function_calls: dict[str, dict[str, Any]] = {}
         async for event in stream:
@@ -445,6 +575,20 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 text = self._event_value(event, "text", "")
                 if text:
                     output_text = str(text)
+            elif event_type == "response.reasoning_text.delta":
+                delta = self._event_value(event, "delta", "")
+                if not delta:
+                    continue
+                reasoning_text += str(delta)
+                yield LLMResponse(
+                    "assistant",
+                    reasoning_content=str(delta),
+                    is_chunk=True,
+                )
+            elif event_type == "response.reasoning_text.done":
+                text = self._event_value(event, "text", "")
+                if text:
+                    reasoning_text = str(text)
             elif event_type == "response.completed":
                 final_response = self._event_value(event, "response")
             else:
@@ -464,4 +608,6 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 "assistant",
                 result_chain=MessageChain().message(output_text),
             )
+        if reasoning_text and not llm_response.reasoning_content:
+            llm_response.reasoning_content = reasoning_text
         yield llm_response
