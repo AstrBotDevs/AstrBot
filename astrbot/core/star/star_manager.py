@@ -11,6 +11,7 @@ import os
 import sys
 import tempfile
 import traceback
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
@@ -815,7 +816,7 @@ class PluginManager:
         self.failed_plugin_info = "\n".join(lines) + "\n"
 
     @staticmethod
-    def _iter_concrete_llm_tools(func_tool: FunctionTool) -> list[FunctionTool]:
+    def _iter_concrete_llm_tools(func_tool: FunctionTool) -> Iterable[FunctionTool]:
         """Return concrete function tools that may belong to a plugin.
 
         Args:
@@ -825,12 +826,13 @@ class PluginManager:
             The concrete function tools to inspect for plugin ownership.
         """
         if isinstance(func_tool, HandoffTool):
-            return [
-                tool
-                for tool in (func_tool.agent.tools or [])
-                if isinstance(tool, FunctionTool)
-            ]
-        return [func_tool]
+            agent = getattr(func_tool, "agent", None)
+            tools = getattr(agent, "tools", None) if agent else None
+            for tool in tools or []:
+                if isinstance(tool, FunctionTool):
+                    yield tool
+            return
+        yield func_tool
 
     @staticmethod
     def _is_plugin_llm_tool(
@@ -846,7 +848,7 @@ class PluginManager:
         Returns:
             Whether the tool belongs to the plugin module.
         """
-        module_path = func_tool.handler_module_path
+        module_path = getattr(func_tool, "handler_module_path", None)
         return bool(
             plugin_module_path
             and module_path
@@ -858,7 +860,7 @@ class PluginManager:
     def _iter_plugin_llm_tools(
         cls,
         plugin_module_path: str | None,
-    ) -> list[FunctionTool]:
+    ) -> Iterable[FunctionTool]:
         """Return registered LLM tools owned by a plugin module.
 
         Args:
@@ -867,12 +869,12 @@ class PluginManager:
         Returns:
             Matching function tools, including sub-tools inside handoff tools.
         """
-        plugin_tools: list[FunctionTool] = []
+        if not plugin_module_path:
+            return
         for func_tool in llm_tools.func_list:
             for concrete_tool in cls._iter_concrete_llm_tools(func_tool):
                 if cls._is_plugin_llm_tool(concrete_tool, plugin_module_path):
-                    plugin_tools.append(concrete_tool)
-        return plugin_tools
+                    yield concrete_tool
 
     async def _migrate_legacy_plugin_tool_inactivation_state(
         self,
@@ -904,6 +906,7 @@ class PluginManager:
                     func_tool.active = not plugin_disabled
 
         if not plugin_tool_names and inactivated_llm_tools:
+            await sp.global_put(PLUGIN_TOOL_STATE_MIGRATION_KEY, True)
             return inactivated_llm_tools
 
         updated_tools = [
@@ -1364,6 +1367,11 @@ class PluginManager:
                     inactivated_plugins,
                 )
             )
+            inactive_tool_names = set(inactivated_llm_tools)
+            for func_tool in llm_tools.func_list:
+                for concrete_tool in self._iter_concrete_llm_tools(func_tool):
+                    if concrete_tool.name in inactive_tool_names:
+                        concrete_tool.active = False
 
         # 清除 pip.main 导致的多余的 logging handlers
         for handler in logging.root.handlers[:]:

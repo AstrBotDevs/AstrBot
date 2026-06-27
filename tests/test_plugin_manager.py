@@ -593,6 +593,7 @@ async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
         assert preferences["inactivated_llm_tools"] == []
     finally:
         llm_tools.func_list = original_func_list
+        cast(Any, plugin_manager_pm.context).stars.remove(plugin)
 
 
 @pytest.mark.asyncio
@@ -647,6 +648,7 @@ async def test_turn_plugin_preserves_user_disabled_llm_tools(
         assert preferences["inactivated_llm_tools"] == [plugin_tool.name]
     finally:
         llm_tools.func_list = original_func_list
+        cast(Any, plugin_manager_pm.context).stars.remove(plugin)
 
 
 @pytest.mark.asyncio
@@ -722,6 +724,57 @@ async def test_migrate_legacy_plugin_tool_inactivation_state(
     finally:
         llm_tools.func_list = original_func_list
         _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_load_applies_manual_inactivation_to_non_plugin_tools(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+):
+    manual_tool = star_manager_module.FunctionTool(
+        name="manual_tool",
+        description="manual tool",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path="external.tools.manual",
+    )
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = [manual_tool]
+    preferences = {
+        "inactivated_plugins": [],
+        "inactivated_llm_tools": [manual_tool.name],
+        "alter_cmd": {},
+        star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY: False,
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    async def mock_sync_command_configs():
+        return None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(plugin_manager_pm, "_get_plugin_modules", lambda: [])
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load()
+
+        assert success is True
+        assert error is None
+        assert manual_tool.active is False
+        assert preferences["inactivated_llm_tools"] == [manual_tool.name]
+        assert preferences[star_manager_module.PLUGIN_TOOL_STATE_MIGRATION_KEY] is True
+    finally:
+        llm_tools.func_list = original_func_list
 
 
 @pytest.mark.asyncio
