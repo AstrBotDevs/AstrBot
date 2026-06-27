@@ -3,6 +3,12 @@ from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.agent.message import (
+    Message,
+    TextPart,
+    bind_checkpoint_messages,
+    dump_messages_with_checkpoints,
+)
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.provider.sources.openai_responses_source import (
     ProviderOpenAIResponses,
@@ -136,7 +142,29 @@ def test_chat_payload_to_responses_payload_replaces_audio_parts_with_placeholder
     ]
 
 
-def test_chat_payload_to_responses_payload_preserves_reasoning_items():
+def test_message_context_dump_preserves_assistant_message_id():
+    messages = [
+        Message(
+            role="assistant",
+            id="msg_1",
+            content=[TextPart(text="answer")],
+        ),
+    ]
+
+    dumped = dump_messages_with_checkpoints(messages)
+    restored = bind_checkpoint_messages(dumped)
+
+    assert dumped == [
+        {
+            "id": "msg_1",
+            "role": "assistant",
+            "content": [{"type": "text", "text": "answer"}],
+        }
+    ]
+    assert restored[0].id == "msg_1"
+
+
+def test_chat_payload_to_responses_payload_preserves_reasoning_and_message_id():
     reasoning_item = {
         "type": "reasoning",
         "id": "rs_1",
@@ -145,11 +173,21 @@ def test_chat_payload_to_responses_payload_preserves_reasoning_items():
         "encrypted_content": "encrypted-reasoning",
         "status": "completed",
     }
+    output_message = {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+            {"type": "output_text", "text": "answer", "annotations": []},
+        ],
+    }
     payload = {
         "model": "gpt-5",
         "messages": [
             {
                 "role": "assistant",
+                "id": "msg_1",
                 "content": [
                     {
                         "type": "think",
@@ -166,11 +204,36 @@ def test_chat_payload_to_responses_payload_preserves_reasoning_items():
 
     assert converted["input"] == [
         reasoning_item,
-        {
-            "role": "assistant",
-            "content": [{"type": "output_text", "text": "answer"}],
-        },
+        output_message,
     ]
+
+
+def test_chat_payload_to_responses_payload_replays_output_message_id_without_duplicate():
+    output_message = {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+            {"type": "output_text", "text": "answer", "annotations": []},
+        ],
+    }
+    payload = {
+        "model": "gpt-5",
+        "messages": [
+            {
+                "role": "assistant",
+                "id": "msg_1",
+                "content": [
+                    {"type": "text", "text": "answer"},
+                ],
+            },
+        ],
+    }
+
+    converted = ProviderOpenAIResponses._chat_payload_to_responses_payload(payload)
+
+    assert converted["input"] == [output_message]
 
 
 def test_build_responses_request_shares_tool_and_extra_body_handling():
@@ -239,7 +302,7 @@ async def test_parse_responses_completion_extracts_function_call_and_usage():
 
 
 @pytest.mark.asyncio
-async def test_parse_responses_completion_preserves_reasoning_item():
+async def test_parse_responses_completion_preserves_reasoning_and_message_id():
     provider = _make_provider()
     reasoning_item = {
         "type": "reasoning",
@@ -249,14 +312,20 @@ async def test_parse_responses_completion_preserves_reasoning_item():
         "encrypted_content": "encrypted-reasoning",
         "status": "completed",
     }
+    output_message = {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+            {"type": "output_text", "text": "answer", "annotations": []},
+        ],
+    }
     response = {
         "id": "resp_1",
         "output": [
             reasoning_item,
-            {
-                "type": "message",
-                "content": [{"type": "output_text", "text": "answer"}],
-            },
+            output_message,
         ],
         "usage": None,
     }
@@ -265,7 +334,36 @@ async def test_parse_responses_completion_preserves_reasoning_item():
 
     assert result.completion_text == "answer"
     assert result.reasoning_content == "private trace"
+    assert result.message_id == "msg_1"
     assert json.loads(result.reasoning_signature) == reasoning_item
+
+
+@pytest.mark.asyncio
+async def test_parse_responses_completion_extracts_message_id_without_reasoning():
+    provider = _make_provider()
+    output_message = {
+        "type": "message",
+        "id": "msg_1",
+        "role": "assistant",
+        "status": "completed",
+        "content": [
+            {"type": "output_text", "text": "answer", "annotations": []},
+        ],
+    }
+    response = {
+        "id": "resp_1",
+        "output": [
+            output_message,
+        ],
+        "usage": None,
+    }
+
+    result = await provider._parse_responses_completion(response, None)
+
+    assert result.completion_text == "answer"
+    assert result.reasoning_content is None
+    assert result.message_id == "msg_1"
+    assert result.reasoning_signature is None
 
 
 @pytest.mark.asyncio

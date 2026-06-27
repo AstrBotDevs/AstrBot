@@ -92,6 +92,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             return []
 
         raw_items = stored if isinstance(stored, list) else [stored]
+
         reasoning_items: list[dict[str, Any]] = []
         for raw_item in raw_items:
             reasoning_item = cls._normalize_reasoning_item(raw_item)
@@ -199,7 +200,41 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             return [item]
 
         items = list(reasoning_items)
-        if not cls._is_empty_response_content(content):
+        message_id = message.get("id")
+        if (
+            isinstance(message_id, str)
+            and message_id
+            and not cls._is_empty_response_content(content)
+        ):
+            response_message_content = content
+            if isinstance(response_message_content, str):
+                response_message_content = [
+                    {
+                        "type": "output_text",
+                        "text": response_message_content,
+                        "annotations": [],
+                    }
+                ]
+            elif isinstance(response_message_content, list):
+                response_message_content = [
+                    {
+                        **part,
+                        "annotations": part.get("annotations", []),
+                    }
+                    if isinstance(part, dict) and part.get("type") == "output_text"
+                    else part
+                    for part in response_message_content
+                ]
+            items.append(
+                {
+                    "type": "message",
+                    "id": message_id,
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": response_message_content,
+                }
+            )
+        elif not cls._is_empty_response_content(content):
             items.append(item)
         if not message.get("tool_calls"):
             return items
@@ -342,6 +377,18 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             signature_payload = reasoning_items
         return reasoning_text, json.dumps(signature_payload, ensure_ascii=False)
 
+    @classmethod
+    def _extract_response_message_id(cls, response: Any) -> str | None:
+        for item in cls._iter_response_output_items(response):
+            if cls._get_field(item, "type") != "message":
+                continue
+            if cls._get_field(item, "role") not in {None, "assistant"}:
+                continue
+            message_id = cls._get_field(item, "id")
+            if isinstance(message_id, str) and message_id:
+                return message_id
+        return None
+
     @staticmethod
     def _iter_response_output_items(response: Any) -> list[Any]:
         output = ProviderOpenAIResponses._get_field(response, "output", [])
@@ -411,6 +458,7 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
             llm_response.reasoning_signature = reasoning_signature
         llm_response.raw_completion = response
         llm_response.id = response_id
+        llm_response.message_id = self._extract_response_message_id(response)
         usage = self._get_field(response, "usage")
         llm_response.usage = self._response_usage_to_token_usage(usage)
         return llm_response
