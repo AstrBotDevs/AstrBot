@@ -76,3 +76,76 @@ export interface SpcodeWorktreeMgmtSnapshot {
   lockReason: string | null;
   worktrees: SpcodeGitWorktreesSnapshot["worktrees"];
 }
+
+// ── Envelope helpers (copied & adapted from parseSpcodeGitWorkflow) ─
+
+function unwrapEnvelope(raw: unknown): unknown {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error("missing status envelope");
+  }
+  const env = raw as { status?: unknown; data?: unknown };
+  if (env.status !== "ok") {
+    throw new Error("unexpected status envelope");
+  }
+  if (typeof env.data !== "object" || env.data === null) {
+    throw new Error("missing data in response");
+  }
+  return env.data;
+}
+
+function asString(v: unknown, fallback = ""): string {
+  return typeof v === "string" ? v : fallback;
+}
+function asStringOrNull(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
+}
+function asNumber(v: unknown, fallback = 0): number {
+  return typeof v === "number" ? v : fallback;
+}
+function asBoolean(v: unknown, fallback = false): boolean {
+  return typeof v === "boolean" ? v : fallback;
+}
+
+/** Build the snapshot's `meta` block + endpoint-specific fields.
+ *  Pure function — takes the unwrapped `data` object and the consumer-
+ *  facing field overrides. Centralizes the field-name mapping from
+ *  snake_case (backend) to camelCase (frontend) so the 4 parsers
+ *  share the same implementation. */
+function buildSnapshot(
+  d: SpcodeWorktreeMgmtRawData,
+  overrides: Partial<{
+    branch: string | null;
+    removedPath: string | null;
+    locked: boolean;
+    lockReason: string | null;
+  }> = {},
+): SpcodeWorktreeMgmtSnapshot {
+  return {
+    meta: {
+      directory: d.directory ?? null,
+      umo: d.umo ?? null,
+      loaded: Boolean(d.loaded),
+      reason: d.reason ?? null,
+      stderr: asString(d.stderr),
+      elapsedMs: asNumber(d.elapsed_ms),
+      fetchedAt: Date.now(),
+    },
+    worktree: asString(d.worktree),
+    branch: overrides.branch !== undefined ? overrides.branch : asStringOrNull(d.branch),
+    removedPath:
+      overrides.removedPath !== undefined
+        ? overrides.removedPath
+        : (d.removed_path ?? null),
+    locked: overrides.locked !== undefined ? overrides.locked : asBoolean(d.locked),
+    lockReason:
+      overrides.lockReason !== undefined
+        ? overrides.lockReason
+        : (d.lock_reason ?? null),
+    // We reuse the raw worktrees array as-is; useSpcodeWorktrees will
+    // re-parse via parseSpcodeGitWorktrees() before swapping state.
+    // The double-parse is intentional: it keeps the parser pure (no
+    // import of parseSpcodeWorktrees here) and avoids drifting the
+    // two parsers' field mappings.
+    worktrees: (d.worktrees ?? []) as SpcodeGitWorktreesSnapshot["worktrees"],
+  };
+}
