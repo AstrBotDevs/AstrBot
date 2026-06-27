@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -15,11 +16,76 @@ from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import CronJob
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.platform.message_type import MessageType
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.utils.history_saver import persist_agent_history
 
 if TYPE_CHECKING:
     from astrbot.core.star.context import Context
+
+
+_CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
+_CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
+
+
+def _normalize_crontab_day_of_week(day_of_week: str) -> str:
+    """Normalize standard crontab weekdays for APScheduler.
+
+    APScheduler treats numeric weekdays as Monday=0, while standard crontab and
+    AstrBot's WebUI use Sunday=0/7. Numeric weekday fields are expanded to
+    weekday names so the scheduled day remains unambiguous.
+
+    Args:
+        day_of_week: The day-of-week field from a five-part crontab expression.
+
+    Returns:
+        A day-of-week field compatible with APScheduler.
+
+    Raises:
+        ValueError: If a numeric weekday value or step is outside the supported
+            crontab range.
+    """
+    normalized_parts: list[str] = []
+    for raw_part in day_of_week.split(","):
+        part = raw_part.strip().lower()
+        match = _CRONTAB_WEEKDAY_PATTERN.fullmatch(part)
+        if not match:
+            normalized_parts.append(part)
+            continue
+
+        wildcard, start_text, end_text, step_text = match.groups()
+        step = int(step_text or "1")
+        if step < 1:
+            raise ValueError("day_of_week step must be greater than 0")
+
+        if wildcard:
+            if step == 1:
+                normalized_parts.append("*")
+                continue
+            values = range(0, 7, step)
+        else:
+            start = int(start_text)
+            end = int(end_text) if end_text is not None else None
+            if start < 0 or start > 7 or (end is not None and (end < 0 or end > 7)):
+                raise ValueError("day_of_week values must be between 0 and 7")
+            if end is not None and start > end:
+                raise ValueError("day_of_week range start must not exceed end")
+            if end is None:
+                end = 7 if step_text else start
+            values = range(start, end + 1, step)
+
+        weekdays: list[int] = []
+        for value in values:
+            weekday = 0 if value == 7 else value
+            if weekday not in weekdays:
+                weekdays.append(weekday)
+
+        if len(weekdays) == 7:
+            normalized_parts.append("*")
+        else:
+            normalized_parts.extend(_CRONTAB_WEEKDAY_NAMES[value] for value in weekdays)
+
+    return ",".join(normalized_parts)
 
 
 class CronJobSchedulingError(Exception):
@@ -176,7 +242,21 @@ class CronJobManager:
                     run_at = run_at.replace(tzinfo=tzinfo)
                 trigger = DateTrigger(run_date=run_at, timezone=tzinfo)
             else:
-                trigger = CronTrigger.from_crontab(job.cron_expression, timezone=tzinfo)
+                if not job.cron_expression:
+                    raise ValueError("recurring job missing cron_expression")
+                minute, hour, day, month, day_of_week = job.cron_expression.split()
+                normalized_cron_expression = " ".join(
+                    [
+                        minute,
+                        hour,
+                        day,
+                        month,
+                        _normalize_crontab_day_of_week(day_of_week),
+                    ]
+                )
+                trigger = CronTrigger.from_crontab(
+                    normalized_cron_expression, timezone=tzinfo
+                )
             self.scheduler.add_job(
                 self._run_job,
                 id=job.job_id,
@@ -200,9 +280,18 @@ class CronJobManager:
             return None
         return aps_job.next_run_time.astimezone(timezone.utc)
 
-    async def _run_job(self, job_id: str) -> None:
+    async def run_job_now(self, job_id: str) -> None:
+        await self._run_job(job_id, ignore_enabled=True, delete_run_once=False)
+
+    async def _run_job(
+        self,
+        job_id: str,
+        *,
+        ignore_enabled: bool = False,
+        delete_run_once: bool = True,
+    ) -> None:
         job = await self.db.get_cron_job(job_id)
-        if not job or not job.enabled:
+        if not job or (not job.enabled and not ignore_enabled):
             return
         start_time = datetime.now(timezone.utc)
         await self.db.update_cron_job(
@@ -230,7 +319,7 @@ class CronJobManager:
                 last_error=last_error,
                 next_run_time=next_run,
             )
-            if job.run_once:
+            if job.run_once and delete_run_once:
                 # one-shot: remove after execution regardless of success
                 await self.delete_job(job_id)
 
@@ -245,9 +334,14 @@ class CronJobManager:
 
     async def _run_active_agent_job(self, job: CronJob, start_time: datetime) -> None:
         payload = job.payload or {}
-        session_str = payload.get("session")
-        if not session_str:
-            raise ValueError("ActiveAgentCronJob missing session.")
+        delivery_session_str = str(payload.get("session") or "").strip()
+        session_str = delivery_session_str or str(
+            MessageSession(
+                platform_name="cron",
+                message_type=MessageType.OTHER_MESSAGE,
+                session_id=job.job_id,
+            )
+        )
         note = payload.get("note") or job.description or job.name
 
         extras = {
@@ -262,7 +356,7 @@ class CronJobManager:
                 "run_at": (
                     job.payload.get("run_at") if isinstance(job.payload, dict) else None
                 ),
-                "session": session_str,
+                "session": delivery_session_str,
             },
             "cron_payload": payload,
         }
@@ -271,6 +365,7 @@ class CronJobManager:
             message=note,
             session_str=session_str,
             extras=extras,
+            delivery_session_str=delivery_session_str,
         )
 
     async def _woke_main_agent(
@@ -279,6 +374,7 @@ class CronJobManager:
         message: str,
         session_str: str,
         extras: dict,
+        delivery_session_str: str = "",
     ) -> None:
         """Woke the main agent to handle the cron job message."""
         from astrbot.core.astr_main_agent import (
@@ -353,11 +449,12 @@ class CronJobManager:
             "Output using same language as previous conversation. "
             "After completing your task, summarize and output your actions and results."
         )
-        if not req.func_tool:
-            req.func_tool = ToolSet()
-        req.func_tool.add_tool(
-            self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
-        )
+        if delivery_session_str:
+            if not req.func_tool:
+                req.func_tool = ToolSet()
+            req.func_tool.add_tool(
+                self.ctx.get_llm_tool_manager().get_builtin_tool(SendMessageToUserTool)
+            )
 
         result = await build_main_agent(
             event=cron_event, plugin_context=self.ctx, config=config, req=req

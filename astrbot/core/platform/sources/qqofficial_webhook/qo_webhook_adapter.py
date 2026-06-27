@@ -13,7 +13,10 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
-from ..qqofficial.qqofficial_platform_adapter import QQOfficialPlatformAdapter
+from ..qqofficial.qqofficial_platform_adapter import (
+    QQOfficialPlatformAdapter,
+    _ensure_group_message_create_parser,
+)
 from .qo_webhook_event import QQOfficialWebhookMessageEvent
 from .qo_webhook_server import QQOfficialWebhook
 
@@ -29,6 +32,19 @@ class botClient(Client):
 
     # 收到群消息
     async def on_group_at_message_create(
+        self, message: botpy.message.GroupMessage
+    ) -> None:
+        abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+            message,
+            MessageType.GROUP_MESSAGE,
+            force_group_mention=True,
+        )
+        abm.group_id = cast(str, message.group_openid)
+        abm.session_id = abm.group_id
+        self.platform.remember_session_scene(abm.session_id, "group")
+        self._commit(abm)
+
+    async def on_group_message_create(
         self, message: botpy.message.GroupMessage
     ) -> None:
         abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
@@ -75,20 +91,7 @@ class botClient(Client):
 
     def _commit(self, abm: AstrBotMessage) -> None:
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
-        event = QQOfficialWebhookMessageEvent(
-            abm.message_str,
-            abm,
-            self.platform.meta(),
-            abm.session_id,
-            self,
-        )
-        # Populate extra fields cached from the raw webhook payload
-        webhook_helper = getattr(self.platform, "webhook_helper", None)
-        if webhook_helper and abm.message_id:
-            extra_data = webhook_helper.pop_extra_data(abm.message_id)
-            for key, val in extra_data.items():
-                event.set_extra(key, val)
-        self.platform.commit_event(event)
+        self.platform.commit_event(self.platform.create_event(abm))
 
 
 @register_platform_adapter("qq_official_webhook", "QQ 机器人官方 API 适配器(Webhook)")
@@ -116,9 +119,11 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             timeout=20,
         )
         self.client.set_platform(self)
+        _ensure_group_message_create_parser()
         self.webhook_helper = None
         self._session_last_message_id: dict[str, str] = {}
         self._session_scene: dict[str, str] = {}
+        self._allow_group_proactive_send = True
 
     async def send_by_session(
         self,
@@ -157,6 +162,29 @@ class QQOfficialWebhookPlatformAdapter(Platform):
             id=cast(str, self.config.get("id")),
             support_proactive_message=True,
         )
+
+    def create_event(self, message: AstrBotMessage) -> QQOfficialWebhookMessageEvent:
+        """Creates a QQ Official webhook message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created QQ Official webhook message event.
+        """
+        event = QQOfficialWebhookMessageEvent(
+            message.message_str,
+            message,
+            self.meta(),
+            message.session_id,
+            self.client,
+        )
+        webhook_helper = getattr(self, "webhook_helper", None)
+        if webhook_helper and message.message_id:
+            extra_data = webhook_helper.pop_extra_data(message.message_id)
+            for key, val in extra_data.items():
+                event.set_extra(key, val)
+        return event
 
     async def run(self) -> None:
         self.webhook_helper = QQOfficialWebhook(

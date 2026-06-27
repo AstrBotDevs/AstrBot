@@ -122,8 +122,8 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
       },
       "max_tokens": {
           "name": "Max Tokens",
-          "description": "最大令牌数",
-          "hint": "生成的最大令牌数。",
+          "description": "最大词元（Tokens）数",
+          "hint": "生成的最大词元（Tokens）数。",
           "type": "int",
           "default": 8192,
       },

@@ -26,6 +26,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import MediaResolver
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from ...register import register_platform_adapter
@@ -311,7 +312,12 @@ class LarkPlatformAdapter(Platform):
                 default_suffix=".opus",
             )
             if file_path:
-                components.append(Comp.Record(file=file_path, url=file_path))
+                path_wav = await MediaResolver(
+                    file_path,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                components.append(Comp.Record(file=path_wav, url=path_wav))
             return components
 
         if message_type == "media":
@@ -587,16 +593,25 @@ class LarkPlatformAdapter(Platform):
 
         await self.handle_msg(abm)
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        event = LarkMessageEvent(
-            message_str=abm.message_str,
-            message_obj=abm,
+    def create_event(self, message: AstrBotMessage) -> LarkMessageEvent:
+        """Creates a Lark message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Lark message event.
+        """
+        return LarkMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
             platform_meta=self.meta(),
-            session_id=abm.session_id,
+            session_id=message.session_id,
             bot=self.lark_api,
         )
 
-        self._event_queue.put_nowait(event)
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(abm))
 
     async def handle_webhook_event(self, event_data: dict) -> None:
         """处理 Webhook 事件

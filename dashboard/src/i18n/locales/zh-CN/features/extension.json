@@ -67,7 +67,7 @@
     "loading": "加载中...",
     "installed": "已安装",
     "unknown": "未知",
-    "incompatible": "不兼容"
+    "unsupported": "不支持"
   },
   "tooltips": {
     "enable": "点击启用",
@@ -229,7 +229,7 @@
       "confirm": "继续",
       "cancel": "取消"
     },
-    "versionCompatibility": {
+    "versionSupport": {
       "title": "版本兼容性警告",
       "message": "该插件声明的 AstrBot 版本范围与当前版本不匹配。你可以无视警告继续安装，但可能无法正常运行。",
       "confirm": "无视警告，继续安装",
@@ -373,7 +373,7 @@
     "neoPayloadTitle": "Neo Payload 详情",
     "neoPayloadFailed": "读取 Payload 失败",
     "runtimeNoneWarning": "Computer Use 运行环境为无，Skills 可能无法正确被 Agent 运行，因为没有启用运行环境。",
-    "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local” 或 “sandbox” 才能让 AstrBot 正常使用你提供的 Skills。",
+    "runtimeHint": "需要在配置的 “使用电脑能力” 中将运行环境设置为 “local” 或 “sandbox” 才能让 AstrBot 正常使用你提供的 Skills。工作区的 Skills 暂不在此页面显示。",
     "neoRuntimeRequired": "Neo Skills 仅在运行环境为 sandbox 且沙箱驱动为 shipyard_neo 时可用。",
     "sourceLocalOnly": "本地 Skill",
     "sourceSandboxOnly": "Sandbox 预置 Skill",

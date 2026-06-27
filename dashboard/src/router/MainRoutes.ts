@@ -58,11 +58,11 @@ const MainRoutes = {
     },
     {
       path: '/normal',
-      redirect: '/config#normal'
+      redirect: '/config'
     },
     {
       path: '/system',
-      redirect: '/config#system'
+      redirect: '/settings#system-config'
     },
     {
       name: 'Stats',

@@ -1,5 +1,6 @@
 import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
-import axios from "axios";
+import { chatApi, fileApi } from "@/api/v1";
+import { fetchWithAuth } from "@/api/http";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -73,6 +74,10 @@ interface ActiveConnection {
   transport: TransportMode;
   abort?: AbortController;
   ws?: WebSocket;
+  botRecord?: ChatRecord;
+  userRecord?: ChatRecord;
+  completed?: boolean;
+  errorShown?: boolean;
 }
 
 interface SendMessageStreamOptions {
@@ -115,6 +120,8 @@ export function useMessages(options: UseMessagesOptions) {
   const messagesBySession = reactive<Record<string, ChatRecord[]>>({});
   const loadedSessions = reactive<Record<string, boolean>>({});
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
+  const chatWebSockets: Record<string, WebSocket> = {};
+  const closingChatWebSockets = new WeakSet<WebSocket>();
   const attachmentBlobCache = new Map<string, Promise<string>>();
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
     {},
@@ -169,18 +176,25 @@ export function useMessages(options: UseMessagesOptions) {
     let cacheKey: string;
     if (part.attachment_id) {
       cacheKey = `att:${part.attachment_id}`;
-      url = `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+      url = fileApi.contentUrl(part.attachment_id);
     } else if (part.filename) {
       cacheKey = `file:${part.filename}`;
-      url = `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+      url = "";
     } else {
       return;
     }
     let promise = attachmentBlobCache.get(cacheKey);
     if (!promise) {
-      promise = axios
-        .get(url, { responseType: "blob" })
-        .then((resp) => URL.createObjectURL(resp.data));
+      if (part.filename) {
+        promise = fileApi
+          .getByName(part.filename)
+          .then((resp) => URL.createObjectURL(resp.data));
+      } else {
+        promise = fetchWithAuth(url).then(async (resp) => {
+          if (!resp.ok) throw new Error(`Media request failed: ${resp.status}`);
+          return URL.createObjectURL(await resp.blob());
+        });
+      }
       attachmentBlobCache.set(cacheKey, promise);
     }
     try {
@@ -208,9 +222,7 @@ export function useMessages(options: UseMessagesOptions) {
     if (!sessionId) return;
     loadingMessages.value = true;
     try {
-      const response = await axios.get("/api/chat/get_session", {
-        params: { session_id: sessionId },
-      });
+      const response = await chatApi.getSession(sessionId);
       const payload = response.data?.data || {};
       const history = payload.history || [];
       const records = history.map(normalizeHistoryRecord);
@@ -311,10 +323,8 @@ export function useMessages(options: UseMessagesOptions) {
   ) {
     if (!sessionId || record.id == null) return { needsRegenerate: false };
     const content = cloneContentWithEditedText(record, editedText);
-    const response = await axios.post("/api/chat/message/edit", {
-      session_id: sessionId,
-      message_id: record.id,
-      content,
+    const response = await chatApi.updateMessage(sessionId, record.id, {
+      content: content as unknown as Record<string, unknown>,
     });
     const payload = response.data?.data || {};
     const updated = payload.message ? normalizeHistoryRecord(payload.message) : null;
@@ -406,15 +416,12 @@ export function useMessages(options: UseMessagesOptions) {
     };
 
     try {
-      const response = await fetch("/api/chat/message/regenerate", {
+      const response = await fetchWithAuth(chatApi.regenerateMessageUrl(sessionId, targetMessageId), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify({
-          session_id: sessionId,
-          message_id: targetMessageId,
           selected_provider: selectedProvider,
           selected_model: selectedModel,
         }),
@@ -445,13 +452,19 @@ export function useMessages(options: UseMessagesOptions) {
 
   async function stopSession(sessionId: string) {
     if (!sessionId) return;
-    await axios.post("/api/chat/stop", { session_id: sessionId });
+    await chatApi.stopSession(sessionId);
   }
 
   function cleanupConnections() {
     Object.values(activeConnections).forEach((connection) => {
       connection.abort?.abort();
-      connection.ws?.close();
+    });
+    Object.values(chatWebSockets).forEach(closeTrackedWebSocket);
+    Object.keys(activeConnections).forEach((sessionId) => {
+      delete activeConnections[sessionId];
+    });
+    Object.keys(chatWebSockets).forEach((sessionId) => {
+      delete chatWebSockets[sessionId];
     });
   }
 
@@ -509,11 +522,10 @@ export function useMessages(options: UseMessagesOptions) {
       abort,
     };
 
-    fetch("/api/chat/send", {
+    fetchWithAuth(chatApi.sendStreamUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
       },
       body: JSON.stringify({
         session_id: sessionId,
@@ -556,52 +568,155 @@ export function useMessages(options: UseMessagesOptions) {
     selectedProvider: string,
     selectedModel: string,
   ) {
-    const token = encodeURIComponent(localStorage.getItem("token") || "");
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(
-      `${protocol}//${window.location.host}/api/unified_chat/ws?token=${token}`,
-    );
+    const ws = getOrCreateChatWebSocket(sessionId);
 
     activeConnections[sessionId] = {
       sessionId,
       messageId,
       transport: "websocket",
       ws,
+      botRecord,
+      userRecord,
+      completed: false,
+      errorShown: false,
     };
 
-    ws.onopen = () => {
-      ws.send(
-        JSON.stringify({
-          ct: "chat",
-          t: "send",
-          session_id: sessionId,
-          message_id: messageId,
-          message: parts.map(partToPayload),
-          enable_streaming: enableStreaming,
-          selected_provider: selectedProvider,
-          selected_model: selectedModel,
-        }),
-      );
-    };
+    sendWebSocketPayload(sessionId, messageId, {
+      ct: "chat",
+      t: "send",
+      session_id: sessionId,
+      message_id: messageId,
+      message: parts.map(partToPayload),
+      enable_streaming: enableStreaming,
+      selected_provider: selectedProvider,
+      selected_model: selectedModel,
+    });
+  }
+
+  function getOrCreateChatWebSocket(sessionId: string) {
+    const existing = chatWebSockets[sessionId];
+    if (
+      existing &&
+      (existing.readyState === WebSocket.OPEN ||
+        existing.readyState === WebSocket.CONNECTING)
+    ) {
+      return existing;
+    }
+
+    const token = localStorage.getItem("token") || "";
+    const ws = new WebSocket(chatApi.unifiedWebSocketUrl(token));
+    chatWebSockets[sessionId] = ws;
+
     ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        processStreamPayload(botRecord, payload, userRecord);
-        options.onStreamUpdate?.(sessionId);
-        if (payload.type === "end" || payload.t === "end") {
-          ws.close();
-        }
-      } catch (error) {
-        console.error("Failed to parse WebSocket payload:", error);
-      }
+      handleWebSocketMessage(sessionId, event);
     };
     ws.onerror = () => {
-      appendPlain(botRecord, "\n\nWebSocket connection failed.");
+      const connection = activeConnections[sessionId];
+      if (connection?.transport === "websocket" && connection.botRecord) {
+        connection.errorShown = true;
+        appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
+      }
     };
     ws.onclose = async () => {
+      if (chatWebSockets[sessionId] === ws) {
+        delete chatWebSockets[sessionId];
+      }
+
+      const connection = activeConnections[sessionId];
+      if (connection?.transport !== "websocket" || connection.ws !== ws) {
+        return;
+      }
+      if (
+        !connection.completed &&
+        !connection.errorShown &&
+        !closingChatWebSockets.has(ws) &&
+        connection.botRecord
+      ) {
+        appendPlain(connection.botRecord, "\n\nWebSocket connection closed.");
+      }
       delete activeConnections[sessionId];
       await options.onSessionsChanged?.();
     };
+    return ws;
+  }
+
+  function sendWebSocketPayload(
+    sessionId: string,
+    messageId: string,
+    payload: Record<string, unknown>,
+  ) {
+    const ws = getOrCreateChatWebSocket(sessionId);
+    const send = () => {
+      const connection = activeConnections[sessionId];
+      if (
+        connection?.transport !== "websocket" ||
+        connection.messageId !== messageId ||
+        connection.ws !== ws
+      ) {
+        return;
+      }
+      try {
+        ws.send(JSON.stringify(payload));
+      } catch (error) {
+        connection.errorShown = true;
+        if (connection.botRecord) {
+          appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
+        }
+        console.error("Failed to send WebSocket payload:", error);
+        void finishWebSocketStream(sessionId, messageId);
+      }
+    };
+
+    if (ws.readyState === WebSocket.OPEN) {
+      send();
+      return;
+    }
+    if (ws.readyState === WebSocket.CONNECTING) {
+      ws.addEventListener("open", send, { once: true });
+      return;
+    }
+    void finishWebSocketStream(sessionId, messageId);
+  }
+
+  function handleWebSocketMessage(sessionId: string, event: MessageEvent) {
+    const connection = activeConnections[sessionId];
+    if (connection?.transport !== "websocket" || !connection.botRecord) {
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(event.data);
+      processStreamPayload(connection.botRecord, payload, connection.userRecord);
+      options.onStreamUpdate?.(sessionId);
+      if (payload.type === "end" || payload.t === "end") {
+        void finishWebSocketStream(sessionId, connection.messageId);
+      }
+    } catch (error) {
+      console.error("Failed to parse WebSocket payload:", error);
+    }
+  }
+
+  async function finishWebSocketStream(sessionId: string, messageId: string) {
+    const connection = activeConnections[sessionId];
+    if (
+      connection?.transport !== "websocket" ||
+      connection.messageId !== messageId
+    ) {
+      return;
+    }
+    connection.completed = true;
+    delete activeConnections[sessionId];
+    await options.onSessionsChanged?.();
+  }
+
+  function closeTrackedWebSocket(ws: WebSocket) {
+    closingChatWebSockets.add(ws);
+    if (
+      ws.readyState === WebSocket.OPEN ||
+      ws.readyState === WebSocket.CONNECTING
+    ) {
+      ws.close();
+    }
   }
 
   function processStreamPayload(
@@ -771,36 +886,36 @@ function normalizeSessionProject(value: unknown): ChatSessionProject | null {
 
 export function normalizeMessageParts(
   parts: unknown,
-  legacyReasoning = "",
+  fallbackReasoning = "",
 ): MessagePart[] {
   const normalizedParts = normalizePartsInternal(parts);
-  if (legacyReasoning && !normalizedParts.some((part) => part.type === "think")) {
-    normalizedParts.unshift({ type: "think", think: legacyReasoning });
+  if (fallbackReasoning && !normalizedParts.some((part) => part.type === "think")) {
+    normalizedParts.unshift({ type: "think", think: fallbackReasoning });
   }
   return normalizedParts;
 }
 
 export function extractReasoningText(
   parts: MessagePart[] | unknown,
-  legacyReasoning = "",
+  fallbackReasoning = "",
 ) {
   const normalizedParts = Array.isArray(parts)
     ? parts
-    : normalizeMessageParts(parts, legacyReasoning);
+    : normalizeMessageParts(parts, fallbackReasoning);
   const text = normalizedParts
     .filter((part) => part.type === "think")
     .map((part) => String(part.think || ""))
     .join("");
-  return text || legacyReasoning;
+  return text || fallbackReasoning;
 }
 
 export function reasoningActivityCounts(
   parts: MessagePart[] | unknown,
-  legacyReasoning = "",
+  fallbackReasoning = "",
 ) {
   const normalizedParts = Array.isArray(parts)
     ? parts
-    : normalizeMessageParts(parts, legacyReasoning);
+    : normalizeMessageParts(parts, fallbackReasoning);
   let thinkCount = 0;
   let toolCount = 0;
 

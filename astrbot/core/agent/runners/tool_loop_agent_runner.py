@@ -5,7 +5,6 @@ import time
 import traceback
 import typing as T
 import uuid
-from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -216,7 +215,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         enforce_max_turns: int = -1,
         # llm compressor
         llm_compress_instruction: str | None = None,
-        llm_compress_keep_recent: int = 0,
+        llm_compress_keep_recent_ratio: float = 0.15,
         llm_compress_provider: Provider | None = None,
         # truncate by turns compressor
         truncate_turns: int = 1,
@@ -225,6 +224,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
         fallback_providers: list[Provider] | None = None,
+        request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
         **kwargs: T.Any,
@@ -233,11 +233,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.streaming = streaming
         self.enforce_max_turns = enforce_max_turns
         self.llm_compress_instruction = llm_compress_instruction
-        self.llm_compress_keep_recent = llm_compress_keep_recent
+        self.llm_compress_keep_recent_ratio = llm_compress_keep_recent_ratio
         self.llm_compress_provider = llm_compress_provider
         self.truncate_turns = truncate_turns
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
+        self.request_max_retries = request_max_retries
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
@@ -248,7 +249,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             enforce_max_turns=self.enforce_max_turns,
             truncate_turns=self.truncate_turns,
             llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent=self.llm_compress_keep_recent,
+            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
             llm_compress_provider=self.llm_compress_provider,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
@@ -331,7 +332,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request: ProviderRequest,
     ) -> dict[str, T.Any]:
         modalities = self.provider.provider_config.get("modalities", None)
-        if not isinstance(modalities, list):
+        if not modalities:  # Unconfigured (None or empty list) defaults to support all modalities for backward compatibility
             return await request.assemble_context()
 
         supports_image = "image" in modalities
@@ -458,15 +459,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self, *, include_model: bool = True
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Yields chunks *and* a final LLMResponse."""
-        messages_for_provider = getattr(
-            self, "_provider_messages", self.run_context.messages
-        )
         payload = {
-            "contexts": self._sanitize_contexts_for_provider(messages_for_provider),
+            "contexts": self._sanitize_contexts_for_provider(self.run_context.messages),
             "func_tool": self._func_tool_for_provider(),
             "session_id": self.req.session_id,
             "extra_user_content_parts": self.req.extra_user_content_parts,  # list[ContentPart]
             "abort_signal": self._abort_signal,
+            "request_max_retries": self.request_max_retries,
         }
         if include_model:
             # For primary provider we keep explicit model selection if provided.
@@ -583,7 +582,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         contexts: list[Message] | list[dict[str, T.Any]],
     ) -> list[Message] | list[dict[str, T.Any]]:
-        if not self._should_fix_modalities_for_provider():
+        modalities = self.provider.provider_config.get("modalities", None)
+        if (
+            not modalities
+        ):  # Unconfigured (None or empty list) defaults to support all modalities
             return contexts
         sanitized_contexts, stats = sanitize_contexts_by_modalities(
             contexts,
@@ -592,15 +594,11 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         log_context_sanitize_stats(stats)
         return sanitized_contexts
 
-    def _should_fix_modalities_for_provider(self) -> bool:
-        modalities = self.provider.provider_config.get("modalities", None)
-        return isinstance(modalities, list)
-
     def _func_tool_for_provider(self) -> ToolSet | None:
         if not self.req.func_tool:
             return None
         modalities = self.provider.provider_config.get("modalities", None)
-        if isinstance(modalities, list) and "tool_use" not in modalities:
+        if isinstance(modalities, list) and modalities and "tool_use" not in modalities:
             logger.debug(
                 "Provider %s does not support tool_use, clearing tools for request.",
                 self.provider,
@@ -608,11 +606,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return None
         return self.req.func_tool
 
-    def _simple_print_message_role(self, tag: str = ""):
-        roles = []
-        for message in self.run_context.messages:
-            roles.append(message.role)
-        logger.debug(f"{tag} RunCtx.messages -> [{len(roles)}] {','.join(roles)}")
+    def _simple_print_message_role(self, tag: str, messages: list):
+        roles = [m.role for m in messages]
+        n = len(roles)
+        if n > 10:
+            summary = ",".join(roles[:4]) + ",...," + ",".join(roles[-4:])
+        else:
+            summary = ",".join(roles)
+        logger.debug(f"{tag} messages -> [{n}] {summary}")
 
     def follow_up(
         self,
@@ -706,16 +707,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
 
-        # Process request-time context on a copy so the runner's canonical
-        # messages are never mutated. The processed result is only used for this
-        # provider call. Persistent compaction is owned by the conversation /
-        # memory layer.
+        # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
-        self._simple_print_message_role("[BefCompact]")
-        self._provider_messages = await self.request_context_manager.process(
+        self._simple_print_message_role("[BefCompact]", self.run_context.messages)
+        self.run_context.messages = await self.request_context_manager.process(
             self.run_context.messages, trusted_token_usage=token_usage
         )
-        self._simple_print_message_role("[AftCompact]")
+        self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
             if llm_response.is_chunk:
@@ -913,7 +911,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             # append a user message with images so LLM can see them
             if cached_images:
                 modalities = self.provider.provider_config.get("modalities", [])
-                supports_image = "image" in modalities
+                supports_image = (
+                    not modalities or "image" in modalities
+                )  # Empty list is treated as unconfigured for backward compatibility
                 if supports_image:
                     # Build user message with images for LLM to review
                     image_parts = []
@@ -1308,6 +1308,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     extra_user_content_parts=self.req.extra_user_content_parts,
                     # tool_choice="required",
                     abort_signal=self._abort_signal,
+                    request_max_retries=self.request_max_retries,
                 )
                 if requery_resp:
                     llm_resp = requery_resp
@@ -1334,6 +1335,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         extra_user_content_parts=self.req.extra_user_content_parts,
                         # tool_choice="required",
                         abort_signal=self._abort_signal,
+                        request_max_retries=self.request_max_retries,
                     )
                     if repair_resp:
                         llm_resp = repair_resp
@@ -1406,7 +1408,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
     async def _iter_tool_executor_results(
         self,
-        executor: AsyncIterator[ToolExecutorResultT],
+        executor: T.AsyncGenerator[ToolExecutorResultT, None],
     ) -> T.AsyncGenerator[ToolExecutorResultT, None]:
         async def _next_executor_result() -> ToolExecutorResultT:
             return await anext(executor)
