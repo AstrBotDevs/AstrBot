@@ -71,8 +71,8 @@ class ProviderOpenAIResponses(ProviderOpenAIOfficial):
                 if detail:
                     image_part["detail"] = detail
                 converted.append(image_part)
-            elif part_type == "input_audio":
-                converted.append(part)
+            elif part_type in {"audio_url", "input_audio"}:
+                converted.append({"type": text_type, "text": "[Audio]"})
             elif part_type == "think":
                 continue
             else:

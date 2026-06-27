@@ -103,6 +103,38 @@ def test_chat_payload_to_responses_payload_converts_messages_and_tool_calls():
     ]
 
 
+def test_chat_payload_to_responses_payload_replaces_audio_parts_with_placeholder():
+    payload = {
+        "model": "gpt-4.1",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "listen"},
+                    {
+                        "type": "input_audio",
+                        "input_audio": {"data": "abc", "format": "wav"},
+                    },
+                    {"type": "audio_url", "audio_url": {"url": "data:audio/wav,abc"}},
+                ],
+            },
+        ],
+    }
+
+    converted = ProviderOpenAIResponses._chat_payload_to_responses_payload(payload)
+
+    assert converted["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "listen"},
+                {"type": "input_text", "text": "[Audio]"},
+                {"type": "input_text", "text": "[Audio]"},
+            ],
+        },
+    ]
+
+
 def test_build_responses_request_shares_tool_and_extra_body_handling():
     provider = _make_provider()
     payload = {
