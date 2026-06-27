@@ -50,6 +50,7 @@
     "save": "Save",
     "saveAndClose": "Save and Close",
     "cancel": "Cancel",
+    "next": "Next",
     "actions": "Actions",
     "back": "Back",
     "selectFile": "Select File",
@@ -168,6 +169,7 @@
     "sourceUpdated": "Source updated successfully",
     "defaultOfficialSource": "Default Official Source",
     "sourceExists": "This source already exists",
+    "sourceResolved": "Source resolved successfully",
     "installPlugin": "Install Plugin",
     "randomPlugins": "🎲 Random Plugins",
     "sourceSafetyWarning": "Even with the default source, plugin stability and security cannot be fully guaranteed. Please verify carefully before use."
@@ -244,6 +246,11 @@
       "title": "Confirm Update All Plugins",
       "message": "Are you sure you want to update all {count} plugins? This operation may take some time.",
       "confirm": "Confirm Update"
+    },
+    "sourceBinding": {
+      "title": "Change Plugin Source",
+      "noCandidates": "No configured plugin source contains a matching plugin identifier and repository.",
+      "confirm": "Use This Source"
     }
   },
   "messages": {
@@ -270,13 +277,19 @@
     "updateAllSuccess": "All upgradable extensions have been updated!",
     "updateAllFailed": "{failed} of {total} extensions failed to update:",
     "noUpdatesAvailable": "No extensions have updates available",
-    "fillSourceNameAndUrl": "Please fill in the complete source name and URL",
+    "updateDisabled": "This plugin was not installed from a plugin marketplace source, so update checks and updates are disabled",
+    "fillSourceUrl": "Please enter the source URL",
+    "fillSourceName": "Please enter the source name",
+    "resolveSourceFirst": "Resolve and validate the source URL first",
+    "sourceResolveFailed": "Failed to resolve source",
     "invalidUrl": "Please enter a valid URL",
     "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
     "pluginNotFound": "Plugin not found",
     "pluginDisabled": "This plugin is disabled. Enable it before opening its page.",
     "pluginPageNotFound": "Plugin page not found",
-    "pluginPageLoadFailed": "Failed to load the plugin page"
+    "pluginPageLoadFailed": "Failed to load the plugin page",
+    "missingMarketPluginId": "This source record is missing legal plugin identifiers, so it cannot be installed from the market",
+    "sourceBindSuccess": "Plugin source updated"
   },
   "upload": {
     "fromFile": "Install from File",
@@ -401,7 +414,8 @@
       "togglePlugin": "Extension",
       "viewHandlers": "View Handlers",
       "updateTo": "Update to",
-      "reinstall": "Reinstall"
+      "reinstall": "Reinstall",
+      "changeSource": "Change Plugin Source"
     },
     "status": {
       "hasUpdate": "New version available",

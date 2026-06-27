@@ -204,6 +204,15 @@ export default defineConfig({
                 ],
               },
               {
+                text: "插件市场规范",
+                base: "/dev/plugin-market",
+                collapsed: true,
+                items: [
+                  { text: "版本列表", link: "/" },
+                  { text: "2026-06-27", link: "/2026-06-27" },
+                ],
+              },
+              {
                 text: "接入平台适配器",
                 link: "/plugin-platform-adapter",
               },
@@ -445,6 +454,15 @@ export default defineConfig({
                   { text: "HTML to Image", link: "/guides/html-to-pic" },
                   { text: "Session Control", link: "/guides/session-control" },
                   { text: "Publish Plugin", link: "/plugin-publish" },
+                ],
+              },
+              {
+                text: "Plugin Market Specification",
+                base: "/en/dev/plugin-market",
+                collapsed: true,
+                items: [
+                  { text: "Versions", link: "/" },
+                  { text: "2026-06-27", link: "/2026-06-27" },
                 ],
               },
               {

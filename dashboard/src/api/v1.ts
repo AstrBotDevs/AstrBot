@@ -105,6 +105,13 @@ export interface VersionData {
   [key: string]: unknown;
 }
 
+export interface PublicVersionData {
+  webui_version?: string | null;
+  astrbot_version?: string | null;
+  astrbot_code_version?: string | null;
+  [key: string]: unknown;
+}
+
 type StartTimeData = {
   start_time?: number | string | null;
 };
@@ -1287,6 +1294,14 @@ export const pluginApi = {
       openApiV1.installPluginFromUrl({ body: body as any }),
     );
   },
+  bindSource(pluginId: string, body: OpenConfig) {
+    return typed<OpenConfig>(
+      openApiV1.bindPluginSource({
+        path: { plugin_id: pluginId },
+        body: body as any,
+      }),
+    );
+  },
   page(pluginId: string, pageName: string) {
     return typed<any>(
       openApiV1.getPluginPageById({
@@ -1719,6 +1734,15 @@ export const statsApi = {
       openApiV1.cleanupStorage({
         body: target ? { target } : undefined,
       }),
+    );
+  },
+};
+
+export const publicApi = {
+  versions() {
+    return withLegacyFallback<PublicVersionData>(
+      openApiV1.getPublicVersions(),
+      () => httpClient.get<ApiEnvelope<PublicVersionData>>('/api/stat/versions'),
     );
   },
 };

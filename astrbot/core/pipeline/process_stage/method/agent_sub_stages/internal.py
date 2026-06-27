@@ -210,7 +210,8 @@ class InternalAgentSubStage(Stage):
                 await event.send_typing()
             except Exception:
                 logger.warning("send_typing failed", exc_info=True)
-            await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
+            if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
+                return
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
