@@ -266,16 +266,22 @@ class KnowledgeBaseService:
     async def list_kbs(self, *, page: int, page_size: int) -> dict[str, Any]:
         kb_manager = self.get_kb_manager()
         kbs = await kb_manager.list_kbs()
+        total = len(kbs)
+
+        # Apply pagination after building the full list (list_kbs returns all)
+        start = (page - 1) * page_size
+        end = start + page_size
+        paged_kbs = kbs[start:end]
 
         kb_list = []
-        for kb in kbs:
+        for kb in paged_kbs:
             kb_dict = kb.model_dump()
             kb_helper = await kb_manager.get_kb(kb.kb_id)
             if kb_helper and kb_helper.init_error:
                 kb_dict["init_error"] = kb_helper.init_error
             kb_list.append(kb_dict)
 
-        return {"items": kb_list, "page": page, "page_size": page_size}
+        return {"items": kb_list, "page": page, "page_size": page_size, "total": total}
 
     async def list_kbs_from_dashboard_query(self, *, page, page_size) -> dict[str, Any]:
         return await self.list_kbs(
@@ -446,10 +452,12 @@ class KnowledgeBaseService:
 
         offset = (page - 1) * page_size
         doc_list = await kb_helper.list_documents(offset=offset, limit=page_size)
+        total = kb_helper.kb.doc_count or 0
         return {
             "items": [doc.model_dump() for doc in doc_list],
             "page": page,
             "page_size": page_size,
+            "total": total,
         }
 
     async def list_documents_from_dashboard_query(
