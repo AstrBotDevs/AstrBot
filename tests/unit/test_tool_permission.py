@@ -209,6 +209,48 @@ class TestLLMToolPermissionTypeDecorator:
                 """Bad declaration using a raw string instead of the enum."""
                 return "ok"
 
+    def test_permission_type_via_agent_llm_tool_raises(self):
+        """Regression test: tools registered via Agent.llm_tool (i.e. through
+        RegisteringAgent) never get written to func_list, so they don't go
+        through _default_permission or the dashboard's permission override.
+        Declaring permission_type there used to be silently dropped --
+        the tool would look like it had no permission protection at all,
+        even though the plugin author explicitly asked for one. It must
+        raise instead of silently ignoring the declaration."""
+        from astrbot.api.event import filter
+        from astrbot.core.agent.agent import Agent
+        from astrbot.core.star.register.star_handler import RegisteringAgent
+
+        agent = Agent(name="t8947_test_agent", instructions="test", tools=[])
+        registering_agent = RegisteringAgent(agent)
+
+        with pytest.raises(ValueError, match="Agent"):
+
+            @registering_agent.llm_tool(
+                name="t8947_agent_tool", permission_type=filter.PermissionType.ADMIN
+            )
+            async def _agent_tool(event):
+                """A tool that should not be registerable with a permission."""
+                return "ok"
+
+    def test_agent_llm_tool_without_permission_type_still_works(self):
+        """Omitting permission_type on an Agent-registered tool must
+        continue to work exactly as before this feature was added."""
+        from astrbot.core.agent.agent import Agent
+        from astrbot.core.star.register.star_handler import RegisteringAgent
+
+        agent = Agent(name="t8947_test_agent_ok", instructions="test", tools=[])
+        registering_agent = RegisteringAgent(agent)
+
+        @registering_agent.llm_tool(name="t8947_agent_tool_ok")
+        async def _agent_tool_ok(event):
+            """A normal tool with no permission declaration."""
+            return "ok"
+
+        assert len(agent.tools) == 1
+        assert agent.tools[0].name == "t8947_agent_tool_ok"
+        assert agent.tools[0].declared_permission_type is None
+
     def test_declared_admin_is_enforced_without_dashboard_config(self):
         """The whole point of the feature: a plugin author's declared
         ADMIN default protects the tool even if the bot owner never
