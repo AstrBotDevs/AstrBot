@@ -35,8 +35,22 @@
             @click="entry.long && toggleArgExpand(i)"
           >
             <span class="args-key">{{ entry.icon }}{{ entry.key }}</span>
-            <span class="args-value">{{ entry.display }}</span>
+            <CopyableText
+
+              :value="entry.raw"
+
+              :display-value="entry.display"
+
+              mode="code"
+
+              class="args-value"
+
+              :show-icon="entry.long"
+
+            />
+
             <span v-if="entry.long && !expandedArgs[i]" class="args-expand-hint">…</span>
+
           </div>
           <div
             v-if="argEntries.length > maxVisibleArgs"
@@ -91,6 +105,7 @@ import { useModuleI18n } from "@/i18n/composables";
 import { findSystemNoticeIndex } from "@/utils/systemNotice";
 import DiffPreview from "./DiffPreview.vue";
 import ToolResultView from "./ToolResultView.vue";
+import CopyableText from "./__shared__/CopyableText.vue";
 import { SPCODE_ICONS } from "./spcode_tools/icons";
 
 const props = defineProps({
@@ -400,7 +415,7 @@ onUnmounted(() => {
 .args-table {
   border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   border-radius: 4px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .args-row {

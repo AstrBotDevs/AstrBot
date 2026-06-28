@@ -24,14 +24,28 @@
                 >
                     <div class="symbol-header">
                         <span class="symbol-kind" :class="kindClass(sym.kind)">{{ sym.kind || 'sym' }}</span>
-                        <span class="symbol-name">{{ sym.name }}</span>
-                        <span v-if="sym.file" class="symbol-loc">{{ sym.file }}:{{ sym.line }}</span>
+                        <CopyableText :value="sym.name" mode="inline" class="symbol-name" />
+                        <CopyableText v-if="sym.file" :value="`${sym.file}:${sym.line}`" mode="code" class="symbol-loc" />
+
                     </div>
                     <pre v-if="sym.signature && openSet[i]" class="symbol-sig">{{ sym.signature }}</pre>
                     <pre v-if="sym.source && openSet[i]" class="symbol-src">{{ sym.source }}</pre>
                     <div v-if="data.callers && data.callers[sym.name] && openSet[i]" class="callers-block">
                         <span class="callers-label">Callers:</span>
-                        <code v-for="c in data.callers[sym.name]" :key="c" class="caller-chip">{{ c }}</code>
+                        <CopyableText
+
+                            v-for="c in data.callers[sym.name]"
+
+                            :key="c"
+
+                            :value="c"
+
+                            mode="code"
+
+                            class="caller-chip"
+
+                        />
+
                     </div>
                 </div>
             </div>
@@ -63,6 +77,7 @@
 
 <script setup lang="ts">
 import { reactive } from "vue";
+import CopyableText from "../__shared__/CopyableText.vue";
 
 interface CodeExploreSymbol {
     kind?: string;

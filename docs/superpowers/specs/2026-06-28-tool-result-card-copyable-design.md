@@ -5,7 +5,7 @@
 | 主题 | 在工具调用结果展示的卡片式组件里，让文本可选可复制，并在 hover 时提供显式的复制按钮 |
 | 日期 | 2026-06-28 |
 | 作者 | elecvoid243 |
-| 状态 | Draft — 待用户审阅 |
+| 状态 | Implemented — 2026-06-28 |
 | 关联代码 | `dashboard/src/components/chat/message_list_comps/`（8 个文件） + i18n 3 个 locale |
 | 前置 spec | 无（独立增强） |
 

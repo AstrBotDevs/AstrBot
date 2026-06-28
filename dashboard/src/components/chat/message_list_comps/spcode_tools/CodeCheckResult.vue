@@ -51,9 +51,12 @@
                 @click="toggleIssue(i)"
             >
                 <div class="issue-line">
-                    <span class="issue-loc">{{ getLocText(iss) }}</span>
-                    <span v-if="getCode(iss)" class="issue-code">{{ getCode(iss) }}</span>
-                    <span class="issue-msg">{{ getMessage(iss) }}</span>
+                <CopyableText :value="getLocText(iss)" mode="code" class="issue-loc" />
+
+                <CopyableText v-if="getCode(iss)" :value="getCode(iss)" mode="code" class="issue-code" />
+
+                <CopyableText :value="getMessage(iss)" mode="block" :multiline="true" class="issue-msg" />
+
                     <v-icon size="14" class="issue-chevron" :class="{ open: openSet[i] }">
                         mdi-chevron-right
                     </v-icon>
@@ -100,6 +103,7 @@
 import { computed, reactive, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import CodeCheckResultList from "./CodeCheckResultList.vue";
+import CopyableText from "../__shared__/CopyableText.vue";
 
 // 折叠态下显示的 issue 数；展开时显示全部
 const COLLAPSED_LIMIT = 5;

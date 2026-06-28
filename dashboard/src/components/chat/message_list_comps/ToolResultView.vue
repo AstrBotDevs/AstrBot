@@ -4,16 +4,37 @@
     <template v-if="toolName === 'astrbot_file_read_tool'">
       <div class="result-header">
         <v-icon size="14" class="result-header-icon">mdi-file-document-outline</v-icon>
-        <span class="result-header-text">{{ readFilePath }}</span>
+        <CopyableText :value="readFilePath" mode="code" class="result-header-text" />
         <span v-if="readFileRange" class="result-header-meta">{{ readFileRange }}</span>
       </div>
-      <div
+      <CopyableText
+
+        :value="readFileContent"
+
+        mode="block"
+
+        :multiline="true"
+
+        bare
+
+        >
+
+        <div
+
         v-if="shikiReady && detectedLanguage !== 'text'"
+
         class="result-code result-code-shiki"
+
         v-html="highlightedCode"
-      ></div>
-      <pre v-else class="result-code">{{ readFileContent }}</pre>
-    </template>
+
+        ></div>
+
+        <pre v-else class="result-code">{{ readFileContent }}</pre>
+
+      </CopyableText>
+
+
+        </template>
 
     <!-- ── file_write_tool ─────────────────────────────────────── -->
     <template v-else-if="toolName === 'astrbot_file_write_tool'">
@@ -35,7 +56,8 @@
           :key="i"
           class="grep-line"
         >
-          <span v-if="line.file" class="grep-file">{{ line.file }}</span>
+        <CopyableText v-if="line.file" :value="line.file" mode="code" class="grep-file" />
+
           <span v-if="line.lineno" class="grep-lineno">{{ line.lineno }}</span>
           <span class="grep-text">{{ line.text }}</span>
         </div>
@@ -47,13 +69,45 @@
     <template v-else-if="toolName === 'astrbot_execute_shell'">
       <div class="shell-result">
         <div class="shell-row">
-          <span class="shell-label">Stdout</span>
-          <pre class="shell-value" v-text="shellStdout"></pre>
-        </div>
+                  <span class="shell-label">Stdout</span>
+                  <CopyableText
+
+                    :value="shellStdout"
+
+                    mode="block"
+
+                    :multiline="true"
+
+                    bare
+
+                    >
+
+                    <pre class="shell-value" v-text="shellStdout"></pre>
+
+                  </CopyableText>
+
+                </div>
         <div v-if="shellStderr" class="shell-row shell-stderr">
-          <span class="shell-label">Stderr</span>
-          <pre class="shell-value shell-stderr-text" v-text="shellStderr"></pre>
-        </div>
+                  <span class="shell-label">Stderr</span>
+                  <CopyableText
+
+                    v-if="shellStderr"
+
+                    :value="shellStderr"
+
+                    mode="block"
+
+                    :multiline="true"
+
+                    bare
+
+                    >
+
+                    <pre class="shell-value shell-stderr-text" v-text="shellStderr"></pre>
+
+                  </CopyableText>
+
+                </div>
         <div class="shell-row">
           <span class="shell-label">Exit code</span>
           <span class="shell-exit-code" :class="shellExitCodeVal === 0 ? 'success' : 'error'">{{ shellExitCodeVal }}</span>
@@ -64,8 +118,24 @@
 
     <!-- ── execute_python ──────────────────────────────────────── -->
     <template v-else-if="toolName === 'astrbot_execute_python' || toolName === 'astrbot_execute_ipython'">
+    <CopyableText
+
+      :value="resultText"
+
+      mode="block"
+
+      :multiline="true"
+
+      bare
+
+      >
+
       <pre class="result-terminal" v-text="resultText"></pre>
-    </template>
+
+    </CopyableText>
+
+
+        </template>
 
     <!-- ── spcode 插件的 9 个工具 ────────────────────────────────── -->
     <template v-else-if="isSpcodeTool">
@@ -86,12 +156,43 @@
     </template>
 
     <!-- ── fallback ────────────────────────────────────────────── -->
-    <template v-else>
-      <pre class="result-raw">{{ formattedResult }}</pre>
+        <template v-else>
+        <CopyableText
+
+          :value="formattedResult"
+
+          mode="block"
+
+          :multiline="true"
+
+          bare
+
+          >
+
+          <pre class="result-raw">{{ formattedResult }}</pre>
+
+        </CopyableText>
+
+
     </template>
 
     <!-- ── shared system suffix ([SYSTEM NOTICE] + overflow notice; exclude shell which handles it separately) ── -->
-    <div v-if="resultSuffix && toolName !== 'astrbot_execute_shell' && !isIntaShellTool" class="result-suffix">{{ resultSuffix }}</div>
+    <CopyableText
+
+      v-if="resultSuffix && toolName !== 'astrbot_execute_shell' && !isIntaShellTool"
+
+      :value="resultSuffix"
+
+      mode="block"
+
+      :multiline="true"
+
+      bare
+
+      class="result-suffix"
+
+      />
+
   </div>
 </template>
 
@@ -107,6 +208,7 @@ import SpcodeToolResultView from "./SpcodeToolResultView.vue";
 import { SPCODE_TOOL_NAMES } from "./spcode_tools/icons";
 import { INTA_SHELL_TOOL_NAMES } from "./inta_shell_tools/icons";
 import IntaShellToolResultView from "./IntaShellToolResultView.vue";
+import CopyableText from "./__shared__/CopyableText.vue";
 
 const props = defineProps<{
   toolName: string;

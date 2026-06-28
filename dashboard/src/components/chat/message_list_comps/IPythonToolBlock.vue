@@ -3,12 +3,20 @@
         <div v-if="displayExpanded" class="py-3 animate-fade-in">
             <!-- Code Section (matches ToolResultView result-code style) -->
             <div class="code-section">
-                <div
-                    v-if="shikiReady && code"
-                    class="code-highlighted code-result-shiki"
-                    v-html="highlightedCode"
-                ></div>
-                <pre v-else class="code-fallback">{{ code || 'No code available' }}</pre>
+                <CopyableText
+                    :value="code"
+                    mode="block"
+                    :multiline="true"
+                    bare
+                    :show-icon="!!code"
+                >
+                    <div
+                        v-if="shikiReady && code"
+                        class="code-highlighted code-result-shiki"
+                        v-html="highlightedCode"
+                    ></div>
+                    <pre v-else class="code-fallback">{{ code || 'No code available' }}</pre>
+                </CopyableText>
             </div>
 
             <!-- Result Section (matches ToolResultView result-code style) -->
@@ -16,8 +24,22 @@
                 <div class="result-label">
                     {{ tm('ipython.output') }}:
                 </div>
-                <pre class="result-content">{{ formattedResult }}</pre>
-                <div v-if="resultNotice" class="result-suffix">{{ resultNotice }}</div>
+                <CopyableText
+                    :value="formattedResult"
+                    mode="block"
+                    :multiline="true"
+                    bare
+                >
+                    <pre class="result-content">{{ formattedResult }}</pre>
+                </CopyableText>
+                <CopyableText
+                    v-if="resultNotice"
+                    :value="resultNotice"
+                    mode="block"
+                    :multiline="true"
+                    bare
+                    class="result-suffix"
+                />
             </div>
         </div>
     </div>
@@ -28,6 +50,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { ensureShikiLanguages, escapeHtml, renderShikiCode } from '@/utils/shiki';
 import { findSystemNoticeIndex } from '@/utils/systemNotice';
+import CopyableText from "./__shared__/CopyableText.vue";
 
 const props = defineProps({
     toolCall: {
