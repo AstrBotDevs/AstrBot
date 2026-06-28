@@ -442,6 +442,7 @@
               @open-thread="openThreadPanel"
               @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
+              @submit-choice="onInteractiveChoiceSubmit"
             />
           </div>
 
@@ -1453,6 +1454,39 @@ async function sendCurrentMessage() {
     sending.value = false;
     await focusChatInput();
   }
+}
+
+/**
+ * Handle InteractiveChoiceBox submit (spec §4.5): bubbled up from
+ * ChatMessageList, creates a user record + bot record via
+ * createLocalExchange and dispatches sendMessageStream with the
+ * currently selected transport / streaming / provider settings.
+ *
+ * Unlike sendCurrentMessage, no new session is created — the user
+ * can only encounter an interactive choice inside an existing chat.
+ */
+function onInteractiveChoiceSubmit(text: string) {
+  const sessionId = currSessionId.value;
+  if (!sessionId) return;
+  const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  const parts: MessagePart[] = [{ type: "plain", text }];
+  const selection = inputRef.value?.getCurrentSelection();
+  const { userRecord, botRecord } = createLocalExchange({
+    sessionId,
+    messageId,
+    parts,
+  });
+  sendMessageStream({
+    sessionId,
+    messageId,
+    parts,
+    transport: transportMode.value,
+    enableStreaming: enableStreaming.value,
+    selectedProvider: selection?.providerId || "",
+    selectedModel: selection?.modelName || "",
+    userRecord,
+    botRecord,
+  });
 }
 
 /**

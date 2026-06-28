@@ -251,6 +251,14 @@
                       </template>
                     </div>
 
+                    <InteractiveChoiceBox
+                      v-else-if="part.type === 'interactive_choice'"
+                      :part="part as unknown as InteractiveChoicePart"
+                      :is-dark="isDark"
+                      :is-ignored="isInteractiveChoiceIgnored(msg)"
+                      @submit="onInteractiveChoiceSubmit"
+                    />
+
                     <div v-else class="unknown-part">
                       {{ formatJson(part) }}
                     </div>
@@ -405,6 +413,8 @@ import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
+import InteractiveChoiceBox from "@/components/chat/message_list_comps/InteractiveChoiceBox.vue";
+import type { InteractiveChoicePart } from "@/composables/parseInteractiveChoice";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import {
@@ -465,6 +475,7 @@ const emit = defineEmits<{
   openThread: [thread: ChatThread];
   openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
   openRefs: [refs: unknown];
+  submitChoice: [text: string];
 }>();
 
 setCustomComponents("chat-message", {
@@ -485,6 +496,24 @@ const avatarSize = computed(() => (props.variant === "thread" ? 36 : 56));
 
 function isUserMessage(message: ChatRecord) {
   return messageContent(message).type === "user";
+}
+
+function onInteractiveChoiceSubmit(text: string) {
+  // 冒泡到父组件(Chat.vue)处理实际发送(spec §4.5)
+  emit("submitChoice", text);
+}
+
+/**
+ * 判定本 bot message 之后是否出现了 user message(用于 InteractiveChoiceBox 的 isIgnored)。
+ * 基于 messages 数组顺序,不需要额外 store / event bus(spec §4.2 ignored 信号协议)。
+ */
+function isInteractiveChoiceIgnored(message: ChatRecord): boolean {
+  const idx = props.messages.findIndex((m) => m === message);
+  if (idx < 0) return false;
+  for (let i = idx + 1; i < props.messages.length; i += 1) {
+    if (isUserMessage(props.messages[i])) return true;
+  }
+  return false;
 }
 
 function messageContent(message: ChatRecord): ChatContent {
