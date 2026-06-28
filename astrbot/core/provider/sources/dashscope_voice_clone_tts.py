@@ -78,10 +78,7 @@ class ProviderDashscopeVoiceCloneTTSAPI(TTSProvider):
         )
         self.timeout_ms = float(provider_config.get("timeout", 20)) * 1000
 
-        dashscope.api_key = self.chosen_api_key
-        resolved_base_url = self._resolve_base_url()
-        if resolved_base_url:
-            dashscope.base_http_api_url = resolved_base_url
+        # API Key 和 Base URL 将在每次调用时通过 kwargs 动态传入，避免修改全局配置
 
     # public API#
     async def get_audio(self, text: str) -> str:
