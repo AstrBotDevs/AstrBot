@@ -41,7 +41,10 @@
 
 - **前端**：`MessagePart` 增加新 type `interactive_choice`；`ChatMessageList.vue` v-else-if 链中加一个分支路由到新组件。
 - **后端**：本期不增加新的 `MessageComponent`——工具 result 走通用的 `Json` 组件即可。
-- **翻译位置（明确）**：在 `dashboard/src/composables/useMessages.ts` 的 `normalizePartsInternal` 中**新增 type 翻译**——当某个 part 的 `type === "interactive_choice"` 且 `prompt` / `options` 字段存在时，**直接透传**该对象（无需转换），并为未声明该 type 的 `MessagePart` interface 补字段。如果 part 缺关键字段（见 §3.2 校验规则）则降级为 `unknown-part`。这是 v1 唯一需要的后端→前端翻译点。
+- **翻译位置（明确）**：在 `dashboard/src/composables/useMessages.ts` 的 `normalizePartsInternal` 中**新增 type 翻译**，分两步：
+  1. **解包**：如果 part 的 `type === "plain"` 且 `text` 字符串以 `"{"` 开头**且** `JSON.parse(text)` 成功且解析结果含 `type === "interactive_choice"`，**用解析后的对象替换原 part**（不保留外层 plain 包装）。否则保留原 plain 文本继续走默认渲染。
+  2. **字段校验**：解包后（或原 part 本身就是 `interactive_choice`）按 §3.2 规则校验 `prompt` / `options` / `id` 等字段。合法则**透传**（不动字段），非法则**降级为 unknown-part**。
+- **来源说明**：解包步骤是 `AskUserChoiceTool`（见 §11）返回 JSON 字符串后被 framework 默认 `Plain` 包装导致的——解包是它的反向操作。这是 v1 唯一需要的后端→前端翻译点。
 - **回传路径**：纯文本——把 `option.value` 或用户输入文本原样塞进 `sendChatMessage`，走标准 user message 通道，**不携带** `tool_call_id` 之类的隐含标记。
 
 ---
@@ -88,6 +91,8 @@ interface ChoiceOption {
 | `options[].description` | ✗ | 200 字 | 前端截断 |
 | `options[].value` | ✓ | 不限 | 不截断(交给 LLM 读) |
 | `input_placeholder` | ✗ | 60 字 | 前端截断;空时使用默认 "或输入自定义内容..." |
+
+> **关于截断的重复约束**：工具层 (§11.2 #4) 也会对 `description` / `input_placeholder` 截断以节省 token,前端截断是**防御性兜底**(应对非 `ask_user_choice` 来源的 part)。两层不冲突: 工具层先截,前端再截不会恢复原文。
 
 ### 3.3 Placement
 
@@ -307,9 +312,12 @@ AstrBot v1 不内置该工具;它以**独立插件**形式提供(`astrbot_plugin
 ```
 LLM (agent runner)
   ↓ 调 ask_user_choice 工具
-Tool Result: { type: "interactive_choice", prompt: "...", options: [...] }
+Tool Result (from `ask_user_choice`): JSON 字符串,形如 `{"type":"interactive_choice", ...}`
+  ↓ framework 默认 Plain 包装成 MessagePart
+MessagePart: { type: "plain", text: '{"type":"interactive_choice", ...}' }
   ↓ 通过 webchat 通道到达 `useMessages.normalizePartsInternal`
-  ↓ 透传(合法) / 降级为 unknown-part(非法)
+  ↓ 步骤 1 解包: 检测 `text` 以 "{" 开头 → JSON.parse → 替换 part
+  ↓ 步骤 2 校验: 按 §3.2 规则 → 透传(合法) / 降级为 unknown-part(非法)
 WebChat Frontend
   ↓ ChatMessageList 路由到 InteractiveChoiceBox
 InteractiveChoiceBox (待选态)
@@ -335,6 +343,7 @@ Backend LLM
 | 用户在 `pending` 状态下关闭页面 | 无副作用——选项框是 stateless UI,后端无挂起任务 |
 | 同一消息内出现两个 `interactive_choice` part | 两者**独立**渲染、独立状态(每个 part 都是一个 `<InteractiveChoiceBox>` 实例,各自管理 `submittedValue`);LLM 一次调用工具不应产生两个 part,这是异常路径但前端需正确处理 |
 | 同一会话内出现多个 `interactive_choice` (跨消息) | 每条 bot message 独立判断 `isIgnored`;新消息中的选项框独立 `pending`,**不**继承上一条的 `submittedValue` |
+| 工具返回的 JSON `JSON.parse` 失败(版本不兼容 / schema 漂移) | 解包步骤 1 中 `JSON.parse` 抛异常 → **保留原 plain 文本继续渲染**(不降级为 unknown-part,避免误把"半合法"文本吃掉);控制台 warn 提示前端检测到 `interactive_choice` 但 JSON 解析失败 |
 
 ---
 
@@ -532,8 +541,11 @@ class AskUserChoiceTool(FunctionTool):
                 {
                     "id": oid,
                     "label": label[:30],  # 截断,见 §3.2
+                    # 修正:`opt.get(key, default)` 只在 key 缺失时用 default;
+                    # 当 LLM 显式传 `null` 时会回 None,然后 str(None)="None"。
+                    # 这里改用 `or ""` 让 None/空字符串都归一为 ""。
                     "description": (
-                        str(opt.get("description", "")).strip()[:200] or None
+                        (opt.get("description") or "")[:200] or None
                     ),
                     "value": str(value),
                 }
