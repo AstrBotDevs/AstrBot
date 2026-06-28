@@ -156,10 +156,16 @@ class ProviderDashscopeVoiceCloneTTSAPI(TTSProvider):
             model,
             text,
         )
+        if hasattr(response, "status_code") and response.status_code != 200:
+            raise RuntimeError(
+                f"DashScope API 调用失败，状态码: {response.status_code}，" 
+                f"错误码: {getattr(response, 'code', 'Unknown')}，" 
+                f"错误信息: {getattr(response, 'message', 'Unknown')}"
+            )
         audio_bytes = await self._extract_audio_from_response(response)
         if not audio_bytes:
             raise RuntimeError(
-                f"模型 '{model}' 音色复刻语音合成失败。原始返回: {response}",
+                f"模型 '{model}' 音色复刻语音合成失败。返回内容为空。",
             )
         return audio_bytes
 
