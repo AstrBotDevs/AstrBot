@@ -40,7 +40,7 @@
 ### 2.3 Extension strategy (chosen via brainstorming)
 
 - **前端**：`MessagePart` 增加新 type `interactive_choice`；`ChatMessageList.vue` v-else-if 链中加一个分支路由到新组件。
-- **后端**：本期不增加新的 `MessageComponent`——工具 result 走通用的 `Json` 组件即可。
+- **后端**：本期不增加新的 `MessageComponent`——工具 result 走 framework 默认的 `Plain` 包装(见 §6 数据流)。
 - **翻译位置（明确）**：在 `dashboard/src/composables/useMessages.ts` 的 `normalizePartsInternal` 中**新增 type 翻译**，分两步：
   1. **解包**：如果 part 的 `type === "plain"` 且 `text` 字符串以 `"{"` 开头**且** `JSON.parse(text)` 成功且解析结果含 `type === "interactive_choice"`，**用解析后的对象替换原 part**（不保留外层 plain 包装）。否则保留原 plain 文本继续走默认渲染。
   2. **字段校验**：解包后（或原 part 本身就是 `interactive_choice`）按 §3.2 规则校验 `prompt` / `options` / `id` 等字段。合法则**透传**（不动字段），非法则**降级为 unknown-part**。
@@ -364,7 +364,7 @@ Backend LLM
 ### 8.2 测试 fixture（明确）
 
 ```ts
-// 输入:工具返回的 part(走 Json 组件或类似通道到达前端)
+// 输入:工具返回的 JSON 字符串(经 framework Plain 包装后到达前端,见 §6)
 const fixtureInput = {
   type: "interactive_choice",
   prompt: "请选择下一步使用的模型",
