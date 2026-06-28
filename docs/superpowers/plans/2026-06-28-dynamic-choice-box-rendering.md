@@ -1165,7 +1165,7 @@ function onInteractiveChoiceSubmit(text: string) {
 />
 ```
 
-> **具体 transport ref 名称** 由 `Chat.vue` 现有代码决定(常见如 `transportRef` / `transport`)。**参考 ChatInput.vue 现有的 send 流程**复制 transport / selectedProvider / selectedModel 的获取方式。
+> **具体 transport / sessionId / selectedProvider / selectedModel 变量名** 由 `Chat.vue` 现有代码决定(实际是 `currSessionId` / `transportMode` / `enableStreaming` / `selectedProvider` / `selectedModel` 等)。**直接参考 `Chat.vue::sendCurrentMessage`(约 line 1386)**,把那段代码里的 send 调用结构照搬过来,只把 parts 替换为 `[{ type: "plain", text }]`。`ChatInput.vue` 只是 UI shell,内部 `@send` 也是 emit 到 Chat.vue 处理。
 
 - [ ] **Step 4: 跑 typecheck + lint**
 
@@ -1378,14 +1378,37 @@ build/
 
 完整内容写入 `choice_ui\choice_tool.py`(**逐字**复制 spec §11.1,约 130 行,包含 `AskUserChoiceTool` 类的 `name` / `description` / `parameters` / `call` 全部字段)。
 
-- [ ] **Step 1.5: diff 校验(spec 漂移检查)**
+- [ ] **Step 1.5: diff 校验(spec 漂移检查,跨平台)**
+
+**方案 A — Git Bash / WSL / macOS / Linux**:
 
 ```bash
-# 在 Astrbot 仓库根目录(spec 与插件源码分离时的兜底)
-diff <(awk '/^### 11.1/,/^### 11.2/' "F:\github\Astrbot\docs\superpowers\specs\2026-06-28-dynamic-choice-box-rendering-design.md") <(cat "D:\AstrbotWorkSpace\astrbot_plugin_choice_ui\choice_ui\choice_tool.py")
+diff <(awk '/^### 11.1/,/^### 11.2/' "F:/github/Astrbot/docs/superpowers/specs/2026-06-28-dynamic-choice-box-rendering-design.md") <(cat "D:/AstrbotWorkSpace/astrbot_plugin_choice_ui/choice_ui/choice_tool.py")
 ```
 
-Expected: 仅有 ASCII 转义 / 路径 / 行号差异,**无实质性代码差异**(spec 是源 of truth,代码必须与 spec §11.1 一致)。如果出现实质性差异,说明 spec 或代码有一处需更新,**不要**让 plan 静默漂移。
+**方案 B — Windows cmd.exe / PowerShell (无 awk 可用)**:
+
+```powershell
+# 用 Python 做行范围提取 + byte diff,跨平台一致
+python -c "
+import re
+with open(r'F:\github\Astrbot\docs\superpowers\specs\2026-06-28-dynamic-choice-box-rendering-design.md', encoding='utf-8') as f:
+    spec = f.read()
+m = re.search(r'### 11\.1\b(.*?)### 11\.2\b', spec, re.DOTALL)
+spec_block = m.group(1).strip() if m else ''
+with open(r'D:\AstrbotWorkSpace\astrbot_plugin_choice_ui\choice_ui\choice_tool.py', encoding='utf-8') as f:
+    impl = f.read().strip()
+print('SPEC_BYTES:', len(spec_block))
+print('IMPL_BYTES:', len(impl))
+print('SPEC_FIRST_LINE:', spec_block.split(chr(10))[0][:80])
+print('IMPL_FIRST_LINE:', impl.split(chr(10))[0][:80])
+"
+```
+
+Expected:
+- `SPEC_BYTES` 与 `IMPL_BYTES` 大致相近(±20 行)
+- `SPEC_FIRST_LINE` 与 `IMPL_FIRST_LINE` 相同(`"""astrbot_plugin_choice_ui/choice_tool.py` 之类)
+- 如差异显著,说明 spec 或代码有一处需更新,**不要**让 plan 静默漂移
 
 - [ ] **Step 2: 写 main.py 入口**
 
