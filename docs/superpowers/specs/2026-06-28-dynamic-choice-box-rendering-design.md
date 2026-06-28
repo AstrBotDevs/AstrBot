@@ -40,7 +40,8 @@
 ### 2.3 Extension strategy (chosen via brainstorming)
 
 - **前端**：`MessagePart` 增加新 type `interactive_choice`；`ChatMessageList.vue` v-else-if 链中加一个分支路由到新组件。
-- **后端**：本期不增加新的 `MessageComponent`——工具 result 走通用的 `Json` 组件即可（webchat 平台侧做 type 翻译，把 `Json.data` 解析为 `InteractiveChoicePart`）。
+- **后端**：本期不增加新的 `MessageComponent`——工具 result 走通用的 `Json` 组件即可。
+- **翻译位置（明确）**：在 `dashboard/src/composables/useMessages.ts` 的 `normalizePartsInternal` 中**新增 type 翻译**——当某个 part 的 `type === "interactive_choice"` 且 `prompt` / `options` 字段存在时，**直接透传**该对象（无需转换），并为未声明该 type 的 `MessagePart` interface 补字段。如果 part 缺关键字段（见 §3.2 校验规则）则降级为 `unknown-part`。这是 v1 唯一需要的后端→前端翻译点。
 - **回传路径**：纯文本——把 `option.value` 或用户输入文本原样塞进 `sendChatMessage`，走标准 user message 通道，**不携带** `tool_call_id` 之类的隐含标记。
 
 ---
@@ -81,8 +82,8 @@ interface ChoiceOption {
 | `type` | ✓ | — | 固定值 |
 | `prompt` | ✓ | 200 字 | 前端截断 |
 | `title` | ✗ | 30 字 | 前端截断 |
-| `options` | ✓ | 2 ~ 10 个 | 少于 2 视为非法,前端降级为 unknown-part |
-| `options[].id` | ✓ | — | 必填,前端用作 :key |
+| `options` | ✓ | 2 ~ 10 个 | 少于 2 / 非数组 / 任意元素缺 `id` 或 `label` 或 `value` → 降级为 unknown-part |
+| `options[].id` | ✓ | — | 必填,前端用作 :key;**id 重复或为空字符串时也降级为 unknown-part**(避免 Vue :key 冲突) |
 | `options[].label` | ✓ | 30 字 | 前端截断 |
 | `options[].description` | ✗ | 200 字 | 前端截断 |
 | `options[].value` | ✓ | 不限 | 不截断(交给 LLM 读) |
@@ -133,6 +134,8 @@ interface ChoiceOption {
 const props = defineProps<{
   part: InteractiveChoicePart;
   isDark?: boolean;
+  /** 父组件判定:本选项框之后是否出现了新 user message(即"被绕过") */
+  isIgnored?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -143,9 +146,19 @@ const emit = defineEmits<{
 **组件内部只管理一个状态**:`submittedValue: string | null`
 - `null` → 渲染"待选" UI
 - 非空 → 渲染"已选择/已输入"只读态
+- `isIgnored === true` → 强制渲染"已忽略"只读态(覆盖 submittedValue)
 
-### 4.3 Layout (待选态)
+**ignored 信号协议（明确）**：
+- 父组件 `ChatMessageList.vue` 在 `renderBlocks(msg)` 渲染时，对每个 `interactive_choice` part 计算一个 `isIgnored` 布尔值
+- 计算规则:在 `messages` 数组中,**当前 msg 之后** 是否存在 `type === "user"` 的 `ChatRecord`
+- 如果 `isIgnored === true` 且组件当前为 `pending` 态 → 渲染"已忽略"标签
+- 如果 `isIgnored === true` 且组件已经 submitted → 保持 submitted 视觉(用户已选择胜过"被忽略")
 
+> 父组件的"之后存在 user message"判断基于消息数组顺序,不需要额外的 store / event bus。这是 v1 唯一的状态传递通道。
+
+### 4.3 Layout
+
+**待选态 (`pending`)**:
 ```
 ┌────────────────────────────────────┐
 │ [icon] title(可选)                 │
@@ -158,6 +171,30 @@ const emit = defineEmits<{
 ├────────────────────────────────────┤
 │  [textarea, placeholder]      │
 │              [   提交  ]         │
+└────────────────────────────────────┘
+```
+
+**已选态 (`submitted_via_option`)**:
+```
+┌────────────────────────────────────┐(opacity 0.6)
+│ ✓ 已选择: {label}                  │
+│   prompt 文案(淡显)               │
+└────────────────────────────────────┘
+```
+
+**已输入态 (`submitted_via_input`)**:
+```
+┌────────────────────────────────────┐(opacity 0.6)
+│ ✓ 已输入: {text}                   │
+│   prompt 文案(淡显)               │
+└────────────────────────────────────┘
+```
+
+**已忽略态 (`ignored`)**:
+```
+┌────────────────────────────────────┐(淡化,无 opacity)
+│ — 已忽略                           │
+│   prompt 文案(淡显)               │
 └────────────────────────────────────┘
 ```
 
@@ -177,7 +214,7 @@ const emit = defineEmits<{
 在 `ChatMessageList.vue` (或其父容器如 `Chat.vue`) 中:
 
 ```ts
-function onInteractiveChoiceSubmit(text: string, sourceMsg: ChatRecord) {
+function onInteractiveChoiceSubmit(text: string) {
   // 走标准 user message 通道 — 不带任何隐藏标记
   sendMessage({ text });
 }
@@ -190,10 +227,12 @@ function onInteractiveChoiceSubmit(text: string, sourceMsg: ChatRecord) {
 选项框存在期间,`ChatInput` 仍可用——用户在 textarea 打字并按 Enter 会走标准 send 路径,**不经过 InteractiveChoiceBox**。
 
 这意味着两条提交路径并存:
-- 路径 1: 用户**点按钮** → InteractiveChoiceBox 提交 → 选项框变只读(`submitted_via_option`)
-- 路径 2: 用户**自己打字** → ChatInput 提交 → 选项框变"已忽略"(`ignored`)
+- 路径 1: 用户**点按钮或提交 InteractiveChoiceBox 内的 textarea** → `InteractiveChoiceBox` 触发 `submit` 事件 → 选项框变只读(`submitted_via_option` 或 `submitted_via_input`)
+- 路径 2: 用户**在 ChatInput 自己打字** → `ChatInput` 触发标准 send → 父组件检测到"本选项框之后出现新 user message" → 通过 `isIgnored` prop 把选项框切到"已忽略"态
 
-**为什么允许路径 2 存在**: 模拟自然对话——用户可能看完选项后想补充自己的想法;选项框不会强制消失。
+**半输入态的处置（明确）**: 如果用户在 `InteractiveChoiceBox` 的 textarea 打了字但**未点提交**就跑去 `ChatInput` 发消息——那段半输入文本**静默丢弃,不弹确认**。理由:选项框是 stateless UI,半输入文本对 LLM 无意义,弹确认会增加用户认知负担。如果未来需要,会改用 `beforeunload` + 显式确认,本期不做。
+
+**为什么允许路径 2 存在**: 模拟自然对话——用户可能看完选项后想补充自己的想法;选项框不会强制消失,而是自然进入"已忽略"态。
 
 ### 4.7 i18n & accessibility
 
@@ -208,6 +247,17 @@ function onInteractiveChoiceSubmit(text: string, sourceMsg: ChatRecord) {
 | `interactiveChoice.defaultPlaceholder` | 或输入自定义内容... | Or type your own... |
 
 每个按钮带 `aria-label`,内容含 `label` + `description`(若存在)。
+
+**A11y 细节（明确）**:
+- `pending` 态: 按钮 `aria-disabled="false"`,可 Tab 聚焦
+- `submitted_*` 态: 按钮加 `aria-disabled="true"` + `tabindex="-1"`,Tab 键跳过;但 `aria-label` 仍可被屏幕阅读器朗读("已选择: {label}")
+- `ignored` 态: 整卡片加 `aria-live="polite"` 公告"选项已被忽略"
+
+**XSS / 转义（明确）**:
+- 所有用户可见文本(`prompt` / `title` / `label` / `description` / `value`)在 Vue 模板中用默认 `{{ }}` 插值,Vue 自动转义 HTML
+- **禁用 `v-html`**: 即使 description 想支持 markdown,本期也只展示纯文本
+- 用户输入文本在 `submitted_via_input` 态显示时同样走 `{{ }}`,不解析为 HTML
+- 未来如需支持 markdown description,会单独 spec,使用 v-text + 单独的 markdown sanitizer
 
 ### 4.8 Visual style
 
@@ -232,8 +282,8 @@ function onInteractiveChoiceSubmit(text: string, sourceMsg: ChatRecord) {
 | 路径 | 修改 |
 | --- | --- |
 | `dashboard/src/composables/useMessages.ts` | 在 `MessagePart` interface 上扩展 `interactive_choice` 字段(`prompt`/`title`/`options`/`input_placeholder`);`isEmptyPlainPart`/`isThinkingPart` 等 helper 中**不**把 `interactive_choice` 当作"thinking"或"empty" |
-| `dashboard/src/components/chat/ChatMessageList.vue` | 加 v-else-if 分支 + `onInteractiveChoiceSubmit` handler |
-| `dashboard/src/components/chat/MessageList.vue` | 同步同样的 v-else-if 分支(legacy 路径) |
+| `dashboard/src/components/chat/ChatMessageList.vue` | 加 v-else-if 分支 + `onInteractiveChoiceSubmit` handler + `isIgnored` 计算 |
+| `dashboard/src/components/chat/MessageList.vue` | **不修改**——该组件为 deprecated legacy 路径(`MessageListDEPRECATED.vue` 提示),其维护已冻结;v1 仅在 `ChatMessageList.vue` 实现 |
 | `dashboard/src/i18n/locales/features/chat.zh-CN.json` (或对应文件) | 新增 i18n keys |
 | `dashboard/src/i18n/locales/features/chat.en-US.json` | 新增 i18n keys |
 
@@ -273,7 +323,9 @@ Backend LLM
 | `options.length > 10` | 前端只渲染前 10 个,控制台 warn |
 | 极端长 `value` / `prompt` | 截断(见 3.2 表) |
 | 用户在 `pending` 状态下关闭页面 | 无副作用——选项框是 stateless UI,后端无挂起任务 |
-| 同一消息内出现两个 `interactive_choice` part | 两者独立渲染、独立状态(都允许用户操作) |
+| 同一消息内出现两个 `interactive_choice` part | 两者**独立**渲染、独立状态(每个 part 都是一个 `<InteractiveChoiceBox>` 实例,各自管理 `submittedValue`);LLM 一次调用工具不应产生两个 part,这是异常路径但前端需正确处理 |
+| 同一会话内出现多个 `interactive_choice` (跨消息) | 每条 bot message 独立判断 `isIgnored`;新消息中的选项框独立 `pending`,**不**继承上一条的 `submittedValue` |
+| 极端长 `value` / `prompt` | 截断(见 3.2 表) |
 
 ---
 
@@ -291,7 +343,34 @@ Backend LLM
   - `normalizePartsInternal` 不会把 `interactive_choice` 误转为 `plain`/`think`
   - `isEmptyPlainPart` / `isThinkingPart` 对 `interactive_choice` 返回 false
 
-### 8.2 手动验证 (与未来 `ask_user_choice` 工具联调时)
+### 8.2 测试 fixture（明确）
+
+```ts
+// 输入:工具返回的 part(走 Json 组件或类似通道到达前端)
+const fixtureInput = {
+  type: "interactive_choice",
+  prompt: "请选择下一步使用的模型",
+  title: "模型选择",
+  options: [
+    { id: "a", label: "GPT-4", description: "更强但更慢", value: "gpt-4" },
+    { id: "b", label: "GPT-4 mini", value: "gpt-4-mini" },
+    { id: "c", label: "本地模型", value: "local" },
+  ],
+  input_placeholder: "或输入自定义模型名",
+};
+
+// 期望输出:normalizePartsInternal 透传该对象,不做字段变换
+const expectedOutput = { ...fixtureInput };
+
+// 非法 fixture (降级为 unknown-part)
+const invalidInput = {
+  type: "interactive_choice",
+  prompt: "请选择",          // 缺 options
+};
+// expectedOutput -> { type: "plain", text: JSON.stringify(invalidInput) }
+```
+
+### 8.3 手动验证 (与未来 `ask_user_choice` 工具联调时)
 
 - LLM 输出 → 工具返回 `interactive_choice` → 前端正确渲染
 - 点选项 → 后端收到纯文本 user message → LLM 正确理解
