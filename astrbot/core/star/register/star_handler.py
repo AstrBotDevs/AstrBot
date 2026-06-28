@@ -577,7 +577,11 @@ def register_on_llm_tool_respond(**kwargs):
     return decorator
 
 
-def register_llm_tool(name: str | None = None, **kwargs):
+def register_llm_tool(
+    name: str | None = None,
+    permission_type: PermissionType | None = None,
+    **kwargs,
+):
     """为函数调用（function-calling / tools-use）添加工具。
 
     请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会尝试解析该函数注释）
@@ -609,11 +613,45 @@ def register_llm_tool(name: str | None = None, **kwargs):
     yield
     ```
 
+    权限声明 / Permission declaration:
+        可以通过 ``permission_type`` 参数为该工具声明一个默认权限要求，效果类似于
+        ``@filter.command()`` 配合 ``@filter.permission_type()`` 的用法。这样即便
+        机器人主人从未在 WebUI 面板里手动配置过该工具的权限，工具也会默认拥有这层
+        防护：
+
+        ```
+        @llm_tool(name="restart_server", permission_type=filter.PermissionType.ADMIN)
+        async def restart_server(event: AstrMessageEvent):
+            \'\'\'重启服务器。\'\'\'
+            # 处理逻辑
+        ```
+
+        - 该参数只是一个**默认值**：如果机器人主人之后在 WebUI 面板里手动为该工具
+          设置了权限，面板的设置会覆盖这里声明的默认值。
+        - 不传或传 ``None`` 时行为与之前完全一致（默认所有人可用）。
+        - 通过 ``registering_agent``（即 ``Agent.llm_tool``）注册的工具目前不支持
+          权限声明，因为它们不经过面板可配置的工具管理系统。
+
     """
     name_ = name
     registering_agent = None
     if kwargs.get("registering_agent"):
         registering_agent = kwargs["registering_agent"]
+
+    if permission_type is not None and not isinstance(permission_type, PermissionType):
+        raise ValueError(
+            "permission_type 必须为 astrbot.api.event.filter.PermissionType 的成员（ADMIN / MEMBER）。",
+        )
+    if permission_type is None:
+        declared_permission = None
+    elif permission_type == PermissionType.ADMIN:
+        declared_permission = "admin"
+    else:
+        # PermissionType.MEMBER (or any non-ADMIN flag) means "no restriction",
+        # which is already the implicit default, but we still record it
+        # explicitly so a dashboard can distinguish "declared member" from
+        # "never declared anything".
+        declared_permission = "member"
 
     def decorator(
         awaitable: Callable[
@@ -661,7 +699,13 @@ def register_llm_tool(name: str | None = None, **kwargs):
         if not registering_agent:
             doc_desc = docstring.description.strip() if docstring.description else ""
             md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)
-            llm_tools.add_func(llm_tool_name, args, doc_desc, md.handler)
+            llm_tools.add_func(
+                llm_tool_name,
+                args,
+                doc_desc,
+                md.handler,
+                declared_permission_type=declared_permission,
+            )
         else:
             assert isinstance(registering_agent, RegisteringAgent)
             # print(f"Registering tool {llm_tool_name} for agent", registering_agent._agent.name)

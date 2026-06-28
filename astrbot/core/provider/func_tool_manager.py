@@ -344,6 +344,7 @@ class FunctionToolManager:
         func_args: list[dict],
         desc: str,
         handler: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
+        declared_permission_type: str | None = None,
     ) -> FuncTool:
         params = {
             "type": "object",  # hard-coded here
@@ -358,6 +359,7 @@ class FunctionToolManager:
             parameters=params,
             description=desc,
             handler=handler,
+            declared_permission_type=declared_permission_type,
         )
 
     def add_func(
@@ -366,6 +368,7 @@ class FunctionToolManager:
         func_args: list,
         desc: str,
         handler: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
+        declared_permission_type: str | None = None,
     ) -> None:
         """添加函数调用工具
 
@@ -373,6 +376,9 @@ class FunctionToolManager:
         @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
         @param desc: 函数描述
         @param func_obj: 处理函数
+        @param declared_permission_type: 插件作者通过 ``@llm_tool(permission_type=...)``
+            声明的默认权限（``"admin"`` / ``"member"`` / ``None``）。仅在该工具尚未
+            在 WebUI 面板中被显式配置过权限时生效，作为默认值使用。
         """
         # check if the tool has been added before
         self.remove_func(name)
@@ -383,6 +389,7 @@ class FunctionToolManager:
                 func_args=func_args,
                 desc=desc,
                 handler=handler,
+                declared_permission_type=declared_permission_type,
             ),
         )
         logger.info(f"Added llm tool: {name}")
@@ -451,9 +458,29 @@ class FunctionToolManager:
     def _default_permission(self, tool_name: str) -> str:
         """Compute the fallback permission for a non-builtin tool.
 
-        All non-builtin tools default to ``"member"`` (no restriction).
+        If the tool's author declared a default via
+        ``@llm_tool(permission_type=...)``, that value is used. Otherwise
+        non-builtin tools default to ``"member"`` (no restriction).
         Builtin tools are never routed through this method."""
+        tool = self._find_declared_tool(tool_name)
+        if tool is not None and tool.declared_permission_type in ("admin", "member"):
+            return tool.declared_permission_type
         return "member"
+
+    def _find_declared_tool(self, tool_name: str) -> FuncTool | None:
+        """Find a tool in ``func_list`` by name, preferring the active copy.
+
+        Mirrors the lookup precedence of :meth:`get_func` but never falls
+        through to builtin tools, since builtin tools don't carry a
+        declared permission and shouldn't trigger builtin-tool loading
+        here."""
+        for f in reversed(self.func_list):
+            if f.name == tool_name and getattr(f, "active", True):
+                return f
+        for f in reversed(self.func_list):
+            if f.name == tool_name:
+                return f
+        return None
 
     def _check_tool_permission(
         self,

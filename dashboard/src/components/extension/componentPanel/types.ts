@@ -130,4 +130,11 @@ export interface ToolItem {
   permission?: 'admin' | 'member';
   /** True when permission was explicitly configured rather than a fallback default. */
   permission_configured?: boolean;
+  /**
+   * Default permission declared by the plugin author via
+   * `@llm_tool(permission_type=...)`. `null` when the tool declared no
+   * default. Distinct from `permission_configured`, which reflects an
+   * explicit WebUI override that always takes precedence over this value.
+   */
+  declared_permission_type?: 'admin' | 'member' | null;
 }
