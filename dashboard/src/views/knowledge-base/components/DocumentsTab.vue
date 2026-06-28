@@ -11,7 +11,9 @@
 
     <!-- 文档列表 -->
     <v-card variant="outlined">
-      <v-data-table :headers="headers" :items="documents" :loading="loading" :search="searchQuery" :items-per-page="10">
+      <v-data-table-server :headers="headers" :items="documents" :loading="loading"
+        :items-per-page="pageSize" :page="page" :items-length="total"
+        @update:page="onPageChange" @update:items-per-page="onItemsPerPageChange">
         <template #item.doc_name="{ item }">
           <div class="d-flex align-center gap-2">
             <v-icon :color="getFileColor(item.file_type)" class="mr-2">
@@ -53,7 +55,7 @@
             <p class="mt-4 text-medium-emphasis">{{ t('documents.empty') }}</p>
           </div>
         </template>
-      </v-data-table>
+      </v-data-table-server>
     </v-card>
 
     <!-- 上传对话框 -->
@@ -236,7 +238,7 @@
 
 <script setup lang="ts">
 import TavilyKeyDialog from './TavilyKeyDialog.vue'
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
@@ -256,6 +258,9 @@ const loading = ref(false)
 const uploading = ref(false)
 const deleting = ref(false)
 const documents = ref<any[]>([])
+const page = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
 const searchQuery = ref('')
 const showUploadDialog = ref(false)
 const showDeleteDialog = ref(false)
@@ -340,9 +345,15 @@ const headers = [
 const loadDocuments = async () => {
   loading.value = true
   try {
-    const response = await knowledgeApi.documents(props.kbId)
+    const response = await knowledgeApi.documents(props.kbId, {
+      page: page.value,
+      page_size: pageSize.value,
+      search: searchQuery.value.trim() || undefined,
+    })
     if (response.data.status === 'ok') {
-      documents.value = response.data.data.items || []
+      const data = response.data.data
+      documents.value = data.items || []
+      total.value = data.total || 0
     }
   } catch (error) {
     console.error('Failed to load documents:', error)
@@ -350,6 +361,18 @@ const loadDocuments = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// Handle pagination
+const onPageChange = (newPage: number) => {
+  page.value = newPage
+  loadDocuments()
+}
+
+const onItemsPerPageChange = (newSize: number) => {
+  pageSize.value = newSize
+  page.value = 1
+  loadDocuments()
 }
 
 // 文件选择
@@ -591,7 +614,7 @@ const startProgressPolling = (taskId: string) => {
           // 移除上传中的占位文档
           documents.value = documents.value.filter(doc => doc.taskId !== taskId)
 
-          // 重新加载文档列表
+          // Reload current page
           await loadDocuments()
           emit('refresh')
 
@@ -684,6 +707,10 @@ const deleteDocument = async () => {
     if (response.data.status === 'ok') {
       showSnackbar(t('documents.deleteSuccess'))
       showDeleteDialog.value = false
+      // If current page becomes empty after delete and is not the first page, go back one page
+      if (documents.value.length === 1 && page.value > 1) {
+        page.value -= 1
+      }
       await loadDocuments()
       emit('refresh')
     } else {
@@ -781,6 +808,12 @@ const onTavilyKeySet = () => {
   showSnackbar('Tavily API Key 配置成功', 'success')
   checkTavilyConfig()
 }
+
+// Reset to page 1 and reload when search text changes
+watch(searchQuery, () => {
+  page.value = 1
+  loadDocuments()
+})
 
 onMounted(() => {
   loadDocuments()

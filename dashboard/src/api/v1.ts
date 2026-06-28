@@ -1384,7 +1384,7 @@ export const knowledgeApi = {
       openApiV1.deleteKnowledgeBase({ path: { kb_id: kbId } }),
     );
   },
-  documents(kbId: string, params?: { page?: number; page_size?: number }) {
+  documents(kbId: string, params?: { page?: number; page_size?: number; search?: string }) {
     return typed<any>(
       openApiV1.listKnowledgeDocuments({
         path: { kb_id: kbId },

@@ -219,25 +219,45 @@ class KBSQLiteDatabase:
         kb_id: str,
         offset: int = 0,
         limit: int = 100,
+        search: str | None = None,
     ) -> list[KBDocument]:
-        """列出知识库的所有文档"""
+        """List documents in a knowledge base.
+
+        Args:
+            kb_id: Knowledge base ID.
+            offset: Number of documents to skip.
+            limit: Maximum number of documents to return.
+            search: Optional partial match on document name; disabled when None or empty.
+
+        Returns:
+            List of matching KBDocument rows.
+        """
         async with self.get_db() as session:
+            stmt = select(KBDocument).where(col(KBDocument.kb_id) == kb_id)
+            if search:
+                stmt = stmt.where(col(KBDocument.doc_name).contains(search))
             stmt = (
-                select(KBDocument)
-                .where(col(KBDocument.kb_id) == kb_id)
-                .offset(offset)
-                .limit(limit)
-                .order_by(desc(KBDocument.created_at))
+                stmt.offset(offset).limit(limit).order_by(desc(KBDocument.created_at))
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def count_documents_by_kb(self, kb_id: str) -> int:
-        """统计知识库的文档数量"""
+    async def count_documents_by_kb(self, kb_id: str, search: str | None = None) -> int:
+        """Count documents in a knowledge base.
+
+        Args:
+            kb_id: Knowledge base ID.
+            search: Optional partial match on document name; disabled when None or empty.
+
+        Returns:
+            Total number of matching documents.
+        """
         async with self.get_db() as session:
             stmt = select(func.count(col(KBDocument.id))).where(
                 col(KBDocument.kb_id) == kb_id,
             )
+            if search:
+                stmt = stmt.where(col(KBDocument.doc_name).contains(search))
             result = await session.execute(stmt)
             return result.scalar() or 0
 

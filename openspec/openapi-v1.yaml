@@ -3446,6 +3446,12 @@ paths:
         - $ref: "#/components/parameters/KbId"
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter documents by name (case-insensitive partial match).
       responses:
         "200":
           $ref: "#/components/responses/Ok"

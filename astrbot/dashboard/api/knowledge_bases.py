@@ -182,6 +182,7 @@ async def list_knowledge_base_documents(
             kb_id=kb_id,
             page=_to_int(request.query_params.get("page"), 1),
             page_size=_to_int(request.query_params.get("page_size"), 100),
+            search=request.query_params.get("search"),
         ),
         prefix="获取文档列表失败",
     )
@@ -390,6 +391,7 @@ async def dashboard_list_documents(
             kb_id=request.query_params.get("kb_id"),
             page=_to_int(request.query_params.get("page"), 1),
             page_size=_to_int(request.query_params.get("page_size"), 100),
+            search=request.query_params.get("search"),
         ),
         prefix="获取文档列表失败",
     )
