@@ -564,6 +564,7 @@ class KBHelper:
                     "row_index": idx,
                     "row_data": row,
                     "is_table_row": True,
+                    "index_text": embedding_text,
                 },
             )
 

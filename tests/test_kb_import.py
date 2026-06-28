@@ -1,4 +1,6 @@
 import asyncio
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -316,6 +318,111 @@ def _make_service_with_mock_kb_helper():
     service.upload_progress = {}
     service.upload_tasks = {}
     return service, kb_helper
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "unsafe_name",
+    ["../../../outside.csv", "..\\..\\..\\outside.csv"],
+)
+async def test_table_upload_sanitizes_multipart_filename(
+    unsafe_name: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    temp_dir = tmp_path / "temp"
+    temp_dir.mkdir()
+    outside_file = tmp_path / "outside.csv"
+    outside_file.write_bytes(b"keep me")
+
+    class UploadedFile:
+        filename = unsafe_name
+        saved_path: Path | None = None
+
+        async def save(self, path) -> None:
+            self.saved_path = Path(path)
+            self.saved_path.write_bytes(b"table content")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.knowledge_base_service.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+    uploaded_file = UploadedFile()
+
+    file_name, file_content = (
+        await KnowledgeBaseService._save_and_read_upload_file(uploaded_file)
+    )
+
+    assert file_name == "outside.csv"
+    assert file_content == b"table content"
+    assert uploaded_file.saved_path is not None
+    assert uploaded_file.saved_path.parent == temp_dir
+    assert not uploaded_file.saved_path.exists()
+    assert outside_file.read_bytes() == b"keep me"
+
+
+@pytest.mark.asyncio
+async def test_table_upload_uses_fallback_for_empty_filename(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    temp_dir = tmp_path / "temp"
+    temp_dir.mkdir()
+
+    class UploadedFile:
+        filename = None
+
+        async def save(self, path) -> None:
+            Path(path).write_bytes(b"table content")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.knowledge_base_service.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+
+    file_name, file_content = await KnowledgeBaseService._save_and_read_upload_file(
+        UploadedFile(),
+    )
+
+    assert file_name == "document"
+    assert file_content == b"table content"
+
+
+@pytest.mark.asyncio
+async def test_table_import_persists_index_text_separately_from_returned_content():
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = SimpleNamespace(kb_id="kb-1")
+    helper._ensure_vec_db = AsyncMock()
+    insert_error = KnowledgeBaseUploadError(
+        stage="storage",
+        user_message="stop after capturing insert payload",
+    )
+    helper.vec_db = SimpleNamespace(
+        insert_batch=AsyncMock(side_effect=insert_error),
+    )
+
+    with pytest.raises(KnowledgeBaseUploadError) as exc_info:
+        await helper.upload_table_document(
+            file_name="products.csv",
+            file_type="csv",
+            headers=["sku", "description"],
+            rows=[["apple-123", "red widget"]],
+            columns_config=[
+                {"name": "sku", "is_index": True, "is_returned": False},
+                {
+                    "name": "description",
+                    "is_index": False,
+                    "is_returned": True,
+                },
+            ],
+        )
+
+    assert exc_info.value is insert_error
+    insert_kwargs = helper.vec_db.insert_batch.await_args.kwargs
+    assert insert_kwargs["contents"] == ["description: red widget"]
+    assert insert_kwargs["embedding_texts"] == ["sku: apple-123"]
+    assert insert_kwargs["metadatas"][0]["index_text"] == "sku: apple-123"
+    assert "apple-123" not in insert_kwargs["contents"][0]
 
 
 @pytest.mark.asyncio

@@ -665,9 +665,11 @@ class KnowledgeBaseService:
             file: The uploaded file object from a multipart request.
 
         Returns:
-            A tuple of ``(file_name, file_content)``.
+            A tuple of the sanitized basename and file content.
         """
-        file_name = file.filename
+        file_name = Path(str(file.filename or "document").replace("\\", "/")).name
+        if file_name in {"", ".", ".."}:
+            file_name = "document"
         temp_file_path = (
             Path(get_astrbot_temp_path()) / f"kb_table_{uuid.uuid4()}_{file_name}"
         )
