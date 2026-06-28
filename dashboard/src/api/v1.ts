@@ -38,6 +38,7 @@ import {
   type ModelScopeSyncRequest,
   type PipInstallRequest,
   type PluginVersionSupportRequest,
+  type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
   type BatchSessionProviderRequest,
@@ -1292,6 +1293,11 @@ export const pluginApi = {
   installUrl(body: OpenConfig) {
     return typed<OpenConfig>(
       openApiV1.installPluginFromUrl({ body: body as any }),
+    );
+  },
+  validateRepo(body: PluginValidateRepoRequest) {
+    return typed<OpenConfig>(
+      openApiV1.validatePluginRepo({ body }),
     );
   },
   bindSource(pluginId: string, body: OpenConfig) {

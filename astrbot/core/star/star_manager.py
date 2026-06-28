@@ -52,7 +52,7 @@ from .error_messages import format_plugin_error
 from .filter.permission import PermissionType, PermissionTypeFilter
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
-from .updator import PluginUpdator
+from .updator import PLUGIN_METADATA_FILENAMES, PluginUpdator
 
 try:
     from watchfiles import PythonFilter, awatch
@@ -465,38 +465,44 @@ class PluginManager:
 
     @staticmethod
     def _load_plugin_metadata(plugin_path: str, plugin_obj=None) -> StarMetadata | None:
-        """先寻找 metadata.yaml 文件，如果不存在，则使用插件对象的 info() 函数获取元数据。
+        """Load plugin metadata from metadata.yaml or metadata.yml.
 
-        Notes: 旧版本 AstrBot 插件可能使用的是 info() 函数来获取元数据。
+        Args:
+            plugin_path: Plugin directory path.
+            plugin_obj: Deprecated compatibility argument; ignored.
+
+        Returns:
+            Loaded plugin metadata, or None if no metadata file exists.
         """
+        del plugin_obj
         metadata = None
+        metadata_label = "metadata.yaml"
+        plugin_root = Path(plugin_path)
 
-        if not os.path.exists(plugin_path):
+        if not plugin_root.exists():
             raise Exception("插件不存在。")
 
-        if os.path.exists(os.path.join(plugin_path, "metadata.yaml")):
-            with open(
-                os.path.join(plugin_path, "metadata.yaml"),
-                encoding="utf-8",
-            ) as f:
+        metadata_path = next(
+            (
+                plugin_root / filename
+                for filename in PLUGIN_METADATA_FILENAMES
+                if (plugin_root / filename).exists()
+            ),
+            None,
+        )
+        if metadata_path:
+            metadata_label = metadata_path.name
+            with metadata_path.open(encoding="utf-8") as f:
                 metadata = yaml.safe_load(f)
-        elif plugin_obj and hasattr(plugin_obj, "info"):
-            # 使用 info() 函数
-            metadata = plugin_obj.info()
 
         if isinstance(metadata, dict):
             if "desc" not in metadata and "description" in metadata:
                 metadata["desc"] = metadata["description"]
 
-            if (
-                "name" not in metadata
-                or "desc" not in metadata
-                or "version" not in metadata
-                or "author" not in metadata
-            ):
-                raise Exception(
-                    "插件元数据信息不完整。name, desc, version, author 是必须的字段。",
-                )
+            try:
+                PluginUpdator.validate_plugin_metadata(metadata, metadata_label)
+            except ValueError as exc:
+                raise Exception(f"插件元数据校验失败：{exc!s}") from exc
             metadata = StarMetadata(
                 name=metadata["name"],
                 author=metadata["author"],
@@ -577,32 +583,42 @@ class PluginManager:
     def _validate_importable_name(plugin_name: str) -> None:
         if "/" in plugin_name or "\\" in plugin_name:
             raise ValueError(
-                "metadata.yaml 中 name 含有路径分隔符，不可用于 importlib 加载。"
+                "metadata 文件中 name 含有路径分隔符，不可用于 importlib 加载。"
             )
         if not plugin_name.isidentifier() or keyword.iskeyword(plugin_name):
             raise Exception(
-                "metadata.yaml 中 name 不是合法的模块名称（应为合法 Python 标识符且非关键字）。"
+                "metadata 文件中 name 不是合法的模块名称（应为合法 Python 标识符且非关键字）。"
             )
 
     @staticmethod
     def _get_plugin_dir_name_from_metadata(plugin_path: str) -> str:
-        metadata_path = os.path.join(plugin_path, "metadata.yaml")
-        if not os.path.exists(metadata_path):
-            raise Exception("未找到 metadata.yaml，无法获取插件目录名。")
+        plugin_root = Path(plugin_path)
+        metadata_path = next(
+            (
+                plugin_root / filename
+                for filename in PLUGIN_METADATA_FILENAMES
+                if (plugin_root / filename).exists()
+            ),
+            None,
+        )
+        if metadata_path is None:
+            raise Exception(
+                "未找到 metadata.yaml 或 metadata.yml，无法获取插件目录名。"
+            )
 
-        with open(metadata_path, encoding="utf-8") as f:
+        with metadata_path.open(encoding="utf-8") as f:
             metadata = yaml.safe_load(f)
 
         if not isinstance(metadata, dict):
-            raise Exception("metadata.yaml 格式错误。")
+            raise Exception(f"{metadata_path.name} 格式错误。")
 
         plugin_name = metadata.get("name")
         if not isinstance(plugin_name, str) or not plugin_name.strip():
-            raise Exception("metadata.yaml 中缺少 name 字段。")
+            raise Exception(f"{metadata_path.name} 中缺少 name 字段。")
 
         plugin_dir_name = PluginManager._normalize_plugin_dir_name(plugin_name)
         if not plugin_dir_name:
-            raise Exception("metadata.yaml 中 name 字段内容非法。")
+            raise Exception(f"{metadata_path.name} 中 name 字段内容非法。")
         PluginManager._validate_importable_name(plugin_dir_name)
         return plugin_dir_name
 
