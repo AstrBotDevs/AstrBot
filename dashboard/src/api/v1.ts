@@ -38,6 +38,7 @@ import {
   type ModelScopeSyncRequest,
   type PipInstallRequest,
   type PluginVersionSupportRequest,
+  type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
   type BatchSessionProviderRequest,
@@ -102,6 +103,13 @@ export interface VersionData {
   change_pwd_hint?: boolean;
   md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
+  [key: string]: unknown;
+}
+
+export interface PublicVersionData {
+  webui_version?: string | null;
+  astrbot_version?: string | null;
+  astrbot_code_version?: string | null;
   [key: string]: unknown;
 }
 
@@ -1287,6 +1295,19 @@ export const pluginApi = {
       openApiV1.installPluginFromUrl({ body: body as any }),
     );
   },
+  validateRepo(body: PluginValidateRepoRequest) {
+    return typed<OpenConfig>(
+      openApiV1.validatePluginRepo({ body }),
+    );
+  },
+  bindSource(pluginId: string, body: OpenConfig) {
+    return typed<OpenConfig>(
+      openApiV1.bindPluginSource({
+        path: { plugin_id: pluginId },
+        body: body as any,
+      }),
+    );
+  },
   page(pluginId: string, pageName: string) {
     return typed<any>(
       openApiV1.getPluginPageById({
@@ -1363,7 +1384,7 @@ export const knowledgeApi = {
       openApiV1.deleteKnowledgeBase({ path: { kb_id: kbId } }),
     );
   },
-  documents(kbId: string, params?: { page?: number; page_size?: number }) {
+  documents(kbId: string, params?: { page?: number; page_size?: number; search?: string }) {
     return typed<any>(
       openApiV1.listKnowledgeDocuments({
         path: { kb_id: kbId },
@@ -1735,6 +1756,15 @@ export const statsApi = {
       openApiV1.cleanupStorage({
         body: target ? { target } : undefined,
       }),
+    );
+  },
+};
+
+export const publicApi = {
+  versions() {
+    return withLegacyFallback<PublicVersionData>(
+      openApiV1.getPublicVersions(),
+      () => httpClient.get<ApiEnvelope<PublicVersionData>>('/api/stat/versions'),
     );
   },
 };

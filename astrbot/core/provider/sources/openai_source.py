@@ -458,16 +458,59 @@ class ProviderOpenAIOfficial(Provider):
             tool_calls = msg.get("tool_calls")
             reasoning_content = msg.get("reasoning_content")
 
-            if _is_empty(content) and not tool_calls and not reasoning_content:
-                logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                continue
+            if _is_empty(content) and not tool_calls:
+                if not reasoning_content:
+                    # 三者全空，真正的垃圾消息，丢弃
+                    logger.debug(
+                        f"过滤第 {idx} 条空 assistant 消息 (无 content | tool_calls | reasoning_content)"
+                    )
+                    continue
+                else:
+                    # ⭐ 有 reasoning_content 但没有 content 和 tool_calls
+                    # 不能丢（推理模型需要 reasoning 历史）
+                    # 但 API 要求 content 或 tool_calls 至少有一个
+                    # → 设空字符串占位，满足校验
+                    msg["content"] = ""
 
-            if _is_empty(content) and tool_calls:
-                msg["content"] = None
+            elif _is_empty(content) and tool_calls:
+                msg["content"] = None  # 有 tool_calls，按 OpenAI 规范
 
             cleaned.append(msg)
 
-        payloads["messages"] = cleaned
+        # Drop orphaned or duplicate tool messages whose assistant(tool_calls)
+        # was removed by context truncation / compression.
+        pending_tool_call_ids: set[str] = set()
+        final: list = []
+        removed_tool_messages = 0
+        for msg in cleaned:
+            if not isinstance(msg, dict):
+                final.append(msg)
+                pending_tool_call_ids = set()
+                continue
+            role = msg.get("role")
+            if role == "assistant" and msg.get("tool_calls"):
+                pending_tool_call_ids = {
+                    tc["id"]
+                    for tc in msg["tool_calls"]
+                    if isinstance(tc, dict) and "id" in tc
+                }
+                final.append(msg)
+            elif role == "tool":
+                tool_call_id = msg.get("tool_call_id")
+                if tool_call_id in pending_tool_call_ids:
+                    final.append(msg)
+                    pending_tool_call_ids.remove(tool_call_id)
+                else:
+                    removed_tool_messages += 1
+            else:
+                pending_tool_call_ids = set()
+                final.append(msg)
+        if removed_tool_messages:
+            logger.debug(
+                "Filtered %d orphaned or duplicate tool message(s)",
+                removed_tool_messages,
+            )
+        payloads["messages"] = final
 
     async def _query(
         self,
@@ -872,8 +915,9 @@ class ProviderOpenAIOfficial(Provider):
         llm_response.raw_completion = completion
         llm_response.id = completion.id
 
-        if completion.usage:
-            llm_response.usage = self._extract_usage(completion.usage)
+        llm_response.usage = (
+            self._extract_usage(completion.usage) if completion.usage else TokenUsage()
+        )
 
         return llm_response
 
@@ -933,11 +977,13 @@ class ProviderOpenAIOfficial(Provider):
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
         is_gemini = "gemini" in model
-        deepseek_reasoning_models = {"deepseek-v4-pro", "deepseek-v4-flash"}
+        _deepseek_v4_markers = ("deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4")
         is_deepseek_v4_reasoning = (
-            model in deepseek_reasoning_models
+            any(marker in model for marker in _deepseek_v4_markers)
             or "api.deepseek.com" in self.client.base_url.host
         )
+        # deepseek-chat and deepseek-reasoner now point to V4 models (per official website)
+
         # MiMo 推理模型（MiMo-V2.5-Pro / MiMo-V2.5 / MiMo-V2-Pro / MiMo-V2-Omni / MiMo-V2-Flash）
         # 要求 assistant 历史消息必须回传 reasoning_content，否则返回 400
         mimo_reasoning_models = {

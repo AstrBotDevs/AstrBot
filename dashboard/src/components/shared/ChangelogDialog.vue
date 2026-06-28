@@ -161,9 +161,9 @@ getCurrentVersion();
     max-width="1000"
   >
     <v-card>
-      <v-card-title class="d-flex justify-space-between align-center">
-        <span class="text-h3">{{ t('core.navigation.changelogDialog.title') }}</span>
-        <v-btn icon @click="dialog = false" flat>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center">
+        <span>{{ t('core.navigation.changelogDialog.title') }}</span>
+        <v-btn icon @click="dialog = false" variant="text">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>

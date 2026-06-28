@@ -1,3 +1,5 @@
+import base64
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
@@ -27,7 +29,7 @@ class FakeEvent:
 
 
 @pytest.mark.asyncio
-async def test_preprocess_converts_images_to_jpeg_and_tracks_temp_files(
+async def test_preprocess_preserves_image_formats_and_tracks_temp_files(
     tmp_path, monkeypatch
 ):
     from PIL import Image as PILImage
@@ -39,15 +41,34 @@ async def test_preprocess_converts_images_to_jpeg_and_tracks_temp_files(
         "get_astrbot_temp_path",
         lambda: str(temp_dir),
     )
-    main_image_path = tmp_path / "main.png"
-    reply_image_path = tmp_path / "reply.webp"
-    PILImage.new("RGBA", (2, 2), (255, 0, 0, 128)).save(main_image_path)
-    PILImage.new("RGB", (2, 2), (0, 255, 0)).save(reply_image_path)
+    main_image_buffer = BytesIO()
+    PILImage.new("RGBA", (2, 2), (255, 0, 0, 128)).save(
+        main_image_buffer,
+        format="PNG",
+    )
+    main_image_ref = (
+        "data:image/png;base64,"
+        + base64.b64encode(main_image_buffer.getvalue()).decode()
+    )
 
-    reply_image = Image(file=str(reply_image_path))
+    reply_image_buffer = BytesIO()
+    PILImage.new("RGB", (2, 2), (0, 255, 0)).save(
+        reply_image_buffer,
+        format="GIF",
+        save_all=True,
+        append_images=[PILImage.new("RGB", (2, 2), (0, 0, 255))],
+        duration=100,
+        loop=0,
+    )
+    reply_image_ref = (
+        "data:image/gif;base64,"
+        + base64.b64encode(reply_image_buffer.getvalue()).decode()
+    )
+
+    reply_image = Image(file=reply_image_ref)
     event = FakeEvent(
         [
-            Image(file=str(main_image_path)),
+            Image(file=main_image_ref),
             Reply(
                 id="reply-1",
                 chain=[Plain(text="quoted"), reply_image],
@@ -66,16 +87,19 @@ async def test_preprocess_converts_images_to_jpeg_and_tracks_temp_files(
     main_image = event.get_messages()[0]
     assert isinstance(main_image, Image)
     assert main_image.file == main_image.path == main_image.url
-    assert main_image.file.endswith(".jpg")
+    assert main_image.file.endswith(".png")
     assert main_image.file in event.temporary_local_files
-    with PILImage.open(main_image.file) as converted_img:
-        assert converted_img.format == "JPEG"
+    with PILImage.open(main_image.file) as processed_img:
+        assert processed_img.format == "PNG"
+        assert processed_img.getpixel((0, 0))[3] == 128
 
     assert reply_image.file == reply_image.path == reply_image.url
-    assert reply_image.file.endswith(".jpg")
+    assert reply_image.file.endswith(".gif")
     assert reply_image.file in event.temporary_local_files
-    with PILImage.open(reply_image.file) as converted_img:
-        assert converted_img.format == "JPEG"
+    with PILImage.open(reply_image.file) as processed_img:
+        assert processed_img.format == "GIF"
+        assert processed_img.is_animated
+        assert processed_img.n_frames == 2
 
 
 @pytest.mark.asyncio

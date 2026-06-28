@@ -216,7 +216,10 @@
     />
 
     <v-dialog v-model="showManualModelDialog" max-width="400">
-      <v-card :title="tm('models.manualDialogTitle')">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ tm('models.manualDialogTitle') }}
+        </v-card-title>
         <v-card-text class="py-4">
           <v-text-field
             v-model="manualModelId"
@@ -238,15 +241,16 @@
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showManualModelDialog = false">取消</v-btn>
-          <v-btn color="primary" @click="confirmManualModel">添加</v-btn>
+          <v-btn color="primary" variant="tonal" @click="confirmManualModel">添加</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <v-dialog v-model="showProviderCfg" width="900" persistent>
-      <v-card
-        :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')"
-      >
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider') }}
+        </v-card-title>
         <v-card-text class="py-4">
           <AstrBotConfig
             :iterable="newSelectedProviderConfig"
@@ -263,7 +267,7 @@
           <v-btn variant="text" :disabled="loading" @click="showProviderCfg = false">
             {{ tm('dialogs.config.cancel') }}
           </v-btn>
-          <v-btn color="primary" :loading="loading" @click="newProvider">
+          <v-btn color="primary" variant="tonal" :loading="loading" @click="newProvider">
             {{ tm('dialogs.config.save') }}
           </v-btn>
         </v-card-actions>
@@ -271,7 +275,10 @@
     </v-dialog>
 
     <v-dialog v-model="showProviderEditDialog" width="800">
-      <v-card :title="providerEditDialogTitle">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ providerEditDialogTitle }}
+        </v-card-title>
         <v-card-text class="py-4">
           <AstrBotConfig
             v-if="providerEditData"
@@ -292,6 +299,7 @@
           </v-btn>
           <v-btn
             color="primary"
+            variant="tonal"
             :loading="savingProviders.includes(providerEditData?.id)"
             @click="saveEditedProvider"
           >
@@ -307,7 +315,7 @@
 
     <v-dialog v-model="showAgentRunnerDialog" max-width="520" persistent>
       <v-card>
-        <v-card-title class="text-h3 d-flex align-center">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <v-icon start class="me-2">mdi-information</v-icon>
           请前往「配置文件」页测试 Agent 执行器
         </v-card-title>
@@ -323,7 +331,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="grey" variant="text" @click="showAgentRunnerDialog = false">好的</v-btn>
-          <v-btn color="primary" variant="flat" @click="goToConfigPage">点击前往</v-btn>
+          <v-btn color="primary" variant="tonal" @click="goToConfigPage">点击前往</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

@@ -240,6 +240,10 @@ const usernameRules = computed(() => [
 const showPassword = ref(false);
 const showNewPassword = ref(false);
 const showConfirmPassword = ref(false);
+const currentPasswordInput = ref();
+const newPasswordInput = ref();
+const confirmPasswordInput = ref();
+const newUsernameInput = ref();
 
 // 账户修改状态
 const accountEditStatus = ref({
@@ -1304,13 +1308,14 @@ onMounted(async () => {
       :fullscreen="$vuetify.display.xs"
     >
       <v-card>
-        <v-card-title class="mobile-card-title">
-          <span class="text-h3 pa-4">{{
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 mobile-card-title">
+          <span>{{
             t("core.header.updateDialog.title")
           }}</span>
           <v-btn
             v-if="$vuetify.display.xs"
             icon
+            variant="text"
             @click="updateStatusDialog = false"
           >
             <v-icon>mdi-close</v-icon>
@@ -1364,7 +1369,7 @@ onMounted(async () => {
                 </div>
                 <v-btn
                   color="success"
-                  variant="elevated"
+                  variant="tonal"
                   size="small"
                   @click="reloadAfterUpdate"
                 >
@@ -1657,7 +1662,7 @@ onMounted(async () => {
     <!-- Release Notes Modal -->
     <v-dialog v-model="releaseNotesDialog" max-width="800">
       <v-card>
-        <v-card-title class="text-h3 pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ t("core.header.updateDialog.releaseNotes.title") }}:
           {{ selectedReleaseTag }}
         </v-card-title>
@@ -1685,7 +1690,7 @@ onMounted(async () => {
 
     <v-dialog v-model="desktopUpdateDialog" max-width="460">
       <v-card>
-        <v-card-title class="text-h3 pa-4 pl-6 pb-0">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ t("core.header.updateDialog.desktopApp.title") }}
         </v-card-title>
         <v-card-text>
@@ -1727,7 +1732,7 @@ onMounted(async () => {
           </v-btn>
           <v-btn
             color="primary"
-            variant="flat"
+            variant="tonal"
             @click="confirmDesktopUpdate"
             :loading="desktopUpdateInstalling"
             :disabled="
@@ -1796,6 +1801,7 @@ onMounted(async () => {
 
           <v-form v-model="formValid" @submit.prevent="accountEdit">
             <v-text-field
+              ref="currentPasswordInput"
               v-model="password"
               :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
               :type="showPassword ? 'text' : 'password'"
@@ -1804,12 +1810,14 @@ onMounted(async () => {
               required
               clearable
               @click:append-inner="showPassword = !showPassword"
+              @keydown.tab.exact.prevent="newPasswordInput?.focus()"
               prepend-inner-icon="mdi-lock-outline"
               hide-details="auto"
               class="mb-4"
             ></v-text-field>
 
             <v-text-field
+              ref="newPasswordInput"
               v-model="newPassword"
               :append-inner-icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'"
               :type="showNewPassword ? 'text' : 'password'"
@@ -1818,6 +1826,8 @@ onMounted(async () => {
               variant="outlined"
               clearable
               @click:append-inner="showNewPassword = !showNewPassword"
+              @keydown.tab.shift.prevent="currentPasswordInput?.focus()"
+              @keydown.tab.exact.prevent="confirmPasswordInput?.focus()"
               prepend-inner-icon="mdi-lock-plus-outline"
               :hint="t('core.header.accountDialog.form.passwordHint')"
               persistent-hint
@@ -1825,6 +1835,7 @@ onMounted(async () => {
             ></v-text-field>
 
             <v-text-field
+              ref="confirmPasswordInput"
               v-model="confirmPassword"
               :append-inner-icon="
                 showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'
@@ -1835,6 +1846,8 @@ onMounted(async () => {
               variant="outlined"
               clearable
               @click:append-inner="showConfirmPassword = !showConfirmPassword"
+              @keydown.tab.shift.prevent="newPasswordInput?.focus()"
+              @keydown.tab.exact.prevent="newUsernameInput?.focus()"
               prepend-inner-icon="mdi-lock-check-outline"
               :hint="t('core.header.accountDialog.form.confirmPasswordHint')"
               persistent-hint
@@ -1842,11 +1855,13 @@ onMounted(async () => {
             ></v-text-field>
 
             <v-text-field
+              ref="newUsernameInput"
               v-model="newUsername"
               :rules="usernameRules"
               :label="t('core.header.accountDialog.form.newUsername')"
               variant="outlined"
               clearable
+              @keydown.tab.shift.prevent="confirmPasswordInput?.focus()"
               prepend-inner-icon="mdi-account-edit-outline"
               :hint="t('core.header.accountDialog.form.usernameHint')"
               persistent-hint
@@ -1872,6 +1887,7 @@ onMounted(async () => {
           </v-btn>
           <v-btn
             color="primary"
+            variant="tonal"
             @click="accountEdit"
             :loading="accountEditStatus.loading"
             :disabled="!formValid"
