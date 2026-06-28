@@ -162,14 +162,13 @@ async function handleCopy() {
   word-break: break-word;
 }
 
-/* code: monospace chip, icon top-right */
+/* code: monospace inline text, icon floats in reserved right padding
+   (no chip background — visually quiet; hover-revealed icon is the affordance) */
 .copyable-code {
   display: inline-block;
-  padding: 0 22px 0 4px;
+  padding: 0 22px 0 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  border-radius: 3px;
   color: rgba(var(--v-theme-on-surface), 0.8);
   cursor: text;
   max-width: 100%;
@@ -180,13 +179,14 @@ async function handleCopy() {
   word-break: break-all;
 }
 
-/* block: block-level, icon top-right, supports slot */
+/* block: block-level, icon top-right, supports slot.
+   No background / border-radius by default; consumers that wrap existing
+   styled <pre> content use the `bare` prop (which zeros these explicitly)
+   so the same base styles serve both bare and non-bare callers. */
 .copyable-block {
   display: block;
   position: relative;
-  padding: 4px 24px 4px 8px;
-  border-radius: 4px;
-  background: rgba(var(--v-theme-on-surface), 0.04);
+  padding: 0 24px 0 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11.5px;
   line-height: 1.55;
@@ -207,14 +207,12 @@ async function handleCopy() {
   font-style: italic;
 }
 
-/* bare: drop wrapper's own chrome (background / border-radius / padding)
-   so the slot content (e.g. a <pre> with its own background) shows through
-   without doubled visual layers. Keeps position:relative + right padding
-   for the absolute-positioned copy button. */
+/* bare: historical no-op since the base .copyable-block no longer carries
+   background / border-radius. Kept for call-site clarity (consumers can
+   still declare `bare` to signal "the slot provides its own visual chrome")
+   and as a safety net in case chrome is re-introduced later. */
 .copyable-block.is-bare {
   padding: 0 24px 0 0;
-  background: transparent;
-  border-radius: 0;
 }
 
 /* copy button (corner, hover-revealed) */
