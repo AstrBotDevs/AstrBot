@@ -724,7 +724,7 @@ class FunctionToolManager:
                 raise
             finally:
                 # Cleanup in the same task that entered the anyio contexts
-                await self._terminate_mcp_client(name)
+                await asyncio.shield(self._terminate_mcp_client(name))
 
         lifecycle_task = asyncio.create_task(
             connect_and_lifecycle(), name=f"mcp-client:{name}"
