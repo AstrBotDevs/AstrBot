@@ -9,6 +9,7 @@ from astrbot.core import logger
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
+    KnowledgeBaseCreateRequest,
     KnowledgeBaseImportRequest,
     KnowledgeBaseRequest,
     KnowledgeBaseRetrieveRequest,
@@ -86,11 +87,7 @@ async def list_knowledge_bases(
     return await _run(
         lambda: service.list_kbs(
             page=_to_int(request.query_params.get("page"), 1),
-            page_size=(
-                _to_int(request.query_params.get("page_size"), 20)
-                if "page" in request.query_params or "page_size" in request.query_params
-                else None
-            ),
+            page_size=_to_int(request.query_params.get("page_size"), 20),
         ),
         prefix="获取知识库列表失败",
     )
@@ -98,7 +95,7 @@ async def list_knowledge_bases(
 
 @router.post("/knowledge-bases")
 async def create_knowledge_base(
-    payload: KnowledgeBaseRequest,
+    payload: KnowledgeBaseCreateRequest,
     _auth: AuthContext = Depends(require_kb_scope),
     service: KnowledgeBaseService = Depends(get_service),
 ):
@@ -318,11 +315,7 @@ async def dashboard_list_kbs(
     return await _run(
         lambda: service.list_kbs(
             page=_to_int(request.query_params.get("page"), 1),
-            page_size=(
-                _to_int(request.query_params.get("page_size"), 20)
-                if "page" in request.query_params or "page_size" in request.query_params
-                else None
-            ),
+            page_size=_to_int(request.query_params.get("page_size"), 20),
         ),
         prefix="获取知识库列表失败",
     )
