@@ -183,7 +183,8 @@ async def test_managed_websocket_uses_qq_hello_heartbeat_interval(monkeypatch):
     assert sent_payloads == [{"op": 1, "d": 7}]
 
 
-def test_bot_client_schedules_rate_limit_reconnect_delay():
+@pytest.mark.asyncio
+async def test_bot_client_schedules_rate_limit_reconnect_delay():
     client = QQOfficialBotClient(
         intents=botpy.Intents(public_messages=True),
         bot_log=False,

@@ -121,6 +121,7 @@ class ManagedBotWebSocket(BotWebSocket):
             logger.info("[QQOfficial] Gateway requested reconnect.")
             self._client.schedule_reconnect_delay("server requested reconnect")
             self._connection.add(self._session)
+            self._can_reconnect = False
             await ws.close()
             return True
         if event_op == self.WS_INVALID_SESSION:
@@ -133,6 +134,7 @@ class ManagedBotWebSocket(BotWebSocket):
                 self._session["last_seq"] = 0
             self._client.schedule_reconnect_delay("invalid session", custom_delay=3)
             self._connection.add(self._session)
+            self._can_reconnect = False
             await ws.close()
             return True
         return await super()._is_system_event(message_event, ws)
