@@ -200,6 +200,9 @@ class ProviderDashscopeVoiceCloneTTSAPI(TTSProvider):
                     timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as response,
             ):
+                if response.status != 200:
+                    logging.error(f"Failed to download audio from URL {url}, HTTP status: {response.status}")
+                    return None
                 return await response.read()
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
             logging.exception(f"Failed to download audio from URL {url}: {e}")
