@@ -18,8 +18,10 @@ import powershell from "shiki/langs/powershell.mjs";
 import python from "shiki/langs/python.mjs";
 import rust from "shiki/langs/rust.mjs";
 import sql from "shiki/langs/sql.mjs";
+import systemVerilog from "shiki/langs/system-verilog.mjs";
 import tsx from "shiki/langs/tsx.mjs";
 import typescript from "shiki/langs/typescript.mjs";
+import verilog from "shiki/langs/verilog.mjs";
 import vue from "shiki/langs/vue.mjs";
 import xml from "shiki/langs/xml.mjs";
 import yaml from "shiki/langs/yaml.mjs";
@@ -47,8 +49,10 @@ export const LIMITED_SHIKI_LANGUAGES = [
   ...python,
   ...rust,
   ...sql,
+  ...systemVerilog,
   ...tsx,
   ...typescript,
+  ...verilog,
   ...vue,
   ...xml,
   ...yaml,
@@ -90,9 +94,15 @@ export const LIMITED_SHIKI_LANGUAGE_ALIASES = {
   shellscript: "bash",
   sh: "bash",
   svg: "xml",
+  sv: "system-verilog",
+  svh: "system-verilog",
+  systemverilog: "system-verilog",
   text: "text",
   ts: "typescript",
   txt: "text",
+  v: "verilog",
+  verilog: "verilog",
+  vh: "verilog",
   xhtml: "html",
   yml: "yaml",
   zsh: "bash",

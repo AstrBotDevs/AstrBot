@@ -85,6 +85,11 @@ const EXT_TO_LANG: Record<string, string> = {
   ".c++": "cpp",
   ".go": "go",
   ".rs": "rust",
+  // Verilog / SystemVerilog
+  ".v": "verilog",
+  ".vh": "verilog",
+  ".sv": "system-verilog",
+  ".svh": "system-verilog",
 };
 
 function detectLanguage(filePath: string): string {

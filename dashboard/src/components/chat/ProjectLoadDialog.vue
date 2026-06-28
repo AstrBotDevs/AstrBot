@@ -62,12 +62,19 @@ function removeFromPathHistory(path: string): void {
 }
 
 /**
- * Compose the final chat input text for the project-load command.
+ * Compose the final chat input text for the load/set command.
+ *
+ * When ``commandMode === 'codegraph'`` the command becomes
+ * ``/codegraph set <path>``; otherwise it stays ``/project load <path>``.
  *
  * Falls back to ``"/"`` if ``wakePrefix`` is empty so an empty
- * ``wakePrefixes`` does not produce ``"undefinedproject load ..."``.
+ * ``wakePrefixes`` does not produce ``"undefinedcodegraph set ..."``.
  */
-function buildLoadCommand(wakePrefix: string, path: string): string {
+function buildLoadCommand(
+  wakePrefix: string,
+  path: string,
+  cmdMode: 'project' | 'codegraph',
+): string {
   const prefix = wakePrefix || "/";
   const trimmed = path.trim();
   // Auto-wrap in double quotes when the path contains whitespace and isn't
@@ -76,16 +83,24 @@ function buildLoadCommand(wakePrefix: string, path: string): string {
     trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2;
   const needsQuoting = !alreadyQuoted && /\s/.test(trimmed);
   const finalPath = needsQuoting ? `"${trimmed}"` : trimmed;
-  return `${prefix}project load ${finalPath}`;
+  const verb = cmdMode === 'codegraph' ? 'codegraph set' : 'project load';
+  return `${prefix}${verb} ${finalPath}`;
 }
 
 // ── Props / Emits ───────────────────────────────────────────────────────
 interface Props {
   wakePrefixes: string[];
+  /**
+   * Controls the command and UI layout:
+   * - `'project'` (default): ``/project load <path>`` with an unload button.
+   * - `'codegraph'`: ``/codegraph set <path>``, no unload button.
+   */
+  commandMode?: 'project' | 'codegraph';
 }
 
 const props = withDefaults(defineProps<Props>(), {
   wakePrefixes: () => ["/"],
+  commandMode: 'project',
 });
 
 const emit = defineEmits<{
@@ -94,6 +109,13 @@ const emit = defineEmits<{
 
 // ── i18n ────────────────────────────────────────────────────────────────
 const { tm } = useModuleI18n("features/chat");
+
+// ── Derived ─────────────────────────────────────────────────────────────
+const dialogTitle = computed(() =>
+  props.commandMode === 'codegraph'
+    ? tm("spcodeProjectLoad.dialog.codegraphTitle")
+    : tm("spcodeProjectLoad.dialog.title"),
+);
 
 // ── Reactive state ──────────────────────────────────────────────────────
 const dialogOpen = ref(false);
@@ -136,7 +158,11 @@ function onConfirm(): void {
   const trimmed = path.value.trim();
   if (!trimmed) return;
   addToPathHistory(trimmed);
-  const text = buildLoadCommand(props.wakePrefixes[0] || "/", trimmed);
+  const text = buildLoadCommand(
+    props.wakePrefixes[0] || "/",
+    trimmed,
+    props.commandMode,
+  );
   emit("submit", text);
   dialogOpen.value = false;
 }
@@ -159,11 +185,12 @@ function onUnload(): void {
   <v-dialog v-model="dialogOpen" max-width="540">
     <v-card>
       <v-card-title class="text-h6">
-        {{ tm("spcodeProjectLoad.dialog.title") }}
+        {{ dialogTitle }}
       </v-card-title>
       <v-card-text>
         <!-- Unload current project (separate from the load form, above a divider) -->
         <v-btn
+          v-if="props.commandMode === 'project'"
           block
           variant="outlined"
           prepend-icon="mdi-folder-remove-outline"
@@ -172,7 +199,7 @@ function onUnload(): void {
         >
           {{ tm("spcodeProjectLoad.dialog.unloadButton") }}
         </v-btn>
-        <v-divider class="my-4" />
+        <v-divider v-if="props.commandMode === 'project'" class="my-4" />
         <v-form @submit.prevent="onConfirm">
           <v-text-field
             v-model="path"

@@ -584,6 +584,7 @@ import { useDisplay } from "vuetify";
 import { isAxiosError } from "axios";
 import { chatApi } from "@/api/v1";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
+import { useSpcodeCodegraphStatus } from "@/composables/useSpcodeCodegraphStatus";
 import { useSpcodePlanMode } from "@/composables/useSpcodePlanMode";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ProjectDialog, {
@@ -641,6 +642,7 @@ const { tm } = useModuleI18n("features/chat");
 // apply updates and so the refresh-on-session-change handler can call
 // the plugin's HTTP API.
 const spcodeStatus = useSpcodeProjectStatus();
+const codegraphStatus = useSpcodeCodegraphStatus();
 // Plan/build mode singleton. Mirrors the spcodeStatus lifecycle so
 // both chips stay in sync across session switches and stream-ends.
 const spcodePlanMode = useSpcodePlanMode();
@@ -980,6 +982,11 @@ const {
       // (not the bare session id) so the backend's `_plan_mode[umo]`
       // lookup actually hits the key the bot just wrote.
       void spcodePlanMode.refresh(resolveCurrentUmo(currSessionId.value));
+      // Codegraph MCP state is global (not per-umo), so no umo arg.
+      // Mirrors project/plan: stream-end is the authoritative sync
+      // point — the bot has just finished processing any
+      // `/codegraph start|stop|set` command the user dispatched.
+      void codegraphStatus.refresh();
     }
   },
 });

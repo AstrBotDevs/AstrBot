@@ -6,6 +6,11 @@
     @dragleave.prevent="handleDragLeave"
     @drop.prevent="handleDrop"
   >
+    <!--
+      Codegraph MCP server status row. Shown above the main status row
+      when the spcode plugin is enabled. Polls every 30 s for live
+      updates (see the setInterval in the script section).
+    -->
     <div
           v-if="showSpcodeIndicator"
           class="input-area__status-row"
@@ -67,6 +72,12 @@
             </div>
           </div>
         </div>
+    <div
+      v-if="showSpcodeIndicator"
+      class="input-area__codegraph-row"
+    >
+      <SpcodeCodegraphChip @open-codegraph-dialog="openCodegraphLoadDialog" />
+    </div>
     <div
       class="input-container"
       :style="{
@@ -369,7 +380,7 @@
           </v-btn>
           <v-btn
             v-else
-            @click="$emit('send')"
+            @click="handleSendClick"
             icon="mdi-arrow-up"
             variant="tonal"
             :disabled="!canSend"
@@ -391,6 +402,13 @@
       ref="projectLoadDialogRef"
       :wake-prefixes="wakePrefixes"
       @submit="handleProjectLoadSubmit"
+    />
+
+    <ProjectLoadDialog
+      ref="codegraphLoadDialogRef"
+      :wake-prefixes="wakePrefixes"
+      command-mode="codegraph"
+      @submit="handleCodegraphSubmit"
     />
 
     <CommentsPreviewDialog
@@ -425,10 +443,12 @@ import CommandSuggestion from "./CommandSuggestion.vue";
 import ProjectLoadMenuItem from "./ProjectLoadMenuItem.vue";
 import ProjectLoadDialog from "./ProjectLoadDialog.vue";
 import SpcodeProjectIndicator from "./SpcodeProjectIndicator.vue";
+import SpcodeCodegraphChip from "./SpcodeCodegraphChip.vue";
 import SpcodePlanModeChip from "./SpcodePlanModeChip.vue";
 import GitDiffChip from "./GitDiffChip.vue";
 import CommentsPreviewDialog from "./CommentsPreviewDialog.vue";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
+import { useSpcodeCodegraphStatus } from "@/composables/useSpcodeCodegraphStatus";
 import { useFileComments } from "@/composables/useFileComments";
 import { useConfirmDialog } from "@/utils/confirmDialog";
 import { useSpcodeProjectLoad } from "@/composables/useSpcodeProjectLoad";
@@ -572,6 +592,11 @@ const commandSuggestionLoading = ref(false);
 // chip's click handler and the + menu's trigger both call its
 // exposed `openLoadDialog()` to surface the same dialog.
 const projectLoadDialogRef = ref<{
+  openLoadDialog: () => void;
+  closeLoadDialog: () => void;
+} | null>(null);
+
+const codegraphLoadDialogRef = ref<{
   openLoadDialog: () => void;
   closeLoadDialog: () => void;
 } | null>(null);
@@ -906,6 +931,7 @@ function handleKeyDown(e: KeyboardEvent) {
       return;
     }
     if (canSend.value) {
+      applyOptimisticCodegraphStatus(localPrompt.value);
       emit("send");
     }
     return;
@@ -1011,6 +1037,63 @@ function applyOptimisticProjectStatus(text: string): void {
 }
 
 /**
+ * Send button click handler. Applies optimistic codegraph updates
+ * before emitting the send event.
+ */
+function handleSendClick(): void {
+  applyOptimisticCodegraphStatus(localPrompt.value);
+  emit("send");
+}
+
+/**
+ * Parse the text being sent for codegraph MCP commands and apply
+ * optimistic updates so the chip reflects the new state immediately.
+ *
+ * Also handles `/project unload`, which on the backend may trigger
+ * `codegraph set` with the configured default project. Since the
+ * frontend cannot know the default path, it clears the displayed
+ * project path — the 30 s poll will correct it if needed.
+ *
+ * Matched commands:
+ *   - `<prefix>codegraph start`       → set MCP running
+ *   - `<prefix>codegraph stop`        → set MCP stopped
+ *   - `<prefix>codegraph set <path>`  → update active project path
+ *   - `<prefix>project unload`        → clear active project path
+ */
+function applyOptimisticCodegraphStatus(text: string): void {
+  const trimmed = text.trim()
+  // start
+  if (/^\S+\s+codegraph\s+start(?:\s|$)/.test(trimmed)) {
+    codegraphStatus.setRunning(true)
+    return
+  }
+  // stop
+  if (/^\S+\s+codegraph\s+stop(?:\s|$)/.test(trimmed)) {
+    codegraphStatus.setRunning(false)
+    return
+  }
+  // set <path>
+  const setMatch = trimmed.match(
+    /^\S+\s+codegraph\s+set\s+(\S[\s\S]*)$/,
+  )
+  if (setMatch) {
+    let path = setMatch[1].trim()
+    if (path.length >= 2 && path.startsWith('"') && path.endsWith('"')) {
+      path = path.slice(1, -1)
+    }
+    if (path) {
+      codegraphStatus.setProject(path)
+    }
+    return
+  }
+  // project unload → the backend may reset codegraph to the configured
+  // default project. Clear our local copy; polling catches up.
+  if (/^\S+\s+project\s+unload(?:\s|$)/.test(trimmed)) {
+    codegraphStatus.setProject("")
+  }
+}
+
+/**
  * Handle a spcode project-load submission: write the constructed command
  * text into the prompt and re-emit the existing `send` event.
  *
@@ -1027,6 +1110,17 @@ function applyOptimisticProjectStatus(text: string): void {
  */
 function handleProjectLoadSubmit(text: string): void {
   applyOptimisticProjectStatus(text);
+  localPrompt.value = text;
+  emit("send");
+}
+
+/**
+ * Handle a codegraph ``set`` submission. Follows the same pattern as
+ * ``handleProjectLoadSubmit`` — write the command into the prompt,
+ * optimistically update the chip state, and dispatch.
+ */
+function handleCodegraphSubmit(text: string): void {
+  applyOptimisticCodegraphStatus(text);
   localPrompt.value = text;
   emit("send");
 }
@@ -1238,6 +1332,19 @@ function openProjectLoadDialog(): void {
   openLoadDialog();
 }
 
+/**
+ * SpcodeCodegraphChip "open codegraph dialog" handler. Delegates to
+ * the second ``ProjectLoadDialog`` instance (``commandMode="codegraph"``)
+ * mounted next to the project-load dialog.
+ */
+function openCodegraphLoadDialog(): void {
+  if (codegraphLoadDialogRef.value) {
+    codegraphLoadDialogRef.value.openLoadDialog();
+    return;
+  }
+  focusInput();
+}
+
 // Pull the spcode status API into scope. The watcher fires an initial
 // status fetch once the unified visibility gate (plugin enabled AND
 // /project* command present) flips to true. Same shape as before, just
@@ -1256,6 +1363,30 @@ watch(showSpcodeIndicator, async (visible) => {
         ).umo
       : null;
     await spcodeStatus.refresh(umo);
+  }
+}, { immediate: false });
+
+// Singleton codegraph MCP status. Authoritative refresh is driven by
+// ``Chat.vue:onStreamEnd`` (same hook that refreshes project status and
+// plan mode), so the chip catches up the moment the bot finishes
+// processing any ``/codegraph start|stop|set`` command. We only need
+// an initial fetch here so the chip has a value to render on first
+// paint when the spcode indicator becomes visible.
+const codegraphStatus = useSpcodeCodegraphStatus();
+// Fallback sync path for the case where another client / the bot itself
+// mutates codegraph state while this tab is in the background. When
+// the user brings the tab back to the foreground we re-query the
+// authoritative state. ``showSpcodeIndicator`` gates the refresh so
+// we never issue a request for users who have the spcode plugin off
+// (or who have already logged out / unmounted this component).
+const onVisibilityChange = () => {
+  if (document.visibilityState === "visible" && showSpcodeIndicator.value) {
+    void codegraphStatus.refresh();
+  }
+};
+watch(showSpcodeIndicator, async (visible) => {
+  if (visible) {
+    await codegraphStatus.refresh();
   }
 }, { immediate: false });
 
@@ -1293,6 +1424,7 @@ onMounted(() => {
     inputField.value.addEventListener("paste", handlePaste);
   }
   document.addEventListener("keyup", handleKeyUp);
+  document.addEventListener("visibilitychange", onVisibilityChange);
   // 预加载指令列表
   fetchCommands();
   // 预加载 spcode 插件启用状态。`useSpcodeProjectLoad` 是单例,
@@ -1309,6 +1441,7 @@ onBeforeUnmount(() => {
   }
   clearCompositionState();
   document.removeEventListener("keyup", handleKeyUp);
+  document.removeEventListener("visibilitychange", onVisibilityChange);
 });
 
 defineExpose({
@@ -1325,6 +1458,15 @@ defineExpose({
   border-top: 1px solid var(--v-theme-border);
   flex-shrink: 0;
 }
+.input-area__codegraph-row {
+  align-items: center;
+  display: flex;
+  margin: 0 auto 4px;
+  max-width: 900px;
+  min-height: 20px;
+  width: 85%;
+}
+
 .input-area__status-row {
   align-items: center;
   display: flex;

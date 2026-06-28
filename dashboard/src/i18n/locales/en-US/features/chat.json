@@ -260,6 +260,7 @@
     "menuItem": "Load Project Directory",
     "dialog": {
       "title": "Load Project Directory",
+      "codegraphTitle": "Set Codegraph Project",
       "pathLabel": "Project Path",
       "pathPlaceholder": "e.g. /Users/me/projects/my-app",
       "historyLabel": "Recent",

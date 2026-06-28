@@ -260,6 +260,7 @@
     "menuItem": "加载项目目录",
     "dialog": {
       "title": "加载项目目录",
+      "codegraphTitle": "设置 Codegraph 项目",
       "pathLabel": "项目路径",
       "pathPlaceholder": "例如 /Users/me/projects/my-app",
       "historyLabel": "最近使用",
