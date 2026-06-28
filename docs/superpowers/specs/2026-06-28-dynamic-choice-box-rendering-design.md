@@ -299,7 +299,8 @@ AstrBot 可在后续提供一个内置 `ask_user_choice` 工具,接收 `prompt +
 LLM (agent runner)
   ↓ 调 ask_user_choice 工具
 Tool Result: { type: "interactive_choice", prompt: "...", options: [...] }
-  ↓ 通过 webchat 平台转成 MessagePart
+  ↓ 通过 webchat 通道到达 `useMessages.normalizePartsInternal`
+  ↓ 透传(合法) / 降级为 unknown-part(非法)
 WebChat Frontend
   ↓ ChatMessageList 路由到 InteractiveChoiceBox
 InteractiveChoiceBox (待选态)
@@ -325,7 +326,6 @@ Backend LLM
 | 用户在 `pending` 状态下关闭页面 | 无副作用——选项框是 stateless UI,后端无挂起任务 |
 | 同一消息内出现两个 `interactive_choice` part | 两者**独立**渲染、独立状态(每个 part 都是一个 `<InteractiveChoiceBox>` 实例,各自管理 `submittedValue`);LLM 一次调用工具不应产生两个 part,这是异常路径但前端需正确处理 |
 | 同一会话内出现多个 `interactive_choice` (跨消息) | 每条 bot message 独立判断 `isIgnored`;新消息中的选项框独立 `pending`,**不**继承上一条的 `submittedValue` |
-| 极端长 `value` / `prompt` | 截断(见 3.2 表) |
 
 ---
 
@@ -393,7 +393,7 @@ const invalidInput = {
 ## 10. References
 
 - `dashboard/src/components/chat/ChatMessageList.vue` — 现有 v-if/v-else-if 路由链
-- `dashboard/src/components/chat/MessageList.vue` — legacy 路径,需同步
+- `dashboard/src/components/chat/MessageList.vue` — legacy/deprecated 路径,v1 不修改(与 §5.2 一致)
 - `dashboard/src/composables/useMessages.ts` — `MessagePart` / `messageBlocks` / `normalizePartsInternal`
 - `dashboard/src/components/chat/message_list_comps/ToolCallCard.vue` — 视觉风格参考(灰底卡片)
 - `astrbot/core/message/components.py` — `BaseMessageComponent` / `Json` 组件
