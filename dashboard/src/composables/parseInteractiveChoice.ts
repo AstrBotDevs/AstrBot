@@ -70,6 +70,24 @@ export function unwrapInteractiveChoice<T extends MaybePlainPart>(part: T): T | 
     if (isInteractiveChoicePayload(parsed)) {
       return parsed;
     }
+    // 框架二次包装:AstrBot 的 tool_loop_agent_runner.py:1264 把工具 str 返回值
+    // 包成 Json({id, ts, result: <plugin return>}),经 message_chain_to_storage_message_parts
+    // 序列化为 {type:"plain", text: json.dumps({id, ts, result})},所以 dashboard 看到的是
+    // 双层 JSON:外层 {id, ts, result},内层 <plugin return>(可能本身就是 InteractiveChoicePart)。
+    // 从 result 字段再尝试一次解包。
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const inner = (parsed as Record<string, unknown>).result;
+      if (typeof inner === "string" && inner.startsWith("{")) {
+        try {
+          const innerParsed = JSON.parse(inner);
+          if (isInteractiveChoicePayload(innerParsed)) {
+            return innerParsed;
+          }
+        } catch {
+          // inner JSON.parse 失败 → fall through,保留原 plain
+        }
+      }
+    }
   }
   return part;
 }

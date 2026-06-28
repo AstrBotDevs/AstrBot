@@ -320,3 +320,102 @@ test("E2E 真实插件极端: 10 options + 缺 description,全部通过", () => 
   const result = truncateInteractiveChoice(unwrapped);
   assert.equal(result.options.length, 10);
 });
+
+// ════════════════════════════════════════════════════════════════
+// 框架二次包装: tool_loop_agent_runner.py 把 tool str 包成 Json({id, ts, result})
+// 然后 message_chain_to_storage_message_parts 把 Json 转成 {type:"plain", text: json.dumps({...})}
+// 所以 dashboard 看到双层 JSON。这是真实部署时实际看到的数据形态。
+// ════════════════════════════════════════════════════════════════
+
+test("框架二次包装: {id, ts, result: '<InteractiveChoicePart JSON>'} → 解包成功", () => {
+  // 镜像 tool_loop_agent_runner.py:1264-1273 的产出
+  const innerJson = JSON.stringify({
+    type: "interactive_choice",
+    prompt: "请选择模型:",
+    options: [
+      { id: "a", label: "GPT-4", description: "更强但更慢", value: "gpt-4" },
+      { id: "b", label: "GPT-4 mini", value: "gpt-4-mini" },
+    ],
+  });
+  const wrappedJson = JSON.stringify({
+    id: "call_abc123",
+    ts: 1719654321.123,
+    result: innerJson,
+  });
+  const plainPart = { type: "plain", text: wrappedJson };
+
+  const unwrapped = unwrapInteractiveChoice(plainPart);
+  assert.equal(isInteractiveChoicePayload(unwrapped), true);
+  assert.equal(validateInteractiveChoice(unwrapped), true);
+  assert.equal(unwrapped.prompt, "请选择模型:");
+  assert.equal(unwrapped.options.length, 2);
+  assert.equal(unwrapped.options[0].value, "gpt-4");
+});
+
+test("框架二次包装: result 字段是普通文本(非 JSON),不误解包", () => {
+  // 假设 LLM 没用 ask_user_choice,调了其他工具,result 是 "天气晴朗" 这种纯文本
+  const wrappedJson = JSON.stringify({
+    id: "call_xyz",
+    ts: 1719654321.0,
+    result: "今天天气晴朗",
+  });
+  const plainPart = { type: "plain", text: wrappedJson };
+  // 不应解包成 InteractiveChoicePart(因 result 不是 JSON)
+  assert.equal(isInteractiveChoicePayload(unwrapInteractiveChoice(plainPart)), false);
+});
+
+test("框架二次包装: result 是损坏的 JSON,不爆错", () => {
+  const wrappedJson = JSON.stringify({
+    id: "call_xyz",
+    ts: 1719654321.0,
+    result: '{ "type": "interactive_choice", "broken',
+  });
+  const plainPart = { type: "plain", text: wrappedJson };
+  // 不应 throw,应保留原 plain
+  const result = unwrapInteractiveChoice(plainPart);
+  assert.equal(result, plainPart);
+});
+
+test("框架二次包装: result 是合法 JSON 但不是 InteractiveChoicePart,不解包", () => {
+  // 比如 result 是 {"type":"other",...} 或 {"foo":1}
+  const wrappedJson = JSON.stringify({
+    id: "call_xyz",
+    ts: 1719654321.0,
+    result: JSON.stringify({ type: "tool_result", other: "data" }),
+  });
+  const plainPart = { type: "plain", text: wrappedJson };
+  assert.equal(isInteractiveChoicePayload(unwrapInteractiveChoice(plainPart)), false);
+});
+
+test("框架二次包装: result 字段缺失,不误判", () => {
+  const wrappedJson = JSON.stringify({ id: "call_xyz", ts: 1719654321.0 });
+  const plainPart = { type: "plain", text: wrappedJson };
+  assert.equal(unwrapInteractiveChoice(plainPart), plainPart);
+});
+
+test("框架二次包装: 完整 pipeline(unwrap → validate → truncate)端到端", () => {
+  const innerJson = JSON.stringify({
+    type: "interactive_choice",
+    prompt: "选择操作",
+    title: "操作确认",
+    options: [
+      { id: "del", label: "删除", description: "不可逆", value: "delete" },
+      { id: "cancel", label: "取消", value: "cancel" },
+    ],
+    input_placeholder: "或输入...",
+  });
+  const wrappedJson = JSON.stringify({
+    id: "call_full",
+    ts: 1719654321.0,
+    result: innerJson,
+  });
+  const plainPart = { type: "plain", text: wrappedJson };
+
+  const unwrapped = unwrapInteractiveChoice(plainPart);
+  const validated = validateInteractiveChoice(unwrapped);
+  assert.equal(validated, true);
+  const truncated = truncateInteractiveChoice(unwrapped);
+  assert.equal(truncated.title, "操作确认");
+  assert.equal(truncated.input_placeholder, "或输入...");
+  assert.equal(truncated.options[0].description, "不可逆");
+});
