@@ -30,25 +30,35 @@
         <div class="session-card-header">
             <v-icon size="14" class="header-icon">mdi-play-circle-outline</v-icon>
             <span class="header-title">{{ tm('intaShell.headers.start') }}</span>
-            <SessionIdCopy v-if="parsed.session" :session-id="parsed.session.session_id" />
+            <CopyableText
+                v-if="parsed.session"
+                :value="parsed.session.session_id"
+                :display-value="parsed.session.session_id.length > 12 ? `${parsed.session.session_id.slice(0, 8)}…` : parsed.session.session_id"
+                :title="parsed.session.session_id"
+                mode="code"
+                class="session-id"
+            />
             <StateChip v-if="parsed.session" :state="parsed.session.state" />
         </div>
         <div v-if="parsed.session" class="session-card-body">
             <div class="meta-row">
                 <span class="meta-label">{{ tm('intaShell.labels.command') }}</span>
-                <code class="meta-value">{{ parsed.session.command }}</code>
+                <CopyableText :value="parsed.session.command" mode="code" class="meta-value" />
             </div>
             <div class="meta-row">
                 <span class="meta-label">{{ tm('intaShell.labels.pid') }}</span>
-                <span class="meta-value-dim">{{ parsed.session.pid }}</span>
+                <CopyableText :value="String(parsed.session.pid)" mode="inline" class="meta-value-dim" />
                 <span v-if="parsed.session.created_at" class="meta-sep">·</span>
-                <span v-if="parsed.session.created_at" class="meta-value-dim">
-                    {{ tm('intaShell.labels.created') }}: {{ formatRelativeTime(parsed.session.created_at) }}
-                </span>
+                <CopyableText
+                    v-if="parsed.session.created_at"
+                    :value="`${tm('intaShell.labels.created')}: ${formatRelativeTime(parsed.session.created_at)}`"
+                    mode="inline"
+                    class="meta-value-dim"
+                />
             </div>
             <div v-if="hasInitialOutput" class="output-block">
                 <span class="meta-label">{{ tm('intaShell.labels.initialOutput') }}</span>
-                <pre class="output-value">{{ parsed.initial_output }}</pre>
+                <CopyableText :value="parsed.initial_output ?? ''" mode="block" :multiline="true" class="output-value" />
             </div>
         </div>
     </div>
@@ -58,13 +68,20 @@
         <div class="session-card-header">
             <v-icon size="14" class="header-icon">mdi-keyboard-outline</v-icon>
             <span class="header-title">{{ tm('intaShell.headers.send') }}</span>
-            <SessionIdCopy v-if="parsed.session" :session-id="parsed.session.session_id" />
+            <CopyableText
+                v-if="parsed.session"
+                :value="parsed.session.session_id"
+                :display-value="parsed.session.session_id.length > 12 ? `${parsed.session.session_id.slice(0, 8)}…` : parsed.session.session_id"
+                :title="parsed.session.session_id"
+                mode="code"
+                class="session-id"
+            />
             <StateChip v-if="parsed.session" :state="parsed.session.state" />
         </div>
         <div v-if="parsed.session || parsed.message" class="session-card-body">
             <div v-if="parsed.message" class="meta-row">
                 <span class="meta-label">{{ tm('intaShell.labels.message') }}</span>
-                <span class="meta-value">{{ parsed.message }}</span>
+                <CopyableText :value="parsed.message" mode="code" class="meta-value" />
             </div>
         </div>
     </div>
@@ -74,17 +91,30 @@
         <div class="session-card-header">
             <v-icon size="14" class="header-icon">mdi-eye-outline</v-icon>
             <span class="header-title">{{ tm('intaShell.headers.read') }}</span>
-            <SessionIdCopy v-if="parsed.session" :session-id="parsed.session.session_id" />
+            <CopyableText
+                v-if="parsed.session"
+                :value="parsed.session.session_id"
+                :display-value="parsed.session.session_id.length > 12 ? `${parsed.session.session_id.slice(0, 8)}…` : parsed.session.session_id"
+                :title="parsed.session.session_id"
+                mode="code"
+                class="session-id"
+            />
             <StateChip v-if="parsed.session" :state="parsed.session.state" />
         </div>
         <div v-if="parsed.session" class="session-card-body">
             <div class="meta-row">
                 <span class="meta-label">{{ tm('intaShell.labels.command') }}</span>
-                <code class="meta-value">{{ parsed.session.command }}</code>
+                <CopyableText :value="parsed.session.command" mode="code" class="meta-value" />
             </div>
             <div class="output-block">
                 <span class="meta-label">{{ tm('intaShell.labels.output') }}</span>
-                <pre v-if="hasOutput" class="output-value">{{ parsed.output }}</pre>
+                <CopyableText
+                    v-if="hasOutput"
+                    :value="parsed.output ?? ''"
+                    mode="block"
+                    :multiline="true"
+                    class="output-value"
+                />
                 <span v-else class="empty-note">{{ tm('intaShell.labels.noOutput') }}</span>
             </div>
         </div>
@@ -95,13 +125,20 @@
         <div class="session-card-header">
             <v-icon size="14" class="header-icon">mdi-stop-circle-outline</v-icon>
             <span class="header-title">{{ tm('intaShell.headers.stop') }}</span>
-            <SessionIdCopy v-if="parsed.session" :session-id="parsed.session.session_id" />
+            <CopyableText
+                v-if="parsed.session"
+                :value="parsed.session.session_id"
+                :display-value="parsed.session.session_id.length > 12 ? `${parsed.session.session_id.slice(0, 8)}…` : parsed.session.session_id"
+                :title="parsed.session.session_id"
+                mode="code"
+                class="session-id"
+            />
             <StateChip v-if="parsed.session" :state="parsed.session.state" />
         </div>
         <div v-if="parsed.session" class="session-card-body">
             <div v-if="parsed.message" class="meta-row">
                 <span class="meta-label">{{ tm('intaShell.labels.message') }}</span>
-                <span class="meta-value">{{ parsed.message }}</span>
+                <CopyableText :value="parsed.message" mode="code" class="meta-value" />
             </div>
             <div v-if="parsed.session.exit_code !== null && parsed.session.exit_code !== undefined" class="meta-row">
                 <span class="meta-label">{{ tm('intaShell.labels.exitCode') }}</span>
@@ -124,20 +161,29 @@
         <div v-if="sessionsList.length" class="session-list">
             <div v-for="s in sessionsList" :key="s.session_id" class="session-list-item">
                 <div class="session-list-line">
-                    <SessionIdCopy :session-id="s.session_id" compact />
+                    <CopyableText
+                        :value="s.session_id"
+                        :display-value="s.session_id.length > 12 ? `${s.session_id.slice(0, 8)}…` : s.session_id"
+                        :title="s.session_id"
+                        mode="code"
+                        class="session-id compact"
+                    />
                     <StateChip :state="s.state" />
                     <span v-if="s.exit_code !== null && s.exit_code !== undefined"
                           class="exit-code-mini"
                           :class="s.exit_code === 0 ? 'success' : 'error'"
                     >exit {{ s.exit_code }}</span>
                 </div>
-                <code class="session-list-cmd">{{ s.command }}</code>
+                <CopyableText :value="s.command" mode="code" class="session-list-cmd" />
                 <div class="session-list-meta">
-                    <span class="meta-value-dim">pid {{ s.pid }}</span>
+                    <CopyableText :value="`pid ${s.pid}`" mode="inline" class="meta-value-dim" />
                     <span v-if="s.last_activity" class="meta-sep">·</span>
-                    <span v-if="s.last_activity" class="meta-value-dim">
-                        {{ formatRelativeTime(s.last_activity) }}
-                    </span>
+                    <CopyableText
+                        v-if="s.last_activity"
+                        :value="formatRelativeTime(s.last_activity)"
+                        mode="inline"
+                        class="meta-value-dim"
+                    />
                 </div>
             </div>
         </div>
@@ -153,8 +199,8 @@
 <script setup lang="ts">
 import { computed, h, defineComponent } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import CopyableText from "./__shared__/CopyableText.vue";
 import {
-    INTA_SHELL_ICONS,
     getSessionStateMeta,
     type SessionStateMeta,
 } from "./inta_shell_tools/icons";
@@ -220,70 +266,6 @@ const StateChip = defineComponent({
     },
 });
 
-// ── Inline sub-component: SessionIdCopy ─────────────────────────
-// 可复制的 session_id。悬停/点击出现 📋 图标,点击后短暂显示 ✓。
-const SessionIdCopy = defineComponent({
-    name: "SessionIdCopy",
-    props: {
-        sessionId: { type: String, required: true },
-        compact: { type: Boolean, default: false },
-    },
-    setup(p) {
-        const copied = { value: false };
-        const copy = async () => {
-            try {
-                if (navigator?.clipboard?.writeText) {
-                    await navigator.clipboard.writeText(p.sessionId);
-                } else {
-                    // Fallback for older browsers / non-secure context
-                    const ta = document.createElement("textarea");
-                    ta.value = p.sessionId;
-                    ta.style.position = "fixed";
-                    ta.style.opacity = "0";
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand("copy");
-                    document.body.removeChild(ta);
-                }
-                copied.value = true;
-                window.setTimeout(() => {
-                    copied.value = false;
-                }, 1200);
-            } catch (err) {
-                console.error("[IntaShell] failed to copy session id:", err);
-            }
-        };
-        return () => {
-            const short = p.sessionId.length > 12
-                ? `${p.sessionId.slice(0, 8)}…`
-                : p.sessionId;
-            return h(
-                "span",
-                {
-                    class: ["session-id", { compact: p.compact }],
-                    onClick: copy,
-                    title: p.sessionId,
-                },
-                [
-                    h("code", { class: "session-id-text" }, short),
-                    h(
-                        "i",
-                        {
-                            class: [
-                                "mdi",
-                                copied.value ? "mdi-check" : "mdi-content-copy",
-                                "session-id-copy",
-                            ],
-                        },
-                    ),
-                ],
-            );
-        };
-    },
-});
-
-// 工具未识别时回退图标(在 ToolCallCard 已统一为 mdi-wrench,这里兜底)
-void INTA_SHELL_ICONS;
 </script>
 
 <style scoped>
