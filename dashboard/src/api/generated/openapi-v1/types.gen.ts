@@ -83,7 +83,11 @@ export type ChatProjectRequest = {
     title?: string;
     emoji?: string;
     description?: string;
+    workspace_type?: 'session' | 'project' | 'custom';
+    workspace_path?: string;
 };
+
+export type workspace_type = 'session' | 'project' | 'custom';
 
 export type ChatRequest = {
     /**

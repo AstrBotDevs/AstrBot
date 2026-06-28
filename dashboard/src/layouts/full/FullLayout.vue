@@ -109,8 +109,9 @@ onMounted(() => {
       <VerticalHeaderVue />
       <VerticalSidebarVue v-if="showSidebar" />
       <v-main
+        :class="{ 'chat-main': isCurrentChatRoute }"
         :style="{
-          height: isCurrentChatRoute ? 'calc(100vh - 55px)' : undefined,
+          height: isCurrentChatRoute ? '100vh' : undefined,
           overflow: isCurrentChatRoute ? 'hidden' : undefined,
         }"
       >
@@ -158,5 +159,9 @@ onMounted(() => {
   min-height: unset !important;
   height: 100% !important;
   overflow: hidden !important;
+}
+
+.chat-main {
+  padding-top: 0 !important;
 }
 </style>

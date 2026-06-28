@@ -14,7 +14,11 @@ from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 
 from ..registry import builtin_tool
-from .util import check_admin_permission, is_local_runtime, workspace_root
+from .util import (
+    check_admin_permission,
+    is_local_runtime,
+    workspace_root_for_context,
+)
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
@@ -99,9 +103,7 @@ class ExecuteShellTool(FunctionTool):
         try:
             cwd: str | None = None
             if is_local_runtime(context):
-                current_workspace_root = workspace_root(
-                    context.context.event.unified_msg_origin
-                )
+                current_workspace_root = await workspace_root_for_context(context)
                 current_workspace_root.mkdir(parents=True, exist_ok=True)
                 cwd = str(current_workspace_root)
 
