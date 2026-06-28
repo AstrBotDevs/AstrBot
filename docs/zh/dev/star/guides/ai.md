@@ -135,10 +135,32 @@ async def restart_server(self, event: AstrMessageEvent):
 
 `permission_type` 可选 `filter.PermissionType.ADMIN` 或 `filter.PermissionType.MEMBER`，不传则保持原有行为（所有人可用）。
 
+如果你是通过 `@dataclass` + `FunctionTool` 的方式定义 Tool（见上方[定义 Tool](#定义-tool)一节），也可以用同样的方式声明默认权限，只需要在 dataclass 里加上 `declared_permission_type` 字段：
+
+```py
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.astr_agent_context import AstrAgentContext
+
+
+@dataclass
+class RestartServerTool(FunctionTool[AstrAgentContext]):
+    name: str = "restart_server"
+    description: str = "Restart the server."
+    parameters: dict = Field(default_factory=lambda: {"type": "object", "properties": {}})
+    declared_permission_type: str | None = "admin"  # 可选 "admin" / "member" / None
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+        # 处理逻辑
+        return "ok"
+```
+
 > [!WARNING]
-> - `permission_type` 只是工具的**默认权限**。如果机器人主人在 WebUI 面板（扩展 -> 组件 -> 工具管理）里为该工具手动配置过权限，面板上的配置会**覆盖**插件代码里声明的默认值。
+> - `permission_type` / `declared_permission_type` 只是工具的**默认权限**。如果机器人主人在 WebUI 面板（扩展 -> 组件 -> 工具管理）里为该工具手动配置过权限，面板上的配置会**覆盖**插件代码里声明的默认值。
 > - 这个机制的意义在于：即便机器人主人从未打开过 WebUI 面板配置任何东西，插件作者依然可以为自己写的危险工具（例如重启服务、执行 shell 命令等）提供一层默认的安全防护，而不必依赖用户主动去配置。
-> - 通过 `@dataclass` + `FunctionTool` 方式定义、再用 `add_llm_tools()` 注册的工具，目前不支持这种方式声明默认权限。
 
 ## 调用 Agent
 

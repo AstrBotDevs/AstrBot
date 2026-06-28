@@ -136,10 +136,32 @@ async def restart_server(self, event: AstrMessageEvent):
 
 `permission_type` accepts `filter.PermissionType.ADMIN` or `filter.PermissionType.MEMBER`. If omitted, the previous behavior is unchanged (the tool is available to everyone).
 
+If you define a tool via `@dataclass` + `FunctionTool` (see [Defining Tools](#defining-tools) above), you can declare a default permission the same way by adding a `declared_permission_type` field to the dataclass:
+
+```py
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.astr_agent_context import AstrAgentContext
+
+
+@dataclass
+class RestartServerTool(FunctionTool[AstrAgentContext]):
+    name: str = "restart_server"
+    description: str = "Restart the server."
+    parameters: dict = Field(default_factory=lambda: {"type": "object", "properties": {}})
+    declared_permission_type: str | None = "admin"  # "admin" / "member" / None
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+        # handler logic
+        return "ok"
+```
+
 > [!WARNING]
-> - `permission_type` only sets the tool's **default permission**. If the bot owner has explicitly configured a permission for this tool in the WebUI panel (Extensions -> Components -> Tool Management), that configuration **overrides** the default declared in the plugin's code.
+> - `permission_type` / `declared_permission_type` only sets the tool's **default permission**. If the bot owner has explicitly configured a permission for this tool in the WebUI panel (Extensions -> Components -> Tool Management), that configuration **overrides** the default declared in the plugin's code.
 > - The point of this mechanism is that plugin authors can ship a sane default safeguard for dangerous tools (e.g. restarting a service, running shell commands) without relying on the bot owner to ever open the WebUI panel.
-> - Tools defined via `@dataclass` + `FunctionTool` and registered with `add_llm_tools()` do not currently support declaring a default permission this way.
 
 ## Invoking Agents
 
