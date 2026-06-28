@@ -1481,12 +1481,7 @@ PROVIDER_MANAGER_GET_INSTS_OUTPUT_SCHEMA = _object_schema(
     providers={"type": "array", "items": MANAGED_PROVIDER_RECORD_SCHEMA},
 )
 PROVIDER_MANAGER_WATCH_CHANGES_INPUT_SCHEMA = _object_schema()
-PROVIDER_MANAGER_WATCH_CHANGES_OUTPUT_SCHEMA = _object_schema(
-    required=("provider_id", "provider_type"),
-    provider_id={"type": "string"},
-    provider_type={"type": "string"},
-    umo=_nullable({"type": "string"}),
-)
+PROVIDER_MANAGER_WATCH_CHANGES_OUTPUT_SCHEMA = _object_schema()
 LLM_TOOL_MANAGER_GET_INPUT_SCHEMA = _object_schema()
 LLM_TOOL_MANAGER_GET_OUTPUT_SCHEMA = _object_schema(
     required=("registered", "active"),
@@ -1752,46 +1747,6 @@ BUILTIN_CAPABILITY_SCHEMAS: dict[str, dict[str, JSONSchema]] = {
     "message_history.delete_all": {
         "input": MESSAGE_HISTORY_DELETE_ALL_INPUT_SCHEMA,
         "output": MESSAGE_HISTORY_DELETE_ALL_OUTPUT_SCHEMA,
-    },
-    "mcp.local.get": {
-        "input": MCP_LOCAL_GET_INPUT_SCHEMA,
-        "output": MCP_LOCAL_GET_OUTPUT_SCHEMA,
-    },
-    "mcp.local.list": {
-        "input": MCP_LOCAL_LIST_INPUT_SCHEMA,
-        "output": MCP_LOCAL_LIST_OUTPUT_SCHEMA,
-    },
-    "mcp.local.enable": {
-        "input": MCP_LOCAL_ENABLE_INPUT_SCHEMA,
-        "output": MCP_LOCAL_ENABLE_OUTPUT_SCHEMA,
-    },
-    "mcp.local.disable": {
-        "input": MCP_LOCAL_DISABLE_INPUT_SCHEMA,
-        "output": MCP_LOCAL_DISABLE_OUTPUT_SCHEMA,
-    },
-    "mcp.local.wait_until_ready": {
-        "input": MCP_LOCAL_WAIT_UNTIL_READY_INPUT_SCHEMA,
-        "output": MCP_LOCAL_WAIT_UNTIL_READY_OUTPUT_SCHEMA,
-    },
-    "mcp.session.open": {
-        "input": MCP_SESSION_OPEN_INPUT_SCHEMA,
-        "output": MCP_SESSION_OPEN_OUTPUT_SCHEMA,
-    },
-    "mcp.session.list_tools": {
-        "input": MCP_SESSION_LIST_TOOLS_INPUT_SCHEMA,
-        "output": MCP_SESSION_LIST_TOOLS_OUTPUT_SCHEMA,
-    },
-    "mcp.session.call_tool": {
-        "input": MCP_SESSION_CALL_TOOL_INPUT_SCHEMA,
-        "output": MCP_SESSION_CALL_TOOL_OUTPUT_SCHEMA,
-    },
-    "mcp.session.close": {
-        "input": MCP_SESSION_CLOSE_INPUT_SCHEMA,
-        "output": MCP_SESSION_CLOSE_OUTPUT_SCHEMA,
-    },
-    "internal.mcp.local.execute": {
-        "input": INTERNAL_MCP_LOCAL_EXECUTE_INPUT_SCHEMA,
-        "output": INTERNAL_MCP_LOCAL_EXECUTE_OUTPUT_SCHEMA,
     },
     "kb.list": {"input": KB_LIST_INPUT_SCHEMA, "output": KB_LIST_OUTPUT_SCHEMA},
     "kb.get": {"input": KB_GET_INPUT_SCHEMA, "output": KB_GET_OUTPUT_SCHEMA},

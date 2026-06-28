@@ -4,10 +4,9 @@ import os
 
 from loguru import logger as _raw_loguru_logger
 
-try:
-    from astrbot.core.config.default import VERSION as _ASTRBOT_VERSION
-except Exception:  # noqa: BLE001
-    _ASTRBOT_VERSION = ""
+from .astrbot_version import get_astrbot_version
+
+_ASTRBOT_VERSION = get_astrbot_version()
 
 _SHORT_LEVEL_NAMES = {
     "DEBUG": "DBUG",

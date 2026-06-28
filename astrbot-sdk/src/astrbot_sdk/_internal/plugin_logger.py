@@ -9,10 +9,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-try:
-    from astrbot.core.config.default import VERSION as _ASTRBOT_VERSION
-except Exception:  # noqa: BLE001
-    _ASTRBOT_VERSION = ""
+from .astrbot_version import get_astrbot_version
+
+_ASTRBOT_VERSION = get_astrbot_version()
 
 __all__ = ["PluginLogEntry", "PluginLogger"]
 
