@@ -403,14 +403,9 @@ class FunctionToolManager:
 
     def get_func(self, name) -> FuncTool | None:
         # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
-        # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
-        for f in reversed(self.func_list):
-            if f.name == name and getattr(f, "active", True):
-                return f
-        # 退化则拿最后一个同名工具
-        for f in reversed(self.func_list):
-            if f.name == name:
-                return f
+        tool = self._lookup_in_func_list(name)
+        if tool is not None:
+            return tool
         if isinstance(name, str):
             try:
                 builtin_tool = self.get_builtin_tool(name)
@@ -420,6 +415,25 @@ class FunctionToolManager:
                 return builtin_tool
             return builtin_tool
         return None
+
+    def _lookup_in_func_list(self, name) -> FuncTool | None:
+        """Find a tool in ``func_list`` by name, preferring the active copy.
+
+        Shared by :meth:`get_func` and :meth:`_default_permission` so the
+        precedence rule (active copy wins; otherwise fall back to the
+        most-recently-added inactive copy) only lives in one place. Never
+        falls through to builtin tools -- callers that need that do it
+        themselves, since loading builtins is a side effect that not every
+        caller wants (notably ``_default_permission``, which must never
+        trigger builtin-tool loading)."""
+        fallback = None
+        for f in reversed(self.func_list):
+            if f.name == name:
+                if getattr(f, "active", True):
+                    return f
+                if fallback is None:
+                    fallback = f
+        return fallback
 
     def get_builtin_tool(self, tool: str | type[FuncTool]) -> FuncTool:
         ensure_builtin_tools_loaded()
@@ -468,27 +482,11 @@ class FunctionToolManager:
         ``FunctionTool`` but not enforced at runtime, so an older or
         custom tool object that doesn't inherit ``FunctionTool`` may not
         carry this attribute at all."""
-        tool = self._find_declared_tool(tool_name)
+        tool = self._lookup_in_func_list(tool_name)
         declared = getattr(tool, "declared_permission_type", None)
         if declared in ("admin", "member"):
             return declared
         return "member"
-
-    def _find_declared_tool(self, tool_name: str) -> FuncTool | None:
-        """Find a tool in ``func_list`` by name, preferring the active copy.
-
-        Mirrors the lookup precedence of :meth:`get_func` but never falls
-        through to builtin tools, since builtin tools don't carry a
-        declared permission and shouldn't trigger builtin-tool loading
-        here."""
-        fallback = None
-        for f in reversed(self.func_list):
-            if f.name == tool_name:
-                if getattr(f, "active", True):
-                    return f
-                if fallback is None:
-                    fallback = f
-        return fallback
 
     def _check_tool_permission(
         self,
