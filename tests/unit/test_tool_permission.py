@@ -104,6 +104,18 @@ def test_default_permission_falls_back_when_undeclared():
     assert mgr._default_permission("undeclared_tool") == "member"
 
 
+def test_default_permission_falls_back_on_unexpected_value():
+    """An unrecognized declared_permission_type (e.g. a typo like "admim",
+    or any future value outside the current "admin"/"member" whitelist)
+    must not be treated as valid -- it should fall back to "member" just
+    like an undeclared tool, never accidentally granting admin."""
+    mgr = FunctionToolManager()
+    tool = _dummy_tool("typo_tool")
+    tool.declared_permission_type = "admim"
+    mgr.func_list.append(tool)
+    assert mgr._default_permission("typo_tool") == "member"
+
+
 def test_default_permission_does_not_crash_on_foreign_tool_object():
     """Regression test: third-party tools registered via add_llm_tools()
     are only type-hinted as FunctionTool, not enforced at runtime. A tool
