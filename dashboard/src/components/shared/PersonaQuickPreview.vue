@@ -91,7 +91,7 @@
 
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
-import axios from 'axios'
+import { personaApi, skillApi, toolApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 
 const props = defineProps({
@@ -135,7 +135,7 @@ const resolvedTools = computed(() =>
 
 async function loadToolsMeta() {
   try {
-    const response = await axios.get('/api/tools/list')
+    const response = await toolApi.list()
     if (response.data?.status === 'ok') {
       const tools = response.data?.data || []
       const nextMap = {}
@@ -159,7 +159,7 @@ async function loadToolsMeta() {
 
 async function loadSkillsMeta() {
   try {
-    const response = await axios.get('/api/skills')
+    const response = await skillApi.list()
     if (response.data?.status === 'ok') {
       const payload = response.data?.data || []
       if (Array.isArray(payload)) {
@@ -190,7 +190,7 @@ async function loadPersonaPreview(personaId) {
 
   loading.value = true
   try {
-    const response = await axios.get('/api/persona/list')
+    const response = await personaApi.list()
     if (response.data?.status === 'ok') {
       const personas = response.data?.data || []
       personaData.value = personas.find((item) => item.persona_id === personaId) || null

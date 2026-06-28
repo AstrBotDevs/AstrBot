@@ -266,8 +266,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # "all tools", including runtime computer-use tools.
         if tools is None:
             toolset = ToolSet()
-            for registered_tool in llm_tools.func_list:
-                if isinstance(registered_tool, HandoffTool):
+            handoff_names = {
+                tool.name
+                for tool in tool_mgr.func_list
+                if isinstance(tool, HandoffTool)
+            }
+            for registered_tool in tool_mgr.get_full_tool_set():
+                if registered_tool.name in handoff_names:
                     continue
                 if registered_tool.active:
                     toolset.add_tool(registered_tool)

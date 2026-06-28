@@ -1,9 +1,12 @@
 import builtins
+from types import SimpleNamespace
 
+import httpx
 import pytest
 
 import astrbot.core.provider.sources.anthropic_source as anthropic_source
 import astrbot.core.provider.sources.kimi_code_source as kimi_code_source
+import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 
@@ -172,6 +175,36 @@ def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_anthropic_get_models_retries_transient_request_error(monkeypatch):
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 0)
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 0)
+
+    class FakeModels:
+        def __init__(self):
+            self.calls = 0
+
+        async def list(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise httpx.ConnectError("temporary connection failure")
+            return SimpleNamespace(
+                data=[
+                    SimpleNamespace(id="claude-b"),
+                    SimpleNamespace(id="claude-a"),
+                ]
+            )
+
+    models = FakeModels()
+    provider = anthropic_source.ProviderAnthropic.__new__(
+        anthropic_source.ProviderAnthropic
+    )
+    provider.client = SimpleNamespace(models=models)
+
+    assert await provider.get_models() == ["claude-a", "claude-b"]
+    assert models.calls == 2
+
+
+@pytest.mark.asyncio
 async def test_text_chat_wraps_string_system_prompt_as_list(monkeypatch):
     monkeypatch.setattr(anthropic_source, "AsyncAnthropic", _FakeAsyncAnthropic)
 
@@ -187,7 +220,7 @@ async def test_text_chat_wraps_string_system_prompt_as_list(monkeypatch):
 
     captured_payloads: dict[str, object] = {}
 
-    async def fake_query(payloads, tools):
+    async def fake_query(payloads, tools, *, request_max_retries=None):
         captured_payloads.update(payloads)
         return LLMResponse(role="assistant", completion_text="ok")
 
@@ -214,7 +247,7 @@ async def test_text_chat_passes_through_list_system_prompt(monkeypatch):
 
     captured_payloads: dict[str, object] = {}
 
-    async def fake_query(payloads, tools):
+    async def fake_query(payloads, tools, *, request_max_retries=None):
         captured_payloads.update(payloads)
         return LLMResponse(role="assistant", completion_text="ok")
 
@@ -418,6 +451,192 @@ def test_prepare_payload_does_not_merge_non_consecutive_tool_results():
     ]
 
 
+def test_sanitize_assistant_messages_removes_orphaned_tool_results_and_merges():
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "First answer."}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "missing_call",
+                        "content": "stale result",
+                    }
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Second answer."}],
+            },
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "First answer."},
+                {"type": "text", "text": "Second answer."},
+            ],
+        }
+    ]
+
+
+def test_sanitize_assistant_messages_keeps_valid_tool_results_only():
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_00",
+                        "name": "read_file",
+                        "input": {"path": "/tmp/one.txt"},
+                    },
+                    {
+                        "type": "tool_use",
+                        "id": "",
+                        "name": "bad_tool",
+                        "input": {},
+                    },
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_00",
+                        "content": "one",
+                    },
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "",
+                        "content": "empty id should not be valid",
+                    },
+                ],
+            },
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"][1]["content"] == [
+        {"type": "tool_result", "tool_use_id": "call_00", "content": "one"}
+    ]
+
+
+def test_sanitize_assistant_messages_removes_stale_duplicate_tool_result():
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_00",
+                        "name": "read_file",
+                        "input": {"path": "/tmp/one.txt"},
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_00",
+                        "content": "one",
+                    }
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Done."}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_00",
+                        "content": "stale duplicate",
+                    }
+                ],
+            },
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "call_00",
+                    "name": "read_file",
+                    "input": {"path": "/tmp/one.txt"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": "call_00", "content": "one"}
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Done."}],
+        },
+    ]
+
+
+def test_sanitize_assistant_messages_puts_tool_results_before_user_text():
+    payloads = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_00",
+                        "name": "read_file",
+                        "input": {"path": "/tmp/one.txt"},
+                    }
+                ],
+            },
+            {"role": "user", "content": "continue"},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_00",
+                        "content": "one",
+                    }
+                ],
+            },
+        ]
+    }
+
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"][1]["content"] == [
+        {"type": "tool_result", "tool_use_id": "call_00", "content": "one"},
+        {"type": "text", "text": "continue"},
+    ]
+
+
 # ---- tool_choice 转换测试 ----
 
 
@@ -481,6 +700,40 @@ def _setup_provider_with_mock_client(monkeypatch) -> anthropic_source.ProviderAn
     provider.client.messages = fakeMessages
 
     return provider
+
+
+@pytest.mark.asyncio
+async def test_query_handles_none_usage_when_content_filtered(monkeypatch):
+    provider = _setup_provider_with_mock_client(monkeypatch)
+    content_filter_message = (
+        "The request was rejected because it was considered high risk"
+    )
+
+    class _FakeMessageBlock:
+        def __init__(self, text: str):
+            self.type = "text"
+            self.text = text
+
+    class _FakeMessage:
+        def __init__(self):
+            self.id = "msg_content_filter"
+            self.content = [_FakeMessageBlock(content_filter_message)]
+            self.stop_reason = "content_filter"
+            self.usage = None
+
+    async def fake_create(**kwargs):
+        return _FakeMessage()
+
+    monkeypatch.setattr(anthropic_source, "Message", _FakeMessage)
+    provider.client.messages.create = fake_create
+
+    llm_response = await provider.text_chat(prompt="test")
+
+    assert llm_response.completion_text == content_filter_message
+    assert llm_response.usage is not None
+    assert llm_response.usage.input_other == 0
+    assert llm_response.usage.input_cached == 0
+    assert llm_response.usage.output == 0
 
 
 @pytest.mark.asyncio

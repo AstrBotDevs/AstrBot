@@ -33,6 +33,8 @@ class EventBus:
         # abconf uuid -> scheduler
         self.pipeline_scheduler_mapping = pipeline_scheduler_mapping
         self.astrbot_config_mgr = astrbot_config_mgr
+        # 持有正在执行的 pipeline 任务的强引用, 防止 task 在 pending 状态被 GC 回收
+        self._pending_tasks: set[asyncio.Task] = set()
 
     async def dispatch(self) -> None:
         while True:
@@ -47,7 +49,18 @@ class EventBus:
                     f"PipelineScheduler not found for id: {conf_id}, event ignored."
                 )
                 continue
-            asyncio.create_task(scheduler.execute(event))
+            task = asyncio.create_task(scheduler.execute(event))
+            self._pending_tasks.add(task)
+            task.add_done_callback(self._on_task_done)
+
+    def _on_task_done(self, task: asyncio.Task) -> None:
+        """pipeline 任务结束回调: 移除强引用并暴露未捕获的异常"""
+        self._pending_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("pipeline 任务执行异常", exc_info=exc)
 
     def _print_event(self, event: AstrMessageEvent, conf_name: str) -> None:
         """用于记录事件信息

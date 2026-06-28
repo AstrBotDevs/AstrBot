@@ -27,7 +27,7 @@
   <!-- Knowledge Base Selection Dialog -->
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal;">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm('knowledgeBaseSelector.dialogTitle') }}
       </v-card-title>
       
@@ -84,6 +84,7 @@
         <v-btn variant="text" @click="cancelSelection">{{ tm('knowledgeBaseSelector.cancelSelection') }}</v-btn>
         <v-btn 
           color="primary" 
+          variant="tonal"
           @click="confirmSelection">
           {{ tm('knowledgeBaseSelector.confirmSelection') }}
         </v-btn>
@@ -94,7 +95,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import axios from 'axios'
+import { knowledgeApi } from '@/api/v1'
 import { useRouter } from 'vue-router'
 import { useModuleI18n } from '@/i18n/composables'
 
@@ -136,11 +137,9 @@ async function openDialog() {
 async function loadKnowledgeBases() {
   loading.value = true
   try {
-    const response = await axios.get('/api/kb/list', {
-      params: {
-        page: 1,
-        page_size: 100
-      }
+    const response = await knowledgeApi.list({
+      page: 1,
+      page_size: 100
     })
     
     if (response.data.status === 'ok') {

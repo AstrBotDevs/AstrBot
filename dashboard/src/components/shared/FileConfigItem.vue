@@ -11,8 +11,8 @@
 
     <v-dialog v-model="dialog" max-width="700">
       <v-card class="file-dialog-card" variant="flat">
-        <v-card-title class="d-flex align-center">
-          <span class="text-h3">{{ tm('fileUpload.dialogTitle') }}</span>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+          <span>{{ tm('fileUpload.dialogTitle') }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="dialog = false" />
         </v-card-title>
@@ -63,7 +63,7 @@
 
         <v-card-actions class="file-dialog-actions">
           <v-spacer />
-          <v-btn color="primary" variant="elevated" @click="dialog = false">
+          <v-btn color="primary" variant="tonal" @click="dialog = false">
             {{ tm('fileUpload.done') }}
           </v-btn>
         </v-card-actions>
@@ -74,7 +74,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import axios from 'axios'
+import { pluginApi } from '@/api/v1'
 import { useToast } from '@/utils/toast'
 import { useModuleI18n } from '@/i18n/composables'
 
@@ -192,10 +192,9 @@ const loadDirectoryFiles = async () => {
 
   loadingFiles.value = true
   try {
-    const response = await axios.get(
-      `/api/config/file/get?scope=plugin&name=${encodeURIComponent(
-        props.pluginName
-      )}&key=${encodeURIComponent(props.configKey)}`
+    const response = await pluginApi.listConfigFiles(
+      props.pluginName,
+      props.configKey
     )
     if (response.data.status === 'ok') {
       const files = response.data.data?.files || []
@@ -257,12 +256,10 @@ const uploadFiles = async (files) => {
       formData.append(`file${index}`, file)
     })
 
-    const response = await axios.post(
-      `/api/config/file/upload?scope=plugin&name=${encodeURIComponent(
-        props.pluginName
-      )}&key=${encodeURIComponent(props.configKey)}`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+    const response = await pluginApi.uploadConfigFiles(
+      props.pluginName,
+      props.configKey,
+      formData
     )
 
     if (response.data.status === 'ok') {
@@ -309,13 +306,8 @@ const deleteFile = (filePath) => {
   directoryFiles.value = directoryFiles.value.filter((item) => item !== filePath)
 
   if (props.pluginName) {
-    axios
-      .post(
-        `/api/config/file/delete?scope=plugin&name=${encodeURIComponent(
-          props.pluginName
-        )}`,
-        { path: filePath }
-      )
+    pluginApi
+      .deleteConfigFile(props.pluginName, { path: filePath })
       .catch((error) => {
         console.warn('Staged file delete failed:', error)
         toast.warning(tm('fileUpload.deleteFailed'))
@@ -329,13 +321,8 @@ const deletePhysicalFile = (filePath) => {
   directoryFiles.value = directoryFiles.value.filter((item) => item !== filePath)
 
   if (props.pluginName) {
-    axios
-      .post(
-        `/api/config/file/delete?scope=plugin&name=${encodeURIComponent(
-          props.pluginName
-        )}`,
-        { path: filePath }
-      )
+    pluginApi
+      .deleteConfigFile(props.pluginName, { path: filePath })
       .catch((error) => {
         console.warn('File delete failed:', error)
         toast.warning(tm('fileUpload.deleteFailed'))

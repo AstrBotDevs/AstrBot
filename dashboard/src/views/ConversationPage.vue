@@ -117,15 +117,23 @@
                             <div class="umo-source-cell">
                                 <div class="umo-source-content">
                                     <template v-if="umoDisplayMode === 'parsed'">
-                                        <v-chip size="x-small" label>
-                                            {{ item.sessionInfo.platform || tm('status.unknown') }}
-                                        </v-chip>
-                                        <span class="umo-separator">:</span>
-                                        <v-chip size="x-small" label>
-                                            {{ getMessageTypeDisplay(item.sessionInfo.messageType) }}
-                                        </v-chip>
-                                        <span class="umo-separator">:</span>
-                                        <span class="umo-session-id">{{ item.sessionInfo.sessionId || tm('status.unknown') }}</span>
+                                        <div class="conversation-umo-stack">
+                                            <UmoDisplay v-if="hasConversationUmoReadableName(item)"
+                                                v-bind="getConversationUmoDisplayProps(item)" compact
+                                                :show-info="false" :show-platform="false" :show-meta="false"
+                                                class="conversation-umo-display" />
+                                            <div class="conversation-umo-parsed">
+                                                <v-chip size="x-small" label>
+                                                    {{ getConversationUmoInfo(item).platform || tm('status.unknown') }}
+                                                </v-chip>
+                                                <span class="umo-separator">:</span>
+                                                <v-chip size="x-small" label>
+                                                    {{ getMessageTypeDisplay(getConversationUmoInfo(item).message_type) }}
+                                                </v-chip>
+                                                <span class="umo-separator">:</span>
+                                                <span class="umo-session-id">{{ getConversationUmoInfo(item).session_id || tm('status.unknown') }}</span>
+                                            </div>
+                                        </div>
                                     </template>
                                     <span v-else class="umo-raw-text">{{ item.user_id || tm('status.unknown') }}</span>
                                 </div>
@@ -198,16 +206,24 @@
         <!-- 对话详情对话框 -->
         <v-dialog v-model="dialogView" max-width="900px" scrollable>
             <v-card class="conversation-detail-card">
-                <v-card-title class="ml-2 mt-2 d-flex align-center">
-                    <span class="text-truncate">{{ selectedConversation?.title || tm('status.noTitle') }}</span>
-                    <v-spacer></v-spacer>
-                    <div class="d-flex align-center" v-if="selectedConversation?.sessionInfo">
-                        <v-chip text-color="primary" size="small" class="mr-2" rounded="md">
-                            {{ selectedConversation.sessionInfo.platform }}
-                        </v-chip>
-                        <v-chip text-color="secondary" size="small" rounded="md">
-                            {{ getMessageTypeDisplay(selectedConversation.sessionInfo.messageType) }}
-                        </v-chip>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6 conversation-detail-title">
+                    <div class="conversation-detail-heading">
+                        <span class="text-truncate">{{ selectedConversation?.title || tm('status.noTitle') }}</span>
+                        <UmoDisplay v-if="selectedConversation?.user_id && hasConversationUmoReadableName(selectedConversation)"
+                            v-bind="getConversationUmoDisplayProps(selectedConversation)" compact :show-info="false"
+                            :show-platform="false" :show-meta="false" class="conversation-umo-display" />
+                        <div v-if="selectedConversation?.user_id"
+                            class="conversation-umo-parsed conversation-detail-umo-parsed">
+                            <v-chip size="x-small" label>
+                                {{ getConversationUmoInfo(selectedConversation).platform || tm('status.unknown') }}
+                            </v-chip>
+                            <span class="umo-separator">:</span>
+                            <v-chip size="x-small" label>
+                                {{ getMessageTypeDisplay(getConversationUmoInfo(selectedConversation).message_type) }}
+                            </v-chip>
+                            <span class="umo-separator">:</span>
+                            <span class="umo-session-id">{{ getConversationUmoInfo(selectedConversation).session_id || tm('status.unknown') }}</span>
+                        </div>
                     </div>
                 </v-card-title>
 
@@ -264,8 +280,8 @@
         <!-- 编辑对话框 -->
         <v-dialog v-model="dialogEdit" max-width="500px">
             <v-card>
-                <v-card-title class="bg-primary text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-pencil</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="primary" class="me-2">mdi-pencil</v-icon>
                     <span>{{ tm('dialogs.edit.title') }}</span>
                 </v-card-title>
 
@@ -284,7 +300,7 @@
                     <v-btn variant="text" @click="dialogEdit = false" :disabled="loading">
                         {{ tm('dialogs.edit.cancel') }}
                     </v-btn>
-                    <v-btn color="primary" @click="saveConversation" :loading="loading">
+                    <v-btn color="primary" variant="tonal" @click="saveConversation" :loading="loading">
                         {{ tm('dialogs.edit.save') }}
                     </v-btn>
                 </v-card-actions>
@@ -294,8 +310,8 @@
         <!-- 删除确认对话框 -->
         <v-dialog v-model="dialogDelete" max-width="500px">
             <v-card>
-                <v-card-title class="bg-error text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-alert</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="error" class="me-2">mdi-alert</v-icon>
                     <span>{{ tm('dialogs.delete.title') }}</span>
                 </v-card-title>
 
@@ -311,7 +327,7 @@
                     <v-btn variant="text" @click="dialogDelete = false" :disabled="loading">
                         {{ tm('dialogs.delete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" @click="deleteConversation" :loading="loading">
+                    <v-btn color="error" variant="tonal" @click="deleteConversation" :loading="loading">
                         {{ tm('dialogs.delete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -321,8 +337,8 @@
         <!-- 批量删除确认对话框 -->
         <v-dialog v-model="dialogBatchDelete" max-width="600px">
             <v-card>
-                <v-card-title class="bg-error text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-delete</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="error" class="me-2">mdi-delete</v-icon>
                     <span>{{ tm('dialogs.batchDelete.title') }}</span>
                 </v-card-title>
 
@@ -353,7 +369,7 @@
                     <v-btn variant="text" @click="dialogBatchDelete = false" :disabled="loading">
                         {{ tm('dialogs.batchDelete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" @click="batchDeleteConversations" :loading="loading">
+                    <v-btn color="error" variant="tonal" @click="batchDeleteConversations" :loading="loading">
                         {{ tm('dialogs.batchDelete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -368,13 +384,15 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { isCancel } from 'axios';
 import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+import { conversationApi } from '@/api/v1';
 import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import MessageList from '@/components/chat/MessageList.vue';
+import UmoDisplay from '@/components/shared/UmoDisplay.vue';
 import {
     askForConfirmation as askForConfirmationDialog,
     useConfirmDialog
@@ -385,7 +403,8 @@ export default {
     name: 'ConversationPage',
     components: {
         VueMonacoEditor,
-        MessageList
+        MessageList,
+        UmoDisplay
     },
 
     setup() {
@@ -642,25 +661,57 @@ export default {
         getMessageTypeDisplay(messageType) {
             const typeMap = {
                 'GroupMessage': this.tm('messageTypes.group'),
+                'group': this.tm('messageTypes.group'),
                 'FriendMessage': this.tm('messageTypes.friend'),
+                'friend': this.tm('messageTypes.friend'),
+                'private': this.tm('messageTypes.friend'),
                 'default': this.tm('messageTypes.unknown')
             };
 
             return typeMap[messageType] || typeMap.default;
         },
 
+        getConversationUmoInfo(item) {
+            const umo = item?.user_id || item?.umo_info?.umo || '';
+            const parsed = this.parseSessionId(umo);
+            const info = item?.umo_info || {};
+            return {
+                umo,
+                platform: info.platform || parsed.platform,
+                message_type: info.message_type || parsed.messageType,
+                session_id: info.session_id || parsed.sessionId,
+                auto_name: info.auto_name || '',
+                user_alias: info.user_alias || '',
+                display_name: info.display_name || umo
+            };
+        },
+
+        getConversationUmoDisplayProps(item) {
+            const info = this.getConversationUmoInfo(item);
+            return {
+                umo: info.umo || this.tm('status.unknown'),
+                platform: info.platform,
+                messageType: info.message_type,
+                sessionId: info.session_id,
+                autoName: info.auto_name,
+                userAlias: info.user_alias
+            };
+        },
+
+        hasConversationUmoReadableName(item) {
+            const info = this.getConversationUmoInfo(item);
+            return Boolean(info.user_alias || info.auto_name);
+        },
+
         formatUmoSource(item) {
-            if (!item?.sessionInfo) {
+            if (this.umoDisplayMode === 'raw') {
                 return item?.user_id || this.tm('status.unknown');
             }
 
-            if (this.umoDisplayMode === 'raw') {
-                return item.user_id || this.tm('status.unknown');
-            }
-
-            const platform = item.sessionInfo.platform || this.tm('status.unknown');
-            const messageType = this.getMessageTypeDisplay(item.sessionInfo.messageType);
-            const sessionId = item.sessionInfo.sessionId || this.tm('status.unknown');
+            const info = this.getConversationUmoInfo(item);
+            const platform = info.platform || this.tm('status.unknown');
+            const messageType = this.getMessageTypeDisplay(info.message_type);
+            const sessionId = info.session_id || this.tm('status.unknown');
             return `${platform}:${messageType}:${sessionId}`;
         },
 
@@ -710,9 +761,8 @@ export default {
                     params.exclude_ids = 'astrbot';
                     params.exclude_platforms = 'webchat';
 
-                    const response = await axios.get('/api/conversation/list', {
+                    const response = await conversationApi.list(params, {
                         signal: controller.signal,
-                        params
                     });
 
                     this.lastAppliedFilters = { ...this.currentFilters }; // 记录已应用的筛选条件
@@ -729,7 +779,12 @@ export default {
                         // 处理会话数据，解析sessionId
                         this.conversations = (data.conversations || []).map(conv => {
                             // 为每个会话添加会话信息
-                            conv.sessionInfo = this.parseSessionId(conv.user_id);
+                            const umoInfo = this.getConversationUmoInfo(conv);
+                            conv.sessionInfo = {
+                                platform: umoInfo.platform,
+                                messageType: umoInfo.message_type,
+                                sessionId: umoInfo.session_id
+                            };
                             return conv;
                         });
 
@@ -748,7 +803,7 @@ export default {
                         this.showErrorMessage(response.data.message || this.tm('messages.fetchError'));
                     }
                 } catch (error) {
-                    if (axios.isCancel(error)) return;
+                    if (isCancel(error)) return;
                     
                     console.error('获取对话列表出错:', error);
                     if (error.response) {
@@ -770,14 +825,21 @@ export default {
 
             try {
                 console.log(`正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`);
-                const response = await axios.post('/api/conversation/detail', {
-                    user_id: item.user_id,
-                    cid: item.cid
-                });
+                const response = await conversationApi.get(item.user_id, item.cid);
 
                 if (response.data.status === "ok") {
                     try {
-                        const historyData = response.data.data.history || '[]';
+                        const detailData = response.data.data || {};
+                        const mergedConversation = { ...this.selectedConversation, ...detailData };
+                        const umoInfo = this.getConversationUmoInfo(mergedConversation);
+                        mergedConversation.sessionInfo = {
+                            platform: umoInfo.platform,
+                            messageType: umoInfo.message_type,
+                            sessionId: umoInfo.session_id
+                        };
+                        this.selectedConversation = mergedConversation;
+
+                        const historyData = detailData.history || '[]';
                         this.conversationHistory = JSON.parse(historyData);
                         this.editedHistory = JSON.stringify(this.conversationHistory, null, 2);
                     } catch (e) {
@@ -813,11 +875,13 @@ export default {
                     return;
                 }
 
-                const response = await axios.post('/api/conversation/update_history', {
-                    user_id: this.selectedConversation.user_id,
-                    cid: this.selectedConversation.cid,
+                const response = await conversationApi.replaceMessages(
+                    this.selectedConversation.user_id,
+                    this.selectedConversation.cid,
+                    {
                     history: historyJson
-                });
+                    }
+                );
 
                 if (response.data.status === "ok") {
                     this.conversationHistory = historyJson;
@@ -858,11 +922,13 @@ export default {
 
             this.loading = true;
             try {
-                const response = await axios.post('/api/conversation/update', {
-                    user_id: this.editedItem.user_id,
-                    cid: this.editedItem.cid,
+                const response = await conversationApi.update(
+                    this.editedItem.user_id,
+                    this.editedItem.cid,
+                    {
                     title: this.editedItem.title
-                });
+                    }
+                );
 
                 if (response.data.status === "ok") {
                     // 更新本地数据
@@ -898,10 +964,10 @@ export default {
         async deleteConversation() {
             this.loading = true;
             try {
-                const response = await axios.post('/api/conversation/delete', {
-                    user_id: this.selectedConversation.user_id,
-                    cid: this.selectedConversation.cid
-                });
+                const response = await conversationApi.delete(
+                    this.selectedConversation.user_id,
+                    this.selectedConversation.cid
+                );
 
                 if (response.data.status === "ok") {
                     const index = this.conversations.findIndex(item => item.user_id === this.selectedConversation.user_id && item.cid === this.selectedConversation.cid
@@ -967,7 +1033,7 @@ export default {
                     cid: item.cid
                 }));
 
-                const response = await axios.post('/api/conversation/delete', {
+                const response = await conversationApi.batchDelete({
                     conversations: conversations
                 });
 
@@ -1020,10 +1086,8 @@ export default {
                     cid: item.cid
                 }));
 
-                const response = await axios.post('/api/conversation/export', {
+                const response = await conversationApi.export({
                     conversations: conversations
-                }, {
-                    responseType: 'blob' // 重要：告诉 axios 响应是一个 blob
                 });
 
                 // 创建一个下载链接
@@ -1223,6 +1287,19 @@ export default {
     flex-direction: column;
 }
 
+.conversation-detail-title {
+    display: flex;
+    align-items: center;
+}
+
+.conversation-detail-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    width: 100%;
+}
+
 .text-truncate {
     display: inline-block;
     /* max-width: 100px; */
@@ -1291,8 +1368,34 @@ export default {
     display: flex;
     align-items: center;
     gap: 4px;
+    flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
+}
+
+.conversation-umo-display {
+    min-width: 0;
+}
+
+.conversation-umo-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    width: 100%;
+}
+
+.conversation-umo-parsed {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    color: rgba(var(--v-theme-on-surface), 0.62);
+    font-size: 12px;
+}
+
+.conversation-detail-umo-parsed {
+    max-width: 100%;
 }
 
 .umo-separator {
