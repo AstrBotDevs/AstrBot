@@ -858,6 +858,7 @@ class ProviderOpenAIOfficial(Provider):
             func_name_ls = []
             tool_call_ids = []
             tool_call_extra_content_dict = {}
+            skipped_count = 0
             for tool_call in choice.message.tool_calls:
                 if isinstance(tool_call, str):
                     # workaround for #1359
@@ -868,6 +869,19 @@ class ProviderOpenAIOfficial(Provider):
                     raise Exception("工具集未提供")
 
                 if tool_call.type == "function":
+                    if (
+                        not tool_call.function
+                        or not tool_call.function.name
+                        or not tool_call.id
+                    ):
+                        logger.warning(
+                            f"Skipping tool call with missing function, name or id: "
+                            f"function={tool_call.function!r}, "
+                            f"name={getattr(tool_call.function, 'name', None)!r}, "
+                            f"id={tool_call.id!r}"
+                        )
+                        skipped_count += 1
+                        continue
                     # workaround for #1454
                     if isinstance(tool_call.function.arguments, str):
                         try:
@@ -889,11 +903,17 @@ class ProviderOpenAIOfficial(Provider):
                     if extra_content is not None:
                         tool_call_extra_content_dict[tool_call.id] = extra_content
 
-            llm_response.role = "tool"
-            llm_response.tools_call_args = args_ls
-            llm_response.tools_call_name = func_name_ls
-            llm_response.tools_call_ids = tool_call_ids
-            llm_response.tools_call_extra_content = tool_call_extra_content_dict
+            if args_ls:
+                llm_response.role = "tool"
+                llm_response.tools_call_args = args_ls
+                llm_response.tools_call_name = func_name_ls
+                llm_response.tools_call_ids = tool_call_ids
+                llm_response.tools_call_extra_content = tool_call_extra_content_dict
+            elif skipped_count > 0:
+                logger.warning(
+                    f"All {skipped_count} function tool call(s) were skipped due to "
+                    "missing name, id, or function field. Treating as non-tool-call response."
+                )
         # specially handle finish reason
         if choice.finish_reason == "content_filter":
             raise Exception(

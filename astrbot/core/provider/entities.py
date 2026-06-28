@@ -404,18 +404,24 @@ class LLMResponse:
         """Convert to OpenAI tool calls format. Deprecated, use to_openai_to_calls_model instead."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
+            tool_name = self.tools_call_name[idx]
+            tool_id = self.tools_call_ids[idx]
+            if not tool_name or not tool_id:
+                logger.warning(
+                    f"Skipping tool call at index {idx} because function.name or id is empty/None. "
+                    f"tool_call_id={tool_id!r}, tool_name={tool_name!r}, arguments={tool_call_arg!r}"
+                )
+                continue
             payload = {
-                "id": self.tools_call_ids[idx],
+                "id": tool_id,
                 "function": {
-                    "name": self.tools_call_name[idx],
+                    "name": tool_name,
                     "arguments": json.dumps(tool_call_arg),
                 },
                 "type": "function",
             }
-            if self.tools_call_extra_content.get(self.tools_call_ids[idx]):
-                payload["extra_content"] = self.tools_call_extra_content[
-                    self.tools_call_ids[idx]
-                ]
+            if self.tools_call_extra_content.get(tool_id):
+                payload["extra_content"] = self.tools_call_extra_content[tool_id]
             ret.append(payload)
         return ret
 
@@ -423,17 +429,23 @@ class LLMResponse:
         """The same as to_openai_tool_calls but return pydantic model."""
         ret = []
         for idx, tool_call_arg in enumerate(self.tools_call_args):
+            tool_name = self.tools_call_name[idx]
+            tool_id = self.tools_call_ids[idx]
+            if not tool_name or not tool_id:
+                logger.warning(
+                    f"Skipping tool call at index {idx} because function.name or id is empty/None. "
+                    f"tool_call_id={tool_id!r}, tool_name={tool_name!r}, arguments={tool_call_arg!r}"
+                )
+                continue
             ret.append(
                 ToolCall(
-                    id=self.tools_call_ids[idx],
+                    id=tool_id,
                     function=ToolCall.FunctionBody(
-                        name=self.tools_call_name[idx],
+                        name=tool_name,
                         arguments=json.dumps(tool_call_arg),
                     ),
                     # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
-                    extra_content=self.tools_call_extra_content.get(
-                        self.tools_call_ids[idx]
-                    ),
+                    extra_content=self.tools_call_extra_content.get(tool_id),
                 ),
             )
         return ret
