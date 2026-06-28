@@ -1080,14 +1080,26 @@ import InteractiveChoiceBox from "@/components/chat/message_list_comps/Interacti
 />
 ```
 
-- [ ] **Step 3: 加 handler + ignored helper**
+- [ ] **Step 3: 加 handler + ignored helper + emit 事件**
 
-在 `<script setup>` 的 `function` 区域(参考 `isUserMessage` 位置),新增:
+**关键**: `useMessages` 暴露的实际 API 是 `sendMessageStream({ sessionId, messageId, parts, transport, ... })` + `createLocalExchange({ sessionId, messageId, parts })`(`useMessages.ts:311,348`),**不**是 `sendMessage({ text })`。这两个函数都在 `useMessages` 闭包内,不通过 props 暴露给 `ChatMessageList`。
+
+**正确做法**: `ChatMessageList` 只负责"接收 submit 事件 → 冒泡到父组件",**不**直接发请求。父组件 `Chat.vue` 处理实际发送。
+
+在 `<script setup>` 的 `defineEmits` 区域(参考现有 emits),新增 `submitChoice` 事件:
+
+```typescript
+const emit = defineEmits<{
+  submitChoice: [text: string];
+}>();
+```
+
+新增 2 个 helper:
 
 ```typescript
 function onInteractiveChoiceSubmit(text: string) {
-  // 走标准 user message 通道(纯文本回传,见 spec §4.5)
-  sendMessage({ text });
+  // 冒泡到父组件(Chat.vue)处理实际发送(spec §4.5)
+  emit("submitChoice", text);
 }
 
 /**
@@ -1104,7 +1116,56 @@ function isInteractiveChoiceIgnored(message: ChatRecord): boolean {
 }
 ```
 
-> **关于 `sendMessage`**:该函数在 `useMessages` composable 中已定义,需要 import 或通过 props/emit 间接使用。打开 `useMessages.ts` 查看 `send` / `sendMessage` 的实际暴露方式,如果未在 ChatMessageList 的 import 链中,需要从 `useMessages` 解构。
+并修改 Step 2 的 v-else-if 块,把 `@submit="onInteractiveChoiceSubmit"` 替换为:
+
+```vue
+@submit="onInteractiveChoiceSubmit"
+```
+
+(因为 `onInteractiveChoiceSubmit` 已经改成 emit,不需要 `@submit="$emit('submitChoice', $event)"` 短路写法)
+
+- [ ] **Step 3.5: 在 Chat.vue 处理 submitChoice 事件**
+
+打开 `Chat.vue`(<mark>如本文件不存在或结构不同,需查找实际承载 `useMessages` 的父组件</mark>),找到 `<ChatMessageList ... />` 的位置,在 `useMessages` 解构处添加:
+
+```typescript
+const {
+  // ... 现有解构
+  sendMessageStream,
+  createLocalExchange,
+} = useMessages({ currentSessionId, /* ... */ });
+```
+
+并新增 handler(参考 ChatInput 现有的 send 写法):
+
+```typescript
+function onInteractiveChoiceSubmit(text: string) {
+  const sessionId = currentSessionId.value;
+  if (!sessionId) return;
+  const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  const parts: MessagePart[] = [{ type: "plain", text }];
+  const { userRecord, botRecord } = createLocalExchange({ sessionId, messageId, parts });
+  sendMessageStream({
+    sessionId,
+    messageId,
+    parts,
+    transport: /* existing transport ref */,
+    userRecord,
+    botRecord,
+  });
+}
+```
+
+并在 `<ChatMessageList>` 上绑定:
+
+```vue
+<ChatMessageList
+  ...
+  @submit-choice="onInteractiveChoiceSubmit"
+/>
+```
+
+> **具体 transport ref 名称** 由 `Chat.vue` 现有代码决定(常见如 `transportRef` / `transport`)。**参考 ChatInput.vue 现有的 send 流程**复制 transport / selectedProvider / selectedModel 的获取方式。
 
 - [ ] **Step 4: 跑 typecheck + lint**
 
@@ -1175,7 +1236,7 @@ if (Math.random() < 0.3) {  // 30% 概率出现,方便手测
 
 刷新页面,发任意消息,等待 bot 回复 → 30% 概率出现选项框。
 
-- [ ] **Step 4: 验证 4 状态**
+- [ ] **Step 4: 验证 4 状态 + 多实例边缘情况**
 
 | 操作 | 期望视觉 |
 |------|---------|
@@ -1183,7 +1244,7 @@ if (Math.random() < 0.3) {  // 30% 概率出现,方便手测
 | 点 "GPT-4" 按钮 | 立即切到 `submitted_via_option` 态:"已选择: GPT-4",整卡灰显,按钮不可点 |
 | (新会话)输入文本到 textarea,点提交 | 切到 `submitted_via_input` 态:"已输入: <文本>" |
 | (新会话)在 ChatInput 自己打字发消息 | 选项框变 `ignored` 态:显示"已忽略"标签 |
-| (新会话)同一 message 内有 2 个 interactive_choice part(临时硬编码) | 两个选项框独立渲染,各自 `pending` |
+| **(spec §7 边缘情况)** 同一 message 内有 2 个 interactive_choice part(临时硬编码) | 两个选项框**独立**渲染,各自 `pending`(不是 5 状态,是同一 message 多个 part 的独立性) |
 
 - [ ] **Step 5: 验证非法 part 降级**
 
@@ -1315,7 +1376,16 @@ build/
 
 - [ ] **Step 1: 写完整 Python 代码**
 
-完整内容写入 `choice_ui\choice_tool.py`(内容同 spec §11.1,这里省略重复粘贴,直接复制 spec §11.1 即可)。
+完整内容写入 `choice_ui\choice_tool.py`(**逐字**复制 spec §11.1,约 130 行,包含 `AskUserChoiceTool` 类的 `name` / `description` / `parameters` / `call` 全部字段)。
+
+- [ ] **Step 1.5: diff 校验(spec 漂移检查)**
+
+```bash
+# 在 Astrbot 仓库根目录(spec 与插件源码分离时的兜底)
+diff <(awk '/^### 11.1/,/^### 11.2/' "F:\github\Astrbot\docs\superpowers\specs\2026-06-28-dynamic-choice-box-rendering-design.md") <(cat "D:\AstrbotWorkSpace\astrbot_plugin_choice_ui\choice_ui\choice_tool.py")
+```
+
+Expected: 仅有 ASCII 转义 / 路径 / 行号差异,**无实质性代码差异**(spec 是源 of truth,代码必须与 spec §11.1 一致)。如果出现实质性差异,说明 spec 或代码有一处需更新,**不要**让 plan 静默漂移。
 
 - [ ] **Step 2: 写 main.py 入口**
 
@@ -1385,9 +1455,23 @@ git commit -m "feat: initial ask_user_choice tool scaffolding"
 
 - [ ] **Step 1: 链接插件到 AstrBot dev 环境**
 
+**Windows (cmd.exe / PowerShell)**:
+
 ```bash
-# 软链接(假设 AstrBot 在 F:\github\Astrbot)
-ln -s "D:\AstrbotWorkSpace\astrbot_plugin_choice_ui" "F:\github\Astrbot\astrbot\plugins\astrbot_plugin_choice_ui"
+# 用 mklink 做目录联接(需要 admin 权限,或者用 junction 替代)
+mklink /D "F:\github\Astrbot\astrbot\plugins\astrbot_plugin_choice_ui" "D:\AstrbotWorkSpace\astrbot_plugin_choice_ui"
+```
+
+或**非 admin 方案**(复制而非链接,改完需手动同步):
+
+```bash
+xcopy /E /I "D:\AstrbotWorkSpace\astrbot_plugin_choice_ui" "F:\github\Astrbot\astrbot\plugins\astrbot_plugin_choice_ui"
+```
+
+**macOS / Linux**:
+
+```bash
+ln -s /path/to/astrbot_plugin_choice_ui /path/to/Astrbot/astrbot/plugins/astrbot_plugin_choice_ui
 ```
 
 - [ ] **Step 2: 启动 AstrBot**
@@ -1453,7 +1537,7 @@ cd /d F:\github\Astrbot\.worktrees\feat-choice-box
 git log --oneline master..HEAD
 ```
 
-Expected: 4-5 个 commit(解析层 / i18n / 组件 / 集成 / 可选手测代码清理),都遵循 conventional commits 格式。
+Expected: **正好 5 个 commit**(Task 3 解析层 / Task 4 集成 / Task 5 i18n / Task 6 组件 / Task 7 ChatMessageList 集成)。Task 8 的临时硬编码直接修改后回滚,**不**产生独立 commit。都遵循 conventional commits 格式。
 
 - [ ] **Worktree 合并回 master 或开 PR(由执行者选择)**
 
