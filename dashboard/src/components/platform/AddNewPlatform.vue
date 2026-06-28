@@ -5,15 +5,16 @@
     max-height="90%"
     @after-enter="prepareData"
   >
-    <v-card
-      :title="
-        updatingMode
-          ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm(
-              'dialog.adapter',
-            )}`
-          : tm('dialog.addPlatform')
-      "
-    >
+    <v-card>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+        {{
+          updatingMode
+            ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm(
+                'dialog.adapter',
+              )}`
+            : tm('dialog.addPlatform')
+        }}
+      </v-card-title>
       <v-card-text
         ref="dialogScrollContainer"
         class="pa-4 ml-2"
@@ -315,7 +316,7 @@
               </div>
               <div>
                 <v-btn
-                  variant="plain"
+                  variant="text"
                   icon
                   @click="toggleConfigSection"
                   class="mt-2"
@@ -670,10 +671,11 @@
 
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn text @click="closeDialog">{{ tm("dialog.cancel") }}</v-btn>
+        <v-btn variant="text" @click="closeDialog">{{ tm("dialog.cancel") }}</v-btn>
         <v-btn
           :disabled="!canSave"
           color="primary"
+          variant="tonal"
           v-if="!updatingMode"
           @click="newPlatform"
           :loading="loading"
@@ -682,6 +684,7 @@
         <v-btn
           :disabled="!selectedAbConfId"
           color="primary"
+          variant="tonal"
           v-else
           @click="newPlatform"
           :loading="loading"
@@ -694,7 +697,7 @@
   <!-- ID冲突确认对话框 -->
   <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
     <v-card>
-      <v-card-title class="text-h6 bg-warning d-flex align-center">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
         <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
         {{ tm("dialog.idConflict.title") }}
       </v-card-title>
@@ -716,7 +719,7 @@
   <!-- 安全警告对话框 -->
   <v-dialog v-model="showOneBotEmptyTokenWarnDialog" max-width="600" persistent>
     <v-card>
-      <v-card-title>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm("dialog.securityWarning.title") }}
       </v-card-title>
       <v-card-text class="py-4">
@@ -733,12 +736,14 @@
         <v-spacer></v-spacer>
         <v-btn
           color="error"
+          variant="tonal"
           @click="handleOneBotEmptyTokenWarningDismiss(true)"
         >
           {{ tm("createDialog.warningContinue") }}
         </v-btn>
         <v-btn
           color="primary"
+          variant="text"
           @click="handleOneBotEmptyTokenWarningDismiss(false)"
         >
           {{ tm("createDialog.warningEditAgain") }}

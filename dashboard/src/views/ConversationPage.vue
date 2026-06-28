@@ -206,7 +206,7 @@
         <!-- 对话详情对话框 -->
         <v-dialog v-model="dialogView" max-width="900px" scrollable>
             <v-card class="conversation-detail-card">
-                <v-card-title class="ml-2 mt-2 conversation-detail-title">
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6 conversation-detail-title">
                     <div class="conversation-detail-heading">
                         <span class="text-truncate">{{ selectedConversation?.title || tm('status.noTitle') }}</span>
                         <UmoDisplay v-if="selectedConversation?.user_id && hasConversationUmoReadableName(selectedConversation)"
@@ -280,8 +280,8 @@
         <!-- 编辑对话框 -->
         <v-dialog v-model="dialogEdit" max-width="500px">
             <v-card>
-                <v-card-title class="bg-primary text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-pencil</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="primary" class="me-2">mdi-pencil</v-icon>
                     <span>{{ tm('dialogs.edit.title') }}</span>
                 </v-card-title>
 
@@ -300,7 +300,7 @@
                     <v-btn variant="text" @click="dialogEdit = false" :disabled="loading">
                         {{ tm('dialogs.edit.cancel') }}
                     </v-btn>
-                    <v-btn color="primary" @click="saveConversation" :loading="loading">
+                    <v-btn color="primary" variant="tonal" @click="saveConversation" :loading="loading">
                         {{ tm('dialogs.edit.save') }}
                     </v-btn>
                 </v-card-actions>
@@ -310,8 +310,8 @@
         <!-- 删除确认对话框 -->
         <v-dialog v-model="dialogDelete" max-width="500px">
             <v-card>
-                <v-card-title class="bg-error text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-alert</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="error" class="me-2">mdi-alert</v-icon>
                     <span>{{ tm('dialogs.delete.title') }}</span>
                 </v-card-title>
 
@@ -327,7 +327,7 @@
                     <v-btn variant="text" @click="dialogDelete = false" :disabled="loading">
                         {{ tm('dialogs.delete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" @click="deleteConversation" :loading="loading">
+                    <v-btn color="error" variant="tonal" @click="deleteConversation" :loading="loading">
                         {{ tm('dialogs.delete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -337,8 +337,8 @@
         <!-- 批量删除确认对话框 -->
         <v-dialog v-model="dialogBatchDelete" max-width="600px">
             <v-card>
-                <v-card-title class="bg-error text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-delete</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="error" class="me-2">mdi-delete</v-icon>
                     <span>{{ tm('dialogs.batchDelete.title') }}</span>
                 </v-card-title>
 
@@ -369,7 +369,7 @@
                     <v-btn variant="text" @click="dialogBatchDelete = false" :disabled="loading">
                         {{ tm('dialogs.batchDelete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" @click="batchDeleteConversations" :loading="loading">
+                    <v-btn color="error" variant="tonal" @click="batchDeleteConversations" :loading="loading">
                         {{ tm('dialogs.batchDelete.confirm') }}
                     </v-btn>
                 </v-card-actions>

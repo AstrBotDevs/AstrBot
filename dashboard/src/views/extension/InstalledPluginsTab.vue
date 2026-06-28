@@ -371,7 +371,7 @@ const togglePinnedExtension = (extension) => {
 
     <v-dialog v-model="sourceBindingDialog.show" max-width="680">
       <v-card>
-        <v-card-title class="d-flex align-center">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           {{
             sourceBindingDialog.pendingUpdate
               ? tm("dialogs.sourceBinding.selectTitle")
@@ -478,7 +478,7 @@ const togglePinnedExtension = (extension) => {
           </v-btn>
           <v-btn
             color="primary"
-            variant="flat"
+            variant="tonal"
             :loading="sourceBindingDialog.saving"
             :disabled="
               sourceBindingDialog.loading ||
