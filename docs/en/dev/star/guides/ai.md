@@ -118,6 +118,29 @@ Supported types: `string`, `number`, `object`, `boolean`, `array`. Since v4.5.7,
 >
 > Additionally, passing `parameters=...` directly to the decorator is **not supported** and will be silently ignored. If you need manual control over the schema, use the `@dataclass` + `add_llm_tools()` approach above.
 
+### Declaring a Default Permission for Tools
+
+> [!TIP]
+> Added in v4.X.X
+
+Just as `@filter.command()` can be restricted to admins with `@filter.permission_type(filter.PermissionType.ADMIN)`, `@filter.llm_tool()` supports the same idea through a `permission_type` parameter, letting you declare a default permission for the tool:
+
+```py
+from astrbot.api.event import filter, AstrMessageEvent
+
+@filter.llm_tool(name="restart_server", permission_type=filter.PermissionType.ADMIN)
+async def restart_server(self, event: AstrMessageEvent):
+    '''Restart the server.'''
+    # handler logic
+```
+
+`permission_type` accepts `filter.PermissionType.ADMIN` or `filter.PermissionType.MEMBER`. If omitted, the previous behavior is unchanged (the tool is available to everyone).
+
+> [!WARNING]
+> - `permission_type` only sets the tool's **default permission**. If the bot owner has explicitly configured a permission for this tool in the WebUI panel (Extensions -> Components -> Tool Management), that configuration **overrides** the default declared in the plugin's code.
+> - The point of this mechanism is that plugin authors can ship a sane default safeguard for dangerous tools (e.g. restarting a service, running shell commands) without relying on the bot owner to ever open the WebUI panel.
+> - Tools defined via `@dataclass` + `FunctionTool` and registered with `add_llm_tools()` do not currently support declaring a default permission this way.
+
 ## Invoking Agents
 
 > [!TIP]
