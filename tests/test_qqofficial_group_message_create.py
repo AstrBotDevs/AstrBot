@@ -1,5 +1,7 @@
 import asyncio
+import json
 import re
+import time
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -19,7 +21,12 @@ from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
+    QQOfficialMessageEvent,
+)
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
+    ManagedBotWebSocket,
+    QQOfficialGatewayUnavailableError,
     QQOfficialPlatformAdapter,
     _ensure_group_message_create_parser,
 )
@@ -66,25 +73,160 @@ def _dispatch_group_message(payload: dict) -> tuple[str, botpy.message.GroupMess
     return dispatched[0]
 
 
+def _platform_config() -> dict:
+    return {
+        "id": "qq-official-test",
+        "appid": "123",
+        "secret": "secret",
+        "enable_group_c2c": True,
+        "enable_guild_direct_message": False,
+    }
+
+
 @pytest.mark.asyncio
 async def test_group_message_create_parser_is_registered_and_dispatches_group_message():
-    QQOfficialPlatformAdapter(
-        {
-            "id": "qq-official-test",
-            "appid": "123",
-            "secret": "secret",
-            "enable_group_c2c": True,
-            "enable_guild_direct_message": False,
-        },
-        {},
-        asyncio.Queue(),
-    )
+    QQOfficialPlatformAdapter(_platform_config(), {}, asyncio.Queue())
 
     event_name, message = _dispatch_group_message(_make_group_payload())
 
     assert event_name == "group_message_create"
     assert isinstance(message, botpy.message.GroupMessage)
     assert message.group_openid == "group-1"
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_bot_login_raises_retryable_error_when_gateway_metadata_missing():
+    adapter = QQOfficialPlatformAdapter(_platform_config(), {}, asyncio.Queue())
+    adapter.client.http = SimpleNamespace(
+        login=AsyncMock(return_value=SimpleNamespace()),
+        close=AsyncMock(),
+    )
+    adapter.client.api = SimpleNamespace(get_ws_url=AsyncMock(return_value=None))
+
+    with pytest.raises(
+        QQOfficialGatewayUnavailableError,
+        match="gateway metadata unavailable",
+    ):
+        await adapter.client._bot_login(SimpleNamespace())
+
+    await adapter.terminate()
+
+
+@pytest.mark.asyncio
+async def test_managed_websocket_uses_qq_hello_heartbeat_interval(monkeypatch):
+    sent_payloads: list[dict] = []
+
+    class ConnectionStub:
+        parser = {}
+
+        def add(self, _session):
+            raise AssertionError("unexpected reconnect")
+
+    class ClientStub:
+        def mark_websocket_connected(self):
+            pass
+
+        def reset_reconnect_backoff(self):
+            pass
+
+        @property
+        def is_shutting_down(self):
+            return False
+
+    class WebSocketStub:
+        closed = False
+
+        async def send_str(self, data: str):
+            sent_payloads.append(json.loads(data))
+
+        async def close(self):
+            self.closed = True
+
+    class TokenStub:
+        async def check_token(self):
+            pass
+
+        def get_string(self):
+            return "QQBot token"
+
+    async def fake_send_msg(data: str):
+        sent_payloads.append(json.loads(data))
+
+    async def fake_sleep(delay: float):
+        assert delay == 41.25
+        raise asyncio.CancelledError
+
+    websocket = ManagedBotWebSocket(
+        {
+            "session_id": "",
+            "last_seq": 7,
+            "intent": 1,
+            "token": TokenStub(),
+            "shards": {"shard_id": 0, "shard_count": 1},
+        },
+        cast(Any, ConnectionStub()),
+        cast(Any, ClientStub()),
+    )
+    websocket._conn = cast(Any, WebSocketStub())
+    monkeypatch.setattr(websocket, "send_msg", fake_send_msg)
+
+    assert await websocket._is_system_event(
+        {"op": 10, "d": {"heartbeat_interval": 41250}},
+        websocket._conn,
+    )
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    sent_payloads.clear()
+
+    with pytest.raises(asyncio.CancelledError):
+        await websocket._send_heart(30)
+
+    assert sent_payloads == [{"op": 1, "d": 7}]
+
+
+def test_bot_client_schedules_rate_limit_reconnect_delay():
+    client = QQOfficialBotClient(
+        intents=botpy.Intents(public_messages=True),
+        bot_log=False,
+    )
+    now = time.monotonic()
+
+    client.schedule_reconnect_delay("rate limit", rate_limited=True)
+
+    delay = client._next_connect_at - now
+    assert 59 <= delay <= 61
+
+
+@pytest.mark.asyncio
+async def test_managed_websocket_requeues_on_gateway_reconnect_request():
+    queued_sessions: list[dict] = []
+
+    class ConnectionStub:
+        parser = {}
+
+        def add(self, session):
+            queued_sessions.append(session)
+
+    class ClientStub:
+        @property
+        def is_shutting_down(self):
+            return False
+
+        def schedule_reconnect_delay(self, reason: str, **_kwargs):
+            assert reason == "server requested reconnect"
+
+    class WebSocketStub:
+        async def close(self):
+            pass
+
+    session = {"session_id": "sid", "last_seq": 3}
+    websocket = ManagedBotWebSocket(
+        session,
+        cast(Any, ConnectionStub()),
+        cast(Any, ClientStub()),
+    )
+
+    assert await websocket._is_system_event({"op": 7}, cast(Any, WebSocketStub()))
+    assert queued_sessions == [session]
 
 
 @pytest.mark.asyncio
@@ -283,6 +425,35 @@ async def test_webhook_group_send_by_session_without_cached_msg_id_omits_msg_id(
     assert "msg_id" not in kwargs
     assert "msg_seq" in kwargs
     assert adapter._session_last_message_id["group-1"] == "sent-1"
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_reply_fallback_removes_expired_msg_id_for_proactive_send():
+    event = object.__new__(QQOfficialMessageEvent)
+    sent_payloads: list[dict] = []
+
+    async def send_func(payload: dict):
+        sent_payloads.append(payload.copy())
+        if len(sent_payloads) == 1:
+            raise botpy.errors.ServerError("回复消息msg_id已过期")
+        return {"id": "sent-1"}
+
+    ret = await event._send_with_markdown_fallback(
+        send_func,
+        {
+            "content": "hello",
+            "msg_type": 0,
+            "msg_id": "expired-msg-id",
+            "msg_seq": 1,
+        },
+        "hello",
+    )
+
+    assert ret == {"id": "sent-1"}
+    assert sent_payloads[0]["msg_id"] == "expired-msg-id"
+    assert "msg_id" not in sent_payloads[1]
+    assert sent_payloads[1]["content"] == "hello"
+    assert sent_payloads[1]["msg_seq"] == 1
 
 
 def test_qqofficial_ws_is_not_excluded_from_segmented_reply():
