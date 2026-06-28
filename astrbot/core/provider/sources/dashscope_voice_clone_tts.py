@@ -96,10 +96,7 @@ class ProviderDashscopeVoiceCloneTTSAPI(TTSProvider):
 
         # 每次调用前确保 dashscope 全局配置使用本提供商指定的值。
         # 避免多 TTS 共存时被其它提供商覆盖。
-        dashscope.api_key = self.chosen_api_key
-        resolved_base_url = self._resolve_base_url()
-        if resolved_base_url:
-            dashscope.base_http_api_url = resolved_base_url
+        # 每次调用时通过 kwargs 动态传入 API Key 和 Base URL，无需修改全局配置
 
         audio_bytes = await self._synthesize(model, text)
         if not audio_bytes:
