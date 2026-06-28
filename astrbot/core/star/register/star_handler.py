@@ -579,6 +579,7 @@ def register_on_llm_tool_respond(**kwargs):
 
 def register_llm_tool(
     name: str | None = None,
+    *,
     permission_type: PermissionType | None = None,
     **kwargs,
 ):
@@ -629,6 +630,12 @@ def register_llm_tool(
         - 该参数只是一个**默认值**：如果机器人主人之后在 WebUI 面板里手动为该工具
           设置了权限，面板的设置会覆盖这里声明的默认值。
         - 不传或传 ``None`` 时行为与之前完全一致（默认所有人可用）。
+        - ``permission_type`` 是仅限关键字参数，必须写成
+          ``permission_type=filter.PermissionType.ADMIN``，不能位置传参。如果你
+          忘了写 ``name=`` 或 ``permission_type=``、直接把 ``PermissionType`` 成员
+          当作第一个位置参数传入（例如错写成
+          ``@llm_tool(filter.PermissionType.ADMIN)``），会抛出 ``ValueError``，
+          而不是被静默当成工具名。
         - 通过 ``registering_agent``（即 ``Agent.llm_tool``）注册的工具不支持权限
           声明，因为它们不会被写入 ``func_list``，不经过面板可配置的工具管理系统，
           也不受 ``_default_permission`` / 面板权限覆盖的约束。同时传入
@@ -636,6 +643,14 @@ def register_llm_tool(
           而不是静默忽略你的权限声明。
 
     """
+    if isinstance(name, PermissionType):
+        raise ValueError(
+            "看起来你把 PermissionType 作为第一个位置参数传给了 name（很可能是忘了写"
+            "name= 或 permission_type=）。正确写法："
+            '@llm_tool(name="xxx", permission_type=filter.PermissionType.ADMIN)。'
+            "如果不需要自定义工具名，直接用 @llm_tool(permission_type=...) 即可"
+            "（permission_type 现在是仅限关键字参数）。",
+        )
     name_ = name
     registering_agent = None
     if kwargs.get("registering_agent"):

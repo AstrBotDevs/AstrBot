@@ -251,6 +251,36 @@ class TestLLMToolPermissionTypeDecorator:
         assert agent.tools[0].name == "t8947_agent_tool_ok"
         assert agent.tools[0].declared_permission_type is None
 
+    def test_permission_type_passed_positionally_as_name_raises(self):
+        """Regression test: forgetting name= / permission_type= and passing
+        a PermissionType member as the sole positional argument used to be
+        silently accepted -- Python binds it to `name`, and pydantic's str
+        coercion mangled it into a near-meaningless tool name (e.g. "1"),
+        with no permission protection at all and no indication anything
+        went wrong. This must raise a clear error instead."""
+        from astrbot.api.event import filter
+
+        with pytest.raises(ValueError, match="PermissionType"):
+
+            @filter.llm_tool(filter.PermissionType.ADMIN)
+            async def _typo_tool(event):
+                """A tool registered with a common typo."""
+                return "ok"
+
+    def test_permission_type_passed_positionally_as_second_arg_raises(self):
+        """Regression test: permission_type is keyword-only. Passing it as
+        a second positional argument must raise TypeError rather than
+        silently relying on parameter-order coincidence (which would break
+        the moment the signature gains another positional parameter)."""
+        from astrbot.api.event import filter
+
+        with pytest.raises(TypeError):
+
+            @filter.llm_tool("t8947_positional_tool", filter.PermissionType.ADMIN)
+            async def _positional_tool(event):
+                """A tool registered with permission_type passed positionally."""
+                return "ok"
+
     def test_declared_admin_is_enforced_without_dashboard_config(self):
         """The whole point of the feature: a plugin author's declared
         ADMIN default protects the tool even if the bot owner never
