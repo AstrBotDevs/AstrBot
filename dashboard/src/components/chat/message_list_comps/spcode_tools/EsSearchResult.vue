@@ -14,8 +14,9 @@
             >
                 <div class="item-line">
                     <v-icon size="13" class="item-icon">mdi-file-outline</v-icon>
-                    <span class="item-name">{{ item.name }}</span>
-                    <span v-if="item.path" class="item-path">{{ item.path }}</span>
+                    <CopyableText :value="item.name" mode="inline" class="item-name" />
+                    <CopyableText v-if="item.path" :value="item.path" mode="code" class="item-path" />
+
                     <span v-if="item.size !== undefined" class="item-size">{{ humanSize(item.size) }}</span>
                 </div>
                 <pre v-if="item.full && openSet[i]" class="item-full">{{ item.full }}</pre>
@@ -29,6 +30,7 @@
 
 <script setup lang="ts">
 import { computed, reactive } from "vue";
+import CopyableText from "../__shared__/CopyableText.vue";
 
 interface EsSearchItem {
     name: string;
