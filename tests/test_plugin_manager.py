@@ -54,6 +54,111 @@ def _write_requirements(plugin_path: Path):
         f.write("networkx\n")
 
 
+def _write_sdk_test_plugin(plugin_path: Path):
+    plugin_path.mkdir(parents=True, exist_ok=True)
+    (plugin_path / "plugin.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "sdk_probe",
+                "display_name": "SDK Probe",
+                "repo": "https://github.com/AstrBotDevs/astrbot-sdk-probe",
+                "version": "1.0.0",
+                "author": "AstrBot Team",
+                "desc": "SDK plugin probe",
+                "runtime": {"python": "3.12"},
+                "components": [{"class": "main:SDKProbe"}],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "main.py").write_text(
+        "\n".join(
+            [
+                "from astrbot_sdk import Context, MessageEvent, Star, on_command",
+                "from astrbot_sdk.decorators import provide_capability",
+                "",
+                "class SDKProbe(Star):",
+                "    async def on_start(self, ctx: Context) -> None:",
+                "        self.started = True",
+                '        starts = int(await ctx.db.get("starts") or 0)',
+                '        await ctx.db.set("starts", starts + 1)',
+                "        await ctx.http.register_api(",
+                '            "/sdk_probe/ping/{name}",',
+                "            handler=self.http_ping,",
+                '            methods=["GET"],',
+                '            description="SDK probe ping",',
+                "        )",
+                "",
+                '    @on_command("sdkprobe", aliases=["sdkp"])',
+                "    async def probe(self, event: MessageEvent, ctx: Context) -> None:",
+                '        starts = await ctx.db.get("starts")',
+                '        await event.reply(f"sdk ok {starts}")',
+                "",
+                '    @provide_capability("sdk_probe.http_ping", description="Probe HTTP ping")',
+                "    async def http_ping(",
+                "        self, payload: dict, ctx: Context",
+                "    ) -> dict:",
+                "        return {",
+                '            "status": 200,',
+                '            "body": {"ok": True, "params": payload.get("params", {})},',
+                "        }",
+                "",
+            ],
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_sdk_event_test_plugin(plugin_path: Path):
+    plugin_path.mkdir(parents=True, exist_ok=True)
+    (plugin_path / "plugin.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "name": "sdk_events",
+                "display_name": "SDK Events",
+                "repo": "https://github.com/AstrBotDevs/astrbot-sdk-events",
+                "version": "1.0.0",
+                "author": "AstrBot Team",
+                "desc": "SDK event bridge probe",
+                "runtime": {"python": "3.12"},
+                "components": [{"class": "main:SDKEvents"}],
+            },
+        ),
+        encoding="utf-8",
+    )
+    (plugin_path / "main.py").write_text(
+        "\n".join(
+            [
+                "from astrbot_sdk import Context, MessageEvent, Plain, Star, on_event",
+                "from astrbot_sdk.clients.llm import LLMResponse",
+                "from astrbot_sdk.llm.entities import ProviderRequest",
+                "from astrbot_sdk.message.result import MessageEventResult",
+                "",
+                "class SDKEvents(Star):",
+                '    @on_event("llm_request")',
+                "    async def on_req(",
+                "        self, event: MessageEvent, req: ProviderRequest, ctx: Context",
+                "    ) -> None:",
+                '        req.system_prompt = (req.system_prompt or "") + "[sdk-req]"',
+                "",
+                '    @on_event("llm_response")',
+                "    async def on_resp(",
+                "        self, event: MessageEvent, response: LLMResponse",
+                "    ) -> None:",
+                '        response.text = response.text.replace("&&happy&&", "")',
+                "",
+                '    @on_event("decorating_result")',
+                "    async def on_decor(",
+                "        self, event: MessageEvent, result: MessageEventResult",
+                "    ) -> None:",
+                '        result.chain.append(Plain("[sdk-decor]"))',
+                "",
+            ],
+        ),
+        encoding="utf-8",
+    )
+
+
 def test_load_plugin_i18n_reads_locale_files(tmp_path: Path):
     plugin_path = tmp_path / "plugin"
     i18n_path = plugin_path / ".astrbot-plugin" / "i18n"
@@ -199,6 +304,243 @@ def test_loaded_metadata_can_copy_i18n_into_existing_star_metadata(tmp_path: Pat
     assert loaded_metadata is not None
     existing_metadata.i18n = loaded_metadata.i18n
     assert existing_metadata.i18n == {"zh-CN": {"metadata": {"desc": "中文描述"}}}
+
+
+def test_get_modules_skips_sdk_plugin_yaml_directories(tmp_path: Path):
+    sdk_plugin = tmp_path / "sdk_probe"
+    _write_sdk_test_plugin(sdk_plugin)
+
+    legacy_plugin = tmp_path / "helloworld"
+    _write_local_test_plugin(legacy_plugin, TEST_PLUGIN_REPO)
+
+    modules = PluginManager._get_modules(str(tmp_path))
+
+    assert [module["pname"] for module in modules] == ["helloworld"]
+
+
+@pytest.mark.asyncio
+async def test_sdk_plugin_adapter_loads_plugin_yaml_into_star_registry(tmp_path: Path):
+    from astrbot.core.star.filter.command import CommandFilter
+    from astrbot.core.star.sdk_plugin_adapter import SDKPluginAdapter
+
+    _clear_star_runtime_state()
+    sdk_plugin = tmp_path / "plugins" / "sdk_probe"
+    _write_sdk_test_plugin(sdk_plugin)
+
+    class FakeStarContext:
+        def __init__(self) -> None:
+            self.registered_web_apis = []
+
+        def register_web_api(self, route, view_handler, methods, desc):
+            self.registered_web_apis.append((route, view_handler, methods, desc))
+
+    star_context = FakeStarContext()
+    adapter = SDKPluginAdapter(
+        plugin_store_path=str(tmp_path / "plugins"),
+        plugin_config_path=str(tmp_path / "config"),
+        star_context=star_context,
+    )
+    success, failed = await adapter.load_all(inactivated_plugins=[])
+    module_path = adapter.module_path_for("sdk_probe")
+
+    try:
+        assert success
+        assert failed == {}
+        assert module_path in star_manager_module.star_map
+
+        metadata = star_manager_module.star_map[module_path]
+        assert metadata.name == "sdk_probe"
+        assert metadata.display_name == "SDK Probe"
+        assert metadata.activated is True
+        assert any(
+            item.module_path == module_path
+            for item in star_manager_module.star_registry
+        )
+
+        handlers = (
+            star_manager_module.star_handlers_registry.get_handlers_by_module_name(
+                module_path,
+            )
+        )
+        assert len(handlers) == 1
+        assert handlers[0].handler_full_name in metadata.star_handler_full_names
+        assert any(
+            isinstance(filter_item, CommandFilter)
+            and filter_item.command_name == "sdkprobe"
+            for filter_item in handlers[0].event_filters
+        )
+        assert [
+            (route, methods, desc)
+            for route, _handler, methods, desc in star_context.registered_web_apis
+        ] == [("/sdk_probe/ping/<name>", ["GET"], "SDK probe ping")]
+
+        class FakeEvent:
+            unified_msg_origin = "webchat:webchat:test-user"
+
+            def __init__(self) -> None:
+                self.sent = []
+                self.stopped = False
+
+            def get_group_id(self):
+                return ""
+
+            def get_message_str(self):
+                return "/sdkprobe"
+
+            def get_sender_id(self):
+                return "test-user"
+
+            def get_platform_id(self):
+                return "webchat"
+
+            def get_platform_name(self):
+                return "webchat"
+
+            def get_self_id(self):
+                return "bot"
+
+            def get_sender_name(self):
+                return "tester"
+
+            def is_admin(self):
+                return False
+
+            async def send(self, chain):
+                self.sent.append(chain)
+
+            def stop_event(self):
+                self.stopped = True
+
+        event = FakeEvent()
+        await handlers[0].handler(event)
+        assert event.stopped is True
+        assert [chain.get_plain_text() for chain in event.sent] == ["sdk ok 1"]
+    finally:
+        await adapter.unload_by_module_path(module_path)
+        assert star_context.registered_web_apis == []
+        _clear_star_runtime_state()
+
+    second_adapter = SDKPluginAdapter(
+        plugin_store_path=str(tmp_path / "plugins"),
+        plugin_config_path=str(tmp_path / "config"),
+    )
+    success, failed = await second_adapter.load_all(inactivated_plugins=[])
+    try:
+        assert success
+        assert failed == {}
+        handlers = (
+            star_manager_module.star_handlers_registry.get_handlers_by_module_name(
+                module_path,
+            )
+        )
+        event = FakeEvent()
+        await handlers[0].handler(event)
+        assert [chain.get_plain_text() for chain in event.sent] == ["sdk ok 2"]
+    finally:
+        await second_adapter.unload_by_module_path(module_path)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_sdk_plugin_adapter_bridges_event_triggers(tmp_path: Path):
+    from astrbot.core.message.message_event_result import MessageEventResult
+    from astrbot.core.provider.entities import LLMResponse, ProviderRequest
+    from astrbot.core.star.sdk_plugin_adapter import SDKPluginAdapter
+    from astrbot.core.star.star_handler import EventType
+
+    _clear_star_runtime_state()
+    sdk_plugin = tmp_path / "plugins" / "sdk_events"
+    _write_sdk_event_test_plugin(sdk_plugin)
+
+    adapter = SDKPluginAdapter(
+        plugin_store_path=str(tmp_path / "plugins"),
+        plugin_config_path=str(tmp_path / "config"),
+    )
+    success, failed = await adapter.load_all(inactivated_plugins=[])
+    module_path = adapter.module_path_for("sdk_events")
+
+    class FakeEvent:
+        unified_msg_origin = "webchat:webchat:test-user"
+        plugins_name = None
+
+        def __init__(self) -> None:
+            self._result = MessageEventResult().message("hello")
+            self.stopped = False
+            self.extras = {}
+
+        def get_group_id(self):
+            return ""
+
+        def get_message_str(self):
+            return "hello"
+
+        def get_sender_id(self):
+            return "test-user"
+
+        def get_platform_id(self):
+            return "webchat"
+
+        def get_platform_name(self):
+            return "webchat"
+
+        def get_self_id(self):
+            return "bot"
+
+        def get_sender_name(self):
+            return "tester"
+
+        def is_admin(self):
+            return False
+
+        def get_result(self):
+            return self._result
+
+        def set_result(self, result):
+            self._result = result
+
+        def set_extra(self, key, value):
+            self.extras[key] = value
+
+        async def send(self, chain):
+            pass
+
+        def stop_event(self):
+            self.stopped = True
+
+    try:
+        assert success
+        assert failed == {}
+        event = FakeEvent()
+
+        llm_request_handlers = (
+            star_manager_module.star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnLLMRequestEvent,
+            )
+        )
+        req = ProviderRequest()
+        req.system_prompt = "base"
+        await llm_request_handlers[0].handler(event, req)
+        assert req.system_prompt == "base[sdk-req]"
+
+        llm_response_handlers = (
+            star_manager_module.star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnLLMResponseEvent,
+            )
+        )
+        response = LLMResponse(role="assistant", completion_text="hi &&happy&&")
+        await llm_response_handlers[0].handler(event, response)
+        assert response.completion_text == "hi "
+
+        decorating_handlers = (
+            star_manager_module.star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnDecoratingResultEvent,
+            )
+        )
+        await decorating_handlers[0].handler(event)
+        assert event.get_result().get_plain_text() == "hello [sdk-decor]"
+    finally:
+        await adapter.unload_by_module_path(module_path)
+        _clear_star_runtime_state()
 
 
 def _clear_module_cache():
