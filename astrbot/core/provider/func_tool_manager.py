@@ -461,10 +461,17 @@ class FunctionToolManager:
         If the tool's author declared a default via
         ``@llm_tool(permission_type=...)``, that value is used. Otherwise
         non-builtin tools default to ``"member"`` (no restriction).
-        Builtin tools are never routed through this method."""
+        Builtin tools are never routed through this method.
+
+        Uses ``getattr`` rather than direct attribute access: third-party
+        tools registered via ``add_llm_tools()`` are only type-hinted as
+        ``FunctionTool`` but not enforced at runtime, so an older or
+        custom tool object that doesn't inherit ``FunctionTool`` may not
+        carry this attribute at all."""
         tool = self._find_declared_tool(tool_name)
-        if tool is not None and tool.declared_permission_type in ("admin", "member"):
-            return tool.declared_permission_type
+        declared = getattr(tool, "declared_permission_type", None)
+        if declared in ("admin", "member"):
+            return declared
         return "member"
 
     def _find_declared_tool(self, tool_name: str) -> FuncTool | None:

@@ -104,6 +104,28 @@ def test_default_permission_falls_back_when_undeclared():
     assert mgr._default_permission("undeclared_tool") == "member"
 
 
+def test_default_permission_does_not_crash_on_foreign_tool_object():
+    """Regression test: third-party tools registered via add_llm_tools()
+    are only type-hinted as FunctionTool, not enforced at runtime. A tool
+    object that doesn't inherit FunctionTool (and so lacks
+    declared_permission_type entirely) must not crash permission
+    resolution with an AttributeError."""
+
+    class HomemadeTool:
+        def __init__(self):
+            self.name = "homemade_tool"
+            self.description = "d"
+            self.parameters = {"type": "object", "properties": {}}
+            self.active = True
+
+        async def call(self, context, **kwargs):
+            return "ok"
+
+    mgr = FunctionToolManager()
+    mgr.func_list.append(HomemadeTool())
+    assert mgr._default_permission("homemade_tool") == "member"
+
+
 def test_default_permission_ignores_unknown_tool_name():
     """Tool name not present in func_list (e.g. MCP/builtin) -> 'member'."""
     mgr = FunctionToolManager()
