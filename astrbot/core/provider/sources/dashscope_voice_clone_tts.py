@@ -141,6 +141,9 @@ class ProviderDashscopeVoiceCloneTTSAPI(TTSProvider):
             "voice": self.voice_id,
             "text": text,
         }
+        resolved_base_url = self._resolve_base_url()
+        if resolved_base_url:
+            kwargs["base_http_api_url"] = resolved_base_url
         if self.language_type:
             kwargs["language_type"] = self.language_type
         return MultiModalConversation.call(**kwargs)
