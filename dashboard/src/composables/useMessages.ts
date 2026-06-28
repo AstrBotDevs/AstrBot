@@ -1,6 +1,12 @@
 import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
+import {
+  isInteractiveChoicePayload,
+  unwrapInteractiveChoice,
+  validateInteractiveChoice,
+  truncateInteractiveChoice,
+} from "./parseInteractiveChoice";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -1312,6 +1318,16 @@ function normalizePartsInternal(parts: unknown): MessagePart[] {
         type: "think",
         think: String(part.think ?? part.text ?? ""),
       };
+    }
+    // ① 解包(plain 文本内嵌 JSON / 透传原生 interactive_choice)
+    const unwrapped = unwrapInteractiveChoice(part);
+    // ② 如果解包后是 InteractiveChoicePart,走校验 + 截断
+    if (isInteractiveChoicePayload(unwrapped)) {
+      if (!validateInteractiveChoice(unwrapped)) {
+        // 非法(spec §2.3 步骤 2):降级为 unknown-part
+        return { type: "plain", text: JSON.stringify(unwrapped) };
+      }
+      return truncateInteractiveChoice(unwrapped);
     }
     return { ...part };
   });
