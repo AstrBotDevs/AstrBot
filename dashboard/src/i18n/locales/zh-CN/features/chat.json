@@ -650,5 +650,12 @@
   "copy": {
     "copy": "复制",
     "copied": "已复制"
+  },
+  "interactiveChoice": {
+    "alreadyChosen": "已选择",
+    "alreadyInput": "已输入",
+    "ignored": "已忽略",
+    "submit": "提交",
+    "defaultPlaceholder": "或输入自定义内容..."
   }
 }

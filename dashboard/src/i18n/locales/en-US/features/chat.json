@@ -650,5 +650,12 @@
   "copy": {
     "copy": "Copy",
     "copied": "Copied"
+  },
+  "interactiveChoice": {
+    "alreadyChosen": "Chosen",
+    "alreadyInput": "Custom input",
+    "ignored": "Ignored",
+    "submit": "Submit",
+    "defaultPlaceholder": "Or type your own..."
   }
 }

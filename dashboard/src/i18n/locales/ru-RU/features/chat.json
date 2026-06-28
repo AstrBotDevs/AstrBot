@@ -636,5 +636,12 @@
   "copy": {
     "copy": "Копировать",
     "copied": "Скопировано"
+  },
+  "interactiveChoice": {
+    "alreadyChosen": "Выбрано",
+    "alreadyInput": "Свой вариант",
+    "ignored": "Игнорировано",
+    "submit": "Отправить",
+    "defaultPlaceholder": "Или введите свой вариант..."
   }
 }
