@@ -757,7 +757,19 @@
         "description": "Max Consecutive Failures",
         "type": "int",
         "hint": "Maximum allowed consecutive failures; retries will stop if exceeded."
-      }
+      },
+      "ntfy_server_url": {
+            "description": "ntfy Server URL",
+            "hint": "The ntfy instance server base URL, e.g., https://ntfy.sh"
+        },
+        "ntfy_topic": {
+            "description": "Subscription Topic",
+            "hint": "The secret unique topic used to listen and publish messages."
+        },
+        "ntfy_access_token": {
+            "description": "Access Token (Optional)",
+            "hint": "Bearer token if your ntfy server requires authentication."
+        }
     },
     "general": {
       "description": "General",
