@@ -94,36 +94,7 @@ async def test_list_kbs_applies_pagination():
 
 
 @pytest.mark.asyncio
-async def test_list_kbs_without_page_size_returns_all_items():
-    kb_manager = MagicMock()
-    kb_manager.list_kbs = AsyncMock(
-        return_value=[
-            make_kb("kb-1", "one"),
-            make_kb("kb-2", "two"),
-            make_kb("kb-3", "three"),
-        ]
-    )
-    kb_manager.get_kb = AsyncMock(
-        side_effect=lambda kb_id: SimpleNamespace(init_error=None)
-    )
-    service = make_service(kb_manager)
-
-    result = await service.list_kbs(page=1, page_size=None)
-
-    assert result == {
-        "items": [
-            {"kb_id": "kb-1", "kb_name": "one"},
-            {"kb_id": "kb-2", "kb_name": "two"},
-            {"kb_id": "kb-3", "kb_name": "three"},
-        ],
-        "page": 1,
-        "page_size": 3,
-        "total": 3,
-    }
-
-
-@pytest.mark.asyncio
-async def test_list_route_preserves_unpaginated_default():
+async def test_list_route_uses_default_page_size_without_query_params():
     service = MagicMock()
     service.list_kbs = AsyncMock(return_value={"items": [], "total": 0})
 
@@ -134,7 +105,7 @@ async def test_list_route_preserves_unpaginated_default():
     )
 
     assert response["status"] == "ok"
-    service.list_kbs.assert_awaited_once_with(page=1, page_size=None)
+    service.list_kbs.assert_awaited_once_with(page=1, page_size=20)
 
 
 @pytest.mark.asyncio
@@ -282,3 +253,14 @@ async def test_create_kb_raises_when_embedding_provider_is_missing():
     with pytest.raises(KnowledgeBaseServiceError, match="缺少参数 embedding_provider_id"):
         await service.create_kb({"kb_name": "Test KB"})
 
+
+@pytest.mark.asyncio
+async def test_create_kb_raises_when_embedding_provider_is_invalid():
+    kb_manager = MagicMock()
+    kb_manager.provider_manager.get_provider_by_id = AsyncMock(return_value=None)
+    service = make_service(kb_manager)
+
+    with pytest.raises(KnowledgeBaseServiceError, match="嵌入模型不存在或类型错误"):
+        await service.create_kb(
+            {"kb_name": "Test KB", "embedding_provider_id": "missing-provider"}
+        )
