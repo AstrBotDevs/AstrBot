@@ -149,6 +149,7 @@
         "
       ></textarea>
       <div
+        class="input-toolbar"
         style="
           display: flex;
           justify-content: space-between;
@@ -157,6 +158,7 @@
         "
       >
         <div
+          class="input-left-actions"
           style="
             display: flex;
             justify-content: flex-start;
@@ -232,6 +234,7 @@
           />
         </div>
         <div
+          class="input-right-actions"
           style="
             display: flex;
             justify-content: flex-end;
@@ -1282,33 +1285,104 @@ defineExpose({
 
 @media (max-width: 768px) {
   .input-area {
-    padding: 0 !important;
+    padding: 8px 0 0 !important;
+    border-top: 0;
   }
 
   .input-container {
-    width: 100% !important;
+    width: calc(100% - 20px) !important;
     max-width: 100% !important;
-    border-bottom-left-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
+    margin: 0 10px calc(8px + env(safe-area-inset-bottom)) !important;
+    padding: 10px 10px 10px !important;
+    overflow: hidden;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.14) !important;
+    border-radius: 26px !important;
+    background: rgb(var(--v-theme-surface)) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+  }
+
+  .input-area.is-dark .input-container {
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    background: #2d2d2d !important;
+    box-shadow: none !important;
+  }
+
+  .input-toolbar {
+    padding: 4px 10px 0 !important;
+    align-items: center !important;
+  }
+
+  .input-left-actions,
+  .input-right-actions {
+    margin-top: 0 !important;
+    align-items: center !important;
+  }
+
+  .input-right-actions {
+    gap: 6px;
   }
 
   .input-outline-control {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    border-radius: 50% !important;
   }
 
   .input-area textarea,
   .chat-textarea {
-    min-height: 28px !important;
-    max-height: 140px !important;
-    font-size: 16px !important;
-    line-height: 20px !important;
-    padding: 8px 14px 7px !important;
+    min-height: 56px !important;
+    max-height: 132px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 18px !important;
+    line-height: 24px !important;
+    padding: 4px 10px 2px !important;
+  }
+
+  .chat-textarea::placeholder {
+    color: rgba(var(--v-theme-on-surface), 0.56);
+    opacity: 1;
+  }
+
+  .input-icon-btn {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    margin-right: 0;
+  }
+
+  .input-action-btn {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    border-radius: 50% !important;
+  }
+
+  .input-action-btn:not(:disabled) {
+    background: rgb(var(--v-theme-on-surface)) !important;
+    color: rgb(var(--v-theme-surface)) !important;
+  }
+
+  .input-action-btn:disabled {
+    background: rgba(var(--v-theme-on-surface), 0.04) !important;
+    color: rgba(var(--v-theme-on-surface), 0.18) !important;
+  }
+
+  :deep(.provider-chip) {
+    height: 38px !important;
+    min-height: 38px !important;
+    border-radius: 999px !important;
+    padding: 0 12px !important;
+    font-size: 14px !important;
+    border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
+    background: transparent !important;
   }
 
   .attachments-preview {
-    margin: 8px 10px 0;
+    margin: 8px 16px 0;
     gap: 8px;
   }
 

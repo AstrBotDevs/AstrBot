@@ -5433,6 +5433,11 @@ components:
           type: string
         description:
           type: string
+        workspace_type:
+          type: string
+          enum: [session, project, custom]
+        workspace_path:
+          type: string
       additionalProperties: false
 
     MessagePart:

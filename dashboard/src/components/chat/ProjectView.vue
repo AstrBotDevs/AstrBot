@@ -8,6 +8,10 @@
       <p class="project-header-description" v-if="project?.description">
         {{ project.description }}
       </p>
+      <div v-if="workspaceSummary" class="project-workspace-summary">
+        <v-icon size="16">mdi-folder-cog-outline</v-icon>
+        <span>{{ workspaceSummary }}</span>
+      </div>
     </div>
 
     <div class="project-input-slot">
@@ -69,6 +73,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import type { Project } from "@/components/chat/ProjectList.vue";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
@@ -84,7 +89,7 @@ interface Props {
   sessions: Session[];
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const emit = defineEmits<{
   selectSession: [sessionId: string];
@@ -95,6 +100,24 @@ const emit = defineEmits<{
 const { tm } = useModuleI18n("features/chat");
 
 const confirmDialog = useConfirmDialog();
+
+const workspaceSummary = computed(() => {
+  const project = props.project;
+  if (!project) return "";
+  const workspaceType = project.workspace_type || "session";
+  if (workspaceType === "session") {
+    return tm("project.workspace.session");
+  }
+  const path = project.resolved_workspace_path || project.workspace_path || "";
+  if (workspaceType === "project") {
+    return path
+      ? `${tm("project.workspace.project")} · ${path}`
+      : tm("project.workspace.project");
+  }
+  return path
+    ? `${tm("project.workspace.custom")} · ${path}`
+    : tm("project.workspace.custom");
+});
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleString();
@@ -147,6 +170,17 @@ async function handleDeleteSession(session: Session) {
   font-size: 14px;
   color: var(--v-theme-secondaryText);
   margin: 0;
+}
+
+.project-workspace-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: 12px;
+  color: var(--v-theme-secondaryText);
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .project-input-slot {

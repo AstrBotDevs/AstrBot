@@ -10,25 +10,31 @@
       :class="{ collapsed: isSidebarCollapsed }"
       :permanent="lgAndUp"
       :temporary="!lgAndUp"
-      :rail="lgAndUp && sidebarCollapsed"
+      :rail="lgAndUp && customizer.chatSidebarCollapsed"
       :width="280"
-      :rail-width="68"
+      :rail-width="56"
       location="left"
       floating
     >
       <div class="sidebar-top">
-        <div v-if="lgAndUp" class="brand-row">
+        <div
+          class="chat-sidebar-brand"
+          :class="{ collapsed: isSidebarCollapsed }"
+        >
+          <div v-if="!isSidebarCollapsed" class="chat-sidebar-brand-title Outfit">
+            <span class="chat-sidebar-brand-name">AstrBot</span>
+            <span class="chat-sidebar-brand-mode">ChatUI</span>
+          </div>
           <v-btn
+            class="chat-sidebar-brand-toggle"
             icon
-            size="small"
+            rounded="sm"
             variant="text"
-            class="sidebar-toggle"
-            @click="sidebarCollapsed = !sidebarCollapsed"
+            @click.stop="toggleChatSidebar"
           >
             <v-icon
               size="20"
-              class="sidebar-action-icon"
-              :class="{ 'chevron-collapsed': isSidebarCollapsed }"
+              :class="{ 'sidebar-toggle-collapsed': isSidebarCollapsed }"
             >
               mdi-chevron-left
             </v-icon>
@@ -46,7 +52,7 @@
           @click="openProviderWorkspace"
         >
           <v-icon
-            size="20"
+            size="18"
             class="sidebar-action-icon"
             :class="{ 'mr-2': !isSidebarCollapsed }"
             >mdi-creation</v-icon
@@ -62,7 +68,7 @@
           @click="startNewChat"
         >
           <v-icon
-            size="20"
+            size="18"
             class="sidebar-action-icon"
             :class="{ 'mr-2': !isSidebarCollapsed }"
             >mdi-square-edit-outline</v-icon
@@ -70,65 +76,78 @@
           <span v-if="!isSidebarCollapsed">{{ tm("actions.newChat") }}</span>
         </v-btn>
 
+      </div>
+
+      <div v-if="!isSidebarCollapsed" class="sidebar-content">
         <ProjectList
-          v-if="!isSidebarCollapsed"
           :projects="projects"
+          :project-sessions="projectSessionsById"
+          :loading-project-ids="loadingProjectSessionIds"
           :selected-project-id="selectedProjectId"
+          :active-session-id="currSessionId"
+          :is-session-running="isSessionRunning"
           @create-project="openCreateProjectDialog"
           @edit-project="openEditProjectDialog"
           @delete-project="handleDeleteProject"
+          @toggle-project="handleProjectToggle"
           @select-project="selectProject"
+          @select-session="selectProjectSession"
+          @edit-session-title="editProjectSessionTitle"
+          @delete-session="deleteProjectSession"
         />
-      </div>
 
-      <div v-if="!isSidebarCollapsed" class="session-list">
-        <div
-          v-for="session in sessions"
-          :key="session.session_id"
-          class="session-item"
-          :class="{ active: !isProviderWorkspace && currSessionId === session.session_id }"
-          role="button"
-          tabindex="0"
-          @click="selectSession(session.session_id)"
-          @keydown.enter="selectSession(session.session_id)"
-          @keydown.space.prevent="selectSession(session.session_id)"
-        >
-          <span v-if="!isSidebarCollapsed" class="session-title">{{
-            sessionTitle(session)
-          }}</span>
-          <div class="session-actions" @click.stop>
-            <v-btn
-              icon="mdi-pencil-outline"
-              size="x-small"
-              variant="text"
-              class="session-action-btn"
-              :title="tm('conversation.editDisplayName')"
-              @click="editSidebarSessionTitle(session)"
-            />
-            <v-btn
-              icon="mdi-delete-outline"
-              size="x-small"
-              variant="text"
-              class="session-action-btn"
-              :title="tm('actions.deleteChat')"
-              @click="deleteSidebarSession(session)"
+        <section class="sidebar-section session-list">
+          <div class="sidebar-section-header">
+            <span>{{ tm("conversation.title") }}</span>
+          </div>
+          <div
+            v-for="session in sessions"
+            :key="session.session_id"
+            class="session-item"
+            :class="{
+              active: !isProviderWorkspace && currSessionId === session.session_id,
+            }"
+            role="button"
+            tabindex="0"
+            @click="selectSession(session.session_id)"
+            @keydown.enter="selectSession(session.session_id)"
+            @keydown.space.prevent="selectSession(session.session_id)"
+          >
+            <span class="session-title">{{ sessionTitle(session) }}</span>
+            <div class="session-actions" @click.stop>
+              <v-btn
+                icon="mdi-pencil-outline"
+                size="x-small"
+                variant="text"
+                class="session-action-btn"
+                :title="tm('conversation.editDisplayName')"
+                @click="editSidebarSessionTitle(session)"
+              />
+              <v-btn
+                icon="mdi-delete-outline"
+                size="x-small"
+                variant="text"
+                class="session-action-btn"
+                :title="tm('actions.deleteChat')"
+                @click="deleteSidebarSession(session)"
+              />
+            </div>
+            <v-progress-circular
+              v-if="isSessionRunning(session.session_id)"
+              class="session-progress"
+              indeterminate
+              size="16"
+              width="2"
             />
           </div>
-          <v-progress-circular
-            v-if="isSessionRunning(session.session_id)"
-            class="session-progress"
-            indeterminate
-            size="16"
-            width="2"
-          />
-        </div>
 
-        <div
-          v-if="!isSidebarCollapsed && !sessions.length && !loadingSessions"
-          class="empty-sessions"
-        >
-          {{ tm("conversation.noHistory") }}
-        </div>
+          <div
+            v-if="!sessions.length && !loadingSessions"
+            class="empty-sessions"
+          >
+            {{ tm("conversation.noHistory") }}
+          </div>
+        </section>
       </div>
 
       <div class="sidebar-footer">
@@ -529,6 +548,7 @@ import {
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
+import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
 import {
@@ -548,6 +568,7 @@ const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean
 const route = useRoute();
 const router = useRouter();
 const { lgAndUp } = useDisplay();
+const chatHeader = useChatHeaderStore();
 const customizer = useCustomizerStore();
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
@@ -592,7 +613,6 @@ const {
 
 type WorkspaceView = "chat" | "providers";
 
-const sidebarCollapsed = ref(false);
 const activeWorkspace = ref<WorkspaceView>("chat");
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
@@ -605,6 +625,8 @@ const messageEditDraft = ref("");
 const editingMessage = ref<ChatRecord | null>(null);
 const savingMessageEdit = ref(false);
 const projectSessions = ref<Session[]>([]);
+const projectSessionsById = ref<Record<string, Session[]>>({});
+const loadingProjectSessionIds = ref<string[]>([]);
 const loadingSessions = ref(false);
 const draft = ref("");
 const messagesContainer = ref<HTMLElement | null>(null);
@@ -650,11 +672,20 @@ const chatSidebarDrawer = computed({
   },
 });
 const isSidebarCollapsed = computed(() =>
-  lgAndUp.value ? sidebarCollapsed.value : !customizer.chatSidebarOpen,
+  lgAndUp.value ? customizer.chatSidebarCollapsed : !customizer.chatSidebarOpen,
 );
 const isProviderWorkspace = computed(
   () => activeWorkspace.value === "providers",
 );
+
+function toggleChatSidebar() {
+  if (lgAndUp.value) {
+    customizer.SET_CHAT_SIDEBAR_COLLAPSED(!customizer.chatSidebarCollapsed);
+    return;
+  }
+  customizer.TOGGLE_CHAT_SIDEBAR();
+}
+
 const activeReasoningParts = computed<MessagePart[]>(() => {
   if (!activeReasoningTarget.value) return [];
   const blocks = buildMessageBlocks(
@@ -729,6 +760,9 @@ const currentSession = computed(
     projectSessions.value.find(
       (session) => session.session_id === currSessionId.value,
     ) ||
+    Object.values(projectSessionsById.value)
+      .flat()
+      .find((session) => session.session_id === currSessionId.value) ||
     null,
 );
 const sessionProject = computed(() =>
@@ -743,6 +777,14 @@ const selectedProject = computed(
       (project) => project.project_id === selectedProjectId.value,
     ) || null,
 );
+const chatHeaderTitle = computed(
+  () => currentSessionTitle.value || selectedProject.value?.title || "",
+);
+const chatHeaderSubtitle = computed(() =>
+  currentSessionTitle.value
+    ? sessionProject.value?.title || selectedProject.value?.title || ""
+    : "",
+);
 const chatInputReplyTarget = computed(() =>
   replyTarget.value?.id == null
     ? null
@@ -753,6 +795,14 @@ const chatInputReplyTarget = computed(() =>
 );
 
 provide("isDark", isDark);
+
+watch(
+  [chatHeaderTitle, chatHeaderSubtitle],
+  ([title, subtitle]) => {
+    chatHeader.SET_CONTEXT({ title, subtitle });
+  },
+  { immediate: true },
+);
 
 onMounted(async () => {
   loadingSessions.value = true;
@@ -770,6 +820,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  chatHeader.CLEAR_CONTEXT();
   cleanupMediaCache();
 });
 
@@ -873,13 +924,40 @@ async function selectProject(projectId: string) {
 async function loadProjectSessions(projectId = selectedProjectId.value) {
   if (!projectId) {
     projectSessions.value = [];
-    return;
+    return [];
   }
-  projectSessions.value = await getProjectSessions(projectId);
+  const sessions = await getProjectSessions(projectId);
+  projectSessionsById.value = {
+    ...projectSessionsById.value,
+    [projectId]: sessions,
+  };
+  if (projectId === selectedProjectId.value) {
+    projectSessions.value = sessions;
+  }
+  return sessions;
+}
+
+async function handleProjectToggle(projectId: string, expanded: boolean) {
+  if (!expanded || projectSessionsById.value[projectId]) return;
+  if (loadingProjectSessionIds.value.includes(projectId)) return;
+  loadingProjectSessionIds.value = [...loadingProjectSessionIds.value, projectId];
+  try {
+    await loadProjectSessions(projectId);
+  } finally {
+    loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
+      (item) => item !== projectId,
+    );
+  }
 }
 
 async function handleDeleteProject(projectId: string) {
   await deleteProjectById(projectId);
+  const nextSessionsById = { ...projectSessionsById.value };
+  delete nextSessionsById[projectId];
+  projectSessionsById.value = nextSessionsById;
+  loadingProjectSessionIds.value = loadingProjectSessionIds.value.filter(
+    (item) => item !== projectId,
+  );
   if (selectedProjectId.value === projectId) {
     selectedProjectId.value = null;
     projectSessions.value = [];
@@ -914,6 +992,14 @@ async function saveSessionTitleDialog() {
     if (projectSession) {
       projectSession.display_name = displayName;
     }
+    Object.values(projectSessionsById.value).forEach((projectSessionList) => {
+      const cachedProjectSession = projectSessionList.find(
+        (session) => session.session_id === sessionId,
+      );
+      if (cachedProjectSession) {
+        cachedProjectSession.display_name = displayName;
+      }
+    });
     if (refreshProjectSessionsAfterTitleSave.value) {
       await loadProjectSessions();
     }
@@ -949,9 +1035,16 @@ async function editProjectSessionTitle(sessionId: string, title: string) {
   openSessionTitleDialog(sessionId, title, true);
 }
 
-async function deleteProjectSession(sessionId: string) {
+async function deleteProjectSession(
+  sessionId: string,
+  projectId = selectedProjectId.value,
+) {
   await deleteSession(sessionId);
-  await loadProjectSessions();
+  if (projectId) {
+    await loadProjectSessions(projectId);
+  } else {
+    await loadProjectSessions();
+  }
 }
 
 async function saveProject(formData: ProjectFormData, projectId?: string) {
@@ -961,11 +1054,19 @@ async function saveProject(formData: ProjectFormData, projectId?: string) {
       formData.title,
       formData.emoji,
       formData.description,
+      formData.workspace_type,
+      formData.workspace_path,
     );
     return;
   }
 
-  await createProject(formData.title, formData.emoji, formData.description);
+  await createProject(
+    formData.title,
+    formData.emoji,
+    formData.description,
+    formData.workspace_type,
+    formData.workspace_path,
+  );
 }
 
 async function selectSession(sessionId: string, pushRoute = true) {
@@ -1068,8 +1169,28 @@ function buildOutgoingParts(text: string): MessagePart[] {
 
 function updateTitleFromText(sessionId: string, text: string) {
   const session = sessions.value.find((item) => item.session_id === sessionId);
-  if (!session || session.display_name || !text) return;
+  const projectSession = projectSessions.value.find(
+    (item) => item.session_id === sessionId,
+  );
+  const cachedProjectSessions = Object.values(projectSessionsById.value)
+    .flat()
+    .filter((item) => item.session_id === sessionId);
+  if (
+    (!session && !projectSession && !cachedProjectSessions.length) ||
+    session?.display_name ||
+    projectSession?.display_name ||
+    cachedProjectSessions.some((item) => item.display_name) ||
+    !text
+  ) {
+    return;
+  }
   updateSessionTitle(sessionId, text.slice(0, 40));
+  if (projectSession) {
+    projectSession.display_name = text.slice(0, 40);
+  }
+  cachedProjectSessions.forEach((item) => {
+    item.display_name = text.slice(0, 40);
+  });
 }
 
 function replyPreview(messageId?: string | number, fallback?: string) {
@@ -1369,6 +1490,7 @@ function toggleTheme() {
 
 <style scoped>
 .chat-ui {
+  --chat-panel-top-offset: 50px;
   --chat-sidebar-bg: #fbfbfb;
   --chat-session-active-bg: #efefef;
   --chat-page-bg: rgb(var(--v-theme-background));
@@ -1401,12 +1523,15 @@ function toggleTheme() {
 }
 
 .chat-sidebar {
-  height: 100%;
+  top: 0 !important;
+  height: 100vh !important;
   background: var(--chat-sidebar-bg);
+  border-right: 0;
 }
 
 .chat-sidebar.collapsed {
   background: transparent;
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .chat-sidebar :deep(.v-navigation-drawer__content) {
@@ -1416,21 +1541,63 @@ function toggleTheme() {
 }
 
 .sidebar-top {
-  padding: 12px;
+  padding: 0 16px 2px;
 }
 
-.brand-row {
+.chat-sidebar.collapsed .sidebar-top {
+  padding-inline: 10px;
+}
+
+.chat-sidebar-brand {
+  min-height: 50px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px 2px;
 }
 
-.brand-row {
-  justify-content: flex-start;
-  min-height: 36px;
-  margin-bottom: 8px;
+.chat-sidebar-brand.collapsed {
+  justify-content: center;
+  padding: 0 0 2px;
 }
 
-.sidebar-toggle,
+.chat-sidebar-brand-title {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.05;
+}
+
+.chat-sidebar-brand-name {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.chat-sidebar-brand-mode {
+  color: var(--chat-muted);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.chat-sidebar-brand-toggle {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  color: var(--chat-muted);
+}
+
+.chat-sidebar-brand-toggle:hover {
+  background: var(--chat-session-active-bg);
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.sidebar-toggle-collapsed {
+  transform: rotate(180deg);
+}
+
 .new-chat-btn,
 .settings-btn {
   color: var(--chat-muted);
@@ -1441,45 +1608,52 @@ function toggleTheme() {
   color: currentcolor;
 }
 
-.sidebar-toggle {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
+.new-chat-btn:not(.icon-only) .sidebar-action-icon {
+  margin-right: 12px !important;
 }
 
 .new-chat-btn,
 .settings-btn {
   width: 100%;
+  min-height: 36px;
+  height: 36px;
   justify-content: flex-start;
   border-radius: 8px;
   text-transform: none;
+  letter-spacing: 0;
+  font-size: 14px;
   font-weight: 500;
 }
 
 .sidebar-provider-btn {
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 
 .new-chat-btn:not(.icon-only),
 .settings-btn:not(.icon-only) {
-  padding-inline: 12px;
+  padding-inline: 10px;
 }
 
 .new-chat-btn.icon-only,
 .settings-btn.icon-only {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
   justify-content: center;
 }
 
-.chat-sidebar.collapsed .brand-row,
+.new-chat-btn :deep(.v-btn__content),
+.settings-btn :deep(.v-btn__content) {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
 .chat-sidebar.collapsed .sidebar-footer {
   display: flex;
   justify-content: center;
 }
 
-.sidebar-toggle:hover,
 .new-chat-btn:hover,
 .settings-btn:hover {
   background: var(--chat-session-active-bg);
@@ -1490,31 +1664,47 @@ function toggleTheme() {
   color: rgb(var(--v-theme-on-surface));
 }
 
-.chevron-collapsed {
-  transform: rotate(180deg);
-}
-
-.session-list {
+.sidebar-content {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 12px 12px;
+  padding: 2px 16px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+.sidebar-section {
+  flex: 0 0 auto;
+}
+
+.sidebar-section-header {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px 4px;
+  color: var(--chat-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.session-list {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .session-item {
   width: 100%;
-  min-height: 38px;
+  min-height: 30px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: inherit;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  padding-right: 68px;
+  gap: 7px;
+  padding: 4px 56px 4px 10px;
   position: relative;
   box-sizing: border-box;
   cursor: pointer;
@@ -1538,7 +1728,7 @@ function toggleTheme() {
 
 .session-progress {
   position: absolute;
-  right: 12px;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
   flex-shrink: 0;
@@ -1553,7 +1743,7 @@ function toggleTheme() {
   opacity: 0;
   pointer-events: none;
   position: absolute;
-  right: 8px;
+  right: 0;
   top: 50%;
   transform: translateY(-50%);
   visibility: hidden;
@@ -1568,7 +1758,7 @@ function toggleTheme() {
 
 .session-item:hover .session-progress,
 .session-item:focus-within .session-progress {
-  right: 62px;
+  right: 52px;
 }
 
 .session-action-btn {
@@ -1580,14 +1770,18 @@ function toggleTheme() {
 }
 
 .empty-sessions {
-  padding: 12px;
+  padding: 5px 8px;
   color: var(--chat-muted);
   font-size: 13px;
 }
 
 .sidebar-footer {
   margin-top: auto;
-  padding: 10px 12px 14px;
+  padding: 10px 16px 14px;
+}
+
+.chat-sidebar.collapsed .sidebar-footer {
+  padding-inline: 10px;
 }
 
 .settings-menu-content {
@@ -1618,6 +1812,8 @@ function toggleTheme() {
   display: flex;
   flex-direction: column;
   position: relative;
+  box-sizing: border-box;
+  padding-top: 50px;
 }
 
 .chat-main.empty-chat {
@@ -1771,6 +1967,11 @@ kbd {
 }
 
 @media (max-width: 760px) {
+  .chat-sidebar {
+    top: 50px !important;
+    height: calc(100vh - 50px) !important;
+  }
+
   .messages-panel {
     padding: 18px 14px;
   }

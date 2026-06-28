@@ -60,7 +60,8 @@ function close() {
 <style scoped>
 .reasoning-sidebar {
   width: 380px;
-  height: 100%;
+  height: calc(100% - var(--chat-panel-top-offset, 0px));
+  margin-top: var(--chat-panel-top-offset, 0px);
   border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-on-surface));
@@ -116,6 +117,7 @@ function close() {
     z-index: 1300;
     width: 100vw;
     height: 100dvh;
+    margin-top: 0;
     border-left: 0;
   }
 

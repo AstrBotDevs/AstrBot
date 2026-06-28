@@ -2,6 +2,8 @@ import { ref } from 'vue';
 import { chatApi } from '@/api/v1';
 import type { Project } from '@/components/chat/ProjectList.vue';
 
+type WorkspaceType = 'session' | 'project' | 'custom';
+
 export function useProjects() {
     const projects = ref<Project[]>([]);
     const selectedProjectId = ref<string | null>(null);
@@ -18,12 +20,20 @@ export function useProjects() {
         }
     }
 
-    async function createProject(title: string, emoji?: string, description?: string) {
+    async function createProject(
+        title: string,
+        emoji?: string,
+        description?: string,
+        workspaceType: WorkspaceType = 'project',
+        workspacePath?: string
+    ) {
         try {
             const res = await chatApi.createProject({
                 title,
                 emoji: emoji || '📁',
-                description
+                description,
+                workspace_type: workspaceType,
+                workspace_path: workspacePath
             });
             if (res.data.status === 'ok') {
                 await getProjects();
@@ -34,12 +44,21 @@ export function useProjects() {
         }
     }
 
-    async function updateProject(projectId: string, title?: string, emoji?: string, description?: string) {
+    async function updateProject(
+        projectId: string,
+        title?: string,
+        emoji?: string,
+        description?: string,
+        workspaceType?: WorkspaceType,
+        workspacePath?: string
+    ) {
         try {
             const res = await chatApi.updateProject(projectId, {
                 title,
                 emoji,
-                description
+                description,
+                workspace_type: workspaceType,
+                workspace_path: workspacePath
             });
             if (res.data.status === 'ok') {
                 await getProjects();
