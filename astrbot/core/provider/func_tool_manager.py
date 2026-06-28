@@ -474,13 +474,14 @@ class FunctionToolManager:
         through to builtin tools, since builtin tools don't carry a
         declared permission and shouldn't trigger builtin-tool loading
         here."""
-        for f in reversed(self.func_list):
-            if f.name == tool_name and getattr(f, "active", True):
-                return f
+        fallback = None
         for f in reversed(self.func_list):
             if f.name == tool_name:
-                return f
-        return None
+                if getattr(f, "active", True):
+                    return f
+                if fallback is None:
+                    fallback = f
+        return fallback
 
     def _check_tool_permission(
         self,

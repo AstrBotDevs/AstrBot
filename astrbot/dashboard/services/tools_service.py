@@ -571,14 +571,14 @@ class ToolsService:
                 perms_store.get("_default", {}) if isinstance(perms_store, dict) else {}
             )
             configured = tool.name in defaults
-            declared_permission = getattr(tool, "declared_permission_type", None)
-            fallback_permission = (
-                declared_permission
-                if declared_permission in ("admin", "member")
-                else "member"
+            permission = (
+                defaults[tool.name]
+                if configured
+                else self.tool_mgr._default_permission(tool.name)
             )
-            permission = defaults[tool.name] if configured else fallback_permission
             tool_info["permission"] = permission
             tool_info["permission_configured"] = configured
-            tool_info["declared_permission_type"] = declared_permission
+            tool_info["declared_permission_type"] = getattr(
+                tool, "declared_permission_type", None
+            )
         return tool_info
