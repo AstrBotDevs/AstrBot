@@ -504,7 +504,14 @@ class PluginInstallRequest(OpenModel):
     ignore_version_check: bool | None = None
 
 
+class PluginValidateRepoRequest(OpenModel):
+    repository: str | None = None
+    url: str | None = None
+    proxy: str | None = None
+
+
 class PluginSourceBindRequest(OpenModel):
+    install_method: str | None = None
     registry_url: str | None = None
     market_plugin_id: str | None = None
 

@@ -462,9 +462,13 @@ export type PluginGithubInstallRequest = {
     download_url?: string;
     proxy?: string;
     ignore_version_check?: boolean;
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
 };
 
 export type PluginSourceBindRequest = {
+    install_method?: string;
     registry_url?: (string) | null;
     market_plugin_id?: string;
 };
@@ -491,6 +495,15 @@ export type PluginUrlInstallRequest = {
     download_url?: string;
     proxy?: string;
     ignore_version_check?: boolean;
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
+};
+
+export type PluginValidateRepoRequest = {
+    repository?: string;
+    url?: string;
+    proxy?: string;
 };
 
 export type PluginVersionSupportRequest = {
@@ -1932,6 +1945,14 @@ export type CheckPluginVersionSupportData = {
 export type CheckPluginVersionSupportResponse = (SuccessEnvelope);
 
 export type CheckPluginVersionSupportError = unknown;
+
+export type ValidatePluginRepoData = {
+    body: PluginValidateRepoRequest;
+};
+
+export type ValidatePluginRepoResponse = (SuccessEnvelope);
+
+export type ValidatePluginRepoError = unknown;
 
 export type ListFailedPluginsResponse = (SuccessEnvelope);
 

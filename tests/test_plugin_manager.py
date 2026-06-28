@@ -124,6 +124,65 @@ def test_load_plugin_metadata_includes_pages(tmp_path: Path):
     assert loaded_metadata.pages == [{"name": "dashboard", "title": "Dashboard"}]
 
 
+def test_load_plugin_metadata_accepts_yml_suffix(tmp_path: Path):
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    metadata_path = plugin_path / "metadata.yaml"
+    yml_metadata_path = plugin_path / "metadata.yml"
+    yml_metadata_path.write_text(metadata_path.read_text(encoding="utf-8"))
+    metadata_path.unlink()
+
+    loaded_metadata = PluginManager._load_plugin_metadata(str(plugin_path))
+
+    assert loaded_metadata is not None
+    assert loaded_metadata.name == TEST_PLUGIN_NAME
+    assert PluginManager._get_plugin_dir_name_from_metadata(str(plugin_path)) == (
+        TEST_PLUGIN_NAME
+    )
+
+
+def test_load_plugin_metadata_does_not_fallback_to_legacy_info(
+    tmp_path: Path,
+) -> None:
+    plugin_path = tmp_path / "helloworld"
+    plugin_path.mkdir()
+    info_called = False
+
+    class LegacyPlugin:
+        def info(self):
+            nonlocal info_called
+            info_called = True
+            return {
+                "name": TEST_PLUGIN_NAME,
+                "repo": TEST_PLUGIN_REPO,
+                "version": "1.0.0",
+                "author": "AstrBot Team",
+                "desc": "Legacy plugin",
+            }
+
+    loaded_metadata = PluginManager._load_plugin_metadata(
+        str(plugin_path),
+        plugin_obj=LegacyPlugin(),
+    )
+
+    assert loaded_metadata is None
+    assert info_called is False
+
+
+def test_load_plugin_metadata_preserves_validation_error(
+    tmp_path: Path,
+) -> None:
+    plugin_path = tmp_path / "helloworld"
+    _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
+    metadata_path = plugin_path / "metadata.yaml"
+    metadata = yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
+    metadata["version"] = ""
+    metadata_path.write_text(yaml.dump(metadata), encoding="utf-8")
+
+    with pytest.raises(Exception, match="version.*非空字符串"):
+        PluginManager._load_plugin_metadata(str(plugin_path))
+
+
 def test_loaded_metadata_can_copy_i18n_into_existing_star_metadata(tmp_path: Path):
     plugin_path = tmp_path / "helloworld"
     _write_local_test_plugin(plugin_path, TEST_PLUGIN_REPO)
@@ -1705,9 +1764,7 @@ async def test_cleanup_plugin_optional_artifacts_clears_kv_when_plugin_id_presen
         async def clear_preferences(self, scope, scope_id):
             cleared.append((scope, scope_id))
 
-    monkeypatch.setattr(
-        plugin_manager_pm.context, "get_db", MockDB, raising=False
-    )
+    monkeypatch.setattr(plugin_manager_pm.context, "get_db", MockDB, raising=False)
 
     await plugin_manager_pm._cleanup_plugin_optional_artifacts(
         root_dir_name="test_plugin",
@@ -1730,9 +1787,7 @@ async def test_cleanup_plugin_optional_artifacts_skips_kv_when_plugin_id_none(
         async def clear_preferences(self, scope, scope_id):
             cleared.append((scope, scope_id))
 
-    monkeypatch.setattr(
-        plugin_manager_pm.context, "get_db", MockDB, raising=False
-    )
+    monkeypatch.setattr(plugin_manager_pm.context, "get_db", MockDB, raising=False)
 
     await plugin_manager_pm._cleanup_plugin_optional_artifacts(
         root_dir_name="test_plugin",

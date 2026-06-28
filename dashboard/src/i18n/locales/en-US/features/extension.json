@@ -249,8 +249,13 @@
     },
     "sourceBinding": {
       "title": "Change Plugin Source",
-      "noCandidates": "No configured plugin source contains a matching plugin identifier and repository.",
-      "confirm": "Use This Source"
+      "selectTitle": "Select Plugin Install Source",
+      "noCandidates": "No configured plugin source contains a matching record, and this plugin has no usable repository URL.",
+      "repoOption": "Use Repository URL Directly",
+      "repoOptionId": "Reinstall via repo",
+      "installDestination": "Install destination",
+      "confirm": "Use This Source",
+      "confirmAndContinue": "Use and Continue"
     }
   },
   "messages": {
@@ -277,19 +282,24 @@
     "updateAllSuccess": "All upgradable extensions have been updated!",
     "updateAllFailed": "{failed} of {total} extensions failed to update:",
     "noUpdatesAvailable": "No extensions have updates available",
-    "updateDisabled": "This plugin was not installed from a plugin marketplace source, so update checks and updates are disabled",
+    "updateDisabled": "This plugin has no usable install source or repository URL, so it cannot be updated or reinstalled",
+    "changeSourceDisabled": "This plugin has no usable repository URL, so its source cannot be changed",
     "fillSourceUrl": "Please enter the source URL",
     "fillSourceName": "Please enter the source name",
     "resolveSourceFirst": "Resolve and validate the source URL first",
     "sourceResolveFailed": "Failed to resolve source",
     "invalidUrl": "Please enter a valid URL",
+    "invalidGithubRepo": "Please enter a valid GitHub repository URL",
     "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
     "pluginNotFound": "Plugin not found",
     "pluginDisabled": "This plugin is disabled. Enable it before opening its page.",
     "pluginPageNotFound": "Plugin page not found",
     "pluginPageLoadFailed": "Failed to load the plugin page",
     "missingMarketPluginId": "This source record is missing legal plugin identifiers, so it cannot be installed from the market",
-    "sourceBindSuccess": "Plugin source updated"
+    "sourceBindSuccess": "Plugin source updated",
+    "validatingPlugin": "Validating plugin...",
+    "pluginValidateSuccess": "Plugin validation passed",
+    "pluginValidateFailed": "Plugin validation failed"
   },
   "upload": {
     "fromFile": "Install from File",

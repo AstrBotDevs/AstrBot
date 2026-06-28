@@ -60,8 +60,33 @@ const updateDisabledReason = computed(() => {
   );
 });
 
+const hasKnownInstallSource = computed(() => {
+  const source = props.extension?.install_source;
+  const installMethod = String(source?.install_method || "")
+    .trim()
+    .toLowerCase();
+  return Boolean(
+    source &&
+      source.implicit !== true &&
+      ["market", "github"].includes(installMethod),
+  );
+});
+
+const hasUsableRepo = computed(() => {
+  const source = props.extension?.install_source;
+  return Boolean(String(props.extension?.repo || source?.repo || "").trim());
+});
+
 const canUpdateExtension = computed(() => {
-  return props.marketMode || props.extension?.updates_enabled !== false;
+  return (
+    props.marketMode ||
+    (!props.extension?.reserved &&
+      (hasKnownInstallSource.value || hasUsableRepo.value))
+  );
+});
+
+const canChangePluginSource = computed(() => {
+  return hasUsableRepo.value;
 });
 
 const showUninstallDialog = ref(false);
@@ -119,6 +144,7 @@ const reloadExtension = () => {
 };
 
 const changePluginSource = () => {
+  if (!canChangePluginSource.value) return;
   emit("change-source", props.extension);
 };
 
@@ -440,15 +466,26 @@ const openWebui = () => {
             </template>
           </v-tooltip>
 
-          <v-list-item
-            class="styled-menu-item"
-            prepend-icon="mdi-source-branch"
-            @click.stop="changePluginSource"
+          <v-tooltip
+            location="left"
+            :disabled="canChangePluginSource"
+            :text="tm('messages.changeSourceDisabled')"
           >
-            <v-list-item-title>{{
-              tm("card.actions.changeSource")
-            }}</v-list-item-title>
-          </v-list-item>
+            <template v-slot:activator="{ props: tooltipProps }">
+              <div v-bind="tooltipProps">
+                <v-list-item
+                  class="styled-menu-item"
+                  prepend-icon="mdi-source-branch"
+                  :disabled="!canChangePluginSource"
+                  @click.stop="changePluginSource"
+                >
+                  <v-list-item-title>{{
+                    tm("card.actions.changeSource")
+                  }}</v-list-item-title>
+                </v-list-item>
+              </div>
+            </template>
+          </v-tooltip>
 
           <v-list-item
             class="styled-menu-item"

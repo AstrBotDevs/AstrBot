@@ -61,6 +61,7 @@ const {
   selectedDangerPlugin,
   selectedMarketInstallPlugin,
   installSupport,
+  installUrlValidation,
   versionSupportDialog,
   showUninstallDialog,
   uninstallTarget,
@@ -890,6 +891,45 @@ const updateDialogPluginLogo = computed(() => {
                 </div>
 
                 <v-alert
+                  v-if="installUrlValidation.status === 'error'"
+                  type="error"
+                  variant="tonal"
+                  density="comfortable"
+                  class="market-install-alert mb-4"
+                >
+                  {{ installUrlValidation.message }}
+                </v-alert>
+                <div
+                  v-else-if="
+                    installUrlValidation.validating ||
+                    installUrlValidation.status === 'valid'
+                  "
+                  class="d-flex align-center text-caption text-medium-emphasis mb-4"
+                  style="gap: 8px"
+                >
+                  <v-progress-circular
+                    v-if="installUrlValidation.validating"
+                    indeterminate
+                    size="16"
+                    width="2"
+                    color="primary"
+                  />
+                  <v-icon
+                    v-else
+                    icon="mdi-check-circle"
+                    size="16"
+                    color="success"
+                  />
+                  <span>
+                    {{ installUrlValidation.message }}
+                    <span v-if="installUrlValidation.version">
+                      · {{ tm("table.headers.version") }}:
+                      {{ installUrlValidation.version }}
+                    </span>
+                  </span>
+                </div>
+
+                <v-alert
                   v-if="installUsesGithubSource"
                   type="warning"
                   variant="tonal"
@@ -916,8 +956,8 @@ const updateDialogPluginLogo = computed(() => {
         <v-btn
           color="primary"
           variant="text"
-          :loading="loading_"
-          :disabled="loading_"
+          :loading="loading_ || installUrlValidation.validating"
+          :disabled="loading_ || installUrlValidation.validating"
           @click="newExtension()"
           >{{ tm("buttons.install") }}</v-btn
         >
@@ -1191,7 +1231,11 @@ const updateDialogPluginLogo = computed(() => {
         <v-btn color="grey" variant="text" @click="closeUpdateConfirmDialog">
           {{ tm("buttons.cancel") }}
         </v-btn>
-        <v-btn color="primary" variant="flat" @click="confirmUpdatePlugin">
+        <v-btn
+          color="primary"
+          variant="flat"
+          @click="confirmUpdatePlugin"
+        >
           {{ tm("dialogs.update.confirm") }}
         </v-btn>
       </v-card-actions>

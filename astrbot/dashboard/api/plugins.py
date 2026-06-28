@@ -28,6 +28,7 @@ from astrbot.dashboard.schemas import (
     PluginSourceRequest,
     PluginUninstallRequest,
     PluginUpdateRequest,
+    PluginValidateRepoRequest,
     PluginVersionSupportRequest,
 )
 from astrbot.dashboard.services.config_service import (
@@ -483,6 +484,18 @@ async def check_plugin_version_support(
     service: PluginService = Depends(get_service),
 ):
     return await _check_plugin_version_support_payload(_model_dict(payload), service)
+
+
+@router.post("/plugins/validate/repo")
+async def validate_plugin_repo(
+    payload: PluginValidateRepoRequest,
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    return await _run_service(
+        service.validate_plugin_repo(_model_dict(payload)),
+        log_label="/api/plugin/validate-repo",
+    )
 
 
 @router.post("/plugins/install/github")

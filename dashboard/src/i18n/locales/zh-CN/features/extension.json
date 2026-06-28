@@ -249,8 +249,13 @@
     },
     "sourceBinding": {
       "title": "更换插件源",
-      "noCandidates": "未在已配置的插件源中找到插件标识和仓库地址匹配的记录。",
-      "confirm": "使用该插件源"
+      "selectTitle": "选择插件安装源",
+      "noCandidates": "未在已配置的插件源中找到匹配记录，且当前插件缺少可用仓库地址。",
+      "repoOption": "直接使用仓库地址",
+      "repoOptionId": "通过 repo 重新安装",
+      "installDestination": "安装目的地",
+      "confirm": "使用该插件源",
+      "confirmAndContinue": "使用并继续"
     }
   },
   "messages": {
@@ -277,19 +282,24 @@
     "updateAllSuccess": "所有可更新的插件都已更新！",
     "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
     "noUpdatesAvailable": "当前没有可更新的插件",
-    "updateDisabled": "该插件不是通过插件市场安装，无法检测或执行更新",
+    "updateDisabled": "该插件缺少可用的安装源或仓库地址，无法更新或重新安装",
+    "changeSourceDisabled": "当前插件缺少可用仓库地址，无法更换插件源",
     "fillSourceUrl": "请填写插件源地址",
     "fillSourceName": "请填写插件源名称",
     "resolveSourceFirst": "请先解析并校验插件源地址",
     "sourceResolveFailed": "插件源解析失败",
     "invalidUrl": "请输入有效的URL地址",
+    "invalidGithubRepo": "请输入有效的 GitHub 仓库链接",
     "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址",
     "pluginNotFound": "未找到该插件",
     "pluginDisabled": "该插件当前已禁用，请先启用后再访问页面",
     "pluginPageNotFound": "未找到该插件页面",
     "pluginPageLoadFailed": "加载插件页面失败",
     "missingMarketPluginId": "缺少合法的插件标识，无法从该插件市场源安装",
-    "sourceBindSuccess": "插件源已更新"
+    "sourceBindSuccess": "插件源已更新",
+    "validatingPlugin": "正在校验插件...",
+    "pluginValidateSuccess": "插件校验通过",
+    "pluginValidateFailed": "插件校验失败"
   },
   "upload": {
     "fromFile": "从文件安装",

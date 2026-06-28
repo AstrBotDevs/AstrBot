@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 import aiohttp
 import certifi
+import yaml
 
 from astrbot.api import sp
 from astrbot.core import DEMO_MODE, file_token_service, logger
@@ -29,6 +30,7 @@ from astrbot.core.star.star_manager import (
     PluginManager,
     PluginVersionUnsupportedError,
 )
+from astrbot.core.star.updator import PLUGIN_METADATA_FILENAMES
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 
 PLUGIN_UPDATE_CONCURRENCY = 3
@@ -37,6 +39,9 @@ PLUGIN_UPDATE_FAILED_MESSAGE = "更新失败，请查看服务端日志。"
 PLUGIN_INSTALL_SOURCES_KEY = "plugin_install_sources"
 PLUGIN_DEFAULT_REGISTRY_NAME = "Default"
 PLUGIN_UPDATE_DISABLED_MESSAGE = "该插件不是通过插件市场安装，无法检测或执行更新。"
+PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE = "请先选择插件安装源后再更新。"
+PLUGIN_REPO_VALIDATE_TIMEOUT_SECONDS = 15
+PLUGIN_METADATA_MAX_BYTES = 1024 * 1024
 PLUGIN_COMPONENT_TYPE_ORDER = {
     "page": 0,
     "skill": 1,
@@ -392,14 +397,14 @@ class PluginService:
         plugin: StarMetadata,
         records: dict[str, dict[str, Any]],
     ) -> dict[str, Any] | None:
-        """Resolve a plugin source, defaulting legacy missing records to official market.
+        """Resolve a plugin source for display.
 
         Args:
             plugin: Loaded plugin metadata.
             records: Persisted source records.
 
         Returns:
-            The persisted source record, an implicit default market record, or None.
+            The persisted source record, an implicit display-only source record, or None.
         """
         record = self.resolve_plugin_install_source(plugin, records)
         if isinstance(record, dict):
@@ -416,6 +421,7 @@ class PluginService:
             "registry_name": PLUGIN_DEFAULT_REGISTRY_NAME,
             "repo": str(plugin.repo or "").strip(),
             "download_url": "",
+            "implicit": True,
         }
         if plugin_name:
             implicit_record["name"] = plugin_name
@@ -620,11 +626,12 @@ class PluginService:
         installed_at: str | None,
         install_source: dict[str, Any] | None,
     ) -> dict:
-        updates_enabled = (
-            isinstance(install_source, dict)
-            and install_source.get("install_method") == "market"
-            and not plugin.reserved
+        install_method = (
+            str(install_source.get("install_method") or "").strip().lower()
+            if isinstance(install_source, dict)
+            else ""
         )
+        updates_enabled = install_method in {"market", "github"} and not plugin.reserved
         return {
             "name": plugin.name,
             "marketplace_name": (plugin.name or "").replace("_", "-"),
@@ -1307,8 +1314,29 @@ class PluginService:
         if not plugin:
             raise PluginServiceError("插件不存在")
         records = await self.get_plugin_install_sources()
-        record = self.resolve_effective_plugin_install_source(plugin, records)
-        if not isinstance(record, dict) or record.get("install_method") != "market":
+        record = self.resolve_plugin_install_source(plugin, records)
+        if not isinstance(record, dict) or record.get("implicit"):
+            raise PluginServiceError(
+                PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
+                public_message=PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
+            )
+
+        install_method = str(record.get("install_method") or "").strip().lower()
+        if install_method == "github":
+            repo_url = str(record.get("repo") or plugin.repo or "").strip()
+            if not repo_url:
+                raise PluginServiceError(
+                    PLUGIN_UPDATE_DISABLED_MESSAGE,
+                    public_message=PLUGIN_UPDATE_DISABLED_MESSAGE,
+                )
+            return {
+                "record": record,
+                "market_plugin": None,
+                "download_url": "",
+                "repo": repo_url,
+            }
+
+        if install_method != "market":
             raise PluginServiceError(
                 PLUGIN_UPDATE_DISABLED_MESSAGE,
                 public_message=PLUGIN_UPDATE_DISABLED_MESSAGE,
@@ -1362,6 +1390,45 @@ class PluginService:
             raise PluginServiceError(
                 "当前插件缺少仓库地址，无法更换插件源。",
                 public_message="当前插件缺少仓库地址，无法更换插件源。",
+            )
+
+        install_method = str(payload.get("install_method") or "market").strip().lower()
+        if install_method in {"github", "repo"}:
+            records = await self.get_plugin_install_sources()
+            old_record = self.resolve_plugin_install_source(plugin, records)
+            installed_at = (
+                old_record.get("installed_at")
+                if isinstance(old_record, dict) and old_record.get("installed_at")
+                else self.get_plugin_installed_at(plugin)
+                or datetime.now(timezone.utc).isoformat()
+            )
+            record = {
+                "schema_version": 1,
+                "root_dir_name": plugin.root_dir_name,
+                "install_method": "github",
+                "registry_url": None,
+                "registry_name": "Repository",
+                "repo": plugin_repo,
+                "download_url": "",
+                "installed_at": installed_at,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            plugin_name_value = str(plugin.name or "").strip()
+            if plugin_name_value:
+                record["name"] = plugin_name_value
+                record["marketplace_name"] = plugin_name_value.replace("_", "-")
+
+            for key in (plugin.root_dir_name, plugin.name):
+                if key:
+                    records.pop(key, None)
+            records[plugin.root_dir_name] = record
+            await self.save_plugin_install_sources(records)
+            return record, "插件源已更新。"
+
+        if install_method != "market":
+            raise PluginServiceError(
+                "不支持的插件源类型。",
+                public_message="不支持的插件源类型。",
             )
 
         market_plugin_id = self.get_market_plugin_id(payload)
@@ -1532,6 +1599,130 @@ class PluginService:
                     "can_ignore": True,
                 },
                 public_message="当前 AstrBot 版本不满足插件要求",
+            ) from exc
+
+    async def validate_plugin_repo(self, data: object) -> tuple[dict[str, Any], str]:
+        """Validate whether a GitHub repository contains AstrBot plugin metadata.
+
+        Args:
+            data: Dashboard request payload containing repository or url.
+
+        Returns:
+            Plugin metadata fetched from the GitHub repository and a success message.
+
+        Raises:
+            PluginServiceError: If the repository is not a valid AstrBot plugin.
+        """
+        payload = self._payload(data)
+        repo_url = str(payload.get("url") or payload.get("repository") or "").strip()
+        if not repo_url:
+            raise PluginServiceError("缺少插件仓库地址")
+        if not repo_url.startswith(("http://", "https://")):
+            repo_url = f"https://github.com/{repo_url}"
+
+        proxy = str(payload.get("proxy") or "").strip().removesuffix("/")
+        try:
+            (
+                author,
+                repo,
+                branch,
+            ) = await self.plugin_manager.updator.resolve_github_source_branch(repo_url)
+        except ValueError as exc:
+            raise PluginServiceError(
+                "请输入有效的 GitHub 仓库地址。",
+                public_message="请输入有效的 GitHub 仓库地址。",
+            ) from exc
+
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        try:
+            async with aiohttp.ClientSession(
+                trust_env=True,
+                connector=connector,
+                timeout=aiohttp.ClientTimeout(
+                    total=PLUGIN_REPO_VALIDATE_TIMEOUT_SECONDS
+                ),
+            ) as session:
+                for filename in PLUGIN_METADATA_FILENAMES:
+                    raw_url = (
+                        f"https://raw.githubusercontent.com/"
+                        f"{author}/{repo}/{branch}/{filename}"
+                    )
+                    request_url = f"{proxy}/{raw_url}" if proxy else raw_url
+                    async with session.get(request_url) as response:
+                        if response.status != 200:
+                            continue
+
+                        content_length = response.headers.get("Content-Length")
+                        if content_length:
+                            try:
+                                if int(content_length) > PLUGIN_METADATA_MAX_BYTES:
+                                    raise PluginServiceError(
+                                        f"{filename} 超过 1MB。",
+                                        public_message=f"{filename} 超过 1MB。",
+                                    )
+                            except ValueError:
+                                pass
+
+                        metadata_bytes = await response.content.read(
+                            PLUGIN_METADATA_MAX_BYTES + 1
+                        )
+                        if len(metadata_bytes) > PLUGIN_METADATA_MAX_BYTES:
+                            raise PluginServiceError(
+                                f"{filename} 超过 1MB。",
+                                public_message=f"{filename} 超过 1MB。",
+                            )
+                        try:
+                            metadata_text = metadata_bytes.decode("utf-8")
+                        except UnicodeDecodeError as exc:
+                            raise PluginServiceError(
+                                f"{filename} 必须使用 UTF-8 编码。",
+                                public_message=f"{filename} 必须使用 UTF-8 编码。",
+                            ) from exc
+                        try:
+                            metadata = yaml.safe_load(metadata_text)
+                        except yaml.YAMLError as exc:
+                            raise PluginServiceError(
+                                f"{filename} 格式错误。",
+                                public_message=f"{filename} 格式错误。",
+                            ) from exc
+                        try:
+                            self.plugin_manager.updator.validate_plugin_metadata(
+                                metadata,
+                                filename,
+                            )
+                        except ValueError as exc:
+                            raise PluginServiceError(
+                                str(exc),
+                                public_message=f"插件校验失败：{exc!s}",
+                            ) from exc
+
+                        metadata = dict(metadata) if isinstance(metadata, dict) else {}
+                        if "desc" not in metadata and "description" in metadata:
+                            metadata["desc"] = metadata["description"]
+                        return {
+                            "valid": True,
+                            "metadata_entry": filename,
+                            "metadata_branch": branch,
+                            "name": str(metadata.get("name") or ""),
+                            "display_name": metadata.get("display_name"),
+                            "desc": str(metadata.get("desc") or ""),
+                            "version": str(metadata.get("version") or ""),
+                            "author": metadata.get("author"),
+                            "repo": str(metadata.get("repo") or repo_url),
+                        }, "插件校验通过。"
+
+            raise PluginServiceError(
+                "未在 GitHub 仓库根目录找到 metadata.yaml 或 metadata.yml。",
+                public_message="未在 GitHub 仓库根目录找到 metadata.yaml 或 metadata.yml。",
+            )
+        except Exception as exc:
+            if isinstance(exc, PluginServiceError):
+                raise
+            logger.warning("插件仓库校验失败 %s: %s", repo_url, exc)
+            raise PluginServiceError(
+                "插件校验失败",
+                public_message="插件校验失败，请查看服务端日志。",
             ) from exc
 
     async def install_plugin_upload(
@@ -1893,7 +2084,9 @@ class PluginService:
 __all__ = [
     "PLUGIN_UPDATE_CONCURRENCY",
     "PLUGIN_OPERATION_FAILED_MESSAGE",
+    "PLUGIN_UPDATE_DISABLED_MESSAGE",
     "PLUGIN_UPDATE_FAILED_MESSAGE",
+    "PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE",
     "PluginService",
     "PluginServiceError",
     "PluginServiceWarning",
