@@ -261,7 +261,7 @@
 
                   <div
                     v-else-if="isWeixinOcPlatform"
-                    class="weixin-oc-registration-inline mt-4"
+                    class="registration-inline mt-4"
                   >
                     <v-text-field
                       :model-value="selectedPlatformConfig.id || ''"
@@ -1099,7 +1099,7 @@ export default {
       if (!platformId) {
         return this.tm("registrationAction.platformIdRequired");
       }
-      if (/[!:\s]/.test(platformId)) {
+      if (!this.isPlatformIdValid(platformId)) {
         return this.tm("registrationAction.platformIdInvalid");
       }
       return "";
@@ -1530,7 +1530,7 @@ export default {
         return;
       }
       this.scanPlatformIdCustomized = true;
-      this.selectedPlatformConfig.id = String(value || "").trim();
+      this.selectedPlatformConfig.id = String(value || "");
     },
 
     buildRandomPlatformIdSuffix() {
@@ -2035,14 +2035,6 @@ export default {
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
-  width: 320px;
-  gap: 8px;
-}
-
-.weixin-oc-registration-inline {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
   width: 320px;
   gap: 8px;
 }
