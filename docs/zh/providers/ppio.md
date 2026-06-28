@@ -16,7 +16,7 @@ PPIO 派欧云是中国领先的独立分布式云计算服务商，您可以在
 
 打开 AstrBot 控制台 -> 服务提供商页面，点击新增提供商，找到并点击 `PPIO派欧云`(需要版本 >= 3.5.10，旧版本也可使用，见下文)。
 
-![image](https://files.astrbot.app/docs/source/images/ppio/image.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/21f2287a-4e81-4b45-a07c-58858b373979" />
 
 将 API Key 和模型名称填入对话框表单，点击保存，即可完成创建。
 

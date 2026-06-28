@@ -32,7 +32,8 @@
 
 1. 进入 AstrBot 的管理面板，点击左侧栏 `机器人`（旧版本为 `消息平台`），然后在右侧的界面中，点击 `+ 新增适配器`，选择 `企业微信智能机器人`，进入配置页面。
 
-![新增适配器](https://files.astrbot.app/docs/source/images/wecom_ai_bot/image-2.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/39d4c653-d35f-4941-b571-1773416b2992" />
+
 
 2. 在弹出的配置项中将 `企业微信智能机器人的名字`、`token`、`encoding_aes_key` 从上一步创建智能机器人时填写的值复制粘贴到对应的输入框中。ID 可以随意填写，用于区分不同的消息平台实例。`port` 默认为 `6198`，可以根据需要修改，但请确保该端口未被占用。请保持 `统一 Webhook 模式 (unified_webhook_mode)` 为开启状态。点击 `保存`。
 
@@ -68,9 +69,10 @@
 
 在单聊或群聊中，直接发送消息即可与机器人进行对话。
 
-如果您需要类似实时打字机的效果，请确保在 AstrBot 中开启了 `流式回复` 功能。
+如果您需要类似实时打字机的效果，请确保在 AstrBot 中开启了 `流式输出` 功能。
 
-![流式回复](https://files.astrbot.app/docs/source/images/wecom_ai_bot/image-6.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/fd962fba-eebd-448a-bf42-8d79c159c8c8" />
+
 
 ## 帮助与支持
 

@@ -4,7 +4,7 @@
 > [!TIP]
 > Requires AstrBot version >= 4.5.0.
 
-![Knowledge Base Preview](https://files.astrbot.app/docs/en/use/image-3.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/d1a71afa-04cd-493e-be9c-a6a6cba22274" />
 
 ## Configuring Embedding Model
 
@@ -28,7 +28,7 @@ AstrBot supports multiple knowledge base management. During chat, you can **free
 
 Enter the knowledge base page and click "Create Knowledge Base", as shown below:
 
-![image](https://files.astrbot.app/docs/source/images/knowledge-base/image.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/1832ec2e-5cbb-4d1a-9466-1d10a34d926b" />
 
 Fill in the relevant information. In the embedding model dropdown menu, you will see the embedding model and reranker model you just created (reranker model is optional).
 
@@ -39,7 +39,7 @@ Fill in the relevant information. In the embedding model dropdown menu, you will
 
 After creating a knowledge base, you can upload documents to it. Up to 10 files can be uploaded simultaneously, with a maximum size of 128 MB per file.
 
-![Upload Files](https://files.astrbot.app/docs/en/use/image-4.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/075a8a8b-0176-4703-b681-e13040ba8082" />
 
 ## Using the Knowledge Base
 
