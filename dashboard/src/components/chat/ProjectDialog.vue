@@ -1,7 +1,7 @@
 <template>
     <v-dialog v-model="isOpen" max-width="500" @update:model-value="handleDialogChange">
         <v-card>
-            <v-card-title class="dialog-title">
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
                 {{ isEditing ? tm('project.edit') : tm('project.create') }}
             </v-card-title>
             <v-card-text>

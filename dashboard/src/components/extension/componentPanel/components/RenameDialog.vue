@@ -59,7 +59,7 @@ watch(showAliasEditor, (open) => {
 <template>
   <v-dialog :model-value="show" @update:model-value="emit('update:show', $event)" max-width="500">
     <v-card>
-      <v-card-title class="text-h5">{{ tm('dialogs.rename.title') }}</v-card-title>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('dialogs.rename.title') }}</v-card-title>
       <v-card-text>
         <v-text-field
           :model-value="newName"
@@ -99,7 +99,7 @@ watch(showAliasEditor, (open) => {
               </div>
               <v-btn
                 prepend-icon="mdi-plus"
-                variant="outlined"
+                variant="tonal"
                 color="primary"
                 block
                 size="small"
@@ -119,7 +119,7 @@ watch(showAliasEditor, (open) => {
         </v-btn>
         <v-btn
           color="primary"
-          variant="text"
+          variant="tonal"
           :loading="loading"
           @click="emit('confirm')"
         >

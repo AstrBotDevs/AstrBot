@@ -12,7 +12,7 @@
 
     <v-dialog v-model="dialog" max-width="700px">
       <v-card>
-        <v-card-title class="d-flex justify-space-between align-center">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center">
           <span>{{ t('features.settings.sidebar.customize.title') }}</span>
           <v-btn
             icon="mdi-close"

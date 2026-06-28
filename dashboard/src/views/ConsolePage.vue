@@ -28,11 +28,11 @@ const { tm } = useModuleI18n('features/console');
         ></v-switch>
         <v-dialog v-model="pipDialog" width="400">
           <template v-slot:activator="{ props }">
-            <v-btn variant="plain" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
+            <v-btn variant="text" v-bind="props">{{ tm('pipInstall.button') }}</v-btn>
           </template>
           <v-card>
-            <v-card-title>
-              <span class="text-h5">{{ tm('pipInstall.dialogTitle') }}</span>
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+              <span>{{ tm('pipInstall.dialogTitle') }}</span>
             </v-card-title>
             <v-card-text>
               <v-text-field v-model="pipInstallPayload.package" :label="tm('pipInstall.packageLabel')" variant="outlined"></v-text-field>

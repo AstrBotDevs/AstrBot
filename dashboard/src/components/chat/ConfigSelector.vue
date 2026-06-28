@@ -22,7 +22,7 @@
 
         <v-dialog v-model="dialog" max-width="480">
             <v-card>
-                <v-card-title class="d-flex align-center justify-space-between">
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between">
                     <span>选择配置文件</span>
                     <v-btn icon variant="text" @click="closeDialog">
                         <v-icon>mdi-close</v-icon>
@@ -60,6 +60,7 @@
                     <v-btn variant="text" @click="closeDialog">取消</v-btn>
                     <v-btn
                         color="primary"
+                        variant="tonal"
                         @click="confirmSelection"
                         :disabled="!tempSelectedConfig"
                         :loading="saving"

@@ -51,6 +51,7 @@ ruff check .
 6. For path handling, use `pathlib.Path` instead of string paths, and use `astrbot.core.utils.path_utils` to get the AstrBot data and temp directory.
 7. When backend API routes, request/response schemas, or OpenAPI definitions change, regenerate the frontend API client by running `cd dashboard && pnpm generate:api`.
 8. When updating the project version, keep `[project].version` in `pyproject.toml` and `__version__` in `astrbot/__init__.py` in sync. `VERSION` in `astrbot/core/config/default.py` should derive from `astrbot.__version__` instead of hardcoding a separate version string.
+9. When designing WebUI dialogs, use `text-h3 pa-4 pb-0 pl-6` as the base class for dialog titles, and use `variant="text"` or `variant="tonal"` for dialog buttons.
 
 ### KISS and First Principles
 

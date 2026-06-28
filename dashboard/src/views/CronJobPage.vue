@@ -188,7 +188,7 @@
 
         <v-dialog v-model="platformDialog" max-width="520">
           <v-card class="dashboard-dialog-card">
-            <v-card-title class="text-h3 pt-5 px-5">
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
               {{ tm("platformDialog.title") }}
             </v-card-title>
             <v-card-text class="px-5 pb-2">
@@ -229,7 +229,7 @@
 
         <v-dialog v-model="createDialog" max-width="620">
           <v-card class="dashboard-dialog-card">
-            <v-card-title class="text-h3 pt-5 px-5">{{
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
               dialogTitle
             }}</v-card-title>
             <v-card-text class="px-5 pb-2">

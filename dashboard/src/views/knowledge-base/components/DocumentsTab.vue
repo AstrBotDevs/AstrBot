@@ -61,8 +61,8 @@
     <!-- 上传对话框 -->
     <v-dialog v-model="showUploadDialog" max-width="650px" persistent @after-enter="initUploadSettings">
       <v-card>
-        <v-card-title class="pa-4 d-flex align-center">
-          <span class="text-h5">{{ t('upload.title') }}</span>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+          <span>{{ t('upload.title') }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="closeUploadDialog" />
         </v-card-title>
@@ -123,7 +123,7 @@
                     <span>
                       {{ tavilyConfigStatus === 'error' ? '检查网页搜索配置失败' : '使用此功能需要配置 Tavily Key' }}
                     </span>
-                    <v-btn size="small" variant="flat" @click="showTavilyDialog = true">
+                    <v-btn size="small" variant="tonal" @click="showTavilyDialog = true">
                       配置
                     </v-btn>
                   </div>
@@ -198,7 +198,7 @@
           <v-btn variant="text" @click="closeUploadDialog" :disabled="uploading">
             {{ t('upload.cancel') }}
           </v-btn>
-          <v-btn color="primary" variant="elevated" @click="startUpload" :loading="uploading"
+          <v-btn color="primary" variant="tonal" @click="startUpload" :loading="uploading"
             :disabled="isUploadDisabled">
             {{ t('upload.submit') }}
           </v-btn>
@@ -209,7 +209,7 @@
     <!-- 删除确认对话框 -->
     <v-dialog v-model="showDeleteDialog" max-width="450px">
       <v-card>
-        <v-card-title class="pa-4 text-h6">{{ t('documents.delete') }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ t('documents.delete') }}</v-card-title>
         <v-card-text class="pa-6">
           <p>{{ t('documents.deleteConfirm', { name: deleteTarget?.doc_name || '' }) }}</p>
           <v-alert type="error" variant="tonal" density="compact" class="mt-4">
@@ -219,7 +219,7 @@
         <v-card-actions class="pa-4">
           <v-spacer />
           <v-btn variant="text" @click="showDeleteDialog = false">取消</v-btn>
-          <v-btn color="error" variant="elevated" @click="deleteDocument" :loading="deleting">
+          <v-btn color="error" variant="tonal" @click="deleteDocument" :loading="deleting">
             删除
           </v-btn>
         </v-card-actions>

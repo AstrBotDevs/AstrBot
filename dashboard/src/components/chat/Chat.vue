@@ -445,7 +445,7 @@
     />
     <v-dialog v-model="sessionTitleDialogOpen" max-width="420">
       <v-card>
-        <v-card-title class="text-h6">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ tm("conversation.editDisplayName") }}
         </v-card-title>
         <v-card-text>
@@ -466,6 +466,7 @@
           </v-btn>
           <v-btn
             color="primary"
+            variant="tonal"
             :loading="savingSessionTitle"
             @click="saveSessionTitleDialog"
           >

@@ -1,7 +1,7 @@
 <template>
     <v-dialog v-model="showDialog" :max-width="$vuetify.display.smAndDown ? undefined : '1200px'" scrollable>
         <v-card class="persona-form-card" :class="{ 'persona-form-card-mobile': $vuetify.display.smAndDown }">
-            <v-card-title class="persona-form-title text-h2 px-6 pt-6 pl-6">
+            <v-card-title class="persona-form-title text-h3 pa-4 pb-0 pl-6">
                 {{ editingPersona ? tm('dialog.edit.title') : tm('dialog.create.title') }}
             </v-card-title>
 
@@ -331,7 +331,7 @@
                                     </v-textarea>
                                 </div>
 
-                                <v-btn variant="outlined" prepend-icon="mdi-plus" @click="addDialogPair" block>
+                                <v-btn variant="tonal" prepend-icon="mdi-plus" @click="addDialogPair" block>
                                     {{ tm('buttons.addDialogPair') }}
                                 </v-btn>
                             </v-expansion-panel-text>
@@ -350,7 +350,7 @@
                 <v-btn color="grey" variant="text" @click="closeDialog">
                     {{ tm('buttons.cancel') }}
                 </v-btn>
-                <v-btn color="primary" variant="flat" @click="savePersona" :loading="saving" :disabled="!formValid">
+                <v-btn color="primary" variant="tonal" @click="savePersona" :loading="saving" :disabled="!formValid">
                     {{ tm('buttons.save') }}
                 </v-btn>
             </v-card-actions>
@@ -883,10 +883,6 @@ export default {
     overflow-y: auto;
 }
 
-.persona-form-title {
-    line-height: 1.3;
-}
-
 .persona-form-actions {
     position: sticky;
     bottom: 0;
@@ -936,11 +932,6 @@ export default {
     .persona-basic-col,
     .persona-panels-col {
         padding-top: 0 !important;
-    }
-
-    .persona-form-title {
-        font-size: 1.15rem !important;
-        padding: 12px 16px !important;
     }
 
     .selected-config-area {

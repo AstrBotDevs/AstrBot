@@ -34,8 +34,7 @@
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
       <v-card-title
-        class="text-h3 py-4 d-flex align-center justify-space-between gap-4 flex-wrap"
-        style="font-weight: normal;"
+        class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between gap-4 flex-wrap"
       >
         <span>{{ tm('providerSelector.dialogTitle') }}</span>
         <v-btn
@@ -146,6 +145,7 @@
         <v-btn variant="text" @click="cancelSelection">{{ tm('providerSelector.cancelSelection') }}</v-btn>
         <v-btn 
           color="primary" 
+          variant="tonal"
           @click="confirmSelection">
           {{ tm('providerSelector.confirmSelection') }}
         </v-btn>

@@ -76,7 +76,7 @@
         <!-- 创建知识库对话框 -->
         <v-dialog v-model="showCreateDialog" max-width="500px">
             <v-card>
-                <v-card-title class="text-h4">{{ tm('createDialog.title') }}</v-card-title>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('createDialog.title') }}</v-card-title>
                 <v-card-text>
 
                     <div style="width: 100%; display: flex; align-items: center; justify-content: center;">
@@ -111,7 +111,7 @@
                     <v-spacer></v-spacer>
                     <v-btn color="error" variant="text" @click="showCreateDialog = false">{{ tm('createDialog.cancel')
                         }}</v-btn>
-                    <v-btn color="primary" variant="text" @click="submitCreateForm">{{ tm('createDialog.create')
+                    <v-btn color="primary" variant="tonal" @click="submitCreateForm">{{ tm('createDialog.create')
                         }}</v-btn>
                 </v-card-actions>
             </v-card>
@@ -120,7 +120,7 @@
         <!-- 表情选择器对话框 -->
         <v-dialog v-model="showEmojiPicker" max-width="400px">
             <v-card>
-                <v-card-title class="text-h6">{{ tm('emojiPicker.title') }}</v-card-title>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('emojiPicker.title') }}</v-card-title>
                 <v-card-text>
                     <div class="emoji-picker">
                         <div v-for="(category, catIndex) in emojiCategories" :key="catIndex" class="mb-4">
@@ -145,11 +145,11 @@
         <!-- 知识库内容管理对话框 -->
         <v-dialog v-model="showContentDialog" max-width="1000px">
             <v-card>
-                <v-card-title class="d-flex align-center">
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
                     <div class="me-2 emoji-sm">{{ currentKB.emoji || '🙂' }}</div>
                     <span>{{ currentKB.collection_name }} - {{ tm('contentDialog.title') }}</span>
                     <v-spacer></v-spacer>
-                    <v-btn variant="plain" icon @click="showContentDialog = false">
+                    <v-btn variant="text" icon @click="showContentDialog = false">
                         <v-icon>mdi-close</v-icon>
                     </v-btn>
                 </v-card-title>
@@ -249,7 +249,7 @@
                                         </div>
 
                                         <div class="text-center mt-4">
-                                            <v-btn color="primary" variant="elevated" :loading="uploading"
+                                            <v-btn color="primary" variant="tonal" :loading="uploading"
                                                 :disabled="!selectedFile" @click="uploadFile">
                                                 {{ tm('upload.upload') }}
                                             </v-btn>
@@ -340,7 +340,7 @@
                                     </v-card>
 
                                     <div class="text-center">
-                                        <v-btn color="primary" variant="elevated" :loading="importing"
+                                        <v-btn color="primary" variant="tonal" :loading="importing"
                                             :disabled="!importUrl" @click="startImportFromUrl">
                                             {{ tm('importFromUrl.startImport') }}
                                         </v-btn>
@@ -408,7 +408,7 @@
         <!-- 删除知识库确认对话框 -->
         <v-dialog v-model="showDeleteDialog" max-width="400px">
             <v-card>
-                <v-card-title class="text-h5">{{ tm('deleteDialog.title') }}</v-card-title>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('deleteDialog.title') }}</v-card-title>
                 <v-card-text>
                     <p>{{ tm('deleteDialog.confirmText', { name: deleteTarget.collection_name }) }}</p>
                     <p class="text-red">{{ tm('deleteDialog.warning') }}</p>
@@ -418,7 +418,7 @@
                     <v-btn color="grey-darken-1" variant="text" @click="showDeleteDialog = false">{{
                         tm('deleteDialog.cancel')
                         }}</v-btn>
-                    <v-btn color="error" variant="text" @click="deleteKnowledgeBase" :loading="deleting">{{
+                    <v-btn color="error" variant="tonal" @click="deleteKnowledgeBase" :loading="deleting">{{
                         tm('deleteDialog.delete') }}</v-btn>
                 </v-card-actions>
             </v-card>
