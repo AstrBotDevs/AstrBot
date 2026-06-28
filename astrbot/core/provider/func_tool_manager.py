@@ -740,15 +740,17 @@ class FunctionToolManager:
 
         try:
             await asyncio.wait_for(connect_done.wait(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, asyncio.CancelledError) as e:
             lifecycle_task.cancel()
             await asyncio.gather(lifecycle_task, return_exceptions=True)
             async with self._runtime_lock:
                 self._mcp_starting.discard(name)
                 self._mcp_server_runtime.pop(name, None)
-            raise MCPInitTimeoutError(
-                f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
-            )
+            if isinstance(e, asyncio.TimeoutError):
+                raise MCPInitTimeoutError(
+                    f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
+                ) from e
+            raise
 
         if connect_error is not None:
             async with self._runtime_lock:
