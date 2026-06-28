@@ -287,9 +287,18 @@ function onInteractiveChoiceSubmit(text: string) {
 | `dashboard/src/i18n/locales/features/chat.zh-CN.json` (或对应文件) | 新增 i18n keys |
 | `dashboard/src/i18n/locales/features/chat.en-US.json` | 新增 i18n keys |
 
-### 5.3 Tool that produces the format (out of scope for v1, but documented)
+### 5.3 New plugin (separate repo)
 
-AstrBot 可在后续提供一个内置 `ask_user_choice` 工具,接收 `prompt + options` 参数,返回 `InteractiveChoicePart` JSON。v1 仅做前端渲染,工具由调用方(插件 / agent runner)自行实现并以 `Json` 组件输出。
+| 路径 | 作用 |
+| --- | --- |
+| `astrbot_plugin_choice_ui/choice_tool.py` | `AskUserChoiceTool(FunctionTool)` 定义 — 详见 §11 |
+| `astrbot_plugin_choice_ui/main.py` | 插件入口,`self.context.add_llm_tool(AskUserChoiceTool())` 一行注册 |
+| `astrbot_plugin_choice_ui/metadata.yaml` | 插件元数据(name/display_name/version/astrbot_version) |
+| `astrbot_plugin_choice_ui/README.md` | 安装说明 + LLM 提示("如何在 prompt 里让 LLM 知道这个工具") |
+
+### 5.4 Tool: `ask_user_choice` (独立插件, spec 见 §11)
+
+AstrBot v1 不内置该工具;它以**独立插件**形式提供(`astrbot_plugin_choice_ui`),插件仓库维护者实现 `AskUserChoiceTool(FunctionTool)` 并通过 `self.context.add_llm_tool(...)` 注册。详见 §11 工具定义。
 
 ---
 
@@ -398,3 +407,176 @@ const invalidInput = {
 - `dashboard/src/components/chat/message_list_comps/ToolCallCard.vue` — 视觉风格参考(灰底卡片)
 - `astrbot/core/message/components.py` — `BaseMessageComponent` / `Json` 组件
 - `astrbot/core/agent/message.py` — LLM tool call 数据结构
+- `astrbot/api/__init__.py` — `FunctionTool` 基类(插件作者继承)
+
+---
+
+## 11. Appendix — `AskUserChoiceTool` 完整定义
+
+> 独立插件 `astrbot_plugin_choice_ui` 的核心实现。本 spec 不定义插件脚手架,只定义工具类。
+
+### 11.1 工具类
+
+```python
+"""astrbot_plugin_choice_ui/choice_tool.py
+
+ask_user_choice 工具:让 LLM 在需要人类审批时输出结构化选项框。
+返回 JSON 字符串,由前端 useMessages.normalizePartsInternal 透传/降级。
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from astrbot.api import FunctionTool
+
+
+class AskUserChoiceTool(FunctionTool):
+    """Ask the user to choose one of N options (with optional free text).
+
+    When to use: 你即将执行一个不可逆/敏感/代价高的操作,
+    或者你需要在多个候选方案中让用户拍板。
+
+    Returns: JSON 字符串,结构与前端 InteractiveChoicePart 一一对应
+    (见 §3.1)。
+    """
+
+    name = "ask_user_choice"
+    description = (
+        "向用户呈现一个可交互的选项框,用户点击其中某个选项(或输入自定义文本) "
+        "后,选择结果会作为下一轮 user message 返回给你。"
+        "适用场景:1) 需要用户对敏感/不可逆操作授权;2) 在多个候选方案中让用户拍板。"
+        "选项不少于 2 个、不多于 10 个;用户可以无视预设选项直接输入自定义文本。"
+    )
+
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "prompt": {
+                "type": "string",
+                "description": "提问文案,显示在选项框顶部,例如: '请选择下一步使用的模型:'",
+            },
+            "options": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 10,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "description": "选项的唯一 ID,仅供前端 key 使用,不会发给 LLM",
+                        },
+                        "label": {
+                            "type": "string",
+                            "description": "按钮上显示的文字(面向用户)",
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "选项的补充说明,hover 展开,面向用户",
+                        },
+                        "value": {
+                            "type": "string",
+                            "description": "选中后回传给 LLM 的文本(面向 LLM)",
+                        },
+                    },
+                    "required": ["id", "label", "value"],
+                },
+                "description": "2-10 个候选选项,单选",
+            },
+            "title": {
+                "type": "string",
+                "description": "可选的选项框标题,例如: '模型选择' / '操作确认'",
+            },
+            "input_placeholder": {
+                "type": "string",
+                "description": "自由输入框的占位符,例如: '或输入你想用的模型名...'",
+            },
+        },
+        "required": ["prompt", "options"],
+    }
+
+    async def call(
+        self,
+        context,  # AstrBot Context,保留以便未来扩展(persona / 权限检查等)
+        **kwargs: Any,
+    ) -> str:
+        prompt: str = (kwargs.get("prompt") or "").strip()
+        options: list[dict[str, Any]] = kwargs.get("options") or []
+        title: str | None = kwargs.get("title")
+        input_placeholder: str | None = kwargs.get("input_placeholder")
+
+        # ① 软错误:参数不合法 → 返回"错误:..."纯文本,
+        #    让 LLM 看到错误信息并自行重试,避免工具异常打断整条链路
+        if not prompt:
+            return "错误:prompt 必填且不能为空。"
+        if not isinstance(options, list) or not (2 <= len(options) <= 10):
+            return "错误:options 必须是包含 2-10 个元素的数组。"
+
+        # ② 逐项校验 option;遇到不合法项直接报错误(整体拒绝,不走部分)
+        normalized_options: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for idx, opt in enumerate(options):
+            if not isinstance(opt, dict):
+                return f"错误:options[{idx}] 不是 object。"
+            oid = str(opt.get("id") or "").strip()
+            label = str(opt.get("label") or "").strip()
+            value = opt.get("value")
+            if not oid or not label or value is None:
+                return f"错误:options[{idx}] 缺 id/label/value。"
+            if oid in seen_ids:
+                return f"错误:options 中存在重复的 id: {oid!r}。"
+            seen_ids.add(oid)
+            normalized_options.append(
+                {
+                    "id": oid,
+                    "label": label[:30],  # 截断,见 §3.2
+                    "description": (
+                        str(opt.get("description", "")).strip()[:200] or None
+                    ),
+                    "value": str(value),
+                }
+            )
+
+        # ③ 构造 InteractiveChoicePart;None 字段清理掉
+        payload: dict[str, Any] = {
+            "type": "interactive_choice",
+            "prompt": prompt[:200],
+            "options": normalized_options,
+        }
+        if title and title.strip():
+            payload["title"] = title.strip()[:30]
+        if input_placeholder and input_placeholder.strip():
+            payload["input_placeholder"] = input_placeholder.strip()[:60]
+
+        # ④ 返回 JSON 字符串 — framework 走默认 Plain 包装,
+        #    前端 normalizePartsInternal 检测 "{" 开头 + type 字段后展平
+        return json.dumps(payload, ensure_ascii=False)
+
+
+# ── 注册方式(插件 main.py 示意,仅 1 行) ────────────────────────
+# from .choice_tool import AskUserChoiceTool
+# self.context.add_llm_tool(AskUserChoiceTool())
+```
+
+### 11.2 设计决策(可推翻)
+
+1. **`context` 参数保留**(v1 不用)— 未来可基于 persona 决定是否提供该工具
+2. **校验失败返回"错误:..."字符串**而不抛异常 — 工具异常会让 LLM 上下文丢失错误现场,软错误让 LLM 自己重试
+3. **option 重复 id 直接拒绝整次调用**,不做去重 — 避免 LLM 误以为"重复就覆盖"
+4. **description / input_placeholder 在工具层就截断**,而不是留给前端 — 减少 tool result 体积,省 token
+5. **`title` 可选,空时不输出该字段**(避免 `title: null` 污染 JSON)
+6. **不做"是否必选"语义** — spec 已明确:用户永远可以无视选项框自己打字
+
+### 11.3 与 spec 其他章节的对应
+
+| 工具约束 | spec 章节 |
+| --- | --- |
+| `prompt` 必填,200 字截断 | §3.2 字段约束 |
+| `options` 2-10 个,每项必填 id/label/value | §3.2 字段约束 |
+| `id` 重复时拒绝 | §3.2 + §7 错误处理 |
+| `title` 可选,30 字截断 | §3.2 字段约束 |
+| `input_placeholder` 可选,60 字截断 | §3.2 字段约束 |
+| 返回 JSON 字符串,framework 走 Plain 包装 | §2.3 + §6 数据流 |
+| 前端 `normalizePartsInternal` 展平 | §2.3 翻译位置 |
