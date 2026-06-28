@@ -645,5 +645,9 @@
       "activeTooltipMulti": "Plan mode is on for this session ({count} build turns). Click to turn it off.",
       "inactiveTooltip": "Build mode for this session. Click to turn Plan mode on."
     }
+  },
+  "copy": {
+    "copy": "Copy",
+    "copied": "Copied"
   }
 }
