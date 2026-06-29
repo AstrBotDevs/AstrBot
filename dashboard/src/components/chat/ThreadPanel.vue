@@ -115,7 +115,6 @@ async function loadThread(threadId: string) {
     const history = response.data?.data?.history || [];
     messages.value = history.map(normalizeRecord);
     scrollToBottom();
-    await cancelPendingChoices();
   } catch (error) {
     console.error("Failed to load thread:", error);
     messages.value = [];
@@ -323,56 +322,6 @@ function scrollToBottom() {
     }
   });
 }
-
-/** 页面加载时静默取消后端挂起的 choice 选项框。
- *
- *  页面刷新后,后端 PendingRegistry 仍持有未回执的 Future。
- *  此函数 POST 一条 `__cancel_pending_choice__` 消息,后端 on_message
- *  钩子检测到后取消 pending 并 stop_event,避免用户下一条正常消息
- *  被错误消费为回执。
- */
-async function cancelPendingChoices() {
-  if (!props.thread?.thread_id) return;
-  try {
-    await fetchWithAuth(chatApi.sendThreadMessageUrl(props.thread.thread_id), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: [{ type: "plain", text: "__cancel_pending_choice__" }],
-        enable_streaming: false,
-      }),
-    });
-  } catch {
-    // 静默失败:取消仅优化级,不影响主流程
-  }
-}
-
-/** 页面卸载时用 sendBeacon 静默取消挂起的选择框。
- *  相比 fetch,sendBeacon 在页面卸载过程中不会被浏览器取消。
- */
-function setupPageUnloadCancel() {
-  const url = props.thread?.thread_id
-    ? chatApi.sendThreadMessageUrl(props.thread.thread_id)
-    : null;
-  if (!url) return;
-
-  const handler = () => {
-    const blob = new Blob(
-      [
-        JSON.stringify({
-          message: [{ type: "plain", text: "__cancel_pending_choice__" }],
-          enable_streaming: false,
-        }),
-      ],
-      { type: "application/json" },
-    );
-    navigator.sendBeacon(url, blob);
-  };
-
-  window.addEventListener("beforeunload", handler);
-}
-
-setupPageUnloadCancel();
 </script>
 
 <style scoped>
