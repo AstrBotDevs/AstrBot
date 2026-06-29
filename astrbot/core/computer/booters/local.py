@@ -40,6 +40,24 @@ _BLOCKED_COMMAND_PATTERNS = [
 ]
 
 
+# WHY ``_NO_WINDOW_KWARGS``:
+#   pythonw.exe (GUI subsystem) 启动下,spawn 一个 CUI 子进程 (cmd.exe /
+#   python.exe) 时 Windows 默认会为子进程新开一个控制台窗口 — 即用户报告的
+#   "弹 cmd 黑框" 现象。``creationflags=CREATE_NO_WINDOW`` 是消除该窗口的
+#   标准做法。
+#
+#   跨平台:
+#     - win32: 返回 ``{"creationflags": subprocess.CREATE_NO_WINDOW}``
+#     - 其他: 返回 ``{}`` (non-Windows 上 ``CREATE_NO_WINDOW`` 不存在)
+#
+#   Refs:
+#     - subprocess.CREATE_NO_WINDOW 只在 win32 平台上有定义
+#     - asyncio.create_subprocess_exec 同样支持 ``creationflags`` kwarg
+_NO_WINDOW_KWARGS: dict[str, int] = (
+    {"creationflags": subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {}
+)
+
+
 def _is_safe_command(command: str) -> bool:
     cmd = f" {command.strip().lower()} "
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
@@ -179,6 +197,7 @@ class LocalShellComponent(ShellComponent):
                     env=run_env,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    **_NO_WINDOW_KWARGS,
                 )
                 return {"pid": proc.pid, "stdout": "", "stderr": "", "exit_code": None}
             # `command` is intentionally executed through the current shell so
@@ -191,6 +210,7 @@ class LocalShellComponent(ShellComponent):
                 env=run_env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                **_NO_WINDOW_KWARGS,
             )
             try:
                 stdout, stderr = proc.communicate(timeout=timeout or 300)
@@ -203,6 +223,7 @@ class LocalShellComponent(ShellComponent):
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL,
                             timeout=5,
+                            **_NO_WINDOW_KWARGS,
                         )
                         should_kill_parent = taskkill_result.returncode != 0
                     except Exception:
@@ -244,6 +265,8 @@ class LocalPythonComponent(PythonComponent):
                     timeout=timeout,
                     capture_output=True,
                     cwd=working_dir,
+                    # pythonw.exe 启动下抑制 python.exe 子进程黑窗;非 Windows 上为 {}
+                    **_NO_WINDOW_KWARGS,
                 )
                 stdout = "" if silent else _decode_shell_output(result.stdout)
                 stderr = (
