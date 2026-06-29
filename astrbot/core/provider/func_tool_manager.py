@@ -673,7 +673,7 @@ class FunctionToolManager:
         connect_error: BaseException | None = None
 
         async def connect_and_lifecycle() -> None:
-            #Single task that handles connect, lifecycle, and cleanup.
+            # Single task that handles connect, lifecycle, and cleanup.
 
             nonlocal connect_error
             try:
