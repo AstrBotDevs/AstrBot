@@ -794,27 +794,28 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
-        if llm_resp.reasoning_content:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(
-                    chain=MessageChain(type="reasoning").message(
-                        llm_resp.reasoning_content,
+        if not llm_resp.tools_call_name:
+            if llm_resp.reasoning_content:
+                yield AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(
+                        chain=MessageChain(type="reasoning").message(
+                            llm_resp.reasoning_content,
+                        ),
                     ),
-                ),
-            )
-        if llm_resp.result_chain:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(chain=llm_resp.result_chain),
-            )
-        elif llm_resp.completion_text:
-            yield AgentResponse(
-                type="llm_result",
-                data=AgentResponseData(
-                    chain=MessageChain().message(llm_resp.completion_text),
-                ),
-            )
+                )
+            if llm_resp.result_chain:
+                yield AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(chain=llm_resp.result_chain),
+                )
+            elif llm_resp.completion_text:
+                yield AgentResponse(
+                    type="llm_result",
+                    data=AgentResponseData(
+                        chain=MessageChain().message(llm_resp.completion_text),
+                    ),
+                )
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:

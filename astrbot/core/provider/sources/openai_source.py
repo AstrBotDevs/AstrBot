@@ -769,6 +769,17 @@ class ProviderOpenAIOfficial(Provider):
 
         if isinstance(raw_content, str):
             content = raw_content.strip() if strip else raw_content
+            check_content = raw_content.strip()
+            while (
+                check_content.startswith("[{text=")
+                and check_content.endswith(", type=text}]")
+                and len(check_content) < 8192
+            ):
+                check_content = check_content[
+                    len("[{text=") : -len(", type=text}]")
+                ].strip()
+            if check_content != raw_content.strip():
+                return check_content.strip() if strip else check_content
             # Check if the string is a JSON-encoded list (e.g., "[{'type': 'text', ...}]")
             # This can happen when streaming concatenates content that was originally list format
             # Only check if it looks like a complete JSON array (requires strip for check)

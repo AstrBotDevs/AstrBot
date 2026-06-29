@@ -60,6 +60,20 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     )
 
 
+def test_normalize_content_handles_text_part_repr_string():
+    raw = "[{text=I will use the file reading tool., type=text}]"
+
+    assert ProviderOpenAIOfficial._normalize_content(raw) == (
+        "I will use the file reading tool."
+    )
+
+
+def test_normalize_content_drops_empty_nested_text_part_repr_string():
+    raw = "[{text=[{text=[{text=, type=text}], type=text}], type=text}]"
+
+    assert ProviderOpenAIOfficial._normalize_content(raw) == ""
+
+
 def test_create_http_client_uses_openai_httpx_module(monkeypatch):
     captured: dict[str, object] = {}
 
