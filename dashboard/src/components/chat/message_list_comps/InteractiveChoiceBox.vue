@@ -36,18 +36,21 @@
     <template v-if="state === 'pending'">
       <div class="choice-options">
         <button
-          v-for="opt in part.options"
-          :key="opt.id"
-          type="button"
-          class="choice-option-button"
-          :aria-label="ariaLabelForOption(opt)"
-          @click="onOptionClick(opt.value)"
-        >
-          <span class="choice-option-label">{{ opt.label }}</span>
-          <span v-if="opt.description" class="choice-option-description">
-            {{ opt.description }}
-          </span>
-        </button>
+                  v-for="opt in part.options"
+                  :key="opt.id"
+                  type="button"
+                  class="choice-option-button"
+                  :aria-label="ariaLabelForOption(opt)"
+                  @click="onOptionClick(opt.value)"
+                >
+                  <span class="choice-option-label-row">
+                    <span v-if="opt.id" class="choice-option-marker">{{ opt.id }}.</span>
+                    <span>{{ opt.label }}</span>
+                  </span>
+                  <span v-if="opt.description" class="choice-option-description">
+                    {{ opt.description }}
+                  </span>
+                </button>
       </div>
       <div class="choice-input-row">
         <textarea
@@ -258,10 +261,25 @@ function ariaLabelForOption(opt: InteractiveChoiceOption): string {
   border-color: rgb(var(--v-theme-primary));
 }
 
-.choice-option-label {
+.choice-option-label-row {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.35;
+}
+
+.choice-option-marker {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-primary), 0.75);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.interactive-choice-box.is-dark .choice-option-marker {
+  color: rgba(var(--v-theme-primary), 0.95);
 }
 
 .choice-option-description {
