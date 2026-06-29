@@ -166,12 +166,21 @@ function ariaLabelForOption(opt: InteractiveChoiceOption): string {
 .interactive-choice-box.is-ignored {
   opacity: 0.6;
   background: transparent;
-  border-color: rgba(var(--v-theme-on-surface), 0.12);
+  border-color: rgba(var(--v-theme-on-surface), 0.18);
 }
 
 .interactive-choice-box.is-dark {
-  background: rgba(var(--v-theme-primary), 0.08);
-  border-color: rgba(var(--v-theme-primary), 0.28);
+  /* 深色下用更高 alpha + 微弱外发光,让选项框从聊天背景中跳出 */
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.55);
+  box-shadow: 0 0 0 1px rgba(var(--v-theme-primary), 0.18);
+}
+
+/* 深色 + 已提交/已忽略:用 on-surface 中灰,避免上面 on-surface 0.18 在黑底上被吞掉 */
+.interactive-choice-box.is-dark.is-submitted,
+.interactive-choice-box.is-dark.is-ignored {
+  border-color: rgba(var(--v-theme-on-surface), 0.32);
+  box-shadow: none;
 }
 
 .choice-header {
