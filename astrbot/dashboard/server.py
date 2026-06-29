@@ -25,6 +25,7 @@ from astrbot.core.utils.io import (
     get_dashboard_dist_version,
     get_local_ip_addresses,
     is_dashboard_dist_compatible,
+    normalize_host_list,
     should_use_bundled_dashboard_dist,
 )
 from astrbot.dashboard.asgi_runtime import (
@@ -553,11 +554,12 @@ class AstrBotDashboard:
             or os.environ.get("ASTRBOT_DASHBOARD_PORT")
             or dashboard_config.get("port", 6185)
         )
-        host = (
+        host_raw = (
             os.environ.get("DASHBOARD_HOST")
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
-            or dashboard_config.get("host", "0.0.0.0")
+            or dashboard_config.get("host", ["0.0.0.0"])
         )
+        hosts = normalize_host_list(host_raw)
         enable = dashboard_config.get("enable", True)
         ssl_config = dashboard_config.get("ssl", {})
         if not isinstance(ssl_config, dict):
@@ -578,17 +580,36 @@ class AstrBotDashboard:
             logger.info("WebUI disabled.")
             return None
 
-        logger.info("Starting WebUI at %s://%s:%s", scheme, host, port)
-        if host == "0.0.0.0":
+        bound_urls = [
+            f"{scheme}://[{h}]:{port}" if ":" in h else f"{scheme}://{h}:{port}"
+            for h in hosts
+        ]
+        logger.info("Starting WebUI at %s", ", ".join(bound_urls))
+        all_interfaces = {"0.0.0.0", "::"}
+        local_hosts = {"localhost", "127.0.0.1", "::1"}
+        if all_interfaces & set(hosts):
             logger.info(
                 "WebUI listens on all interfaces. Check security. Set dashboard.host in data/cmd_config.json to change it.",
             )
 
-        if host not in ["localhost", "127.0.0.1"]:
-            try:
-                ip_addr = get_local_ip_addresses()
-            except Exception as _:
-                pass
+        if not set(hosts).issubset(local_hosts):
+            if all_interfaces & set(hosts):
+                try:
+                    ip_addr = get_local_ip_addresses()
+                except Exception as _:
+                    ip_addr = []
+                has_v4_wildcard = "0.0.0.0" in hosts
+                has_v6_wildcard = "::" in hosts
+                if has_v4_wildcard and not has_v6_wildcard:
+                    specific_v6 = [h for h in hosts if ":" in h and h != "::"]
+                    ip_addr = [ip for ip in ip_addr if ":" not in ip] + specific_v6
+                elif has_v6_wildcard and not has_v4_wildcard:
+                    specific_v4 = [h for h in hosts if ":" not in h and h != "0.0.0.0"]
+                    ip_addr = [ip for ip in ip_addr if ":" in ip] + specific_v4
+            else:
+                ip_addr = [h for h in hosts if h not in local_hosts]
+        else:
+            ip_addr = []
         if isinstance(port, str):
             port = int(port)
 
@@ -614,7 +635,10 @@ class AstrBotDashboard:
         parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} {webui_status}\n\n"]
         parts.append(f"   ➜  Local: {scheme}://localhost:{port}\n")
         for ip in ip_addr:
-            parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
+            if ":" in ip:
+                parts.append(f"   ➜  Network: {scheme}://[{ip}]:{port}\n")
+            else:
+                parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
         parts.append(self._build_dashboard_credentials_display())
         display = "".join(parts)
 
@@ -627,7 +651,9 @@ class AstrBotDashboard:
 
         # 配置 Hypercorn
         config = HyperConfig()
-        config.bind = [f"{host}:{port}"]
+        config.bind = [
+            f"[{h}]:{port}" if ":" in h else f"{h}:{port}" for h in hosts
+        ]
         if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False)):
             config.logger_class = _ProxyAwareHypercornLogger
         if ssl_enable:
