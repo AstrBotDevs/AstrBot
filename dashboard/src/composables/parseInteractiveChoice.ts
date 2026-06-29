@@ -11,10 +11,11 @@
 /** InteractiveChoicePart 的最小类型。完整字段见 spec §3.1。 */
 export interface InteractiveChoiceOption {
   id: string;
-  label: string;
-  description?: string;
-  value: string;
-}
+    label: string;
+    description?: string;
+    /** 自 plugin v0.3+ 起不再是必填。缺省时 emit 文本回退到 id+label 拼接 */
+    value?: string;
+  }
 
 export interface InteractiveChoicePart {
   type: "interactive_choice";
@@ -109,20 +110,20 @@ export function validateInteractiveChoice(obj: unknown): boolean {
   if (!Array.isArray(options) || options.length < 2) return false;
 
   const seenIds = new Set<string>();
-  for (const opt of options) {
-    if (!opt || typeof opt !== "object") return false;
-    const o = opt as Record<string, unknown>;
-    const id = o.id;
-    const label = o.label;
-    const value = o.value;
-    if (typeof id !== "string" || !id.trim()) return false;
-    if (typeof label !== "string" || !label.trim()) return false;
-    if (typeof value !== "string") return false;
-    if (seenIds.has(id)) return false;
-    seenIds.add(id);
+    for (const opt of options) {
+      if (!opt || typeof opt !== "object") return false;
+      const o = opt as Record<string, unknown>;
+      const id = o.id;
+      const label = o.label;
+      if (typeof id !== "string" || !id.trim()) return false;
+      if (typeof label !== "string" || !label.trim()) return false;
+      // value 自 plugin v0.3+ 起不再是必填——允许 undefined / 非 string
+      // (前端 emit 时回退到 id+label 拼接,见 getOptionSubmitText)
+      if (seenIds.has(id)) return false;
+      seenIds.add(id);
+    }
+    return true;
   }
-  return true;
-}
 
 // ─── 截断:防御性兜底,工具层已截但前端再截一次(spec §3.2 footnote) ─
 
@@ -240,7 +241,28 @@ export function extractAskUserChoiceFromToolCall<P extends MaybeToolCallPart>(
   }
 
   const remainingPart = remainingTools.length > 0
-    ? ({ ...part, tool_calls: remainingTools } as P)
-    : null;
-  return { remainingPart, extractedChoices };
-}
+      ? ({ ...part, tool_calls: remainingTools } as P)
+      : null;
+    return { remainingPart, extractedChoices };
+  }
+
+  // ─── emit 文本:点击按钮后发给 LLM 的字符串 ───────────────────
+
+  /**
+   * 计算选项点击后 emit 的文本(最终经 onInteractiveChoiceSubmit → SSE → 后端 → LLM)。
+   *
+   * 策略:
+   * - 优先用 ``option.value``(plugin 老 schema 字段,LLM 可自定义回传文本)
+   * - 否则用 ``id + label`` 拼接,格式 ``"A. GPT-4"``(plugin v0.3+ 新 schema)
+   * - 极端兜底:id / label 都缺时返回 id 单独 / 空字符串
+   */
+  export function getOptionSubmitText(opt: InteractiveChoiceOption): string {
+    if (typeof opt.value === "string" && opt.value.length > 0) {
+      return opt.value;
+    }
+    const id = typeof opt.id === "string" ? opt.id : "";
+    const label = typeof opt.label === "string" ? opt.label : "";
+    if (id && label) return `${id}. ${label}`;
+    if (label) return label;
+    return id;
+  }

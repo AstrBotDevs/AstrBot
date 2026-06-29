@@ -41,7 +41,7 @@
                   type="button"
                   class="choice-option-button"
                   :aria-label="ariaLabelForOption(opt)"
-                  @click="onOptionClick(opt.value)"
+                  @click="onOptionClick(getOptionSubmitText(opt))"
                 >
                   <span class="choice-option-label-row">
                     <span v-if="opt.id" class="choice-option-marker">{{ opt.id }}.</span>
@@ -94,7 +94,11 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import type { InteractiveChoicePart, InteractiveChoiceOption } from "@/composables/parseInteractiveChoice";
+import {
+  getOptionSubmitText,
+  type InteractiveChoicePart,
+  type InteractiveChoiceOption,
+} from "@/composables/parseInteractiveChoice";
 
 const props = defineProps<{
   part: InteractiveChoicePart;
