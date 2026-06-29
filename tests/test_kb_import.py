@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -117,6 +118,92 @@ async def authenticated_header(
     assert data["status"] == "ok"
     token = data["data"]["token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+async def test_remove_deleted_kb_from_session_configs(monkeypatch: pytest.MonkeyPatch):
+    updates = []
+    configs = {
+        "platform:GroupMessage:group!alice": {
+            "kb_ids": ["kb-old", "kb-keep"],
+            "top_k": 3,
+        },
+        "platform:GroupMessage:group!bob": {"kb_ids": ["kb-old"]},
+        "platform:FriendMessage:charlie": {"kb_ids": ["kb-keep"]},
+        "platform:FriendMessage:broken": {"kb_ids": "kb-old"},
+    }
+
+    class FakeSharedPreferences:
+        async def session_get(self, umo, key):
+            assert key == "kb_config"
+            if umo is not None:
+                return configs.get(umo)
+
+            return [
+                SimpleNamespace(
+                    scope_id="platform:GroupMessage:group!alice",
+                    value={"val": configs["platform:GroupMessage:group!alice"]},
+                ),
+                SimpleNamespace(
+                    scope_id="platform:GroupMessage:group!bob",
+                    value={"val": configs["platform:GroupMessage:group!bob"]},
+                ),
+                SimpleNamespace(
+                    scope_id="platform:FriendMessage:charlie",
+                    value={"val": configs["platform:FriendMessage:charlie"]},
+                ),
+                SimpleNamespace(
+                    scope_id="platform:FriendMessage:broken",
+                    value={"val": configs["platform:FriendMessage:broken"]},
+                ),
+            ]
+
+        async def session_put(self, umo, key, value):
+            updates.append((umo, key, value))
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.knowledge_base_service.sp",
+        FakeSharedPreferences(),
+    )
+
+    updated = await KnowledgeBaseService._remove_kb_from_session_configs("kb-old")
+
+    assert updated == 2
+    assert updates == [
+        (
+            "platform:GroupMessage:group!alice",
+            "kb_config",
+            {"kb_ids": ["kb-keep"], "top_k": 3},
+        ),
+        (
+            "platform:GroupMessage:group!bob",
+            "kb_config",
+            {"kb_ids": []},
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_remove_deleted_kb_ignores_missing_session_list(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FakeSharedPreferences:
+        async def session_get(self, umo, key):
+            assert umo is None
+            assert key == "kb_config"
+            return None
+
+        async def session_put(self, umo, key, value):
+            raise AssertionError("session_put should not be called")
+
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.knowledge_base_service.sp",
+        FakeSharedPreferences(),
+    )
+
+    updated = await KnowledgeBaseService._remove_kb_from_session_configs("kb-old")
+
+    assert updated == 0
 
 
 @pytest.mark.asyncio
