@@ -172,3 +172,75 @@ export function truncateInteractiveChoice(part: InteractiveChoicePart): Interact
   }
   return mutated ? out : part;
 }
+
+// ─── 提取:从 tool_call part 中拆出 ask_user_choice 结果 ──────────
+
+/** 工具调用的最小契约(避免 import useMessages 引起循环依赖) */
+export interface MaybeToolCall {
+  name?: string;
+  result?: unknown;
+  [key: string]: unknown;
+}
+
+export interface MaybeToolCallPart {
+  type: string;
+  tool_calls?: MaybeToolCall[];
+  [key: string]: unknown;
+}
+
+export interface ExtractionResult<P extends MaybeToolCallPart> {
+  /** 剩余工具构成的 tool_call part;若剩余为 0 则 null(避免渲染空 card) */
+  remainingPart: P | null;
+  /** 从 ask_user_choice 工具 result 解析得到的 InteractiveChoicePart 列表 */
+  extractedChoices: InteractiveChoicePart[];
+}
+
+/**
+ * 从 tool_call part 的 tool_calls[] 中提取所有 ask_user_choice 工具的 result
+ * (若为合法 InteractiveChoicePart JSON),返回 { remainingPart, extractedChoices }。
+ *
+ * 处理路径:SSE 事件 ``{type:"plain", chain_type:"tool_call_result", data:<json>}`` →
+ * ``finishToolCall`` 写入 ``botRecord.content.message`` 的 tool_call part,
+ * result 字符串存于 ``tool.result``(可能是 plugin 返回的 JSON 字符串)。
+ * 此函数把这种"嵌在 tool_call 里的"interactive_choice 拆出来,
+ * 让渲染层 ``<InteractiveChoiceBox v-else-if="part.type === 'interactive_choice'">`` 能命中。
+ *
+ * 剩余工具仍留在原 tool_call part 中(若有),继续按原有逻辑渲染。
+ */
+export function extractAskUserChoiceFromToolCall<P extends MaybeToolCallPart>(
+  part: P,
+): ExtractionResult<P> {
+  if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) {
+    return { remainingPart: part, extractedChoices: [] };
+  }
+
+  const remainingTools: MaybeToolCall[] = [];
+  const extractedChoices: InteractiveChoicePart[] = [];
+
+  for (const tool of part.tool_calls) {
+    if (
+      tool?.name === "ask_user_choice"
+      && typeof tool.result === "string"
+      && tool.result.startsWith("{")
+    ) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(tool.result);
+      } catch {
+        // result 不是合法 JSON → 视为普通 tool,保留在 tool_calls[] 让 ToolCallCard 兜底
+        remainingTools.push(tool);
+        continue;
+      }
+      if (isInteractiveChoicePayload(parsed) && validateInteractiveChoice(parsed)) {
+        extractedChoices.push(truncateInteractiveChoice(parsed));
+        continue;
+      }
+    }
+    remainingTools.push(tool);
+  }
+
+  const remainingPart = remainingTools.length > 0
+    ? ({ ...part, tool_calls: remainingTools } as P)
+    : null;
+  return { remainingPart, extractedChoices };
+}

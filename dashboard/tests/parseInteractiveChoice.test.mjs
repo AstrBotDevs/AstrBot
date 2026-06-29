@@ -2,12 +2,14 @@
 // Date: 2026-06-28
 // Spec: docs/superpowers/specs/2026-06-28-dynamic-choice-box-rendering-design.md §2.3 / §3.2 / §7
 //
-// 测试 parseInteractiveChoice.ts 的纯函数:解包(unwrap) + 校验(validate) + 截断(truncate)。
-// 覆盖 spec §3.2 字段约束、§7 错误处理。
+// 测试 parseInteractiveChoice.ts 的纯函数:解包(unwrap) + 校验(validate) + 截断(truncate)
+// + 提取(extractAskUserChoiceFromToolCall)。
+// 覆盖 spec §3.2 字段约束、§7 错误处理、tool_call 拆解。
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  extractAskUserChoiceFromToolCall,
   isInteractiveChoicePayload,
   unwrapInteractiveChoice,
   validateInteractiveChoice,
@@ -418,4 +420,201 @@ test("框架二次包装: 完整 pipeline(unwrap → validate → truncate)端�
   assert.equal(truncated.title, "操作确认");
   assert.equal(truncated.input_placeholder, "或输入...");
   assert.equal(truncated.options[0].description, "不可逆");
+});
+
+// ════════════════════════════════════════════════════════════════
+// 提取:从 tool_call part 的 tool_calls[] 中拆出 ask_user_choice 工具
+// 这是 SSE 路径下 messageBlocks → InteractiveChoiceBox 渲染的唯一通路。
+// ════════════════════════════════════════════════════════════════
+
+test("extractAskUserChoiceFromToolCall: 镜像 SSE 实际形状(单 ask_user_choice 工具)", () => {
+  // 模拟 useMessages.finishToolCall 写入的 part 结构
+  const result = JSON.stringify({
+    type: "interactive_choice",
+    prompt: "请选择模型:",
+    options: [
+      { id: "a", label: "GPT-4", description: "更强但更慢", value: "gpt-4" },
+      { id: "b", label: "GPT-4 mini", value: "gpt-4-mini" },
+    ],
+  });
+  const part = {
+    type: "tool_call",
+    tool_calls: [
+      {
+        id: "call_xyz",
+        name: "ask_user_choice",
+        arguments: { prompt: "请选择模型:", options: [] },
+        result,
+        ts: 1719654321.0,
+        finished_ts: 1719654321.5,
+      },
+    ],
+  };
+  const { remainingPart, extractedChoices } = extractAskUserChoiceFromToolCall(part);
+  // 单 ask_user_choice,没有其他工具 → remainingPart 应为 null
+  assert.equal(remainingPart, null);
+  assert.equal(extractedChoices.length, 1);
+  assert.equal(isInteractiveChoicePayload(extractedChoices[0]), true);
+  assert.equal(extractedChoices[0].prompt, "请选择模型:");
+  assert.equal(extractedChoices[0].options.length, 2);
+});
+
+test("extractAskUserChoiceFromToolCall: 多工具中混有 ask_user_choice,只拆 choice", () => {
+  const part = {
+    type: "tool_call",
+    tool_calls: [
+      { id: "t1", name: "get_weather", result: "晴天" },
+      {
+        id: "t2",
+        name: "ask_user_choice",
+        result: JSON.stringify({
+          type: "interactive_choice",
+          prompt: "选一个",
+          options: [
+            { id: "a", label: "A", value: "a" },
+            { id: "b", label: "B", value: "b" },
+          ],
+        }),
+      },
+      { id: "t3", name: "search_web", result: "results" },
+    ],
+  };
+  const { remainingPart, extractedChoices } = extractAskUserChoiceFromToolCall(part);
+  // ask_user_choice 拆出
+  assert.equal(extractedChoices.length, 1);
+  assert.equal(extractedChoices[0].prompt, "选一个");
+  // 剩余 2 个其他工具保留在 tool_call part
+  assert.notEqual(remainingPart, null);
+  assert.equal(remainingPart.tool_calls.length, 2);
+  assert.equal(remainingPart.tool_calls[0].name, "get_weather");
+  assert.equal(remainingPart.tool_calls[1].name, "search_web");
+});
+
+test("extractAskUserChoiceFromToolCall: 多个 ask_user_choice 都拆出", () => {
+  const part = {
+    type: "tool_call",
+    tool_calls: [
+      {
+        id: "c1",
+        name: "ask_user_choice",
+        result: JSON.stringify({
+          type: "interactive_choice",
+          prompt: "第一个",
+          options: [
+            { id: "a", label: "A", value: "a" },
+            { id: "b", label: "B", value: "b" },
+          ],
+        }),
+      },
+      {
+        id: "c2",
+        name: "ask_user_choice",
+        result: JSON.stringify({
+          type: "interactive_choice",
+          prompt: "第二个",
+          options: [
+            { id: "x", label: "X", value: "x" },
+            { id: "y", label: "Y", value: "y" },
+          ],
+        }),
+      },
+    ],
+  };
+  const { remainingPart, extractedChoices } = extractAskUserChoiceFromToolCall(part);
+  assert.equal(remainingPart, null);
+  assert.equal(extractedChoices.length, 2);
+  assert.equal(extractedChoices[0].prompt, "第一个");
+  assert.equal(extractedChoices[1].prompt, "第二个");
+});
+
+test("extractAskUserChoiceFromToolCall: ask_user_choice result 不是 JSON,保留在 tool_calls", () => {
+  const part = {
+    type: "tool_call",
+    tool_calls: [
+      { id: "c1", name: "ask_user_choice", result: "错误:参数非法" },  // 软错误字符串
+    ],
+  };
+  const { remainingPart, extractedChoices } = extractAskUserChoiceFromToolCall(part);
+  assert.equal(extractedChoices.length, 0);
+  assert.equal(remainingPart.tool_calls.length, 1);
+  assert.equal(remainingPart.tool_calls[0].name, "ask_user_choice");
+});
+
+test("extractAskUserChoiceFromToolCall: ask_user_choice result 是损坏 JSON,不爆错", () => {
+  const part = {
+    type: "tool_call",
+    tool_calls: [
+      { id: "c1", name: "ask_user_choice", result: '{ "type": "interactive_choice", "broken' },
+    ],
+  };
+  const { remainingPart, extractedChoices } = extractAskUserChoiceFromToolCall(part);
+  assert.equal(extractedChoices.length, 0);
+  assert.equal(remainingPart.tool_calls.length, 1);
+});
+
+test("extractAskUserChoiceFromToolCall: ask_user_choice result 是合法 JSON 但非 choice,保留", () => {
+  const part = {
+    type: "tool_call",
+    tool_calls: [
+      { id: "c1", name: "ask_user_choice", result: JSON.stringify({ type: "other", foo: 1 }) },
+    ],
+  };
+  const { remainingPart, extractedChoices } = extractAskUserChoiceFromToolCall(part);
+  assert.equal(extractedChoices.length, 0);
+  assert.equal(remainingPart.tool_calls.length, 1);
+});
+
+test("extractAskUserChoiceFromToolCall: 非法 choice(缺 options)被 validate 拒,保留", () => {
+  // 模拟 plugin 软错误被 wrapper 重新包装成合法 JSON 但内容不合法
+  const part = {
+    type: "tool_call",
+    tool_calls: [
+      {
+        id: "c1",
+        name: "ask_user_choice",
+        result: JSON.stringify({ type: "interactive_choice", prompt: "x" }),  // 缺 options
+      },
+    ],
+  };
+  const { remainingPart, extractedChoices } = extractAskUserChoiceFromToolCall(part);
+  assert.equal(extractedChoices.length, 0);
+  assert.equal(remainingPart.tool_calls.length, 1);
+});
+
+test("extractAskUserChoiceFromToolCall: 非 tool_call part 原样返回", () => {
+  const part = { type: "plain", text: "hello" };
+  const { remainingPart, extractedChoices } = extractAskUserChoiceFromToolCall(part);
+  assert.equal(remainingPart, part);
+  assert.equal(extractedChoices.length, 0);
+});
+
+test("extractAskUserChoiceFromToolCall: tool_call part 但无 tool_calls 数组,原样", () => {
+  const part = { type: "tool_call" };
+  const { remainingPart, extractedChoices } = extractAskUserChoiceFromToolCall(part);
+  assert.equal(remainingPart, part);
+  assert.equal(extractedChoices.length, 0);
+});
+
+test("extractAskUserChoiceFromToolCall: 截断管道也走(超长 prompt 拆出后被截到 200)", () => {
+  const longPrompt = "a".repeat(500);
+  const part = {
+    type: "tool_call",
+    tool_calls: [
+      {
+        id: "c1",
+        name: "ask_user_choice",
+        result: JSON.stringify({
+          type: "interactive_choice",
+          prompt: longPrompt,
+          options: [
+            { id: "a", label: "A", value: "a" },
+            { id: "b", label: "B", value: "b" },
+          ],
+        }),
+      },
+    ],
+  };
+  const { extractedChoices } = extractAskUserChoiceFromToolCall(part);
+  assert.equal(extractedChoices.length, 1);
+  assert.equal(extractedChoices[0].prompt.length, 200);
 });
