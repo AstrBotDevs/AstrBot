@@ -79,6 +79,23 @@ class _KeyRotator:
             self.index = (self.index + 1) % len(keys)
             return key
 
+    async def ordered_keys(self, provider_settings: dict) -> list[str]:
+        """All configured keys, ordered from the current rotation position.
+
+        Lets a caller fall through to the next key when one fails (invalid,
+        out of quota, rate limited) instead of giving up on the first error,
+        while keeping the round-robin starting point consistent across calls.
+        """
+        keys = provider_settings.get(self.setting_name, [])
+        if not keys:
+            raise ValueError(
+                f"Error: {self.provider_name} API key is not configured in AstrBot."
+            )
+        async with self.lock:
+            start = self.index % len(keys)
+            self.index = (self.index + 1) % len(keys)
+        return keys[start:] + keys[:start]
+
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
@@ -153,32 +170,40 @@ async def _tavily_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
-    header = {
-        "Authorization": f"Bearer {tavily_key}",
-        "Content-Type": "application/json",
-    }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
-            "https://api.tavily.com/search",
-            json=payload,
-            headers=header,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Tavily web search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            return [
-                SearchResult(
-                    title=item.get("title"),
-                    url=item.get("url"),
-                    snippet=item.get("content"),
-                    favicon=item.get("favicon"),
-                )
-                for item in data.get("results", [])
-            ]
+    last_error: Exception = Exception(
+        "Error: Tavily API key is not configured in AstrBot."
+    )
+    for tavily_key in await _TAVILY_KEY_ROTATOR.ordered_keys(provider_settings):
+        header = {
+            "Authorization": f"Bearer {tavily_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            async with aiohttp.ClientSession(trust_env=True) as session:
+                async with session.post(
+                    "https://api.tavily.com/search",
+                    json=payload,
+                    headers=header,
+                ) as response:
+                    if response.status != 200:
+                        reason = await response.text()
+                        raise Exception(
+                            f"Tavily web search failed: {reason}, status: {response.status}",
+                        )
+                    data = await response.json()
+                    return [
+                        SearchResult(
+                            title=item.get("title"),
+                            url=item.get("url"),
+                            snippet=item.get("content"),
+                            favicon=item.get("favicon"),
+                        )
+                        for item in data.get("results", [])
+                    ]
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Tavily key failed, trying the next one: {e}")
+    raise last_error
 
 
 async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
