@@ -656,6 +656,8 @@
     "alreadyInput": "Custom input",
     "ignored": "Ignored",
     "submit": "Submit",
-    "defaultPlaceholder": "Or type your own..."
+    "defaultPlaceholder": "Or type your own...",
+    "expandDetails": "Show details",
+    "collapseDetails": "Hide details"
   }
 }

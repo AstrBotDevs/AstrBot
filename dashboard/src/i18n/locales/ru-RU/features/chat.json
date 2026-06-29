@@ -642,6 +642,8 @@
     "alreadyInput": "Свой вариант",
     "ignored": "Игнорировано",
     "submit": "Отправить",
-    "defaultPlaceholder": "Или введите свой вариант..."
+    "defaultPlaceholder": "Или введите свой вариант...",
+    "expandDetails": "Показать варианты",
+    "collapseDetails": "Скрыть варианты"
   }
 }
