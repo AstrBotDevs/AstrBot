@@ -125,6 +125,9 @@
     "valueTypeLabel": "值类型",
     "keyExists": "键名已存在",
     "invalidJson": "JSON 格式错误",
+    "resetToDefault": "还原默认值",
+    "disableParam": "禁用注入",
+    "enableParam": "启用注入",
     "placeholders": {
       "keyName": "键名",
       "stringValue": "字符串值",

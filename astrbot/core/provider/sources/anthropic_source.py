@@ -493,7 +493,14 @@ class ProviderAnthropic(Provider):
                     payloads.get("tool_choice", "auto")
                 )
 
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self.get_effective_custom_extra_body()
+        # Anthropic requires max_tokens - always include it even if disabled
+        full_custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if (
+            isinstance(full_custom_extra_body, dict)
+            and "max_tokens" in full_custom_extra_body
+        ):
+            extra_body["max_tokens"] = full_custom_extra_body["max_tokens"]
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
@@ -592,7 +599,14 @@ class ProviderAnthropic(Provider):
         final_tool_calls = []
         id = None
         usage = TokenUsage()
-        extra_body = self.provider_config.get("custom_extra_body", {})
+        extra_body = self.get_effective_custom_extra_body()
+        # Anthropic requires max_tokens - always include it even if disabled
+        full_custom_extra_body = self.provider_config.get("custom_extra_body", {})
+        if (
+            isinstance(full_custom_extra_body, dict)
+            and "max_tokens" in full_custom_extra_body
+        ):
+            extra_body["max_tokens"] = full_custom_extra_body["max_tokens"]
         reasoning_content = ""
         reasoning_signature = ""
 
