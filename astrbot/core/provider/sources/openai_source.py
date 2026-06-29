@@ -769,14 +769,17 @@ class ProviderOpenAIOfficial(Provider):
 
         if isinstance(raw_content, str):
             content = raw_content.strip() if strip else raw_content
+            repr_like_prefix = "[{text="
+            repr_like_suffix = ", type=text}]"
+            repr_like_max_len = 8192
             check_content = raw_content.strip()
             while (
-                check_content.startswith("[{text=")
-                and check_content.endswith(", type=text}]")
-                and len(check_content) < 8192
+                check_content.startswith(repr_like_prefix)
+                and check_content.endswith(repr_like_suffix)
+                and len(check_content) < repr_like_max_len
             ):
                 check_content = check_content[
-                    len("[{text=") : -len(", type=text}]")
+                    len(repr_like_prefix) : -len(repr_like_suffix)
                 ].strip()
             if check_content != raw_content.strip():
                 return check_content.strip() if strip else check_content

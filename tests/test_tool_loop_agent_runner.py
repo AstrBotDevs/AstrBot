@@ -528,11 +528,13 @@ async def test_tool_call_assistant_preface_is_not_sent_as_llm_result(
     async for response in runner.step_until_done(3):
         responses.append(response)
 
-    llm_texts = [
-        response.data["chain"].get_plain_text()
-        for response in responses
-        if response.type == "llm_result"
-    ]
+    response_types = [response.type for response in responses]
+    assert response_types[-1] == "llm_result"
+    assert "llm_result" not in response_types[:-1]
+
+    llm_results = [response for response in responses if response.type == "llm_result"]
+    llm_texts = [response.data["chain"].get_plain_text() for response in llm_results]
+    assert len(llm_results) == 1
     assert "我需要使用工具来帮助您" not in llm_texts
     assert llm_texts == ["这是我的最终回答"]
 
