@@ -1,0 +1,65 @@
+{
+  "title": "平台日誌",
+  "subtitle": "即時監控與數據統計",
+  "lastUpdate": "最後更新",
+  "status": {
+    "loading": "載入中...",
+    "dataError": "獲取數據失敗",
+    "noticeError": "獲取公告失敗",
+    "online": "上線",
+    "uptime": "運行時間",
+    "memoryUsage": "記憶體佔用"
+  },
+  "stats": {
+    "totalMessage": {
+      "title": "訊息總數",
+      "subtitle": "所有平台發送的訊息總計"
+    },
+    "onlinePlatform": {
+      "title": "訊息平台",
+      "subtitle": "已連線的訊息平台數量"
+    },
+    "runningTime": {
+      "title": "運行時間",
+      "subtitle": "系統已運行時長",
+      "format": "{hours} 小時 {minutes} 分鐘 {seconds} 秒"
+    },
+    "memoryUsage": {
+      "title": "記憶體佔用",
+      "subtitle": "系統記憶體使用量",
+      "cpuLoad": "CPU 負載",
+      "status": {
+        "good": "良好",
+        "normal": "正常",
+        "high": "偏高"
+      }
+    }
+  },
+  "charts": {
+    "messageTrend": {
+      "title": "訊息趨勢分析",
+      "subtitle": "追蹤訊息數量隨時間的變化",
+      "totalMessages": "總訊息數",
+      "dailyAverage": "每日平均",
+      "growthRate": "增長率",
+      "timeLabel": "時間",
+      "messageCount": "訊息數量",
+      "timeRanges": {
+        "1day": "過去 1 天",
+        "3days": "過去 3 天",
+        "1week": "過去 7 天",
+        "1month": "過去 30 天"
+      }
+    },
+    "platformStat": {
+      "title": "平台訊息統計",
+      "subtitle": "各平台訊息數量分佈",
+      "total": "總計",
+      "noData": "暫無平台數據",
+      "messageUnit": "條",
+      "platformCount": "平台數量",
+      "mostActive": "最活躍",
+      "totalPercentage": "總訊息佔比"
+    }
+  }
+}
