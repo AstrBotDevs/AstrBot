@@ -1020,7 +1020,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         while True:
             try:
                 if (
-                    tool.name == "wait_for_subagent" or tool.name == "orchestrate_tasks"
+                    tool.name == "wait_for_subagent"
+                    or tool.name == "orchestrate_tasks"
+                    or tool.name == "ask_user_choice"
                 ):  # wait工具有自己的超时，避免受到tool_call_timeout影响
                     resp = await asyncio.wait_for(
                         anext(wrapper),
