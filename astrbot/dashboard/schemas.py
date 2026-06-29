@@ -243,8 +243,11 @@ class KnowledgeBaseRequest(OpenModel):
 
 
 class KnowledgeBaseCreateRequest(KnowledgeBaseRequest):
-    kb_name: str = Field(..., alias="name")
-    embedding_provider_id: str
+    model_config = ConfigDict(
+        populate_by_name=True,
+        extra="allow",
+        json_schema_extra={"required": ["name", "embedding_provider_id"]},
+    )
 
 
 class KnowledgeBaseImportRequest(OpenModel):
