@@ -1,21 +1,23 @@
 <template>
     <div class="ipython-tool-block" :class="{ compact: !showHeader }">
         <div v-if="displayExpanded" class="py-3 animate-fade-in">
-            <!-- Code Section -->
+            <!-- Code Section (matches ToolResultView result-code style) -->
             <div class="code-section">
-                <div v-if="shikiReady && code" class="code-highlighted"
-                    v-html="highlightedCode"></div>
-                <pre v-else class="code-fallback"
-                    :class="{ 'dark-theme': isDark }">{{ code || 'No code available' }}</pre>
+                <div
+                    v-if="shikiReady && code"
+                    class="code-highlighted code-result-shiki"
+                    v-html="highlightedCode"
+                ></div>
+                <pre v-else class="code-fallback">{{ code || 'No code available' }}</pre>
             </div>
 
-            <!-- Result Section -->
+            <!-- Result Section (matches ToolResultView result-code style) -->
             <div v-if="result" class="result-section">
                 <div class="result-label">
                     {{ tm('ipython.output') }}:
                 </div>
-                <pre class="result-content"
-                    :class="{ 'dark-theme': isDark }">{{ formattedResult }}</pre>
+                <pre class="result-content">{{ formattedResult }}</pre>
+                <div v-if="resultNotice" class="result-suffix">{{ resultNotice }}</div>
             </div>
         </div>
     </div>
@@ -25,6 +27,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useModuleI18n } from '@/i18n/composables';
 import { ensureShikiLanguages, escapeHtml, renderShikiCode } from '@/utils/shiki';
+import { findSystemNoticeIndex } from '@/utils/systemNotice';
 
 const props = defineProps({
     toolCall: {
@@ -69,12 +72,24 @@ const result = computed(() => props.toolCall.result);
 
 const formattedResult = computed(() => {
     if (!result.value) return '';
+    let text = result.value;
+    const idx = findSystemNoticeIndex(text);
+    if (idx >= 0) {
+        text = text.slice(0, idx).trim();
+    }
     try {
-        const parsed = JSON.parse(result.value);
+        const parsed = JSON.parse(text);
         return JSON.stringify(parsed, null, 2);
     } catch {
-        return result.value;
+        return text;
     }
+});
+
+const resultNotice = computed(() => {
+    if (!result.value) return null;
+    const idx = findSystemNoticeIndex(result.value);
+    if (idx < 0) return null;
+    return result.value.slice(idx).trim();
 });
 
 const highlightedCode = computed(() => {
@@ -128,89 +143,104 @@ onMounted(async () => {
     padding-bottom: 12px;
 }
 
+/* ── Code section (matches ToolResultView .result-code) ──────── */
+
 .code-section {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
-.code-highlighted {
-    border-radius: 6px;
-    overflow: hidden;
-    font-size: 12px;
-    line-height: 1.5;
-    overflow-x: auto;
-}
-
-:deep(.code-highlighted pre.shiki) {
+/* Fallback (non-Shiki) code block */
+.code-fallback {
     margin: 0;
-    padding: 16px;
-    border-radius: 6px;
-    overflow: auto;
+    padding: 8px 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.55;
+    background: rgba(var(--v-theme-on-surface), 0.04);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 300px;
+    overflow-y: auto;
 }
 
-:deep(.code-highlighted pre.shiki code) {
+/* Shiki highlighted code — mirrors ToolResultView .result-code-shiki */
+.code-result-shiki {
+    padding: 0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+:deep(.code-result-shiki pre.shiki) {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 4px;
+    overflow: auto;
+    max-height: 300px;
+    font-size: 11.5px;
+    line-height: 1.55;
+    tab-size: 4;
+}
+
+:deep(.code-result-shiki pre.shiki code) {
     display: block;
     padding: 0;
     background: transparent;
-    border-radius: 0;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
 }
 
-.code-fallback {
-    margin: 0;
-    padding: 12px;
-    border-radius: 6px;
-    overflow-x: auto;
-    font-size: 12px;
-    line-height: 1.5;
-    background-color: #f5f5f5;
-}
-
-.code-fallback.dark-theme {
-    background-color: rgb(var(--v-theme-codeBg));
-}
+/* ── Result section ─────────────────────────────────────────── */
 
 .result-section {
-    margin-top: 12px;
+    margin-top: 8px;
 }
 
 .result-label {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
-    color: var(--v-theme-secondaryText);
-    margin-bottom: 6px;
+    color: rgba(var(--v-theme-on-surface), 0.55);
+    margin-bottom: 4px;
     opacity: 0.8;
 }
 
 .result-content {
     margin: 0;
-    padding: 12px;
-    border-radius: 6px;
+    padding: 8px 10px;
+    border-radius: 4px;
     overflow-x: auto;
-    font-size: 12px;
-    line-height: 1.5;
-    background-color: #f5f5f5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.55;
+    background: rgba(var(--v-theme-on-surface), 0.04);
+    white-space: pre-wrap;
+    word-break: break-all;
     max-height: 300px;
     overflow-y: auto;
 }
 
-.result-content.dark-theme {
-    background-color: rgb(var(--v-theme-codeBg));
+/* ── System notice suffix ───────────────────────────────────── */
+.result-suffix {
+    margin-top: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(var(--v-theme-on-surface), 0.03);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    color: rgba(var(--v-theme-on-surface), 0.55);
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .animate-fade-in {
     animation: fadeIn 0.2s ease-in-out;
 }
 
-:deep(.code-highlighted pre) {
-    background-color: transparent !important;
-}
-
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 </style>

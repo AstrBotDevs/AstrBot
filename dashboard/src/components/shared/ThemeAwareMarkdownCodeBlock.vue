@@ -1,5 +1,12 @@
 <template>
+  <DiffPreview
+    v-if="node.lang === 'diff'"
+    :content="String((node as Record<string, unknown>).content ?? (node as Record<string, unknown>).code ?? '')"
+    :is-dark="effectiveIsDark"
+    :max-lines="30"
+  />
   <MarkdownCodeBlockNode
+    v-else
     :key="themeRenderKey"
     v-bind="forwardedBindings"
   >
@@ -16,6 +23,7 @@
 import { computed, inject, type Ref } from "vue";
 import { MarkdownCodeBlockNode } from "markstream-vue";
 import { useAttrs } from "vue";
+import DiffPreview from "@/components/chat/message_list_comps/DiffPreview.vue";
 
 defineOptions({
   inheritAttrs: false,

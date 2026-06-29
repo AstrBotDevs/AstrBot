@@ -33,6 +33,8 @@ Local path resolution rule:
 - In sandbox runtime, relative paths are passed through unchanged.
 """
 
+import asyncio
+import base64
 import os
 import stat
 import uuid
@@ -56,6 +58,14 @@ from astrbot.core.utils.astrbot_path import (
 
 from ..registry import builtin_tool
 from . import util as computer_util
+from .edit_engine import (
+    EditResult,
+    _read_file_bytes,
+    _write_file_bytes,
+    bytes_edit_file,
+    get_file_lock,
+)
+from .edit_history import get_history_manager
 from .util import (
     check_admin_permission,
     is_local_runtime,
@@ -396,33 +406,170 @@ class FileWriteTool(FunctionTool):
             return f"Error writing file: {exc}"
 
 
+async def _sandbox_read_bytes(sb, path: str) -> bytes:
+    """Read a file in binary mode inside the sandbox via sb.python.exec.
+
+    Returns the raw bytes so that original line endings (CRLF/LF) are preserved.
+    Raises IOError on read failure.
+    """
+    code = (
+        "import base64 as _b64, sys\n"
+        f"path = {path!r}\n"
+        "try:\n"
+        "    with open(path, 'rb') as _f:\n"
+        "        _data = _f.read()\n"
+        "    print(_b64.b64encode(_data).decode(), end='')\n"
+        "except Exception as _e:\n"
+        "    print('ERROR:' + str(_e), end='', file=sys.stderr)\n"
+        "    sys.exit(1)\n"
+    )
+    result = await sb.python.exec(code, timeout=30)
+    if not result.get("success", False):
+        error = str(result.get("error", "") or "").strip()
+        if not error:
+            output = result.get("output", "")
+            if isinstance(output, dict):
+                error = str(output.get("error", "") or "").strip()
+        raise OSError(
+            f"Failed to read file in sandbox: {error or 'unknown read error'}"
+        )
+    output = result.get("output", "")
+    if isinstance(output, dict):
+        output = output.get("text", "")
+    b64_text = str(output).strip()
+    return base64.b64decode(b64_text)
+
+
+async def _sandbox_write_bytes(sb, path: str, data: bytes) -> None:
+    """Write raw bytes to a file inside the sandbox via sb.python.exec.
+
+    Raises IOError on write failure.
+    """
+    b64_data = base64.b64encode(data).decode()
+    code = (
+        "import base64 as _b64, sys\n"
+        f"path = {path!r}\n"
+        f"b64 = {b64_data!r}\n"
+        "try:\n"
+        "    _raw = _b64.b64decode(b64)\n"
+        "    with open(path, 'wb') as _f:\n"
+        "        _f.write(_raw)\n"
+        "    print('ok', end='')\n"
+        "except Exception as _e:\n"
+        "    print('ERROR:' + str(_e), end='', file=sys.stderr)\n"
+        "    sys.exit(1)\n"
+    )
+    result = await sb.python.exec(code, timeout=30)
+    if not result.get("success", False):
+        error = str(result.get("error", "") or "").strip()
+        if not error:
+            output = result.get("output", "")
+            if isinstance(output, dict):
+                error = str(output.get("error", "") or "").strip()
+        raise OSError(
+            f"Failed to write file in sandbox: {error or 'unknown write error'}"
+        )
+
+
+def _format_result(
+    path: str,
+    result: EditResult,
+    *,
+    replace_all: bool,
+) -> str:
+    """Build the human-readable / LLM-readable result string with optional diff."""
+    if not result.success:
+        return f"Error editing file: {result.error}"
+
+    mode_text = "all matches" if replace_all else "first match"
+
+    lines = [
+        f"Edited {path}.",
+        f"Replaced {result.replacements} occurrence(s) using {mode_text} mode.",
+    ]
+
+    if result.diff:
+        diff_preview = result.diff
+        if len(diff_preview) > 2000:
+            diff_preview = diff_preview[:2000] + "\n... (diff truncated)"
+        lines.append("")
+        lines.append("Diff:")
+        lines.append("```diff")
+        lines.append(diff_preview)
+        lines.append("```")
+
+    return "\n".join(lines)
+
+
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
 @dataclass
 class FileEditTool(FunctionTool):
+    """
+    Enhanced file editing tool with robust fuzzy matching and edit history rollback.
+
+    Three modes based on which parameters are provided:
+
+    1. **Edit mode** (provide `old` + `new`):
+       Replace text using a 9-strategy fuzzy matching chain.
+
+    2. **List history** (provide only `path`, or set `list_history=true`):
+       Show all available backup versions without modifying the file.
+
+    3. **Rollback** (provide `backup_id`, without `old`/`new`):
+       Restore the file to a specific previous version.
+
+    In local runtime it uses the full robust edit engine (BOM +
+    line-ending preservation, file locks); in sandbox runtimes it
+    mediates reads and writes through the booter's filesystem
+    abstraction while applying the same 9-strategy replacer chain.
+    """
+
     name: str = "astrbot_file_edit_tool"
-    description: str = "Editing files."
+    description: str = (
+        "Edit files with fuzzy matching, view edit history, or rollback to previous versions.\n\n"
+        "## Mode 1 — Edit (provide `old` and `new`)\n"
+        "Replace text using fuzzy matching that handles whitespace, indentation, and escape sequences. "
+        "When editing from Read tool output, exclude the line number prefix (format: '1: ') from `old` and `new` — "
+        "only include the actual file content after the space. "
+        "Fails if `old` is not found, or if found multiple times when `replace_all` is false. "
+        "Use `replace_all=true` for renaming across the file. "
+        "Automatically saves backup before each edit.\n\n"
+        "## Mode 2 — List history (only `path`, or `list_history=true`)\n"
+        "Show all backups with timestamps and IDs for rollback.\n\n"
+        "## Mode 3 — Rollback (`backup_id`, no `old`/`new`)\n"
+        "Restore file to specified backup. Omit `backup_id` to restore the most recent backup."
+    )
+
     parameters: dict = field(
         default_factory=lambda: {
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Path of the file to edit. If relative, will be in workspace root.",
+                    "description": "File path to edit/rollback. Relative paths resolve in workspace root.",
                 },
                 "old": {
                     "type": "string",
-                    "description": "The exact old text to replace.",
+                    "description": "[Edit Mode] Text to replace. Include 3-5 lines of context for unique match.",
                 },
                 "new": {
                     "type": "string",
-                    "description": "The replacement text.",
+                    "description": "[Edit Mode] Replacement text.",
                 },
                 "replace_all": {
                     "type": "boolean",
-                    "description": "Whether to replace all matches. Defaults to false.",
+                    "description": "[Edit Mode] Replace all matches (default: false).",
+                },
+                "backup_id": {
+                    "type": "string",
+                    "description": "[Rollback Mode] Backup ID to restore.",
+                },
+                "list_history": {
+                    "type": "boolean",
+                    "description": "[List Mode] Show backup history (default: false).",
                 },
             },
-            "required": ["path", "old", "new"],
+            "required": ["path"],
         }
     )
 
@@ -430,57 +577,233 @@ class FileEditTool(FunctionTool):
         self,
         context: ContextWrapper[AstrAgentContext],
         path: str,
-        old: str,
-        new: str,
+        old: str | None = None,
+        new: str | None = None,
         replace_all: bool = False,
+        backup_id: str | None = None,
+        list_history: bool = False,
     ) -> ToolExecResult:
         umo = str(context.context.event.unified_msg_origin)
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
+        history_mgr = get_history_manager()
+
         try:
-            normalized_path = (
-                _normalize_rw_path(
+            if local_env:
+                normalized_path = _normalize_rw_path(
                     path,
                     restricted=restricted,
                     local_env=local_env,
                     umo=umo,
                     write=True,
                 )
-                if local_env
-                else path.strip()
-            )
+            else:
+                normalized_path = path.strip()
+
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
-            normalized_old = _decode_escaped_text(old)
-            normalized_new = _decode_escaped_text(new)
-            sb = await get_booter(
-                context.context.context,
-                context.context.event.unified_msg_origin,
-            )
-            result = await sb.fs.edit_file(
-                path=normalized_path,
-                old_string=normalized_old,
-                new_string=normalized_new,
-                replace_all=replace_all,
-                encoding="utf-8",
-            )
-            if not result.get("success", False):
-                error_detail = str(result.get("error", "") or "").strip()
-                return (
-                    "Error editing file: "
-                    f"{error_detail or 'unknown filesystem edit error'}"
+
+            # ---- Determine mode ----
+            has_old = old is not None and old != ""
+            has_new = new is not None
+            has_backup_id = backup_id is not None and backup_id != ""
+
+            # Conflict check: edit params + rollback params
+            if (has_old or has_new) and (has_backup_id or list_history):
+                raise ValueError(
+                    "Conflicting parameters: provide `old`+`new` for editing, "
+                    "or `backup_id`/`list_history` for rollback. Not both."
                 )
-            replacements = int(result.get("replacements", 0) or 0)
-            mode_text = "all matches" if replace_all else "first match"
-            return (
-                f"Edited {normalized_path}. "
-                f"Replaced {replacements} occurrence(s) using {mode_text} mode."
+
+            # Rollback mode: backup_id provided
+            if has_backup_id:
+                return await self._do_rollback(
+                    context, normalized_path, backup_id, local_env
+                )
+
+            # List mode: list_history=True or only path provided (no edit params)
+            if list_history or (not has_old and not has_new):
+                return await self._do_list_history(history_mgr, normalized_path)
+
+            # ---- Edit mode: both old and new must be present ----
+            if not has_old or not has_new:
+                raise ValueError(
+                    "Edit mode requires both `old` and `new`. "
+                    "For rollback, provide `backup_id` or set `list_history=true`."
+                )
+
+            return await self._do_edit(
+                context,
+                normalized_path,
+                old,
+                new,
+                replace_all,
+                local_env,
+                history_mgr,
             )
+
         except PermissionError as exc:
             return f"Error: {exc}"
         except Exception as exc:
             logger.error(f"Error editing file: {exc}")
             return f"Error editing file: {exc}"
+
+    async def _do_list_history(
+        self,
+        history_mgr,
+        normalized_path: str,
+    ) -> str:
+        backups = await asyncio.to_thread(history_mgr.list_backups, normalized_path)
+        if not backups:
+            return f"No edit history found for: {normalized_path}"
+
+        lines = [f"Edit history for: {normalized_path}", ""]
+        for i, entry in enumerate(backups):
+            marker = " ← latest" if i == 0 else ""
+            lines.append(
+                f"  [{entry.id}]  {entry.timestamp}  ({entry.size} bytes){marker}"
+            )
+            if entry.diff_preview:
+                preview = entry.diff_preview.strip()
+                if preview:
+                    for pl in preview.split("\n")[:3]:
+                        lines.append(f"    {pl}")
+        lines.append("")
+        lines.append(
+            f"Total: {len(backups)} backup(s). "
+            "Use backup_id to rollback to a specific version."
+        )
+        return "\n".join(lines)
+
+    async def _do_rollback(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        normalized_path: str,
+        backup_id: str,
+        local_env: bool,
+    ) -> str:
+        umo = str(context.context.event.unified_msg_origin)
+        history_mgr = get_history_manager()
+
+        entry, backup_bytes = await asyncio.to_thread(
+            history_mgr.read_backup, normalized_path, backup_id
+        )
+
+        # Set up read/write functions based on runtime
+        if local_env:
+
+            async def read_fn():
+                return await asyncio.to_thread(_read_file_bytes, normalized_path)
+
+            async def write_fn(data):
+                return await asyncio.to_thread(_write_file_bytes, normalized_path, data)
+        else:
+            sb = await get_booter(context.context.context, umo)
+
+            async def read_fn():
+                return await _sandbox_read_bytes(sb, normalized_path)
+
+            async def write_fn(data):
+                return await _sandbox_write_bytes(sb, normalized_path, data)
+
+        lock = get_file_lock(normalized_path)
+        async with lock:
+            # Save current file state as pre-rollback snapshot (issue #5 fix)
+            try:
+                current_bytes = await read_fn()
+                await asyncio.to_thread(
+                    history_mgr.save_backup,
+                    normalized_path,
+                    current_bytes,
+                    runtime="local" if local_env else "sandbox",
+                    diff_preview="[pre-rollback snapshot]",
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to save pre-rollback snapshot for {normalized_path}: {exc}"
+                )
+
+            # Write the backup content to restore the file
+            await write_fn(backup_bytes)
+
+        return (
+            f"Successfully rolled back {normalized_path} to backup "
+            f"{entry.id} ({entry.timestamp}, {entry.size} bytes)."
+        )
+
+    async def _do_edit(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        normalized_path: str,
+        old: str,
+        new: str,
+        replace_all: bool,
+        local_env: bool,
+        history_mgr,
+    ) -> str:
+        umo = str(context.context.event.unified_msg_origin)
+
+        # Unified read/write strategy for local vs sandbox
+        if local_env:
+
+            async def read_fn():
+                return await asyncio.to_thread(_read_file_bytes, normalized_path)
+
+            async def write_fn(data):
+                return await asyncio.to_thread(_write_file_bytes, normalized_path, data)
+        else:
+            sb = await get_booter(context.context.context, umo)
+
+            async def read_fn():
+                return await _sandbox_read_bytes(sb, normalized_path)
+
+            async def write_fn(data):
+                return await _sandbox_write_bytes(sb, normalized_path, data)
+
+        lock = get_file_lock(normalized_path)
+        async with lock:
+            # 1. Read original file content
+            try:
+                raw_bytes = await read_fn()
+            except OSError as exc:
+                return f"Error editing file: {exc}"
+
+            # 2. Validate edit first — no backup if edit would fail
+            try:
+                write_bytes, result = bytes_edit_file(
+                    raw_bytes,
+                    old,
+                    new,
+                    replace_all=replace_all,
+                    encoding="utf-8",
+                )
+            except ValueError as exc:
+                return f"Error editing file: {exc}"
+
+            # 3. Save backup (only after successful validation, async)
+            try:
+                await asyncio.to_thread(
+                    history_mgr.save_backup,
+                    normalized_path,
+                    raw_bytes,
+                    runtime="local" if local_env else "sandbox",
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to save edit backup for {normalized_path}: {exc}"
+                )
+
+            # 4. Write the edited content
+            try:
+                await write_fn(write_bytes)
+            except OSError as exc:
+                return f"Error editing file: {exc}"
+
+        return _format_result(
+            normalized_path,
+            result,
+            replace_all=replace_all,
+        )
 
 
 @builtin_tool(config=_COMPUTER_RUNTIME_TOOL_CONFIG)
