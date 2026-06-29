@@ -5,7 +5,7 @@ __pycache__
 .conda/
 uv.lock
 .coverage
-.codegraph
+.codegraph/
 
 # IDE and editors
 .vscode
@@ -66,6 +66,3 @@ GenieData/
 .worktrees/
 
 dashboard/bun.lock
-.codegraph/.gitignore
-.codegraph/codegraph.lock
-.codegraph/daemon.pid
