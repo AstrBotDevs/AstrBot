@@ -64,6 +64,7 @@ const {
   editingSource,
   originalSourceUrl,
   sourceBindingDialog,
+  selectedSourceBindingCandidate,
   extension_url,
   dialog,
   upload_file,
@@ -370,9 +371,12 @@ const togglePinnedExtension = (extension) => {
 
     <v-dialog v-model="sourceBindingDialog.show" max-width="680">
       <v-card>
-        <v-card-title class="d-flex align-center">
-          <v-icon class="mr-2" icon="mdi-source-branch" />
-          {{ tm("dialogs.sourceBinding.title") }}
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+          {{
+            sourceBindingDialog.pendingUpdate
+              ? tm("dialogs.sourceBinding.selectTitle")
+              : tm("dialogs.sourceBinding.title")
+          }}
         </v-card-title>
         <v-card-text>
           <div
@@ -416,19 +420,56 @@ const togglePinnedExtension = (extension) => {
                   <div class="font-weight-medium">
                     {{ candidate.registry_name }}
                   </div>
-                  <div class="text-caption text-medium-emphasis">
-                    {{ candidate.market_plugin_id }}
-                  </div>
-                  <div class="text-caption text-medium-emphasis">
-                    {{ candidate.repo }}
-                  </div>
-                  <div class="text-caption text-medium-emphasis">
-                    {{ tm("table.headers.version") }}: {{ candidate.version }}
-                  </div>
                 </div>
               </template>
             </v-radio>
           </v-radio-group>
+          <div
+            v-if="selectedSourceBindingCandidate"
+            class="text-caption text-medium-emphasis mt-2"
+          >
+            <div>
+              {{ tm("dialogs.sourceBinding.installDestination") }}:
+              {{
+                selectedSourceBindingCandidate.download_url ||
+                selectedSourceBindingCandidate.repo
+              }}
+            </div>
+            <div class="d-flex align-center" style="gap: 4px">
+              <span>{{ tm("table.headers.version") }}:</span>
+              <span
+                v-if="
+                  selectedSourceBindingCandidate.validation_status === 'loading'
+                "
+                class="d-inline-flex align-center"
+                style="height: 16px"
+              >
+                <v-progress-circular
+                  indeterminate
+                  size="14"
+                  width="1"
+                  color="primary"
+                />
+              </span>
+              <span v-else>
+                {{
+                  selectedSourceBindingCandidate.version ||
+                  tm("status.unknown")
+                }}
+              </span>
+            </div>
+          </div>
+          <v-alert
+            v-if="
+              selectedSourceBindingCandidate?.validation_status === 'error'
+            "
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mt-3"
+          >
+            {{ selectedSourceBindingCandidate.validation_message }}
+          </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -437,16 +478,22 @@ const togglePinnedExtension = (extension) => {
           </v-btn>
           <v-btn
             color="primary"
-            variant="flat"
+            variant="tonal"
             :loading="sourceBindingDialog.saving"
             :disabled="
               sourceBindingDialog.loading ||
               sourceBindingDialog.candidates.length === 0 ||
-              !sourceBindingDialog.selectedKey
+              !sourceBindingDialog.selectedKey ||
+              (selectedSourceBindingCandidate?.install_method === 'github' &&
+                selectedSourceBindingCandidate?.validation_status !== 'valid')
             "
             @click="confirmPluginSourceBinding"
           >
-            {{ tm("dialogs.sourceBinding.confirm") }}
+            {{
+              sourceBindingDialog.pendingUpdate
+                ? tm("dialogs.sourceBinding.confirmAndContinue")
+                : tm("dialogs.sourceBinding.confirm")
+            }}
           </v-btn>
         </v-card-actions>
       </v-card>

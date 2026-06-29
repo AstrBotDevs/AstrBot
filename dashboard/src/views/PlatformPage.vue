@@ -120,7 +120,7 @@
     <!-- Webhook URL 对话框 -->
     <v-dialog v-model="showWebhookDialog" max-width="600">
       <v-card>
-        <v-card-title class="d-flex align-center pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <v-icon class="me-2" color="primary">mdi-webhook</v-icon>
           {{ tm('webhookDialog.title') }}
         </v-card-title>
@@ -156,7 +156,7 @@
 
     <v-dialog v-model="showQrDialog" max-width="480">
       <v-card>
-        <v-card-title class="d-flex align-center pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <v-icon class="me-2">mdi-qrcode</v-icon>
           {{ tm('platformQr.title') }}
         </v-card-title>
@@ -181,7 +181,7 @@
     <!-- 错误详情对话框 -->
     <v-dialog v-model="showErrorDialog" max-width="700">
       <v-card>
-        <v-card-title class="d-flex align-center pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <v-icon class="me-2" color="error">mdi-alert-circle</v-icon>
           {{ tm('errorDialog.title') }}
         </v-card-title>

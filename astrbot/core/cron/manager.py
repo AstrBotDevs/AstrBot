@@ -416,7 +416,7 @@ class CronJobManager:
         if cron_payload.get("origin", "tool") == "api":
             cron_event.role = "admin"
 
-        provider_settings = cfg.get("provider_settings", {})
+        provider_settings = cfg.get("provider_settings", {}) or {}
         tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,

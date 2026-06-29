@@ -88,15 +88,15 @@
   <v-dialog v-model="codeEditorDialog" fullscreen transition="dialog-bottom-transition" scrollable>
     <v-card>
       <v-toolbar color="primary" dark>
-        <v-btn icon @click="codeEditorDialog = false">
+        <v-btn icon variant="text" @click="codeEditorDialog = false">
           <v-icon>mdi-close</v-icon>
         </v-btn>
         <v-toolbar-title>{{ tm('codeEditor.title') }}</v-toolbar-title>
         <v-spacer></v-spacer>
         <v-toolbar-items style="display: flex; align-items: center;">
-          <v-btn style="margin-left: 16px;" size="small" @click="configToString()">{{
+          <v-btn style="margin-left: 16px;" size="small" variant="text" @click="configToString()">{{
             tm('editor.revertCode') }}</v-btn>
-          <v-btn v-if="config_data_has_changed" style="margin-left: 16px;" size="small" @click="applyStrConfig()">{{
+          <v-btn v-if="config_data_has_changed" style="margin-left: 16px;" size="small" variant="tonal" @click="applyStrConfig()">{{
             tm('editor.applyConfig') }}</v-btn>
           <small style="margin-left: 16px;">💡 {{ tm('editor.applyTip') }}</small>
         </v-toolbar-items>
@@ -112,8 +112,8 @@
   <!-- Config Management Dialog -->
   <v-dialog v-model="configManageDialog" max-width="800px">
     <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
-        <span class="text-h4">{{ tm('configManagement.title') }}</span>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between">
+        <span>{{ tm('configManagement.title') }}</span>
         <v-btn icon="mdi-close" variant="text" @click="configManageDialog = false"></v-btn>
       </v-card-title>
 
@@ -156,7 +156,7 @@
 
           <div class="d-flex justify-end mt-4" style="gap: 8px;">
             <v-btn variant="text" @click="cancelConfigForm">{{ tm('buttons.cancel') }}</v-btn>
-            <v-btn color="primary" @click="saveConfigForm"
+            <v-btn color="primary" variant="tonal" @click="saveConfigForm"
               :disabled="isConfigFormSaveDisabled">
               {{ isEditingConfig ? tm('buttons.update') : tm('buttons.create') }}
             </v-btn>
