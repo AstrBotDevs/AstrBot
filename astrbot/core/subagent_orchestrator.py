@@ -15,8 +15,9 @@ if TYPE_CHECKING:
 class SubAgentOrchestrator:
     """Loads subagent definitions from config and registers handoff tools.
 
-    This is intentionally lightweight: it does not execute agents itself.
-    Execution happens via HandoffTool in FunctionToolExecutor.
+    Static subagents from config are registered into SubAgentManager so they
+    can enjoy unified lifecycle management, shared context, history retention,
+    and other advanced features alongside dynamically created subagents.
     """
 
     def __init__(
@@ -25,6 +26,7 @@ class SubAgentOrchestrator:
         self._tool_mgr = tool_mgr
         self._persona_mgr = persona_mgr
         self.handoffs: list[HandoffTool] = []
+        self.handoff_skills: list[Any] = []
 
     async def reload_from_config(self, cfg: dict[str, Any]) -> None:
         from astrbot.core.astr_agent_context import AstrAgentContext
@@ -35,6 +37,7 @@ class SubAgentOrchestrator:
             return
 
         handoffs: list[HandoffTool] = []
+        handoff_skills: list[Any] = []
         for item in agents:
             if not isinstance(item, dict):
                 continue
@@ -61,6 +64,7 @@ class SubAgentOrchestrator:
             if provider_id is not None:
                 provider_id = str(provider_id).strip() or None
             tools = item.get("tools", [])
+            skills = item.get("skills", [])
             begin_dialogs = None
 
             if persona_data:
@@ -71,6 +75,7 @@ class SubAgentOrchestrator:
                     persona_data.get("_begin_dialogs_processed")
                 )
                 tools = persona_data.get("tools")
+                skills = persona_data.get("skills")
                 if public_description == "" and prompt:
                     public_description = prompt[:120]
             if tools is None:
@@ -80,6 +85,12 @@ class SubAgentOrchestrator:
             else:
                 tools = [str(t).strip() for t in tools if str(t).strip()]
 
+            if skills is None:
+                skills = None
+            elif not isinstance(skills, list):
+                skills = []
+            else:
+                skills = [str(s).strip() for s in skills if str(s).strip()]
             agent = Agent[AstrAgentContext](
                 name=name,
                 instructions=instructions,
@@ -97,8 +108,50 @@ class SubAgentOrchestrator:
             handoff.provider_id = provider_id
 
             handoffs.append(handoff)
+            handoff_skills.append(skills)
 
         for handoff in handoffs:
             logger.info(f"Registered subagent handoff tool: {handoff.name}")
 
         self.handoffs = handoffs
+        self.handoff_skills = handoff_skills
+
+    def register_static_subagents_to_manager(self, session_id: str) -> None:
+        """Register all static subagents (from config) into SubAgentManager.
+
+        This makes static subagents enjoy the same unified management as
+        dynamically created subagents: shared context, history retention,
+        lifecycle management, etc.
+
+        Static subagents are always protected from auto-cleanup.
+        """
+
+        try:
+            from astrbot.core.subagent_manager import SubAgentManager
+        except ImportError:
+            return
+
+        for handoff, skills in zip(self.handoffs, self.handoff_skills):
+            try:
+                workdir = None
+                # Try to get skills from the handoff tool or agent
+                agent = handoff.agent
+                # The agent.tools may contain skill names; we pass them along
+                # SubAgentManager will filter and build skills prompt as needed
+                SubAgentManager.register_static_subagent(
+                    session_id=session_id,
+                    handoff_tool=handoff,
+                    skills=skills,
+                    workdir=workdir,
+                )
+                logger.debug(
+                    "[SubAgentOrchestrator] Registered static subagent '%s' to SubAgentManager for session %s",
+                    agent.name,
+                    session_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[SubAgentOrchestrator] Failed to register static subagent '%s' to manager: %s",
+                    getattr(handoff.agent, "name", "unknown"),
+                    e,
+                )

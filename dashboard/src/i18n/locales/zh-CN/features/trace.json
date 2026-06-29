@@ -4,7 +4,12 @@
     "enabled": "自动滚动：开",
     "disabled": "自动滚动：关"
   },
-  "hint": "当前仅记录部分 AstrBot 主 Agent 的模型调用路径，后续会不断完善。",
+  "hint": "实时展示 AstrBot 主 Agent 及 SubAgent 的完整模型调用链路、工具调用与执行结果。",
   "recording": "记录中",
-  "paused": "已暂停"
+  "paused": "已暂停",
+  "mainTitle": "主代理追踪",
+  "subTitle": "子代理追踪",
+  "mainEmpty": "暂无主代理追踪记录。",
+  "subEmpty": "暂无子代理追踪记录。",
+  "parentMissing": "父级追踪记录已被清理"
 }
