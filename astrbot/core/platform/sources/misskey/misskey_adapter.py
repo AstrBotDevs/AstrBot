@@ -37,6 +37,7 @@ from .misskey_utils import (
     process_files,
     resolve_message_visibility,
     serialize_message_chain,
+    summarize_note_for_context,
 )
 
 # Constants
@@ -91,6 +92,24 @@ class MisskeyPlatformAdapter(Platform):
         except Exception:
             self.max_download_bytes = None
 
+        # 评论区原帖上下文注入
+        self.include_reply_context = bool(
+            self.config.get("misskey_include_reply_context", True),
+        )
+        try:
+            self.reply_context_max_depth = max(
+                0,
+                min(int(self.config.get("misskey_reply_context_max_depth", 1)), 5),
+            )
+        except Exception:
+            self.reply_context_max_depth = 1
+        try:
+            _raw_len = int(self.config.get("misskey_reply_context_max_text_length", 500))
+            # -1 表示不截断；否则强制下限 50 防止误填导致摘要几乎为空
+            self.reply_context_max_text_length = -1 if _raw_len < 0 else max(50, _raw_len)
+        except Exception:
+            self.reply_context_max_text_length = 500
+
         self.api: MisskeyAPI | None = None
         self._running = False
         self.bot_self_id = ""
@@ -110,6 +129,10 @@ class MisskeyPlatformAdapter(Platform):
             "misskey_download_timeout": 15,
             "misskey_download_chunk_size": 65536,
             "misskey_max_download_bytes": None,
+            # 评论区原帖上下文注入
+            "misskey_include_reply_context": True,
+            "misskey_reply_context_max_depth": 1,
+            "misskey_reply_context_max_text_length": 500,
         }
         default_config.update(self.config)
 
@@ -634,6 +657,146 @@ class MisskeyPlatformAdapter(Platform):
 
         return await super().send_by_session(session, message_chain)
 
+    async def _resolve_reply_target(
+        self,
+        current: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """解析当前 note 的 reply 目标（被回复的原帖）。
+
+        优先用 payload 中已展开的 `reply` 对象；缺失时通过 `replyId`
+        走一次 notes/show API 回退。两者皆无返回 None。
+        """
+        reply_obj = current.get("reply")
+        if isinstance(reply_obj, dict):
+            return reply_obj
+        reply_id = current.get("replyId")
+        if reply_id and self.api:
+            fetched = await self.api.get_note(str(reply_id))
+            if isinstance(fetched, dict):
+                return fetched
+        return None
+
+    async def _resolve_renote_target(
+        self,
+        current: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """解析当前 note 的 renote 目标（被引用/转发的原帖）。
+
+        优先用 payload 中已展开的 `renote` 对象；缺失时通过 `renoteId`
+        走一次 notes/show API 回退。两者皆无返回 None。
+        """
+        renote_obj = current.get("renote")
+        if isinstance(renote_obj, dict):
+            return renote_obj
+        renote_id = current.get("renoteId")
+        if renote_id and self.api:
+            fetched = await self.api.get_note(str(renote_id))
+            if isinstance(fetched, dict):
+                return fetched
+        return None
+
+    async def _resolve_parent_note(
+        self,
+        current: dict[str, Any],
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """解析当前 note 的父帖（按优先级返回首个候选）。
+
+        优先返回 reply 目标（被回复的原帖）；reply 不存在时回退到 renote 目标
+        （被引用/转发的原帖）。reply-with-quote 场景：返回 reply，调用方需要
+        再单独走 _resolve_renote_target 取引用帖。
+        """
+        reply_parent = await self._resolve_reply_target(current)
+        if reply_parent is not None:
+            return reply_parent, "被回复的原帖"
+        renote_parent = await self._resolve_renote_target(current)
+        if renote_parent is not None:
+            return renote_parent, "被引用/转发的原帖"
+        return None, None
+
+    async def _build_parent_note_context(
+        self,
+        raw_data: dict[str, Any],
+    ) -> str:
+        """从一条 note 出发，向上追溯 reply / renote 链，返回拼好的纯文本上下文。
+
+        - depth=0 时如果同时存在 reply + renote（reply-with-quote），两个都注入。
+        - 顶层（depth=0）父帖作者是机器人自己时整段跳过，避免反馈循环。
+        - 链中循环或 API 失败时静默截断，不阻断消息处理。
+        - 返回值会被作为后缀拼到 ``message_str`` 末尾，因此自带前导分隔符
+          ``\\n\\n---\\n``，让 LLM 看到的 prompt 形如「用户文本 \\n--- 父帖摘要」。
+          放尾部而非头部是为了不破坏 wake_prefix 与命令前缀的 startswith 匹配。
+        """
+        if self.reply_context_max_depth <= 0:
+            return ""
+
+        # 既无 reply/replyId 又无 renote/renoteId 的独立帖子，没有父帖可追，直接退出，
+        # 避免空循环以及无谓的 API 调用。
+        if not (
+            raw_data.get("reply")
+            or raw_data.get("replyId")
+            or raw_data.get("renote")
+            or raw_data.get("renoteId")
+        ):
+            return ""
+
+        blocks: list[str] = []
+        visited: set[str] = set()
+        current = raw_data
+        labelled_by_depth = self.reply_context_max_depth > 1
+
+        def append_summary_block(
+            target: dict[str, Any],
+            relation: str,
+            depth_index: int,
+        ) -> None:
+            """生成摘要并追加到 blocks。两处调用（主父帖 / 引用帖）共用此 helper
+            以避免「summarize + label + blocks.append」的重复逻辑。"""
+            summary = summarize_note_for_context(
+                target,
+                max_text_length=self.reply_context_max_text_length,
+            )
+            if not summary:
+                return
+            label = relation
+            if labelled_by_depth:
+                label = f"{label} - 第{depth_index + 1}层"
+            blocks.append(f"[{label}]\n{summary}")
+
+        for depth in range(self.reply_context_max_depth):
+            parent, relation = await self._resolve_parent_note(current)
+            if not isinstance(parent, dict):
+                break
+
+            parent_id = str(parent.get("id") or "")
+            if not parent_id or parent_id in visited:
+                break
+            visited.add(parent_id)
+
+            if depth == 0:
+                parent_uid = str((parent.get("user") or {}).get("id") or "")
+                if parent_uid and parent_uid == self.bot_self_id:
+                    return ""
+
+            append_summary_block(parent, relation or "被回复的原帖", depth)
+
+            # depth=0 且当前是 reply：如果还有 renote（reply-with-quote），也补上。
+            # 走 _resolve_renote_target 而不是只检查 isinstance(current.get("renote"))，
+            # 这样 payload 仅给 renoteId 时也能通过 API 回退拉取引用帖。
+            if depth == 0 and relation == "被回复的原帖":
+                renote_parent = await self._resolve_renote_target(current)
+                if isinstance(renote_parent, dict):
+                    renote_id = str(renote_parent.get("id") or "")
+                    if renote_id and renote_id not in visited:
+                        visited.add(renote_id)
+                        append_summary_block(renote_parent, "被引用/转发的原帖", 0)
+
+            current = parent
+
+        if not blocks:
+            return ""
+        # 作为 message_str 的后缀返回，前导分隔符确保与用户原文有清晰边界
+        return "\n\n---\n" + "\n\n".join(blocks)
+
     async def convert_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:
         """将 Misskey 贴文数据转换为 AstrBotMessage 对象"""
         sender_info = extract_sender_info(raw_data, is_chat=False)
@@ -650,6 +813,19 @@ class MisskeyPlatformAdapter(Platform):
             self.bot_self_id,
             is_chat=False,
         )
+
+        # 评论区原帖上下文：拼到 message_str 尾部，避免破坏 wake_prefix / 命令
+        # 前缀 startswith 匹配（waking_check 与 star.filter.command 都是头部匹配）。
+        # LLM 主路径直接读 message_str（astr_main_agent / agent third_party 都遍历
+        # message chain 时只取多模态 Comp，忽略 Comp.Plain），所以这里不再把
+        # parent_ctx 加到 message.message —— 那会变成读不到的死代码。
+        parent_ctx = ""
+        if self.include_reply_context:
+            try:
+                parent_ctx = await self._build_parent_note_context(raw_data)
+            except Exception as e:
+                logger.warning(f"[Misskey] 构建父帖上下文失败: {e}")
+                parent_ctx = ""
 
         message_parts = []
         raw_text = raw_data.get("text", "")
@@ -675,11 +851,12 @@ class MisskeyPlatformAdapter(Platform):
         if poll and isinstance(poll, dict):
             self._process_poll_data(message, poll, message_parts)
 
-        message.message_str = (
+        body = (
             " ".join(part for part in message_parts if part.strip())
             if message_parts
             else ""
         )
+        message.message_str = body + parent_ctx if parent_ctx else body
         return message
 
     async def convert_chat_message(self, raw_data: dict[str, Any]) -> AstrBotMessage:
