@@ -498,13 +498,11 @@ async def _ensure_persona_and_skills(
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
     skills = _filter_skills_for_current_config(skills, cfg)
-    workspace_skills = (
-        skill_manager.list_workspace_skills(
+    workspace_skills = []
+    if runtime == "local" and not event.get_group_id():
+        workspace_skills = skill_manager.list_workspace_skills(
             _get_workspace_path_for_umo(event.unified_msg_origin)
         )
-        if runtime == "local"
-        else []
-    )
 
     if skills or workspace_skills:
         if persona and persona.get("skills") is not None:
