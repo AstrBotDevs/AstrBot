@@ -27,7 +27,7 @@ class _FakeResponse:
 
 
 class _FakeSession:
-    def __init__(self, response: _FakeResponse):
+    def __init__(self, response: _FakeResponse | Exception):
         self._response = response
 
     async def __aenter__(self):
@@ -37,15 +37,21 @@ class _FakeSession:
         return False
 
     def get(self, *_args, **_kwargs):
+        if isinstance(self._response, Exception):
+            raise self._response
         return self._response
 
 
 def _patch_download_session(monkeypatch, response: _FakeResponse):
+    _patch_download_sessions(monkeypatch, [response])
+
+
+def _patch_download_sessions(monkeypatch, responses: list[_FakeResponse | Exception]):
     monkeypatch.setattr(io.aiohttp, "TCPConnector", lambda **_kwargs: object())
     monkeypatch.setattr(
         io.aiohttp,
         "ClientSession",
-        lambda **_kwargs: _FakeSession(response),
+        lambda **_kwargs: _FakeSession(responses.pop(0)),
     )
 
 
@@ -57,7 +63,32 @@ async def test_download_file_rejects_non_200_response(monkeypatch, tmp_path):
         _FakeResponse(status=404, chunks=[b"not found"]),
     )
 
-    with pytest.raises(RuntimeError, match="HTTP status code: 404"):
+    with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 404"):
+        await io.download_file("https://example.test/missing", str(target_path))
+
+    assert not target_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_download_file_rejects_non_200_response_after_ssl_fallback(
+    monkeypatch,
+    tmp_path,
+):
+    class FakeSSLError(Exception):
+        pass
+
+    target_path = tmp_path / "missing.bin"
+    _patch_download_sessions(
+        monkeypatch,
+        [
+            FakeSSLError(),
+            _FakeResponse(status=404, chunks=[b"not found"]),
+        ],
+    )
+    monkeypatch.setattr(io.aiohttp, "ClientConnectorSSLError", FakeSSLError)
+    monkeypatch.setattr(io.aiohttp, "ClientConnectorCertificateError", FakeSSLError)
+
+    with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 404"):
         await io.download_file("https://example.test/missing", str(target_path))
 
     assert not target_path.exists()
