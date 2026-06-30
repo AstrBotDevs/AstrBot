@@ -304,6 +304,11 @@ class FileReadTool(FunctionTool):
             )
             if not normalized_path:
                 raise ValueError("`path` must be a non-empty string.")
+            if local_env and os.path.isdir(normalized_path):
+                return (
+                    f"Error: '{normalized_path}' is a directory, not a file. "
+                    "Use a file path instead, or use 'astrbot_execute_shell' to list directory contents."
+                )
             offset, limit = self._validate_read_window(offset, limit)
             sb = await get_booter(
                 context.context.context,
