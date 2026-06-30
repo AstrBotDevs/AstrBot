@@ -1057,7 +1057,7 @@ class FunctionToolManager:
                             "mcp_server_list",
                             [],
                         )
-                        local_mcp_config = self.load_mcp_config()
+                        local_mcp_config = copy.deepcopy(self.load_mcp_config())
 
                         mcp_servers = local_mcp_config.setdefault("mcpServers", {})
                         synced_servers: list[tuple[str, dict]] = []
