@@ -254,6 +254,12 @@
       "unified": "Unified",
       "split": "Split",
       "ariaLabel": "Switch diff view mode"
+    },
+    "fullscreen": {
+      "enter": "Fullscreen",
+      "exit": "Exit fullscreen",
+      "exitLabel": "Back",
+      "ariaLabel": "Diff fullscreen view"
     }
   },
   "spcodeProjectLoad": {

@@ -66,6 +66,17 @@
             <v-icon size="14">mdi-view-split-vertical</v-icon>
           </button>
         </div>
+        <!-- Fullscreen button (spec 2026-06-30-diff-fullscreen-design.md §3.1) -->
+        <button
+          ref="fullscreenBtnRef"
+          type="button"
+          class="diff-fullscreen-btn"
+          :title="tm('diffPreview.fullscreen.enter')"
+          :aria-label="tm('diffPreview.fullscreen.enter')"
+          @click.stop="enterFullscreen"
+        >
+          <v-icon size="14">mdi-fullscreen</v-icon>
+        </button>
         <v-icon
           v-if="collapsible"
           size="18"
@@ -184,10 +195,216 @@
       </div>
     </div>
   </div>
+
+  <!-- Fullscreen overlay — Teleported to <body> to escape fixed-position
+       stacking contexts. Shares same reactive refs as normal view.
+       Spec 2026-06-30-diff-fullscreen-design.md §3.2 -->
+  <Teleport to="body">
+    <div
+      v-if="isFullscreen"
+      ref="overlayRef"
+      class="diff-fullscreen-overlay"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="tm('diffPreview.fullscreen.ariaLabel')"
+      tabindex="-1"
+      @keydown.escape="exitFullscreen"
+    >
+      <!-- Back button: fixed top-right corner -->
+      <button
+        type="button"
+        class="diff-fullscreen-back-btn"
+        :title="tm('diffPreview.fullscreen.exit')"
+        :aria-label="tm('diffPreview.fullscreen.exit')"
+        @click="exitFullscreen"
+      >
+        <v-icon size="20">mdi-fullscreen-exit</v-icon>
+        <span class="diff-fullscreen-back-label">{{
+          tm("diffPreview.fullscreen.exitLabel")
+        }}</span>
+      </button>
+
+      <!-- Fullscreen diff content — same refs as normal view.
+           The header and diff body are re-rendered here so they appear
+           inside the overlay. The isFullscreen ref is shared, so
+           clicking the fullscreen button inside the overlay is a
+           no-op (the button is at the normal view and is not rendered
+           here because it is behind the overlay). -->
+      <div class="diff-fullscreen-body">
+        <div
+          class="diff-preview is-fullscreen"
+          :class="{ 'is-dark': isDark, collapsed: isCollapsed, 'is-split': viewMode === 'split' }"
+        >
+          <!-- Same header — the fullscreen button in the normal header
+               is behind the overlay, so it doesn't appear here. -->
+          <button
+            v-if="summary || filePath || statsAdds || statsDels"
+            type="button"
+            class="diff-header"
+            @click="toggleCollapsed"
+          >
+            <div class="diff-header-left">
+              <v-icon size="16" class="diff-header-icon"
+                >mdi-file-document-edit-outline</v-icon
+              >
+              <span v-if="filePath" class="diff-file-path">{{ filePath }}</span>
+            </div>
+            <div class="diff-header-right">
+              <template v-if="statsAdds || statsDels">
+                <span v-if="statsAdds" class="diff-stats diff-stats-add"
+                  >+{{ statsAdds }}</span
+                >
+                <span v-if="statsDels" class="diff-stats diff-stats-del"
+                  >−{{ statsDels }}</span
+                >
+              </template>
+              <div
+                class="diff-view-toggle"
+                role="group"
+                :aria-label="viewModeAriaLabel"
+              >
+                <button
+                  type="button"
+                  class="diff-view-toggle-btn"
+                  :class="{ active: viewMode === 'unified' }"
+                  :aria-pressed="viewMode === 'unified'"
+                  :title="unifiedLabel"
+                  @click.stop="setViewMode('unified')"
+                >
+                  <v-icon size="14">mdi-format-align-justify</v-icon>
+                </button>
+                <button
+                  type="button"
+                  class="diff-view-toggle-btn"
+                  :class="{ active: viewMode === 'split' }"
+                  :aria-pressed="viewMode === 'split'"
+                  :title="splitLabel"
+                  @click.stop="setViewMode('split')"
+                >
+                  <v-icon size="14">mdi-view-split-vertical</v-icon>
+                </button>
+              </div>
+              <!-- Fullscreen button is intentionally omitted here:
+                   the overlay has its own "Back" exit button above. -->
+              <v-icon
+                v-if="collapsible"
+                size="18"
+                class="diff-chevron"
+                :class="{ expanded: !isCollapsed }"
+              >
+                mdi-chevron-right
+              </v-icon>
+            </div>
+          </button>
+
+          <!-- Summary text -->
+          <div v-if="summary && !isCollapsed" class="diff-summary-text">
+            {{ summary }}
+          </div>
+
+          <!-- Diff body -->
+          <div v-if="!isCollapsed" class="diff-body">
+            <div v-if="truncated" class="diff-truncation-warning">
+              ⚠ Diff truncated (showing first
+              {{ maxChars.toLocaleString() }} characters)
+            </div>
+
+            <!-- Unified mode -->
+            <template v-if="viewMode === 'unified'">
+              <div
+                v-for="(hunk, hi) in parsedHunks"
+                :key="hi"
+                class="diff-hunk"
+                :class="{ 'is-hunk-folded': collapsedHunks.has(hi) }"
+              >
+                <button
+                  type="button"
+                  class="hunk-header"
+                  :aria-expanded="!collapsedHunks.has(hi)"
+                  @click="toggleHunk(hi)"
+                >
+                  <v-icon
+                    size="12"
+                    class="hunk-chevron"
+                    :class="{ expanded: !collapsedHunks.has(hi) }"
+                  >
+                    mdi-chevron-right
+                  </v-icon>
+                  <span class="hunk-header-text">{{ hunk.header }}</span>
+                  <span class="hunk-header-count">{{
+                    hunk.lines.length
+                  }}</span>
+                </button>
+                <div
+                  v-show="!collapsedHunks.has(hi)"
+                  class="diff-hunk-body"
+                >
+                  <div
+                    v-for="(line, li) in hunk.lines"
+                    :key="li"
+                    class="diff-line"
+                    :class="line.type"
+                  >
+                    <span class="line-number old">{{ line.oldNo }}</span>
+                    <span class="line-number new">{{ line.newNo }}</span>
+                    <span class="line-prefix">{{ line.prefix }}</span>
+                    <span class="line-content">{{ line.content }}</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <!-- Split mode -->
+            <template v-else>
+              <div
+                v-for="(hunk, hi) in splitHunks"
+                :key="hi"
+                class="diff-hunk diff-hunk-split"
+              >
+                <div class="hunk-header">
+                  {{ hunk.header }}
+                </div>
+                <div
+                  v-for="(row, ri) in hunk.rows"
+                  :key="ri"
+                  class="diff-row-split"
+                  :class="row.kind"
+                >
+                  <div class="diff-cell left">
+                    <span class="line-number">{{ row.left?.oldNo ?? '' }}</span>
+                    <span class="line-prefix">{{ row.left?.prefix ?? '' }}</span>
+                    <span class="line-content">{{ row.left?.content ?? '' }}</span>
+                  </div>
+                  <div class="diff-cell right">
+                    <span class="line-number">{{ row.right?.newNo ?? '' }}</span>
+                    <span class="line-prefix">{{ row.right?.prefix ?? '' }}</span>
+                    <span class="line-content">{{ row.right?.content ?? '' }}</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <div v-if="collapsedOverflow > 0" class="diff-overflow-bar">
+              <button
+                type="button"
+                class="diff-show-more"
+                @click="showAllLines = true"
+              >
+                Show all {{ totalLines.toLocaleString() }} lines ({{
+                  collapsedOverflow
+                }}
+                more)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, nextTick, watch, onBeforeUnmount } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -312,6 +529,33 @@ const toggleCollapsed = () => {
     isCollapsed.value = !isCollapsed.value;
   }
 };
+
+// ── Fullscreen state (spec 2026-06-30-diff-fullscreen-design.md §4) ─
+const isFullscreen = ref(false);
+const fullscreenBtnRef = ref<HTMLElement | null>(null);
+const overlayRef = ref<HTMLElement | null>(null);
+
+function enterFullscreen(): void {
+  isFullscreen.value = true;
+  nextTick(() => overlayRef.value?.focus());
+}
+
+function exitFullscreen(): void {
+  isFullscreen.value = false;
+  nextTick(() => fullscreenBtnRef.value?.focus());
+}
+
+// Body scroll lock while fullscreen (spec §3.4)
+watch(isFullscreen, (v) => {
+  document.body.style.overflow = v ? "hidden" : "";
+});
+
+// Cleanup on unmount (spec §8 — edge case: component unmounts while fullscreen)
+onBeforeUnmount(() => {
+  if (isFullscreen.value) {
+    document.body.style.overflow = "";
+  }
+});
 
 // ── Parse unified diff ─────────────────────────────────────────────
 
@@ -1005,5 +1249,89 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
 .diff-preview.collapsed .diff-body,
 .diff-preview.collapsed .diff-summary-text {
   display: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Fullscreen overlay — spec 2026-06-30-diff-fullscreen-design.md §7
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Overlay backdrop: fills entire viewport */
+.diff-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgb(var(--v-theme-background));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Back button: small FAB fixed at top-right corner */
+.diff-fullscreen-back-btn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 10000;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid rgb(var(--v-theme-outline));
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.diff-fullscreen-back-btn:hover {
+  background: rgb(var(--v-theme-surface-variant));
+}
+
+/* Fullscreen body: scrollable container */
+.diff-fullscreen-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  padding-top: 52px; /* room for the fixed back button at top-right */
+}
+
+/* Override for diff-preview inside fullscreen: wider border,
+   no max-width constraint. */
+.diff-preview.is-fullscreen {
+  max-width: 100%;
+  border: 1px solid rgb(var(--v-theme-outline-variant));
+  border-radius: 8px;
+}
+
+/* Fullscreen button in the normal header. Matches existing
+   .diff-view-toggle-btn dimensions (22×22px) and transitions. */
+.diff-fullscreen-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
+  flex-shrink: 0;
+}
+.diff-fullscreen-btn:hover {
+  border-color: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+.diff-fullscreen-btn:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: -2px;
 }
 </style>

@@ -254,6 +254,12 @@
       "unified": "统一",
       "split": "分栏",
       "ariaLabel": "切换 diff 视图模式"
+    },
+    "fullscreen": {
+      "enter": "全屏",
+      "exit": "退出全屏",
+      "exitLabel": "返回",
+      "ariaLabel": "全屏显示差异"
     }
   },
   "spcodeProjectLoad": {
