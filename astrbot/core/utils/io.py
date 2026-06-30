@@ -215,6 +215,10 @@ async def download_file(
                         _safe_url_for_log(url),
                         resp.status,
                     )
+                    raise RuntimeError(
+                        "Failed to download file from "
+                        f"{_safe_url_for_log(url)}. HTTP status code: {resp.status}"
+                    )
                 total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
                 start_time = time.time()
@@ -291,6 +295,16 @@ async def download_file(
         ssl_context.verify_mode = ssl.CERT_NONE
         async with aiohttp.ClientSession() as session:
             async with session.get(url, ssl=ssl_context, timeout=120) as resp:
+                if resp.status != 200:
+                    logger.error(
+                        "Failed to download file from %s. HTTP status code: %s",
+                        _safe_url_for_log(url),
+                        resp.status,
+                    )
+                    raise RuntimeError(
+                        "Failed to download file from "
+                        f"{_safe_url_for_log(url)}. HTTP status code: {resp.status}"
+                    )
                 total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
                 start_time = time.time()
