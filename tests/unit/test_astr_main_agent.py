@@ -889,6 +889,13 @@ class TestEnsurePersonaAndSkills:
         for path in (data_dir, global_skills_dir, plugins_dir):
             path.mkdir(parents=True, exist_ok=True)
 
+        global_skill_dir = global_skills_dir / "workspace-skill"
+        global_skill_dir.mkdir(parents=True)
+        global_skill_dir.joinpath("SKILL.md").write_text(
+            "---\ndescription: Global scoped skill.\n---\n",
+            encoding="utf-8",
+        )
+
         mock_event.get_group_id.return_value = "group123"
         mock_event.message_obj.group_id = "group123"
         mock_event.unified_msg_origin = "test_platform:GroupMessage:group123"
@@ -927,8 +934,8 @@ class TestEnsurePersonaAndSkills:
             req, {"computer_use_runtime": "local"}, mock_context, mock_event
         )
 
+        assert "Global scoped skill." in req.system_prompt
         assert "Workspace scoped skill." not in req.system_prompt
-        assert "## Skills" not in req.system_prompt
 
     @pytest.mark.asyncio
     async def test_ensure_skills_respects_empty_persona_skills_for_workspace(
@@ -1285,6 +1292,41 @@ class TestDecorateLlmRequest:
             await module._decorate_llm_request(mock_event, req, mock_context, config)
 
         assert req.prompt == "Hello"
+
+    @pytest.mark.asyncio
+    async def test_decorate_llm_request_skips_workspace_extra_prompt_for_group(
+        self,
+        monkeypatch,
+        tmp_path,
+        mock_event,
+        mock_context,
+        sample_config,
+    ):
+        """Test group sessions do not load workspace extra prompts."""
+        module = ama
+        workspaces_dir = tmp_path / "workspaces"
+        mock_event.get_group_id.return_value = "group123"
+        mock_event.message_obj.group_id = "group123"
+        mock_event.unified_msg_origin = "test_platform:GroupMessage:group123"
+        workspace_root = workspaces_dir / module.normalize_umo_for_workspace(
+            mock_event.unified_msg_origin
+        )
+        workspace_root.mkdir(parents=True)
+        workspace_root.joinpath("EXTRA_PROMPT.md").write_text(
+            "Group workspace injected prompt.",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            module,
+            "get_astrbot_workspaces_path",
+            lambda: str(workspaces_dir),
+        )
+        req = ProviderRequest(prompt="Hello", system_prompt="System")
+        req.conversation = None
+
+        await module._decorate_llm_request(mock_event, req, mock_context, sample_config)
+
+        assert req.system_prompt == "System"
 
 
 class TestPluginToolFix:

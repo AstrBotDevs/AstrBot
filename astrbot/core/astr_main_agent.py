@@ -362,10 +362,25 @@ def _get_workspace_path_for_umo(umo: str) -> Path:
     return Path(get_astrbot_workspaces_path()) / normalized_umo
 
 
+def _is_group_session(event: AstrMessageEvent) -> bool:
+    """Return whether the event belongs to a group session.
+
+    Args:
+        event: Message event to inspect.
+
+    Returns:
+        True if the event has a group id.
+    """
+    return bool(event.get_group_id())
+
+
 def _apply_workspace_extra_prompt(
     event: AstrMessageEvent,
     req: ProviderRequest,
 ) -> None:
+    if _is_group_session(event):
+        return
+
     extra_prompt_path = _get_workspace_path_for_umo(event.unified_msg_origin) / (
         "EXTRA_PROMPT.md"
     )
@@ -499,7 +514,7 @@ async def _ensure_persona_and_skills(
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
     skills = _filter_skills_for_current_config(skills, cfg)
     workspace_skills = []
-    if runtime == "local" and not event.get_group_id():
+    if runtime == "local" and not _is_group_session(event):
         workspace_skills = skill_manager.list_workspace_skills(
             _get_workspace_path_for_umo(event.unified_msg_origin)
         )
