@@ -115,8 +115,8 @@
         <!-- 查看 Persona 详情对话框 -->
         <v-dialog v-model="showViewDialog" max-width="700px">
             <v-card v-if="viewingPersona">
-                <v-card-title class="d-flex justify-space-between align-center">
-                    <span class="text-h5">{{ viewingPersona.persona_id }}</span>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center">
+                    <span>{{ viewingPersona.persona_id }}</span>
                     <div class="d-flex align-center ga-1">
                         <v-btn
                             color="primary"
@@ -207,7 +207,7 @@
         <!-- 重命名文件夹对话框 -->
         <v-dialog v-model="showRenameFolderDialog" max-width="400px">
             <v-card>
-                <v-card-title>{{ tm('folder.renameDialog.title') }}</v-card-title>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('folder.renameDialog.title') }}</v-card-title>
                 <v-card-text>
                     <v-text-field v-model="renameFolderData.name" :label="tm('folder.form.name')"
                         :rules="[v => !!v || tm('folder.validation.nameRequired')]" variant="outlined"
@@ -218,7 +218,7 @@
                     <v-btn variant="text" @click="showRenameFolderDialog = false">
                         {{ tm('buttons.cancel') }}
                     </v-btn>
-                    <v-btn color="primary" variant="flat" @click="submitRenameFolder" :loading="renameLoading"
+                    <v-btn color="primary" variant="tonal" @click="submitRenameFolder" :loading="renameLoading"
                         :disabled="!renameFolderData.name">
                         {{ tm('buttons.save') }}
                     </v-btn>
@@ -233,7 +233,7 @@
         <!-- 删除文件夹确认对话框 -->
         <v-dialog v-model="showDeleteFolderDialog" max-width="450px">
             <v-card>
-                <v-card-title class="text-error">
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
                     <v-icon class="mr-2" color="error">mdi-alert</v-icon>
                     {{ tm('folder.deleteDialog.title') }}
                 </v-card-title>
@@ -249,7 +249,7 @@
                     <v-btn variant="text" @click="showDeleteFolderDialog = false">
                         {{ tm('buttons.cancel') }}
                     </v-btn>
-                    <v-btn color="error" variant="flat" @click="submitDeleteFolder" :loading="deleteLoading">
+                    <v-btn color="error" variant="tonal" @click="submitDeleteFolder" :loading="deleteLoading">
                         {{ tm('buttons.delete') }}
                     </v-btn>
                 </v-card-actions>

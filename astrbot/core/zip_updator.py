@@ -54,6 +54,55 @@ class RepoZipUpdator:
             return body
         return body[:max_len] + "...[truncated]"
 
+    async def fetch_github_default_branch(self, author: str, repo: str) -> str | None:
+        """Fetch the default branch for a GitHub repository.
+
+        Args:
+            author: GitHub repository owner.
+            repo: GitHub repository name.
+
+        Returns:
+            The default branch name, or None if it cannot be resolved.
+        """
+        url = f"https://api.github.com/repos/{author}/{repo}"
+        try:
+            async with self._create_httpx_client(timeout=10.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                repo_info = response.json()
+        except Exception as exc:
+            logger.debug("获取 GitHub 默认分支失败 %s/%s: %s", author, repo, exc)
+            return None
+
+        default_branch = str(repo_info.get("default_branch") or "").strip()
+        return default_branch or None
+
+    async def resolve_github_source_branch(
+        self,
+        repo_url: str,
+    ) -> tuple[str, str, str]:
+        """Resolve the GitHub branch used for repository source downloads.
+
+        Args:
+            repo_url: GitHub repository URL, optionally with a tree branch.
+
+        Returns:
+            Repository owner, name, and resolved source branch.
+
+        Raises:
+            ValueError: If the repository URL is invalid.
+        """
+        author, repo, branch = self.parse_github_url(repo_url)
+        if branch:
+            return author, repo, branch
+
+        default_branch = await self.fetch_github_default_branch(author, repo)
+        if default_branch:
+            return author, repo, default_branch
+
+        logger.info("未能获取 %s/%s 的默认分支，将尝试 main 分支", author, repo)
+        return author, repo, "main"
+
     async def _download_file(
         self,
         url: str,
@@ -225,32 +274,13 @@ class RepoZipUpdator:
     async def download_from_repo_url(
         self, target_path: str, repo_url: str, proxy=""
     ) -> None:
-        author, repo, branch = self.parse_github_url(repo_url)
+        author, repo, branch = await self.resolve_github_source_branch(repo_url)
 
         logger.info(f"正在下载更新 {repo} ...")
-
-        if branch:
-            logger.info(f"正在从指定分支 {branch} 下载 {author}/{repo}")
-            release_url = (
-                f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
-            )
-        else:
-            try:
-                release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
-                releases = await self.fetch_release_info(url=release_url)
-            except Exception as e:
-                logger.warning(
-                    f"获取 {author}/{repo} 的 GitHub Releases 失败: {e}，将尝试下载默认分支",
-                )
-                releases = []
-            if not releases:
-                # 如果没有最新版本，下载默认分支
-                logger.info(f"正在从默认分支下载 {author}/{repo}")
-                release_url = (
-                    f"https://github.com/{author}/{repo}/archive/refs/heads/master.zip"
-                )
-            else:
-                release_url = releases[0]["zipball_url"]
+        logger.info(f"正在从分支 {branch} 下载 {author}/{repo}")
+        release_url = (
+            f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
+        )
 
         if proxy:
             proxy = proxy.rstrip("/")

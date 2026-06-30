@@ -445,7 +445,7 @@
     />
     <v-dialog v-model="sessionTitleDialogOpen" max-width="420">
       <v-card>
-        <v-card-title class="text-h6">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ tm("conversation.editDisplayName") }}
         </v-card-title>
         <v-card-text>
@@ -466,6 +466,7 @@
           </v-btn>
           <v-btn
             color="primary"
+            variant="tonal"
             :loading="savingSessionTitle"
             @click="saveSessionTitleDialog"
           >
@@ -503,7 +504,8 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useDisplay } from "vuetify";
-import axios from "axios";
+import { isAxiosError } from "axios";
+import { chatApi } from "@/api/v1";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ProjectDialog, {
   type ProjectFormData,
@@ -526,6 +528,7 @@ import {
   type TransportMode,
 } from "@/composables/useMessages";
 import { useMediaHandling } from "@/composables/useMediaHandling";
+import { useRecording } from "@/composables/useRecording";
 import { useProjects } from "@/composables/useProjects";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
@@ -633,8 +636,12 @@ const threadSelection = reactive<{
   selectedText: "",
 });
 const enableStreaming = ref(true);
-const isRecording = ref(false);
 const sendShortcut = ref<"enter" | "shift_enter">("enter");
+const {
+  isRecording,
+  startRecording: startRecorder,
+  stopRecording: stopRecorder,
+} = useRecording();
 const chatSidebarDrawer = computed({
   get: () => lgAndUp.value || customizer.chatSidebarOpen,
   set: (value: boolean) => {
@@ -898,8 +905,7 @@ async function saveSessionTitleDialog() {
   try {
     const sessionId = editingSessionTitleId.value;
     const displayName = sessionTitleDraft.value.trim();
-    await axios.post("/api/chat/update_session_display_name", {
-      session_id: sessionId,
+    await chatApi.updateSession(sessionId, {
       display_name: displayName,
     });
     updateSessionTitle(sessionId, displayName);
@@ -1197,7 +1203,7 @@ async function createThreadFromSelection() {
   const message = threadSelection.message;
   if (!currSessionId.value || !message?.id || !threadSelection.selectedText) return;
   try {
-    const response = await axios.post("/api/chat/thread/create", {
+    const response = await chatApi.createThread({
       session_id: currSessionId.value,
       parent_message_id: message.id,
       selected_text: threadSelection.selectedText,
@@ -1219,7 +1225,7 @@ async function createThreadFromSelection() {
     window.getSelection()?.removeAllRanges();
   } catch (error) {
     toast.error(
-      axios.isAxiosError(error)
+      isAxiosError(error)
         ? error.response?.data?.message || error.message
         : tm("thread.createFailed"),
     );
@@ -1264,9 +1270,7 @@ async function deleteThread(thread: ChatThread) {
   if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog))) return;
   deletingThread.value = true;
   try {
-    await axios.post("/api/chat/thread/delete", {
-      thread_id: thread.thread_id,
-    });
+    await chatApi.deleteThread(thread.thread_id);
     removeThreadFromMessages(thread.thread_id);
     if (activeThread.value?.thread_id === thread.thread_id) {
       threadPanelOpen.value = false;
@@ -1303,12 +1307,26 @@ function toggleStreaming() {
   enableStreaming.value = !enableStreaming.value;
 }
 
-function startRecording() {
-  isRecording.value = true;
+async function startRecording() {
+  try {
+    await startRecorder();
+  } catch (error) {
+    console.error("Failed to start recording:", error);
+    toast.error(tm("voice.error"));
+  }
 }
 
-function stopRecording() {
-  isRecording.value = false;
+async function stopRecording() {
+  try {
+    const audioFile = await stopRecorder();
+    const uploaded = await processAndUploadFile(audioFile);
+    if (!uploaded) {
+      toast.error(tm("voice.error"));
+    }
+  } catch (error) {
+    console.error("Failed to stop recording:", error);
+    toast.error(tm("voice.error"));
+  }
 }
 
 function handleMessagesScroll() {
@@ -1520,7 +1538,12 @@ function toggleTheme() {
 }
 
 .session-progress {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   flex-shrink: 0;
+  transition: right 0.16s ease;
 }
 
 .session-actions {
@@ -1542,6 +1565,11 @@ function toggleTheme() {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
+}
+
+.session-item:hover .session-progress,
+.session-item:focus-within .session-progress {
+  right: 62px;
 }
 
 .session-action-btn {

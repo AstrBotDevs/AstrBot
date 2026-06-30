@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import axios from 'axios';
+import { chatApi } from '@/api/v1';
 import type { Project } from '@/components/chat/ProjectList.vue';
 
 export function useProjects() {
@@ -8,7 +8,7 @@ export function useProjects() {
 
     async function getProjects() {
         try {
-            const res = await axios.get('/api/chatui_project/list');
+            const res = await chatApi.listProjects();
             if (res.data.status === 'ok') {
                 projects.value = res.data.data || [];
                 
@@ -20,7 +20,7 @@ export function useProjects() {
 
     async function createProject(title: string, emoji?: string, description?: string) {
         try {
-            const res = await axios.post('/api/chatui_project/create', {
+            const res = await chatApi.createProject({
                 title,
                 emoji: emoji || '📁',
                 description
@@ -36,8 +36,7 @@ export function useProjects() {
 
     async function updateProject(projectId: string, title?: string, emoji?: string, description?: string) {
         try {
-            const res = await axios.post('/api/chatui_project/update', {
-                project_id: projectId,
+            const res = await chatApi.updateProject(projectId, {
                 title,
                 emoji,
                 description
@@ -52,9 +51,7 @@ export function useProjects() {
 
     async function deleteProject(projectId: string) {
         try {
-            const res = await axios.get('/api/chatui_project/delete', { 
-                params: { project_id: projectId }
-            });
+            const res = await chatApi.deleteProject(projectId);
             if (res.data.status === 'ok') {
                 await getProjects();
                 if (selectedProjectId.value === projectId) {
@@ -68,10 +65,7 @@ export function useProjects() {
 
     async function addSessionToProject(sessionId: string, projectId: string) {
         try {
-            const res = await axios.post('/api/chatui_project/add_session', {
-                session_id: sessionId,
-                project_id: projectId
-            });
+            const res = await chatApi.addProjectSession(projectId, sessionId);
             return res.data.status === 'ok';
         } catch (error) {
             console.error('Failed to add session to project:', error);
@@ -81,9 +75,7 @@ export function useProjects() {
 
     async function removeSessionFromProject(sessionId: string) {
         try {
-            const res = await axios.post('/api/chatui_project/remove_session', {
-                session_id: sessionId
-            });
+            const res = await chatApi.removeProjectSession(sessionId);
             return res.data.status === 'ok';
         } catch (error) {
             console.error('Failed to remove session from project:', error);
@@ -93,9 +85,7 @@ export function useProjects() {
 
     async function getProjectSessions(projectId: string) {
         try {
-            const res = await axios.get('/api/chatui_project/get_sessions', { 
-                params: { project_id: projectId }
-            });
+            const res = await chatApi.listProjectSessions(projectId);
             if (res.data.status === 'ok') {
                 return res.data.data || [];
             }

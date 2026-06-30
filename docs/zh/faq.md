@@ -4,7 +4,7 @@
 
 ### 当管理面板打开时遇到 404 错误
 
-在 [release](https://github.com/AstrBotDevs/AstrBot/releases) 页面下载 `dist.zip`，解压拖到 `AstrBot/data` 下。还不行请重启电脑（来自群里的反馈）
+在 [release](https://github.com/AstrBotDevs/AstrBot/releases) 页面下载 `AstrBot-vxxxxx-dashboard.zip`，解压拖到 `AstrBot/data` 下。还不行请重启电脑（来自群里的反馈）
 
 
 ### 首次登录的默认账号和随机密码
@@ -28,7 +28,9 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 管理面板的密码忘记了
 
-如果你忘记了 AstrBot 管理面板的密码，你可以在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段，如下：
+如果你忘记了 AstrBot 管理面板的密码，你可以直接使用CLI工具`astrbot password`来更改密码
+
+另外，你也可以在 `AstrBot/data/cmd_config.json` 配置文件中找到 `"dashboard"` 字段，如下：
 
 ```json
   "dashboard": {
@@ -118,7 +120,7 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 没有权限操作管理员指令
 
-1. `/reset, /persona, /dashboard_update, /op, /deop, /wl, /dewl` 是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置` -> `其他配置` 中添加到管理员 ID 名单中。
+1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` 等是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置` -> `其他配置` 中添加到管理员 ID 名单中。
 
 ### 本地渲染 Markdown 图片（t2i）时中文乱码
 
