@@ -1,5 +1,6 @@
 // Author: elecvoid243
-// Date: 2026-06-17 (updated 2026-06-20 for scope echo)
+// Date: 2026-06-17 (updated 2026-06-20 for scope echo; 2026-06-30
+//       for empty-diff data-loss fix — see tests/parseSpcodeGitDiff.test.mjs)
 // Spec: docs/superpowers/specs/2026-06-17-chatui-git-diff-sidebar-design.md §4.1.1
 //      + docs/superpowers/specs/2026-06-20-git-diff-scope-switcher-design.md §4.2
 
@@ -106,7 +107,13 @@ export function parseSpcodeGitDiff(
       fetchedAt: Date.now(),
     },
     files: (() => {
-      if (!data.diff || !Array.isArray(data.files_changed)) return [];
+      // files_changed is the source of truth for the file list;
+      // diff is OPTIONAL patch text used to attach slices. Treat the
+      // two independently so a missing/empty diff payload (e.g. for
+      // a scope=unstaged query against a clean worktree, or a
+      // truncation that dropped the patch but kept the metadata)
+      // does NOT drop the file rows from the sidebar.
+      if (!Array.isArray(data.files_changed)) return [];
       const byPath = new Map<string, SpcodeGitDiffFile>();
       for (const f of data.files_changed) {
         byPath.set(f.path, {
@@ -118,7 +125,10 @@ export function parseSpcodeGitDiff(
           isBinary: false,
         });
       }
-      const segments = data.diff.split(/^diff --git /m);
+      // Split the patch text once. `data.diff` may be null or "" when
+      // the backend had no patch to ship; treat that as "no slices
+      // to attach" and keep the file rows with slice=null.
+      const segments = (data.diff ?? "").split(/^diff --git /m);
       for (let i = 1; i < segments.length; i++) {
         const seg = "diff --git " + segments[i];
         const m = seg.match(/^diff --git a\/\S+ b\/(\S+)/m);

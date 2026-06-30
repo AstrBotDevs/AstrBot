@@ -61,4 +61,4 @@ echo [INFO] Starting AstrBot in background mode ...
 echo Running "%PYW%" "%~dp0%SCRIPT_NAME%"
 start /b "" "%PYW%" "%~dp0%SCRIPT_NAME%"
 echo [SUCCESS] Astrbot is running in background.
-endlocal
+pause
