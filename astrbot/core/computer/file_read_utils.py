@@ -78,13 +78,26 @@ class ParsedDocument:
     text: str
 
 
+def _directory_read_error(path: str) -> str:
+    return (
+        f"Error: `{path}` is a directory, not a file. "
+        "Use a file path instead, or use `astrbot_execute_shell` "
+        "to list directory contents."
+    )
+
+
 def _build_probe_script(path: str) -> str:
+    directory_error = _directory_read_error(path)
     return f"""
 import base64
 import json
 from pathlib import Path
 
 path = Path({path!r})
+if path.is_dir():
+    raise ValueError({directory_error!r})
+if not path.is_file():
+    raise ValueError("Error: File does not exist: `{path}`")
 with path.open("rb") as file_obj:
     sample = file_obj.read({_FILE_SNIFF_BYTES})
 print(
@@ -652,13 +665,24 @@ async def read_file_tool_result(
     workspace_dir: str | None = None,
 ) -> ToolExecResult:
     if local_mode:
+        file_path = Path(path)
+        if file_path.is_dir():
+            return _directory_read_error(path)
+        if not file_path.is_file():
+            return f"Error: File does not exist: `{path}`"
         probe_payload = await _probe_local_file(path)
     else:
-        probe_payload = await _exec_python_json(
-            booter,
-            _build_probe_script(path),
-            action="file probe",
-        )
+        try:
+            probe_payload = await _exec_python_json(
+                booter,
+                _build_probe_script(path),
+                action="file probe",
+            )
+        except RuntimeError as exc:
+            probe_error = str(exc).removeprefix("file probe failed: ").strip()
+            if probe_error.startswith("Error:"):
+                return probe_error
+            raise
     sample_b64 = str(probe_payload.get("sample_b64", "") or "")
     sample = base64.b64decode(sample_b64) if sample_b64 else b""
     size_bytes = int(probe_payload.get("size_bytes", 0) or 0)

@@ -408,6 +408,26 @@ def test_detect_text_encoding_allows_utf8_probe_cut_mid_character():
 
 
 @pytest.mark.asyncio
+async def test_file_read_tool_rejects_directory_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    directory = workspace / "api"
+    directory.mkdir()
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(),
+        path="api",
+    )
+
+    assert "is a directory, not a file" in result
+    assert "astrbot_execute_shell" in result
+    assert "Permission denied" not in result
+    assert "Is a directory" not in result
+
+
+@pytest.mark.asyncio
 async def test_file_read_tool_rejects_large_full_text_read_before_local_stream_read(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
