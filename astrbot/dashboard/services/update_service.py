@@ -197,13 +197,16 @@ class UpdateService:
         """
         update_temp_parent = Path(get_astrbot_temp_path()) / "updates"
         try:
+            if update_temp_parent.is_symlink():
+                update_temp_parent.unlink()
             update_temp_parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             update_temp_parent.chmod(0o700)
-            with tempfile.TemporaryDirectory(
+            update_temp_dir_obj = tempfile.TemporaryDirectory(
                 prefix="project-update-",
                 dir=update_temp_parent,
-            ) as update_temp_dir_name:
-                update_temp_dir = Path(update_temp_dir_name)
+            )
+            try:
+                update_temp_dir = Path(update_temp_dir_obj.name)
                 update_token = uuid.uuid4().hex
                 dashboard_zip_path = update_temp_dir / f"{update_token}-dashboard.zip"
                 core_zip_path = update_temp_dir / f"{update_token}-core.zip"
