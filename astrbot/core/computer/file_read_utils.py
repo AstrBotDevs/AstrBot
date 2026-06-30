@@ -652,6 +652,12 @@ async def read_file_tool_result(
     workspace_dir: str | None = None,
 ) -> ToolExecResult:
     if local_mode:
+        if Path(path).is_dir():
+            return (
+                f"Error: `{path}` is a directory, not a file. "
+                "Provide a file path instead, or use `astrbot_execute_shell` "
+                "to list directory contents."
+            )
         probe_payload = await _probe_local_file(path)
     else:
         probe_payload = await _exec_python_json(
