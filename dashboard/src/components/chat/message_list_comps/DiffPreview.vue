@@ -138,8 +138,53 @@
               v-for="(line, li) in hunk.lines"
               :key="li"
               class="diff-line"
-              :class="line.type"
+              :class="[
+                line.type,
+                {
+                  'has-comment': isCommentable &&
+                    !!line.newNo &&
+                    commentsByNewLine.has(Number(line.newNo)),
+                  'is-hovered': isCommentable &&
+                    !!line.newNo &&
+                    hoveredUnifiedLine === Number(line.newNo) &&
+                    hoveredUnifiedHunk === hi,
+                },
+              ]"
+              @mouseenter="onUnifiedRowEnter(line, hi)"
+              @mouseleave="onUnifiedRowLeave"
             >
+              <!-- Inline-comment gutter: only on lines that exist in
+                   the new file (ctx / add). Always rendered (even
+                   when invisible) so the layout doesn't shift when
+                   the user hovers in. Positioned as the FIRST child
+                   of .diff-line so it sits at the left edge. -->
+              <span
+                v-if="isCommentable && line.newNo"
+                class="diff-line-gutter"
+              >
+                <button
+                  v-if="hoveredUnifiedLine === Number(line.newNo) &&
+                    hoveredUnifiedHunk === hi &&
+                    !commentsByNewLine.has(Number(line.newNo))"
+                  type="button"
+                  class="diff-comment-add"
+                  :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line: line.newNo })"
+                  @click.stop="openNewEditor(Number(line.newNo))"
+                >+</button>
+                <button
+                  v-else-if="commentsByNewLine.has(Number(line.newNo))"
+                  type="button"
+                  class="diff-comment-indicator"
+                  :title="commentsByNewLine.get(Number(line.newNo))?.text ?? ''"
+                  :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.indicatorAria', {
+                    line: line.newNo,
+                    preview: commentsByNewLine.get(Number(line.newNo))?.text ?? '',
+                  })"
+                  @click.stop="openEditEditor(commentsByNewLine.get(Number(line.newNo))?.id ?? '')"
+                >
+                  <v-icon size="12">mdi-comment-text-outline</v-icon>
+                </button>
+              </span>
               <span class="line-number old">{{ line.oldNo }}</span>
               <span class="line-number new">{{ line.newNo }}</span>
               <span class="line-prefix">{{ line.prefix }}</span>
@@ -151,7 +196,10 @@
 
       <!-- Split mode: two-column layout, del/add lines are paired
            into rows by alignHunkLines. A row with a missing side
-           keeps the cell empty so the visual columns stay aligned. -->
+           keeps the cell empty so the visual columns stay aligned.
+           The inline-comment gutter is anchored to the RIGHT cell
+           (the new-side column) so we don't have to decide what
+           "the line" means on a row with two distinct contents. -->
       <template v-else>
         <div
           v-for="(hunk, hi) in splitHunks"
@@ -165,7 +213,24 @@
             v-for="(row, ri) in hunk.rows"
             :key="ri"
             class="diff-row-split"
-            :class="row.kind"
+            :class="[
+              row.kind,
+              {
+                'has-comment': isCommentable &&
+                  !!row.right?.newNo &&
+                  commentsByNewLine.has(Number(row.right.newNo)),
+                // Hunk index guard: `ri` is the row index WITHIN
+                // this hunk, so two hunks with a row at the same
+                // offset would otherwise both light up. Pairing
+                // (hi, ri) makes the key globally unique.
+                'is-hovered': isCommentable &&
+                  !!row.right?.newNo &&
+                  hoveredSplitRow === ri &&
+                  hoveredSplitHunk === hi,
+              },
+            ]"
+            @mouseenter="onSplitRowEnter(ri, row, hi)"
+            @mouseleave="onSplitRowLeave"
           >
             <div class="diff-cell left">
               <span class="line-number">{{ row.left?.oldNo ?? '' }}</span>
@@ -173,6 +238,36 @@
               <span class="line-content">{{ row.left?.content ?? '' }}</span>
             </div>
             <div class="diff-cell right">
+              <!-- Inline-comment gutter: first child of the right
+                   cell, absolutely positioned to the left edge via
+                   CSS. Only on rows that have a new-side line. -->
+              <span
+                v-if="isCommentable && row.right?.newNo"
+                class="diff-line-gutter"
+              >
+                <button
+                  v-if="hoveredSplitRow === ri &&
+                    hoveredSplitHunk === hi &&
+                    !commentsByNewLine.has(Number(row.right!.newNo))"
+                  type="button"
+                  class="diff-comment-add"
+                  :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line: row.right!.newNo })"
+                  @click.stop="openNewEditor(Number(row.right!.newNo))"
+                >+</button>
+                <button
+                  v-else-if="commentsByNewLine.has(Number(row.right!.newNo))"
+                  type="button"
+                  class="diff-comment-indicator"
+                  :title="commentsByNewLine.get(Number(row.right!.newNo))?.text ?? ''"
+                  :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.indicatorAria', {
+                    line: row.right!.newNo,
+                    preview: commentsByNewLine.get(Number(row.right!.newNo))?.text ?? '',
+                  })"
+                  @click.stop="openEditEditor(commentsByNewLine.get(Number(row.right!.newNo))?.id ?? '')"
+                >
+                  <v-icon size="12">mdi-comment-text-outline</v-icon>
+                </button>
+              </span>
               <span class="line-number">{{ row.right?.newNo ?? '' }}</span>
               <span class="line-prefix">{{ row.right?.prefix ?? '' }}</span>
               <span class="line-content">{{ row.right?.content ?? '' }}</span>
@@ -194,6 +289,27 @@
         </button>
       </div>
     </div>
+
+    <!-- Inline-comment editor. Rendered inside the preview root (as
+         a sibling of the body) so it scrolls together with the
+         diff in the parent container. Hidden when the diff is
+         collapsed — there's no point editing a comment the user
+         can't see the context for. `v-if` (not v-show) so a closed
+         editor fully tears down its DOM (and the textarea's
+         keydown listener). -->
+    <FileCommentEditor
+      v-if="!isCollapsed && activeEditLine !== null && isCommentable"
+      :line="activeEditLine"
+      :comment-id="activeEditCommentId"
+      :initial-text="editorInitialText"
+      :line-content="editorContext?.lineContent ?? null"
+      :context-before="editorContext?.contextBefore ?? null"
+      :context-after="editorContext?.contextAfter ?? null"
+      :file-path="filePath"
+      @save="onSaveComment"
+      @cancel="closeEditor"
+      @delete="onDeleteComment"
+    />
   </div>
 
   <!-- Fullscreen overlay — Teleported to <body> to escape fixed-position
@@ -309,7 +425,7 @@
               {{ maxChars.toLocaleString() }} characters)
             </div>
 
-            <!-- Unified mode -->
+            <!-- Unified mode (fullscreen copy) -->
             <template v-if="viewMode === 'unified'">
               <div
                 v-for="(hunk, hi) in parsedHunks"
@@ -343,8 +459,51 @@
                     v-for="(line, li) in hunk.lines"
                     :key="li"
                     class="diff-line"
-                    :class="line.type"
+                    :class="[
+                      line.type,
+                      {
+                        'has-comment': isCommentable &&
+                          !!line.newNo &&
+                          commentsByNewLine.has(Number(line.newNo)),
+                        // Fullscreen copy mirrors the normal view:
+                        // hunk guard scopes the hover to the
+                        // hunk the cursor is in.
+                        'is-hovered': isCommentable &&
+                          !!line.newNo &&
+                          hoveredUnifiedLine === Number(line.newNo) &&
+                          hoveredUnifiedHunk === hi,
+                      },
+                    ]"
+                    @mouseenter="onUnifiedRowEnter(line, hi)"
+                    @mouseleave="onUnifiedRowLeave"
                   >
+                    <span
+                      v-if="isCommentable && line.newNo"
+                      class="diff-line-gutter"
+                    >
+                      <button
+                        v-if="hoveredUnifiedLine === Number(line.newNo) &&
+                          hoveredUnifiedHunk === hi &&
+                          !commentsByNewLine.has(Number(line.newNo))"
+                        type="button"
+                        class="diff-comment-add"
+                        :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line: line.newNo })"
+                        @click.stop="openNewEditor(Number(line.newNo))"
+                      >+</button>
+                      <button
+                        v-else-if="commentsByNewLine.has(Number(line.newNo))"
+                        type="button"
+                        class="diff-comment-indicator"
+                        :title="commentsByNewLine.get(Number(line.newNo))?.text ?? ''"
+                        :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.indicatorAria', {
+                          line: line.newNo,
+                          preview: commentsByNewLine.get(Number(line.newNo))?.text ?? '',
+                        })"
+                        @click.stop="openEditEditor(commentsByNewLine.get(Number(line.newNo))?.id ?? '')"
+                      >
+                        <v-icon size="12">mdi-comment-text-outline</v-icon>
+                      </button>
+                    </span>
                     <span class="line-number old">{{ line.oldNo }}</span>
                     <span class="line-number new">{{ line.newNo }}</span>
                     <span class="line-prefix">{{ line.prefix }}</span>
@@ -354,7 +513,7 @@
               </div>
             </template>
 
-            <!-- Split mode -->
+            <!-- Split mode (fullscreen copy) -->
             <template v-else>
               <div
                 v-for="(hunk, hi) in splitHunks"
@@ -368,7 +527,25 @@
                   v-for="(row, ri) in hunk.rows"
                   :key="ri"
                   class="diff-row-split"
-                  :class="row.kind"
+                  :class="[
+                    row.kind,
+                    {
+                      'has-comment': isCommentable &&
+                        !!row.right?.newNo &&
+                        commentsByNewLine.has(Number(row.right.newNo)),
+                      // Fullscreen copy mirrors the normal view:
+                      // hunk guard scopes the hover to the hunk
+                      // the cursor is in. (Bugfix for per-hunk
+                      // `ri` collision when multiple hunks share
+                      // a row offset.)
+                      'is-hovered': isCommentable &&
+                        !!row.right?.newNo &&
+                        hoveredSplitRow === ri &&
+                        hoveredSplitHunk === hi,
+                    },
+                  ]"
+                  @mouseenter="onSplitRowEnter(ri, row, hi)"
+                  @mouseleave="onSplitRowLeave"
                 >
                   <div class="diff-cell left">
                     <span class="line-number">{{ row.left?.oldNo ?? '' }}</span>
@@ -376,6 +553,33 @@
                     <span class="line-content">{{ row.left?.content ?? '' }}</span>
                   </div>
                   <div class="diff-cell right">
+                    <span
+                      v-if="isCommentable && row.right?.newNo"
+                      class="diff-line-gutter"
+                    >
+                      <button
+                        v-if="hoveredSplitRow === ri &&
+                          hoveredSplitHunk === hi &&
+                          !commentsByNewLine.has(Number(row.right!.newNo))"
+                        type="button"
+                        class="diff-comment-add"
+                        :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line: row.right!.newNo })"
+                        @click.stop="openNewEditor(Number(row.right!.newNo))"
+                      >+</button>
+                      <button
+                        v-else-if="commentsByNewLine.has(Number(row.right!.newNo))"
+                        type="button"
+                        class="diff-comment-indicator"
+                        :title="commentsByNewLine.get(Number(row.right!.newNo))?.text ?? ''"
+                        :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.indicatorAria', {
+                          line: row.right!.newNo,
+                          preview: commentsByNewLine.get(Number(row.right!.newNo))?.text ?? '',
+                        })"
+                        @click.stop="openEditEditor(commentsByNewLine.get(Number(row.right!.newNo))?.id ?? '')"
+                      >
+                        <v-icon size="12">mdi-comment-text-outline</v-icon>
+                      </button>
+                    </span>
                     <span class="line-number">{{ row.right?.newNo ?? '' }}</span>
                     <span class="line-prefix">{{ row.right?.prefix ?? '' }}</span>
                     <span class="line-content">{{ row.right?.content ?? '' }}</span>
@@ -397,6 +601,25 @@
               </button>
             </div>
           </div>
+
+          <!-- Inline-comment editor (fullscreen copy). Same state as
+               the normal view, so when the user opens the editor
+               while fullscreen and then exits fullscreen, the
+               editor simply migrates from the overlay to the normal
+               view — no state to re-create. -->
+          <FileCommentEditor
+            v-if="!isCollapsed && activeEditLine !== null && isCommentable"
+            :line="activeEditLine"
+            :comment-id="activeEditCommentId"
+            :initial-text="editorInitialText"
+            :line-content="editorContext?.lineContent ?? null"
+            :context-before="editorContext?.contextBefore ?? null"
+            :context-after="editorContext?.contextAfter ?? null"
+            :file-path="filePath"
+            @save="onSaveComment"
+            @cancel="closeEditor"
+            @delete="onDeleteComment"
+          />
         </div>
       </div>
     </div>
@@ -406,6 +629,14 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, watch, onBeforeUnmount } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import {
+  extractLineContext,
+  useFileComments,
+  type DiffHunkContext,
+  type FileComment,
+  type LineContext,
+} from "@/composables/useFileComments";
+import FileCommentEditor from "./FileCommentEditor.vue";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -453,6 +684,21 @@ const props = withDefaults(
     maxChars?: number;
     collapsible?: boolean;
     isDark?: boolean;
+    /**
+     * When true (default), lines that exist in the new file (ctx +
+     * add) expose an inline-comment gutter; lines that have a
+     * comment already expose an indicator. Set to false to disable
+     * the comment UI for a particular DiffPreview instance (e.g. for
+     * a synthetic stub the user shouldn't be reviewing).
+     */
+    commentable?: boolean;
+    /**
+     * Pre-filtered comments for this file. When omitted, DiffPreview
+     * pulls from the global useFileComments() store on its own.
+     * Exposed as a prop so a parent that already maintains a scoped
+     * comment list can pass it in without re-deriving.
+     */
+    comments?: FileComment[];
   }>(),
   {
     filePath: "",
@@ -461,6 +707,8 @@ const props = withDefaults(
     maxChars: 2000,
     collapsible: true,
     isDark: false,
+    commentable: true,
+    comments: () => [],
   },
 );
 
@@ -556,6 +804,276 @@ onBeforeUnmount(() => {
     document.body.style.overflow = "";
   }
 });
+
+// ── Inline comments (spec 2026-06-30-diff-inline-comments) ─────────
+// Comments are anchored to the NEW file. A diff has up to 4 kinds of
+// lines:
+//   - ctx   — exists on both sides; newNo is set
+//   - add   — only in new file; newNo is set
+//   - del   — only in old file; newNo is ""  (we skip these)
+//   - split del-only rows — right cell is null (we skip these)
+//
+// To avoid polluting useFileComments.contentCache (which is reserved
+// for the real on-disk file content seen in the file browser), we
+// reconstruct the "post-change file content" from the parsed diff and
+// hand it directly to addCommentWithContext.
+
+const fileComments = useFileComments();
+
+/** Per-row hover state.
+ *
+ *  Unified mode keys off the new-side absolute line number — newNo
+ *  is unique per file, so one number identifies one row.
+ *
+ *  Split mode keys off the per-hunk row index `ri` plus the hunk
+ *  index `hi` — `ri` alone is naturally ambiguous because each
+ *  hunk restarts its row counter from 0, so two hunks with the
+ *  same number of rows would have a `ri` collision at every
+ *  position. The pair (hi, ri) is unique.
+ *
+ *  We carry the hunk index in unified mode too for symmetry, even
+ *  though `hoveredUnifiedLine` is already unambiguous — it makes
+ *  the v-if's intent explicit ("the line in the same hunk") and
+ *  shields against any future change to the newNo assignment.
+ *
+ *  `null` means "no row hovered". */
+const hoveredUnifiedLine = ref<number | null>(null);
+const hoveredUnifiedHunk = ref<number | null>(null);
+const hoveredSplitRow = ref<number | null>(null);
+const hoveredSplitHunk = ref<number | null>(null);
+
+/** Editor state (mirrors FileBrowserFilePreview's pattern). When
+ *  `activeEditLine` is non-null the editor is visible at the bottom
+ *  of the preview. */
+const activeEditLine = ref<number | null>(null);
+const activeEditCommentId = ref<string | null>(null);
+const editorContext = ref<LineContext | null>(null);
+const editorInitialText = ref<string>("");
+
+/** Effective opt-in: must be enabled AND a filePath must be set.
+ *  filePath is empty for markdown ```diff``` blocks, so the comment
+ *  UI silently disappears there. */
+const isCommentable = computed<boolean>(
+  () => props.commentable !== false && props.filePath.length > 0,
+);
+
+/** Resolved comment list: prefer the parent-supplied `props.comments`,
+ *  fall back to querying the store. Splitting this from
+ *  `commentsByNewLine` means a parent can pre-filter or scope the
+ *  list (e.g. by worktree) without going through the store. */
+const visibleComments = computed<FileComment[]>(() => {
+  if (props.comments.length > 0) return props.comments;
+  if (!isCommentable.value) return [];
+  return fileComments.commentsForFile(props.filePath);
+});
+
+/** newNo → existing comment. First-wins: if a parent injects
+ *  duplicates (shouldn't happen, but be defensive) the first one
+ *  renders the indicator and the others are ignored. */
+const commentsByNewLine = computed<Map<number, FileComment>>(() => {
+  const m = new Map<number, FileComment>();
+  for (const c of visibleComments.value) {
+    if (Number.isInteger(c.line) && c.line > 0 && !m.has(c.line)) {
+      m.set(c.line, c);
+    }
+  }
+  return m;
+});
+
+/** Reconstruct the post-change file content by joining all ctx + add
+ *  lines in order. This is the synthetic "current file" the diff
+ *  describes, and it's what we hand to extractLineContext when the
+ *  user opens a new comment. We deliberately do NOT register this
+ *  in useFileComments.contentCache (see addCommentWithContext docs). */
+const newFileContent = computed<string>(() => {
+  const out: string[] = [];
+  for (const hunk of parsedHunks.value) {
+    for (const line of hunk.lines) {
+      if (line.type === "ctx" || line.type === "add") {
+        out.push(line.content);
+      }
+    }
+  }
+  return out.join("\n");
+});
+
+/**
+ * Editor state carries the optional diff-hunk context for the line
+ * being edited. We snapshot the hunk at the moment the editor opens
+ * (NOT at save time) so the user can see the surrounding patch in
+ * the comment preview, and so the saved comment reflects the patch
+ * as the user saw it when they decided to write.
+ *
+ * `null` for file-browser paths and for synthetic diffs that have no
+ * parseable hunk header.
+ */
+const pendingDiffHunk = ref<DiffHunkContext | null>(null);
+
+/**
+ * Find the parsed DiffHunk whose new-side range contains `line`.
+ * The hunk header `@@ -X,A +Y,B @@` tells us the starting new-side
+ * line Y and the new-side count B. We check whether the requested
+ * line falls in [Y, Y+B) by counting ctx+add lines (we have the
+ * parsed lines in `parsedHunks` already, so this is O(hunk-lines)
+ * per hunk, not a re-parse).
+ */
+function findHunkForLine(line: number): DiffHunk | null {
+  for (const hunk of parsedHunks.value) {
+    const m = hunk.header.match(
+      /^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/,
+    );
+    if (!m) continue;
+    const startNew = parseInt(m[1], 10);
+    const newCount = hunk.lines.filter((l) => l.type !== "del").length;
+    if (line >= startNew && line < startNew + newCount) {
+      return hunk;
+    }
+  }
+  return null;
+}
+
+/**
+ * Convert a parsed DiffHunk into the serializable DiffHunkContext
+ * that gets stored on the FileComment. The hunk's `oldNo`/`newNo`
+ * strings are parsed back to numbers so the LLM-facing renderer
+ * can format them without re-parsing. `header-file` lines are
+ * dropped — they don't appear inside hunks in practice but we
+ * filter defensively.
+ */
+function buildDiffHunkContext(hunk: DiffHunk, newLine: number): DiffHunkContext {
+  return {
+    header: hunk.header,
+    lines: hunk.lines
+      .filter((l) => l.type !== "header-file")
+      .map((l) => ({
+        type: l.type as "add" | "del" | "ctx",
+        content: l.content,
+        oldNo: l.oldNo ? Number(l.oldNo) : null,
+        newNo: l.newNo ? Number(l.newNo) : null,
+      })),
+    newLine,
+  };
+}
+
+/** Open the editor for a brand-new comment on a given new-side line. */
+function openNewEditor(line: number): void {
+  activeEditLine.value = line;
+  activeEditCommentId.value = null;
+  editorInitialText.value = "";
+  // extractLineContext may return null when the line is out of range
+  // (e.g. a stub diff that only contains del lines). The editor
+  // handles a null context gracefully (no preview snippet shown).
+  editorContext.value = extractLineContext(newFileContent.value, line);
+  // Snapshot the surrounding diff hunk so the saved comment can
+  // include the patch in the LLM-facing output. Falls back to null
+  // when the line isn't in any parseable hunk (very rare: only
+  // happens if the diff text is malformed and the parser couldn't
+  // recover the @@ header).
+  const hunk = findHunkForLine(line);
+  pendingDiffHunk.value = hunk ? buildDiffHunkContext(hunk, line) : null;
+}
+
+/** Open the editor for an existing comment (look up by id in the
+ *  global store so the comment's own lineContent/context is used —
+ *  not whatever the current diff happens to contain). */
+function openEditEditor(commentId: string): void {
+  const existing = fileComments.findCommentById(commentId);
+  if (!existing) return;
+  activeEditLine.value = existing.line;
+  activeEditCommentId.value = existing.id;
+  editorInitialText.value = existing.text;
+  editorContext.value = {
+    lineContent: existing.lineContent,
+    contextBefore: existing.contextBefore,
+    contextAfter: existing.contextAfter,
+  };
+}
+
+function onSaveComment(payload: {
+  text: string;
+  commentId: string | null;
+  line: number;
+}): void {
+  if (payload.commentId) {
+    fileComments.updateComment(payload.commentId, payload.text);
+  } else {
+    if (!isCommentable.value) {
+      closeEditor();
+      return;
+    }
+    // Fall back to a minimal context if the diff couldn't synthesize
+    // a real one (e.g. out-of-range line). The comment is still
+    // useful — the LLM can locate the line by number + file path.
+    const ctx = editorContext.value ?? {
+      lineContent: "",
+      contextBefore: null,
+      contextAfter: null,
+    };
+    fileComments.addCommentWithContext({
+      filePath: props.filePath,
+      line: payload.line,
+      text: payload.text,
+      context: ctx,
+      // Attach the diff hunk so the LLM sees the surrounding
+      // patch (with the target line marked) instead of just the
+      // one line of context around the comment. `null` for
+      // file-browser paths and for hunks that couldn't be parsed.
+      diffHunk: pendingDiffHunk.value ?? undefined,
+    });
+  }
+  closeEditor();
+}
+
+function onDeleteComment(commentId: string): void {
+  fileComments.deleteComment(commentId);
+  closeEditor();
+}
+
+function closeEditor(): void {
+  activeEditLine.value = null;
+  activeEditCommentId.value = null;
+  editorContext.value = null;
+  // Drop the snapshotted hunk — it's only meaningful while the
+  // editor is open. Leaving it would leak memory if the editor is
+  // never re-opened.
+  pendingDiffHunk.value = null;
+}
+
+/** Hover handlers — using @mouseenter/@mouseleave on each row gives
+ *  us a stable "which row is the mouse over" signal without the
+ *  mousemove handler that FileBrowserCodeView needs (Shiki outputs
+ *  one span per line so the file browser has to compute the hovered
+ *  line from clientY; here we get it for free from the row element). */
+function onUnifiedRowEnter(line: DiffLine, hi: number): void {
+  if (!isCommentable.value) return;
+  if (!line.newNo) return; // del lines don't have a new-side number
+  hoveredUnifiedLine.value = Number(line.newNo);
+  hoveredUnifiedHunk.value = hi;
+}
+function onUnifiedRowLeave(): void {
+  hoveredUnifiedLine.value = null;
+  hoveredUnifiedHunk.value = null;
+}
+function onSplitRowEnter(ri: number, row: SplitRow, hi: number): void {
+  if (!isCommentable.value) return;
+  if (!row.right || !row.right.newNo) return; // del-only rows
+  hoveredSplitRow.value = ri;
+  hoveredSplitHunk.value = hi;
+}
+function onSplitRowLeave(): void {
+  hoveredSplitRow.value = null;
+  hoveredSplitHunk.value = null;
+}
+
+/** Close the editor when the user switches files in the parent — the
+ *  editor's line number is for a different file, so keeping it open
+ *  would be confusing. */
+watch(
+  () => props.filePath,
+  () => {
+    closeEditor();
+  },
+);
 
 // ── Parse unified diff ─────────────────────────────────────────────
 
@@ -1333,5 +1851,143 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
 .diff-fullscreen-btn:focus-visible {
   outline: 2px solid rgb(var(--v-theme-primary));
   outline-offset: -2px;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Inline-comment gutter (spec 2026-06-30-diff-inline-comments)
+   ══════════════════════════════════════════════════════════════════
+
+   Mirrors the file-browser gutter (FileBrowserCodeView.vue) so the
+   two review surfaces feel identical. The gutter is a 24px-wide slot
+   at the right end of each diff row; it stays in the layout (just
+   invisible) so hovering doesn't shift the code column. The cell
+   shows:
+     - the primary-tinted "+" chip on hover (when the line has no
+       existing comment)
+     - the warning-tinted indicator (when a comment exists) — stays
+       visible always, like the file-browser indicator
+*/
+
+/* Unified mode: a fixed 24px column at the very LEFT of .diff-line
+   (which is a flex row). Mirrors the file-browser code view, which
+   also puts the gutter on the left — keeps the two review surfaces
+   visually consistent so the user's mouse doesn't have to learn a
+   new hot-zone. */
+.diff-line {
+  position: relative;
+}
+.diff-line-gutter {
+  width: 24px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+/* Show on row hover OR when a comment already exists on the line. */
+.diff-line.is-hovered .diff-line-gutter,
+.diff-line.has-comment .diff-line-gutter {
+  opacity: 1;
+}
+
+/* The "add comment" chip — matches FileBrowserCodeView .gutter-add-btn. */
+.diff-comment-add {
+  width: 20px;
+  height: 20px;
+  background: rgba(var(--v-theme-primary), 0.2);
+  border: 1.5px solid rgba(var(--v-theme-primary), 0.7);
+  border-radius: 5px;
+  cursor: pointer;
+  color: rgb(var(--v-theme-primary));
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.diff-preview.is-dark .diff-comment-add {
+  background: rgba(var(--v-theme-primary), 0.28);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.diff-comment-add:hover,
+.diff-comment-add:focus {
+  background: rgba(var(--v-theme-primary), 0.4);
+  border-color: rgb(var(--v-theme-primary));
+  transform: scale(1.15);
+  box-shadow: 0 2px 6px rgba(var(--v-theme-primary), 0.45);
+}
+.diff-comment-add:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
+}
+
+/* The "comment exists" indicator — matches FileBrowserCodeView
+   .gutter-comment-indicator. Always visible when present, doesn't
+   require hover. */
+.diff-comment-indicator {
+  width: 18px;
+  height: 18px;
+  background: rgba(var(--v-theme-warning), 0.15);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: rgb(var(--v-theme-warning));
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.diff-comment-indicator:hover,
+.diff-comment-indicator:focus {
+  background: rgba(var(--v-theme-warning), 0.25);
+  transform: scale(1.1);
+}
+.diff-comment-indicator:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-warning));
+  outline-offset: 2px;
+}
+
+/* Split mode: the right cell already fills the right half of the
+   row. The gutter is absolutely positioned at the LEFT edge of the
+   right cell so it sits in the gap between the two columns' line
+   numbers and the code text — the same place the file browser puts
+   its gutter. */
+.diff-row-split {
+  position: relative;
+}
+.diff-cell.right {
+  position: relative;
+}
+.diff-cell.right .diff-line-gutter {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: auto;
+  margin-left: 0;
+}
+/* In split mode the gutter appears as an overlay, not a flex
+   column — otherwise it would push the line-number column around
+   and break the left/right cell alignment. Override the visibility
+   transitions to only apply when hover/has-comment. */
+.diff-row-split .diff-line-gutter {
+  opacity: 0;
+  pointer-events: none;
+}
+.diff-row-split.is-hovered .diff-line-gutter,
+.diff-row-split.has-comment .diff-line-gutter {
+  opacity: 1;
+  pointer-events: auto;
 }
 </style>

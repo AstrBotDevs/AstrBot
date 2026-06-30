@@ -1,5 +1,8 @@
 // Author: elecvoid243, 2026-06-21
 // Spec: docs/superpowers/specs/2026-06-21-file-browser-inline-comments-design.md §4.1
+//      + 2026-06-30: add addCommentWithContext for diff-comment
+//        integration (diff-synthesized "post-change" content must NOT
+//        be written into contentCache).
 // In-memory comment store + content cache for the file-browser inline
 // comments feature. See spec §1, §2 (decisions), §4.1, §5 for context.
 
@@ -28,6 +31,48 @@ export interface FileComment {
   text: string;
   createdAt: number;
   updatedAt: number;
+  /**
+   * Optional diff-hunk context. When set, indicates the comment was
+   * made on a DiffPreview (not the raw file browser). The LLM uses
+   * this to see what changed around the commented line — far more
+   * informative than just "the line above and below". File browser
+   * comments leave this undefined.
+   */
+  diffHunk?: DiffHunkContext;
+}
+
+/**
+ * Snapshot of a unified-diff hunk captured at comment time, plus the
+ * new-side line the comment is anchored to. Renderer in formatForLLM
+ * emits the hunk with a ">" marker next to the anchored line so the
+ * LLM can see both the surrounding patch and exactly which line the
+ * user is reviewing.
+ */
+export interface DiffHunkContext {
+  /** The hunk header line, e.g. "@@ -40,3 +40,3 @@ optional context". */
+  header: string;
+  /**
+   * Hunk lines, in order. `type` carries the unified-diff prefix
+   * (so the LLM can tell which lines were added vs removed); the
+   * renderer re-emits the prefix in the LLM-facing output. Line
+   * numbers are denormalized into each line so the renderer can
+   * format rows without re-parsing the hunk header or tracking
+   * newNo manually.
+   */
+  lines: Array<{
+    type: "add" | "del" | "ctx";
+    content: string;
+    /** New-side line number. Set for ctx and add; null for del. */
+    newNo: number | null;
+    /** Old-side line number. Set for ctx and del; null for add. */
+    oldNo: number | null;
+  }>;
+  /**
+   * New-side line number the comment is anchored to. The renderer
+   * looks up the line whose newNo equals this value and prepends a
+   * ">" marker to it.
+   */
+  newLine: number;
 }
 
 /** Single source of truth for line context extraction. Used by both
@@ -103,28 +148,70 @@ function createFileComments() {
 
   /** Add a comment, freezing lineContent / contextBefore / contextAfter
    *  from the cached content. Returns null if the cache has no entry
-   *  for this file (caller shows a snackbar and keeps the editor open). */
+   *  for this file (caller shows a snackbar and keeps the editor open).
+   *  The optional `diffHunk` is passed through to addCommentWithContext
+   *  so callers (currently none — the file browser doesn't produce
+   *  diff hunks) can attach a hunk if they ever need to. */
   function addComment(input: {
     filePath: string;
     line: number;
     text: string;
+    diffHunk?: DiffHunkContext;
   }): FileComment | null {
     const content = contentCache[input.filePath];
     if (content === undefined) return null;
     const ctx = extractLineContext(content, input.line);
     if (ctx === null) return null;
-    const comment: FileComment = {
-      id: newId(),
+    return addCommentWithContext({
       filePath: input.filePath,
       line: input.line,
-      lineContent: ctx.lineContent,
-      contextBefore: ctx.contextBefore,
-      contextAfter: ctx.contextAfter,
       text: input.text,
+      context: ctx,
+      diffHunk: input.diffHunk,
+    });
+  }
+
+  /**
+   * Add a comment using a pre-computed LineContext instead of looking
+   * the line up in the content cache. This is the path callers use
+   * when they have a derived/synthetic "file content" (e.g. the
+   * post-change content reconstructed from a unified diff) that
+   * should NOT be written back into `contentCache` — that cache is
+   * reserved for the real on-disk file content so that
+   * `extractLineContext(contentCache[path], line)` always reflects
+   * the file the user can see in the file browser.
+   *
+   * Pass `diffHunk` when the comment was made on a DiffPreview so
+   * the LLM receives the surrounding patch (with the target line
+   * marked) instead of just one line of context before/after.
+   *
+   * Validation: returns null on bad input so callers can surface a
+   * meaningful error (snackbar, etc.) without crashing.
+   */
+  function addCommentWithContext(input: {
+    filePath: string;
+    line: number;
+    text: string;
+    context: LineContext;
+    diffHunk?: DiffHunkContext;
+  }): FileComment | null {
+    const { filePath, line, text, context, diffHunk } = input;
+    if (!filePath) return null;
+    if (!Number.isInteger(line) || line < 1) return null;
+    if (text.trim() === "") return null;
+    const comment: FileComment = {
+      id: newId(),
+      filePath,
+      line,
+      lineContent: context.lineContent,
+      contextBefore: context.contextBefore,
+      contextAfter: context.contextAfter,
+      text,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      diffHunk,
     };
-    (comments[input.filePath] ??= []).push(comment);
+    (comments[filePath] ??= []).push(comment);
     return comment;
   }
 
@@ -224,67 +311,170 @@ function createFileComments() {
     for (const [filePath, commentList] of byFile) {
       const sorted = [...commentList].sort((a, b) => a.line - b.line);
 
-      // Group adjacent comments (line diff <= 3) into a shared window.
-      type Window = { startLine: number; endLine: number; comments: FileComment[] };
-      const windows: Window[] = [];
+      // Group comments by their rendering unit:
+      //   - hunk group: comments sharing a diff hunk header (one
+      //     hunk is rendered, with all anchored lines marked)
+      //   - window: file-browser comments within 3 lines of each
+      //     other (existing behavior, unchanged)
+      //
+      // A hunk group takes precedence: if a diff comment starts a
+      // new group, it is rendered as a hunk even if there are
+      // nearby file-browser comments — they go into a separate
+      // window group.
+      type HunkGroup = {
+        kind: "hunk";
+        hunk: DiffHunkContext;
+        comments: FileComment[];
+      };
+      type Window = {
+        kind: "window";
+        startLine: number;
+        endLine: number;
+        comments: FileComment[];
+      };
+      const groups: Array<HunkGroup | Window> = [];
       for (const c of sorted) {
-        const last = windows[windows.length - 1];
-        if (last && c.line - last.endLine <= 3) {
+        const last = groups[groups.length - 1];
+        if (c.diffHunk) {
+          // Greedy-merge into the previous hunk group if it has the
+          // SAME hunk header. Different hunks → different groups.
+          if (last && last.kind === "hunk" && last.hunk.header === c.diffHunk.header) {
+            last.comments.push(c);
+            continue;
+          }
+          groups.push({ kind: "hunk", hunk: c.diffHunk, comments: [c] });
+          continue;
+        }
+        // File-browser comment: merge into the previous window if
+        // line-adjacent.
+        if (last && last.kind === "window" && c.line - last.endLine <= 3) {
           last.endLine = Math.max(last.endLine, c.line);
           last.comments.push(c);
-        } else {
-          windows.push({ startLine: c.line, endLine: c.line, comments: [c] });
+          continue;
         }
+        groups.push({
+          kind: "window",
+          startLine: c.line,
+          endLine: c.line,
+          comments: [c],
+        });
       }
 
-      for (const win of windows) {
-        const ctxStart = win.comments.some((c) => c.contextBefore !== null)
-          ? Math.max(1, win.startLine - 1)
-          : win.startLine;
-        const ctxEnd = win.comments.some((c) => c.contextAfter !== null)
-          ? win.endLine + 1
-          : win.endLine;
-
-        const header =
-          win.startLine === win.endLine
-            ? `\`${filePath}\` line ${win.startLine}:`
-            : `\`${filePath}\` lines ${win.startLine}-${win.endLine}:`;
-        out.push("");
-        out.push(header);
-        out.push("````");  // 4-backtick fence (see spec §5.1)
-        const commentedSet = new Set(win.comments.map((c) => c.line));
-        const commentByLine = new Map(win.comments.map((c) => [c.line, c]));
-
-        for (let line = ctxStart; line <= ctxEnd; line++) {
-          const c = commentByLine.get(line);
-          let lineContent: string;
-          if (c) {
-            lineContent = c.lineContent;
-          } else if (line === ctxStart && win.comments[0].contextBefore !== null) {
-            lineContent = win.comments[0].contextBefore ?? "";
-          } else if (
-            line === ctxEnd &&
-            win.comments[win.comments.length - 1].contextAfter !== null
-          ) {
-            lineContent = win.comments[win.comments.length - 1].contextAfter ?? "";
-          } else {
-            lineContent = "";
-          }
-          const marker = commentedSet.has(line) ? ">" : " ";
-          const padded = String(line).padStart(4);
-          out.push(`  ${marker} ${padded} │ ${lineContent}`);
-          if (c) {
-            const textLines = c.text.split("\n");
-            out.push(`         │ Comment: ${textLines[0]}`);
-            for (let i = 1; i < textLines.length; i++) {
-              out.push(`         │ ${textLines[i]}`);
-            }
-          }
+      for (const group of groups) {
+        if (group.kind === "hunk") {
+          renderHunkGroup(out, filePath, group.hunk, group.comments);
+        } else {
+          renderWindow(out, filePath, group);
         }
-        out.push("````");
       }
     }
   return out.join("\n");
+  }
+
+  /**
+   * Render a line-proximity window (the original formatForLLM
+   * output, for file-browser comments that don't carry diff hunk
+   * context). Kept as a local helper so the diff-hunk and
+   * file-browser code paths can be read independently.
+   */
+  function renderWindow(
+    out: string[],
+    filePath: string,
+    win: { startLine: number; endLine: number; comments: FileComment[] },
+  ): void {
+    const ctxStart = win.comments.some((c) => c.contextBefore !== null)
+      ? Math.max(1, win.startLine - 1)
+      : win.startLine;
+    const ctxEnd = win.comments.some((c) => c.contextAfter !== null)
+      ? win.endLine + 1
+      : win.endLine;
+
+    const header =
+      win.startLine === win.endLine
+        ? `\`${filePath}\` line ${win.startLine}:`
+        : `\`${filePath}\` lines ${win.startLine}-${win.endLine}:`;
+    out.push("");
+    out.push(header);
+    out.push("````");  // 4-backtick fence (see spec §5.1)
+    const commentedSet = new Set(win.comments.map((c) => c.line));
+    const commentByLine = new Map(win.comments.map((c) => [c.line, c]));
+
+    for (let line = ctxStart; line <= ctxEnd; line++) {
+      const c = commentByLine.get(line);
+      let lineContent: string;
+      if (c) {
+        lineContent = c.lineContent;
+      } else if (line === ctxStart && win.comments[0].contextBefore !== null) {
+        lineContent = win.comments[0].contextBefore ?? "";
+      } else if (
+        line === ctxEnd &&
+        win.comments[win.comments.length - 1].contextAfter !== null
+      ) {
+        lineContent = win.comments[win.comments.length - 1].contextAfter ?? "";
+      } else {
+        lineContent = "";
+      }
+      const marker = commentedSet.has(line) ? ">" : " ";
+      const padded = String(line).padStart(4);
+      out.push(`  ${marker} ${padded} │ ${lineContent}`);
+      if (c) {
+        const textLines = c.text.split("\n");
+        out.push(`         │ Comment: ${textLines[0]}`);
+        for (let i = 1; i < textLines.length; i++) {
+          out.push(`         │ ${textLines[i]}`);
+        }
+      }
+    }
+    out.push("````");
+  }
+
+  /**
+   * Render a diff-hunk group: emit the unified-diff hunk with the
+   * anchored new-side line(s) marked with ">". Multiple comments on
+   * the same hunk share the rendered hunk — all their target lines
+   * get a ">" marker, and the comments themselves are listed below
+   * the fenced block. This is much more informative than the
+   * file-browser "1 line above, the line, 1 line below" format
+   * because the LLM sees the actual patch (what was added, what was
+   * removed) and can reason about it directly.
+   */
+  function renderHunkGroup(
+    out: string[],
+    filePath: string,
+    hunk: DiffHunkContext,
+    comments: FileComment[],
+  ): void {
+    out.push("");
+    out.push(`\`${filePath}\` (in diff hunk ${hunk.header}):`);
+    out.push("````");
+    out.push(hunk.header);
+
+    const commentedNewLines = new Set(comments.map((c) => c.line));
+    for (const line of hunk.lines) {
+      const isMarked = line.newNo !== null && commentedNewLines.has(line.newNo);
+      // Pick the line number to display: prefer newNo (adds and
+      // ctx), fall back to oldNo (del lines have no newNo). Pad to
+      // 4 chars for column alignment.
+      const lineNo =
+        line.newNo !== null
+          ? String(line.newNo).padStart(4)
+          : line.oldNo !== null
+            ? String(line.oldNo).padStart(4)
+            : "    ";
+      const prefix = line.type === "add" ? "+" : line.type === "del" ? "-" : " ";
+      const marker = isMarked ? ">" : " ";
+      out.push(`  ${marker} ${lineNo} │ ${prefix}${line.content}`);
+    }
+    out.push("````");
+
+    out.push("Comments:");
+    for (const c of comments) {
+      const textLines = c.text.split("\n");
+      out.push(`  - line ${c.line}: ${textLines[0]}`);
+      for (let i = 1; i < textLines.length; i++) {
+        out.push(`    ${textLines[i]}`);
+      }
+    }
   }
 
   return {
@@ -292,6 +482,7 @@ function createFileComments() {
     resetForSession,
     registerFileContent,
     addComment,
+    addCommentWithContext,
     updateComment,
     deleteComment,
     findCommentById,
