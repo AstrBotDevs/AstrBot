@@ -244,6 +244,12 @@
       "unified": "Единый",
       "split": "Разделённый",
       "ariaLabel": "Переключить режим просмотра diff"
+    },
+    "fullscreen": {
+      "enter": "На весь экран",
+      "exit": "Выйти из полноэкранного режима",
+      "exitLabel": "Назад",
+      "ariaLabel": "Полноэкранный просмотр diff"
     }
   },
   "spcodeProjectLoad": {
