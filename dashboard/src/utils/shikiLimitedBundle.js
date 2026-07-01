@@ -14,6 +14,7 @@ import javascript from "shiki/langs/javascript.mjs";
 import json from "shiki/langs/json.mjs";
 import jsx from "shiki/langs/jsx.mjs";
 import markdown from "shiki/langs/markdown.mjs";
+import matlab from "shiki/langs/matlab.mjs";
 import powershell from "shiki/langs/powershell.mjs";
 import python from "shiki/langs/python.mjs";
 import rust from "shiki/langs/rust.mjs";
@@ -45,6 +46,7 @@ export const LIMITED_SHIKI_LANGUAGES = [
   ...json,
   ...jsx,
   ...markdown,
+  ...matlab,
   ...powershell,
   ...python,
   ...rust,

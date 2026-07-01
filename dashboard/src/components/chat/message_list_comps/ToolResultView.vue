@@ -262,6 +262,14 @@ const EXT_TO_LANG: Record<string, string> = {
   ".vh": "verilog",
   ".sv": "system-verilog",
   ".svh": "system-verilog",
+  // MATLAB. `.m` is also the Objective-C extension, but
+  // objective-c is not in the shiki whitelist, so claiming it
+  // here does not collide with anything currently supported.
+  // `.matlab` is the explicit form for the rare cases where a
+  // file is named without the canonical `.m` (e.g. for clarity
+  // when the project mixes OC-style and matlab tooling).
+  ".m": "matlab",
+  ".matlab": "matlab",
 };
 
 function detectLanguage(filePath: string): string {
