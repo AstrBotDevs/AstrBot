@@ -58,6 +58,62 @@ _NO_WINDOW_KWARGS: dict[str, int] = (
 )
 
 
+# WHY ``_PYTHON_SUBPROCESS_PREAMBLE``:
+#   ``_NO_WINDOW_KWARGS`` suppresses the console for the *direct* child of
+#   AstrBot's computer booter (e.g. ``python.exe`` invoked by ``-c``), but
+#   it does NOT propagate into user code. When a user-side script spawns
+#   yet another CUI child via ``subprocess.run`` / ``subprocess.Popen``
+#   without ``creationflags=CREATE_NO_WINDOW``, Windows allocates a brand
+#   new console window because the current ``python.exe`` has no inherited
+#   console to hand out — the nested "弹 cmd 黑框" case.
+#
+#   Mitigation: prepend a tiny idempotent snippet to user code that
+#   monkey-patches ``subprocess.Popen`` to default-inject
+#   ``creationflags=CREATE_NO_WINDOW`` AND a ``STARTUPINFO`` with
+#   ``wShowWindow = SW_HIDE``. After this runs in the spawned interpreter
+#   every common entry point (``subprocess.run`` / ``subprocess.call`` /
+#   ``subprocess.check_output`` / direct ``Popen``) routes through the
+#   patched class. The patch is itself flagged via
+#   ``_ab_no_window_patched`` so re-execution (e.g. via ``python -c``
+#   invoked twice) cannot stack-wrap.
+#
+#   Naming note: identifiers use a single leading underscore rather than
+#   the dunder form so CPython's name-mangling does NOT rewrite them to
+#   ``_ClassName__name`` when they appear inside the patched class body.
+#
+#   Out-of-scope (not patched, accepted edge cases):
+#     - ``from subprocess import Popen`` captured before this preamble runs.
+#     - Direct ctypes / ``os.spawn*`` / ``os.system`` / ``os.popen`` calls.
+#   These cover the >95% agent-written spawn paths without a heavy module
+#   rewrite.
+_PYTHON_SUBPROCESS_PREAMBLE: str = (
+    "import subprocess as _ab_sp\n"
+    "import sys as _ab_sys\n"
+    "if _ab_sys.platform == 'win32':\n"
+    "    _ab_cnw = getattr(_ab_sp, 'CREATE_NO_WINDOW', 0x08000000)\n"
+    "    _ab_orig_popen = getattr(_ab_sp, 'Popen', None)\n"
+    "    if _ab_orig_popen is not None and not getattr(\n"
+    "        _ab_orig_popen, '_ab_no_window_patched', False\n"
+    "    ):\n"
+    "        class _ab_no_window_popen(_ab_orig_popen):\n"
+    "            _ab_no_window_patched = True\n"
+    "\n"
+    "            def __init__(self, *args, **kwargs):\n"
+    "                cf = kwargs.get('creationflags') or 0\n"
+    "                if not (cf & _ab_cnw):\n"
+    "                    kwargs['creationflags'] = cf | _ab_cnw\n"
+    "                si = kwargs.get('startupinfo')\n"
+    "                if si is None:\n"
+    "                    si = _ab_sp.STARTUPINFO()\n"
+    "                    kwargs['startupinfo'] = si\n"
+    "                si.dwFlags |= 0x00000001  # STARTF_USESHOWWINDOW\n"
+    "                si.wShowWindow = 0  # SW_HIDE\n"
+    "                super().__init__(*args, **kwargs)\n"
+    "\n"
+    "        _ab_sp.Popen = _ab_no_window_popen\n"
+)
+
+
 def _is_safe_command(command: str) -> bool:
     cmd = f" {command.strip().lower()} "
     return not any(pat in cmd for pat in _BLOCKED_COMMAND_PATTERNS)
@@ -257,11 +313,24 @@ class LocalPythonComponent(PythonComponent):
         silent: bool = False,
         cwd: str | None = None,
     ) -> dict[str, Any]:
+        # Prepend a tiny monkey-patch of ``subprocess.Popen`` so that any
+        # user-side ``subprocess.run`` / ``subprocess.Popen`` nested call
+        # inside the spawned interpreter also suppresses its own console
+        # window. Without this, a user ``subprocess.run(['cmd.exe', ...])``
+        # would still flash a black console even though the parent
+        # ``python.exe`` was already launched with ``CREATE_NO_WINDOW``.
+        # See ``_PYTHON_SUBPROCESS_PREAMBLE`` for the patch details.
+        wrapped_code = _PYTHON_SUBPROCESS_PREAMBLE + code
+
         def _run() -> dict[str, Any]:
             try:
                 working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
                 result = subprocess.run(
-                    [os.environ.get("PYTHON", sys.executable), "-c", code],
+                    [
+                        os.environ.get("PYTHON", sys.executable),
+                        "-c",
+                        wrapped_code,
+                    ],
                     timeout=timeout,
                     capture_output=True,
                     cwd=working_dir,
