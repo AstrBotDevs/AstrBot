@@ -1,9 +1,10 @@
 <!-- Author: elecvoid243, 2026-06-20
      Spec: docs/superpowers/specs/2026-06-20-git-diff-sidebar-file-browser-design.md §4.5 -->
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from "vue";
+import { computed, ref, onBeforeUnmount, onMounted, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { ensureShikiLanguages, renderShikiCode, escapeHtml } from "@/utils/shiki";
+import { copyToClipboard } from "@/utils/clipboard";
 import type { FileBrowserFetchState } from "@/composables/useSpcodeFileBrowser";
 import { useDisplay } from "vuetify";
 import {
@@ -138,23 +139,65 @@ const highlightedHtml = computed(() => {
 });
 
 const copyButtonText = ref<string>("");
+// Vuetify `color` accepts the theme token name; success/error give the
+// user a clear visual hint that distinguishes "已复制" (green) from
+// "复制失败" (red), instead of two identical grey states.
+const copyButtonColor = ref<"success" | "error" | undefined>(undefined);
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
 watch(highlightedHtml, () => {
+  // New file loaded → reset the transient success/fail feedback so
+  // a "复制失败" toast from the previous file does not leak into the
+  // freshly rendered header. Color is reset here too — without that,
+  // a failed copy on the previous file would tint the new file's
+  // copy button red before the user even clicks it.
   copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copy");
+  copyButtonColor.value = undefined;
 });
 
 async function copyContent(): Promise<void> {
   if (props.state.kind !== "file" || !props.state.snapshot.content) return;
-  if (!navigator.clipboard) return;  // HTTP insecure context fallback
-  try {
-    await navigator.clipboard.writeText(props.state.snapshot.content);
-    copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copySuccess");
-    setTimeout(() => {
-      copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copy");
-    }, 2000);
-  } catch {
-    // Silent: user can manually select
+  // Cancel any in-flight reset timer before scheduling a new one so
+  // rapid double-clicks do not race the old timer into flipping the
+  // button back to the default state mid-feedback.
+  if (copyResetTimer) {
+    clearTimeout(copyResetTimer);
+    copyResetTimer = null;
   }
+  // Use the shared clipboard utility: it auto-selects between
+  // navigator.clipboard.writeText (secure context) and a
+  // <textarea>+execCommand("copy") fallback for HTTP / non-secure
+  // deployments, and logs `[clipboard] ...` breadcrumbs so we can
+  // diagnose future failures from the console alone.
+  const ok = await copyToClipboard(props.state.snapshot.content);
+  if (ok) {
+    copyButtonColor.value = "success";
+    copyButtonText.value = tm(
+      "spcodeProjectLoad.fileBrowser.preview.copySuccess",
+    );
+  } else {
+    copyButtonColor.value = "error";
+    copyButtonText.value = tm(
+      "spcodeProjectLoad.fileBrowser.preview.copyFail",
+    );
+  }
+  copyResetTimer = setTimeout(() => {
+    copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copy");
+    copyButtonColor.value = undefined;
+    copyResetTimer = null;
+  }, 2000);
 }
+
+// Drop any pending reset timer on unmount. Without this the closure
+// would hold a stale ref to the destroyed component's copyButtonText
+// and write to it 2s after the user has navigated away, tripping
+// Vue's "set operation on key ... failed" warning.
+onBeforeUnmount(() => {
+  if (copyResetTimer) {
+    clearTimeout(copyResetTimer);
+    copyResetTimer = null;
+  }
+});
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -346,6 +389,7 @@ function onDeleteComment(commentId: string): void {
           v-if="state.snapshot.content"
           size="x-small"
           variant="text"
+          :color="copyButtonColor"
           prepend-icon="mdi-content-copy"
           @click="copyContent"
         >

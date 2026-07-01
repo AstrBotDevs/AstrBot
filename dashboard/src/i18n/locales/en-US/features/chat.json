@@ -330,6 +330,7 @@
         "tooLarge": "File too large ({size}), preview unavailable",
         "copy": "Copy",
         "copySuccess": "Copied",
+        "copyFail": "Copy failed",
         "goToTarget": "Go to target"
       },
       "comment": {
