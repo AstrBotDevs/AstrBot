@@ -1613,7 +1613,11 @@
             },
             "mimo-tts-voice": {
                 "description": "Голос",
-                "hint": "Имя голоса MiMo TTS. Поддерживаются значения 'mimo_default', 'default_en' и 'default_zh'."
+                "hint": "Имя голоса MiMo TTS. Поддерживаются значения 'mimo_default', 'default_en' и 'default_zh'. Используется только для моделей с предустановленными голосами; игнорируется для модели mimo-v2.5-tts-voiceclone (используйте 'Референсное аудио для клонирования голоса')."
+            },
+            "mimo-tts-voiceclone-audio": {
+                "description": "Референсное аудио для клонирования голоса",
+                "hint": "Требуется только для модели mimo-v2.5-tts-voiceclone. Принимает локальный путь к файлу, ссылку http(s) или base64/data URI. Поддерживаются только mp3 и wav, размер после кодирования не должен превышать 10 МБ."
             },
             "mimo-tts-format": {
                 "description": "Формат вывода",

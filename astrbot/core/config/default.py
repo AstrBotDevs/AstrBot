@@ -1638,6 +1638,7 @@ CONFIG_METADATA_2 = {
                         "api_base": "https://api.xiaomimimo.com/v1",
                         "model": "mimo-v2-tts",
                         "mimo-tts-voice": "mimo_default",
+                        "mimo-tts-voiceclone-audio": "",
                         "mimo-tts-format": "wav",
                         "mimo-tts-style-prompt": "",
                         "mimo-tts-dialect": "",
@@ -2604,7 +2605,12 @@ CONFIG_METADATA_2 = {
                     "mimo-tts-voice": {
                         "description": "音色",
                         "type": "string",
-                        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。",
+                        "hint": "MiMo TTS 的音色名称。可选值包括 'mimo_default'、'default_en'、'default_zh'。仅用于 mimo-v2.5-tts / mimo-v2-tts 等预置音色模型；使用 mimo-v2.5-tts-voiceclone 模型时本字段会被忽略，请改填下方的'音色复刻参考音频'。",
+                    },
+                    "mimo-tts-voiceclone-audio": {
+                        "description": "音色复刻参考音频",
+                        "type": "string",
+                        "hint": "仅在模型为 mimo-v2.5-tts-voiceclone（音色复刻）时需要填写。支持本地文件路径、http(s) 链接、或 base64/data URI，音频格式仅支持 mp3、wav，转换后大小不超过 10 MB。留空且选用该模型时会报错。",
                     },
                     "mimo-tts-format": {
                         "description": "输出格式",
