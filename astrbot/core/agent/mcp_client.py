@@ -679,6 +679,30 @@ class MCPClient:
         self.running_event.set()
 
 
+
+def clean_tool_name(server_name: str, tool_name: str, max_length: int = 64) -> str:
+    """构建前缀化的 MCP 工具名，确保兼容 LLM API 的命名规范。
+
+    LLM API（OpenAI、Anthropic、Gemini 等）的工具名只允许
+    [a-zA-Z0-9_-] 字符，且通常限制 64 字符。
+
+    使用双下划线 __ 作为分隔符，并对非法字符做清洗而非报错，
+    让工具在多数场景下仍可正常工作。
+    """
+    safe_server = re.sub(r"[^a-zA-Z0-9_\-]", "_", server_name)
+    safe_tool = re.sub(r"[^a-zA-Z0-9_\-]", "_", tool_name)
+    prefixed = f"{safe_server}__{safe_tool}"
+    if len(prefixed) > max_length:
+        # 优先截断工具名部分
+        excess = len(prefixed) - max_length
+        if len(safe_tool) > excess + 3:
+            safe_tool = safe_tool[:len(safe_tool) - excess - 3] + "..."
+        else:
+            safe_tool = safe_tool[:max(3, len(safe_tool) - excess)]
+        prefixed = f"{safe_server}__{safe_tool}"
+    return prefixed
+
+
 class MCPTool(FunctionTool, Generic[TContext]):
     """A function tool that calls an MCP service."""
 
@@ -686,7 +710,7 @@ class MCPTool(FunctionTool, Generic[TContext]):
         self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
     ) -> None:
         super().__init__(
-            name=mcp_tool.name,
+            name=clean_tool_name(mcp_server_name, mcp_tool.name),
             description=mcp_tool.description or "",
             parameters=_normalize_mcp_input_schema(mcp_tool.inputSchema),
         )
