@@ -74,14 +74,18 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
     with wave.open(wav_path, "rb") as wav:
         rate = wav.getframerate()
         channels = wav.getnchannels()
+        sampwidth = wav.getsampwidth()
         pcm_data = wav.readframes(wav.getnframes())
 
-    # downmix to mono and resample to 24 kHz -- no external dependency.
+    # Downmix to mono, resample to 24 kHz if needed, and convert to 16-bit PCM
+    # (pysilk only accepts 16-bit linear PCM)
     if channels == 2:
-        pcm_data = audioop.tomono(pcm_data, 2, 0.5, 0.5)
+        pcm_data = audioop.tomono(pcm_data, sampwidth, 0.5, 0.5)
     if rate not in _PYSILK_SUPPORTED_RATES:
-        pcm_data, _ = audioop.ratecv(pcm_data, 2, 1, rate, 24000, None)
+        pcm_data, _ = audioop.ratecv(pcm_data, sampwidth, 1, rate, 24000, None)
         rate = 24000
+    if sampwidth != 2:
+        pcm_data = audioop.lin2lin(pcm_data, sampwidth, 2)
 
     input_io = BytesIO(pcm_data)
     output_io = BytesIO()
