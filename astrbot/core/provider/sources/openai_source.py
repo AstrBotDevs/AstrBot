@@ -398,6 +398,25 @@ class ProviderOpenAIOfficial(Provider):
 
         self.reasoning_key = "reasoning_content"
 
+    def _provider_error_retries(self) -> int:
+        """Return retry attempts for provider-level recovery paths.
+
+        This outer retry loop handles payload mutation and key rotation (for
+        example context trimming, tool removal, image fallback, or switching to
+        another configured API key). Transport/status-code retries are handled
+        separately by ``request_max_retries`` in ``retry_provider_request``.
+        Keeping this value configurable prevents nested retry loops from
+        multiplying latency for proxy/aggregator providers that already perform
+        their own upstream retry and fallback.
+        """
+        provider_settings = getattr(self, "provider_settings", {}) or {}
+        raw = provider_settings.get("provider_error_retries", 1)
+        try:
+            retries = int(raw)
+        except (TypeError, ValueError):
+            retries = 1
+        return max(1, retries)
+
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)
         if isinstance(value, str):
@@ -1188,7 +1207,7 @@ class ProviderOpenAIOfficial(Provider):
             payloads["tool_choice"] = tool_choice
 
         llm_response = None
-        max_retries = 10
+        max_retries = self._provider_error_retries()
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
         image_fallback_used = False
@@ -1228,7 +1247,7 @@ class ProviderOpenAIOfficial(Provider):
                 if success:
                     break
 
-        if retry_cnt == max_retries - 1 or llm_response is None:
+        if llm_response is None:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             if last_exception is None:
                 raise Exception("未知错误")
@@ -1264,13 +1283,14 @@ class ProviderOpenAIOfficial(Provider):
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
-        max_retries = 10
+        max_retries = self._provider_error_retries()
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
         image_fallback_used = False
 
         last_exception = None
         retry_cnt = 0
+        completed = False
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
@@ -1280,6 +1300,7 @@ class ProviderOpenAIOfficial(Provider):
                     request_max_retries=request_max_retries,
                 ):
                     yield response
+                completed = True
                 break
             except Exception as e:
                 last_exception = e
@@ -1305,7 +1326,7 @@ class ProviderOpenAIOfficial(Provider):
                 if success:
                     break
 
-        if retry_cnt == max_retries - 1:
+        if not completed:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             if last_exception is None:
                 raise Exception("未知错误")
