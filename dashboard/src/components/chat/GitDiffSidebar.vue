@@ -1716,8 +1716,8 @@ function toggleFile(path: string): void {
 // ── Drag resize ────────────────────────────────────────────────────
 
 const MIN_WIDTH = 320;
-const MAX_WIDTH = 1200;
-const DEFAULT_WIDTH = 420;
+const MAX_WIDTH = 1800;
+const DEFAULT_WIDTH = 1000;
 
 const sidebarWidth = ref(DEFAULT_WIDTH);
 const sidebarRef = ref<HTMLElement | null>(null);
