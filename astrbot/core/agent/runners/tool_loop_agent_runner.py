@@ -193,7 +193,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             parts.append(TextPart(text=llm_resp.completion_text))
         if len(parts) == 0:
             logger.warning("LLM returned empty assistant message with no tool calls.")
-        self.run_context.messages.append(Message(role="assistant", content=parts))
+        self.run_context.messages.append(
+            Message(role="assistant", content=parts, id=llm_resp.message_id)
+        )
 
         try:
             await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
@@ -899,6 +901,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 tool_calls_info=AssistantMessageSegment(
                     tool_calls=llm_resp.to_openai_to_calls_model(),
                     content=parts,
+                    id=llm_resp.message_id,
                 ),
                 tool_calls_result=tool_call_result_blocks,
             )
@@ -1386,7 +1389,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.completion_text:
             parts.append(TextPart(text=llm_resp.completion_text))
         if parts:
-            self.run_context.messages.append(Message(role="assistant", content=parts))
+            self.run_context.messages.append(
+                Message(role="assistant", content=parts, id=llm_resp.message_id)
+            )
 
         try:
             await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
