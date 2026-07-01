@@ -5,6 +5,7 @@ from typing import Any
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
+from astrbot.core.agent.mcp_oauth import MCPOAuthAuthorizationRequiredError
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 from astrbot.core.tools.registry import get_builtin_tool_config_statuses
@@ -49,7 +50,7 @@ class ToolsService:
             logger.error(traceback.format_exc())
             return False
 
-    def get_mcp_servers(self) -> list[dict]:
+    async def get_mcp_servers(self) -> list[dict]:
         try:
             config = self.tool_mgr.load_mcp_config()
             servers = []
@@ -75,6 +76,10 @@ class ToolsService:
                 for key, value in server_config.items():
                     if key != "active":
                         server_info[key] = value
+
+                get_oauth_state = getattr(self.tool_mgr, "get_mcp_oauth_state", None)
+                if get_oauth_state is not None:
+                    server_info.update(await get_oauth_state(server_config))
 
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
@@ -121,6 +126,8 @@ class ToolsService:
 
             try:
                 await self.tool_mgr.test_mcp_server_connection(server_config)
+            except MCPOAuthAuthorizationRequiredError as exc:
+                raise ToolsServiceError(f"{exc!s}") from exc
             except Exception as exc:
                 logger.error(traceback.format_exc())
                 raise ToolsServiceError(f"MCP connection test failed: {exc!s}") from exc
@@ -239,10 +246,15 @@ class ToolsService:
             elif not config:
                 raise ToolsServiceError("MCP server configuration cannot be empty")
 
+            config.pop("oauth2_enabled", None)
+            config.pop("oauth2_authorized", None)
+            config.pop("oauth2_grant_type", None)
             self._validate_server_config(config)
             return await self.tool_mgr.test_mcp_server_connection(config)
         except ToolsServiceError:
             raise
+        except MCPOAuthAuthorizationRequiredError as exc:
+            raise ToolsServiceError(f"{exc!s}") from exc
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to test MCP connection: {exc!s}") from exc
@@ -374,13 +386,109 @@ class ToolsService:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Sync failed: {exc!s}") from exc
 
+    async def start_mcp_oauth_authorization(
+        self,
+        config: dict,
+        *,
+        callback_base_url: str,
+        server_name: str | None = None,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        """Start an interactive MCP OAuth authorization flow.
+
+        Args:
+            config: Normalized MCP server configuration that includes OAuth settings.
+            callback_base_url: Public dashboard base URL used for the OAuth callback.
+            server_name: Optional MCP server name associated with the flow.
+            force: Whether to clear existing OAuth credentials before starting the flow.
+
+        Returns:
+            Current OAuth flow status payload.
+
+        Raises:
+            ToolsServiceError: If the flow cannot be started.
+        """
+        try:
+            return await self.tool_mgr.start_mcp_oauth_authorization(
+                config,
+                callback_base_url=callback_base_url,
+                server_name=server_name,
+                force=force,
+            )
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise ToolsServiceError(
+                f"Failed to start MCP OAuth authorization: {exc!s}"
+            ) from exc
+
+    def get_mcp_oauth_flow_status(self, flow_id: str) -> dict[str, Any]:
+        """Get an MCP OAuth authorization flow status.
+
+        Args:
+            flow_id: Identifier returned by the OAuth start endpoint.
+
+        Returns:
+            Current OAuth flow status payload.
+
+        Raises:
+            ToolsServiceError: If the flow is missing or status lookup fails.
+        """
+        try:
+            return self.tool_mgr.get_mcp_oauth_flow_status(flow_id)
+        except KeyError as exc:
+            raise ToolsServiceError("OAuth flow not found or expired") from exc
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise ToolsServiceError(f"Failed to get MCP OAuth status: {exc!s}") from exc
+
+    async def submit_mcp_oauth_callback(
+        self,
+        flow_id: str | None,
+        *,
+        code: str | None,
+        state: str | None,
+        error: str | None,
+    ) -> None:
+        """Submit OAuth callback parameters to a pending MCP flow.
+
+        Args:
+            flow_id: Optional flow identifier; the OAuth state is used when omitted.
+            code: Authorization code from the provider callback.
+            state: OAuth state from the provider callback.
+            error: Provider error text, if authorization failed.
+
+        Raises:
+            KeyError: If the flow is not found or expired.
+            ToolsServiceError: If callback processing fails.
+        """
+        try:
+            await self.tool_mgr.submit_mcp_oauth_callback(
+                flow_id,
+                code=code,
+                state=state,
+                error=error,
+            )
+        except KeyError:
+            raise
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            raise ToolsServiceError(f"OAuth callback failed: {exc!s}") from exc
+
     @staticmethod
     def _build_server_config(server_data: dict) -> tuple[bool, dict]:
         has_valid_config = False
         server_config = {"active": server_data.get("active", True)}
 
         for key, value in server_data.items():
-            if key in ["name", "active", "tools", "errlogs"]:
+            if key in [
+                "name",
+                "active",
+                "tools",
+                "errlogs",
+                "oauth2_enabled",
+                "oauth2_authorized",
+                "oauth2_grant_type",
+            ]:
                 continue
             if key == "mcpServers":
                 try:
@@ -403,7 +511,16 @@ class ToolsService:
         only_update_active = True
 
         for key, value in server_data.items():
-            if key in ["name", "active", "tools", "errlogs", "oldName"]:
+            if key in [
+                "name",
+                "active",
+                "tools",
+                "errlogs",
+                "oldName",
+                "oauth2_enabled",
+                "oauth2_authorized",
+                "oauth2_grant_type",
+            ]:
                 continue
             if key == "mcpServers":
                 try:
@@ -431,6 +548,14 @@ class ToolsService:
     async def _enable_added_server(self, name: str, server_config: dict) -> None:
         try:
             await self.tool_mgr.enable_mcp_server(name, server_config, timeout=30)
+        except MCPOAuthAuthorizationRequiredError as exc:
+            rollback_ok = self.rollback_mcp_server(name)
+            err_msg = f"{exc!s}"
+            if not rollback_ok:
+                err_msg += (
+                    " Configuration rollback failed. Please check the config manually."
+                )
+            raise ToolsServiceError(err_msg) from exc
         except TimeoutError as exc:
             rollback_ok = self.rollback_mcp_server(name)
             err_msg = f"Timed out while enabling MCP server {name}."
@@ -486,6 +611,8 @@ class ToolsService:
     async def _enable_updated_server(self, name: str, server_config: dict) -> None:
         try:
             await self.tool_mgr.enable_mcp_server(name, server_config, timeout=30)
+        except MCPOAuthAuthorizationRequiredError as exc:
+            raise ToolsServiceError(f"{exc!s}") from exc
         except TimeoutError as exc:
             raise ToolsServiceError(
                 f"Timed out while enabling MCP server {name}."

@@ -19,14 +19,20 @@
       "useTemplateStdio": "Stdio Template",
       "useTemplateStreamableHttp": "Streamable HTTP Template",
       "useTemplateSse": "SSE Template",
-      "sync": "Sync MCP Servers"
+      "useTemplateOauth2": "OAuth 2.0 Template",
+      "sync": "Sync MCP Servers",
+      "authorize": "Authorize",
+      "reauthorize": "Re-authorize"
     },
     "empty": "No MCP servers available, click Add Server to add one",
     "status": {
       "noTools": "No available tools",
       "availableTools": "Available tools",
       "configSummary": "Config: {keys}",
-      "noConfig": "No configuration set"
+      "noConfig": "No configuration set",
+      "oauthAuthorized": "OAuth 2.0 authorized",
+      "oauthLoginRequired": "OAuth 2.0 login required",
+      "oauthClientCredentials": "OAuth 2.0 client_credentials"
     }
   },
   "functionTools": {
@@ -106,7 +112,17 @@
         "cancel": "Cancel",
         "save": "Save",
         "testConnection": "Test Connection",
+        "oauthLogin": "OAuth 2.0 Login",
         "sync": "Sync"
+      },
+      "oauth": {
+        "status": {
+          "notAuthorized": "Authorization code OAuth 2.0 was detected. Complete login before saving.",
+          "awaitingUser": "Waiting for user authorization. Please use the link or QR code below.",
+          "authorizing": "Completing the OAuth authorization.",
+          "authorized": "OAuth 2.0 authorization completed.",
+          "failed": "OAuth 2.0 authorization failed."
+        }
       },
       "tips": {
         "timeoutConfig": "Please configure tool call timeout separately in the configuration page",
@@ -183,6 +199,10 @@
     "updateToolPermissionSuccess": "Permission for {name} updated",
     "updateToolPermissionFailed": "Failed to update tool permission",
     "updateToolPermissionBuiltin": "Builtin tools do not support per-tool permission configuration.",
-    "testError": "Test connection failed: {error}"
+    "testError": "Test connection failed: {error}",
+    "oauthPopupOpened": "The OAuth login page has been opened. Complete authorization in the new window.",
+    "oauthPopupBlocked": "The browser blocked the OAuth popup. Allow popups and try again.",
+    "oauthAuthorized": "OAuth 2.0 authorization completed!",
+    "oauthStartError": "Failed to start OAuth 2.0 authorization: {error}"
   }
 }

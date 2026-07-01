@@ -19,14 +19,20 @@
             "useTemplateStdio": "Шаблон Stdio",
             "useTemplateStreamableHttp": "Шаблон Streamable HTTP",
             "useTemplateSse": "Шаблон SSE",
-            "sync": "Синхронизировать"
+            "useTemplateOauth2": "Шаблон OAuth 2.0",
+            "sync": "Синхронизировать",
+            "authorize": "Авторизовать",
+            "reauthorize": "Переавторизовать"
         },
         "empty": "MCP-сервера не найдены. Нажмите «Добавить сервер».",
         "status": {
             "noTools": "Нет доступных инструментов",
             "availableTools": "Доступные инструменты",
             "configSummary": "Конфигурация: {keys}",
-            "noConfig": "Конфигурация не задана"
+            "noConfig": "Конфигурация не задана",
+            "oauthAuthorized": "OAuth 2.0 авторизация выполнена",
+            "oauthLoginRequired": "Требуется вход через OAuth 2.0",
+            "oauthClientCredentials": "OAuth 2.0 client_credentials"
         }
     },
     "functionTools": {
@@ -106,7 +112,17 @@
                 "cancel": "Отмена",
                 "save": "Сохранить",
                 "testConnection": "Тест связи",
+                "oauthLogin": "Войти через OAuth 2.0",
                 "sync": "Синхронизировать"
+            },
+            "oauth": {
+                "status": {
+                    "notAuthorized": "Обнаружен OAuth 2.0 authorization_code. Перед сохранением выполните вход.",
+                    "awaitingUser": "Страница входа OAuth открыта. Ожидание подтверждения.",
+                    "authorizing": "Завершается OAuth-авторизация.",
+                    "authorized": "OAuth 2.0 авторизация завершена.",
+                    "failed": "OAuth 2.0 авторизация завершилась ошибкой."
+                }
             },
             "tips": {
                 "timeoutConfig": "Тайм-аут вызова инструментов настраивается отдельно на странице конфигурации",
@@ -183,7 +199,11 @@
         "updateToolPermissionSuccess": "Доступ к {name} обновлён",
         "updateToolPermissionFailed": "Не удалось обновить доступ к инструменту",
         "updateToolPermissionBuiltin": "Встроенные инструменты не поддерживают настройку доступа.",
-        "testError": "Ошибка теста связи: {error}"
+        "testError": "Ошибка теста связи: {error}",
+        "oauthPopupOpened": "Страница входа OAuth открыта. Завершите авторизацию в новом окне.",
+        "oauthPopupBlocked": "Браузер заблокировал всплывающее окно OAuth. Разрешите всплывающие окна и повторите попытку.",
+        "oauthAuthorized": "OAuth 2.0 авторизация успешно завершена!",
+        "oauthStartError": "Не удалось запустить OAuth 2.0 авторизацию: {error}"
     },
     "syncProvider": {
         "title": "Синхронизация серверов MCP",

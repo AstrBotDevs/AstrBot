@@ -9,7 +9,7 @@ from typing import Any, Protocol, cast
 import jwt
 import psutil
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from hypercorn.asyncio import serve
 from hypercorn.config import Config as HyperConfig
 from hypercorn.logging import AccessLogAtoms
@@ -246,7 +246,15 @@ class AstrBotDashboard:
             auth_response = await self.auth_middleware(request_)
             if auth_response is not None:
                 return auth_response
-            return await call_next(request_)
+            try:
+                return await call_next(request_)
+            except RuntimeError as exc:
+                if (
+                    str(exc) == "No response returned."
+                    and await request_.is_disconnected()
+                ):
+                    return Response(status_code=204)
+                raise
 
         self.shutdown_event = shutdown_event
 

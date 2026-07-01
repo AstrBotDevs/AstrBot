@@ -77,6 +77,7 @@ from .stats import legacy_router as legacy_stats_router
 from .subagents import legacy_router as legacy_subagents_router
 from .t2i import legacy_router as legacy_t2i_router
 from .tools import legacy_router as legacy_tools_router
+from .tools import oauth_callback_router as tools_oauth_callback_router
 from .updates import legacy_router as legacy_updates_router
 
 CLEAR_SITE_DATA_HEADERS = {"Clear-Site-Data": '"cache"'}
@@ -188,6 +189,7 @@ def create_dashboard_asgi_app(
     app.include_router(legacy_t2i_router)
     app.include_router(legacy_personas_router)
     app.include_router(legacy_updates_router)
+    app.include_router(tools_oauth_callback_router)
     app.include_router(build_api_router())
     app.include_router(static_files_router)
     return app

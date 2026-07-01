@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 279 icons */
+/* Auto-generated MDI subset – 281 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -876,6 +876,10 @@
   content: "\F0432";
 }
 
+.mdi-qrcode-scan::before {
+  content: "\F0433";
+}
+
 .mdi-radiobox-blank::before {
   content: "\F043D";
 }
@@ -950,6 +954,10 @@
 
 .mdi-shield-key::before {
   content: "\F0BC4";
+}
+
+.mdi-shield-key-outline::before {
+  content: "\F0BC5";
 }
 
 .mdi-shield-lock-outline::before {
