@@ -1706,6 +1706,20 @@ function onLogApply(filter: LogFilter): void {
   // 用 filter 调用 refresh(spec §6.5.1:filter 变化时 key 自动变化,旧 ETag 不复用)
   void gitLog.refresh(filter);
 }
+function onLogReset(filter: LogFilter): void {
+  // Reset semantics differ from a regular Apply: the URL of the reset
+  // request is identical to the very first history-tab load (?ref=HEAD&n=20),
+  // so without dropping the ETag the backend returns 304 Not Modified and
+  // the client-side 304 branch replays `prevSnapshot` — which was overwritten
+  // by the user's most recent filter (e.g. author=alice) and therefore shows
+  // the filtered result instead of the reset state. We invalidate only this
+  // one tuple's ETag so other filter tuples (author=bob etc.) keep their
+  // cache and remain cheap to revisit. forceLoading makes the spinner show
+  // even though the previous state was already ok, so the user gets
+  // feedback that a refresh is in flight.
+  gitLog.invalidateEtagFor(filter);
+  void gitLog.refresh(filter, { forceLoading: true });
+}
 function onLogLoadMore(): void {
   void gitLog.loadMore();
 }
@@ -2188,6 +2202,7 @@ const currentRoot = computed<string | null>(() => {
           :is-loading="logIsLoading"
           :git-show="gitShow"
           @apply="onLogApply"
+          @reset="onLogReset"
           @load-more="onLogLoadMore"
           @refresh="() => gitLog.refresh()"
         />

@@ -48,6 +48,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "apply", filter: LogFilter): void;
+  // reset is its own event (not just apply) so the parent can run
+  // reset-specific prep — invalidate the ETag for the default filter
+  // tuple and force a loading spinner — before re-fetching. Emitting
+  // apply would lose that distinction; spec §6.5.1 reset behavior.
+  (e: "reset", filter: LogFilter): void;
   (e: "loadMore"): void;
   (e: "refresh"): void;
 }>();
@@ -207,7 +212,10 @@ function onApply(): void {
 
 function onReset(): void {
   localFilter.value = { ref: "HEAD", n: 20 };
-  emit("apply", { ...localFilter.value });
+  // Distinct from onApply: the parent uses this to invalidate the ETag
+  // for this filter tuple and force a loading transition. See the
+  // `reset` event JSDoc in defineEmits above.
+  emit("reset", { ...localFilter.value });
 }
 
 // ── File list helpers (spec 2026-06-25 §3.3) ──────────────────────

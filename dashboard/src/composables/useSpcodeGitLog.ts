@@ -60,12 +60,22 @@ export type LogFetchState =
 export interface UseSpcodeGitLog {
   state: Ref<LogFetchState>;
   filter: Ref<LogFilter>;
-  refresh: (override?: Partial<LogFilter>) => Promise<void>;
+  refresh: (
+    override?: Partial<LogFilter>,
+    options?: { forceLoading?: boolean },
+  ) => Promise<void>;
   loadMore: () => Promise<void>;
   startPolling: (intervalMs?: number) => void;
   stopPolling: () => void;
   /** Spec §3.4 决策 #24:切 worktree / 切 umo 时清空 ETag Map */
   invalidateEtag: () => void;
+  /** Drop the ETag entry for one filter tuple only. Used by the
+   *  GitLogView "Reset" button so a reset doesn't 304 against a
+   *  stale ETag and replay an older (e.g. author=alice-filtered)
+   *  snapshot — the reset URL matches the original history-load
+   *  URL bit-for-bit, so without this the 304 branch wins and
+   *  commits come back filtered. Spec §6.5.1 reset behavior. */
+  invalidateEtagFor: (filter: LogFilter) => void;
   dispose: () => void;
 }
 
@@ -106,7 +116,10 @@ export function useSpcodeGitLog(
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let isMounted = true;
 
-  async function refresh(override?: Partial<LogFilter>): Promise<void> {
+  async function refresh(
+    override?: Partial<LogFilter>,
+    options?: { forceLoading?: boolean },
+  ): Promise<void> {
     if (!isMounted) return;
     if (override) {
       // Replace (not merge) the filter for predictable behavior: explicit
@@ -121,8 +134,13 @@ export function useSpcodeGitLog(
     }
     abortController?.abort();
     abortController = new AbortController();
+    // isFirst covers the very first fetch (idle/error → loading). forceLoading
+    // covers user-initiated re-fetches that want to give visual feedback even
+    // when the previous state was already ok — e.g. the History view's Reset
+    // button, which otherwise would not show a spinner while the request is
+    // in flight and reads as "nothing happened".
     const isFirst = state.value.kind !== "ok";
-    if (isFirst) state.value = { kind: "loading" };
+    if (isFirst || options?.forceLoading) state.value = { kind: "loading" };
 
     const worktree = toValue(worktreeRef);
     const key = etagKey({ umo, worktree, filter: filter.value });
@@ -257,6 +275,15 @@ export function useSpcodeGitLog(
     prevSnapshot = null;
   }
 
+  /** Drop the ETag entry for exactly the given filter tuple (others are
+   *  preserved). See the matching JSDoc on the public interface. */
+  function invalidateEtagFor(target: LogFilter): void {
+    const umo = spcodeStatus.status.value.umo;
+    const worktree = toValue(worktreeRef);
+    const key = etagKey({ umo, worktree, filter: target });
+    etagMap.delete(key);
+  }
+
   // Re-fetch when worktree changes (or umo changes — handled by caller
   // typically by invalidating ETag then calling refresh). We watch
   // worktree only; the orchestrator owns the umo-change lifecycle.
@@ -285,6 +312,7 @@ export function useSpcodeGitLog(
     startPolling,
     stopPolling,
     invalidateEtag,
+    invalidateEtagFor,
     dispose,
   };
 }
