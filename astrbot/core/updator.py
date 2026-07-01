@@ -8,6 +8,10 @@ import psutil
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.desktop_runtime import (
+    DESKTOP_MANAGED_RESTART_MESSAGE,
+    is_desktop_managed_backend,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.io import ensure_dir
 
@@ -142,6 +146,10 @@ class AstrBotUpdator(RepoZipUpdator):
         在指定的延迟后，终止所有子进程并重新启动程序
         这里只能使用 os.exec* 来重启程序
         """
+        if is_desktop_managed_backend():
+            logger.error(DESKTOP_MANAGED_RESTART_MESSAGE)
+            raise RuntimeError(DESKTOP_MANAGED_RESTART_MESSAGE)
+
         time.sleep(delay)
         self.terminate_child_processes()
         executable = sys.executable
