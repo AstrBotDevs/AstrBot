@@ -610,6 +610,14 @@ const isFetching = ref(false);
 // file that calls it. Mirroring the shape here keeps the consumer
 // honest about what it can call.
 const fileBrowserRef = ref<{ refresh: () => Promise<void> } | null>(null);
+// Mirror of fileBrowserRef for <GitDiffBodyContent>. We need
+// `clearSelection` to drop the "selected N files" counter after a
+// successful bulk stage/unstage — the child owns the Set (it's a
+// UI concern scoped to that component), so the parent reaches in
+// via the exposed method instead of duplicating the state here.
+// Same `v-if="viewMode==='diff'"` caveat: ref is null in other tabs,
+// so callers null-check before invocation.
+const gitDiffBodyRef = ref<{ clearSelection: () => void } | null>(null);
 async function onManualRefresh(): Promise<void> {
   if (isFetching.value) return;
   isFetching.value = true;
@@ -1342,6 +1350,11 @@ async function onStagePaths(paths: string[]): Promise<void> {
   if (isAborted(result)) return;
   if (result.ok) {
     stagedFiles.value = new Set(result.snapshot.files);
+    // Parallel refresh: git-diff shows the file in the staged view,
+    // git-status moves it out of "untracked"/"intent_to_add" so the
+    // merged unstaged list drops the new-file stub. Without the
+    // second call the user would wait up to 10s for the polling
+    // tick to remove the row.
     await Promise.all([composable.refresh(), gitStatus.refresh()]);
     showSnackbar(
       tm(
@@ -1350,6 +1363,14 @@ async function onStagePaths(paths: string[]): Promise<void> {
       ),
       "success",
     );
+    // Drop the toolbar's "暂存选中的 N 个文件" counter now that the
+    // bulk write succeeded. Without this the child keeps holding the
+    // file paths in its local selection Set, so the toolbar text
+    // stays frozen at the pre-action count and the next click would
+    // re-stage already-staged files. Run AFTER refresh so the row
+    // removal is visible before the "已暂存 N" toast; failures skip
+    // this so the user can retry without re-ticking every checkbox.
+    gitDiffBodyRef.value?.clearSelection();
   } else {
     const meta = reasonMeta("stage", result.reason);
     const key = reasonKey("stage", result.reason);
@@ -1546,6 +1567,11 @@ async function onUnstagePaths(paths: string[]): Promise<void> {
       ),
       "success",
     );
+    // Symmetric to onStagePaths: the bulk unstage succeeds, the
+    // selected rows leave the staged view, and we drop the toolbar's
+    // "已选 N" counter so the next click does not re-fire the same
+    // unstage on freshly-empty indices.
+    gitDiffBodyRef.value?.clearSelection();
   } else {
     const meta = reasonMeta("unstage", result.reason);
     const key = reasonKey("unstage", result.reason);
@@ -2131,6 +2157,7 @@ const currentRoot = computed<string | null>(() => {
         />
         <GitDiffBodyContent
           v-else-if="viewMode === 'diff'"
+          ref="gitDiffBodyRef"
           :state="diffBodyState"
           :expanded="expandedSet"
           :is-dark="!!isDark"

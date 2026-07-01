@@ -281,6 +281,18 @@ function clearSelection(): void {
   selectedFiles.value = new Set();
 }
 
+// Expose `clearSelection` to the parent so successful bulk
+// stage/unstage can reset the toolbar's "selected N files" counter.
+// Without this, the parent (GitDiffSidebar) handles bulk stage by
+// emitting `stage-paths`/`unstage-paths`, which mutates the parent's
+// `stagedFiles` set and triggers refresh — but the child's local
+// `selectedFiles` is invisible to the parent, so the toolbar kept
+// showing the original count even after the files were gone from the
+// list. expose'ing the method lets the parent drive the reset on
+// result.ok; failures intentionally keep the user's selection so
+// they can retry without re-checking every box.
+defineExpose({ clearSelection });
+
 // Reset selection whenever the scope changes (so checking files in
 // the unstaged view doesn't carry over when the user switches to
 // the staged view, where the same paths are no longer visible).
