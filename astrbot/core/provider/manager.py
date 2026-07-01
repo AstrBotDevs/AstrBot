@@ -415,6 +415,10 @@ class ProviderManager:
                 from .sources.whisper_selfhosted_source import (
                     ProviderOpenAIWhisperSelfHost as ProviderOpenAIWhisperSelfHost,
                 )
+            case "dashscope_stt":
+                from .sources.dashscope_stt_api_source import (
+                    ProviderDashScopeSTT as ProviderDashScopeSTT,
+                )
             case "xinference_stt":
                 from .sources.xinference_stt_provider import (
                     ProviderXinferenceSTT as ProviderXinferenceSTT,

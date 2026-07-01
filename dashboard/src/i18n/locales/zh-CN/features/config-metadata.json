@@ -1664,6 +1664,16 @@
       "enable": {
         "description": "启用"
       },
+      "api_key": {
+        "description": "API Key"
+      },
+      "language": {
+        "description": "语种"
+      },
+      "enable_itn": {
+        "description": "开启 ITN",
+        "hint": "将数字文本转换为阿拉伯数字"
+      },
       "key": {
         "description": "API Key"
       },
