@@ -377,6 +377,8 @@ class ProviderManager:
                 from .sources.zhipu_source import ProviderZhipu as ProviderZhipu
             case "groq_chat_completion":
                 from .sources.groq_source import ProviderGroq as ProviderGroq
+            case "qiniu_chat_completion":
+                from .sources.qiniu_source import ProviderQiniu as ProviderQiniu
             case "xai_chat_completion":
                 from .sources.xai_source import ProviderXAI as ProviderXAI
             case "aihubmix_chat_completion":
