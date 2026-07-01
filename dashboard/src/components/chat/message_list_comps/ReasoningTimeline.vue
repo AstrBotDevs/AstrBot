@@ -27,7 +27,7 @@
           :fade="false"
           :typewriter="false"
           :is-dark="isDark"
-          :max-live-nodes="0"
+          :max-live-nodes="320"
         />
 
         <div v-else-if="entry.tool" class="reasoning-tool-call-block">

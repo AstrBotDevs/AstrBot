@@ -8,7 +8,7 @@
     :smooth-streaming="isStreaming ? 'auto' : false"
     :fade="false"
     :typewriter="false"
-    :max-live-nodes="0"
+    :max-live-nodes="320"
   />
 </template>
 
