@@ -199,78 +199,107 @@
            keeps the cell empty so the visual columns stay aligned.
            The inline-comment gutter is anchored to the RIGHT cell
            (the new-side column) so we don't have to decide what
-           "the line" means on a row with two distinct contents. -->
+           "the line" means on a row with two distinct contents.
+
+           UI #8 (symmetric to unified mode): the hunk header is a
+           button that folds/unfolds the body. We share the same
+           `collapsedHunks` Set with the unified view, so a fold
+           decision carries over when the user toggles view modes
+           mid-review (no UX surprise). The row v-for is wrapped in
+           `.diff-hunk-body` so a single `v-show` collapses the
+           whole hunk at once — rows stay in the DOM, preserving
+           scroll position and any in-progress comment hover state
+           when the user re-expands. -->
       <template v-else>
         <div
           v-for="(hunk, hi) in splitHunks"
           :key="hi"
           class="diff-hunk diff-hunk-split"
+          :class="{ 'is-hunk-folded': collapsedHunks.has(hi) }"
         >
-          <div class="hunk-header">
-            {{ hunk.header }}
-          </div>
-          <div
-            v-for="(row, ri) in hunk.rows"
-            :key="ri"
-            class="diff-row-split"
-            :class="[
-              row.kind,
-              {
-                'has-comment': isCommentable &&
-                  !!row.right?.newNo &&
-                  commentsByNewLine.has(Number(row.right.newNo)),
-                // Hunk index guard: `ri` is the row index WITHIN
-                // this hunk, so two hunks with a row at the same
-                // offset would otherwise both light up. Pairing
-                // (hi, ri) makes the key globally unique.
-                'is-hovered': isCommentable &&
-                  !!row.right?.newNo &&
-                  hoveredSplitRow === ri &&
-                  hoveredSplitHunk === hi,
-              },
-            ]"
-            @mouseenter="onSplitRowEnter(ri, row, hi)"
-            @mouseleave="onSplitRowLeave"
+          <button
+            type="button"
+            class="hunk-header"
+            :aria-expanded="!collapsedHunks.has(hi)"
+            @click="toggleHunk(hi)"
           >
-            <div class="diff-cell left">
-              <span class="line-number">{{ row.left?.oldNo ?? '' }}</span>
-              <span class="line-prefix">{{ row.left?.prefix ?? '' }}</span>
-              <span class="line-content">{{ row.left?.content ?? '' }}</span>
-            </div>
-            <div class="diff-cell right">
-              <!-- Inline-comment gutter: first child of the right
-                   cell, absolutely positioned to the left edge via
-                   CSS. Only on rows that have a new-side line. -->
-              <span
-                v-if="isCommentable && row.right?.newNo"
-                class="diff-line-gutter"
-              >
-                <button
-                  v-if="hoveredSplitRow === ri &&
-                    hoveredSplitHunk === hi &&
-                    !commentsByNewLine.has(Number(row.right!.newNo))"
-                  type="button"
-                  class="diff-comment-add"
-                  :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line: row.right!.newNo })"
-                  @click.stop="openNewEditor(Number(row.right!.newNo))"
-                >+</button>
-                <button
-                  v-else-if="commentsByNewLine.has(Number(row.right!.newNo))"
-                  type="button"
-                  class="diff-comment-indicator"
-                  :title="commentsByNewLine.get(Number(row.right!.newNo))?.text ?? ''"
-                  :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.indicatorAria', {
-                    line: row.right!.newNo,
-                    preview: commentsByNewLine.get(Number(row.right!.newNo))?.text ?? '',
-                  })"
-                  @click.stop="openEditEditor(commentsByNewLine.get(Number(row.right!.newNo))?.id ?? '')"
+            <v-icon
+              size="12"
+              class="hunk-chevron"
+              :class="{ expanded: !collapsedHunks.has(hi) }"
+            >
+              mdi-chevron-right
+            </v-icon>
+            <span class="hunk-header-text">{{ hunk.header }}</span>
+            <span class="hunk-header-count">{{ hunk.rows.length }}</span>
+          </button>
+          <div
+            v-show="!collapsedHunks.has(hi)"
+            class="diff-hunk-body"
+          >
+            <div
+              v-for="(row, ri) in hunk.rows"
+              :key="ri"
+              class="diff-row-split"
+              :class="[
+                row.kind,
+                {
+                  'has-comment': isCommentable &&
+                    !!row.right?.newNo &&
+                    commentsByNewLine.has(Number(row.right.newNo)),
+                  // Hunk index guard: `ri` is the row index WITHIN
+                  // this hunk, so two hunks with a row at the same
+                  // offset would otherwise both light up. Pairing
+                  // (hi, ri) makes the key globally unique.
+                  'is-hovered': isCommentable &&
+                    !!row.right?.newNo &&
+                    hoveredSplitRow === ri &&
+                    hoveredSplitHunk === hi,
+                },
+              ]"
+              @mouseenter="onSplitRowEnter(ri, row, hi)"
+              @mouseleave="onSplitRowLeave"
+            >
+              <div class="diff-cell left">
+                <span class="line-number">{{ row.left?.oldNo ?? '' }}</span>
+                <span class="line-prefix">{{ row.left?.prefix ?? '' }}</span>
+                <span class="line-content">{{ row.left?.content ?? '' }}</span>
+              </div>
+              <div class="diff-cell right">
+                <!-- Inline-comment gutter: first child of the right
+                     cell, absolutely positioned to the left edge via
+                     CSS. Only on rows that have a new-side line. -->
+                <span
+                  v-if="isCommentable && row.right?.newNo"
+                  class="diff-line-gutter"
                 >
-                  <v-icon size="12">mdi-comment-text-outline</v-icon>
-                </button>
-              </span>
-              <span class="line-number">{{ row.right?.newNo ?? '' }}</span>
-              <span class="line-prefix">{{ row.right?.prefix ?? '' }}</span>
-              <span class="line-content">{{ row.right?.content ?? '' }}</span>
+                  <button
+                    v-if="hoveredSplitRow === ri &&
+                      hoveredSplitHunk === hi &&
+                      !commentsByNewLine.has(Number(row.right!.newNo))"
+                    type="button"
+                    class="diff-comment-add"
+                    :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line: row.right!.newNo })"
+                    @click.stop="openNewEditor(Number(row.right!.newNo))"
+                  >+</button>
+                  <button
+                    v-else-if="commentsByNewLine.has(Number(row.right!.newNo))"
+                    type="button"
+                    class="diff-comment-indicator"
+                    :title="commentsByNewLine.get(Number(row.right!.newNo))?.text ?? ''"
+                    :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.indicatorAria', {
+                      line: row.right!.newNo,
+                      preview: commentsByNewLine.get(Number(row.right!.newNo))?.text ?? '',
+                    })"
+                    @click.stop="openEditEditor(commentsByNewLine.get(Number(row.right!.newNo))?.id ?? '')"
+                  >
+                    <v-icon size="12">mdi-comment-text-outline</v-icon>
+                  </button>
+                </span>
+                <span class="line-number">{{ row.right?.newNo ?? '' }}</span>
+                <span class="line-prefix">{{ row.right?.prefix ?? '' }}</span>
+                <span class="line-content">{{ row.right?.content ?? '' }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -513,76 +542,101 @@
               </div>
             </template>
 
-            <!-- Split mode (fullscreen copy) -->
+            <!-- Split mode (fullscreen copy). Mirrors the normal
+                 view: same `collapsedHunks` Set, same toggleHunk
+                 handler, same hunk-header button. Keeping the two
+                 views symmetric means the user's fold decisions
+                 survive the fullscreen toggle, and full-screen +
+                 folded hunks give a "scannable overview of hunks"
+                 mode not available elsewhere. -->
             <template v-else>
               <div
                 v-for="(hunk, hi) in splitHunks"
                 :key="hi"
                 class="diff-hunk diff-hunk-split"
+                :class="{ 'is-hunk-folded': collapsedHunks.has(hi) }"
               >
-                <div class="hunk-header">
-                  {{ hunk.header }}
-                </div>
-                <div
-                  v-for="(row, ri) in hunk.rows"
-                  :key="ri"
-                  class="diff-row-split"
-                  :class="[
-                    row.kind,
-                    {
-                      'has-comment': isCommentable &&
-                        !!row.right?.newNo &&
-                        commentsByNewLine.has(Number(row.right.newNo)),
-                      // Fullscreen copy mirrors the normal view:
-                      // hunk guard scopes the hover to the hunk
-                      // the cursor is in. (Bugfix for per-hunk
-                      // `ri` collision when multiple hunks share
-                      // a row offset.)
-                      'is-hovered': isCommentable &&
-                        !!row.right?.newNo &&
-                        hoveredSplitRow === ri &&
-                        hoveredSplitHunk === hi,
-                    },
-                  ]"
-                  @mouseenter="onSplitRowEnter(ri, row, hi)"
-                  @mouseleave="onSplitRowLeave"
+                <button
+                  type="button"
+                  class="hunk-header"
+                  :aria-expanded="!collapsedHunks.has(hi)"
+                  @click="toggleHunk(hi)"
                 >
-                  <div class="diff-cell left">
-                    <span class="line-number">{{ row.left?.oldNo ?? '' }}</span>
-                    <span class="line-prefix">{{ row.left?.prefix ?? '' }}</span>
-                    <span class="line-content">{{ row.left?.content ?? '' }}</span>
-                  </div>
-                  <div class="diff-cell right">
-                    <span
-                      v-if="isCommentable && row.right?.newNo"
-                      class="diff-line-gutter"
-                    >
-                      <button
-                        v-if="hoveredSplitRow === ri &&
-                          hoveredSplitHunk === hi &&
-                          !commentsByNewLine.has(Number(row.right!.newNo))"
-                        type="button"
-                        class="diff-comment-add"
-                        :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line: row.right!.newNo })"
-                        @click.stop="openNewEditor(Number(row.right!.newNo))"
-                      >+</button>
-                      <button
-                        v-else-if="commentsByNewLine.has(Number(row.right!.newNo))"
-                        type="button"
-                        class="diff-comment-indicator"
-                        :title="commentsByNewLine.get(Number(row.right!.newNo))?.text ?? ''"
-                        :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.indicatorAria', {
-                          line: row.right!.newNo,
-                          preview: commentsByNewLine.get(Number(row.right!.newNo))?.text ?? '',
-                        })"
-                        @click.stop="openEditEditor(commentsByNewLine.get(Number(row.right!.newNo))?.id ?? '')"
+                  <v-icon
+                    size="12"
+                    class="hunk-chevron"
+                    :class="{ expanded: !collapsedHunks.has(hi) }"
+                  >
+                    mdi-chevron-right
+                  </v-icon>
+                  <span class="hunk-header-text">{{ hunk.header }}</span>
+                  <span class="hunk-header-count">{{ hunk.rows.length }}</span>
+                </button>
+                <div
+                  v-show="!collapsedHunks.has(hi)"
+                  class="diff-hunk-body"
+                >
+                  <div
+                    v-for="(row, ri) in hunk.rows"
+                    :key="ri"
+                    class="diff-row-split"
+                    :class="[
+                      row.kind,
+                      {
+                        'has-comment': isCommentable &&
+                          !!row.right?.newNo &&
+                          commentsByNewLine.has(Number(row.right.newNo)),
+                        // Fullscreen copy mirrors the normal view:
+                        // hunk guard scopes the hover to the hunk
+                        // the cursor is in. (Bugfix for per-hunk
+                        // `ri` collision when multiple hunks share
+                        // a row offset.)
+                        'is-hovered': isCommentable &&
+                          !!row.right?.newNo &&
+                          hoveredSplitRow === ri &&
+                          hoveredSplitHunk === hi,
+                      },
+                    ]"
+                    @mouseenter="onSplitRowEnter(ri, row, hi)"
+                    @mouseleave="onSplitRowLeave"
+                  >
+                    <div class="diff-cell left">
+                      <span class="line-number">{{ row.left?.oldNo ?? '' }}</span>
+                      <span class="line-prefix">{{ row.left?.prefix ?? '' }}</span>
+                      <span class="line-content">{{ row.left?.content ?? '' }}</span>
+                    </div>
+                    <div class="diff-cell right">
+                      <span
+                        v-if="isCommentable && row.right?.newNo"
+                        class="diff-line-gutter"
                       >
-                        <v-icon size="12">mdi-comment-text-outline</v-icon>
-                      </button>
-                    </span>
-                    <span class="line-number">{{ row.right?.newNo ?? '' }}</span>
-                    <span class="line-prefix">{{ row.right?.prefix ?? '' }}</span>
-                    <span class="line-content">{{ row.right?.content ?? '' }}</span>
+                        <button
+                          v-if="hoveredSplitRow === ri &&
+                            hoveredSplitHunk === hi &&
+                            !commentsByNewLine.has(Number(row.right!.newNo))"
+                          type="button"
+                          class="diff-comment-add"
+                          :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line: row.right!.newNo })"
+                          @click.stop="openNewEditor(Number(row.right!.newNo))"
+                        >+</button>
+                        <button
+                          v-else-if="commentsByNewLine.has(Number(row.right!.newNo))"
+                          type="button"
+                          class="diff-comment-indicator"
+                          :title="commentsByNewLine.get(Number(row.right!.newNo))?.text ?? ''"
+                          :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.indicatorAria', {
+                            line: row.right!.newNo,
+                            preview: commentsByNewLine.get(Number(row.right!.newNo))?.text ?? '',
+                          })"
+                          @click.stop="openEditEditor(commentsByNewLine.get(Number(row.right!.newNo))?.id ?? '')"
+                        >
+                          <v-icon size="12">mdi-comment-text-outline</v-icon>
+                        </button>
+                      </span>
+                      <span class="line-number">{{ row.right?.newNo ?? '' }}</span>
+                      <span class="line-prefix">{{ row.right?.prefix ?? '' }}</span>
+                      <span class="line-content">{{ row.right?.content ?? '' }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
