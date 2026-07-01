@@ -409,7 +409,8 @@ class ProviderOpenAIOfficial(Provider):
         multiplying latency for proxy/aggregator providers that already perform
         their own upstream retry and fallback.
         """
-        raw = self.provider_settings.get("provider_error_retries", 1)
+        provider_settings = getattr(self, "provider_settings", {}) or {}
+        raw = provider_settings.get("provider_error_retries", 1)
         try:
             retries = int(raw)
         except (TypeError, ValueError):
@@ -1246,7 +1247,7 @@ class ProviderOpenAIOfficial(Provider):
                 if success:
                     break
 
-        if retry_cnt == max_retries - 1 or llm_response is None:
+        if llm_response is None:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             if last_exception is None:
                 raise Exception("未知错误")
@@ -1289,6 +1290,7 @@ class ProviderOpenAIOfficial(Provider):
 
         last_exception = None
         retry_cnt = 0
+        completed = False
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
@@ -1298,6 +1300,7 @@ class ProviderOpenAIOfficial(Provider):
                     request_max_retries=request_max_retries,
                 ):
                     yield response
+                completed = True
                 break
             except Exception as e:
                 last_exception = e
@@ -1323,7 +1326,7 @@ class ProviderOpenAIOfficial(Provider):
                 if success:
                     break
 
-        if retry_cnt == max_retries - 1:
+        if not completed:
             logger.error(f"API 调用失败，重试 {max_retries} 次仍然失败。")
             if last_exception is None:
                 raise Exception("未知错误")

@@ -123,6 +123,8 @@ def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
 def test_provider_error_retries_defaults_and_coerces_values():
     provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
 
+    assert provider._provider_error_retries() == 1
+
     provider.provider_settings = {}
     assert provider._provider_error_retries() == 1
 
