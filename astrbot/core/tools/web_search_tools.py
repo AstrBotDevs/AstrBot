@@ -3,6 +3,7 @@ import json
 import uuid
 from dataclasses import dataclass as std_dataclass
 from dataclasses import field
+from typing import Awaitable, Callable, TypeVar
 
 import aiohttp
 from pydantic import Field
@@ -58,6 +59,9 @@ class SearchResult:
     favicon: str | None = None
 
 
+_T = TypeVar("_T")
+
+
 @std_dataclass
 class _KeyRotator:
     setting_name: str
@@ -78,6 +82,47 @@ class _KeyRotator:
             key = keys[self.index]
             self.index = (self.index + 1) % len(keys)
             return key
+
+    async def ordered_keys(self, provider_settings: dict) -> list[str]:
+        """All configured keys, ordered from the current rotation position.
+
+        Lets a caller fall through to the next key when one fails (invalid,
+        out of quota, rate limited) instead of giving up on the first error,
+        while keeping the round-robin starting point consistent across calls.
+        """
+        keys = provider_settings.get(self.setting_name, [])
+        if not keys:
+            raise ValueError(
+                f"Error: {self.provider_name} API key is not configured in AstrBot."
+            )
+        async with self.lock:
+            start = self.index % len(keys)
+            self.index = (self.index + 1) % len(keys)
+        return keys[start:] + keys[:start]
+
+    async def execute_with_fallback(
+        self,
+        provider_settings: dict,
+        fn: Callable[[str], Awaitable[_T]],
+    ) -> _T:
+        """Run ``fn(key)`` against each key in rotation order, returning the
+        first success and only raising once every key has failed.
+
+        Other web-search providers can reuse this to gain the same key
+        failover behaviour.
+        """
+        last_error: Exception | None = None
+        for key in await self.ordered_keys(provider_settings):
+            try:
+                return await fn(key)
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    f"{self.provider_name} key failed, trying the next one: {e}"
+                )
+        raise last_error or RuntimeError(
+            f"{self.provider_name} web search failed."
+        )
 
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
@@ -153,32 +198,34 @@ async def _tavily_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
-    header = {
-        "Authorization": f"Bearer {tavily_key}",
-        "Content-Type": "application/json",
-    }
-    async with aiohttp.ClientSession(trust_env=True) as session:
-        async with session.post(
-            "https://api.tavily.com/search",
-            json=payload,
-            headers=header,
-        ) as response:
-            if response.status != 200:
-                reason = await response.text()
-                raise Exception(
-                    f"Tavily web search failed: {reason}, status: {response.status}",
-                )
-            data = await response.json()
-            return [
-                SearchResult(
-                    title=item.get("title"),
-                    url=item.get("url"),
-                    snippet=item.get("content"),
-                    favicon=item.get("favicon"),
-                )
-                for item in data.get("results", [])
-            ]
+    async def _search(tavily_key: str) -> list[SearchResult]:
+        header = {
+            "Authorization": f"Bearer {tavily_key}",
+            "Content-Type": "application/json",
+        }
+        async with aiohttp.ClientSession(trust_env=True) as session:
+            async with session.post(
+                "https://api.tavily.com/search",
+                json=payload,
+                headers=header,
+            ) as response:
+                if response.status != 200:
+                    reason = await response.text()
+                    raise Exception(
+                        f"Tavily web search failed: {reason}, status: {response.status}",
+                    )
+                data = await response.json()
+                return [
+                    SearchResult(
+                        title=item.get("title"),
+                        url=item.get("url"),
+                        snippet=item.get("content"),
+                        favicon=item.get("favicon"),
+                    )
+                    for item in data.get("results", [])
+                ]
+
+    return await _TAVILY_KEY_ROTATOR.execute_with_fallback(provider_settings, _search)
 
 
 async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:

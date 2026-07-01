@@ -513,3 +513,45 @@ async def test_exa_get_contents_raises_on_http_error(monkeypatch):
             {"websearch_exa_key": ["exa-key"]},
             {"ids": ["https://example.com"]},
         )
+
+
+@pytest.mark.asyncio
+async def test_tavily_search_falls_back_to_next_key_on_failure(monkeypatch):
+    responses = [
+        _FakeFirecrawlResponse(status=401, text_data="Unauthorized"),
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={
+                "results": [
+                    {
+                        "title": "AstrBot",
+                        "url": "https://example.com",
+                        "content": "AI Agent Assistant",
+                    }
+                ]
+            },
+        ),
+    ]
+    sessions = []
+
+    def fake_client_session(*, trust_env):
+        session = _FakeFirecrawlSession(responses.pop(0))
+        session.trust_env = trust_env
+        sessions.append(session)
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+    tools._TAVILY_KEY_ROTATOR.index = 0
+
+    results = await tools._tavily_search(
+        {"websearch_tavily_key": ["bad-key", "good-key"]},
+        {"query": "AstrBot"},
+    )
+
+    assert sessions[0].posted["headers"]["Authorization"] == "Bearer bad-key"
+    assert sessions[1].posted["headers"]["Authorization"] == "Bearer good-key"
+    assert results == [
+        tools.SearchResult(
+            title="AstrBot", url="https://example.com", snippet="AI Agent Assistant"
+        )
+    ]
