@@ -98,7 +98,7 @@ class WecomServer:
         """内部服务器的 GET 验证入口"""
         return await self.handle_verify(request)
 
-    async def handle_verify(self, request) -> str:
+    async def handle_verify(self, request) -> FastAPIResponse:
         """处理验证请求，可被统一 webhook 入口复用
 
         Args:
