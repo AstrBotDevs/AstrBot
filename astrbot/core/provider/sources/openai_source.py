@@ -398,6 +398,24 @@ class ProviderOpenAIOfficial(Provider):
 
         self.reasoning_key = "reasoning_content"
 
+    def _provider_error_retries(self) -> int:
+        """Return retry attempts for provider-level recovery paths.
+
+        This outer retry loop handles payload mutation and key rotation (for
+        example context trimming, tool removal, image fallback, or switching to
+        another configured API key). Transport/status-code retries are handled
+        separately by ``request_max_retries`` in ``retry_provider_request``.
+        Keeping this value configurable prevents nested retry loops from
+        multiplying latency for proxy/aggregator providers that already perform
+        their own upstream retry and fallback.
+        """
+        raw = self.provider_settings.get("provider_error_retries", 1)
+        try:
+            retries = int(raw)
+        except (TypeError, ValueError):
+            retries = 1
+        return max(1, retries)
+
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)
         if isinstance(value, str):
@@ -1188,7 +1206,7 @@ class ProviderOpenAIOfficial(Provider):
             payloads["tool_choice"] = tool_choice
 
         llm_response = None
-        max_retries = 10
+        max_retries = self._provider_error_retries()
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
         image_fallback_used = False
@@ -1264,7 +1282,7 @@ class ProviderOpenAIOfficial(Provider):
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
-        max_retries = 10
+        max_retries = self._provider_error_retries()
         available_api_keys = self.api_keys.copy()
         chosen_key = random.choice(available_api_keys)
         image_fallback_used = False

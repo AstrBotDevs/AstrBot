@@ -104,6 +104,7 @@ DEFAULT_CONFIG = {
         "default_provider_id": "",
         "fallback_chat_models": [],
         "request_max_retries": 5,
+        "provider_error_retries": 1,
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
@@ -2801,6 +2802,9 @@ CONFIG_METADATA_2 = {
                         "items": {"type": "string"},
                     },
                     "request_max_retries": {
+                        "type": "int",
+                    },
+                    "provider_error_retries": {
                         "type": "int",
                     },
                     "wake_prefix": {
