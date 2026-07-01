@@ -19,6 +19,7 @@
  */
 export const SPCODE_ICONS: Record<string, string> = {
     code_check: "mdi-shield-check-outline",
+    code_format: "mdi-format-paint",
     code_index: "mdi-database-cog-outline",
     code_explore: "mdi-graph-outline",
     es_search: "mdi-file-search-outline",

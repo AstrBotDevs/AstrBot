@@ -1,5 +1,6 @@
 <template>
-    <CodeCheckResult v-if="toolName === 'code_check'" :data="parsedData" :args="args" />
+    <CodeFormatResult v-if="toolName === 'code_format'" :data="parsedData" :args="args" />
+    <CodeCheckResult v-else-if="toolName === 'code_check'" :data="parsedData" :args="args" />
     <CodeIndexResult v-else-if="toolName === 'code_index'" :data="parsedData" />
     <CodeExploreResult v-else-if="toolName === 'code_explore'" :data="parsedData" :args="args" />
     <EsSearchResult v-else-if="toolName === 'es_search'" :data="parsedData" :args="args" />
@@ -17,6 +18,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import CodeCheckResult from "./spcode_tools/CodeCheckResult.vue";
+import CodeFormatResult from "./spcode_tools/CodeFormatResult.vue";
 import CodeIndexResult from "./spcode_tools/CodeIndexResult.vue";
 import CodeExploreResult from "./spcode_tools/CodeExploreResult.vue";
 import EsSearchResult from "./spcode_tools/EsSearchResult.vue";
