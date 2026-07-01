@@ -2,6 +2,7 @@ import base64
 import math
 import os
 import struct
+import sys
 import wave
 from io import BytesIO
 from pathlib import Path
@@ -653,19 +654,39 @@ def test_path_mapping_accepts_standard_and_legacy_file_uri(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_tencent_silk_encoding_uses_pysilk_tencent_format(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "rate, channels",
+    [
+        (24000, 1),  # supported, no resample
+        (44100, 1),  # unsupported rate, triggers resample
+        (22050, 1),  # unsupported rate, triggers resample
+        (48000, 2),  # stereo at supported rate, triggers downmix
+        (44100, 2),  # stereo + unsupported rate, triggers both
+    ],
+    ids=["24k-mono", "44.1k-mono", "22.05k-mono", "48k-stereo", "44.1k-stereo"],
+)
+async def test_tencent_silk_encoding_uses_pysilk_tencent_format(
+    rate, channels, tmp_path, monkeypatch
+):
+    """Real pysilk end-to-end across sample rates that previously failed.
+
+    44100 Hz was the regression trigger: pysilk rejects it with
+    ENC_INPUT_INVALID_NO_OF_SAMPLES. The fix resamples to 24 kHz mono via
+    audioop.ratecv before encoding.
+    """
     monkeypatch.setattr(media_utils, "get_astrbot_temp_path", lambda: str(tmp_path))
     wav_path = tmp_path / "tone.wav"
     silk_path = tmp_path / "tone.silk"
-    rate = 24000
-    frames = int(rate * 0.2)
+    secs = 0.2
+    frames = int(rate * secs)
     with wave.open(str(wav_path), "wb") as wav:
-        wav.setnchannels(1)
+        wav.setnchannels(channels)
         wav.setsampwidth(2)
         wav.setframerate(rate)
         for i in range(frames):
             sample = int(0.2 * 32767 * math.sin(2 * math.pi * 440 * i / rate))
-            wav.writeframesraw(struct.pack("<h", sample))
+            for _ in range(channels):
+                wav.writeframesraw(struct.pack("<h", sample))
 
     duration = await wav_to_tencent_silk(str(wav_path), str(silk_path))
     silk_bytes = silk_path.read_bytes()
@@ -679,7 +700,82 @@ async def test_tencent_silk_encoding_uses_pysilk_tencent_format(tmp_path, monkey
         assert resolved.format == "tencent_silk"
         assert resolved.mime_type == "audio/silk"
 
-    assert duration == pytest.approx(0.2)
+    assert duration == pytest.approx(secs, abs=0.05)
     assert silk_bytes.startswith(b"\x02#!SILK_V3")
     assert resolved_silk_bytes.startswith(b"\x02#!SILK_V3")
     assert not resolved_silk_path.exists()
+
+
+def _make_wav(path, rate, channels=1, secs=0.2, freq=440):
+    """Write a short sine-tone WAV at the given rate/channels."""
+    nframes = int(rate * secs)
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(channels)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        for i in range(nframes):
+            sample = int(0.2 * 32767 * math.sin(2 * math.pi * freq * i / rate))
+            for _ in range(channels):
+                wav.writeframesraw(struct.pack("<h", sample))
+
+
+class _FakePysilk:
+    """Stand-in for the ``pysilk`` module that records encode() calls."""
+
+    def __init__(self):
+        self.calls = []
+
+    def encode(self, input_io, output_io, sample_rate, bit_rate, tencent=True):
+        self.calls.append({"sample_rate": sample_rate, "tencent": tencent})
+        output_io.write(b"\x02#!SILK_V3")
+
+
+@pytest.mark.asyncio
+async def test_wav_to_tencent_silk_resamples_unsupported_rate(tmp_path, monkeypatch):
+    """44100 Hz input must be resampled to 24 kHz before pysilk.encode."""
+    fake = _FakePysilk()
+    monkeypatch.setitem(sys.modules, "pysilk", fake)
+
+    wav_path = tmp_path / "tts_44100.wav"
+    _make_wav(wav_path, 44100)
+
+    silk_path = tmp_path / "out.silk"
+    await wav_to_tencent_silk(str(wav_path), str(silk_path))
+
+    assert len(fake.calls) == 1
+    assert fake.calls[0]["sample_rate"] == 24000
+    assert fake.calls[0]["tencent"] is True
+    assert silk_path.read_bytes().startswith(b"\x02#!SILK_V3")
+
+
+@pytest.mark.asyncio
+async def test_wav_to_tencent_silk_resamples_stereo(tmp_path, monkeypatch):
+    """Stereo input at a supported rate must still be downmixed to mono."""
+    fake = _FakePysilk()
+    monkeypatch.setitem(sys.modules, "pysilk", fake)
+
+    wav_path = tmp_path / "stereo_48k.wav"
+    _make_wav(wav_path, 48000, channels=2)
+
+    await wav_to_tencent_silk(str(wav_path), str(tmp_path / "out.silk"))
+
+    assert len(fake.calls) == 1
+    # 48000 Hz is supported, so only downmix happens -- rate stays unchanged.
+    assert fake.calls[0]["sample_rate"] == 48000
+
+
+@pytest.mark.asyncio
+async def test_wav_to_tencent_silk_skips_resample_for_supported_rate(
+    tmp_path, monkeypatch
+):
+    """24000 Hz mono must go straight to pysilk without resampling."""
+    fake = _FakePysilk()
+    monkeypatch.setitem(sys.modules, "pysilk", fake)
+
+    wav_path = tmp_path / "tone_24k.wav"
+    _make_wav(wav_path, 24000)
+
+    await wav_to_tencent_silk(str(wav_path), str(tmp_path / "out.silk"))
+
+    assert len(fake.calls) == 1
+    assert fake.calls[0]["sample_rate"] == 24000

@@ -1,12 +1,16 @@
 """Tencent Silk audio conversion helpers."""
 
 import asyncio
+import audioop
 import os
 import subprocess
 import wave
 from io import BytesIO
 
 from astrbot.core import logger
+
+# The SILK SDK only supports these rates
+_PYSILK_SUPPORTED_RATES = frozenset({8000, 12000, 16000, 24000, 32000, 48000})
 
 
 async def tencent_silk_to_wav(silk_path: str, output_path: str) -> str:
@@ -69,8 +73,15 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
 
     with wave.open(wav_path, "rb") as wav:
         rate = wav.getframerate()
-        frames = wav.getnframes()
-        pcm_data = wav.readframes(frames)
+        channels = wav.getnchannels()
+        pcm_data = wav.readframes(wav.getnframes())
+
+    # downmix to mono and resample to 24 kHz -- no external dependency.
+    if channels == 2:
+        pcm_data = audioop.tomono(pcm_data, 2, 0.5, 0.5)
+    if rate not in _PYSILK_SUPPORTED_RATES:
+        pcm_data, _ = audioop.ratecv(pcm_data, 2, 1, rate, 24000, None)
+        rate = 24000
 
     input_io = BytesIO(pcm_data)
     output_io = BytesIO()
@@ -78,7 +89,7 @@ async def wav_to_tencent_silk(wav_path: str, output_path: str) -> float:
     pysilk.encode(input_io, output_io, rate, rate, tencent=True)
     with open(output_path, "wb") as f:
         f.write(output_io.getvalue())
-    return frames / rate if rate else 0
+    return len(pcm_data) / (2 * rate) if rate else 0
 
 
 async def convert_to_pcm_wav(input_path: str, output_path: str) -> str:
