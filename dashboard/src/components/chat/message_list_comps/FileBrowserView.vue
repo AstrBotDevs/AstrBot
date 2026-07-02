@@ -235,6 +235,7 @@ onBeforeUnmount(() => {
       v-if="spcodeStatus.status.value.loaded"
       :current-path="breadcrumbPath"
       :root-path="rootPath"
+      :is-dark="!!isDark"
       @navigate="onBreadcrumbNavigate"
     />
     <SearchPanel

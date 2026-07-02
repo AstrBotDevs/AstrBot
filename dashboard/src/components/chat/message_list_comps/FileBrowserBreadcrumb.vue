@@ -8,6 +8,14 @@ const props = defineProps<{
   currentPath: string;
   /** Root path; null when project not loaded. */
   rootPath: string | null;
+  /**
+   * 2026-07-02: pass through the dashboard's dark-mode flag so the
+   * path bar can lift its background alpha + border strength in
+   * dark theme. Without this, the primary-tint background
+   * introduced for the light mode would render as a near-invisible
+   * 8%-alpha wash against the dark sidebar.
+   */
+  isDark?: boolean;
 }>();
 const emit = defineEmits<{ (e: "navigate", path: string): void }>();
 const { tm } = useModuleI18n("features/chat");
@@ -96,7 +104,11 @@ const segments = computed<Segment[]>(() => {
 </script>
 
 <template>
-  <nav v-if="segments.length > 0" class="file-browser-breadcrumb">
+  <nav
+    v-if="segments.length > 0"
+    class="file-browser-breadcrumb"
+    :class="{ dark: props.isDark }"
+  >
     <template v-for="(seg, i) in segments" :key="seg.path">
       <button
         type="button"
@@ -113,6 +125,12 @@ const segments = computed<Segment[]>(() => {
 </template>
 
 <style scoped>
+/* ── Light mode (default) ─────────────────────────────────────────
+   Primary-tint background + matching bottom border. The 8% alpha
+   is enough to read as a distinct path-navigation surface without
+   fighting the surrounding sidebar chrome. Active segment gets a
+   slightly stronger fill so the leaf (the file the user just
+   opened) is unambiguous. */
 .file-browser-breadcrumb {
   display: flex;
   align-items: center;
@@ -121,8 +139,8 @@ const segments = computed<Segment[]>(() => {
   padding: 8px 14px;
   font-size: 12px;
   font-family: ui-monospace, monospace;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  background: rgba(var(--v-theme-surface), 0.4);
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.2);
 }
 .breadcrumb-segment {
   background: none;
@@ -137,18 +155,51 @@ const segments = computed<Segment[]>(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
 }
 .breadcrumb-segment:hover {
-  background: rgba(var(--v-theme-on-surface), 0.06);
-  color: rgba(var(--v-theme-on-surface), 0.9);
+  background: rgba(var(--v-theme-primary), 0.14);
+  color: rgb(var(--v-theme-on-surface));
 }
 .breadcrumb-segment.is-current {
-  color: rgba(var(--v-theme-on-surface), 0.95);
+  color: rgb(var(--v-theme-on-surface));
   font-weight: 500;
+  background: rgba(var(--v-theme-primary), 0.12);
   cursor: default;
 }
 .breadcrumb-sep {
-  color: rgba(var(--v-theme-on-surface), 0.3);
+  color: rgba(var(--v-theme-primary), 0.4);
   user-select: none;
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────
+   Same primary tint, but alpha-lifted so the path bar reads as a
+   distinct surface against the dark sidebar. Without the lift, an
+   8% primary wash vanishes into a near-black background. Border
+   strength also goes up (0.2 → 0.32) for the same reason. The
+   active segment is a touch stronger (0.12 → 0.22) because the
+   default segment color in dark mode is already a slightly
+   brighter near-white, so the leaf needs a small extra push to
+   pop. */
+.file-browser-breadcrumb.dark {
+  background: rgba(var(--v-theme-primary), 0.14);
+  border-bottom-color: rgba(var(--v-theme-primary), 0.32);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+}
+.file-browser-breadcrumb.dark .breadcrumb-segment {
+  color: rgba(var(--v-theme-on-surface), 0.82);
+}
+.file-browser-breadcrumb.dark .breadcrumb-segment:hover {
+  background: rgba(var(--v-theme-primary), 0.22);
+  color: rgb(var(--v-theme-on-surface));
+}
+.file-browser-breadcrumb.dark .breadcrumb-segment.is-current {
+  color: rgb(var(--v-theme-on-surface));
+  background: rgba(var(--v-theme-primary), 0.22);
+}
+.file-browser-breadcrumb.dark .breadcrumb-sep {
+  color: rgba(var(--v-theme-primary), 0.55);
 }
 </style>
