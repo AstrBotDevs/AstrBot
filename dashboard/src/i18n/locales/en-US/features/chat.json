@@ -646,6 +646,28 @@
             "commit_too_large": "Commit is too large; use the diff endpoint to view the full patch"
           }
         }
+      },
+      "search": {
+        "button": "Search files (Cmd/Ctrl-F)",
+        "placeholder": "Search in project…",
+        "hint": "Type to search · Esc to close",
+        "searching": "Searching…",
+        "resultCount": "{count} match(es)",
+        "truncated": "Truncated — narrow your pattern",
+        "toolbarActive": "Searching…",
+        "fallbackHint": "🐢 Python fallback (install ripgrep for speed)",
+        "error": {
+          "invalid_pattern": "Invalid pattern",
+          "pattern_too_long": "Pattern too long (max 256 chars)",
+          "search_unavailable": "Search unavailable",
+          "search_timeout": "Search timed out (5s)",
+          "path_unsafe_filter": "Path filter is unsafe",
+          "no_project_loaded": "No project loaded",
+          "worktree_invalid": "Invalid worktree",
+          "directory_missing": "Directory missing",
+          "not_a_git_repo": "Not a git repository",
+          "network_error": "Network error"
+        }
       }
     },
     "planModeChip": {

@@ -632,6 +632,28 @@
           "cancel": "Cancel",
           "success": "Unlocked worktree {branch}"
         }
+      },
+      "search": {
+        "button": "Поиск файлов (Cmd/Ctrl-F)",
+        "placeholder": "Искать в проекте…",
+        "hint": "Введите для поиска · Esc для закрытия",
+        "searching": "Поиск…",
+        "resultCount": "{count} совпадений",
+        "truncated": "Обрезано — сузьте шаблон",
+        "toolbarActive": "Идёт поиск…",
+        "fallbackHint": "🐢 Резервный Python (установите ripgrep для скорости)",
+        "error": {
+          "invalid_pattern": "Неверный шаблон",
+          "pattern_too_long": "Шаблон слишком длинный (макс. 256 символов)",
+          "search_unavailable": "Поиск недоступен",
+          "search_timeout": "Тайм-аут поиска (5 с)",
+          "path_unsafe_filter": "Небезопасный фильтр пути",
+          "no_project_loaded": "Проект не загружен",
+          "worktree_invalid": "Неверный worktree",
+          "directory_missing": "Каталог отсутствует",
+          "not_a_git_repo": "Не git-репозиторий",
+          "network_error": "Сетевая ошибка"
+        }
       }
     },
     "planModeChip": {

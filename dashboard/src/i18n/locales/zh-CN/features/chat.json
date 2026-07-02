@@ -646,6 +646,28 @@
             "commit_too_large": "该 commit 过大，请使用 diff 端点查看完整 patch"
           }
         }
+      },
+      "search": {
+        "button": "搜索文件 (Cmd/Ctrl-F)",
+        "placeholder": "在项目中搜索…",
+        "hint": "输入关键词搜索 · Esc 关闭",
+        "searching": "正在搜索…",
+        "resultCount": "{count} 个匹配",
+        "truncated": "已截断 — 请缩小搜索范围",
+        "toolbarActive": "搜索中…",
+        "fallbackHint": "🐢 Python 兜底(安装 ripgrep 可加速)",
+        "error": {
+          "invalid_pattern": "无效的搜索模式",
+          "pattern_too_long": "搜索模式过长(最长 256 字符)",
+          "search_unavailable": "搜索不可用",
+          "search_timeout": "搜索超时(5 秒)",
+          "path_unsafe_filter": "路径过滤器不安全",
+          "no_project_loaded": "未加载项目",
+          "worktree_invalid": "无效的 worktree",
+          "directory_missing": "目录不存在",
+          "not_a_git_repo": "不是 git 仓库",
+          "network_error": "网络错误"
+        }
       }
     },
     "planModeChip": {
