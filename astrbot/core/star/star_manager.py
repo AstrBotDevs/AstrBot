@@ -996,7 +996,7 @@ class PluginManager:
                         logger.warning(
                             f"插件 {smd.name} 未被正常终止: {e!s}, 可能会导致该插件运行不正常。",
                         )
-                    if smd.name and smd.module_path and smd.activated:
+                    if smd.name and smd.module_path:
                         await self._unbind_plugin(smd.name, smd.module_path)
 
                 star_handlers_registry.clear()
