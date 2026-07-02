@@ -365,7 +365,10 @@ class KBHelper:
             contents = []
             metadatas = []
             for idx, chunk_text in enumerate(chunks_text):
-                contents.append(chunk_text)
+                # Replace lone surrogates that break UTF-8 encoding (e.g., broken
+                # emoji codepoints from PDF text extraction).
+                sanitized = chunk_text.encode("utf-8", errors="replace").decode("utf-8")
+                contents.append(sanitized)
                 metadatas.append(
                     {
                         "kb_id": self.kb.kb_id,
