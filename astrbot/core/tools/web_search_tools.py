@@ -79,6 +79,23 @@ class _KeyRotator:
             self.index = (self.index + 1) % len(keys)
             return key
 
+    async def iter_keys(self, provider_settings: dict) -> list[str]:
+        """Return every configured key in rotation order (current index first).
+
+        Used for failover: callers try the keys in turn and move on to the next
+        one when a key is invalid, out of quota, or rate-limited.
+        """
+        keys = provider_settings.get(self.setting_name, [])
+        if not keys:
+            raise ValueError(
+                f"Error: {self.provider_name} API key is not configured in AstrBot."
+            )
+
+        async with self.lock:
+            start = self.index
+            self.index = (self.index + 1) % len(keys)
+        return [keys[(start + i) % len(keys)] for i in range(len(keys))]
+
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
 _BOCHA_KEY_ROTATOR = _KeyRotator("websearch_bocha_key", "BoCha")
@@ -149,11 +166,10 @@ def _search_result_payload(results: list[SearchResult]) -> str:
     return json.dumps({"results": ret_ls}, ensure_ascii=False)
 
 
-async def _tavily_search(
-    provider_settings: dict,
+async def _tavily_request_once(
+    tavily_key: str,
     payload: dict,
 ) -> list[SearchResult]:
-    tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
     header = {
         "Authorization": f"Bearer {tavily_key}",
         "Content-Type": "application/json",
@@ -179,6 +195,22 @@ async def _tavily_search(
                 )
                 for item in data.get("results", [])
             ]
+
+
+async def _tavily_search(
+    provider_settings: dict,
+    payload: dict,
+) -> list[SearchResult]:
+    keys = await _TAVILY_KEY_ROTATOR.iter_keys(provider_settings)
+    last_exc: Exception | None = None
+    for tavily_key in keys:
+        try:
+            return await _tavily_request_once(tavily_key, payload)
+        except Exception as e:
+            # Key invalid / out of quota / rate-limited: fall through to the next key.
+            last_exc = e
+    assert last_exc is not None  # iter_keys raises when no keys are configured
+    raise last_exc
 
 
 async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:

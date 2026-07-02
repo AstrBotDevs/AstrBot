@@ -513,3 +513,54 @@ async def test_exa_get_contents_raises_on_http_error(monkeypatch):
             {"websearch_exa_key": ["exa-key"]},
             {"ids": ["https://example.com"]},
         )
+
+
+@pytest.mark.asyncio
+async def test_iter_keys_returns_rotation_order():
+    rotator = tools._KeyRotator("websearch_tavily_key", "Tavily")
+    settings = {"websearch_tavily_key": ["k1", "k2", "k3"]}
+
+    assert await rotator.iter_keys(settings) == ["k1", "k2", "k3"]
+    # the starting point advances so a different key leads the next call
+    assert await rotator.iter_keys(settings) == ["k2", "k3", "k1"]
+
+
+@pytest.mark.asyncio
+async def test_iter_keys_raises_when_unconfigured():
+    rotator = tools._KeyRotator("websearch_tavily_key", "Tavily")
+    with pytest.raises(ValueError):
+        await rotator.iter_keys({"websearch_tavily_key": []})
+
+
+@pytest.mark.asyncio
+async def test_tavily_search_falls_over_to_next_key(monkeypatch):
+    tried = []
+
+    async def fake_request_once(key, payload):
+        tried.append(key)
+        if key == "bad-key":
+            raise Exception("Tavily web search failed: quota exceeded, status: 429")
+        return [tools.SearchResult(title="t", url="u", snippet="s")]
+
+    monkeypatch.setattr(tools, "_tavily_request_once", fake_request_once)
+    monkeypatch.setattr(tools._TAVILY_KEY_ROTATOR, "index", 0)
+    settings = {"websearch_tavily_key": ["bad-key", "good-key"]}
+
+    results = await tools._tavily_search(settings, {"query": "x"})
+
+    # the first key failed, so the search must have moved on to the second key
+    assert tried == ["bad-key", "good-key"]
+    assert results[0].title == "t"
+
+
+@pytest.mark.asyncio
+async def test_tavily_search_raises_last_error_when_all_keys_fail(monkeypatch):
+    async def fake_request_once(key, payload):
+        raise Exception(f"Tavily web search failed for {key}")
+
+    monkeypatch.setattr(tools, "_tavily_request_once", fake_request_once)
+    monkeypatch.setattr(tools._TAVILY_KEY_ROTATOR, "index", 0)
+    settings = {"websearch_tavily_key": ["k1", "k2"]}
+
+    with pytest.raises(Exception, match="Tavily web search failed for k2"):
+        await tools._tavily_search(settings, {"query": "x"})
