@@ -141,14 +141,6 @@ onMounted(() => {
             })
           }}
         </span>
-        <v-chip
-          v-if="state.backend === 'python'"
-          size="x-small"
-          variant="tonal"
-          color="warning"
-        >
-          {{ tm("spcodeProjectLoad.diffSidebar.search.fallbackHint") }}
-        </v-chip>
         <span v-if="state.truncated" class="text-caption text-warning">
           {{ tm("spcodeProjectLoad.diffSidebar.search.truncated") }}
         </span>

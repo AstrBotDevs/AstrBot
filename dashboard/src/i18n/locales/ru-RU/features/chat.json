@@ -641,7 +641,6 @@
         "resultCount": "{count} совпадений",
         "truncated": "Обрезано — сузьте шаблон",
         "toolbarActive": "Идёт поиск…",
-        "fallbackHint": "🐢 Резервный Python (установите ripgrep для скорости)",
         "error": {
           "invalid_pattern": "Неверный шаблон",
           "pattern_too_long": "Шаблон слишком длинный (макс. 256 символов)",

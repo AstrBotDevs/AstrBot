@@ -9,8 +9,6 @@
 import { ref, type Ref } from "vue";
 import { pluginExtensionApi } from "@/api/v1";
 
-export type SearchBackend = "ripgrep" | "python";
-
 export type SearchState =
   | { kind: "idle" }
   | { kind: "loading"; query: string }
@@ -19,7 +17,6 @@ export type SearchState =
       query: string;
       results: SearchResult[];
       truncated: boolean;
-      backend: SearchBackend;
       elapsedMs: number;
     }
   | { kind: "error"; query: string; reason: string; elapsedMs: number };
@@ -70,7 +67,6 @@ export function useSpcodeFileSearch() {
       // the wrapper, which produced TS2339 on data.reason / data.results.
       const res = await pluginExtensionApi.post<{
         pattern: string;
-        backend: SearchBackend;
         result_count: number;
         max_results: number;
         truncated: boolean;
@@ -118,7 +114,6 @@ export function useSpcodeFileSearch() {
         query: opts.pattern,
         results: data.results ?? [],
         truncated: data.truncated ?? false,
-        backend: data.backend ?? "python",
         elapsedMs: data.elapsed_ms ?? 0,
       };
     } catch (err: unknown) {

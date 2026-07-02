@@ -655,7 +655,6 @@
         "resultCount": "{count} 个匹配",
         "truncated": "已截断 — 请缩小搜索范围",
         "toolbarActive": "搜索中…",
-        "fallbackHint": "🐢 Python 兜底(安装 ripgrep 可加速)",
         "error": {
           "invalid_pattern": "无效的搜索模式",
           "pattern_too_long": "搜索模式过长(最长 256 字符)",
