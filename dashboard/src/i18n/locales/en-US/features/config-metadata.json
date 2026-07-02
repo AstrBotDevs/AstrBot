@@ -137,6 +137,10 @@
           "description": "Baidu Qianfan Smart Cloud APP Builder API Key",
           "hint": "Reference: [https://console.bce.baidu.com/iam/#/iam/apikey/list](https://console.bce.baidu.com/iam/#/iam/apikey/list)"
         },
+        "websearch_keenable_key": {
+          "description": "Keenable API Key",
+          "hint": "Optional. Keenable works without a key on the free tier (1000 requests/hour); add one or more keys to remove the limit. Get one at [https://keenable.ai](https://keenable.ai)."
+        },
         "web_search_link": {
           "description": "Display Source Citations"
         },

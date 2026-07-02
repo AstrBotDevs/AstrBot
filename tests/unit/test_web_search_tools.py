@@ -371,6 +371,326 @@ class _FakeFirecrawlSession:
         return self.response
 
 
+class _FakeKeenableSession:
+    def __init__(self, response):
+        self.response = response
+        self.trust_env = None
+        self.entered = False
+        self.exited = False
+        self.posted = None
+        self.got = None
+
+    async def __aenter__(self):
+        self.entered = True
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.exited = True
+        return None
+
+    def post(self, url, json, headers):
+        self.posted = {"url": url, "json": json, "headers": headers}
+        return self.response
+
+    def get(self, url, params, headers):
+        self.got = {"url": url, "params": params, "headers": headers}
+        return self.response
+
+
+def test_normalize_legacy_web_search_config_migrates_keenable_key():
+    config = _FakeConfig(
+        {"provider_settings": {"websearch_keenable_key": "keenable-key"}}
+    )
+
+    tools.normalize_legacy_web_search_config(config)
+
+    assert config["provider_settings"]["websearch_keenable_key"] == ["keenable-key"]
+    assert config.saved is True
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_maps_results(monkeypatch):
+    async def fake_keenable_search(provider_settings, payload):
+        assert provider_settings["websearch_keenable_key"] == ["keenable-key"]
+        assert payload == {"query": "AstrBot", "site": "example.com"}
+        return [
+            tools.SearchResult(
+                title="AstrBot",
+                url="https://example.com",
+                snippet="Search result",
+            )
+        ]
+
+    monkeypatch.setattr(tools, "_keenable_search", fake_keenable_search)
+    tool = tools.KeenableWebSearchTool()
+    context = _context_with_provider_settings(
+        {"websearch_keenable_key": ["keenable-key"]}
+    )
+
+    result = await tool.call(context, query="AstrBot", site="example.com")
+
+    assert json.loads(result)["results"] == [
+        {
+            "title": "AstrBot",
+            "url": "https://example.com",
+            "snippet": "Search result",
+            "index": json.loads(result)["results"][0]["index"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_uses_api_key_header_and_falls_back_to_description(
+    monkeypatch,
+):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={
+                "query": "AstrBot",
+                "results": [
+                    {
+                        "title": "AstrBot",
+                        "url": "https://example.com",
+                        "description": "From description",
+                    },
+                    {"title": "No URL", "description": "dropped"},
+                ],
+            },
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._keenable_search(
+        {"websearch_keenable_key": ["keenable-key"]},
+        {"query": "AstrBot"},
+    )
+
+    assert session.trust_env is True
+    assert session.entered is True
+    assert session.exited is True
+    assert session.posted == {
+        "url": "https://api.keenable.ai/v1/search",
+        "json": {"query": "AstrBot"},
+        "headers": {
+            "X-API-Key": "keenable-key",
+            "X-Keenable-Title": "astrbot",
+            "Content-Type": "application/json",
+        },
+    }
+    assert results == [
+        tools.SearchResult(
+            title="AstrBot", url="https://example.com", snippet="From description"
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_without_key_uses_public_endpoint(monkeypatch):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={"results": [{"title": "AstrBot", "url": "https://example.com"}]},
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    results = await tools._keenable_search({}, {"query": "AstrBot"})
+
+    assert session.posted == {
+        "url": "https://api.keenable.ai/v1/search/public",
+        "json": {"query": "AstrBot"},
+        "headers": {
+            "X-Keenable-Title": "astrbot",
+            "Content-Type": "application/json",
+        },
+    }
+    assert "X-API-Key" not in session.posted["headers"]
+    assert results == [
+        tools.SearchResult(title="AstrBot", url="https://example.com", snippet="")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_handles_null_results_and_items(monkeypatch):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(status=200, json_data={"results": None})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    assert (
+        await tools._keenable_search(
+            {"websearch_keenable_key": ["keenable-key"]}, {"query": "AstrBot"}
+        )
+        == []
+    )
+
+    session.response = _FakeFirecrawlResponse(
+        status=200,
+        json_data={
+            "results": [None, {"title": "AstrBot", "url": "https://example.com"}]
+        },
+    )
+    results = await tools._keenable_search(
+        {"websearch_keenable_key": ["keenable-key"]}, {"query": "AstrBot"}
+    )
+    assert results == [
+        tools.SearchResult(title="AstrBot", url="https://example.com", snippet="")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_keenable_search_raises_error_for_http_errors(monkeypatch):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(status=401, text_data="Unauthorized")
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(
+        Exception,
+        match="Keenable web search failed: Unauthorized, status: 401",
+    ):
+        await tools._keenable_search(
+            {"websearch_keenable_key": ["keenable-key"]},
+            {"query": "AstrBot"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_keenable_extract_returns_fetched_markdown(monkeypatch):
+    async def fake_keenable_fetch(provider_settings, params):
+        assert provider_settings["websearch_keenable_key"] == ["keenable-key"]
+        assert params == {"url": "https://example.com", "max_chars": 1000}
+        return {"url": "https://example.com", "content": "# Example"}
+
+    monkeypatch.setattr(tools, "_keenable_fetch", fake_keenable_fetch)
+    tool = tools.KeenableExtractWebPageTool()
+    context = _context_with_provider_settings(
+        {"websearch_keenable_key": ["keenable-key"]}
+    )
+
+    result = await tool.call(context, url="https://example.com", max_chars=1000)
+
+    assert result == "URL: https://example.com\nContent: # Example"
+
+
+@pytest.mark.asyncio
+async def test_keenable_fetch_uses_get_with_api_key_header(monkeypatch):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={"url": "https://example.com", "content": "# Example"},
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    result = await tools._keenable_fetch(
+        {"websearch_keenable_key": ["keenable-key"]},
+        {"url": "https://example.com"},
+    )
+
+    assert result == {"url": "https://example.com", "content": "# Example"}
+    assert session.got == {
+        "url": "https://api.keenable.ai/v1/fetch",
+        "params": {"url": "https://example.com"},
+        "headers": {"X-API-Key": "keenable-key", "X-Keenable-Title": "astrbot"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_keenable_fetch_without_key_uses_public_endpoint(monkeypatch):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(
+            status=200,
+            json_data={"url": "https://example.com", "content": "# Example"},
+        )
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    result = await tools._keenable_fetch({}, {"url": "https://example.com"})
+
+    assert result == {"url": "https://example.com", "content": "# Example"}
+    assert session.got == {
+        "url": "https://api.keenable.ai/v1/fetch/public",
+        "params": {"url": "https://example.com"},
+        "headers": {"X-Keenable-Title": "astrbot"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_keenable_fetch_raises_when_no_content(monkeypatch):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(status=200, json_data={"url": "https://example.com"})
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(
+        ValueError,
+        match="Keenable web fetcher does not return any results.",
+    ):
+        await tools._keenable_fetch(
+            {"websearch_keenable_key": ["keenable-key"]},
+            {"url": "https://example.com"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_keenable_fetch_raises_error_for_http_errors(monkeypatch):
+    session = _FakeKeenableSession(
+        _FakeFirecrawlResponse(status=403, text_data="Forbidden")
+    )
+
+    def fake_client_session(*, trust_env):
+        session.trust_env = trust_env
+        return session
+
+    monkeypatch.setattr(tools.aiohttp, "ClientSession", fake_client_session)
+
+    with pytest.raises(
+        Exception,
+        match="Keenable web fetch failed: Forbidden, status: 403",
+    ):
+        await tools._keenable_fetch(
+            {"websearch_keenable_key": ["keenable-key"]},
+            {"url": "https://example.com"},
+        )
+
+
 def _context_with_provider_settings(provider_settings):
     config = {"provider_settings": provider_settings}
     agent_context = SimpleNamespace(

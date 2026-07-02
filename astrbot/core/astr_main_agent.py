@@ -89,6 +89,8 @@ from astrbot.core.tools.web_search_tools import (
     ExaWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
+    KeenableExtractWebPageTool,
+    KeenableWebSearchTool,
     TavilyExtractWebPageTool,
     TavilyWebSearchTool,
     normalize_legacy_web_search_config,
@@ -1210,6 +1212,9 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
     elif provider == "baidu_ai_search":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
+    elif provider == "keenable":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(KeenableWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(KeenableExtractWebPageTool))
     elif provider == "exa":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaWebSearchTool))
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))

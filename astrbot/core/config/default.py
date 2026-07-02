@@ -115,6 +115,7 @@ DEFAULT_CONFIG = {
         "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
         "websearch_firecrawl_key": [],
+        "websearch_keenable_key": [],
         "websearch_exa_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
@@ -3284,6 +3285,7 @@ CONFIG_METADATA_3 = {
                             "bocha",
                             "brave",
                             "firecrawl",
+                            "keenable",
                             "exa",
                         ],
                         "condition": {
@@ -3336,6 +3338,16 @@ CONFIG_METADATA_3 = {
                         "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
                         "condition": {
                             "provider_settings.websearch_provider": "baidu_ai_search",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_keenable_key": {
+                        "description": "Keenable API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可选。Keenable 免费额度无需 Key（每小时 1000 次请求）；添加一个或多个 Key 可解除该限制。获取地址：https://keenable.ai",
+                        "condition": {
+                            "provider_settings.websearch_provider": "keenable",
                             "provider_settings.web_search": True,
                         },
                     },
