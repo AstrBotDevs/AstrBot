@@ -199,6 +199,22 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="file-browser-view">
+    <!-- 2026-07-02: breadcrumb lifted out of the v-if="!searchOpen"
+         block so it stays visible even while the search panel is
+         open. Previously the SearchPanel REPLACED the file browser
+         entirely (including the breadcrumb), so the user had to
+         close the search panel before they could navigate to a
+         different directory. Now the breadcrumb is always rendered
+         at the top of the file browser (when the project is loaded),
+         and the user can click a segment to switch paths without
+         touching the search panel. The SearchPanel and the
+         file-list/preview body remain mutually exclusive below. -->
+    <FileBrowserBreadcrumb
+      v-if="spcodeStatus.status.value.loaded"
+      :current-path="breadcrumbPath"
+      :root-path="rootPath"
+      @navigate="onBreadcrumbNavigate"
+    />
     <SearchPanel
       v-if="props.searchOpen"
       :model-value="props.searchOpen"
@@ -207,112 +223,104 @@ onBeforeUnmount(() => {
       @update:model-value="emit('update:searchOpen', $event)"
       @open-file="emit('open-file', $event)"
     />
-    <template v-if="!props.searchOpen">
+    <template v-else>
       <div v-if="!spcodeStatus.status.value.loaded" class="file-browser-empty">
         <v-icon size="36" color="grey">mdi-folder-open-outline</v-icon>
         <span class="empty-text">{{
           tm("spcodeProjectLoad.fileBrowser.placeholder")
         }}</span>
       </div>
-
-      <template v-else>
-        <FileBrowserBreadcrumb
-          :current-path="breadcrumbPath"
-          :root-path="rootPath"
-          @navigate="onBreadcrumbNavigate"
-        />
-
-        <div
-          ref="bodyRef"
-          class="file-browser-body"
-          :class="{
-            resizing: isResizing,
-            'left-collapsed': isLeftPaneCollapsed,
-          }"
-        >
-          <!-- Expand handle: only when collapsed. Placed FIRST in DOM
+      <div
+        v-else
+        ref="bodyRef"
+        class="file-browser-body"
+        :class="{
+          resizing: isResizing,
+          'left-collapsed': isLeftPaneCollapsed,
+        }"
+      >
+        <!-- Expand handle: only when collapsed. Placed FIRST in DOM
                order so it sits at the leftmost position in the flex
                row. Click to restore the left pane at its previous
                width (leftPanePercent ref is preserved across collapse). -->
-          <button
-            v-if="isLeftPaneCollapsed"
-            type="button"
-            class="file-browser-expand-handle"
-            :title="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
-            :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
-            @click="isLeftPaneCollapsed = false"
-          >
-            <v-icon size="16">mdi-chevron-double-right</v-icon>
-          </button>
+        <button
+          v-if="isLeftPaneCollapsed"
+          type="button"
+          class="file-browser-expand-handle"
+          :title="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
+          :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
+          @click="isLeftPaneCollapsed = false"
+        >
+          <v-icon size="16">mdi-chevron-double-right</v-icon>
+        </button>
 
-          <!-- Left pane wrapper: holds the entry list AND the collapse
+        <!-- Left pane wrapper: holds the entry list AND the collapse
                button. `position: relative` so the absolutely-positioned
                collapse button anchors to the pane's top-right. v-show
                preserves the inline `width` style so collapse ↔ expand
                animations are smooth. -->
-          <div
-            v-show="!isLeftPaneCollapsed"
-            class="file-browser-pane-left"
-            :style="{ width: leftPanePercent + '%' }"
-          >
-            <FileBrowserEntryList
-              :state="dirComposable.state.value"
-              :selected-path="previewPath"
-              @navigate="onEntryNavigate"
-            />
-            <button
-              v-if="previewPath"
-              type="button"
-              class="file-browser-collapse-btn"
-              :title="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
-              :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
-              @click="isLeftPaneCollapsed = true"
-            >
-              <v-icon size="14">mdi-chevron-double-left</v-icon>
-            </button>
-          </div>
-
-          <div
-            v-show="!isLeftPaneCollapsed"
-            class="file-browser-divider"
-            role="separator"
-            aria-orientation="vertical"
-            :aria-valuenow="Math.round(leftPanePercent)"
-            aria-valuemin="15"
-            aria-valuemax="70"
-            @mousedown="startResize"
+        <div
+          v-show="!isLeftPaneCollapsed"
+          class="file-browser-pane-left"
+          :style="{ width: leftPanePercent + '%' }"
+        >
+          <FileBrowserEntryList
+            :state="dirComposable.state.value"
+            :selected-path="previewPath"
+            @navigate="onEntryNavigate"
           />
+          <button
+            v-if="previewPath"
+            type="button"
+            class="file-browser-collapse-btn"
+            :title="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
+            :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
+            @click="isLeftPaneCollapsed = true"
+          >
+            <v-icon size="14">mdi-chevron-double-left</v-icon>
+          </button>
+        </div>
 
-          <!-- Right pane: when collapsed, suppress the inline width
+        <div
+          v-show="!isLeftPaneCollapsed"
+          class="file-browser-divider"
+          role="separator"
+          aria-orientation="vertical"
+          :aria-valuenow="Math.round(leftPanePercent)"
+          aria-valuemin="15"
+          aria-valuemax="70"
+          @mousedown="startResize"
+        />
+
+        <!-- Right pane: when collapsed, suppress the inline width
                (rely on flex: 1 1 auto to fill the remaining space
                after the expand handle). Otherwise size to the
                complement of leftPanePercent. -->
-          <FileBrowserFilePreview
-            v-if="previewPath"
-            class="file-browser-pane-right"
-            :style="
-              isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }
-            "
-            :state="previewComposable.state.value"
-            :is-dark="!!isDark"
-            :scroll-to-line="props.scrollToLine ?? null"
-            @navigate-target="onPreviewTargetNavigate"
-            @retry="() => previewComposable.refresh()"
-          />
-          <div
-            v-else
-            class="file-browser-pane-right file-browser-preview-empty"
-            :style="
-              isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }
-            "
-          >
-            <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
-            <span class="preview-hint">
-              {{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}
-            </span>
-          </div>
+        <FileBrowserFilePreview
+          v-if="previewPath"
+          class="file-browser-pane-right"
+          :style="
+            isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }
+          "
+          :state="previewComposable.state.value"
+          :is-dark="!!isDark"
+          :scroll-to-line="props.scrollToLine ?? null"
+          @navigate-target="onPreviewTargetNavigate"
+          @retry="() => previewComposable.refresh()"
+        />
+        <div
+          v-else
+          class="file-browser-pane-right file-browser-preview-empty"
+          :style="
+            isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }
+          "
+        >
+          <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
+          <span class="preview-hint">
+            {{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}
+          </span>
         </div>
-      </template>
+      </div>
     </template>
   </div>
 </template>
