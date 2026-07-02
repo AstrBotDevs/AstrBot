@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import time
 import zipfile
@@ -139,6 +140,11 @@ class AstrBotUpdator(RepoZipUpdator):
             quoted_args = [f'"{arg}"' if " " in arg else arg for arg in argv[1:]]
             os.execl(executable, quoted_executable, *quoted_args)
             return
+        elif os.name == "nt":
+            subprocess.Popen(
+                [executable] + argv[1:], creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+            os._exit(0)
         os.execv(executable, argv)
 
     def _reboot(self, delay: int = 3) -> None:
