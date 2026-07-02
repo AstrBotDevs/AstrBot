@@ -24,6 +24,13 @@ const props = defineProps<{
   rootPath: string | null;
   /** When true, the search panel is mounted at the top of the view and replaces the file tree. */
   searchOpen?: boolean;
+  /**
+   * 2026-07-02 sidebar-search: 1-based line number to center in the
+   * file preview after a search-result click. null = no scroll.
+   * Propagated as-is to <FileBrowserFilePreview>, which forwards it
+   * to <FileBrowserCodeView>, where the scrollIntoView() lives.
+   */
+  scrollToLine?: number | null;
   /** Unified message origin passed through to the search composable for backend routing. */
   umo?: string | null;
   /** Search scope (currently the active worktree path). */
@@ -288,6 +295,7 @@ onBeforeUnmount(() => {
             "
             :state="previewComposable.state.value"
             :is-dark="!!isDark"
+            :scroll-to-line="props.scrollToLine ?? null"
             @navigate-target="onPreviewTargetNavigate"
             @retry="() => previewComposable.refresh()"
           />

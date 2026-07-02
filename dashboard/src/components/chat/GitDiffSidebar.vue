@@ -205,6 +205,15 @@ const fileBrowserCurrentPath = ref<string>(loadFileBrowserCurrentPath());
 // breadcrumb clicks, and any directory navigation.
 const fileBrowserPreviewPath = ref<string | null>(null);
 
+// 2026-07-02 sidebar-search: scroll target for the file preview, set
+// by onFileOpen() when the user clicks a search result. 1-based line
+// number, null = no scroll. The watch in FileBrowserCodeView
+// re-fires the scroll when (scrollToLine, filePath, highlightedHtml)
+// changes, so the scroll also runs correctly after the file content
+// finishes loading. Cleared by onFileBrowserNavigate() so a manual
+// tree click does not inherit a stale scroll target.
+const fileSearchScrollToLine = ref<number | null>(null);
+
 // 2026-07-02 sidebar-search: search panel toggle for the Files view.
 // Persisted so the panel stays open/closed across page reloads (matches
 // the other sidebar state above). Query/results are intentionally NOT
@@ -1361,6 +1370,11 @@ function onFileBrowserNavigate(payload: {
 }): void {
   fileBrowserCurrentPath.value = payload.dirPath;
   fileBrowserPreviewPath.value = payload.previewPath;
+  // 2026-07-02: clear any pending search-result scroll target.
+  // The user is navigating manually, not via a search result;
+  // leaving fileSearchScrollToLine set would re-scroll the next
+  // file the user opens to the line from a prior search click.
+  fileSearchScrollToLine.value = null;
 }
 
 // 2026-07-02 sidebar-search: handle a "click this result" from
@@ -1375,9 +1389,16 @@ function onFileBrowserNavigate(payload: {
 //   2. fileBrowserCurrentPath = dirOf(payload.path) — so the breadcrumb
 //      shows the file's directory rather than the file itself, AND so
 //      the left pane stays usable as a sibling listing.
-//   3. searchOpen is left ALONE — the user might want to refine the
-//      query after opening a result. Closing it here would be a UX
-//      regression vs. every other search UI (VS Code, IntelliJ, ...).
+//   3. searchOpen = false — close the search panel so the file preview
+//      becomes visible. In this UI SearchPanel REPLACES the file
+//      browser (see FileBrowserView.vue `v-if="!props.searchOpen"`),
+//      so leaving it open would hide the file the user just clicked.
+//      The toolbar input retains the query string, so the user can
+//      re-open the search panel with one click on the magnifier.
+//   4. fileSearchScrollToLine = payload.line — the 1-based target
+//      line. 0 (filename mode) is normalized to null (= no scroll).
+//      Propagated down to FileBrowserCodeView, which centers the
+//      target line in the code-view scroll container.
 function onFileOpen(payload: { path: string; line: number }): void {
   fileBrowserPreviewPath.value = payload.path;
   // POSIX + Windows separator: strip the trailing filename. Use a
@@ -1390,6 +1411,8 @@ function onFileOpen(payload: { path: string; line: number }): void {
   if (dir && dir !== fileBrowserCurrentPath.value) {
     fileBrowserCurrentPath.value = dir;
   }
+  searchOpen.value = false;
+  fileSearchScrollToLine.value = payload.line > 0 ? payload.line : null;
 }
 
 // Spec §3.2 data flow: GitDiffFileItem -> GitDiffBodyContent -> here.
@@ -2438,6 +2461,7 @@ const currentRoot = computed<string | null>(() => {
           :is-dark="!!isDark"
           :root-path="currentRoot"
           :search-open="searchOpen"
+          :scroll-to-line="fileSearchScrollToLine"
           :umo="spcodeStatus.status.value.umo"
           :worktree="selectedWorktree"
           @navigate="onFileBrowserNavigate"

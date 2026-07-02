@@ -3,7 +3,11 @@
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount, onMounted, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { ensureShikiLanguages, renderShikiCode, escapeHtml } from "@/utils/shiki";
+import {
+  ensureShikiLanguages,
+  renderShikiCode,
+  escapeHtml,
+} from "@/utils/shiki";
 import { copyToClipboard } from "@/utils/clipboard";
 import type { FileBrowserFetchState } from "@/composables/useSpcodeFileBrowser";
 import { useDisplay } from "vuetify";
@@ -18,6 +22,13 @@ import FileCommentEditor from "./FileCommentEditor.vue";
 const props = defineProps<{
   state: FileBrowserFetchState;
   isDark: boolean;
+  /**
+   * 2026-07-02 sidebar-search: 1-based line number to center in the
+   * code view after a search-result click. null = no scroll.
+   * Forwarded to <FileBrowserCodeView>, where the scrollIntoView()
+   * watcher lives.
+   */
+  scrollToLine?: number | null;
 }>();
 const emit = defineEmits<{
   (e: "navigate-target", resolvedPath: string): void;
@@ -39,9 +50,12 @@ function resolveTargetPath(symlinkPath: string, target: string): string {
   const isWindows = symlinkPath.includes("\\");
   const sep = isWindows ? "\\" : "/";
   if (target.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(target)) {
-    return target;  // Absolute path
+    return target; // Absolute path
   }
-  const lastSep = Math.max(symlinkPath.lastIndexOf("/"), symlinkPath.lastIndexOf("\\"));
+  const lastSep = Math.max(
+    symlinkPath.lastIndexOf("/"),
+    symlinkPath.lastIndexOf("\\"),
+  );
   const parentDir = lastSep >= 0 ? symlinkPath.slice(0, lastSep) : symlinkPath;
   return parentDir + sep + target;
 }
@@ -185,9 +199,7 @@ async function copyContent(): Promise<void> {
     );
   } else {
     copyButtonColor.value = "error";
-    copyButtonText.value = tm(
-      "spcodeProjectLoad.fileBrowser.preview.copyFail",
-    );
+    copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copyFail");
   }
   copyResetTimer = setTimeout(() => {
     copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copy");
@@ -339,7 +351,10 @@ function onDeleteComment(commentId: string): void {
 <template>
   <div class="file-browser-preview" :class="{ 'is-mobile': isMobile }">
     <!-- 加载中 -->
-    <div v-if="state.kind === 'idle' || state.kind === 'loading'" class="preview-center">
+    <div
+      v-if="state.kind === 'idle' || state.kind === 'loading'"
+      class="preview-center"
+    >
       <v-progress-circular indeterminate color="primary" :size="32" />
       <span>{{ tm("spcodeProjectLoad.fileBrowser.loading") }}</span>
     </div>
@@ -347,8 +362,12 @@ function onDeleteComment(commentId: string): void {
     <!-- 错误(真错误:path_not_found / permission_denied / special_file / network / unknown) -->
     <div v-else-if="state.kind === 'error'" class="preview-center">
       <v-icon size="32" color="error">mdi-alert-circle-outline</v-icon>
-      <div class="preview-error-title">{{ tm("spcodeProjectLoad.fileBrowser.error.loadFailedTitle") }}</div>
-      <div class="preview-error-detail">{{ localizedReason(state.reason) }}</div>
+      <div class="preview-error-title">
+        {{ tm("spcodeProjectLoad.fileBrowser.error.loadFailedTitle") }}
+      </div>
+      <div class="preview-error-detail">
+        {{ localizedReason(state.reason) }}
+      </div>
       <v-btn
         size="small"
         color="primary"
@@ -363,15 +382,22 @@ function onDeleteComment(commentId: string): void {
     <!-- 目录状态:左栏已经显示列表,右栏只显示提示 -->
     <div v-else-if="state.kind === 'directory'" class="preview-center">
       <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
-      <span class="preview-hint">{{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}</span>
+      <span class="preview-hint">{{
+        tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft")
+      }}</span>
     </div>
 
     <!-- symlink 状态 -->
     <div v-else-if="state.kind === 'symlink'" class="preview-center">
       <v-icon size="32" color="info">mdi-link-variant</v-icon>
       <div class="preview-symlink-info">
-        <div class="preview-symlink-target-label">→ {{ state.snapshot.meta.target }}</div>
-        <div v-if="!state.snapshot.meta.targetExists" class="preview-symlink-dangling">
+        <div class="preview-symlink-target-label">
+          → {{ state.snapshot.meta.target }}
+        </div>
+        <div
+          v-if="!state.snapshot.meta.targetExists"
+          class="preview-symlink-dangling"
+        >
           {{ tm("spcodeProjectLoad.fileBrowser.entryType.dangling") }}
         </div>
       </div>
@@ -380,7 +406,15 @@ function onDeleteComment(commentId: string): void {
         size="small"
         variant="tonal"
         prepend-icon="mdi-arrow-right"
-        @click="emit('navigate-target', resolveTargetPath(state.snapshot.meta.path, state.snapshot.meta.target))"
+        @click="
+          emit(
+            'navigate-target',
+            resolveTargetPath(
+              state.snapshot.meta.path,
+              state.snapshot.meta.target,
+            ),
+          )
+        "
       >
         {{ tm("spcodeProjectLoad.fileBrowser.preview.goToTarget") }}
       </v-btn>
@@ -390,9 +424,15 @@ function onDeleteComment(commentId: string): void {
     <div v-else-if="state.kind === 'file'" class="preview-file">
       <!-- 元信息头 -->
       <div class="preview-file-meta">
-        <span class="preview-file-path" :title="state.snapshot.meta.path">{{ state.snapshot.meta.name }}</span>
-        <span class="preview-file-size">{{ formatBytes(state.snapshot.meta.size) }}</span>
-        <span class="preview-file-mtime">{{ formatMtime(state.snapshot.meta.mtime) }}</span>
+        <span class="preview-file-path" :title="state.snapshot.meta.path">{{
+          state.snapshot.meta.name
+        }}</span>
+        <span class="preview-file-size">{{
+          formatBytes(state.snapshot.meta.size)
+        }}</span>
+        <span class="preview-file-mtime">{{
+          formatMtime(state.snapshot.meta.mtime)
+        }}</span>
         <v-btn
           v-if="state.snapshot.content"
           size="x-small"
@@ -414,7 +454,11 @@ function onDeleteComment(commentId: string): void {
       <!-- 过大文件 -->
       <div v-else-if="state.snapshot.content === null" class="preview-binary">
         <v-icon size="32" color="grey">mdi-file-alert-outline</v-icon>
-        <span>{{ tm("spcodeProjectLoad.fileBrowser.preview.tooLarge", { size: formatBytes(state.snapshot.meta.size) }) }}</span>
+        <span>{{
+          tm("spcodeProjectLoad.fileBrowser.preview.tooLarge", {
+            size: formatBytes(state.snapshot.meta.size),
+          })
+        }}</span>
       </div>
 
       <!-- 文本内容(Shiki 高亮) + 行内评论 gutter/编辑器 -->
@@ -426,6 +470,7 @@ function onDeleteComment(commentId: string): void {
         :active-edit-line="activeEditLine"
         :active-edit-comment-id="activeEditCommentId"
         :is-dark="isDark"
+        :scroll-to-line="props.scrollToLine ?? null"
         @request-add="onRequestAdd"
         @request-edit="onRequestEdit"
       />
@@ -479,9 +524,20 @@ function onDeleteComment(commentId: string): void {
   font-size: 13px;
   text-align: center;
 }
-.preview-hint { color: rgba(var(--v-theme-on-surface), 0.5); font-size: 12.5px; }
-.preview-error-title { color: rgba(var(--v-theme-error), 1); font-weight: 500; font-size: 14px; }
-.preview-error-detail { color: rgba(var(--v-theme-on-surface), 0.7); font-size: 12.5px; max-width: 320px; }
+.preview-hint {
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-size: 12.5px;
+}
+.preview-error-title {
+  color: rgba(var(--v-theme-error), 1);
+  font-weight: 500;
+  font-size: 14px;
+}
+.preview-error-detail {
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  font-size: 12.5px;
+  max-width: 320px;
+}
 
 .preview-file {
   display: flex;
@@ -506,7 +562,8 @@ function onDeleteComment(commentId: string): void {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.preview-file-size, .preview-file-mtime {
+.preview-file-size,
+.preview-file-mtime {
   font-variant-numeric: tabular-nums;
   color: rgba(var(--v-theme-on-surface), 0.4);
 }
@@ -534,7 +591,9 @@ function onDeleteComment(commentId: string): void {
   font-size: 13px;
   text-align: center;
 }
-.preview-symlink-target-label { color: rgb(var(--v-theme-info)); }
+.preview-symlink-target-label {
+  color: rgb(var(--v-theme-info));
+}
 .preview-symlink-dangling {
   color: rgb(248, 81, 73);
   font-size: 12px;

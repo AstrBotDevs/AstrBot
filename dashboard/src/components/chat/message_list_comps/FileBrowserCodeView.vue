@@ -1,7 +1,7 @@
 <!-- Author: elecvoid243, 2026-06-21
      Spec: docs/superpowers/specs/2026-06-21-file-browser-inline-comments-design.md §4.2 -->
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import type { FileComment } from "@/composables/useFileComments";
 
@@ -12,6 +12,14 @@ const props = defineProps<{
   activeEditLine: number | null;
   activeEditCommentId: string | null;
   isDark: boolean;
+  /**
+   * 2026-07-02 sidebar-search: 1-based line number to center in the
+   * code view after a search-result click. null / 0 = no scroll.
+   * The watcher re-fires the scroll on (scrollToLine, filePath,
+   * highlightedHtml) changes, so it also runs correctly when the
+   * file content finishes loading after the click.
+   */
+  scrollToLine?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -62,6 +70,48 @@ function onMouseMove(e: MouseEvent): void {
 function onMouseLeave(): void {
   hoveredLine.value = null;
 }
+
+// 2026-07-02 sidebar-search: center the requested line in the
+// code-view scroll container when a search result is clicked.
+//
+// We watch three props so the scroll also re-fires after a slow
+// file load (the user clicks a result while the file is still
+// fetching, then `highlightedHtml` updates once Shiki has rendered
+// the .line elements):
+//   - props.scrollToLine   (1-based line number, null/0 = no-op)
+//   - props.filePath        (new file)
+//   - props.highlightedHtml (Shiki output for the new file)
+//
+// `scrollIntoView({ block: 'center' })` is used instead of a manual
+// `scrollTop` calculation because the .code-view's grid layout
+// (gutter + line numbers + <pre>) makes offsetTop arithmetic
+// fragile across viewport sizes; the browser's native
+// scrollIntoView walks the .line span and centers it in the
+// nearest scrollable ancestor, which is exactly the .code-view.
+// `behavior: 'smooth'` is gated on the document's reduced-motion
+// preference to respect accessibility settings.
+watch(
+  [() => props.scrollToLine, () => props.filePath, () => props.highlightedHtml],
+  async ([line, path, html]) => {
+    if (!line || line < 1) return;
+    if (!codeContentRef.value || !html) return;
+    // Wait for the v-for + v-html to commit the .line spans to the
+    // DOM. The Shiki render is sync but v-for reconciliation runs
+    // on the next microtask, so one nextTick is sufficient.
+    await nextTick();
+    if (!codeContentRef.value) return;
+    const lineEls = codeContentRef.value.querySelectorAll<HTMLElement>(".line");
+    const idx = line - 1;
+    if (idx >= lineEls.length) return;
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    lineEls[idx].scrollIntoView({
+      block: "center",
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+  },
+);
 </script>
 
 <template>
@@ -72,22 +122,27 @@ function onMouseLeave(): void {
     @mouseleave="onMouseLeave"
   >
     <div class="code-gutter">
-      <div
-        v-for="line in lineCount"
-        :key="line"
-        class="gutter-cell"
-      >
+      <div v-for="line in lineCount" :key="line" class="gutter-cell">
         <button
           v-if="line === hoveredLine && !hasComment(line)"
           class="gutter-add-btn"
-          :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line })"
+          :aria-label="
+            tm('spcodeProjectLoad.fileBrowser.comment.addButtonAria', { line })
+          "
           @click="emit('request-add', line)"
-        >+</button>
+        >
+          +
+        </button>
         <button
           v-else-if="hasComment(line)"
           class="gutter-comment-indicator"
           :title="commentText(line)"
-          :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.indicatorAria', { line, preview: commentText(line) })"
+          :aria-label="
+            tm('spcodeProjectLoad.fileBrowser.comment.indicatorAria', {
+              line,
+              preview: commentText(line),
+            })
+          "
           @click="emit('request-edit', commentIdFor(line) ?? '')"
         >
           <v-icon size="12">mdi-comment-text-outline</v-icon>
@@ -95,17 +150,11 @@ function onMouseLeave(): void {
       </div>
     </div>
     <div class="line-numbers">
-      <div
-        v-for="line in lineCount"
-        :key="line"
-        class="line-number-cell"
-      >{{ line }}</div>
+      <div v-for="line in lineCount" :key="line" class="line-number-cell">
+        {{ line }}
+      </div>
     </div>
-    <pre
-      ref="codeContentRef"
-      class="code-content"
-      v-html="highlightedHtml"
-    />
+    <pre ref="codeContentRef" class="code-content" v-html="highlightedHtml" />
   </div>
 </template>
 
