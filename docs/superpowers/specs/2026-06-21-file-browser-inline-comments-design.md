@@ -27,7 +27,7 @@
 3. **评论编辑器**:固定在文件预览底部(不打断阅读),含 textarea + 保存/取消/删除按钮
 4. **评论指示器**:已被评论的行,gutter 始终显示评论图标(高亮),悬停时 tooltip 预览评论内容
 5. **状态作用域**:评论按 chat session 隔离,内存存储(刷新/换 session 清空)
-6. **LLM 携带**:下一次用户发送消息时,所有评论以**结构化文本 + 行内容指纹 + ±1 临近行**形式附加到消息末尾
+6. **LLM 携带**:下一次用户发送消息时,所有评论以**结构化文本 + 行内容指纹 + ±3 临近行(中间非注释行从 on-disk 当前文件内容填充,见 §4.1)**形式附加到消息末尾
 7. **底部状态**:ChatInput 左下角显示 "N 个评论" chip,带 tooltip 说明
 8. **i18n**:zh-CN / en-US / ru-RU 三语
 
@@ -57,8 +57,8 @@
 | 6 | 编辑器位置 | **固定在文件预览底部**(图示位置) | 不打断阅读;实现简单 |
 | 7 | i18n 范围 | zh-CN / en-US / ru-RU | 跟随现有约定 |
 | 8 | 评论数据模型 | **带行内容快照**(`lineContent` / `contextBefore` / `contextAfter` 在 add 时冻结) | 文件可能被编辑;line 漂移后 LLM 仍能用 lineContent 作为 fingerprint 定位 |
-| 9 | LLM 上下文格式 | **git-diff 风格**(`>` 标记 + 行号列 + ±1 临近行) | 业界标准;LLM 已熟悉此格式 |
-| 10 | 邻近评论合并 | **同文件 line 差 ≤ 3 行的多条评论合并为一段** | 避免重复 context;token 效率 |
+| 9 | LLM 上下文格式 | **git-diff 风格**(`>` 标记 + 行号列 + ±3 临近行) | 业界标准;LLM 已熟悉此格式 |
+| 10 | 邻近评论合并 | **同文件 line 差 ≤ 6 行的多条评论合并为一段**(`MERGE_DISTANCE = 2 × ±3 = 2 × CONTEXT_LINES`,保证两个不合并的窗口在输出中物理上无重叠) | 避免重复 context;token 效率 |
 | 11 | 切 session 清空 | ✅ 是(调用 `fileComments.resetForSession()` 清空 `comments`;**contentCache 跨 session 保留**,下次开文件会被 watch 重新注册) | session 切换是明确的上下文边界;contentCache 保留避免无意义重读 |
 | 12 | 切 worktree / 项目 | **评论按 filePath 区分**,不强制清空 | 评论与文件路径绑定,worktree 切换不应丢评论 |
 | 13 | 仅评论无文本能否发送 | ✅ 是(`sendCurrentMessage` 在 `draft` 空、`stagedFiles` 空、但 `totalCount > 0` 时仍可发送) | 用户"累积多条评论后一键提问"的工作流,无需额外敲字 |
@@ -204,6 +204,21 @@ export function useFileComments() {
   // Used only inside addComment() to freeze line snapshots.
   const contentCache = reactive<Record<string, string>>({});
 
+  // Window layout for the file-browser (non-diff) comment path.
+  // `renderWindow` (called from inside `formatForLLM`) renders
+  // ±CONTEXT_LINES around each window's commented range.
+  // MERGE_DISTANCE caps how far apart two file-browser comments
+  // can be while still folding into one window: setting it to
+  // 2 × CONTEXT_LINES guarantees that any two non-merged windows
+  // are physically non-overlapping in the LLM-facing output (each
+  // covers [a-C, a+C] and [b-C, b+C] with b - a > 2C). The same
+  // constants live inside the actual implementation (see
+  // `dashboard/src/composables/useFileComments.ts` near the top of
+  // `createFileComments`); mirror them here so the spec stays in
+  // sync.
+  const CONTEXT_LINES = 3;
+  const MERGE_DISTANCE = CONTEXT_LINES * 2;
+
   /**
    * Drop the current session's comments. Called by StandaloneChat
    * when the user switches to a different session. Does NOT clear
@@ -326,7 +341,7 @@ export function useFileComments() {
 
     const out: string[] = [
       "[File review comments]",
-      "Each entry shows the line content (and 1 line of context above/below)",
+      "Each entry shows the line content (and 3 lines of context above/below)",
       "that was current when the comment was written. Use the line content",
       "as a fingerprint to locate the line in the current file — line numbers",
       "may have drifted if the file was edited since the comment.",
@@ -335,15 +350,18 @@ export function useFileComments() {
     for (const [filePath, commentList] of byFile) {
       const sorted = [...commentList].sort((a, b) => a.line - b.line);
 
-      // Walk and group into windows: any two comments within 3 lines
-      // of each other share a single context block. This avoids
-      // duplicating context lines when the user leaves several
-      // comments in the same area of a file.
+      // Walk and group into windows: any two comments within
+      // MERGE_DISTANCE (2 × CONTEXT_LINES = 6) of each other share
+      // a single context block. This avoids duplicating context
+      // lines when the user leaves several comments in the same
+      // area of a file. The 2 × CONTEXT_LINES choice keeps two
+      // non-merged windows physically non-overlapping in the
+      // LLM-facing output.
       type Window = { startLine: number; endLine: number; comments: FileComment[] };
       const windows: Window[] = [];
       for (const c of sorted) {
         const last = windows[windows.length - 1];
-        if (last && c.line - last.endLine <= 3) {
+        if (last && c.line - last.endLine <= MERGE_DISTANCE) {
           last.endLine = Math.max(last.endLine, c.line);
           last.comments.push(c);
         } else {
@@ -353,21 +371,29 @@ export function useFileComments() {
 
       for (const win of windows) {
         // Resolve per-line content for the window. The window spans
-        // [startLine-1, endLine+1] (clipped to comment-time bounds).
+        // [startLine - CONTEXT_LINES, endLine + CONTEXT_LINES],
+        // clipped to [1, fileLines.length].
         //
-        // Limitation: a comment only carries ±1 line of context, so
-        // if two comments are 3 lines apart (sharing a window) the
-        // middle context line has no recorded content. We render it
-        // as "" (an empty line in the code block) — the LLM still
-        // has the `>` marker and the surrounding fingerprints to
-        // locate. Future: store full file content on the comment to
-        // close this gap.
-        const ctxStart = win.comments.some((c) => c.contextBefore !== null)
-          ? Math.max(1, win.startLine - 1)
-          : win.startLine;
-        const ctxEnd = win.comments.some((c) => c.contextAfter !== null)
-          ? win.endLine + 1
-          : win.endLine;
+        // Per-line content source-of-truth order:
+        //   1. Commented line itself → c.lineContent (frozen
+        //      snapshot at comment-creation time; this is the
+        //      fingerprint the LLM uses to relocate the line)
+        //   2. Any non-commented line in [ctxStart, ctxEnd] →
+        //      contentCache[filePath].split("\n")[line - 1], i.e.
+        //      the CURRENT on-disk line content. This fills middle
+        //      gaps inside merged windows (previously these were
+        //      emitted as "" — see §6 trade-off #2, now resolved).
+        //   3. Cache-miss fallback → the comment's frozen
+        //      contextBefore / contextAfter snapshot, kept as a
+        //      ±1 last-resort for when the content cache hasn't
+        //      been populated yet.
+        const fileLines = contentCache[filePath]?.split("\n") ?? [];
+        const totalLines = fileLines.length;
+        const ctxStart = Math.max(1, win.startLine - CONTEXT_LINES);
+        const ctxEnd =
+          totalLines > 0
+            ? Math.min(totalLines, win.endLine + CONTEXT_LINES)
+            : win.endLine + CONTEXT_LINES;
 
         const header =
           win.startLine === win.endLine
@@ -386,15 +412,22 @@ export function useFileComments() {
           let lineContent: string;
           if (c) {
             lineContent = c.lineContent;
+          } else if (line - 1 < fileLines.length) {
+            // Cached current on-disk content for this line.
+            lineContent = fileLines[line - 1];
           } else if (line === ctxStart && win.comments[0].contextBefore !== null) {
+            // Cache-miss fallback for the line above the first
+            // commented line.
             lineContent = win.comments[0].contextBefore ?? "";
           } else if (
             line === ctxEnd &&
             win.comments[win.comments.length - 1].contextAfter !== null
           ) {
+            // Cache-miss fallback for the line below the last
+            // commented line.
             lineContent = win.comments[win.comments.length - 1].contextAfter ?? "";
           } else {
-            lineContent = "";  // Middle context line, see limitation above.
+            lineContent = "";
           }
           const marker = commentedSet.has(line) ? ">" : " ";
           const padded = String(line).padStart(4);
@@ -1001,44 +1034,60 @@ async function sendCurrentMessage() {
 
 ```
 [File review comments]
-Each entry shows the line content (and 1 line of context above/below)
+Each entry shows the line content (and 3 lines of context above/below)
 that was current when the comment was written. Use the line content
 as a fingerprint to locate the line in the current file — line numbers
 may have drifted if the file was edited since the comment.
 
 `edit_engine.py` line 607:
 ````
+  604 │ …
+  605 │ …
   606 │ def robust_replace(content, old, new, match_idx=0):
 > 607 │     old_indent = _first_nonempty_line_indent(old_string)
          │ Comment: 这一个`内`的操作是什么意思?!
   608 │     new_indent = _first_nonempty_line_indent(new_string)
+  609 │ …
+  610 │ …
 ````
 
 `src/foo.py` line 42:
 ````
+   39 │ …
+   40 │ …
    41 │   items = read_config(path)
 >  42 │     return process(items)
          │ Comment: 这个函数没处理空列表
    43 │ 
+   44 │ …
+   45 │ …
 ````
 
 `edit_engine.py` lines 100-102:
 ````
+   97 │ …
+   98 │ …
    99 │ def parse_config(path):
 > 100 │     raw = open(path).read()
          │ Comment: 缺异常处理
   101 │     items = json.loads(raw)
 > 102 │     return items
          │ Comment: 缩进不一致
+  103 │ …
+  104 │ …
+  105 │ …
 ````
 ```
+
+> 示例说明:每段 ±3 之外的 `│ …` 行表示从 `contentCache[filePath].split("\n")[line - 1]` 取到的当前 on-disk 行内容(`…` 是占位,不展示真实源码)。`100-102` 这段同时演示**合并窗口**:窗口内被注释行之间的非注释行(如 `101`)以前在 §6 trade-off #2 中以空行输出,现在按 §4.1 中的新逻辑从 contentCache 填入。
 
 **关键约定**:
 - 每个窗口(单评论 / 邻近合并评论)用一个 4-backtick fence 包裹(` ```` ` ` ````),让用户的 comment 文本可以含 3-backtick 子代码块而不会破坏外层 fence
 - `>` 前缀 = 正在评论的行(git-diff 风格)
 - 行号右对齐到 4 列,`│` 分隔符
 - `Comment:` 缩进与代码列对齐(9 空格);多行评论每行前都加 `         │`
-- 同文件 line 差 ≤3 行的多条评论合并为 1 个窗口
+- 同文件 line 差 ≤ **6** 行的多条评论合并为 1 个窗口(`MERGE_DISTANCE = 2 × CONTEXT_LINES`,保证两个不合并的窗口在 LLM 输出中无重叠)
+- 每个窗口的代码列从 `startLine - CONTEXT_LINES` 到 `endLine + CONTEXT_LINES`(钳到 `[1, fileLines.length]`),中间非注释行从 `contentCache` 取当前内容
 
 ### 5.2 多行评论
 
@@ -1061,12 +1110,17 @@ may have drifted if the file was edited since the comment.
 
 1. 按 filePath 分组
 2. 每组按 line 排序
-3. 滑动窗口:相邻 comment `line 差 ≤ 3` → 合并到同一窗口
+3. 滑动窗口:相邻 comment `line 差 ≤ MERGE_DISTANCE`(当前实现 `= 2 × CONTEXT_LINES = 6`)→ 合并到同一窗口
 4. 窗口的 `startLine` / `endLine` = 窗口内 comment 的 min/max line
-5. 上下文范围 = `[max(1, startLine-1), endLine+1]`
-6. 每个有 comment 的行渲染 `> marker` + `Comment:`;纯 context 行渲染 ` `
+5. 上下文范围 = `[max(1, startLine - CONTEXT_LINES), min(totalLines, endLine + CONTEXT_LINES)]`,其中 `totalLines = contentCache[filePath].split("\n").length`
+6. 渲染每行时的 per-line 内容来源(优先级从高到低):
+   - **被注释行** → `comment.lineContent`(冻结的 fingerprint)
+   - **其余行** → `contentCache[filePath].split("\n")[line - 1]`,即当前 on-disk 内容
+   - **cache miss 兜底**(只在 `cache` 没注册到这个文件时):首条 comment 的 `contextBefore` 用于 `ctxStart` 行,末条 comment 的 `contextAfter` 用于 `ctxEnd` 行
+   - **边界行**(超出 1..totalLines)→ `""`
+7. 每个被注释行输出 `> marker` + `Comment: <text>`;其余行仅输出当前行内容
 
-**注**:第 5 步的 `contextBefore/After` 取自 comment 自带的快照(在 add 时冻结);中间 context 行(同窗口内相邻 comment 之间的行)在 v1 输出 `""`(因为我们没有完整 file content 缓存的所有中间行)。这是 §6 的已知 trade-off。
+**为何这样设阈值**:`MERGE_DISTANCE = 2 × CONTEXT_LINES` 保证任何**两个未合并的窗口**渲染出的行范围互不相交 — 一段覆盖 `[a−C, a+C]`,另一段覆盖 `[b−C, b+C]`,若 `b − a > 2C` 则两段无重叠。这避免输出重复 token(已移除原 §6 trade-off #2,现视为已解决)。
 
 ### 5.4 与用户消息的拼装
 
@@ -1088,7 +1142,7 @@ const fullText = commentText
 | # | 风险 | 影响 | 缓解 |
 |---|------|------|------|
 | 1 | **Shiki 输出结构依赖**:本设计依赖 `<span class="line">` 包裹每行。Shiki 升级可能破坏。 | gutter 对齐失败 / 行号错位 | 把 `extractLinesFromShikiHtml()` 写成单点函数,加详细注释;Shiki 升级时优先验证 |
-| 2 | **中间 context 行缺失**:`contextBefore/After` 只存 ±1 行的快照,窗口内中间 context 行没法重构 | 合并的窗口里,相邻 comment 中间的行显示为空 | v1 可接受(LLM 仍能用 lineContent 定位);未来需要时把 cache 升级为完整 lines 数组 |
+| 2 | ~~**中间 context 行缺失**:`contextBefore/After` 只存 ±1 行的快照,窗口内中间 context 行没法重构~~ | (已解决 — 2026-07-02 elecvoid243) 在 `dashboard/src/composables/useFileComments.ts` 的 `renderWindow` 中按行号直接索引 `contentCache[filePath].split("\n")`(等价于"完整 lines 数组"),`CONTEXT_LINES` 同时从 ±1 拓宽到 ±3,中间非注释行不再输出空字符串。详见 §4.1 / §5.3。 |
 | 3 | **大文件性能**:1000+ 行的文件,gutter 有 1000+ 个 cell | DOM 元素多,初始渲染慢 | v1 可接受(<5MB 文件一般 < 2000 行);未来用虚拟滚动 |
 | 4 | **Hover 性能**:`@mousemove` 触发 O(N) 行元素遍历 | mousemove 频繁触发时计算开销 | 实测 < 5ms/帧(1000 行);如需更省可加 rAF throttle |
 | 5 | **评论注入与 `buildOutgoingParts` 边界**:`fullText` 是一整段 plain text,LLM 看到的是 1 个 part | 部分 LLM 模型可能拆 token 不准 | 沿用现有 plain part 路径,后端无需改动;若未来需要独立 part,扩展 MessagePart 类型 |

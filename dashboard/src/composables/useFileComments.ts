@@ -86,7 +86,10 @@ export interface LineContext {
   contextAfter: string | null;
 }
 
-export function extractLineContext(content: string, line: number): LineContext | null {
+export function extractLineContext(
+  content: string,
+  line: number,
+): LineContext | null {
   const lines = content.split("\n");
   const idx = line - 1;
   if (idx < 0 || idx >= lines.length) return null;
@@ -133,6 +136,17 @@ let _instance: ReturnType<typeof createFileComments> | null = null;
 function createFileComments() {
   const comments = reactive<Record<string, FileComment[]>>({});
   const contentCache = reactive<Record<string, string>>({});
+
+  // Window layout for the file-browser (non-diff) comment path.
+  // `renderWindow` renders ±CONTEXT_LINES around the window's
+  // commented range. `MERGE_DISTANCE` caps how far apart two
+  // file-browser comments can be while still folding into one
+  // window: setting it to 2 * CONTEXT_LINES guarantees that any
+  // two non-merged windows are physically non-overlapping in the
+  // LLM-facing output (each covers [a-C, a+C] and [b-C, b+C] with
+  // b - a > 2C, so they cannot share a line).
+  const CONTEXT_LINES = 3;
+  const MERGE_DISTANCE = CONTEXT_LINES * 2;
 
   /** Drop the current session's comments. Called by StandaloneChat
    *  when the user switches to a different session. Does NOT clear
@@ -262,7 +276,10 @@ function createFileComments() {
    *  ASC. Groups themselves are sorted by filePath ASC for stable
    *  rendering. Returns a fresh array each call (safe to iterate /
    *  sort downstream). Used by CommentsPreviewDialog. */
-  function commentsByFile(): Array<{ filePath: string; comments: FileComment[] }> {
+  function commentsByFile(): Array<{
+    filePath: string;
+    comments: FileComment[];
+  }> {
     const entries = Object.entries(comments)
       .filter(([, list]) => list.length > 0)
       .map(([filePath, list]) => ({
@@ -302,7 +319,7 @@ function createFileComments() {
 
     const out: string[] = [
       "[File review comments]",
-      "Each entry shows the line content (and 1 line of context above/below)",
+      "Each entry shows the line content (and 3 lines of context above/below)",
       "that was current when the comment was written. Use the line content",
       "as a fingerprint to locate the line in the current file — line numbers",
       "may have drifted if the file was edited since the comment.",
@@ -338,7 +355,11 @@ function createFileComments() {
         if (c.diffHunk) {
           // Greedy-merge into the previous hunk group if it has the
           // SAME hunk header. Different hunks → different groups.
-          if (last && last.kind === "hunk" && last.hunk.header === c.diffHunk.header) {
+          if (
+            last &&
+            last.kind === "hunk" &&
+            last.hunk.header === c.diffHunk.header
+          ) {
             last.comments.push(c);
             continue;
           }
@@ -346,8 +367,13 @@ function createFileComments() {
           continue;
         }
         // File-browser comment: merge into the previous window if
-        // line-adjacent.
-        if (last && last.kind === "window" && c.line - last.endLine <= 3) {
+        // line-adjacent (within MERGE_DISTANCE of the window's
+        // current endLine, see createFileComments for derivation).
+        if (
+          last &&
+          last.kind === "window" &&
+          c.line - last.endLine <= MERGE_DISTANCE
+        ) {
           last.endLine = Math.max(last.endLine, c.line);
           last.comments.push(c);
           continue;
@@ -368,7 +394,7 @@ function createFileComments() {
         }
       }
     }
-  return out.join("\n");
+    return out.join("\n");
   }
 
   /**
@@ -382,12 +408,21 @@ function createFileComments() {
     filePath: string,
     win: { startLine: number; endLine: number; comments: FileComment[] },
   ): void {
-    const ctxStart = win.comments.some((c) => c.contextBefore !== null)
-      ? Math.max(1, win.startLine - 1)
-      : win.startLine;
-    const ctxEnd = win.comments.some((c) => c.contextAfter !== null)
-      ? win.endLine + 1
-      : win.endLine;
+    // Widened from ±1 to ±CONTEXT_LINES (declared at the top of
+    // createFileComments) so the LLM has enough surrounding code to
+    // relocate the commented lines. Middle non-commented lines are
+    // filled from the cached on-disk content rather than emitted
+    // empty (the previous ±1 design only stored 1 line of
+    // contextBefore/contextAfter per comment, which covered the
+    // immediate neighbours but left gaps once we widened the
+    // window).
+    const fileLines = contentCache[filePath]?.split("\n") ?? [];
+    const totalLines = fileLines.length;
+    const ctxStart = Math.max(1, win.startLine - CONTEXT_LINES);
+    const ctxEnd =
+      totalLines > 0
+        ? Math.min(totalLines, win.endLine + CONTEXT_LINES)
+        : win.endLine + CONTEXT_LINES;
 
     const header =
       win.startLine === win.endLine
@@ -395,7 +430,7 @@ function createFileComments() {
         : `\`${filePath}\` lines ${win.startLine}-${win.endLine}:`;
     out.push("");
     out.push(header);
-    out.push("````");  // 4-backtick fence (see spec §5.1)
+    out.push("````"); // 4-backtick fence (see spec §5.1)
     const commentedSet = new Set(win.comments.map((c) => c.line));
     const commentByLine = new Map(win.comments.map((c) => [c.line, c]));
 
@@ -404,7 +439,14 @@ function createFileComments() {
       let lineContent: string;
       if (c) {
         lineContent = c.lineContent;
+      } else if (line - 1 < fileLines.length) {
+        // 1-based line number → 0-based array index. Sourced from
+        // the cached current file content so the LLM sees the
+        // latest text rather than a stale ±1 snapshot.
+        lineContent = fileLines[line - 1];
       } else if (line === ctxStart && win.comments[0].contextBefore !== null) {
+        // Cache miss fallback: the comment's frozen 1-line
+        // contextBefore snapshot is the best we have.
         lineContent = win.comments[0].contextBefore ?? "";
       } else if (
         line === ctxEnd &&
@@ -459,9 +501,10 @@ function createFileComments() {
         line.newNo !== null
           ? String(line.newNo).padStart(4)
           : line.oldNo !== null
-            ? String(line.oldNo).padStart(4)
-            : "    ";
-      const prefix = line.type === "add" ? "+" : line.type === "del" ? "-" : " ";
+          ? String(line.oldNo).padStart(4)
+          : "    ";
+      const prefix =
+        line.type === "add" ? "+" : line.type === "del" ? "-" : " ";
       const marker = isMarked ? ">" : " ";
       out.push(`  ${marker} ${lineNo} │ ${prefix}${line.content}`);
     }
