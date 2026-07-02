@@ -126,9 +126,14 @@ const segments = computed<Segment[]>(() => {
 
 <style scoped>
 /* ── Light mode (default) ─────────────────────────────────────────
-   Primary-tint background + matching bottom border. The 8% alpha
-   is enough to read as a distinct path-navigation surface without
-   fighting the surrounding sidebar chrome. Active segment gets a
+   Primary-tint background + 2px matching bottom border. The
+   previous 0.08-alpha wash was indistinguishable from the
+   surrounding sidebar chrome on most displays (the user
+   reported "no effect" after the first iteration), so the
+   background is now lifted to 0.15 and the border to 0.4 with
+   2px stroke. A 1px subtle drop shadow under the bar gives it
+   a "raised card" feel so it reads as a distinct navigation
+   surface, not just inline text. Active segment keeps a
    slightly stronger fill so the leaf (the file the user just
    opened) is unambiguous. */
 .file-browser-breadcrumb {
@@ -136,11 +141,12 @@ const segments = computed<Segment[]>(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 2px;
-  padding: 8px 14px;
+  padding: 10px 14px;
   font-size: 12px;
   font-family: ui-monospace, monospace;
-  background: rgba(var(--v-theme-primary), 0.08);
-  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.2);
+  background: rgba(var(--v-theme-primary), 0.15);
+  border-bottom: 2px solid rgba(var(--v-theme-primary), 0.4);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 .breadcrumb-segment {
   background: none;
@@ -160,46 +166,48 @@ const segments = computed<Segment[]>(() => {
     color 0.1s ease;
 }
 .breadcrumb-segment:hover {
-  background: rgba(var(--v-theme-primary), 0.14);
+  background: rgba(var(--v-theme-primary), 0.22);
   color: rgb(var(--v-theme-on-surface));
 }
 .breadcrumb-segment.is-current {
   color: rgb(var(--v-theme-on-surface));
-  font-weight: 500;
-  background: rgba(var(--v-theme-primary), 0.12);
+  font-weight: 600;
+  background: rgba(var(--v-theme-primary), 0.22);
   cursor: default;
 }
 .breadcrumb-sep {
-  color: rgba(var(--v-theme-primary), 0.4);
+  color: rgba(var(--v-theme-primary), 0.55);
   user-select: none;
 }
 
 /* ── Dark mode ────────────────────────────────────────────────────
-   Same primary tint, but alpha-lifted so the path bar reads as a
-   distinct surface against the dark sidebar. Without the lift, an
-   8% primary wash vanishes into a near-black background. Border
-   strength also goes up (0.2 → 0.32) for the same reason. The
-   active segment is a touch stronger (0.12 → 0.22) because the
-   default segment color in dark mode is already a slightly
-   brighter near-white, so the leaf needs a small extra push to
-   pop. */
+   Alpha lifted further (0.15 → 0.24) and border strength raised
+   (0.4 → 0.55) so the bar still reads as a distinct surface
+   against the dark sidebar — at 0.15 the wash disappeared
+   entirely into the dark chrome. The inset top + bottom shadow
+   pair gives a tactile "inset card" feel that reads well
+   against a dark surface. Active segment is bumped to 0.3 so
+   the leaf still pops above the other (already near-white)
+   segments. */
 .file-browser-breadcrumb.dark {
-  background: rgba(var(--v-theme-primary), 0.14);
-  border-bottom-color: rgba(var(--v-theme-primary), 0.32);
-  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+  background: rgba(var(--v-theme-primary), 0.24);
+  border-bottom-color: rgba(var(--v-theme-primary), 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(0, 0, 0, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
 }
 .file-browser-breadcrumb.dark .breadcrumb-segment {
   color: rgba(var(--v-theme-on-surface), 0.82);
 }
 .file-browser-breadcrumb.dark .breadcrumb-segment:hover {
-  background: rgba(var(--v-theme-primary), 0.22);
+  background: rgba(var(--v-theme-primary), 0.32);
   color: rgb(var(--v-theme-on-surface));
 }
 .file-browser-breadcrumb.dark .breadcrumb-segment.is-current {
   color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-primary), 0.22);
+  background: rgba(var(--v-theme-primary), 0.3);
 }
 .file-browser-breadcrumb.dark .breadcrumb-sep {
-  color: rgba(var(--v-theme-primary), 0.55);
+  color: rgba(var(--v-theme-primary), 0.65);
 }
 </style>
