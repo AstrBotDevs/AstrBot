@@ -1309,18 +1309,19 @@ Content-Type: application/json
 
 #### 5.6.4 实现说明
 
-- **后端技术**：`subprocess.run(["rg", "--files", directory, ...])` 拿文件列表（`--files-with-matches` 不适用——这是路径名搜不是内容搜）；rg 已在 AstrBot 环境中，无需配置。
-- **.gitignore 尊重**：由 `rg --files` 自动处理。
-- **glob 过滤**：传 `-g GLOB` 给 rg（不是 Python 端过滤）。
-- **路径匹配**：
-  - `regex=False`（默认）：`re.escape(pattern)` 后匹配 basename（或 path，看实现）
+- **后端技术**（2026-07-02 修订）：与 §5.1 一致，统一用 `python_ripgrep` 库，不再调 rg CLI 子进程。模块顶层 `from python_ripgrep import files as rg_files`，调用 `rg_files(patterns=[], paths=[search_path], globs=[glob_filter])` 拿文件列表（`patterns=[]` 表示不施加内容正则，只列文件）。原计划用 `subprocess.run(["rg", "--files", ...])` 的方案在 AstrBot runtime 下总是 `FileNotFoundError`（rg 二进制被 bundled 在 `python_ripgrep.pyd` 内部，NOT on system PATH）→ `search_unavailable`。修正后两个端点（file-search 用 `python_ripgrep.search`、file-name-search 用 `python_ripgrep.files`）调用同一库，rg 可用性由库内部统一处理。
+- **.gitignore 尊重**：由 `python_ripgrep.files` 内部 rg 处理（同 `rg --files` 行为）。
+- **glob 过滤**：传 `globs=[GLOB]` 给 `python_ripgrep.files`（不是 Python 端过滤）。
+- **路径匹配**（在 Python 端做，rg_files 返回后）：
+  - `regex=False`（默认）：`re.escape(pattern)` 后匹配 basename
   - `regex=True`：pattern 作为 regex
   - `case_sensitive=False`（默认）：`re.IGNORECASE`
-  - `case_sensitive=True`：`re.NOFLAG`
-- **匹配目标**：默认匹配 basename；`path_filter` 限定子目录后在该子目录内匹配。
+  - `case_sensitive=True`：无 flag
+- **匹配目标**：默认匹配 basename；`path_filter` 限定子目录后在该子目录内匹配（handler 在 Python 端二次确认 `rel_path` 以 `path_filter` 为前缀，防 TOCTOU / 符号链接越界）。
 - **path_filter**：与 file-search 一致，4-step 防御（`_validate_repo_relative_file`）。
 - **超时**：5s（`asyncio.wait_for` wrap `asyncio.to_thread`，与 file-search 一致）。
-- **python_ripgrep 不适用**：库只暴露 `search()`（content-only），不支持 `--files`。这是新增的独立端点，不复用 file-search 的实现。
+- **路径规范化**：`python_ripgrep.files` 返回 OS-native 绝对路径（Windows 上是 `\`），handler 用 `os.path.relpath(raw, directory).replace(os.sep, "/")` 转成 POSIX 风格相对路径，保证响应跨平台一致。
+- **python_ripgrep.files**：`search()` 走内容搜索（file-search 用），`files()` 走文件列表（file-name-search 用）；两者都暴露在库顶层，统一 `from python_ripgrep import files as rg_files`。
 
 ---
 
@@ -1453,3 +1454,4 @@ Content-Type: application/json
 | 2026-07-02 | elecvoid243 | 修订：后端从 rg CLI + Python 兜底改为 `python_ripgrep` 库（与 `astrbot_grep_tool` 一致）。删除 main.py rg probe、删除 `_conf_schema.json` 的 `search.rg_path` 字段、删除 `SEARCH_UNAVAILABLE` 兜底语义（仅保留"库未安装或 rg 调用失败"窄义）。响应 `backend` 字段删除。 |
 | 2026-07-02 | elecvoid243 | 追加：新增 `POST /spcode/file-name-search` 端点（按文件名匹配），与 `/spcode/file-search` 并列。复用请求 schema，响应 schema 不同（`{path, name, type, size}`）。实现用 `rg --files`（库 `python_ripgrep` 不支持 `--files`）。详见 §5.6。 |
 | 2026-07-02 | elecvoid243 | 追加：前端 SearchPanel 加 mode toggle（`Filename` / `Content`），默认 **Filename**（用 `/spcode/file-name-search`），切到 Content 才调 `/spcode/file-search`。mode 持久化到 `localStorage["spcode.searchMode"]`。结果渲染按 mode 分支（filename 模式显示 `name + type + size`；content 模式显示 `line:column snippet`）。i18n 加 10 个 key（详见 §4.7）。 |
+| 2026-07-02 | elecvoid243 | 修复：`/spcode/file-name-search` 实现从 `subprocess.run(["rg", "--files", ...])` 改为 `python_ripgrep.files`（rg 二进制在 AstrBot runtime 不在系统 PATH；被 bundled 在 `python_ripgrep.pyd` 模块内部；之前会 `FileNotFoundError` → `search_unavailable`）。现在两个端点统一用 `python_ripgrep` 库（search 走内容、files 走列表）。详见 §5.6.4。 |
