@@ -24,6 +24,14 @@
 
 ### 1.2 目标
 
+> **2026-07-02 修订**：原计划是直接调 rg CLI，rg 缺失则走 Python 兜底。**改为**统一通过 `python_ripgrep` 库（`from python_ripgrep import search`）调用 ripgrep。这与 AstrBot 自带的 `astrbot_grep_tool` 用的库一致（参考 `astrbot/core/computer/booters/local.py:13` 和 `astrbot/core/tools/computer_tools/fs.py:896` 的 `GrepTool.call`）。理由：
+> - 不需要探测 rg 是否存在（库内部统一处理）
+> - 不需要在插件配置中加 `rg_path`（AstrBot 安装意味着 ripgrep 已在环境中）
+> - 不需要 Python 兜底
+> - 与 `astrbot_grep_tool` 的实现路径一致
+>
+> 本节其余目标文字保持不变。
+
 在 Files 视图内增加一个**人肉即时搜索**入口：
 
 - **触发**：`Cmd/Ctrl-F`（sidebar 可见时）或者工具栏的搜索按钮
@@ -55,12 +63,12 @@
 
 | # | 决策点 | 选择 | 理由 |
 |---|---|---|---|
-| 1 | 搜索后端 | **ripgrep 优先 + 纯 Python 兜底** | rg 极快（5-30ms），`--json` 易解析；rg 缺失时 Python 兜底保证功能可用，前端用 `backend` 字段提示用户 |
+| 1 | 搜索后端 | **`python_ripgrep` 库**（与 `astrbot_grep_tool` 一致） | 与 AstrBot 自带 grep 工具使用同一 ripgrep 调用路径；库内部统一处理 rg 可用性；无需插件配置 rg 路径 |
 | 2 | 后端实现位置 | spcode 工具箱插件（`astrbot_plugin_spcode_toolkit`） | 与现有 14 个 `/spcode/*` 端点同模块；前端已经在用 `pluginExtensionApi` |
 | 3 | HTTP 方法 | **POST** + JSON body | pattern/filter 字段多 + 含 glob/正则，GET 长度受限且 URL 编码复杂 |
 | 4 | 路径规范 | repo-relative | 与 `git-log` / `git-show` 现有约定一致 |
 | 5 | 端点位置 | `POST /spcode/file-search` | 命名对齐 `file-browser` / `file-restore` |
-| 6 | rg 缺失行为 | graceful degradation（`backend=python`） | 符合现有 `git unavailable` 的处理模式（`main.py:226-231`） |
+| 6 | rg 缺失行为 | 由 `python_ripgrep` 库内部处理 | 库会 raise 异常；handler 捕获后返回 `search_unavailable` reason |
 | 7 | 结果截断 | hard cap `max_results`（默认 200，上限 1000） | 避免 10MB JSON 阻塞前端；超限时 `truncated=true` |
 | 8 | 二进制 / 隐藏文件 | 跳过（rg 默认；Python 兜底跳过 `__pycache__` `.git` `.venv` `node_modules`） | 用户搜的是代码；二进制无意义 |
 | 9 | 结果排序 | 按 `(path, line)` 升序 | 与 rg 一致；确定性 |
@@ -92,8 +100,8 @@ astrbot_plugin_spcode_toolkit/
 │   └── __init__.py                # 改：注册新路由到 ROUTES
 ├── tests/
 │   └── test_file_search.py        # 新增：单测
-├── _conf_schema.json              # 改：新增 search 分组
-└── main.py                        # 改：init 时探测 rg
+├── (conf_schema.json 2026-07-02 修订后无需修改)
+└── (main.py 2026-07-02 修订后无需修改)
 ```
 
 ### 3.2 路由注册（`tools/webapi/__init__.py`）
@@ -566,7 +574,11 @@ async def handle(
     )
 ```
 
-### 3.4 init 时探测 rg（`main.py` 修改）
+### 3.4 ~~init 时探测 rg（`main.py` 修改）~~ — 2026-07-02 修订：**删除**
+
+> 原计划在 `SPCodeToolkit.__init__` 探测 rg 是否可用，决定走 rg 还是 Python 兜底。**修订后不再需要**——`python_ripgrep` 库内部统一处理 rg 可用性，库缺失则 `import` 阶段就报错。`main.py` 此次提交**无需任何修改**。
+
+<details><summary>原内容（保留供参考）</summary>
 
 在 `SPCodeToolkit.__init__` 末尾（git 探测之前或之后均可；推荐**之后**）追加：
 
@@ -616,20 +628,28 @@ except Exception as exc:  # pragma: no cover - defensive
     logger.warning(f"[file-search] 启动期探测异常: {exc!s}")
 ```
 
-### 3.5 `ReasonCode` 扩展（`tools/webapi/_helpers.py`）
+</details>
+
+### 3.5 `ReasonCode` 扩展（`tools/webapi/_helpers.py`） — 2026-07-02 修订
+
+> **删除** `SEARCH_UNAVAILABLE`（不再有"Python 兜底也失败"概念；改为 `SEARCH_UNAVAILABLE` = `python_ripgrep` 库未安装或内部 rg 调用失败，语义更窄）。其他 4 个保留。
 
 在 `ReasonCode` 类内追加：
 
 ```python
 # ── file-search 专用(v2.15.0,2026-07-02) ──
-SEARCH_UNAVAILABLE = "search_unavailable"   # 兜底 Python 也失败
+SEARCH_UNAVAILABLE = "search_unavailable"   # python_ripgrep 库未安装或内部 rg 调用失败
 SEARCH_TIMEOUT = "search_timeout"           # 5s 超时
 INVALID_PATTERN = "invalid_pattern"         # pattern 为空 / 含换行 / 正则语法错
 PATTERN_TOO_LONG = "pattern_too_long"       # > 256 chars
 PATH_UNSAFE_FILTER = "path_unsafe_filter"   # path_filter 越界
 ```
 
-### 3.6 配置文件（`_conf_schema.json`）
+### 3.6 ~~配置文件（`_conf_schema.json`）~~ — 2026-07-02 修订：**删除**
+
+> 原计划在 `_conf_schema.json` 加 `search.rg_path` 字段让用户配置 rg 路径。**修订后不再需要**——`python_ripgrep` 库自带 rg，rg 路径由库内部解析；AstrBot 安装即意味着 rg 可用。`_conf_schema.json` 此次提交**无需任何修改**。
+
+<details><summary>原内容（保留供参考）</summary>
 
 新增 `search` 分组：
 
@@ -1144,8 +1164,8 @@ Content-Type: application/json
   "pattern": "validate_user",                  // 必填，1-256 字符，无换行
   "path_filter": "src/api/",                   // 可选，repo-relative 子目录
   "glob_filter": "*.py",                       // 可选，文件 glob
-  "case_sensitive": false,                     // 默认 false
-  "regex": false,                              // 默认 false（substring 优先）
+  "case_sensitive": false,                     // 默认 false（re.escape + (?i) 实现）
+  "regex": false,                              // 默认 false（substring 优先 — re.escape 包装）
   "max_results": 200,                          // 默认 200，上限 1000
   "context_chars": 60                          // 默认 60，上限 200
 }
@@ -1160,7 +1180,6 @@ Content-Type: application/json
     "umo": "FriendMessage:webchat!astrbot!xxx",
     "worktree": "C:/path/to/repo",
     "pattern": "validate_user",
-    "backend": "ripgrep",                       // "ripgrep" | "python"
     "result_count": 12,
     "max_results": 200,
     "truncated": false,
@@ -1212,6 +1231,7 @@ Content-Type: application/json
 | `pattern_too_long` | pattern 超过 256 字符 |
 | `path_unsafe_filter` | path_filter 越界（含 `..` 或绝对路径） |
 | `search_timeout` | 5s 超时 |
+| `search_unavailable` | `python_ripgrep` 库未安装或内部 rg 调用失败 |
 | `network_error` | 前端 fetch 失败（前端映射，非后端 reason） |
 
 ### 5.4 错误响应示例
@@ -1361,3 +1381,4 @@ Content-Type: application/json
 | 日期 | 作者 | 变更 |
 |---|---|---|
 | 2026-07-02 | elecvoid243 | 初稿 |
+| 2026-07-02 | elecvoid243 | 修订：后端从 rg CLI + Python 兜底改为 `python_ripgrep` 库（与 `astrbot_grep_tool` 一致）。删除 main.py rg probe、删除 `_conf_schema.json` 的 `search.rg_path` 字段、删除 `SEARCH_UNAVAILABLE` 兜底语义（仅保留"库未安装或 rg 调用失败"窄义）。响应 `backend` 字段删除。 |
