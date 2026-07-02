@@ -362,7 +362,9 @@
           "clearAllButton": "Clear all",
           "deleteButton": "Delete this comment",
           "lineLabel": "L {line}",
-          "openWithCount": "Open comments preview ({count})"
+          "openWithCount": "Open comments preview ({count})",
+          "expandContext": "Show ±3 lines of code context",
+          "collapseContext": "Hide code context"
         }
       },
       "error": {

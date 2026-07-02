@@ -362,7 +362,9 @@
           "clearAllButton": "全部删除",
           "deleteButton": "删除此评论",
           "lineLabel": "L {line}",
-          "openWithCount": "打开评论预览 ({count})"
+          "openWithCount": "打开评论预览 ({count})",
+          "expandContext": "展开 ±3 行代码上下文",
+          "collapseContext": "收起代码上下文"
         }
       },
       "error": {

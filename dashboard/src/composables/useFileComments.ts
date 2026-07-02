@@ -520,6 +520,16 @@ function createFileComments() {
     }
   }
 
+  /**
+   * Read the cached on-disk content for a file. Returns undefined
+   * if the file hasn't been registered (i.e. the user never opened
+   * its preview). Used by the comments preview dialog to render
+   * ±CONTEXT_LINES around a commented line.
+   */
+  function getFileContent(filePath: string): string | undefined {
+    return contentCache[filePath];
+  }
+
   return {
     totalCount,
     resetForSession,
@@ -533,6 +543,10 @@ function createFileComments() {
     commentsByFile,
     clearAll,
     formatForLLM,
+    // Exposed so the comments-preview dialog can render ±CONTEXT_LINES
+    // around each commented line without re-fetching the file. Returns
+    // undefined if the file hasn't been registered yet.
+    getFileContent,
   };
 }
 

@@ -351,7 +351,9 @@
           "clearAllButton": "Очистить все",
           "deleteButton": "Удалить этот комментарий",
           "lineLabel": "С {line}",
-          "openWithCount": "Открыть просмотр комментариев ({count})"
+          "openWithCount": "Открыть просмотр комментариев ({count})",
+          "expandContext": "Показать ±3 строки контекста кода",
+          "collapseContext": "Скрыть контекст кода"
         }
       },
       "error": {
