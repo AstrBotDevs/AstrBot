@@ -20,32 +20,78 @@ interface Segment {
 
 // Split currentPath into clickable segments. root segment is special
 // (label = "Project root" / "项目根" / "Корень проекта").
+//
+// 2026-07-02 revision: case-insensitive root match on Windows, plus a
+// "render the basename anyway" fallback when currentPath is outside
+// the root. The previous strict equality check left the breadcrumb
+// completely hidden when the search-result absolute path and the
+// worktree root disagreed by even one case character (very common on
+// Windows where the worktree path can be "C:/work/Repo" and the
+// search result path can be "c:/work/repo/astrabot/cli/main.py" —
+// different drive case). Hiding the breadcrumb was unacceptable
+// because the user lost path navigation entirely, so we now render
+// the basename as a single segment in that case (and still emit
+// `navigate(currentPath)` so clicking it scrolls the file browser
+// back to that directory).
+function buildSegments(current: string, root: string | null): Segment[] {
+  if (!current) return [];
+  const normCurrent = current.replace(/\\/g, "/");
+
+  // Basename fallback (used both for the "no root" case and for the
+  // "current is outside root" case). Centralised so the two code
+  // paths stay in sync.
+  const basenameFallback = (): Segment[] => {
+    const parts = normCurrent.split("/").filter(Boolean);
+    if (parts.length === 0) return [];
+    const basename = parts[parts.length - 1];
+    return [{ name: basename, path: normCurrent, isRoot: false }];
+  };
+
+  if (!root) return basenameFallback();
+
+  const normRoot = root.replace(/\\/g, "/").replace(/\/$/, "");
+  // Case-insensitive comparison on Windows where the drive letter or
+  // path segments can differ in case between the worktree root and
+  // the absolute path returned by the search backend.
+  const ci = (a: string, b: string): boolean =>
+    a === b || a.toLowerCase() === b.toLowerCase();
+
+  if (ci(normCurrent, normRoot)) {
+    return [
+      {
+        name: tm("spcodeProjectLoad.fileBrowser.breadcrumbRoot"),
+        path: normRoot,
+        isRoot: true,
+      },
+    ];
+  }
+  if (ci(normCurrent.slice(0, normRoot.length + 1), normRoot + "/")) {
+    const relative = normCurrent.slice(normRoot.length + 1);
+    const parts = relative.split("/").filter(Boolean);
+    const result: Segment[] = [
+      {
+        name: tm("spcodeProjectLoad.fileBrowser.breadcrumbRoot"),
+        path: normRoot,
+        isRoot: true,
+      },
+    ];
+    let acc = normRoot;
+    for (const p of parts) {
+      acc += "/" + p;
+      result.push({ name: p, path: acc, isRoot: false });
+    }
+    return result;
+  }
+  // currentPath is outside root (or the root comparison still failed
+  // despite case-folding — e.g. UNC vs drive-letter, or a symlink
+  // boundary). Fall back to the basename so the user always sees
+  // SOMETHING and can click it to re-anchor the file browser on
+  // this path.
+  return basenameFallback();
+}
+
 const segments = computed<Segment[]>(() => {
-  if (!props.currentPath || !props.rootPath) return [];
-  const sep = props.currentPath.includes("\\") ? "\\" : "/";
-  const normCurrent = props.currentPath.replace(/\\/g, "/");
-  const normRoot = props.rootPath.replace(/\\/g, "/").replace(/\/$/, "");
-
-  // Compute relative path from root
-  let relative: string;
-  if (normCurrent === normRoot) {
-    relative = "";
-  } else if (normCurrent.startsWith(normRoot + "/")) {
-    relative = normCurrent.slice(normRoot.length + 1);
-  } else {
-    return [];  // currentPath is outside root; render nothing
-  }
-
-  const parts = relative.split("/").filter(Boolean);
-  const result: Segment[] = [
-    { name: tm("spcodeProjectLoad.fileBrowser.breadcrumbRoot"), path: normRoot, isRoot: true },
-  ];
-  let acc = normRoot;
-  for (const p of parts) {
-    acc += "/" + p;
-    result.push({ name: p, path: acc, isRoot: false });
-  }
-  return result;
+  return buildSegments(props.currentPath, props.rootPath);
 });
 </script>
 
