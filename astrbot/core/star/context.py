@@ -305,6 +305,15 @@ class Context:
             other_kwargs.setdefault(
                 "read_tool", request.func_tool.get_tool("astrbot_file_read_tool")
             )
+            if self._is_sandbox_runtime(event.unified_msg_origin):
+                from astrbot.core.computer.computer_client import (
+                    make_sandbox_overflow_writer,
+                )
+
+                other_kwargs.setdefault(
+                    "overflow_file_writer",
+                    make_sandbox_overflow_writer(self, event.unified_msg_origin),
+                )
 
         await agent_runner.reset(
             provider=prov,
@@ -502,6 +511,13 @@ class Context:
             # 使用默认配置
             return self._config
         return self.astrbot_config_mgr.get_conf(umo)
+
+    def _is_sandbox_runtime(self, umo: str) -> bool:
+        cfg = self.get_config(umo=umo)
+        runtime = str(
+            cfg.get("provider_settings", {}).get("computer_use_runtime", "local")
+        )
+        return runtime == "sandbox"
 
     async def send_message(
         self,
