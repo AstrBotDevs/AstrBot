@@ -654,7 +654,6 @@
         "searching": "Searching…",
         "resultCount": "{count} match(es)",
         "truncated": "Truncated — narrow your pattern",
-        "toolbarActive": "Searching…",
         "modeLabel": "Search by",
         "modeFilename": "Filename",
         "modeContent": "Content",

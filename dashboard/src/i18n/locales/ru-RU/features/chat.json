@@ -640,7 +640,6 @@
         "searching": "Поиск…",
         "resultCount": "{count} совпадений",
         "truncated": "Обрезано — сузьте шаблон",
-        "toolbarActive": "Идёт поиск…",
         "modeLabel": "Искать по",
         "modeFilename": "Имя файла",
         "modeContent": "Содержимое",

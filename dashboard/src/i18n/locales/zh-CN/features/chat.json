@@ -654,7 +654,6 @@
         "searching": "正在搜索…",
         "resultCount": "{count} 个匹配",
         "truncated": "已截断 — 请缩小搜索范围",
-        "toolbarActive": "搜索中…",
         "modeLabel": "搜索方式",
         "modeFilename": "文件名",
         "modeContent": "内容",

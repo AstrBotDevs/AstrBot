@@ -8,6 +8,18 @@
 //   - "content"  mode → POST /spcode/file-search
 //     response shape: {path, line, column, snippet}
 //
+// 2026-07-02 revision (toolbar input): the search input now lives in
+// the GitDiffSidebar toolbar (not in SearchPanel). The composable is
+// implemented as a module-level singleton so the toolbar input and
+// SearchPanel share the same `query` ref, the same 300ms debounce
+// watcher, and the same in-flight AbortController. SearchPanel binds
+// to the same `query` ref via destructuring (read + write), and the
+// toolbar input writes to it via @input. close() is a one-call reset
+// that SearchPanel uses to drop the panel state when the user closes
+// the panel via Esc from a search result. The singleton shape is
+// correct for this feature because only one search panel can be
+// visible at a time.
+//
 // Mode persists in localStorage["spcode.searchMode"] (key defined
 // co-located here; the STORAGE_KEYS object in GitDiffSidebar.vue
 // covers panel open/closed state, which is a separate concern).
@@ -158,109 +170,189 @@ function _parseResults(
     .filter((r): r is SearchResult => r !== null);
 }
 
-export function useSpcodeFileSearch() {
-  const state: Ref<SearchState> = ref({ kind: "idle" });
-  const mode: Ref<SearchMode> = ref(loadSearchMode());
-  let inflight: AbortController | null = null;
+// ── Module-level singleton state ──────────────────────────────────
+// 2026-07-02 toolbar input: the search <input> now lives in
+// GitDiffSidebar (not inside SearchPanel), and both components need
+// to read/write the same `query` ref + share the debounce watcher
+// + share the in-flight cancellation. A per-call composable would
+// create separate instances per component and the two refs would
+// not be linked. Hoisting the state to module scope is the
+// smallest change that gives both consumers the same backing
+// store; only one search panel can be visible at a time anyway,
+// so a singleton is semantically correct.
+const _state: Ref<SearchState> = ref({ kind: "idle" });
+const _mode: Ref<SearchMode> = ref(loadSearchMode());
+const _query: Ref<string> = ref("");
+let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
+// Last umo/worktree captured from the most recent search() call.
+// The debounce watcher uses these to re-fire search() with the same
+// routing context — callers no longer need to push context into
+// the input's @input handler. Null until the first search() call.
+let _lastUmo: string | null = null;
+let _lastWorktree: string | null = null;
+let _inflight: AbortController | null = null;
 
-  // Persist mode changes to localStorage. Mirrors the pattern used by
-  // GitDiffSidebar.vue (watch + safeSetItem, flush:"post" to coalesce
-  // bursts). Watcher is not `immediate`, so the initial load from
-  // localStorage does not trigger a redundant write.
-  watch(mode, (v) => safeSetItem(STORAGE_KEYS.searchMode, v), {
-    flush: "post",
-  });
+// Persist mode changes to localStorage. Mirrors the pattern used by
+// GitDiffSidebar.vue (watch + safeSetItem, flush:"post" to coalesce
+// bursts). Watcher is not `immediate`, so the initial load from
+// localStorage does not trigger a redundant write. Registered once
+// at module load — a singleton watcher covers all consumers.
+watch(_mode, (v) => safeSetItem(STORAGE_KEYS.searchMode, v), {
+  flush: "post",
+});
 
-  function cancel(): void {
-    if (inflight) {
-      inflight.abort();
-      inflight = null;
-    }
+// 2026-07-02 toolbar input: debounced auto-search on query change.
+// Empty query short-circuits to idle (no API call). Non-empty
+// schedules a search 300ms later — multiple keystrokes coalesce
+// into one network request, matching the spec's §4.4 timing.
+//
+// Lives at module scope (singleton) so the toolbar input and
+// SearchPanel share the same debounce state. Without this, typing
+// in the toolbar wouldn't trigger any search at all (SearchPanel
+// would be using a separate `query` ref that the toolbar never
+// writes to).
+watch(_query, (v) => {
+  if (_debounceTimer) {
+    clearTimeout(_debounceTimer);
+    _debounceTimer = null;
   }
-
-  function setMode(newMode: SearchMode): void {
-    if (newMode === mode.value) return;
-    cancel();
-    state.value = { kind: "idle" };
-    mode.value = newMode;
-    // watch(mode) → safeSetItem handles persistence
+  if (!v.trim()) {
+    _cancel();
+    _state.value = { kind: "idle" };
+    return;
   }
+  _debounceTimer = setTimeout(() => {
+    void _search({ umo: _lastUmo, worktree: _lastWorktree, pattern: v });
+  }, 300);
+});
 
-  async function search(opts: SearchOptions): Promise<void> {
-    cancel();
-    if (!opts.pattern || !opts.pattern.trim()) {
-      state.value = { kind: "idle" };
-      return;
-    }
-    const controller = new AbortController();
-    inflight = controller;
-    const currentMode = mode.value;
-    state.value = { kind: "loading", query: opts.pattern };
-    const endpoint =
-      currentMode === "filename"
-        ? "spcode/file-name-search"
-        : "spcode/file-search";
-    try {
-      // pluginExtensionApi.post<T> wraps the response in ApiEnvelope<T>
-      // (status, data: T), so T is the inner search-result payload — NOT
-      // another { status, data } envelope. The brief draft double-nested
-      // the wrapper, which produced TS2339 on data.reason / data.results.
-      const res = await pluginExtensionApi.post<SearchResponseCommon>(
-        endpoint,
-        {
-          umo: opts.umo,
-          worktree: opts.worktree,
-          pattern: opts.pattern,
-          path_filter: opts.pathFilter ?? null,
-          glob_filter: opts.globFilter ?? null,
-          case_sensitive: opts.caseSensitive ?? false,
-          regex: opts.regex ?? false,
-          max_results: opts.maxResults ?? 200,
-          context_chars: opts.contextChars ?? 60,
-        },
-        { signal: controller.signal },
-      );
-      // If a newer search already started, drop this response
-      if (controller.signal.aborted) return;
-      const data = res.data?.data;
-      if (!data) {
-        state.value = {
-          kind: "error",
-          query: opts.pattern,
-          reason: "network_error",
-          elapsedMs: 0,
-        };
-        return;
-      }
-      if (data.reason) {
-        state.value = {
-          kind: "error",
-          query: opts.pattern,
-          reason: data.reason,
-          elapsedMs: data.elapsed_ms ?? 0,
-        };
-        return;
-      }
-      state.value = {
-        kind: "ok",
-        query: opts.pattern,
-        results: _parseResults(currentMode, data),
-        truncated: data.truncated ?? false,
-        elapsedMs: data.elapsed_ms ?? 0,
-      };
-    } catch (err: unknown) {
-      const e = err as { name?: string; code?: string };
-      if (e?.name === "CanceledError" || controller.signal.aborted) return;
-      state.value = {
+function _cancel(): void {
+  if (_inflight) {
+    _inflight.abort();
+    _inflight = null;
+  }
+}
+
+// 2026-07-02 toolbar input: full reset. Called when the user
+// closes the panel (Esc from a search result, etc.). Clears the
+// debounce timer, cancels any in-flight request, empties the
+// query (which itself triggers the watcher → state idle), and
+// forces state to idle in case the watcher short-circuit didn't
+// fire (e.g. query was already empty when close() was called).
+function _close(): void {
+  if (_debounceTimer) {
+    clearTimeout(_debounceTimer);
+    _debounceTimer = null;
+  }
+  _cancel();
+  _query.value = "";
+  _state.value = { kind: "idle" };
+}
+
+function _setMode(newMode: SearchMode): void {
+  if (newMode === _mode.value) return;
+  _cancel();
+  _state.value = { kind: "idle" };
+  _mode.value = newMode;
+  // watch(_mode) → safeSetItem handles persistence
+}
+
+async function _search(opts: SearchOptions): Promise<void> {
+  // 2026-07-02 toolbar input: capture the routing context so the
+  // debounced watcher can re-fire search() with the same umo/
+  // worktree after a later query edit. Done before _cancel() so
+  // the captured values survive a synchronous abort.
+  _lastUmo = opts.umo;
+  _lastWorktree = opts.worktree;
+  _cancel();
+  if (!opts.pattern || !opts.pattern.trim()) {
+    _state.value = { kind: "idle" };
+    return;
+  }
+  const controller = new AbortController();
+  _inflight = controller;
+  const currentMode = _mode.value;
+  _state.value = { kind: "loading", query: opts.pattern };
+  const endpoint =
+    currentMode === "filename"
+      ? "spcode/file-name-search"
+      : "spcode/file-search";
+  try {
+    // pluginExtensionApi.post<T> wraps the response in ApiEnvelope<T>
+    // (status, data: T), so T is the inner search-result payload — NOT
+    // another { status, data } envelope. The brief draft double-nested
+    // the wrapper, which produced TS2339 on data.reason / data.results.
+    const res = await pluginExtensionApi.post<SearchResponseCommon>(
+      endpoint,
+      {
+        umo: opts.umo,
+        worktree: opts.worktree,
+        pattern: opts.pattern,
+        path_filter: opts.pathFilter ?? null,
+        glob_filter: opts.globFilter ?? null,
+        case_sensitive: opts.caseSensitive ?? false,
+        regex: opts.regex ?? false,
+        max_results: opts.maxResults ?? 200,
+        context_chars: opts.contextChars ?? 60,
+      },
+      { signal: controller.signal },
+    );
+    // If a newer search already started, drop this response
+    if (controller.signal.aborted) return;
+    const data = res.data?.data;
+    if (!data) {
+      _state.value = {
         kind: "error",
         query: opts.pattern,
         reason: "network_error",
         elapsedMs: 0,
       };
-    } finally {
-      if (inflight === controller) inflight = null;
+      return;
     }
+    if (data.reason) {
+      _state.value = {
+        kind: "error",
+        query: opts.pattern,
+        reason: data.reason,
+        elapsedMs: data.elapsed_ms ?? 0,
+      };
+      return;
+    }
+    _state.value = {
+      kind: "ok",
+      query: opts.pattern,
+      results: _parseResults(currentMode, data),
+      truncated: data.truncated ?? false,
+      elapsedMs: data.elapsed_ms ?? 0,
+    };
+  } catch (err: unknown) {
+    const e = err as { name?: string; code?: string };
+    if (e?.name === "CanceledError" || controller.signal.aborted) return;
+    _state.value = {
+      kind: "error",
+      query: opts.pattern,
+      reason: "network_error",
+      elapsedMs: 0,
+    };
+  } finally {
+    if (_inflight === controller) _inflight = null;
   }
+}
 
-  return { state, mode, search, cancel, setMode };
+export function useSpcodeFileSearch() {
+  // 2026-07-02 toolbar input: thin accessor around the module-level
+  // singleton state above. Both GitDiffSidebar (toolbar input) and
+  // SearchPanel (results UI) destructure from this return value, so
+  // they share the same `query` ref, debounce watcher, and in-flight
+  // AbortController. Keep the call-site shape identical to a normal
+  // composable so neither consumer needs to know it's a singleton.
+  return {
+    state: _state,
+    mode: _mode,
+    query: _query,
+    search: _search,
+    cancel: _cancel,
+    setMode: _setMode,
+    close: _close,
+  };
 }

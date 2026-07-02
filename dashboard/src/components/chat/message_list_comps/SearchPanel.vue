@@ -7,6 +7,15 @@
   file-name-search, Content → /spcode/file-search) and branches result
   rendering on the discriminated SearchResult union.
 
+  2026-07-02 revision (toolbar input): the search <input> moved out of
+  this component into the GitDiffSidebar toolbar (next to the search
+  toggle button). The shared `query` ref + 300ms debounce now live in
+  useSpcodeFileSearch, so this component only owns the mode toggle,
+  status line, and result list. Closing the panel is still driven
+  from here (Esc on a result row → composable's close() + emit
+  update:modelValue false); the input's own Esc handler lives in
+  GitDiffSidebar.
+
   Notes vs. the brief template:
   - Project pins vue@3.3.4, so `useTemplateRef` (Vue 3.5+) is unavailable;
     fall back to the established `ref<HTMLInputElement | null>(null)` pattern.
@@ -16,7 +25,6 @@
     T8 adds the per-reason keys; until then the raw reason is shown.
 -->
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from "vue";
 import {
   useSpcodeFileSearch,
   type SearchResult,
@@ -35,48 +43,26 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-const { state, mode, search, cancel, setMode } = useSpcodeFileSearch();
-
-const query = ref("");
-const debounceTimer = ref<ReturnType<typeof setTimeout> | null>(null);
-const inputRef = ref<HTMLInputElement | null>(null);
-
-// 300ms debounce per spec §4.4. Mode changes go through setMode()
-// (which already cancels in-flight requests and resets state); they
-// do NOT auto re-trigger a search — the user retypes or edits the
-// query, and the existing debounce watcher picks it up.
-watch(query, (v) => {
-  if (debounceTimer.value) clearTimeout(debounceTimer.value);
-  if (!v.trim()) {
-    cancel();
-    state.value = { kind: "idle" };
-    return;
-  }
-  debounceTimer.value = setTimeout(() => {
-    void search({
-      umo: props.umo,
-      worktree: props.worktree,
-      pattern: v,
-    });
-  }, 300);
-});
-
-// Focus the input when the panel opens
-watch(
-  () => props.modelValue,
-  async (open) => {
-    if (open) {
-      await nextTick();
-      inputRef.value?.focus();
-    }
-  },
-);
+// 2026-07-02 toolbar input: `query` is now shared with the toolbar
+// input. We still kick off a programmatic search() at mount with the
+// current props (umo/worktree) so the debounce watcher has a valid
+// routing context for any later keystroke. The actual typing lives
+// in the toolbar input; this component no longer owns an <input>.
+// `close()` is the one-call reset that Esc on a result row triggers.
+const { state, mode, search, setMode, close } = useSpcodeFileSearch();
+// Seed the composable's last-umo/last-worktree cache so the debounce
+// watcher can re-fire search() with the right routing context after
+// the user edits the toolbar input. The pattern argument is empty
+// (the watcher short-circuits empty patterns to idle), so this is
+// a context-priming call only — no network request fires.
+void search({ umo: props.umo, worktree: props.worktree, pattern: "" });
 
 function onClose(): void {
-  if (debounceTimer.value) clearTimeout(debounceTimer.value);
-  cancel();
-  query.value = "";
-  state.value = { kind: "idle" };
+  // 2026-07-02 toolbar input: clear the shared query + state via the
+  // composable's close(), then tell the parent to collapse the panel.
+  // (We no longer own the debounce timer or inputRef — both live
+  // elsewhere now.)
+  close();
   emit("update:modelValue", false);
 }
 
@@ -97,6 +83,11 @@ function onResultClick(r: SearchResult): void {
 }
 
 function onKeydown(e: KeyboardEvent): void {
+  // 2026-07-02 toolbar input: Escape on a search result row still
+  // closes the panel (focus may have drifted from the toolbar input
+  // to a result after a click). The toolbar input's own Esc handler
+  // stopPropagation-prevents this branch from running when focus is
+  // on the input itself.
   if (e.key === "Escape") {
     e.stopPropagation();
     onClose();
@@ -130,37 +121,14 @@ function countKey(m: SearchMode): string {
     ? "spcodeProjectLoad.diffSidebar.search.filenameResultCount"
     : "spcodeProjectLoad.diffSidebar.search.resultCount";
 }
-
-onMounted(() => {
-  // Focus on mount if opened
-  if (props.modelValue) {
-    nextTick(() => inputRef.value?.focus());
-  }
-});
 </script>
 
 <template>
   <div v-if="modelValue" class="search-panel" @keydown="onKeydown">
-    <div class="search-panel-input-row">
-      <v-icon size="16">mdi-magnify</v-icon>
-      <input
-        ref="inputRef"
-        v-model="query"
-        type="text"
-        class="search-panel-input"
-        :placeholder="tm('spcodeProjectLoad.diffSidebar.search.placeholder')"
-        spellcheck="false"
-        autocomplete="off"
-      />
-      <v-icon
-        v-if="state.kind === 'loading'"
-        size="14"
-        class="search-panel-spinner"
-      >
-        mdi-loading
-      </v-icon>
-      <v-btn icon="mdi-close" size="x-small" variant="text" @click="onClose" />
-    </div>
+    <!-- 2026-07-02 toolbar input: the <input> + close button used to
+         live here. They moved to GitDiffSidebar's files-toolbar so the
+         input is always visible at the top of the sidebar. The mode
+         toggle, status line, and result list stay below. -->
 
     <div class="search-panel-mode-row">
       <span class="search-panel-mode-label text-caption text-medium-emphasis">
@@ -194,6 +162,13 @@ onMounted(() => {
         <span class="text-caption text-medium-emphasis">
           {{ tm("spcodeProjectLoad.diffSidebar.search.searching") }}
         </span>
+        <v-icon
+          v-if="state.kind === 'loading'"
+          size="14"
+          class="search-panel-spinner"
+        >
+          mdi-loading
+        </v-icon>
       </template>
       <template v-else-if="state.kind === 'ok'">
         <span class="text-caption">
@@ -252,20 +227,11 @@ onMounted(() => {
   max-height: 50%;
   overflow: hidden;
 }
-.search-panel-input-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.search-panel-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: 13px;
-  color: rgb(var(--v-theme-on-surface));
-  font-family: inherit;
-}
+/* 2026-07-02 toolbar input: the .search-panel-input-row /
+   .search-panel-input classes were removed when the <input> moved
+   to the GitDiffSidebar toolbar (see SearchPanel.vue revision note
+   in the <script setup> header). The .search-panel-mode-row and
+   below remain in active use. */
 .search-panel-mode-row {
   display: flex;
   align-items: center;

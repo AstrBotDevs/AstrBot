@@ -45,6 +45,7 @@ import { useSpcodeGitCommit } from "@/composables/useSpcodeGitCommit";
 import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
 import { useSpcodeGitShow } from "@/composables/useSpcodeGitShow";
 import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
+import { useSpcodeFileSearch } from "@/composables/useSpcodeFileSearch";
 import { classifyReason } from "@/composables/parseSpcodeGitWorkflow";
 import { classifyWorktreeReason } from "@/composables/parseSpcodeWorktreeManagement";
 import { pluginExtensionApi } from "@/api/v1";
@@ -382,6 +383,73 @@ const gitStatus = useSpcodeGitStatus(selectedWorktree);
 const spcodeStatus = useSpcodeProjectStatus();
 const expandedSet = ref<Set<string>>(new Set());
 
+// 2026-07-02 toolbar input: the search <input> moved out of
+// SearchPanel.vue and into this toolbar. We destructure the shared
+// `query` ref from the singleton composable (see
+// useSpcodeFileSearch.ts) and bind it to the input via :value +
+// @input. The composable owns the 300ms debounce, so writing to
+// `query` here is what actually drives a search. The same `query`
+// ref is read by SearchPanel's results UI, so the two components
+// stay in sync without any explicit prop wiring. Placed AFTER
+// spcodeStatus is declared so primeFileSearch() can read its umo
+// without hitting a TDZ ReferenceError.
+const { query: fileSearchQuery, search: fileSearchSearch } =
+  useSpcodeFileSearch();
+const searchInputRef = ref<HTMLInputElement | null>(null);
+
+// Push the current umo/worktree into the composable so the debounced
+// search re-fires with the right routing context after a toolbar
+// keystroke. Mirrors the priming call in SearchPanel.vue's setup —
+// both call sites are idempotent (the composable stores the last
+// values), and racing is fine: whichever call lands last wins, and
+// both call sites pass the same umo/worktree at any given moment.
+function primeFileSearch(): void {
+  void fileSearchSearch({
+    umo: spcodeStatus.status.value.umo,
+    worktree: selectedWorktree.value,
+    pattern: "",
+  });
+}
+primeFileSearch();
+
+// Auto-focus the toolbar input when the panel opens; clear the
+// composable's query (which also resets state to idle via the
+// composable's own watcher) when it closes. The toolbar input is
+// in the same row as the search toggle button, so once the panel
+// is open the input is always reachable — no scrolling required.
+watch(searchOpen, async (open) => {
+  if (open) {
+    // Re-prime in case umo/worktree changed while the panel was
+    // closed (e.g. user switched worktrees between sessions).
+    primeFileSearch();
+    await nextTick();
+    searchInputRef.value?.focus();
+  } else {
+    fileSearchQuery.value = "";
+  }
+});
+
+// Wire native input events to the shared ref. We use :value + @input
+// (not v-model) so it's explicit that `fileSearchQuery` is shared
+// state owned by the composable, not local to this component. The
+// composable's watcher handles the rest (debounce → search, empty
+// → idle).
+function onSearchInput(e: Event): void {
+  const target = e.target as HTMLInputElement;
+  fileSearchQuery.value = target.value;
+}
+
+// Esc on the input closes the panel. stopPropagation prevents the
+// global onSearchKeydown handler (window-level bubble) from
+// re-closing it / re-toggling state. (The input is now outside
+// .search-panel so SearchPanel's wrapper-level Esc handler can't
+// fire on it, but the stop is cheap insurance against future
+// refactors that move the input back inside the panel.)
+function onSearchClose(e: KeyboardEvent): void {
+  e.stopPropagation();
+  searchOpen.value = false;
+}
+
 // ── Git workflow composables (spec 2026-06-24 §3.2) ──────────────
 // All 4 live at the sidebar level so they can share stagedFiles state
 // and call composable.refresh() after a write.
@@ -535,6 +603,12 @@ function closeContextMenuOnEscape(e: KeyboardEvent): void {
 // click somehow escapes the panel (e.g. focus drifted to the bread-
 // crumb after a result click), we close from here so the panel
 // doesn't stick around.
+// 2026-07-02 toolbar input: Escape closes the panel as a fallback.
+// The toolbar input's own @keydown.escape.stop handler closes first
+// when focus is on the input itself; this branch fires when focus
+// has drifted elsewhere (e.g. the breadcrumb after a result click)
+// and the user presses Esc. We exclude the input and SearchPanel
+// result rows from this branch to avoid double-closing.
 function onSearchKeydown(e: KeyboardEvent): void {
   if (!props.modelValue) return;
   const isMod = e.metaKey || e.ctrlKey;
@@ -549,13 +623,21 @@ function onSearchKeydown(e: KeyboardEvent): void {
       // Focus the search input after Vue mounts it (v-if=true branch).
       nextTick(() => {
         document
-          .querySelector<HTMLInputElement>(".search-panel-input")
+          .querySelector<HTMLInputElement>(".git-diff-sidebar-search-input")
           ?.focus();
       });
     }
   } else if (e.key === "Escape" && searchOpen.value) {
     const target = e.target as HTMLElement | null;
-    if (target && !target.closest(".search-panel")) {
+    // 2026-07-02 toolbar input: also bail if focus is on the toolbar
+    // input itself — that element's @keydown.escape.stop handler
+    // owns the close (and stopPropagation prevents this from firing
+    // in normal cases; this is a defensive guard).
+    if (
+      target &&
+      !target.closest(".search-panel") &&
+      !target.closest(".git-diff-sidebar-search-input")
+    ) {
       searchOpen.value = false;
     }
   }
@@ -1880,7 +1962,7 @@ function toggleFile(path: string): void {
 
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 1800;
-const DEFAULT_WIDTH = 1000;
+const DEFAULT_WIDTH = 800;
 
 const sidebarWidth = ref(DEFAULT_WIDTH);
 const sidebarRef = ref<HTMLElement | null>(null);
@@ -2303,10 +2385,17 @@ const currentRoot = computed<string | null>(() => {
       <!-- Body: Files / Diff / History -->
       <div class="git-diff-sidebar-body">
         <!-- 2026-07-02 sidebar-search: Files-view toolbar with a search
-             toggle. Sits ABOVE the FileBrowserView so it survives the
-             v-if/v-else switching inside FileBrowserView (toolbar is
-             independent of whether the file tree or search panel is
-             showing below). Hidden in diff/history views. -->
+             toggle AND the search input. Sits ABOVE the FileBrowserView
+             so it survives the v-if/v-else switching inside
+             FileBrowserView (toolbar is independent of whether the
+             file tree or search panel is showing below). Hidden in
+             diff/history views.
+             2026-07-02 toolbar input: the input is now inline with
+             the toggle button (was a "Searching…" label before).
+             The input binds to the shared `fileSearchQuery` ref via
+             :value + @input; the composable owns the 300ms debounce.
+             Esc on the input closes the panel (stopPropagation
+             prevents the window-level handler from also firing). -->
         <div
           v-if="viewMode === 'files'"
           class="git-diff-sidebar-files-toolbar"
@@ -2326,9 +2415,20 @@ const currentRoot = computed<string | null>(() => {
           >
             <v-icon size="16">mdi-magnify</v-icon>
           </v-btn>
-          <span v-if="searchOpen" class="text-caption text-medium-emphasis">
-            {{ tm("spcodeProjectLoad.diffSidebar.search.toolbarActive") }}
-          </span>
+          <input
+            v-if="searchOpen"
+            ref="searchInputRef"
+            :value="fileSearchQuery"
+            type="text"
+            class="git-diff-sidebar-search-input"
+            :placeholder="
+              tm('spcodeProjectLoad.diffSidebar.search.placeholder')
+            "
+            spellcheck="false"
+            autocomplete="off"
+            @input="onSearchInput"
+            @keydown.escape.stop="onSearchClose"
+          />
         </div>
         <FileBrowserView
           v-if="viewMode === 'files'"
@@ -3131,7 +3231,7 @@ const currentRoot = computed<string | null>(() => {
   overflow: hidden;
 }
 
-/* 2026-07-02 sidebar-search: Files-view toolbar (search toggle). */
+/* 2026-07-02 sidebar-search: Files-view toolbar (search toggle + input). */
 .git-diff-sidebar-files-toolbar {
   display: flex;
   align-items: center;
@@ -3142,5 +3242,28 @@ const currentRoot = computed<string | null>(() => {
 .git-diff-sidebar-search-toggle.is-active {
   background: rgba(var(--v-theme-primary), 0.12);
   color: rgb(var(--v-theme-primary));
+}
+/* 2026-07-02 toolbar input: inline search input. flex:1 makes it
+   take the remaining horizontal space (the toggle button is the
+   only fixed-width sibling). The themed border + transparent
+   background blend with the toolbar; the focus state uses the
+   primary color for a subtle highlight. min-width:0 lets the
+   input shrink below its intrinsic content width inside the flex
+   row, otherwise the parent would grow and clip other toolbar
+   children. */
+.git-diff-sidebar-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 4px;
+  outline: none;
+  background: transparent;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface));
+  font-family: inherit;
+}
+.git-diff-sidebar-search-input:focus {
+  border-color: rgb(var(--v-theme-primary));
 }
 </style>
