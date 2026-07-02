@@ -1,68 +1,134 @@
 <template>
-  <div class="project-list-shell">
-    <!-- 项目按钮 -->
-    <div class="project-button-wrap">
-      <v-btn block variant="text" class="project-btn" @click="toggleExpanded">
-        <v-icon size="20" class="project-action-icon mr-2">
-          mdi-folder-outline
-        </v-icon>
-        <span class="project-btn-title">{{ tm("project.title") }}</span>
-        <v-spacer />
-        <v-icon size="18" class="project-toggle-icon">
-          {{ expanded ? "mdi-chevron-up" : "mdi-chevron-down" }}
-        </v-icon>
-      </v-btn>
+  <section class="sidebar-section project-list-shell">
+    <div class="sidebar-section-header">
+      <span>{{ tm("project.title") }}</span>
+      <v-btn
+        icon="mdi-plus"
+        size="x-small"
+        variant="text"
+        class="section-action-btn"
+        :title="tm('project.create')"
+        @click="$emit('createProject')"
+      />
     </div>
 
-    <!-- 项目列表 -->
-    <v-expand-transition>
-      <div v-show="expanded" class="project-list-wrap">
-        <button
-          class="project-row create-project-item"
-          type="button"
-          @click="$emit('createProject')"
-        >
-          <span class="project-emoji">
-            <v-icon size="18">mdi-plus</v-icon>
-          </span>
-          <span class="project-title">{{ tm("project.create") }}</span>
-        </button>
-
-        <button
-          v-for="project in projects"
-          :key="project.project_id"
+    <div class="project-list-wrap">
+      <div v-for="project in projects" :key="project.project_id">
+        <div
           class="project-row project-item"
           :class="{ active: selectedProjectId === project.project_id }"
-          type="button"
-          @click="$emit('selectProject', project.project_id)"
+          role="button"
+          tabindex="0"
+          @click="handleProjectClick(project)"
+          @keydown.enter="handleProjectClick(project)"
+          @keydown.space.prevent="handleProjectClick(project)"
         >
           <span class="project-emoji">{{ project.emoji || "📁" }}</span>
-          <span class="project-title">{{ project.title }}</span>
-          <span class="project-actions">
+          <span class="project-title-wrap">
+            <span class="project-title">{{ project.title }}</span>
+            <v-icon size="16" class="project-chevron">
+              {{
+                isProjectExpanded(project.project_id)
+                  ? "mdi-chevron-down"
+                  : "mdi-chevron-right"
+              }}
+            </v-icon>
+          </span>
+          <span class="project-actions" @click.stop>
             <v-btn
-              icon="mdi-pencil"
+              icon="mdi-pencil-outline"
               size="x-small"
               variant="text"
-              class="edit-project-btn"
-              @click.stop="$emit('editProject', project)"
+              class="project-action-btn"
+              :title="tm('project.edit')"
+              @click="$emit('editProject', project)"
             />
             <v-btn
-              icon="mdi-delete"
+              icon="mdi-delete-outline"
               size="x-small"
               variant="text"
-              class="delete-project-btn"
-              color="error"
-              @click.stop="handleDeleteProject(project)"
+              class="project-action-btn"
+              :title="tm('actions.deleteChat')"
+              @click="handleDeleteProject(project)"
             />
           </span>
-        </button>
+        </div>
+
+        <Transition name="project-session-fade">
+          <div
+            v-if="isProjectExpanded(project.project_id)"
+            class="project-session-list"
+          >
+            <div
+              v-if="loadingProjectIds.includes(project.project_id)"
+              class="project-session-empty"
+            >
+              {{ tm("project.loadingSessions") }}
+            </div>
+            <template v-else-if="projectSessionList(project.project_id).length">
+              <div
+                v-for="session in projectSessionList(project.project_id)"
+                :key="session.session_id"
+                class="project-session-row"
+                :class="{ active: activeSessionId === session.session_id }"
+                role="button"
+                tabindex="0"
+                @click="$emit('selectSession', session.session_id)"
+                @keydown.enter="$emit('selectSession', session.session_id)"
+                @keydown.space.prevent="$emit('selectSession', session.session_id)"
+              >
+                <span class="project-session-title">
+                  {{ sessionTitle(session) }}
+                </span>
+                <span class="project-session-actions" @click.stop>
+                  <v-btn
+                    icon="mdi-pencil-outline"
+                    size="x-small"
+                    variant="text"
+                    class="project-action-btn"
+                    :title="tm('conversation.editDisplayName')"
+                    @click="
+                      $emit(
+                        'editSessionTitle',
+                        session.session_id,
+                        session.display_name || '',
+                      )
+                    "
+                  />
+                  <v-btn
+                    icon="mdi-delete-outline"
+                    size="x-small"
+                    variant="text"
+                    class="project-action-btn"
+                    :title="tm('actions.deleteChat')"
+                    @click="handleDeleteSession(project.project_id, session)"
+                  />
+                </span>
+                <v-progress-circular
+                  v-if="sessionRunning(session.session_id)"
+                  class="project-session-progress"
+                  indeterminate
+                  size="14"
+                  width="2"
+                />
+              </div>
+            </template>
+            <div v-else class="project-session-empty">
+              {{ tm("project.noSessions") }}
+            </div>
+          </div>
+        </Transition>
       </div>
-    </v-expand-transition>
-  </div>
+
+      <div v-if="!projects.length" class="project-session-empty">
+        {{ tm("project.noProjects") }}
+      </div>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
@@ -71,19 +137,31 @@ export interface Project {
   title: string;
   emoji?: string;
   description?: string;
+  workspace_type?: "session" | "project" | "custom";
+  workspace_path?: string | null;
+  resolved_workspace_path?: string | null;
   created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectSession {
+  session_id: string;
+  display_name?: string | null;
   updated_at: string;
 }
 
 interface Props {
   projects: Project[];
-  initialExpanded?: boolean;
+  projectSessions: Record<string, ProjectSession[]>;
+  loadingProjectIds: string[];
   selectedProjectId?: string | null;
+  activeSessionId?: string | null;
+  isSessionRunning?: (sessionId: string) => boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  initialExpanded: false,
   selectedProjectId: null,
+  activeSessionId: null,
 });
 
 const emit = defineEmits<{
@@ -91,23 +169,90 @@ const emit = defineEmits<{
   createProject: [];
   editProject: [project: Project];
   deleteProject: [projectId: string];
+  toggleProject: [projectId: string, expanded: boolean];
+  selectSession: [sessionId: string];
+  editSessionTitle: [sessionId: string, title: string];
+  deleteSession: [sessionId: string, projectId: string];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-
 const confirmDialog = useConfirmDialog();
 
-const expanded = ref(props.initialExpanded);
+const expandedProjectIds = ref<Set<string>>(readExpandedProjectIds());
 
-// 从 localStorage 读取项目展开状态
-const savedProjectsExpandedState = localStorage.getItem("projectsExpanded");
-if (savedProjectsExpandedState !== null) {
-  expanded.value = JSON.parse(savedProjectsExpandedState);
+watch(
+  () => props.selectedProjectId,
+  (projectId) => {
+    if (projectId) {
+      setProjectExpanded(projectId, true);
+    }
+  },
+);
+
+watch(
+  () => props.projects.map((project) => project.project_id).join(","),
+  () => {
+    const validProjectIds = new Set(
+      props.projects.map((project) => project.project_id),
+    );
+    expandedProjectIds.value.forEach((projectId) => {
+      if (validProjectIds.has(projectId)) {
+        emit("toggleProject", projectId, true);
+      }
+    });
+  },
+  { immediate: true },
+);
+
+function readExpandedProjectIds() {
+  try {
+    const raw = localStorage.getItem("chat.projectExpandedIds");
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter(Boolean) : []);
+  } catch {
+    return new Set<string>();
+  }
 }
 
-function toggleExpanded() {
-  expanded.value = !expanded.value;
-  localStorage.setItem("projectsExpanded", JSON.stringify(expanded.value));
+function persistExpandedProjectIds() {
+  localStorage.setItem(
+    "chat.projectExpandedIds",
+    JSON.stringify([...expandedProjectIds.value]),
+  );
+}
+
+function isProjectExpanded(projectId: string) {
+  return expandedProjectIds.value.has(projectId);
+}
+
+function setProjectExpanded(projectId: string, expanded: boolean) {
+  const next = new Set(expandedProjectIds.value);
+  if (expanded) {
+    next.add(projectId);
+  } else {
+    next.delete(projectId);
+  }
+  expandedProjectIds.value = next;
+  persistExpandedProjectIds();
+  emit("toggleProject", projectId, expanded);
+}
+
+function handleProjectClick(project: Project) {
+  const nextExpanded = !isProjectExpanded(project.project_id);
+  setProjectExpanded(project.project_id, nextExpanded);
+  emit("selectProject", project.project_id);
+}
+
+function projectSessionList(projectId: string) {
+  return props.projectSessions[projectId] || [];
+}
+
+function sessionRunning(sessionId: string) {
+  return props.isSessionRunning?.(sessionId) || false;
+}
+
+function sessionTitle(session: ProjectSession) {
+  return session.display_name?.trim() || tm("conversation.newConversation");
 }
 
 async function handleDeleteProject(project: Project) {
@@ -116,48 +261,61 @@ async function handleDeleteProject(project: Project) {
     emit("deleteProject", project.project_id);
   }
 }
+
+async function handleDeleteSession(projectId: string, session: ProjectSession) {
+  const message = tm("conversation.confirmDelete", {
+    name: sessionTitle(session),
+  });
+  if (await askForConfirmation(message, confirmDialog)) {
+    emit("deleteSession", session.session_id, projectId);
+  }
+}
+
 </script>
 
 <style scoped>
 .project-list-shell {
-  margin-top: 6px;
+  margin-top: 2px;
 }
 
-.project-button-wrap {
-  opacity: 0.6;
+.sidebar-section-header {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 4px;
+  color: var(--chat-muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.project-btn {
-  justify-content: flex-start;
-  background-color: transparent !important;
-  border-radius: 8px;
-  padding: 8px 12px !important;
-  text-transform: none;
-  font-weight: 500;
+.section-action-btn,
+.project-action-btn {
+  color: var(--chat-muted);
 }
 
-.project-action-icon {
-  color: currentcolor;
+.section-action-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
 }
 
-.project-btn-title {
-  min-width: 0;
+.section-action-btn:hover,
+.project-action-btn:hover {
+  color: rgb(var(--v-theme-on-surface));
 }
 
-.project-toggle-icon {
-  margin-left: 10px;
-}
-
-.project-list-wrap {
+.project-list-wrap,
+.project-session-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 8px;
+  gap: 2px;
 }
 
-.project-row {
+.project-row,
+.project-session-row {
   width: 100%;
-  min-height: 38px;
+  min-height: 30px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -165,33 +323,40 @@ async function handleDeleteProject(project: Project) {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 4px 56px 4px 10px;
+  position: relative;
+  box-sizing: border-box;
   cursor: pointer;
   text-align: left;
 }
 
 .project-row:hover,
-.project-row.active {
+.project-row.active,
+.project-session-row:hover,
+.project-session-row.active {
   background: var(--chat-session-active-bg);
 }
 
-.project-item:hover .project-actions {
-  opacity: 1;
-  visibility: visible;
-}
-
 .project-emoji {
-  width: 20px;
-  flex: 0 0 20px;
+  width: 18px;
+  flex: 0 0 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 15px;
 }
 
-.project-title {
+.project-title-wrap {
   min-width: 0;
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.project-title,
+.project-session-title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -199,30 +364,77 @@ async function handleDeleteProject(project: Project) {
   font-weight: 500;
 }
 
-.project-actions {
+.project-title {
+  flex: 0 1 auto;
+}
+
+.project-session-title {
+  flex: 1;
+}
+
+.project-chevron {
+  flex: 0 0 auto;
+  color: var(--chat-muted);
+}
+
+.project-actions,
+.project-session-actions {
   display: flex;
+  align-items: center;
   gap: 2px;
+  flex-shrink: 0;
   opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   visibility: hidden;
-  transition: all 0.2s ease;
 }
 
-.edit-project-btn,
-.delete-project-btn {
-  opacity: 0.7;
-  transition: opacity 0.2s ease;
-}
-
-.edit-project-btn:hover,
-.delete-project-btn:hover {
+.project-row:hover .project-actions,
+.project-row:focus-within .project-actions,
+.project-session-row:hover .project-session-actions,
+.project-session-row:focus-within .project-session-actions {
   opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
 }
 
-.create-project-item {
-  opacity: 0.7;
+.project-session-list {
+  padding: 2px 0 4px 26px;
 }
 
-.create-project-item:hover {
-  opacity: 1;
+.project-session-fade-enter-active {
+  transition: opacity 0.1s ease-out;
+}
+
+.project-session-fade-leave-active {
+  transition: opacity 0.08s ease-in;
+}
+
+.project-session-fade-enter-from,
+.project-session-fade-leave-to {
+  opacity: 0;
+}
+
+.project-session-progress {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-shrink: 0;
+  transition: right 0.16s ease;
+}
+
+.project-session-row:hover .project-session-progress,
+.project-session-row:focus-within .project-session-progress {
+  right: 52px;
+}
+
+.project-session-empty {
+  padding: 5px 8px;
+  color: var(--chat-muted);
+  font-size: 13px;
 }
 </style>

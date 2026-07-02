@@ -73,6 +73,7 @@
     "placeholder": "Ask about this excerpt..."
   },
   "conversation": {
+    "title": "Conversations",
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",
     "systemStatus": "System Status",
@@ -131,7 +132,16 @@
     "name": "Project Name",
     "emoji": "Icon (Emoji)",
     "description": "Description (Optional)",
+    "workspace": {
+      "type": "Workspace",
+      "session": "Per-session workspace",
+      "project": "Shared project workspace",
+      "custom": "Custom path",
+      "path": "Workspace path"
+    },
+    "loadingSessions": "Loading conversations...",
     "noSessions": "No conversations in this project",
+    "noProjects": "No projects",
     "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
   },
   "time": {
