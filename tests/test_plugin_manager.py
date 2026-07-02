@@ -2051,16 +2051,6 @@ async def test_reload_activated_plugin_still_unbinds(
         unbound.append(name)
 
     async def mock_load(specified_module_path=None, **kwargs):
-        # In full reload, load() re-registers all plugins.
-        # Deactivated plugins get registered with activated=False.
-        re_registered = star_manager_module.StarMetadata(
-            name=plugin_name,
-            root_dir_name=plugin_name,
-            module_path=module_path,
-            activated=False,
-        )
-        star_manager_module.star_map[module_path] = re_registered
-        star_manager_module.star_registry.append(re_registered)
         return True, None
 
     monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
@@ -2146,6 +2136,7 @@ async def test_turn_on_plugin_after_deactivated_reload_reactivates_tools(
         parameters={"type": "object", "properties": {}},
         handler_module_path=f"data.plugins.{plugin_name}.main.tools.search",
     )
+    plugin_tool.active = False  # simulate deactivated state
     llm_tools = cast(Any, star_manager_module.llm_tools)
     original_func_list = llm_tools.func_list
     llm_tools.func_list = [plugin_tool]
