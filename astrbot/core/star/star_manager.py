@@ -1013,7 +1013,7 @@ class PluginManager:
                         logger.warning(
                             f"插件 {smd.name} 未被正常终止: {e!s}, 可能会导致该插件运行不正常。",
                         )
-                    if smd.name:
+                    if smd.name and smd.activated:
                         await self._unbind_plugin(smd.name, specified_module_path)
 
             result = await self.load(specified_module_path)
