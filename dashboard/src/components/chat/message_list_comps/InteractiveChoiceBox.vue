@@ -41,7 +41,7 @@
           type="button"
           class="choice-option-button"
           :aria-label="ariaLabelForOption(opt)"
-          @click="onOptionClick(opt.value)"
+          @click="onOptionClick(opt)"
         >
           <span class="choice-option-label">{{ opt.label }}</span>
           <span v-if="opt.description" class="choice-option-description">
@@ -91,7 +91,11 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import type { InteractiveChoicePart, InteractiveChoiceOption } from "@/composables/parseInteractiveChoice";
+import {
+  getOptionSubmitText,
+  type InteractiveChoicePart,
+  type InteractiveChoiceOption,
+} from "@/composables/parseInteractiveChoice";
 
 const props = defineProps<{
   part: InteractiveChoicePart;
@@ -122,21 +126,25 @@ const state = computed<State>(() => {
 const submittedLabel = computed(() => {
   if (submittedValue.value === null) return "";
   if (submittedKind.value === "option") {
-    const opt = props.part.options.find((o) => o.value === submittedValue.value);
-    return opt?.label ?? submittedValue.value;
+    const opt = props.part.options.find((o) => o.id === submittedOptionId.value);
+    if (opt) return getOptionSubmitText(opt);
+    return submittedValue.value;
   }
   return submittedValue.value;
 });
+
+const submittedOptionId = ref<string | null>(null);
 
 const inputPlaceholderResolved = computed(
   () => props.part.input_placeholder || tm("interactiveChoice.defaultPlaceholder"),
 );
 
-function onOptionClick(value: string) {
+function onOptionClick(opt: InteractiveChoiceOption) {
   if (state.value !== "pending") return;
-  submittedValue.value = value;
+  submittedOptionId.value = opt.id;
+  submittedValue.value = getOptionSubmitText(opt);
   submittedKind.value = "option";
-  emit("submit", value);
+  emit("submit", submittedValue.value);
 }
 
 function onInputSubmit() {
