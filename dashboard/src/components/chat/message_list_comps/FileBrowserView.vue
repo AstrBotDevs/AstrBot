@@ -12,6 +12,7 @@ import type { SpcodeFileBrowserEntry } from "@/composables/parseSpcodeFileBrowse
 import FileBrowserBreadcrumb from "./FileBrowserBreadcrumb.vue";
 import FileBrowserEntryList from "./FileBrowserEntryList.vue";
 import FileBrowserFilePreview from "./FileBrowserFilePreview.vue";
+import SearchPanel from "./SearchPanel.vue";
 
 const props = defineProps<{
   /** Directory whose entries are shown in the left pane. */
@@ -21,6 +22,12 @@ const props = defineProps<{
   isDark?: boolean;
   /** Current worktree root (parent computes: selectedWorktree ?? mainWorktreePath). null = project not loaded. */
   rootPath: string | null;
+  /** When true, the search panel is mounted at the top of the view and replaces the file tree. */
+  searchOpen?: boolean;
+  /** Unified message origin passed through to the search composable for backend routing. */
+  umo?: string | null;
+  /** Search scope (currently the active worktree path). */
+  worktree?: string | null;
 }>();
 
 /**
@@ -32,7 +39,12 @@ const props = defineProps<{
  * directory / breadcrumb clicks send { dirPath: <clicked>, previewPath: null }.
  */
 const emit = defineEmits<{
-  (e: "navigate", payload: { dirPath: string; previewPath: string | null }): void;
+  (
+    e: "navigate",
+    payload: { dirPath: string; previewPath: string | null },
+  ): void;
+  (e: "open-file", p: { path: string; line: number }): void;
+  (e: "update:searchOpen", v: boolean): void;
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -43,9 +55,7 @@ const spcodeStatus = useSpcodeProjectStatus();
 // `dirComposable` always fetches `currentPath`; `previewComposable`
 // only fetches when `previewPath` is non-empty (its watch has an
 // empty-path short-circuit to avoid spurious path_not_found errors).
-const dirComposable = useSpcodeFileBrowser(
-  computed(() => props.currentPath),
-);
+const dirComposable = useSpcodeFileBrowser(computed(() => props.currentPath));
 const previewComposable = useSpcodeFileBrowser(
   computed(() => props.previewPath ?? ""),
 );
@@ -53,7 +63,9 @@ const previewComposable = useSpcodeFileBrowser(
 // Breadcrumb path: when previewing a file, show the FILE'S path so
 // the user can see "root / src / file.ts" in the breadcrumb instead
 // of just "root / src". When browsing a directory, show currentPath.
-const breadcrumbPath = computed<string>(() => props.previewPath ?? props.currentPath);
+const breadcrumbPath = computed<string>(
+  () => props.previewPath ?? props.currentPath,
+);
 
 /** Compute the parent directory of a path (POSIX + Windows separators). */
 function parentOf(p: string): string {
@@ -70,7 +82,10 @@ function onEntryNavigate(entry: SpcodeFileBrowserEntry): void {
   } else {
     // File or symlink: navigate to the parent (left pane shows the
     // directory listing) and preview the clicked path on the right.
-    emit("navigate", { dirPath: parentOf(entry.path), previewPath: entry.path });
+    emit("navigate", {
+      dirPath: parentOf(entry.path),
+      previewPath: entry.path,
+    });
   }
 }
 
@@ -85,7 +100,10 @@ function onPreviewTargetNavigate(resolvedTarget: string): void {
   // previews it; if the target is actually a directory, the
   // previewComposable will land on a directory state and the user
   // can then click the entry in the right pane to navigate into it.
-  emit("navigate", { dirPath: parentOf(resolvedTarget), previewPath: resolvedTarget });
+  emit("navigate", {
+    dirPath: parentOf(resolvedTarget),
+    previewPath: resolvedTarget,
+  });
 }
 
 /** Manually re-fetch the workspace contents. Exposed to the parent
@@ -174,100 +192,119 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="file-browser-view">
-    <div v-if="!spcodeStatus.status.value.loaded" class="file-browser-empty">
-      <v-icon size="36" color="grey">mdi-folder-open-outline</v-icon>
-      <span class="empty-text">{{ tm("spcodeProjectLoad.fileBrowser.placeholder") }}</span>
-    </div>
-
-    <template v-else>
-      <FileBrowserBreadcrumb
-        :current-path="breadcrumbPath"
-        :root-path="rootPath"
-        @navigate="onBreadcrumbNavigate"
-      />
-
-      <div
-        ref="bodyRef"
-        class="file-browser-body"
-        :class="{ resizing: isResizing, 'left-collapsed': isLeftPaneCollapsed }"
-      >
-        <!-- Expand handle: only when collapsed. Placed FIRST in DOM
-             order so it sits at the leftmost position in the flex
-             row. Click to restore the left pane at its previous
-             width (leftPanePercent ref is preserved across collapse). -->
-        <button
-          v-if="isLeftPaneCollapsed"
-          type="button"
-          class="file-browser-expand-handle"
-          :title="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
-          :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
-          @click="isLeftPaneCollapsed = false"
-        >
-          <v-icon size="16">mdi-chevron-double-right</v-icon>
-        </button>
-
-        <!-- Left pane wrapper: holds the entry list AND the collapse
-             button. `position: relative` so the absolutely-positioned
-             collapse button anchors to the pane's top-right. v-show
-             preserves the inline `width` style so collapse ↔ expand
-             animations are smooth. -->
-        <div
-          v-show="!isLeftPaneCollapsed"
-          class="file-browser-pane-left"
-          :style="{ width: leftPanePercent + '%' }"
-        >
-          <FileBrowserEntryList
-            :state="dirComposable.state.value"
-            :selected-path="previewPath"
-            @navigate="onEntryNavigate"
-          />
-          <button
-            v-if="previewPath"
-            type="button"
-            class="file-browser-collapse-btn"
-            :title="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
-            :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
-            @click="isLeftPaneCollapsed = true"
-          >
-            <v-icon size="14">mdi-chevron-double-left</v-icon>
-          </button>
-        </div>
-
-        <div
-          v-show="!isLeftPaneCollapsed"
-          class="file-browser-divider"
-          role="separator"
-          aria-orientation="vertical"
-          :aria-valuenow="Math.round(leftPanePercent)"
-          aria-valuemin="15"
-          aria-valuemax="70"
-          @mousedown="startResize"
-        />
-
-        <!-- Right pane: when collapsed, suppress the inline width
-             (rely on flex: 1 1 auto to fill the remaining space
-             after the expand handle). Otherwise size to the
-             complement of leftPanePercent. -->
-        <FileBrowserFilePreview
-          v-if="previewPath"
-          class="file-browser-pane-right"
-          :style="isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }"
-          :state="previewComposable.state.value"
-          :is-dark="!!isDark"
-          @navigate-target="onPreviewTargetNavigate"
-          @retry="() => previewComposable.refresh()"
-        />
-        <div
-          v-else
-          class="file-browser-pane-right file-browser-preview-empty"
-          :style="isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }"
-        >
-          <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
-          <span class="preview-hint">
-            {{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}
-          </span>
-        </div>
+    <SearchPanel
+      v-if="props.searchOpen"
+      :model-value="props.searchOpen"
+      :worktree="props.worktree ?? null"
+      :umo="props.umo ?? null"
+      @update:model-value="emit('update:searchOpen', $event)"
+      @open-file="emit('open-file', $event)"
+    />
+    <template v-if="!props.searchOpen">
+      <div v-if="!spcodeStatus.status.value.loaded" class="file-browser-empty">
+        <v-icon size="36" color="grey">mdi-folder-open-outline</v-icon>
+        <span class="empty-text">{{
+          tm("spcodeProjectLoad.fileBrowser.placeholder")
+        }}</span>
       </div>
+
+      <template v-else>
+        <FileBrowserBreadcrumb
+          :current-path="breadcrumbPath"
+          :root-path="rootPath"
+          @navigate="onBreadcrumbNavigate"
+        />
+
+        <div
+          ref="bodyRef"
+          class="file-browser-body"
+          :class="{
+            resizing: isResizing,
+            'left-collapsed': isLeftPaneCollapsed,
+          }"
+        >
+          <!-- Expand handle: only when collapsed. Placed FIRST in DOM
+               order so it sits at the leftmost position in the flex
+               row. Click to restore the left pane at its previous
+               width (leftPanePercent ref is preserved across collapse). -->
+          <button
+            v-if="isLeftPaneCollapsed"
+            type="button"
+            class="file-browser-expand-handle"
+            :title="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
+            :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
+            @click="isLeftPaneCollapsed = false"
+          >
+            <v-icon size="16">mdi-chevron-double-right</v-icon>
+          </button>
+
+          <!-- Left pane wrapper: holds the entry list AND the collapse
+               button. `position: relative` so the absolutely-positioned
+               collapse button anchors to the pane's top-right. v-show
+               preserves the inline `width` style so collapse ↔ expand
+               animations are smooth. -->
+          <div
+            v-show="!isLeftPaneCollapsed"
+            class="file-browser-pane-left"
+            :style="{ width: leftPanePercent + '%' }"
+          >
+            <FileBrowserEntryList
+              :state="dirComposable.state.value"
+              :selected-path="previewPath"
+              @navigate="onEntryNavigate"
+            />
+            <button
+              v-if="previewPath"
+              type="button"
+              class="file-browser-collapse-btn"
+              :title="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
+              :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
+              @click="isLeftPaneCollapsed = true"
+            >
+              <v-icon size="14">mdi-chevron-double-left</v-icon>
+            </button>
+          </div>
+
+          <div
+            v-show="!isLeftPaneCollapsed"
+            class="file-browser-divider"
+            role="separator"
+            aria-orientation="vertical"
+            :aria-valuenow="Math.round(leftPanePercent)"
+            aria-valuemin="15"
+            aria-valuemax="70"
+            @mousedown="startResize"
+          />
+
+          <!-- Right pane: when collapsed, suppress the inline width
+               (rely on flex: 1 1 auto to fill the remaining space
+               after the expand handle). Otherwise size to the
+               complement of leftPanePercent. -->
+          <FileBrowserFilePreview
+            v-if="previewPath"
+            class="file-browser-pane-right"
+            :style="
+              isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }
+            "
+            :state="previewComposable.state.value"
+            :is-dark="!!isDark"
+            @navigate-target="onPreviewTargetNavigate"
+            @retry="() => previewComposable.refresh()"
+          />
+          <div
+            v-else
+            class="file-browser-pane-right file-browser-preview-empty"
+            :style="
+              isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }
+            "
+          >
+            <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
+            <span class="preview-hint">
+              {{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}
+            </span>
+          </div>
+        </div>
+      </template>
     </template>
   </div>
 </template>
@@ -321,7 +358,10 @@ onBeforeUnmount(() => {
 .file-browser-pane-right,
 .file-browser-divider,
 .file-browser-expand-handle {
-  transition: width 0.2s ease, flex-basis 0.2s ease, padding 0.2s ease;
+  transition:
+    width 0.2s ease,
+    flex-basis 0.2s ease,
+    padding 0.2s ease;
 }
 .file-browser-body.resizing .file-browser-pane-left,
 .file-browser-body.resizing .file-browser-pane-right,
@@ -350,7 +390,9 @@ onBeforeUnmount(() => {
   cursor: col-resize;
   flex-shrink: 0;
   position: relative;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 .file-browser-divider:hover,
 .file-browser-divider:active {
@@ -379,7 +421,10 @@ onBeforeUnmount(() => {
   color: rgba(var(--v-theme-on-surface), 0.55);
   cursor: pointer;
   padding: 0;
-  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease,
+    border-color 0.1s ease;
 }
 .file-browser-collapse-btn:hover,
 .file-browser-collapse-btn:focus-visible {
@@ -403,7 +448,10 @@ onBeforeUnmount(() => {
   color: rgba(var(--v-theme-on-surface), 0.5);
   cursor: pointer;
   padding: 0;
-  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease,
+    border-color 0.1s ease;
 }
 .file-browser-expand-handle:hover,
 .file-browser-expand-handle:focus-visible {
@@ -422,7 +470,9 @@ onBeforeUnmount(() => {
   min-height: 200px;
   color: rgba(var(--v-theme-on-surface), 0.6);
 }
-.empty-text { font-size: 14px; }
+.empty-text {
+  font-size: 14px;
+}
 
 /* Mobile: stack the two panes vertically. The divider becomes a
    thin horizontal bar; on touch devices there's no drag, so the
