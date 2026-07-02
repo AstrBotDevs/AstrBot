@@ -96,10 +96,12 @@
 ```
 astrbot_plugin_spcode_toolkit/
 ├── tools/webapi/
-│   ├── file_search.py             # 新增：POST /spcode/file-search handler
-│   └── __init__.py                # 改：注册新路由到 ROUTES
+│   ├── file_search.py             # 新增：POST /spcode/file-search handler (content)
+│   ├── file_name_search.py        # 新增：POST /spcode/file-name-search handler (filename)
+│   └── __init__.py                # 改：注册 2 个新路由到 ROUTES
 ├── tests/
-│   └── test_file_search.py        # 新增：单测
+│   ├── test_file_search.py        # 新增：content search 单测
+│   └── test_file_name_search.py   # 新增：filename search 单测
 ├── (conf_schema.json 2026-07-02 修订后无需修改)
 └── (main.py 2026-07-02 修订后无需修改)
 ```
@@ -1253,6 +1255,64 @@ Content-Type: application/json
 - 304：不适用（搜索不缓存）
 - 5xx：未捕获异常（仅灾难性情况，spec 内不允许）
 
+### 5.6 `/spcode/file-name-search` —— 2026-07-02 追加
+
+> 按文件名匹配而非内容。复用 §5.1 请求 schema；响应 schema 不同。
+
+#### 5.6.1 请求
+
+同 §5.1（`umo` / `worktree` / `pattern` / `path_filter` / `glob_filter` / `case_sensitive` / `regex` / `max_results` / `context_chars`）。注：`context_chars` 在 filename 模式下无意义，handler 忽略。
+
+#### 5.6.2 响应（成功）
+
+```jsonc
+{
+  "status": "ok",
+  "data": {
+    "umo": "FriendMessage:webchat!astrbot!xxx",
+    "worktree": "C:/path/to/repo",
+    "pattern": "auth",
+    "result_count": 5,
+    "max_results": 200,
+    "truncated": false,
+    "elapsed_ms": 12,
+    "results": [
+      {
+        "path": "src/api/auth.py",       // repo-relative, POSIX 分隔符
+        "name": "auth.py",                // basename
+        "type": "file",                   // "file" | "dir"
+        "size": 1234                      // bytes;directory 时为 0
+      },
+      {
+        "path": "src/api/auth/",
+        "name": "auth",
+        "type": "dir",
+        "size": 0
+      }
+    ]
+  }
+}
+```
+
+#### 5.6.3 响应（错误）
+
+与 §5.3 同一 ReasonCode 表（`invalid_pattern` / `pattern_too_long` / `path_unsafe_filter` / `search_timeout` / `search_unavailable` / `no_project_loaded` / `worktree_invalid` / `directory_missing` / `not_a_git_repo`），但响应体无 `results` 字段。
+
+#### 5.6.4 实现说明
+
+- **后端技术**：`subprocess.run(["rg", "--files", directory, ...])` 拿文件列表（`--files-with-matches` 不适用——这是路径名搜不是内容搜）；rg 已在 AstrBot 环境中，无需配置。
+- **.gitignore 尊重**：由 `rg --files` 自动处理。
+- **glob 过滤**：传 `-g GLOB` 给 rg（不是 Python 端过滤）。
+- **路径匹配**：
+  - `regex=False`（默认）：`re.escape(pattern)` 后匹配 basename（或 path，看实现）
+  - `regex=True`：pattern 作为 regex
+  - `case_sensitive=False`（默认）：`re.IGNORECASE`
+  - `case_sensitive=True`：`re.NOFLAG`
+- **匹配目标**：默认匹配 basename；`path_filter` 限定子目录后在该子目录内匹配。
+- **path_filter**：与 file-search 一致，4-step 防御（`_validate_repo_relative_file`）。
+- **超时**：5s（`asyncio.wait_for` wrap `asyncio.to_thread`，与 file-search 一致）。
+- **python_ripgrep 不适用**：库只暴露 `search()`（content-only），不支持 `--files`。这是新增的独立端点，不复用 file-search 的实现。
+
 ---
 
 ## 6. 配置与部署
@@ -1382,3 +1442,4 @@ Content-Type: application/json
 |---|---|---|
 | 2026-07-02 | elecvoid243 | 初稿 |
 | 2026-07-02 | elecvoid243 | 修订：后端从 rg CLI + Python 兜底改为 `python_ripgrep` 库（与 `astrbot_grep_tool` 一致）。删除 main.py rg probe、删除 `_conf_schema.json` 的 `search.rg_path` 字段、删除 `SEARCH_UNAVAILABLE` 兜底语义（仅保留"库未安装或 rg 调用失败"窄义）。响应 `backend` 字段删除。 |
+| 2026-07-02 | elecvoid243 | 追加：新增 `POST /spcode/file-name-search` 端点（按文件名匹配），与 `/spcode/file-search` 并列。复用请求 schema，响应 schema 不同（`{path, name, type, size}`）。实现用 `rg --files`（库 `python_ripgrep` 不支持 `--files`）。详见 §5.6。 |
