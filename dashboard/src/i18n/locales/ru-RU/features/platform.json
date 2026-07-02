@@ -181,6 +181,9 @@
     "created": "Настройка завершена",
     "startFailed": "Не удалось начать QR настройку",
     "pollFailed": "Не удалось проверить статус QR настройки",
+    "platformIdLabel": "ID бота",
+    "platformIdRequired": "ID бота обязателен",
+    "platformIdInvalid": "ID бота не может содержать пробелы, ':' или '!'",
     "mode": {
       "title": "Выберите способ создания",
       "scan": "Создать через QR",
