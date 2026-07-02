@@ -389,10 +389,15 @@ class FakePlatform:
         return True
 
     async def webhook_callback(self, request_obj):
+        payload = await request_obj.get_json(silent=True)
+        if payload.get("response_mode") == "plain":
+            return "success"
+        if payload.get("response_mode") == "tuple":
+            return "accepted", 202, {"Content-Type": "text/plain"}
         return {
             "webhook_uuid": self.config["webhook_uuid"],
             "method": request_obj.method,
-            "payload": await request_obj.get_json(silent=True),
+            "payload": payload,
         }
 
     async def send_by_session(self, session, message_chain) -> None:
@@ -3294,10 +3299,35 @@ async def test_v1_platform_webhook_is_public_route(
     )
 
     assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["data"] == {
+    assert response.json() == {
         "webhook_uuid": "demo-hook",
         "method": "POST",
         "payload": {"challenge": "ping"},
     }
+
+
+@pytest.mark.asyncio
+async def test_v1_platform_webhook_preserves_plain_response(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.post(
+        "/api/v1/webhooks/platforms/demo-hook",
+        json={"response_mode": "plain"},
+    )
+
+    assert response.status_code == 200
+    assert response.text == "success"
+
+
+@pytest.mark.asyncio
+async def test_v1_platform_webhook_preserves_tuple_response(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.post(
+        "/api/v1/webhooks/platforms/demo-hook",
+        json={"response_mode": "tuple"},
+    )
+
+    assert response.status_code == 202
+    assert response.headers["content-type"] == "text/plain"
+    assert response.text == "accepted"
