@@ -395,6 +395,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
         message_chain: MessageChain,
     ) -> None:
         await super().send_by_session(session, message_chain)
+        raise Exception("微信公众号不支持发送主动消息")
 
     @override
     def meta(self) -> PlatformMetadata:
@@ -403,7 +404,7 @@ class WeixinOfficialAccountPlatformAdapter(Platform):
             "微信公众平台 适配器",
             id=self.config.get("id", "weixin_official_account"),
             support_streaming_message=False,
-            support_proactive_message=False,
+            support_proactive_message=True,
         )
 
     @override

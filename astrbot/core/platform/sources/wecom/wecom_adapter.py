@@ -272,15 +272,13 @@ class WecomPlatformAdapter(Platform):
     ) -> None:
         # 企业微信客服不支持主动发送
         if hasattr(self.client, "kf_message"):
-            logger.warning("企业微信客服模式不支持 send_by_session 主动发送。")
             await super().send_by_session(session, message_chain)
-            return
+            raise Exception("企业微信客服模式不支持 send_by_session 主动发送。")
         if not self.agent_id:
-            logger.warning(
+            await super().send_by_session(session, message_chain)
+            raise Exception(
                 f"send_by_session 失败：无法为会话 {session.session_id} 推断 agent_id。",
             )
-            await super().send_by_session(session, message_chain)
-            return
 
         message_obj = AstrBotMessage()
         message_obj.self_id = self.agent_id
@@ -303,7 +301,7 @@ class WecomPlatformAdapter(Platform):
             "wecom 适配器",
             id=self.config.get("id", "wecom"),
             support_streaming_message=False,
-            support_proactive_message=False,
+            support_proactive_message=True,
         )
 
     @override
