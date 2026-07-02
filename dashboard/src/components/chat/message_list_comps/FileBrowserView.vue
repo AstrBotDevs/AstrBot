@@ -70,9 +70,31 @@ const previewComposable = useSpcodeFileBrowser(
 // Breadcrumb path: when previewing a file, show the FILE'S path so
 // the user can see "root / src / file.ts" in the breadcrumb instead
 // of just "root / src". When browsing a directory, show currentPath.
-const breadcrumbPath = computed<string>(
-  () => props.previewPath ?? props.currentPath,
-);
+//
+// 2026-07-02 revision: the search composable returns REPO-RELATIVE
+// forward-slash paths (see plugin/.../file_search.py and
+// file_name_search.py — they call os.path.relpath +
+// .replace(os.sep, "/") on the ripgrep output). The file-list and
+// file-preview APIs both accept relative paths, so `previewPath`
+// and `currentPath` are kept as-is for those consumers. But the
+// breadcrumb needs an absolute path to render the
+// "项目根 / astrbot / core / platform / file.py" hierarchy, so
+// re-anchor the relative path against rootPath here. The
+// FileBrowserBreadcrumb's case-insensitive root match would
+// otherwise fall through to the basename-only fallback, leaving
+// the user with no way to navigate to ancestor directories.
+const breadcrumbPath = computed<string>(() => {
+  const rel = props.previewPath ?? props.currentPath;
+  if (!rel) return "";
+  // Already absolute (Unix /foo, Windows \foo, or C:\foo / C:/foo).
+  // The regex matches a leading slash, backslash, or drive letter
+  // followed by a separator.
+  if (/^([/\\]|[a-zA-Z]:[/\\])/.test(rel)) return rel;
+  if (!props.rootPath) return rel;
+  return (
+    props.rootPath.replace(/[\\/]+$/, "") + "/" + rel.replace(/^[\\/]+/, "")
+  );
+});
 
 /** Compute the parent directory of a path (POSIX + Windows separators). */
 function parentOf(p: string): string {
