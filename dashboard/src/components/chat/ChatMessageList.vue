@@ -395,7 +395,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import axios from "axios";
 import { fileApi } from "@/api/v1";
 import { setCustomComponents } from "markstream-vue";
@@ -414,7 +414,12 @@ import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import InteractiveChoiceBox from "@/components/chat/message_list_comps/InteractiveChoiceBox.vue";
-import type { InteractiveChoicePart } from "@/composables/parseInteractiveChoice";
+import {
+  isInteractiveChoicePayload,
+  truncateInteractiveChoice,
+  type InteractiveChoicePart,
+} from "@/composables/parseInteractiveChoice";
+import { useInteractiveChoiceStore } from "@/stores/interactiveChoice";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import {
@@ -445,6 +450,13 @@ const props = withDefaults(
     editingMessageId?: string | number | null;
     editDraft?: string;
     savingEdit?: boolean;
+    /**
+     * Current conversation unified_msg_origin. Optional — when supplied,
+     * ChatMessageList will call `store.reconcile(umo)` on mount and whenever
+     * the value changes, so a tab-switch picks up server-side pending
+     * interactive choices without depending on a fresh SSE event.
+     */
+    currentUmo?: string;
   }>(),
   {
     isDark: false,
@@ -458,6 +470,7 @@ const props = withDefaults(
     editingMessageId: null,
     editDraft: "",
     savingEdit: false,
+    currentUmo: "",
   },
 );
 
@@ -475,7 +488,7 @@ const emit = defineEmits<{
   openThread: [thread: ChatThread];
   openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
   openRefs: [refs: unknown];
-  submitChoice: [text: string];
+  submitChoice: [requestId: string, payload: { choice_id: string; free_text: string }];
 }>();
 
 setCustomComponents("chat-message", {
@@ -494,14 +507,88 @@ const selectedRefs = ref<Record<string, unknown> | null>(null);
 const listRoot = ref<HTMLElement | null>(null);
 const avatarSize = computed(() => (props.variant === "thread" ? 36 : 56));
 
+// ── Pinia store: blocking InteractiveChoice (Task 13/15) ────────────────
+// Spec §5.2: store mirrors any `interactive_choice` parts surfaced into
+// `props.messages` so a tab-switch / refresh keeps the choice box visible
+// until the user actually submits. Submit is handled in-place (Task 15):
+// parent no longer needs to receive a bubbled submit event — the store
+// action does the actual POST to /api/chat/interactive-choice/{request_id}.
+const interactiveChoiceStore = useInteractiveChoiceStore();
+
 function isUserMessage(message: ChatRecord) {
   return messageContent(message).type === "user";
 }
 
-function onInteractiveChoiceSubmit(text: string) {
-  // 冒泡到父组件(Chat.vue)处理实际发送(spec §4.5)
-  emit("submitChoice", text);
+/**
+ * Task 15 — submit handler now consumes the v1.0 (requestId, payload)
+ * signature emitted by `InteractiveChoiceBox` (Task 14). The store action
+ * removes the entry optimistically on success; failures keep the local
+ * copy so the UI can be retried by the user.
+ */
+async function onInteractiveChoiceSubmit(
+  requestId: string,
+  payload: { choice_id: string; free_text: string },
+): Promise<void> {
+  try {
+    await interactiveChoiceStore.submitChoice(requestId, payload);
+  } catch (e) {
+    console.error("[interactiveChoice] submit failed:", e);
+  }
 }
+
+/**
+ * Mirror any `interactive_choice` parts present in `props.messages` into
+ * the Pinia store. This is the "SSE → store" wiring for the chat-history
+ * path: a part appearing in messages (whether from an initial load, from
+ * `useMessages.ts` pushing a streamed part, or from a tab-switch back to a
+ * session with a still-pending choice) becomes a keyed entry in
+ * `activeChoices`, ensuring the box survives render passes.
+ *
+ * Defensive dedup by request_id avoids re-mirroring the same part on
+ * every reactive update.
+ */
+function mirrorInteractiveChoiceParts(records: ChatRecord[]): void {
+  for (const message of records) {
+    for (const part of messageParts(message)) {
+      if (!isInteractiveChoicePayload(part)) continue;
+      if (typeof part.request_id !== "string" || !part.request_id) continue;
+      if (interactiveChoiceStore.activeChoices[part.request_id]) continue;
+      interactiveChoiceStore.addChoice(truncateInteractiveChoice(part));
+    }
+  }
+}
+
+onMounted(() => {
+  // Spec §5.2: hydrate from localStorage so a hard refresh during a
+  // pending choice does not lose the prompt.
+  interactiveChoiceStore.hydrate();
+  // Mirror whatever interactive_choice parts the parent already loaded.
+  mirrorInteractiveChoiceParts(props.messages);
+  // Spec §5.2: reconcile against the backend's view of pending requests
+  // for this conversation so a tab-switch catches up.
+  if (props.currentUmo) {
+    void interactiveChoiceStore.reconcile(props.currentUmo);
+  }
+});
+
+// React to (a) new parts streamed in via the chat SSE pipeline and
+// (b) conversation switches that change the current umo.
+watch(
+  () => props.messages,
+  (next) => {
+    mirrorInteractiveChoiceParts(next);
+  },
+  { deep: true },
+);
+
+watch(
+  () => props.currentUmo,
+  (nextUmo) => {
+    if (nextUmo) {
+      void interactiveChoiceStore.reconcile(nextUmo);
+    }
+  },
+);
 
 /**
  * 判定本 bot message 之后是否出现了 user message(用于 InteractiveChoiceBox 的 isIgnored)。
