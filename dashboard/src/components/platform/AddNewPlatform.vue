@@ -88,6 +88,17 @@
                       v-if="larkCreationMode === 'scan'"
                       class="registration-inline mt-3"
                     >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="larkCreationMode === 'scan'"
@@ -140,6 +151,17 @@
                       v-if="dingtalkCreationMode === 'scan'"
                       class="registration-inline mt-3"
                     >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="dingtalkCreationMode === 'scan'"
@@ -195,6 +217,17 @@
                       v-if="qqOfficialCreationMode === 'scan'"
                       class="registration-inline mt-3"
                     >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="qqOfficialCreationMode === 'scan'"
@@ -229,8 +262,19 @@
 
                   <div
                     v-else-if="isWeixinOcPlatform"
-                    class="weixin-oc-registration-inline mt-4"
+                    class="registration-inline mt-4"
                   >
+                    <v-text-field
+                      :model-value="selectedPlatformConfig.id || ''"
+                      :label="tm('registrationAction.platformIdLabel')"
+                      :error="Boolean(scanPlatformIdError)"
+                      :error-messages="scanPlatformIdError"
+                      variant="outlined"
+                      density="compact"
+                      hide-details="auto"
+                      class="registration-platform-id-field"
+                      @update:model-value="setScanPlatformId"
+                    />
                     <PlatformRegistrationAction
                       :platform-config="selectedPlatformConfig"
                       :active="isWeixinOcPlatform"
@@ -839,6 +883,7 @@ export default {
       larkCreationMode: "",
       dingtalkCreationMode: "",
       qqOfficialCreationMode: "",
+      scanPlatformIdCustomized: false,
 
       aBConfigRadioVal: "0",
       selectedAbConfId: "default",
@@ -1054,6 +1099,16 @@ export default {
         this.selectedPlatformConfig?.type,
       );
     },
+    scanPlatformIdError() {
+      const platformId = String(this.selectedPlatformConfig?.id || "");
+      if (!platformId) {
+        return this.tm("registrationAction.platformIdRequired");
+      }
+      if (!this.isPlatformIdValid(platformId)) {
+        return this.tm("registrationAction.platformIdInvalid");
+      }
+      return "";
+    },
   },
   watch: {
     selectedPlatformType(newType) {
@@ -1064,11 +1119,13 @@ export default {
         this.larkCreationMode = "";
         this.dingtalkCreationMode = "";
         this.qqOfficialCreationMode = "";
+        this.scanPlatformIdCustomized = false;
       } else {
         this.selectedPlatformConfig = null;
         this.larkCreationMode = "";
         this.dingtalkCreationMode = "";
         this.qqOfficialCreationMode = "";
+        this.scanPlatformIdCustomized = false;
       }
     },
     selectedAbConfId(newConfigId) {
@@ -1156,6 +1213,7 @@ export default {
       this.larkCreationMode = "";
       this.dingtalkCreationMode = "";
       this.qqOfficialCreationMode = "";
+      this.scanPlatformIdCustomized = false;
 
       this.aBConfigRadioVal = "0";
       this.selectedAbConfId = "default";
@@ -1472,6 +1530,14 @@ export default {
       this.$emit("show-toast", { message: message, type: "error" });
     },
 
+    setScanPlatformId(value) {
+      if (!this.selectedPlatformConfig) {
+        return;
+      }
+      this.scanPlatformIdCustomized = true;
+      this.selectedPlatformConfig.id = String(value || "");
+    },
+
     buildRandomPlatformIdSuffix() {
       const letters = "abcdefghijklmnopqrstuvwxyz";
       let suffix = "_";
@@ -1490,6 +1556,9 @@ export default {
 
     handlePlatformRegistrationCreated(data) {
       if (!this.selectedPlatformConfig || !data) {
+        return;
+      }
+      if (this.scanPlatformIdCustomized) {
         return;
       }
       const currentId = String(this.selectedPlatformConfig.id || "").trim();
@@ -1968,8 +2037,14 @@ export default {
 
 .registration-inline {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
   width: 320px;
+  gap: 8px;
+}
+
+.registration-platform-id-field {
+  width: 300px;
 }
 </style>
