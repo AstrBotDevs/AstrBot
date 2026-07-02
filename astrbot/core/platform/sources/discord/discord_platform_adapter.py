@@ -565,7 +565,7 @@ class DiscordPlatformAdapter(Platform):
             return None
 
         # Discord 斜杠指令名称规范
-        if not re.match(r"^[a-z0-9_-]{1,32}$", cmd_name):
+        if cmd_name != cmd_name.lower() or not re.match(r"^[-_'\\w]{1,32}$", cmd_name):
             logger.debug(f"[Discord] Skipping invalid slash command format: {cmd_name}")
             return None
 
