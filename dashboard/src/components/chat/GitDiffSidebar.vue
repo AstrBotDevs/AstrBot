@@ -74,6 +74,8 @@ const STORAGE_KEYS = {
     "astrbot.spcode.gitDiffSidebar.fileBrowserCurrentPath",
   selectedWorktree: "astrbot.spcode.gitDiffSidebar.selectedWorktree",
   selectedScope: "astrbot.spcode.gitDiffSidebar.selectedScope",
+  // 2026-07-02 sidebar-search: search-panel collapsed state.
+  searchOpen: "astrbot.spcode.gitDiffSidebar.searchOpen",
 } as const;
 
 function safeGetItem(key: string): string | null {
@@ -104,6 +106,13 @@ function loadSelectedScope(): GitDiffScope {
   const v = safeGetItem(STORAGE_KEYS.selectedScope);
   if (v === "unstaged" || v === "staged" || v === "all") return v;
   return DEFAULT_SCOPE;
+}
+
+// 2026-07-02 sidebar-search: only "true" string is accepted as true;
+// any other value (including null/absent) means the panel starts
+// collapsed (default).
+function loadSearchOpen(): boolean {
+  return safeGetItem(STORAGE_KEYS.searchOpen) === "true";
 }
 
 // Debounced writer for currentPath (spec §5.1 lines 1273-1280).
@@ -195,6 +204,15 @@ const fileBrowserCurrentPath = ref<string>(loadFileBrowserCurrentPath());
 // breadcrumb clicks, and any directory navigation.
 const fileBrowserPreviewPath = ref<string | null>(null);
 
+// 2026-07-02 sidebar-search: search panel toggle for the Files view.
+// Persisted so the panel stays open/closed across page reloads (matches
+// the other sidebar state above). Query/results are intentionally NOT
+// persisted — privacy + stale-state concerns (spec §4.5).
+const searchOpen = ref<boolean>(loadSearchOpen());
+watch(searchOpen, (v) => safeSetItem(STORAGE_KEYS.searchOpen, String(v)), {
+  flush: "post",
+});
+
 // Hydrate selectedScope from localStorage (validated; fall back to default).
 const _persistedScope = loadSelectedScope();
 if (_persistedScope !== DEFAULT_SCOPE) selectedScope.value = _persistedScope;
@@ -227,9 +245,7 @@ const mainWorktreePath = computed(
 // fallback, fileBrowserCurrentPath would collapse to "" and
 // useSpcodeFileBrowser's watcher would skip the fetch
 // (`if (!path) return`), leaving the Files view empty.
-const projectRoot = computed(
-  () => spcodeStatus.status.value.directory,
-);
+const projectRoot = computed(() => spcodeStatus.status.value.directory);
 
 // Persist viewMode / selectedScope / selectedWorktree on every change.
 // fileBrowserCurrentPath uses persistCurrentPath (300ms debounce).
@@ -410,8 +426,12 @@ const removeDialogOpen = ref(false);
 const lockDialogOpen = ref(false);
 const confirmUnlockOpen = ref(false);
 const confirmUnlockPath = ref<string | null>(null);
-const lockDialogTarget = ref<{ path: string; branch: string | null } | null>(null);
-const removeDialogTarget = ref<{ path: string; branch: string | null } | null>(null);
+const lockDialogTarget = ref<{ path: string; branch: string | null } | null>(
+  null,
+);
+const removeDialogTarget = ref<{ path: string; branch: string | null } | null>(
+  null,
+);
 const dirtyCount = ref<number | null>(null);
 const isRemoving = ref(false);
 const isLocking = ref(false);
@@ -498,6 +518,46 @@ function closeContextMenuOnOutside(e: MouseEvent): void {
 function closeContextMenuOnEscape(e: KeyboardEvent): void {
   if (e.key === "Escape" && contextMenu.value.open) {
     closeContextMenu();
+  }
+}
+
+// ── 2026-07-02 sidebar-search: keyboard shortcuts ────────────────
+// Cmd/Ctrl-F toggles the search panel when the sidebar is visible
+// AND the user is in the Files view. We intercept (preventDefault)
+// because the browser's default Cmd-F opens a native "find in page"
+// overlay that fights with our search — the user has explicitly
+// asked for in-file-tree search by clicking the magnifying glass
+// or by pressing Cmd-F while focused inside the sidebar.
+//
+// Escape closes the panel, but ONLY as a fallback: SearchPanel
+// already handles its own Esc (stopPropagation). If focus is still
+// inside .search-panel, let SearchPanel's handler run first; if the
+// click somehow escapes the panel (e.g. focus drifted to the bread-
+// crumb after a result click), we close from here so the panel
+// doesn't stick around.
+function onSearchKeydown(e: KeyboardEvent): void {
+  if (!props.modelValue) return;
+  const isMod = e.metaKey || e.ctrlKey;
+  if (isMod && (e.key === "f" || e.key === "F")) {
+    // Don't steal Cmd-F from diff/history views — the user is
+    // probably looking for a line in a diff hunk, in which case
+    // "find in page" / native search is more useful than our panel.
+    if (viewMode.value !== "files") return;
+    e.preventDefault();
+    searchOpen.value = !searchOpen.value;
+    if (searchOpen.value) {
+      // Focus the search input after Vue mounts it (v-if=true branch).
+      nextTick(() => {
+        document
+          .querySelector<HTMLInputElement>(".search-panel-input")
+          ?.focus();
+      });
+    }
+  } else if (e.key === "Escape" && searchOpen.value) {
+    const target = e.target as HTMLElement | null;
+    if (target && !target.closest(".search-panel")) {
+      searchOpen.value = false;
+    }
   }
 }
 
@@ -660,6 +720,12 @@ onMounted(() => {
   // v-menu does internally with its overlay).
   document.addEventListener("mousedown", closeContextMenuOnOutside, true);
   document.addEventListener("keydown", closeContextMenuOnEscape, true);
+  // 2026-07-02 sidebar-search: Cmd/Ctrl-F + Escape handlers. Attached
+  // to window in bubble phase so the browser's native Cmd-F handler
+  // (which also runs in bubble) sees the same event we do — we only
+  // preventDefault when our sidebar is visible + in files view, so
+  // outside of those contexts the native find-in-page still works.
+  window.addEventListener("keydown", onSearchKeydown);
 });
 
 // ── Worktree polling (added 2026-06-25, elecvoid243) ──────────────
@@ -1004,9 +1070,18 @@ async function onCreateSubmit(params: WorktreeAddParams): Promise<void> {
     // 用 classifyWorktreeReason 走统一错误处理
     const meta = classifyWorktreeReason(result.reason, "add");
     const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
-    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
-    lastCreateError.value = { reason: result.reason, stderr: result.stderr ?? "" };
-    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    lastCreateError.value = {
+      reason: result.reason,
+      stderr: result.stderr ?? "",
+    };
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
   }
 }
 
@@ -1056,8 +1131,14 @@ async function onLockSubmit(reason: string | null): Promise<void> {
   } else {
     const meta = classifyWorktreeReason(result.reason, "lock");
     const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
-    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
-    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
   }
 }
 
@@ -1111,7 +1192,8 @@ async function onConfirmRemove(force: boolean): Promise<void> {
     if (selectedWorktree.value === target.path) {
       selectedWorktree.value = null;
       // projectRoot.value is string|null; coerce to string with final fallback
-      fileBrowserCurrentPath.value = mainWorktreePath.value ?? projectRoot.value ?? "";
+      fileBrowserCurrentPath.value =
+        mainWorktreePath.value ?? projectRoot.value ?? "";
     }
     removeDialogOpen.value = false;
     removeDialogTarget.value = null;
@@ -1125,8 +1207,14 @@ async function onConfirmRemove(force: boolean): Promise<void> {
   } else {
     const meta = classifyWorktreeReason(result.reason, "remove");
     const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
-    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
-    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
   }
 }
 
@@ -1153,8 +1241,14 @@ async function onConfirmUnlock(): Promise<void> {
   } else {
     const meta = classifyWorktreeReason(result.reason, "unlock");
     const key = `spcodeProjectLoad.diffSidebar.${meta.i18nKey}`;
-    const message = meta.withReason ? tm(key, { reason: result.reason }) : tm(key);
-    showSnackbar(message, meta.color, meta.withStderr ? result.stderr : undefined);
+    const message = meta.withReason
+      ? tm(key, { reason: result.reason })
+      : tm(key);
+    showSnackbar(
+      message,
+      meta.color,
+      meta.withStderr ? result.stderr : undefined,
+    );
   }
 }
 
@@ -1185,6 +1279,35 @@ function onFileBrowserNavigate(payload: {
 }): void {
   fileBrowserCurrentPath.value = payload.dirPath;
   fileBrowserPreviewPath.value = payload.previewPath;
+}
+
+// 2026-07-02 sidebar-search: handle a "click this result" from
+// SearchPanel (forwards via FileBrowserView). payload.path is
+// ABSOLUTE (the search composable joins the worktree root with the
+// repo-relative match), payload.line is the 1-indexed match line —
+// the preview pane scrolls there.
+//
+// Side effects:
+//   1. fileBrowserPreviewPath = payload.path — FileBrowserView reacts
+//      and triggers content fetch + scroll-to-line.
+//   2. fileBrowserCurrentPath = dirOf(payload.path) — so the breadcrumb
+//      shows the file's directory rather than the file itself, AND so
+//      the left pane stays usable as a sibling listing.
+//   3. searchOpen is left ALONE — the user might want to refine the
+//      query after opening a result. Closing it here would be a UX
+//      regression vs. every other search UI (VS Code, IntelliJ, ...).
+function onFileOpen(payload: { path: string; line: number }): void {
+  fileBrowserPreviewPath.value = payload.path;
+  // POSIX + Windows separator: strip the trailing filename. Use a
+  // single regex that matches either separator so the same code
+  // works for both *nix and Windows worktree paths.
+  const dir = payload.path.replace(/[\\/][^\\/]+$/, "");
+  // Guard against degenerate empty dir (root file) and against an
+  // unnecessary write if we're already pointing at this directory
+  // (would re-trigger the persistCurrentPath debounce + a fetch).
+  if (dir && dir !== fileBrowserCurrentPath.value) {
+    fileBrowserCurrentPath.value = dir;
+  }
 }
 
 // Spec §3.2 data flow: GitDiffFileItem -> GitDiffBodyContent -> here.
@@ -1357,10 +1480,9 @@ async function onStagePaths(paths: string[]): Promise<void> {
     // tick to remove the row.
     await Promise.all([composable.refresh(), gitStatus.refresh()]);
     showSnackbar(
-      tm(
-        "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.successAll",
-        { count: paths.length },
-      ),
+      tm("spcodeProjectLoad.diffSidebar.gitWorkflow.stage.successAll", {
+        count: paths.length,
+      }),
       "success",
     );
     // Drop the toolbar's "暂存选中的 N 个文件" counter now that the
@@ -1561,10 +1683,9 @@ async function onUnstagePaths(paths: string[]): Promise<void> {
     stagedFiles.value = new Set(result.snapshot.files);
     await Promise.all([composable.refresh(), gitStatus.refresh()]);
     showSnackbar(
-      tm(
-        "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.successAll",
-        { count: paths.length },
-      ),
+      tm("spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.successAll", {
+        count: paths.length,
+      }),
       "success",
     );
     // Symmetric to onStagePaths: the bulk unstage succeeds, the
@@ -1739,12 +1860,14 @@ onBeforeUnmount(() => {
   // call after gitLog.dispose() since the two are independent.
   gitShow.dispose();
   if (persistCurrentPathTimer) {
-      clearTimeout(persistCurrentPathTimer);
-      persistCurrentPathTimer = null;
-    }
-    document.removeEventListener("mousedown", closeContextMenuOnOutside, true);
-    document.removeEventListener("keydown", closeContextMenuOnEscape, true);
-  });
+    clearTimeout(persistCurrentPathTimer);
+    persistCurrentPathTimer = null;
+  }
+  document.removeEventListener("mousedown", closeContextMenuOnOutside, true);
+  document.removeEventListener("keydown", closeContextMenuOnEscape, true);
+  // 2026-07-02 sidebar-search: tear down the Cmd/Ctrl-F handler.
+  window.removeEventListener("keydown", onSearchKeydown);
+});
 
 function toggleFile(path: string): void {
   const next = new Set(expandedSet.value);
@@ -2011,7 +2134,10 @@ const currentRoot = computed<string | null>(() => {
           <v-icon v-if="wt.isMain" size="12" class="git-diff-sidebar-tab-icon"
             >mdi-home</v-icon
           >
-          <v-icon v-else-if="wt.locked" size="12" class="git-diff-sidebar-tab-icon"
+          <v-icon
+            v-else-if="wt.locked"
+            size="12"
+            class="git-diff-sidebar-tab-icon"
             >mdi-lock</v-icon
           >
           <span class="git-diff-sidebar-tab-label">
@@ -2030,7 +2156,9 @@ const currentRoot = computed<string | null>(() => {
         <button
           type="button"
           class="git-diff-sidebar-tab-add"
-          :aria-label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButtonAria')"
+          :aria-label="
+            tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButtonAria')
+          "
           :title="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButton')"
           @click="openCreateDialog"
         >
@@ -2047,63 +2175,77 @@ const currentRoot = computed<string | null>(() => {
                      left corner of the viewport regardless of cursor position.
                      Manual positioning gives us deterministic behavior and a
                      single source of truth (contextMenuStyle computed). -->
-                <Teleport to="body">
-                  <div
-                    v-if="contextMenu.open"
-                    ref="contextMenuEl"
-                    class="worktree-context-menu"
-                    :style="contextMenuStyle"
-                    role="menu"
-                    :aria-label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.ariaLabel')"
-                    @click.stop
-                    @contextmenu.prevent
-                  >
-                    <v-list density="compact">
-                      <template v-if="contextMenu.wt && !contextMenu.wt.isMain">
-                        <!-- Lock/unlock toggle: never disabled. When the worktree
+        <Teleport to="body">
+          <div
+            v-if="contextMenu.open"
+            ref="contextMenuEl"
+            class="worktree-context-menu"
+            :style="contextMenuStyle"
+            role="menu"
+            :aria-label="
+              tm(
+                'spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.ariaLabel',
+              )
+            "
+            @click.stop
+            @contextmenu.prevent
+          >
+            <v-list density="compact">
+              <template v-if="contextMenu.wt && !contextMenu.wt.isMain">
+                <!-- Lock/unlock toggle: never disabled. When the worktree
                              is locked this button reads "unlock" and the click
                              opens the unlock confirm dialog; when unlocked it
                              reads "lock" and opens the lock-reason dialog.
                              Disabling it when locked would prevent the very
                              action it represents. -->
-                        <v-list-item @click="onLockClick(contextMenu.wt!)">
-                          <template #prepend>
-                            <v-icon>{{
-                              contextMenu.wt.locked ? "mdi-lock-open-variant" : "mdi-lock"
-                            }}</v-icon>
-                          </template>
-                          <v-list-item-title>{{
-                            contextMenu.wt.locked
-                              ? tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.unlock")
-                              : tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.lock")
-                          }}</v-list-item-title>
-                        </v-list-item>
-                        <!-- Remove: disabled only when locked (a locked worktree
+                <v-list-item @click="onLockClick(contextMenu.wt!)">
+                  <template #prepend>
+                    <v-icon>{{
+                      contextMenu.wt.locked
+                        ? "mdi-lock-open-variant"
+                        : "mdi-lock"
+                    }}</v-icon>
+                  </template>
+                  <v-list-item-title>{{
+                    contextMenu.wt.locked
+                      ? tm(
+                          "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.unlock",
+                        )
+                      : tm(
+                          "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.lock",
+                        )
+                  }}</v-list-item-title>
+                </v-list-item>
+                <!-- Remove: disabled only when locked (a locked worktree
                              must be unlocked before it can be removed). -->
-                        <v-list-item
-                          :disabled="!!contextMenu.wt.locked"
-                          @click="onRemoveClick(contextMenu.wt!)"
-                        >
-                          <template #prepend>
-                            <v-icon color="error">mdi-trash-can-outline</v-icon>
-                          </template>
-                          <v-list-item-title>{{
-                            tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.remove")
-                          }}</v-list-item-title>
-                        </v-list-item>
-                      </template>
-                      <template v-else>
-                        <v-list-item disabled>
-                          <v-list-item-title class="text-caption">
-                            {{
-                              tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.mainDisabled")
-                            }}
-                          </v-list-item-title>
-                        </v-list-item>
-                      </template>
-                    </v-list>
-                  </div>
-                </Teleport>
+                <v-list-item
+                  :disabled="!!contextMenu.wt.locked"
+                  @click="onRemoveClick(contextMenu.wt!)"
+                >
+                  <template #prepend>
+                    <v-icon color="error">mdi-trash-can-outline</v-icon>
+                  </template>
+                  <v-list-item-title>{{
+                    tm(
+                      "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.remove",
+                    )
+                  }}</v-list-item-title>
+                </v-list-item>
+              </template>
+              <template v-else>
+                <v-list-item disabled>
+                  <v-list-item-title class="text-caption">
+                    {{
+                      tm(
+                        "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.mainDisabled",
+                      )
+                    }}
+                  </v-list-item-title>
+                </v-list-item>
+              </template>
+            </v-list>
+          </div>
+        </Teleport>
       </div>
 
       <!-- Diff-only sub-UI: scope bar + truncation warning -->
@@ -2160,6 +2302,34 @@ const currentRoot = computed<string | null>(() => {
 
       <!-- Body: Files / Diff / History -->
       <div class="git-diff-sidebar-body">
+        <!-- 2026-07-02 sidebar-search: Files-view toolbar with a search
+             toggle. Sits ABOVE the FileBrowserView so it survives the
+             v-if/v-else switching inside FileBrowserView (toolbar is
+             independent of whether the file tree or search panel is
+             showing below). Hidden in diff/history views. -->
+        <div
+          v-if="viewMode === 'files'"
+          class="git-diff-sidebar-files-toolbar"
+          data-testid="git-diff-sidebar-files-toolbar"
+        >
+          <v-btn
+            icon
+            size="small"
+            variant="text"
+            :class="[
+              'git-diff-sidebar-search-toggle',
+              { 'is-active': searchOpen },
+            ]"
+            :title="tm('spcodeProjectLoad.diffSidebar.search.button')"
+            :aria-label="tm('spcodeProjectLoad.diffSidebar.search.button')"
+            @click="searchOpen = !searchOpen"
+          >
+            <v-icon size="16">mdi-magnify</v-icon>
+          </v-btn>
+          <span v-if="searchOpen" class="text-caption text-medium-emphasis">
+            {{ tm("spcodeProjectLoad.diffSidebar.search.toolbarActive") }}
+          </span>
+        </div>
         <FileBrowserView
           v-if="viewMode === 'files'"
           ref="fileBrowserRef"
@@ -2167,7 +2337,12 @@ const currentRoot = computed<string | null>(() => {
           :preview-path="fileBrowserPreviewPath"
           :is-dark="!!isDark"
           :root-path="currentRoot"
+          :search-open="searchOpen"
+          :umo="spcodeStatus.status.value.umo"
+          :worktree="selectedWorktree"
           @navigate="onFileBrowserNavigate"
+          @open-file="onFileOpen"
+          @update:search-open="searchOpen = $event"
         />
         <GitDiffBodyContent
           v-else-if="viewMode === 'diff'"
@@ -2357,14 +2532,21 @@ const currentRoot = computed<string | null>(() => {
       <v-dialog v-model="removeDialogOpen" persistent max-width="480">
         <v-card>
           <v-card-title class="text-h6">
-            {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmTitle") }}
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmTitle",
+              )
+            }}
           </v-card-title>
           <v-card-text>
             <p class="mb-2">
               {{
                 tm(
                   "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmMessageWithPath",
-                  { path: removeDialogTarget?.path ?? "", branch: removeDialogTarget?.branch ?? "" },
+                  {
+                    path: removeDialogTarget?.path ?? "",
+                    branch: removeDialogTarget?.branch ?? "",
+                  },
                 )
               }}
             </p>
@@ -2383,15 +2565,25 @@ const currentRoot = computed<string | null>(() => {
               v-if="dirtyCount !== null && dirtyCount > 0"
               v-model="removeForceChecked"
               density="compact"
-              :label="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.force', { count: dirtyCount })"
+              :label="
+                tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.force', {
+                  count: dirtyCount,
+                })
+              "
               color="warning"
               hide-details
             />
           </v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn variant="text" :disabled="isRemoving" @click="removeDialogOpen = false">
-              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.cancel") }}
+            <v-btn
+              variant="text"
+              :disabled="isRemoving"
+              @click="removeDialogOpen = false"
+            >
+              {{
+                tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.cancel")
+              }}
             </v-btn>
             <v-btn
               variant="flat"
@@ -2399,7 +2591,9 @@ const currentRoot = computed<string | null>(() => {
               :loading="isRemoving"
               @click="onConfirmRemove(removeForceChecked)"
             >
-              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirm") }}
+              {{
+                tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirm")
+              }}
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -2420,15 +2614,29 @@ const currentRoot = computed<string | null>(() => {
       <v-dialog v-model="confirmUnlockOpen" persistent max-width="440">
         <v-card>
           <v-card-title class="text-h6">
-            {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmTitle") }}
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmTitle",
+              )
+            }}
           </v-card-title>
           <v-card-text>
-            {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmMessage") }}
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmMessage",
+              )
+            }}
           </v-card-text>
           <v-card-actions>
             <v-spacer />
-            <v-btn variant="text" :disabled="isUnlocking" @click="onCancelUnlock">
-              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.cancel") }}
+            <v-btn
+              variant="text"
+              :disabled="isUnlocking"
+              @click="onCancelUnlock"
+            >
+              {{
+                tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.cancel")
+              }}
             </v-btn>
             <v-btn
               variant="flat"
@@ -2436,7 +2644,9 @@ const currentRoot = computed<string | null>(() => {
               :loading="isUnlocking"
               @click="onConfirmUnlock"
             >
-              {{ tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirm") }}
+              {{
+                tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirm")
+              }}
             </v-btn>
           </v-card-actions>
         </v-card>
@@ -2919,5 +3129,18 @@ const currentRoot = computed<string | null>(() => {
   color: rgb(var(--v-theme-on-surface));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   overflow: hidden;
+}
+
+/* 2026-07-02 sidebar-search: Files-view toolbar (search toggle). */
+.git-diff-sidebar-files-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+.git-diff-sidebar-search-toggle.is-active {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
 }
 </style>
