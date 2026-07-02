@@ -1135,6 +1135,15 @@ function onClose() {
   "resultCount": "{count} match(es)",
   "truncated": "Truncated — narrow your pattern",
   "fallbackHint": "🐢 Python fallback (install ripgrep for speed)",
+  "modeLabel": "Search by",
+  "modeFilename": "Filename",
+  "modeContent": "Content",
+  "filenameResultCount": "{count} file(s)",
+  "name": "Name",
+  "fileType": "Type",
+  "fileSize": "Size",
+  "dir": "dir",
+  "file": "file",
   "error": {
     "invalid_pattern": "Invalid pattern",
     "pattern_too_long": "Pattern too long (max 256 chars)",
@@ -1443,3 +1452,4 @@ Content-Type: application/json
 | 2026-07-02 | elecvoid243 | 初稿 |
 | 2026-07-02 | elecvoid243 | 修订：后端从 rg CLI + Python 兜底改为 `python_ripgrep` 库（与 `astrbot_grep_tool` 一致）。删除 main.py rg probe、删除 `_conf_schema.json` 的 `search.rg_path` 字段、删除 `SEARCH_UNAVAILABLE` 兜底语义（仅保留"库未安装或 rg 调用失败"窄义）。响应 `backend` 字段删除。 |
 | 2026-07-02 | elecvoid243 | 追加：新增 `POST /spcode/file-name-search` 端点（按文件名匹配），与 `/spcode/file-search` 并列。复用请求 schema，响应 schema 不同（`{path, name, type, size}`）。实现用 `rg --files`（库 `python_ripgrep` 不支持 `--files`）。详见 §5.6。 |
+| 2026-07-02 | elecvoid243 | 追加：前端 SearchPanel 加 mode toggle（`Filename` / `Content`），默认 **Filename**（用 `/spcode/file-name-search`），切到 Content 才调 `/spcode/file-search`。mode 持久化到 `localStorage["spcode.searchMode"]`。结果渲染按 mode 分支（filename 模式显示 `name + type + size`；content 模式显示 `line:column snippet`）。i18n 加 10 个 key（详见 §4.7）。 |
