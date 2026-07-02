@@ -1,7 +1,11 @@
 <!--
   Author: elecvoid243, 2026-07-02
-  SearchPanel — in-sidebar content search results UI.
-  Spec: docs/superpowers/specs/2026-07-02-sidebar-search-design.md §4.4
+  SearchPanel — in-sidebar search results UI with Filename / Content
+  mode toggle. Spec: docs/superpowers/specs/2026-07-02-sidebar-search-design.md §4.4
+
+  2026-07-02 revision: adds the mode toggle (Filename default → /spcode/
+  file-name-search, Content → /spcode/file-search) and branches result
+  rendering on the discriminated SearchResult union.
 
   Notes vs. the brief template:
   - Project pins vue@3.3.4, so `useTemplateRef` (Vue 3.5+) is unavailable;
@@ -16,6 +20,7 @@ import { ref, watch, nextTick, onMounted } from "vue";
 import {
   useSpcodeFileSearch,
   type SearchResult,
+  type SearchMode,
 } from "@/composables/useSpcodeFileSearch";
 import { useModuleI18n } from "@/i18n/composables";
 
@@ -30,13 +35,16 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-const { state, search, cancel } = useSpcodeFileSearch();
+const { state, mode, search, cancel, setMode } = useSpcodeFileSearch();
 
 const query = ref("");
 const debounceTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const inputRef = ref<HTMLInputElement | null>(null);
 
-// 300ms debounce per spec §4.4
+// 300ms debounce per spec §4.4. Mode changes go through setMode()
+// (which already cancels in-flight requests and resets state); they
+// do NOT auto re-trigger a search — the user retypes or edits the
+// query, and the existing debounce watcher picks it up.
 watch(query, (v) => {
   if (debounceTimer.value) clearTimeout(debounceTimer.value);
   if (!v.trim()) {
@@ -72,8 +80,20 @@ function onClose(): void {
   emit("update:modelValue", false);
 }
 
+function onModeChange(newMode: SearchMode | undefined): void {
+  if (!newMode || newMode === mode.value) return;
+  setMode(newMode);
+  // The setMode() call already cancels in-flight + resets state to
+  // idle. The current query stays in the input; the debounce watcher
+  // will NOT re-fire unless the user edits the query (by design —
+  // we don't want a stale pattern to silently re-search on toggle).
+}
+
 function onResultClick(r: SearchResult): void {
-  emit("open-file", { path: r.path, line: r.line });
+  // Filename mode has no line number; open at line 0 (the preview
+  // pane treats 0 as "scroll to top" / "no highlight").
+  const line = r.mode === "content" ? r.line : 0;
+  emit("open-file", { path: r.path, line });
 }
 
 function onKeydown(e: KeyboardEvent): void {
@@ -89,6 +109,26 @@ function errorReasonLabel(reason: string): string {
   const translated = tm(`spcodeProjectLoad.diffSidebar.search.error.${reason}`);
   if (translated.startsWith("[MISSING:")) return reason;
   return translated;
+}
+
+// formatSize — human-readable byte count. Matches the spec example
+// format ("567 B", "1.2 KB", "3.4 MB"). Directories always pass 0
+// (and we hide the size segment for them in the result row), so the
+// "0 B" branch is not user-visible in practice.
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+// i18n key prefix shared by the count text — the plural form differs
+// between Filename ("{count} file(s)") and Content ("{count} match(es)").
+function countKey(m: SearchMode): string {
+  return m === "filename"
+    ? "spcodeProjectLoad.diffSidebar.search.filenameResultCount"
+    : "spcodeProjectLoad.diffSidebar.search.resultCount";
 }
 
 onMounted(() => {
@@ -122,6 +162,28 @@ onMounted(() => {
       <v-btn icon="mdi-close" size="x-small" variant="text" @click="onClose" />
     </div>
 
+    <div class="search-panel-mode-row">
+      <span class="search-panel-mode-label text-caption text-medium-emphasis">
+        {{ tm("spcodeProjectLoad.diffSidebar.search.modeLabel") }}
+      </span>
+      <v-btn-toggle
+        :model-value="mode"
+        mandatory
+        density="compact"
+        divided
+        hide-details
+        class="search-panel-mode-toggle"
+        @update:model-value="onModeChange"
+      >
+        <v-btn size="x-small" value="filename">
+          {{ tm("spcodeProjectLoad.diffSidebar.search.modeFilename") }}
+        </v-btn>
+        <v-btn size="x-small" value="content">
+          {{ tm("spcodeProjectLoad.diffSidebar.search.modeContent") }}
+        </v-btn>
+      </v-btn-toggle>
+    </div>
+
     <div class="search-panel-status">
       <template v-if="state.kind === 'idle'">
         <span class="text-caption text-medium-emphasis">
@@ -135,11 +197,7 @@ onMounted(() => {
       </template>
       <template v-else-if="state.kind === 'ok'">
         <span class="text-caption">
-          {{
-            tm("spcodeProjectLoad.diffSidebar.search.resultCount", {
-              count: state.results.length,
-            })
-          }}
+          {{ tm(countKey(mode), { count: state.results.length }) }}
         </span>
         <span v-if="state.truncated" class="text-caption text-warning">
           {{ tm("spcodeProjectLoad.diffSidebar.search.truncated") }}
@@ -162,10 +220,23 @@ onMounted(() => {
         class="search-panel-result"
         @click="onResultClick(r)"
       >
-        <div class="search-panel-result-path">
-          {{ r.path }}:{{ r.line }}:{{ r.column }}
-        </div>
-        <pre class="search-panel-result-snippet">{{ r.snippet }}</pre>
+        <template v-if="r.mode === 'filename'">
+          <div class="search-panel-result-path">{{ r.path }}</div>
+          <div class="search-panel-result-meta">
+            {{ r.name }} ·
+            {{ tm("spcodeProjectLoad.diffSidebar.search.fileType") }}:
+            {{ tm("spcodeProjectLoad.diffSidebar.search." + r.type) }}
+            <template v-if="r.type === 'file'">
+              · {{ formatSize(r.size) }}
+            </template>
+          </div>
+        </template>
+        <template v-else>
+          <div class="search-panel-result-path">
+            {{ r.path }}:{{ r.line }}:{{ r.column }}
+          </div>
+          <pre class="search-panel-result-snippet">{{ r.snippet }}</pre>
+        </template>
       </li>
     </ul>
   </div>
@@ -194,6 +265,19 @@ onMounted(() => {
   font-size: 13px;
   color: rgb(var(--v-theme-on-surface));
   font-family: inherit;
+}
+.search-panel-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.search-panel-mode-label {
+  white-space: nowrap;
+}
+.search-panel-mode-toggle {
+  /* v-btn-toggle is a wrapper that lays out its v-btn children as a
+     segmented control. We rely on the divided + mandatory props for
+     the visual "selected" state and don't override the colors. */
 }
 .search-panel-status {
   display: flex;
@@ -229,6 +313,14 @@ onMounted(() => {
   white-space: pre-wrap;
   word-break: break-all;
   color: rgb(var(--v-theme-on-surface));
+}
+.search-panel-result-meta {
+  font-size: 11px;
+  margin: 2px 0 0 0;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .search-panel-spinner {
   animation: spin 1s linear infinite;
