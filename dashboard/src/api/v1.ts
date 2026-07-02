@@ -32,6 +32,8 @@ import {
   type DynamicConfig,
   type EnabledPatch,
   type GhproxyTestRequest,
+  type KnowledgeBaseCreateRequest,
+  type KnowledgeBaseRequest,
   type LoginRequest,
   type ListConversationsData,
   type McpServerConfig,
@@ -1366,16 +1368,16 @@ export const knowledgeApi = {
       openApiV1.getKnowledgeBase({ path: { kb_id: kbId } }),
     );
   },
-  create(config: OpenConfig) {
+  create(config: KnowledgeBaseCreateRequest) {
     return typed<OpenConfig>(
-      openApiV1.createKnowledgeBase({ body: config as any }),
+      openApiV1.createKnowledgeBase({ body: config }),
     );
   },
-  update(kbId: string, config: OpenConfig) {
+  update(kbId: string, config: KnowledgeBaseRequest) {
     return typed<OpenConfig>(
       openApiV1.updateKnowledgeBase({
         path: { kb_id: kbId },
-        body: config as any,
+        body: config,
       }),
     );
   },
