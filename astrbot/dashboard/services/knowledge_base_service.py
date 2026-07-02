@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import traceback
 import uuid
 from pathlib import Path
@@ -337,6 +338,10 @@ class KnowledgeBaseService:
                     f"测试重排序模型失败: {exc!s}，请检查平台日志输出。"
                 ) from exc
 
+        kb_type = payload.get("kb_type") or "text"
+        if kb_type not in ("text", "table"):
+            raise KnowledgeBaseServiceError(f"不支持的知识库类型: {kb_type}")
+
         kb_helper = await kb_manager.create_kb(
             kb_name=kb_name,
             description=payload.get("description"),
@@ -348,6 +353,7 @@ class KnowledgeBaseService:
             top_k_dense=payload.get("top_k_dense"),
             top_k_sparse=payload.get("top_k_sparse"),
             top_m_final=payload.get("top_m_final"),
+            kb_type=kb_type,
         )
         return kb_helper.kb.model_dump(), "创建知识库成功"
 
@@ -627,6 +633,285 @@ class KnowledgeBaseService:
             "doc_count": len(documents),
             "message": "import task created, processing in background",
         }
+
+    @staticmethod
+    def _read_single_upload(form_data, files):
+        """Return the first uploaded file object from a multipart request.
+
+        Args:
+            form_data: Parsed multipart form fields.
+            files: Parsed multipart file fields.
+
+        Returns:
+            The first uploaded file object (e.g. a Quart ``FileStorage``). Use
+            :meth:`_save_and_read_upload_file` to obtain its name and bytes.
+
+        Raises:
+            KnowledgeBaseServiceError: If no file is present.
+        """
+        file_list = []
+        for key in files.keys():
+            if key == "file" or key.startswith("file") or key == "files[]":
+                file_list.extend(files.getlist(key))
+        if not file_list:
+            raise KnowledgeBaseServiceError("缺少文件")
+        return file_list[0]
+
+    @staticmethod
+    async def _save_and_read_upload_file(file) -> tuple[str, bytes]:
+        """Persist an uploaded file to a temp path and read it back into memory.
+
+        Args:
+            file: The uploaded file object from a multipart request.
+
+        Returns:
+            A tuple of the sanitized basename and file content.
+        """
+        file_name = Path(str(file.filename or "document").replace("\\", "/")).name
+        if file_name in {"", ".", ".."}:
+            file_name = "document"
+        temp_file_path = (
+            Path(get_astrbot_temp_path()) / f"kb_table_{uuid.uuid4()}_{file_name}"
+        )
+        try:
+            await file.save(temp_file_path)
+            async with aiofiles.open(temp_file_path, "rb") as file_obj:
+                file_content = await file_obj.read()
+            return file_name, file_content
+        finally:
+            temp_file_path.unlink(missing_ok=True)
+
+    async def preview_table(
+        self,
+        *,
+        content_type: str | None,
+        form_data,
+        files,
+    ) -> dict[str, Any]:
+        """Parse an uploaded table file and return headers plus sample rows.
+
+        Args:
+            content_type: Request content type header.
+            form_data: Parsed multipart form fields (kb_id, header_row, ...).
+            files: Parsed multipart file fields.
+
+        Returns:
+            A dict with ``headers``, sample ``rows`` and ``total_rows``.
+
+        Raises:
+            KnowledgeBaseServiceError: On validation or parse failure.
+        """
+        if content_type and "multipart/form-data" not in content_type:
+            raise KnowledgeBaseServiceError("Content-Type 须为 multipart/form-data")
+        if not form_data.get("kb_id"):
+            raise KnowledgeBaseServiceError("缺少参数 kb_id")
+
+        try:
+            header_row = int(form_data.get("header_row", 0))
+            if header_row < 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError("表头行数必须是大于等于 0 的整数") from exc
+
+        try:
+            preview_rows = int(form_data.get("preview_rows", 20))
+            if preview_rows <= 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError("预览行数必须是大于 0 的整数") from exc
+
+        file = self._read_single_upload(form_data, files)
+        file_name, file_content = await self._save_and_read_upload_file(file)
+
+        from astrbot.core.knowledge_base.parsers.table_parser import (
+            is_table_file,
+            parse_table,
+        )
+
+        if not is_table_file(file_name):
+            raise KnowledgeBaseServiceError(
+                "不支持的表格格式，请上传 csv/xls/xlsx 文件",
+            )
+        try:
+            result = parse_table(file_content, file_name, header_row=header_row)
+        except Exception as exc:
+            raise KnowledgeBaseServiceError(f"解析表格失败: {exc!s}") from exc
+
+        return {
+            "file_name": file_name,
+            "headers": result.headers,
+            "rows": result.rows[:preview_rows],
+            "total_rows": len(result.rows),
+        }
+
+    async def import_table(
+        self,
+        *,
+        content_type: str | None,
+        form_data,
+        files,
+    ) -> dict[str, Any]:
+        """Start a background task to import a table with column configuration.
+
+        Args:
+            content_type: Request content type header.
+            form_data: Parsed multipart form fields (kb_id, header_row,
+                columns_config JSON, batch params).
+            files: Parsed multipart file fields.
+
+        Returns:
+            A dict with the background ``task_id``.
+
+        Raises:
+            KnowledgeBaseServiceError: On validation failure.
+        """
+        if content_type and "multipart/form-data" not in content_type:
+            raise KnowledgeBaseServiceError("Content-Type 须为 multipart/form-data")
+        kb_id = form_data.get("kb_id")
+        if not kb_id:
+            raise KnowledgeBaseServiceError("缺少参数 kb_id")
+
+        try:
+            header_row = int(form_data.get("header_row", 0))
+            if header_row < 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError("表头行数必须是大于等于 0 的整数") from exc
+
+        try:
+            batch_size = int(form_data.get("batch_size", 32))
+            if batch_size <= 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError("批处理大小必须是大于 0 的整数") from exc
+
+        try:
+            tasks_limit = int(form_data.get("tasks_limit", 3))
+            if tasks_limit <= 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError("并发限制必须是大于 0 的整数") from exc
+
+        try:
+            max_retries = int(form_data.get("max_retries", 3))
+            if max_retries < 0:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            raise KnowledgeBaseServiceError(
+                "最大重试次数必须是大于等于 0 的整数"
+            ) from exc
+
+        columns_config_raw = form_data.get("columns_config")
+        if not columns_config_raw:
+            raise KnowledgeBaseServiceError("缺少参数 columns_config")
+        try:
+            columns_config = json.loads(columns_config_raw)
+        except (TypeError, ValueError) as exc:
+            raise KnowledgeBaseServiceError("columns_config 格式错误") from exc
+        if not isinstance(columns_config, list) or not columns_config:
+            raise KnowledgeBaseServiceError("columns_config 必须是非空列表")
+        if not all(isinstance(c, dict) for c in columns_config):
+            raise KnowledgeBaseServiceError("columns_config 格式错误：元素必须是对象")
+        if not any(c.get("is_index") for c in columns_config):
+            raise KnowledgeBaseServiceError("至少需要选择一个索引列")
+
+        file = self._read_single_upload(form_data, files)
+        file_name, file_content = await self._save_and_read_upload_file(file)
+        file_type = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+        file_size = len(file_content)
+
+        kb_helper = await self.get_kb_manager().get_kb(kb_id)
+        if not kb_helper:
+            raise KnowledgeBaseServiceError("知识库不存在")
+        if kb_helper.kb.kb_type != "table":
+            raise KnowledgeBaseServiceError("只能向表格知识库导入表格数据")
+
+        task_id = str(uuid.uuid4())
+        self.init_task(task_id, status="pending")
+        asyncio.create_task(
+            self.background_table_import_task(
+                task_id=task_id,
+                kb_helper=kb_helper,
+                file_name=file_name,
+                file_type=file_type,
+                file_content=file_content,
+                file_size=file_size,
+                columns_config=columns_config,
+                header_row=header_row,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+            ),
+        )
+        return {
+            "task_id": task_id,
+            "file_count": 1,
+            "message": "table import task created, processing in background",
+        }
+
+    async def background_table_import_task(
+        self,
+        task_id: str,
+        kb_helper,
+        file_name: str,
+        file_type: str,
+        file_content: bytes,
+        file_size: int,
+        columns_config: list[dict[str, Any]],
+        header_row: int,
+        batch_size: int,
+        tasks_limit: int,
+        max_retries: int,
+    ) -> None:
+        """Parse a table file and import every row as a chunk in the background."""
+        try:
+            self.init_task(task_id, status="processing")
+            self.upload_progress[task_id] = {
+                "status": "processing",
+                "file_index": 0,
+                "file_total": 1,
+                "file_name": file_name,
+                "stage": "parsing",
+                "current": 0,
+                "total": 100,
+            }
+            progress_callback = self.make_progress_callback(task_id, 0, file_name)
+
+            from astrbot.core.knowledge_base.parsers.table_parser import parse_table
+
+            result = parse_table(file_content, file_name, header_row=header_row)
+            doc = await kb_helper.upload_table_document(
+                file_name=file_name,
+                file_type=file_type,
+                headers=result.headers,
+                rows=result.rows,
+                columns_config=columns_config,
+                file_size=file_size,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+            self.set_task_result(
+                task_id,
+                "completed",
+                result={
+                    "task_id": task_id,
+                    "uploaded": [doc.model_dump()],
+                    "failed": [],
+                    "total": 1,
+                    "success_count": 1,
+                    "failed_count": 0,
+                },
+            )
+        except Exception as exc:
+            logger.error(f"后台表格导入任务 {task_id} 失败: {exc}")
+            logger.error(traceback.format_exc())
+            self.set_task_result(
+                task_id,
+                "failed",
+                error=self.format_failed_doc_error(file_name, exc),
+            )
 
     def get_upload_progress(self, task_id: str | None) -> dict[str, Any]:
         if not task_id:

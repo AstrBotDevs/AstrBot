@@ -228,6 +228,31 @@ class DocumentStorage:
             self._stopwords = load_stopwords(stopwords_path)
         return self._stopwords
 
+    @staticmethod
+    def _get_sparse_index_text(
+        content: str,
+        metadata: dict | str | None,
+    ) -> str:
+        """Resolve the text used by FTS and BM25 sparse retrieval.
+
+        Args:
+            content: Stored chunk text returned to retrieval callers.
+            metadata: Chunk metadata as a mapping or serialized JSON string.
+
+        Returns:
+            The table index text when present, otherwise the stored content.
+        """
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                return content
+        if isinstance(metadata, dict):
+            index_text = metadata.get("index_text")
+            if isinstance(index_text, str) and index_text.strip():
+                return index_text
+        return content
+
     async def get_documents(
         self,
         metadata_filters: dict,
@@ -301,7 +326,11 @@ class DocumentStorage:
             session.add(document)
             await session.flush()  # Flush to get the ID
             if document.id is not None:
-                await self._insert_fts_row(session, int(document.id), text)
+                await self._insert_fts_row(
+                    session,
+                    int(document.id),
+                    self._get_sparse_index_text(text, metadata),
+                )
             return document.id  # type: ignore
 
     async def insert_documents_batch(
@@ -339,7 +368,14 @@ class DocumentStorage:
                 session.add(document)
 
             await session.flush()  # Flush to get all IDs
-            await self._insert_fts_rows_batch(session, documents, texts)
+            await self._insert_fts_rows_batch(
+                session,
+                documents,
+                [
+                    self._get_sparse_index_text(content, metadata)
+                    for content, metadata in zip(texts, metadatas)
+                ],
+            )
             return [doc.id for doc in documents]  # type: ignore
 
     async def delete_document_by_doc_id(self, doc_id: str) -> None:
@@ -358,7 +394,14 @@ class DocumentStorage:
 
             if document:
                 if document.id is not None:
-                    await self._delete_fts_row(session, int(document.id), document.text)
+                    await self._delete_fts_row(
+                        session,
+                        int(document.id),
+                        self._get_sparse_index_text(
+                            document.text,
+                            document.metadata_,
+                        ),
+                    )
                 await session.delete(document)
 
     async def get_document_by_doc_id(self, doc_id: str):
@@ -399,12 +442,24 @@ class DocumentStorage:
 
             if document:
                 if document.id is not None:
-                    await self._delete_fts_row(session, int(document.id), document.text)
+                    sparse_index_text = self._get_sparse_index_text(
+                        document.text,
+                        document.metadata_,
+                    )
+                    await self._delete_fts_row(
+                        session,
+                        int(document.id),
+                        sparse_index_text,
+                    )
                 document.text = new_text
                 document.updated_at = datetime.now()
                 session.add(document)
                 if document.id is not None:
-                    await self._insert_fts_row(session, int(document.id), new_text)
+                    await self._insert_fts_row(
+                        session,
+                        int(document.id),
+                        self._get_sparse_index_text(new_text, document.metadata_),
+                    )
 
     async def delete_documents(self, metadata_filters: dict) -> None:
         """Delete documents by their metadata filters.
@@ -513,7 +568,10 @@ class DocumentStorage:
                 await self._insert_fts_rows_batch(
                     session,
                     documents,
-                    [doc.text for doc in documents],
+                    [
+                        self._get_sparse_index_text(doc.text, doc.metadata_)
+                        for doc in documents
+                    ],
                 )
                 last_id = int(documents[-1].id or last_id)
 
@@ -700,7 +758,10 @@ class DocumentStorage:
         fts_params = [
             {
                 "rowid": int(doc.id),
-                "search_text": to_fts5_search_text(doc.text, self.stopwords),
+                "search_text": to_fts5_search_text(
+                    self._get_sparse_index_text(doc.text, doc.metadata_),
+                    self.stopwords,
+                ),
             }
             for doc in docs_with_ids
             if doc.id is not None and int(doc.id) in existing_rowids

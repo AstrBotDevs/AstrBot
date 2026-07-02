@@ -465,6 +465,172 @@ class KBHelper:
 
             raise
 
+    @staticmethod
+    def _format_row_text(columns: list[dict], row: dict[str, str]) -> str:
+        """Format selected columns of a row as ``name: value`` lines.
+
+        Args:
+            columns: Column descriptors to render, each with a ``name`` key.
+            row: Mapping of header name to cell value for one row.
+
+        Returns:
+            A newline-joined ``name: value`` representation, skipping blank cells.
+        """
+        lines = []
+        for col in columns:
+            name = col.get("name")
+            if not name:
+                continue
+            value = str(row.get(name) or "").strip()
+            if value:
+                lines.append(f"{name}: {value}")
+        return "\n".join(lines)
+
+    async def upload_table_document(
+        self,
+        file_name: str,
+        file_type: str,
+        headers: list[str],
+        rows: list[list[str]],
+        columns_config: list[dict],
+        file_size: int = 0,
+        batch_size: int = 32,
+        tasks_limit: int = 3,
+        max_retries: int = 3,
+        progress_callback=None,
+    ) -> KBDocument:
+        """Upload a structured table where each row is an independent chunk.
+
+        Index columns are concatenated to build the embedding text (used for
+        semantic matching), while the full row is stored/returned and the raw
+        row values are kept in chunk metadata under ``row_data``.
+
+        Args:
+            file_name: Original table file name.
+            file_type: File extension without the dot (e.g. ``csv``).
+            headers: Column header names aligned to ``rows``.
+            rows: Row values, each aligned to ``headers``.
+            columns_config: Per-column config items with keys ``name``,
+                ``is_index`` and ``is_returned``.
+            file_size: Original file size in bytes.
+            batch_size: Embedding batch size.
+            tasks_limit: Embedding concurrency limit.
+            max_retries: Embedding retry count.
+            progress_callback: Async callback ``(stage, current, total)``.
+
+        Returns:
+            KBDocument: The created document metadata record.
+
+        Raises:
+            KnowledgeBaseUploadError: If no indexable row can be produced.
+        """
+        await self._ensure_vec_db()
+        doc_id = str(uuid.uuid4())
+
+        index_cols = [c for c in columns_config if c.get("is_index")]
+        if not index_cols:
+            raise KnowledgeBaseUploadError(
+                stage="validation",
+                user_message="表格导入失败：至少需要选择一个索引列用于语义检索。",
+                details={"file_name": file_name},
+            )
+        returned_cols = [c for c in columns_config if c.get("is_returned")] or [
+            {"name": h} for h in headers
+        ]
+
+        if progress_callback:
+            await progress_callback("parsing", 100, 100)
+
+        contents: list[str] = []
+        embedding_texts: list[str] = []
+        metadatas: list[dict] = []
+        for idx, row_values in enumerate(rows):
+            row = {
+                h: (row_values[i] if i < len(row_values) else "")
+                for i, h in enumerate(headers)
+            }
+            embedding_text = self._format_row_text(index_cols, row)
+            if not embedding_text:
+                # Skip rows whose index columns are all empty.
+                continue
+            content_text = self._format_row_text(returned_cols, row) or embedding_text
+            contents.append(content_text)
+            embedding_texts.append(embedding_text)
+            metadatas.append(
+                {
+                    "kb_id": self.kb.kb_id,
+                    "kb_doc_id": doc_id,
+                    "chunk_index": len(contents) - 1,
+                    "row_index": idx,
+                    "row_data": row,
+                    "is_table_row": True,
+                    "index_text": embedding_text,
+                },
+            )
+
+        if not contents:
+            raise KnowledgeBaseUploadError(
+                stage="validation",
+                user_message="表格导入失败：所选索引列在所有行中均为空，没有可索引的数据。",
+                details={"file_name": file_name},
+            )
+
+        if progress_callback:
+            await progress_callback("chunking", 100, 100)
+
+        async def embedding_progress_callback(current, total) -> None:
+            if progress_callback:
+                await progress_callback("embedding", current, total)
+
+        try:
+            await self.vec_db.insert_batch(
+                contents=contents,
+                metadatas=metadatas,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=embedding_progress_callback,
+                embedding_texts=embedding_texts,
+            )
+        except KnowledgeBaseUploadError:
+            raise
+        except Exception as exc:
+            raise KnowledgeBaseUploadError(
+                stage="storage",
+                user_message="存储失败：表格行已生成，但写入知识库索引时出错。",
+                details={"file_name": file_name},
+            ) from exc
+
+        doc = KBDocument(
+            doc_id=doc_id,
+            kb_id=self.kb.kb_id,
+            doc_name=file_name,
+            file_type=file_type,
+            file_size=file_size,
+            file_path="",
+            table_schema=json.dumps(columns_config, ensure_ascii=False),
+            chunk_count=len(contents),
+            media_count=0,
+        )
+        try:
+            async with self.kb_db.get_db() as session:
+                async with session.begin():
+                    session.add(doc)
+                    await session.commit()
+                await session.refresh(doc)
+        except Exception as exc:
+            raise KnowledgeBaseUploadError(
+                stage="metadata",
+                user_message="元数据保存失败：表格行已写入知识库，但文档记录保存失败。",
+                details={"file_name": file_name, "doc_id": doc_id},
+            ) from exc
+
+        vec_db: FaissVecDB = self.vec_db  # type: ignore
+        await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
+        await self.refresh_kb()
+        await self.refresh_document(doc_id)
+        return doc
+
     async def list_documents(
         self,
         offset: int = 0,
@@ -563,16 +729,19 @@ class KBHelper:
         result = []
         for chunk in chunks:
             chunk_md = json.loads(chunk["metadata"])
-            result.append(
-                {
-                    "chunk_id": chunk["doc_id"],
-                    "doc_id": chunk_md["kb_doc_id"],
-                    "kb_id": chunk_md["kb_id"],
-                    "chunk_index": chunk_md["chunk_index"],
-                    "content": chunk["text"],
-                    "char_count": len(chunk["text"]),
-                },
-            )
+            item = {
+                "chunk_id": chunk["doc_id"],
+                "doc_id": chunk_md["kb_doc_id"],
+                "kb_id": chunk_md["kb_id"],
+                "chunk_index": chunk_md["chunk_index"],
+                "content": chunk["text"],
+                "char_count": len(chunk["text"]),
+            }
+            if chunk_md.get("is_table_row"):
+                item["is_table_row"] = True
+                item["row_index"] = chunk_md.get("row_index")
+                item["row_data"] = chunk_md.get("row_data")
+            result.append(item)
         return result
 
     async def get_chunk_count_by_doc_id(self, doc_id: str) -> int:

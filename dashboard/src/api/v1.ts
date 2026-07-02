@@ -1408,6 +1408,22 @@ export const knowledgeApi = {
       }),
     );
   },
+  previewTable(kbId: string, formData: FormData) {
+    return typed<any>(
+      openApiV1.previewKnowledgeTable({
+        path: { kb_id: kbId },
+        body: generatedFormData(formData),
+      }),
+    );
+  },
+  importTable(kbId: string, formData: FormData) {
+    return typed<any>(
+      openApiV1.importKnowledgeTable({
+        path: { kb_id: kbId },
+        body: generatedFormData(formData),
+      }),
+    );
+  },
   task(taskId: string) {
     return typed<any>(
       openApiV1.getKnowledgeTask({ path: { task_id: taskId } }),

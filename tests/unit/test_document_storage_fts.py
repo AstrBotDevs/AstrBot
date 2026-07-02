@@ -58,6 +58,72 @@ async def test_document_storage_fts_rebuilds_existing_documents(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_document_storage_fts_uses_table_index_text_for_search(tmp_path):
+    storage = DocumentStorage(str(tmp_path / "doc.db"))
+    await storage.initialize()
+
+    await storage.insert_documents_batch(
+        doc_ids=["table-chunk"],
+        texts=["description: red widget"],
+        metadatas=[
+            {
+                "kb_doc_id": "doc-1",
+                "kb_id": "kb-1",
+                "chunk_index": 0,
+                "index_text": "sku: apple-123",
+            },
+        ],
+    )
+
+    results = await storage.search_sparse(["apple"], limit=10)
+
+    assert results is not None
+    assert [result["doc_id"] for result in results] == ["table-chunk"]
+    assert results[0]["text"] == "description: red widget"
+    assert "apple" not in results[0]["text"]
+
+    await storage.close()
+
+
+@pytest.mark.asyncio
+async def test_document_storage_fts_rebuild_and_delete_use_table_index_text(tmp_path):
+    storage = DocumentStorage(str(tmp_path / "doc.db"))
+    await storage.initialize()
+
+    storage.fts5_available = False
+    await storage.insert_document(
+        doc_id="table-chunk",
+        text="description: red widget",
+        metadata={
+            "kb_doc_id": "doc-1",
+            "kb_id": "kb-1",
+            "chunk_index": 0,
+            "index_text": "sku: apple-123",
+        },
+    )
+
+    storage.fts5_available = True
+    storage._fts_index_ready = False
+
+    results = await storage.search_sparse(["apple"], limit=10)
+    assert results is not None
+    assert [result["doc_id"] for result in results] == ["table-chunk"]
+
+    await storage.update_document_by_doc_id(
+        "table-chunk",
+        "description: updated red widget",
+    )
+    results = await storage.search_sparse(["apple"], limit=10)
+    assert results is not None
+    assert results[0]["text"] == "description: updated red widget"
+
+    await storage.delete_document_by_doc_id("table-chunk")
+    assert await storage.search_sparse(["apple"], limit=10) == []
+
+    await storage.close()
+
+
+@pytest.mark.asyncio
 async def test_document_storage_fts_delete_skips_missing_fts_row(tmp_path):
     storage = DocumentStorage(str(tmp_path / "doc.db"))
     await storage.initialize()
