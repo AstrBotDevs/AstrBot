@@ -1442,6 +1442,26 @@
       "dashscope_tts_voice": {
         "description": "音色"
       },
+      "voice_id": {
+        "description": "复刻音色 ID",
+        "hint": "由阿里云百炼「音色复刻」接口返回（output.voice，例如 yourVoice）。请确保 voice_id 与所选模型属于同一次声音复刻创建结果。"
+      },
+      "language_type": {
+        "description": "合成语种 (可选)",
+        "hint": "合成音频的语种。留空表示由模型自动判断 (Auto)。指定单一语种通常能显著提升合成质量。"
+      },
+      "workspace_id": {
+        "description": "workspace ID (可选)",
+        "hint": "填写后会自动切换到百炼 workspace 专属域名 (https://{WorkspaceId}.{region}.maas.aliyuncs.com)，通常能获得更好的性能和稳定性。可在百炼控制台「workspace 详情」页面查看。"
+      },
+      "region": {
+        "description": "URL区域 (可选)",
+        "hint": "仅在填写了 workspace ID 时生效。北京地域选择 cn-beijing，新加坡地域选择 ap-southeast-1。"
+      },
+      "base_url": {
+        "description": "自定义 DashScope Base URL (可选)",
+        "hint": "完整的 HTTP API Base URL，例如 https://dashscope.aliyuncs.com/api/v1。若填写则优先级高于 workspace ID + 地域 的组合。一般无需填写。"
+      },
       "gm_resp_image_modal": {
         "description": "启用图片模态",
         "hint": "启用后，将支持返回图片内容。需要模型支持，否则会报错。具体支持模型请查看 Google Gemini 官方网站。温馨提示，如果您需要生成图片，请关闭 `启用群员识别` 配置获得更好的效果。"

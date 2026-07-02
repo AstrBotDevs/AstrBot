@@ -1440,6 +1440,26 @@
       "dashscope_tts_voice": {
         "description": "Voice"
       },
+      "voice_id": {
+        "description": "Voice Clone ID",
+        "hint": "Returned by the Alibaba Cloud Bailian Voice Cloning API (output.voice, e.g. yourVoice). Make sure the voice_id and the selected model belong to the same voice clone creation result."
+      },
+      "language_type": {
+        "description": "Synthesis Language (optional)",
+        "hint": "Language for the synthesized audio. Leave empty for auto-detection (Auto). Specifying a single language usually improves synthesis quality significantly."
+      },
+      "workspace_id": {
+        "description": "Workspace ID (optional)",
+        "hint": "When filled, the provider switches to the workspace-specific domain (https://{WorkspaceId}.{region}.maas.aliyuncs.com) for better performance and stability. Find it in the Bailian console under Workspace Details."
+      },
+      "region": {
+        "description": "Region (optional)",
+        "hint": "Only effective when Workspace ID is set. Use cn-beijing for Beijing, ap-southeast-1 for Singapore."
+      },
+      "base_url": {
+        "description": "Custom DashScope Base URL (optional)",
+        "hint": "Full HTTP API Base URL, e.g. https://dashscope.aliyuncs.com/api/v1. Takes precedence over Workspace ID + Region when set. Usually not needed."
+      },
       "gm_resp_image_modal": {
         "description": "Enable image modality",
         "hint": "When enabled, responses can include images. Requires model support or it will error. See the Google Gemini website for supported models. Tip: if you need image generation, disable the `Enable member recognition` setting for better results."

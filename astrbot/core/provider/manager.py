@@ -451,6 +451,10 @@ class ProviderManager:
                 from .sources.dashscope_tts import (
                     ProviderDashscopeTTSAPI as ProviderDashscopeTTSAPI,
                 )
+            case "dashscope_voice_clone_tts":
+                from .sources.dashscope_voice_clone_tts import (
+                    ProviderDashscopeVoiceCloneTTSAPI as ProviderDashscopeVoiceCloneTTSAPI,
+                )
             case "azure_tts":
                 from .sources.azure_tts_source import (
                     AzureTTSProvider as AzureTTSProvider,

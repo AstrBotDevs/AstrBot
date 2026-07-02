@@ -1742,6 +1742,25 @@ CONFIG_METADATA_2 = {
                         "dashscope_tts_voice": "loongstella",
                         "timeout": "20",
                     },
+                    "阿里云百炼 音色复刻 TTS(API)": {
+                        "hint": "使用阿里云百炼「音色复刻」生成的专属音色（Qwen3-TTS-VC 系列）。"
+                        "请先在百炼控制台或通过声音复刻 API 创建复刻音色，获取 voice_id 后填入下方配置。"
+                        "API Key 获取: https://bailian.console.aliyun.com/?tab=model#/api-key；"
+                        "声音复刻文档: https://help.aliyun.com/zh/model-studio/voice-cloning-user-guide",
+                        "id": "dashscope_voice_clone_tts",
+                        "provider": "dashscope",
+                        "type": "dashscope_voice_clone_tts",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "model": "qwen3-tts-vc-2026-01-22",
+                        "voice_id": "",
+                        "language_type": "",
+                        "workspace_id": "",
+                        "region": "cn-beijing",
+                        "base_url": "",
+                        "timeout": "20",
+                    },
                     "Azure TTS": {
                         "id": "azure_tts",
                         "type": "azure_tts",
@@ -2323,6 +2342,54 @@ CONFIG_METADATA_2 = {
                         "hint": "Azure_TTS 服务的订阅密钥（注意不是令牌）",
                     },
                     "dashscope_tts_voice": {"description": "音色", "type": "string"},
+                    "voice_id": {
+                        "description": "复刻音色 ID",
+                        "type": "string",
+                        "hint": "由阿里云百炼「音色复刻」接口返回（output.voice，例如 yourVoice）。"
+                        "请确保 voice_id 与所选模型属于同一次声音复刻创建结果。",
+                    },
+                    "language_type": {
+                        "description": "合成语种 (可选)",
+                        "type": "string",
+                        "hint": "合成音频的语种。留空表示由模型自动判断 (Auto)。"
+                        "指定单一语种通常能显著提升合成质量。",
+                        "options": [
+                            "",
+                            "Auto",
+                            "Chinese",
+                            "English",
+                            "German",
+                            "Italian",
+                            "Portuguese",
+                            "Spanish",
+                            "Japanese",
+                            "Korean",
+                            "French",
+                            "Russian",
+                        ],
+                    },
+                    "workspace_id": {
+                        "description": "workspace ID (可选)",
+                        "type": "string",
+                        "hint": "填写后会自动切换到百炼 workspace 专属域名 "
+                        "(https://{WorkspaceId}.{region}.maas.aliyuncs.com)，"
+                        "通常能获得更好的性能和稳定性。可在百炼控制台「workspace 详情」页面查看。",
+                    },
+                    "region": {
+                        "description": "URL区域 (可选)",
+                        "type": "string",
+                        "hint": "仅在填写了 workspace ID 时生效。北京地域选择 cn-beijing，新加坡地域选择 ap-southeast-1。",
+                        "options": [
+                            "cn-beijing",
+                            "ap-southeast-1",
+                        ],
+                    },
+                    "base_url": {
+                        "description": "自定义 DashScope Base URL (可选)",
+                        "type": "string",
+                        "hint": "完整的 HTTP API Base URL，例如 https://dashscope.aliyuncs.com/api/v1。"
+                        "若填写则优先级高于 workspace ID + 地域 的组合。一般无需填写。",
+                    },
                     "gm_resp_image_modal": {
                         "description": "启用图片模态",
                         "type": "bool",
