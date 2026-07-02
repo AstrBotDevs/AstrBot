@@ -508,6 +508,38 @@ async def test_max_step_final_request_includes_limit_prompt(
 
 
 @pytest.mark.asyncio
+async def test_tool_call_assistant_preface_is_not_sent_as_llm_result(
+    runner, provider_request, mock_tool_executor, mock_hooks, mock_provider
+):
+    """Assistant preface text on a tool-call turn must stay internal."""
+    mock_provider.should_call_tools = True
+    mock_provider.max_calls_before_normal_response = 1
+
+    await runner.reset(
+        provider=mock_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = []
+    async for response in runner.step_until_done(3):
+        responses.append(response)
+
+    response_types = [response.type for response in responses]
+    assert response_types[-1] == "llm_result"
+    assert "llm_result" not in response_types[:-1]
+
+    llm_results = [response for response in responses if response.type == "llm_result"]
+    llm_texts = [response.data["chain"].get_plain_text() for response in llm_results]
+    assert len(llm_results) == 1
+    assert "我需要使用工具来帮助您" not in llm_texts
+    assert llm_texts == ["这是我的最终回答"]
+
+
+@pytest.mark.asyncio
 async def test_tool_loop_next_request_includes_tool_result(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):
