@@ -117,6 +117,51 @@ async def get_weather(self, event: AstrMessageEvent, location: str) -> MessageEv
 >
 > 此外，装饰器**不支持**通过 `parameters=...` 显式传入参数 schema，该写法会被忽略。如需手动控制 schema，请使用上方的 `@dataclass` + `add_llm_tools()` 方式。
 
+### 为 Tool 声明默认权限
+
+> [!TIP]
+> 在 v4.X.X 时加入
+
+`@filter.command()` 可以通过 `@filter.permission_type(filter.PermissionType.ADMIN)` 限制指令仅管理员可用，`@filter.llm_tool()` 也支持类似的写法，通过 `permission_type` 参数为工具声明一个默认权限：
+
+```py
+from astrbot.api.event import filter, AstrMessageEvent
+
+@filter.llm_tool(name="restart_server", permission_type=filter.PermissionType.ADMIN)
+async def restart_server(self, event: AstrMessageEvent):
+    '''重启服务器。'''
+    # 处理逻辑
+```
+
+`permission_type` 可选 `filter.PermissionType.ADMIN` 或 `filter.PermissionType.MEMBER`，不传则保持原有行为（所有人可用）。
+
+如果你是通过 `@dataclass` + `FunctionTool` 的方式定义 Tool（见上方[定义 Tool](#定义-tool)一节），也可以用同样的方式声明默认权限，只需要在 dataclass 里加上 `declared_permission_type` 字段：
+
+```py
+from pydantic import Field
+from pydantic.dataclasses import dataclass
+
+from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult
+from astrbot.core.astr_agent_context import AstrAgentContext
+
+
+@dataclass
+class RestartServerTool(FunctionTool[AstrAgentContext]):
+    name: str = "restart_server"
+    description: str = "Restart the server."
+    parameters: dict = Field(default_factory=lambda: {"type": "object", "properties": {}})
+    declared_permission_type: str | None = "admin"  # 可选 "admin" / "member" / None
+
+    async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
+        # 处理逻辑
+        return "ok"
+```
+
+> [!WARNING]
+> - `permission_type` / `declared_permission_type` 只是工具的**默认权限**。如果机器人主人在 WebUI 面板（扩展 -> 组件 -> 工具管理）里为该工具手动配置过权限，面板上的配置会**覆盖**插件代码里声明的默认值。
+> - 这个机制的意义在于：即便机器人主人从未打开过 WebUI 面板配置任何东西，插件作者依然可以为自己写的危险工具（例如重启服务、执行 shell 命令等）提供一层默认的安全防护，而不必依赖用户主动去配置。
+
 ## 调用 Agent
 
 > [!TIP]
