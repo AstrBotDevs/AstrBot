@@ -3,6 +3,7 @@ import json
 import pytest
 
 from astrbot.core import sp
+from astrbot.core.provider import func_tool_manager as ftm
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
 from astrbot.core.tools.message_tools import SendMessageToUserTool
@@ -345,3 +346,80 @@ def test_firecrawl_tools_are_registered_as_builtin_tools():
     assert extract_tool.name == "firecrawl_extract_web_page"
     assert manager.is_builtin_tool("web_search_firecrawl") is True
     assert manager.is_builtin_tool("firecrawl_extract_web_page") is True
+
+
+@pytest.mark.asyncio
+async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
+    class FakeResponse:
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def json(self):
+            return {
+                "data": {
+                    "mcp_server_list": [
+                        {
+                            "name": "valid",
+                            "operational_urls": [{"url": "https://example.com/mcp"}],
+                        },
+                        {"name": "missing-url", "operational_urls": []},
+                        {"name": "empty-url", "operational_urls": [{}]},
+                        {"operational_urls": [{"url": "https://example.com/no-name"}]},
+                    ]
+                }
+            }
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    saved_configs = []
+    enabled_servers = []
+    default_config = {"mcpServers": {}}
+    manager = FunctionToolManager()
+
+    async def fake_enable_mcp_server(name, config):
+        enabled_servers.append((name, config))
+
+    monkeypatch.setattr(ftm.aiohttp, "ClientSession", lambda: FakeSession())
+    monkeypatch.setattr(manager, "load_mcp_config", lambda: default_config)
+    monkeypatch.setattr(manager, "save_mcp_config", saved_configs.append)
+    monkeypatch.setattr(manager, "enable_mcp_server", fake_enable_mcp_server)
+
+    await manager.sync_modelscope_mcp_servers("token")
+
+    assert default_config == {"mcpServers": {}}
+    assert saved_configs == [
+        {
+            "mcpServers": {
+                "valid": {
+                    "url": "https://example.com/mcp",
+                    "transport": "sse",
+                    "active": True,
+                    "provider": "modelscope",
+                }
+            }
+        }
+    ]
+    assert enabled_servers == [
+        (
+            "valid",
+            {
+                "url": "https://example.com/mcp",
+                "transport": "sse",
+                "active": True,
+                "provider": "modelscope",
+            },
+        )
+    ]

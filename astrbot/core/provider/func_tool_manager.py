@@ -1057,11 +1057,14 @@ class FunctionToolManager:
                             "mcp_server_list",
                             [],
                         )
-                        local_mcp_config = self.load_mcp_config()
+                        local_mcp_config = copy.deepcopy(self.load_mcp_config())
 
-                        synced_count = 0
+                        mcp_servers = local_mcp_config.setdefault("mcpServers", {})
+                        synced_servers: list[tuple[str, dict]] = []
                         for server in mcp_server_list:
-                            server_name = server["name"]
+                            server_name = server.get("name")
+                            if not server_name:
+                                continue
                             operational_urls = server.get("operational_urls", [])
                             if not operational_urls:
                                 continue
@@ -1070,28 +1073,28 @@ class FunctionToolManager:
                             if not server_url:
                                 continue
                             # 添加到配置中(同名会覆盖)
-                            local_mcp_config["mcpServers"][server_name] = {
+                            server_config = {
                                 "url": server_url,
                                 "transport": "sse",
                                 "active": True,
                                 "provider": "modelscope",
                             }
-                            synced_count += 1
+                            mcp_servers[server_name] = server_config
+                            synced_servers.append((server_name, server_config))
 
-                        if synced_count > 0:
+                        if synced_servers:
                             self.save_mcp_config(local_mcp_config)
                             tasks = []
-                            for server in mcp_server_list:
-                                name = server["name"]
+                            for name, config in synced_servers:
                                 tasks.append(
                                     self.enable_mcp_server(
                                         name=name,
-                                        config=local_mcp_config["mcpServers"][name],
+                                        config=config,
                                     ),
                                 )
                             await asyncio.gather(*tasks)
                             logger.info(
-                                f"从 ModelScope 同步了 {synced_count} 个 MCP 服务器",
+                                f"从 ModelScope 同步了 {len(synced_servers)} 个 MCP 服务器",
                             )
                         else:
                             logger.warning("没有找到可用的 ModelScope MCP 服务器")
