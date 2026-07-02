@@ -20,6 +20,7 @@ from werkzeug.datastructures import FileStorage
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.desktop_runtime import DESKTOP_MANAGED_RESTART_MESSAGE
 from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.auth_password import (
@@ -2663,6 +2664,35 @@ async def test_check_update(
 
 
 @pytest.mark.asyncio
+async def test_restart_core_rejects_desktop_managed_backend(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    restart_called = False
+
+    async def mock_restart():
+        nonlocal restart_called
+        restart_called = True
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setattr(core_lifecycle_td, "restart", mock_restart)
+
+    response = await test_client.post(
+        "/api/stat/restart-core",
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 400
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == DESKTOP_MANAGED_RESTART_MESSAGE
+    assert restart_called is False
+
+
+@pytest.mark.asyncio
 async def test_do_update(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
@@ -2824,6 +2854,44 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
     )
     assert progress_data["data"]["status"] == "error"
     assert calls == ["download-dashboard", "download-core"]
+
+
+@pytest.mark.asyncio
+async def test_do_update_rejects_desktop_managed_backend(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    calls = []
+
+    async def mock_download_core(*args, **kwargs):
+        del args, kwargs
+        calls.append("download-core")
+
+    async def mock_restart():
+        calls.append("restart")
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "download_update_package",
+        mock_download_core,
+    )
+    monkeypatch.setattr(core_lifecycle_td, "restart", mock_restart)
+
+    response = await test_client.post(
+        "/api/update/do",
+        headers=authenticated_header,
+        json={"version": "v3.4.0", "progress_id": "desktop-progress"},
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == DESKTOP_MANAGED_RESTART_MESSAGE
+    assert calls == []
 
 
 @pytest.mark.asyncio

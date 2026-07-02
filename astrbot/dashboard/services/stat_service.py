@@ -21,6 +21,10 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import ProviderStat
+from astrbot.core.desktop_runtime import (
+    DESKTOP_MANAGED_RESTART_MESSAGE,
+    is_desktop_managed_backend,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.auth_password import (
     is_default_dashboard_password,
@@ -57,6 +61,9 @@ class StatService:
             raise StatServiceError(
                 "You are not permitted to do this operation in demo mode"
             )
+        if is_desktop_managed_backend():
+            raise StatServiceError(DESKTOP_MANAGED_RESTART_MESSAGE)
+
         await self.core_lifecycle.restart()
 
     @staticmethod

@@ -15,6 +15,10 @@ from astrbot.core import logger
 from astrbot.core import pip_installer as _pip_installer
 from astrbot.core.config.default import VERSION
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
+from astrbot.core.desktop_runtime import (
+    DESKTOP_MANAGED_RESTART_MESSAGE,
+    is_desktop_managed_backend,
+)
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
@@ -67,7 +71,9 @@ class UpdateServiceResult:
 
 
 class UpdateServiceError(Exception):
-    pass
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class UpdateService:
@@ -143,6 +149,12 @@ class UpdateService:
             raise UpdateServiceError(exc.__str__()) from exc
 
     async def update_project(self, data: object) -> UpdateServiceResult:
+        if is_desktop_managed_backend():
+            raise UpdateServiceError(
+                DESKTOP_MANAGED_RESTART_MESSAGE,
+                code="desktop_managed",
+            )
+
         payload = data if isinstance(data, dict) else {}
         version = payload.get("version", "")
         reboot = payload.get("reboot", True)
