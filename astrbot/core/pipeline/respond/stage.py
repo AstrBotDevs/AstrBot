@@ -1,6 +1,4 @@
 import asyncio
-import math
-import random
 from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
@@ -10,6 +8,11 @@ from astrbot.core.message.message_event_result import MessageChain, ResultConten
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
+from astrbot.core.utils.segmented_reply import (
+    SEGMENTED_REPLY_UNSUPPORTED_PLATFORMS,
+    calc_segment_interval,
+    parse_interval_range,
+)
 
 from ..context import PipelineContext, call_event_hook
 from ..stage import Stage, register_stage
@@ -80,31 +83,17 @@ class RespondStage(Stage):
             interval_str: str = ctx.astrbot_config["platform_settings"][
                 "segmented_reply"
             ]["interval"]
-            interval_str_ls = interval_str.replace(" ", "").split(",")
-            try:
-                self.interval = [float(t) for t in interval_str_ls]
-            except BaseException as e:
-                logger.error(f"解析分段回复的间隔时间失败。{e}")
+            self.interval = list(parse_interval_range(interval_str))
             logger.info(f"分段回复间隔时间：{self.interval}")
-
-    async def _word_cnt(self, text: str) -> int:
-        """分段回复 统计字数"""
-        if all(ord(c) < 128 for c in text):
-            word_count = len(text.split())
-        else:
-            word_count = len([c for c in text if c.isalnum()])
-        return word_count
 
     async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
         """分段回复 计算间隔时间"""
-        if self.interval_method == "log":
-            if isinstance(comp, Comp.Plain):
-                wc = await self._word_cnt(comp.text)
-                i = math.log(wc + 1, self.log_base)
-                return random.uniform(i, i + 0.5)
-            return random.uniform(1, 1.75)
-        # random
-        return random.uniform(self.interval[0], self.interval[1])
+        return calc_segment_interval(
+            comp.text if isinstance(comp, Comp.Plain) else None,
+            self.interval_method,
+            (self.interval[0], self.interval[1]),
+            self.log_base,
+        )
 
     async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]) -> bool:
         """检查消息链是否为空
@@ -137,11 +126,7 @@ class RespondStage(Stage):
         if self.only_llm_result and not result.is_model_result():
             return False
 
-        if event.get_platform_name() in [
-            "qq_official_webhook",
-            "weixin_official_account",
-            "dingtalk",
-        ]:
+        if event.get_platform_name() in SEGMENTED_REPLY_UNSUPPORTED_PLATFORMS:
             return False
 
         return True

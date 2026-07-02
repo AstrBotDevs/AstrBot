@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import astrbot.core.message.components as Comp
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.tools.message_tools import SendMessageToUserTool
@@ -15,13 +16,15 @@ def _make_context(
     role="admin",
     require_admin=True,
     runtime="local",
+    platform_settings=None,
 ):
     """Build a minimal ContextWrapper for SendMessageToUserTool."""
     cfg = {
         "provider_settings": {
             "computer_use_require_admin": require_admin,
             "computer_use_runtime": runtime,
-        }
+        },
+        "platform_settings": platform_settings or {},
     }
     extras = {}
     event = SimpleNamespace(
@@ -450,3 +453,146 @@ async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
     sent_chain = ctx.context.context.send_message.await_args.args[1]
     sent_file = sent_chain.chain[0]
     assert sent_file.name == "export"
+
+
+def _seg_cfg(**overrides):
+    """Segmented-reply config with fast (zero) intervals for tests."""
+    seg = {
+        "enable": True,
+        "only_llm_result": True,
+        "interval_method": "random",
+        "interval": "0,0",
+        "log_base": 2.6,
+        "words_count_threshold": 150,
+        "split_mode": "words",
+        "split_words": ["|"],
+        "regex": ".*?[。？！~…]+|.+$",
+        "content_cleanup_rule": "",
+    }
+    seg.update(overrides)
+    return seg
+
+
+@pytest.mark.asyncio
+async def test_send_message_segments_mention_reply_like_pipeline():
+    """Issue #8325: tool-sent messages respect the segmented reply config.
+
+    A mention component must ride on the first segment, and the plain text
+    must be split the same way ResultDecorateStage splits pipeline replies.
+    """
+    tool = SendMessageToUserTool()
+    ctx = _make_context(
+        current_session="aiocqhttp:GroupMessage:684468174",
+        platform_settings={"segmented_reply": _seg_cfg()},
+    )
+    result = await tool.call(
+        ctx,
+        messages=[
+            {"type": "mention_user", "mention_user_id": "2842682873"},
+            {"type": "plain", "text": "啊这|找到bug了（"},
+        ],
+    )
+    assert "Message sent to session" in result
+    send = ctx.context.context.send_message
+    assert send.await_count == 2
+    first_chain = send.await_args_list[0].args[1].chain
+    second_chain = send.await_args_list[1].args[1].chain
+    assert isinstance(first_chain[0], Comp.At)
+    assert str(first_chain[0].qq) == "2842682873"
+    assert isinstance(first_chain[1], Comp.Plain)
+    assert first_chain[1].text == "啊这"
+    assert len(second_chain) == 1
+    assert isinstance(second_chain[0], Comp.Plain)
+    assert second_chain[0].text == "找到bug了（"
+    # Dedupe bookkeeping still records the original full text.
+    assert ctx.context.event.get_extra(
+        "_send_message_to_user_current_session_plain_texts",
+    ) == ["啊这|找到bug了（"]
+
+
+@pytest.mark.asyncio
+async def test_send_message_not_segmented_when_disabled():
+    """Segmented reply disabled keeps the single-send behavior."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(
+        platform_settings={"segmented_reply": _seg_cfg(enable=False)},
+    )
+    result = await tool.call(
+        ctx,
+        messages=[
+            {"type": "mention_user", "mention_user_id": "u1"},
+            {"type": "plain", "text": "啊这|找到bug了（"},
+        ],
+    )
+    assert "Message sent to session" in result
+    send = ctx.context.context.send_message
+    assert send.await_count == 1
+    chain = send.await_args.args[1].chain
+    assert [type(comp) for comp in chain] == [Comp.At, Comp.Plain]
+    assert chain[1].text == "啊这|找到bug了（"
+
+
+@pytest.mark.asyncio
+async def test_send_message_segmented_respects_words_count_threshold():
+    """Text longer than the threshold is sent unsplit, like the pipeline."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(
+        platform_settings={
+            "segmented_reply": _seg_cfg(words_count_threshold=5),
+        },
+    )
+    text = "这条消息比阈值长|不应被分段"
+    result = await tool.call(ctx, messages=[{"type": "plain", "text": text}])
+    assert "Message sent to session" in result
+    send = ctx.context.context.send_message
+    assert send.await_count == 1
+    assert send.await_args.args[1].chain[0].text == text
+
+
+@pytest.mark.asyncio
+async def test_send_message_segmented_regex_mode_with_cleanup_rule():
+    """Regex split mode and content cleanup rule match pipeline behavior."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(
+        platform_settings={
+            "segmented_reply": _seg_cfg(
+                split_mode="regex",
+                content_cleanup_rule="[。]",
+            ),
+        },
+    )
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "plain", "text": "你好。再见。"}],
+    )
+    assert "Message sent to session" in result
+    send = ctx.context.context.send_message
+    assert send.await_count == 2
+    assert send.await_args_list[0].args[1].chain[0].text == "你好"
+    assert send.await_args_list[1].args[1].chain[0].text == "再见"
+
+
+@pytest.mark.asyncio
+async def test_send_message_not_segmented_on_unsupported_platform():
+    """Platforms that cannot send proactive segments keep the single send."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(
+        current_session="qq_official_webhook:GroupMessage:g1",
+        platform_settings={"segmented_reply": _seg_cfg()},
+    )
+    ctx.context.context.platform_manager = SimpleNamespace(
+        platform_insts=[
+            SimpleNamespace(
+                meta=lambda: SimpleNamespace(
+                    id="qq_official_webhook",
+                    name="qq_official_webhook",
+                ),
+            ),
+        ],
+    )
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "plain", "text": "你好。再见。"}],
+    )
+    assert "Message sent to session" in result
+    assert ctx.context.context.send_message.await_count == 1
