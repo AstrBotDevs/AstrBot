@@ -2,12 +2,15 @@
  * 提供商相关的工具函数
  */
 
+const opencodeGoIcon = new URL('@/assets/images/provider_logos/opencode-go.png', import.meta.url).href;
+
 /**
  * 获取提供商类型对应的图标
  * @param {string} type - 提供商类型
  * @returns {string} 图标 URL
  */
 export function getProviderIcon(type) {
+  const providerType = type?.toString().trim().toLowerCase();
   const icons = {
     'openai': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg',
     'azure': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/azure.svg',
@@ -23,6 +26,8 @@ export function getProviderIcon(type) {
     'moonshot': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg',
     'kimi': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg',
     'kimi-code': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kimi.svg',
+    'opencode-go': opencodeGoIcon,
+    'opencode_go_chat_completion': opencodeGoIcon,
     'longcat': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/longcat-color.svg',
     'ppio': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/ppio.svg',
     'dify': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/dify-color.svg',
@@ -49,7 +54,7 @@ export function getProviderIcon(type) {
     "bailian": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/bailian-color.svg",
     "volcengine": 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine-color.svg',
   };
-  return icons[type] || '';
+  return icons[providerType] || '';
 }
 
 /**
