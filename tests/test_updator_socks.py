@@ -10,6 +10,7 @@ import certifi
 import httpx
 import pytest
 
+from astrbot.core import updator as core_updator
 from astrbot.core.star.updator import PluginUpdator
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils import io as io_utils
@@ -78,6 +79,60 @@ class _FakeStatusErrorResponse:
             request=request,
             response=response,
         )
+
+
+def test_astrbot_updator_exec_reboot_spawns_new_console_on_windows(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    popen_calls = []
+    exit_codes = []
+    execv_calls = []
+
+    def fake_popen(args, creationflags=0):
+        popen_calls.append((args, creationflags))
+        return SimpleNamespace(pid=1234)
+
+    def fake_exit(code):
+        exit_codes.append(code)
+        raise SystemExit(code)
+
+    def fake_execv(*args):
+        execv_calls.append(args)
+
+    monkeypatch.setattr(core_updator.os, "name", "nt")
+    monkeypatch.setattr(core_updator.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(
+        core_updator.subprocess, "CREATE_NEW_CONSOLE", 0x00000010, raising=False
+    )
+    monkeypatch.setattr(core_updator.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(core_updator.os, "_exit", fake_exit)
+    monkeypatch.setattr(core_updator.os, "execv", fake_execv)
+
+    with pytest.raises(SystemExit) as exc_info:
+        AstrBotUpdator._exec_reboot(
+            r"C:\Python312\python.exe",
+            [
+                r"C:\Python312\python.exe",
+                "main.py",
+                "--webui-dir",
+                r"C:\AstrBot WebUI\dist",
+            ],
+        )
+
+    assert exc_info.value.code == 0
+    assert popen_calls == [
+        (
+            [
+                r"C:\Python312\python.exe",
+                "main.py",
+                "--webui-dir",
+                r"C:\AstrBot WebUI\dist",
+            ],
+            core_updator.subprocess.CREATE_NEW_CONSOLE,
+        )
+    ]
+    assert exit_codes == [0]
+    assert execv_calls == []
 
 
 @dataclass
