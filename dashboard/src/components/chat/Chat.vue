@@ -421,6 +421,7 @@
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
+              :current-umo="currentUmo ?? undefined"
               :is-dark="isDark"
               :is-streaming="
                 Boolean(currSessionId && isSessionRunning(currSessionId))
@@ -442,7 +443,6 @@
               @open-thread="openThreadPanel"
               @open-reasoning="openReasoningPanel"
               @open-refs="openRefsSidebar"
-              @submit-choice="onInteractiveChoiceSubmit"
             />
           </div>
 
@@ -1198,6 +1198,20 @@ function resolveCurrentUmo(sessionId: string): string | null {
   return `${platformId}:${messageType}:${sessionId}`;
 }
 
+/**
+ * Current conversation's full unified_msg_origin.
+ *
+ * `ChatMessageList` receives this and passes it to the InteractiveChoice
+ * Pinia store's `reconcile(currentUmo)` action on mount and whenever
+ * the value changes, so a tab-switch picks up server-side pending
+ * interactive choices without depending on a fresh SSE event.
+ *
+ * Format mirrors the backend's webchat adapter:
+ *   `webchat:{FriendMessage|GroupMessage}:webchat!{user}!{cid}`.
+ * `resolveCurrentUmo()` does the actual construction.
+ */
+const currentUmo = computed(() => resolveCurrentUmo(currSessionId.value));
+
 function getRouteSessionId() {
   const raw = route.params.conversationId;
   return Array.isArray(raw) ? raw[0] : raw || "";
@@ -1454,39 +1468,6 @@ async function sendCurrentMessage() {
     sending.value = false;
     await focusChatInput();
   }
-}
-
-/**
- * Handle InteractiveChoiceBox submit (spec §4.5): bubbled up from
- * ChatMessageList, creates a user record + bot record via
- * createLocalExchange and dispatches sendMessageStream with the
- * currently selected transport / streaming / provider settings.
- *
- * Unlike sendCurrentMessage, no new session is created — the user
- * can only encounter an interactive choice inside an existing chat.
- */
-function onInteractiveChoiceSubmit(text: string) {
-  const sessionId = currSessionId.value;
-  if (!sessionId) return;
-  const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-  const parts: MessagePart[] = [{ type: "plain", text }];
-  const selection = inputRef.value?.getCurrentSelection();
-  const { userRecord, botRecord } = createLocalExchange({
-    sessionId,
-    messageId,
-    parts,
-  });
-  sendMessageStream({
-    sessionId,
-    messageId,
-    parts,
-    transport: transportMode.value,
-    enableStreaming: enableStreaming.value,
-    selectedProvider: selection?.providerId || "",
-    selectedModel: selection?.modelName || "",
-    userRecord,
-    botRecord,
-  });
 }
 
 /**
