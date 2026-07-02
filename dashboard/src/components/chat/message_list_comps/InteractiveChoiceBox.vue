@@ -103,8 +103,10 @@ const props = defineProps<{
   isIgnored?: boolean;
 }>();
 
+// v1.0 提交协议:emit (requestId, payload),由 ChatMessageList 冒泡到 Chat.vue
+// 处理实际发送。payload.choice_id 为 "__free_text__" 表示自由文本提交。
 const emit = defineEmits<{
-  submit: [text: string];
+  submit: [requestId: string, payload: { choice_id: string; free_text: string }];
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -141,18 +143,21 @@ const inputPlaceholderResolved = computed(
 
 function onOptionClick(opt: InteractiveChoiceOption) {
   if (state.value !== "pending") return;
+  // 先 emit,再更新本地状态,保证父组件拿到的 requestId 与本次选项匹配
+  emit("submit", props.part.request_id, { choice_id: opt.id, free_text: "" });
   submittedOptionId.value = opt.id;
   submittedValue.value = getOptionSubmitText(opt);
   submittedKind.value = "option";
-  emit("submit", submittedValue.value);
 }
 
 function onInputSubmit() {
   const text = freeText.value.trim();
   if (!text || state.value !== "pending") return;
+  // 自由文本提交:choice_id 用哨兵值 "__free_text__" 标识,真实文本放在 free_text
+  emit("submit", props.part.request_id, { choice_id: "__free_text__", free_text: text });
   submittedValue.value = text;
   submittedKind.value = "input";
-  emit("submit", text);
+  submittedOptionId.value = null;
 }
 
 function ariaLabelForOption(opt: InteractiveChoiceOption): string {
