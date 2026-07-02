@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import shlex
@@ -25,6 +26,17 @@ from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_temp_path,
+)
+from astrbot.core.utils.segmented_reply import (
+    DEFAULT_SPLIT_REGEX,
+    DEFAULT_SPLIT_WORDS,
+    SEGMENTED_REPLY_UNSUPPORTED_PLATFORMS,
+    calc_segment_interval,
+    cleanup_segments,
+    compile_split_words_pattern,
+    parse_interval_range,
+    split_text_by_regex,
+    split_text_by_words,
 )
 
 
@@ -187,6 +199,146 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
 
         raise FileNotFoundError(f"{component_type} path does not exist: {path}")
 
+    def _get_segmented_reply_conf(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        target_session: MessageSession,
+    ) -> dict | None:
+        """获取目标会话生效的分段回复配置；不需要分段时返回 None。
+
+        send_message_to_user 直接调用 send_message 发送，绕过了
+        ResultDecorateStage/RespondStage，因此需要在这里应用与 pipeline
+        一致的分段回复行为。See #8325.
+        """
+        try:
+            cfg = context.context.context.get_config(umo=str(target_session))
+        except Exception:
+            return None
+        if not isinstance(cfg, dict):
+            return None
+        seg_conf = cfg.get("platform_settings", {}).get("segmented_reply", {})
+        # 工具消息由 LLM 主动发出，属于 LLM 结果，无需检查 only_llm_result。
+        if not seg_conf.get("enable", False):
+            return None
+        platform_id = target_session.platform_id
+        if platform_id in SEGMENTED_REPLY_UNSUPPORTED_PLATFORMS:
+            return None
+        platform_manager = getattr(
+            context.context.context,
+            "platform_manager",
+            None,
+        )
+        if platform_manager is not None:
+            try:
+                for inst in platform_manager.platform_insts:
+                    meta = inst.meta()
+                    if (
+                        meta.id == platform_id
+                        and meta.name in SEGMENTED_REPLY_UNSUPPORTED_PLATFORMS
+                    ):
+                        return None
+            except Exception:
+                pass
+        return seg_conf
+
+    def _build_segmented_chains(
+        self,
+        components: list[Comp.BaseMessageComponent],
+        seg_conf: dict,
+    ) -> list[list[Comp.BaseMessageComponent]] | None:
+        """按分段回复配置将消息组件拆分为多条消息链；返回 None 表示原样发送。
+
+        与 pipeline 行为对齐：Plain 文本按配置分段，At/Reply 附加在第一条
+        消息上（Record 需要单独发送，不附加）。
+        """
+        try:
+            words_count_threshold = int(seg_conf.get("words_count_threshold", 150))
+        except (TypeError, ValueError):
+            words_count_threshold = 150
+        split_mode = seg_conf.get("split_mode", "regex")
+        regex = seg_conf.get("regex", DEFAULT_SPLIT_REGEX)
+        split_words = seg_conf.get("split_words", DEFAULT_SPLIT_WORDS)
+        content_cleanup_rule = seg_conf.get("content_cleanup_rule", "")
+        split_words_pattern = (
+            compile_split_words_pattern(split_words) if split_mode == "words" else None
+        )
+
+        header_comps = [
+            comp for comp in components if isinstance(comp, (Comp.At, Comp.Reply))
+        ]
+        body_comps = [
+            comp for comp in components if not isinstance(comp, (Comp.At, Comp.Reply))
+        ]
+        if not body_comps:
+            return None
+
+        units: list[Comp.BaseMessageComponent] = []
+        for comp in body_comps:
+            if (
+                not isinstance(comp, Comp.Plain)
+                or len(comp.text) > words_count_threshold
+            ):
+                # 与 ResultDecorateStage 一致：非 Plain 或超过阈值的长文本不分段
+                units.append(comp)
+                continue
+            if split_mode == "words":
+                split_response = split_text_by_words(
+                    comp.text,
+                    split_words,
+                    split_words_pattern,
+                )
+            else:
+                split_response = split_text_by_regex(comp.text, regex)
+            if not split_response:
+                units.append(comp)
+                continue
+            segments = cleanup_segments(split_response, content_cleanup_rule)
+            if segments:
+                units.extend(Comp.Plain(text=seg) for seg in segments)
+            else:
+                units.append(comp)
+
+        chains: list[list[Comp.BaseMessageComponent]] = []
+        pending_header = list(header_comps)
+        for unit in units:
+            if isinstance(unit, Comp.Record):
+                # Record 需要单独发送，与 RespondStage 一致
+                chains.append([unit])
+            else:
+                chains.append([*pending_header, unit])
+                pending_header = []
+        if pending_header:
+            # 全部是 Record 时，单独发送 At/Reply，避免丢失 LLM 显式要求的提及
+            chains.insert(0, pending_header)
+        return chains
+
+    async def _send_segmented_chains(
+        self,
+        context: ContextWrapper[AstrAgentContext],
+        target_session: MessageSession,
+        chains: list[list[Comp.BaseMessageComponent]],
+        seg_conf: dict,
+    ) -> None:
+        interval_method = seg_conf.get("interval_method", "random")
+        interval_range = parse_interval_range(str(seg_conf.get("interval", "1.5,3.5")))
+        try:
+            log_base = float(seg_conf.get("log_base", 2.6))
+        except (TypeError, ValueError):
+            log_base = 2.6
+        for chain in chains:
+            main_comp = chain[-1]
+            interval = calc_segment_interval(
+                main_comp.text if isinstance(main_comp, Comp.Plain) else None,
+                interval_method,
+                interval_range,
+                log_base,
+            )
+            await asyncio.sleep(interval)
+            await context.context.context.send_message(
+                target_session,
+                MessageChain(chain=chain),
+            )
+
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
@@ -318,7 +470,19 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return f"error: invalid session: {session}"
 
         message_chain = MessageChain(chain=components)
-        await context.context.context.send_message(target_session, message_chain)
+        seg_conf = self._get_segmented_reply_conf(context, target_session)
+        seg_chains = (
+            self._build_segmented_chains(components, seg_conf) if seg_conf else None
+        )
+        if seg_chains:
+            await self._send_segmented_chains(
+                context,
+                target_session,
+                seg_chains,
+                seg_conf,
+            )
+        else:
+            await context.context.context.send_message(target_session, message_chain)
         if str(target_session) == current_session:
             context.context.event._has_send_oper = True
             sent_plain_text = message_chain.get_plain_text().strip()
