@@ -1976,3 +1976,202 @@ async def test_uninstall_failed_plugin_without_plugin_id_in_record(
 
     assert len(cleanup_calls) == 1
     assert cleanup_calls[0]["plugin_id"] is None
+
+
+# --- reload + deactivated plugin regression tests ---
+
+
+@pytest.mark.asyncio
+async def test_reload_deactivated_plugin_preserves_tools(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """Specified reload of a deactivated plugin keeps its tools in func_list."""
+    _clear_star_runtime_state()
+    plugin_name = "demo_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    metadata = star_manager_module.StarMetadata(
+        name=plugin_name,
+        root_dir_name=plugin_name,
+        module_path=module_path,
+        activated=False,
+    )
+    star_manager_module.star_map[module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+
+    plugin_tool = star_manager_module.FunctionTool(
+        name="plugin_search",
+        description="plugin search",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path=f"data.plugins.{plugin_name}.main.tools.search",
+    )
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = [plugin_tool]
+
+    async def mock_terminate(smd):
+        pass  # deactivated → no-op
+
+    async def mock_load(specified_module_path=None, **kwargs):
+        return True, None
+
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
+
+    try:
+        await plugin_manager_pm.reload(plugin_name)
+        assert plugin_tool in llm_tools.func_list
+    finally:
+        llm_tools.func_list = original_func_list
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_reload_activated_plugin_still_unbinds(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """Specified reload of an activated plugin still calls _unbind_plugin."""
+    _clear_star_runtime_state()
+    plugin_name = "demo_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    metadata = star_manager_module.StarMetadata(
+        name=plugin_name,
+        root_dir_name=plugin_name,
+        module_path=module_path,
+        activated=True,
+    )
+    star_manager_module.star_map[module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+
+    unbound = []
+
+    async def mock_terminate(smd):
+        pass
+
+    async def mock_unbind(name, path):
+        unbound.append(name)
+
+    async def mock_load(specified_module_path=None, **kwargs):
+        return True, None
+
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", mock_unbind)
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
+
+    try:
+        await plugin_manager_pm.reload(plugin_name)
+        assert unbound == [plugin_name]
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_full_reload_deactivated_plugin_stays_registered(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """Full reload keeps deactivated plugin in star_map with activated=False."""
+    _clear_star_runtime_state()
+    plugin_name = "demo_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    metadata = star_manager_module.StarMetadata(
+        name=plugin_name,
+        root_dir_name=plugin_name,
+        module_path=module_path,
+        activated=False,
+    )
+    star_manager_module.star_map[module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+
+    async def mock_terminate(smd):
+        pass
+
+    async def mock_unbind_full(name, path):
+        pass
+
+    async def mock_load(specified_module_path=None, **kwargs):
+        # In full reload, load() re-registers all plugins.
+        # Deactivated plugins get registered with activated=False.
+        re_registered = star_manager_module.StarMetadata(
+            name=plugin_name,
+            root_dir_name=plugin_name,
+            module_path=module_path,
+            activated=False,
+        )
+        star_manager_module.star_map[module_path] = re_registered
+        star_manager_module.star_registry.append(re_registered)
+        return True, None
+
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "_unbind_plugin", mock_unbind_full)
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
+
+    try:
+        await plugin_manager_pm.reload()
+        assert module_path in star_manager_module.star_map
+        assert star_manager_module.star_map[module_path].activated is False
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_turn_on_plugin_after_deactivated_reload_reactivates_tools(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """turn_on_plugin reactivates tools after a deactivated plugin is reloaded."""
+    _clear_star_runtime_state()
+    plugin_name = "demo_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    plugin = star_manager_module.StarMetadata(
+        name=plugin_name,
+        root_dir_name=plugin_name,
+        module_path=module_path,
+        activated=False,
+    )
+    cast(Any, plugin_manager_pm.context).stars.append(plugin)
+    star_manager_module.star_map[module_path] = plugin
+    star_manager_module.star_registry.append(plugin)
+
+    plugin_tool = star_manager_module.FunctionTool(
+        name="plugin_search",
+        description="plugin search",
+        parameters={"type": "object", "properties": {}},
+        handler_module_path=f"data.plugins.{plugin_name}.main.tools.search",
+    )
+    plugin_tool.active = False  # simulate deactivated state
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = [plugin_tool]
+    preferences = {
+        "inactivated_plugins": [module_path],
+        "inactivated_llm_tools": [],
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    async def mock_terminate(smd):
+        pass
+
+    async def mock_reload(plugin_name_arg):
+        assert plugin_name_arg == plugin_name
+        # Simulate what load() does: re-register with activated=True
+        # since it's no longer in inactivated_plugins
+        plugin.activated = True
+        return True, None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(plugin_manager_pm, "_terminate_plugin", mock_terminate)
+    monkeypatch.setattr(plugin_manager_pm, "reload", mock_reload)
+
+    try:
+        await plugin_manager_pm.turn_on_plugin(plugin_name)
+        assert plugin_tool.active is True
+        assert module_path not in preferences["inactivated_plugins"]
+        assert plugin.activated is True
+    finally:
+        llm_tools.func_list = original_func_list
+        cast(Any, plugin_manager_pm.context).stars.remove(plugin)
+        _clear_star_runtime_state()
