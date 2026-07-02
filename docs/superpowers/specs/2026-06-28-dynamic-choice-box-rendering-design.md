@@ -1,5 +1,7 @@
 # Dynamic Choice Box Rendering — Design Spec
 
+> ⚠️ **DEPRECATED (2026-07-02)**: This spec describes v0.3 软阻塞式实现,已被 v1.0 真阻塞式替代。v1.0 spec 见 `2026-07-02-blocking-interactive-choice-design.md`。本文档保留作为历史记录,不再代表当前实现。
+
 | Field | Value |
 | --- | --- |
 | Spec author | elecvoid243 |
