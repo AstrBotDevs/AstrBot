@@ -234,6 +234,45 @@ class RepoZipUpdator:
         """Semver 版本比较"""
         return VersionComparator.compare_version(v1, v2)
 
+    def _is_prerelease_version(self, version: str) -> bool:
+        """Check if a version string is a prerelease version."""
+        return bool(
+            re.search(
+                r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
+                version,
+                re.IGNORECASE,
+            )
+        )
+
+    def _matches_prerelease_policy(
+        self,
+        release: dict,
+        consider_prerelease: bool,
+    ) -> bool:
+        """Return whether a release is allowed by the prerelease policy."""
+        return consider_prerelease or not self._is_prerelease_version(
+            release["tag_name"],
+        )
+
+    def _select_release_data(
+        self,
+        releases: list,
+        consider_prerelease: bool,
+    ) -> dict | None:
+        """Select the first release allowed by the prerelease policy."""
+        return next(
+            (
+                release
+                for release in releases
+                if self._matches_prerelease_policy(release, consider_prerelease)
+            ),
+            None,
+        )
+
+    def _has_newer_version(self, current_version: str, release_version: str) -> bool:
+        """Return whether the selected release is newer than current version."""
+        return self.compare_version(current_version, release_version) < 0
+
     async def check_update(
         self,
         url: str,
@@ -241,29 +280,17 @@ class RepoZipUpdator:
         consider_prerelease: bool = True,
     ) -> ReleaseInfo | None:
         update_data = await self.fetch_release_info(url)
-
-        sel_release_data = None
-        if consider_prerelease:
-            tag_name = update_data[0]["tag_name"]
-            sel_release_data = update_data[0]
-        else:
-            for data in update_data:
-                # 跳过带有 alpha、beta 等预发布标签的版本
-                if re.search(
-                    r"[\-_.]?(alpha|beta|rc|dev)[\-_.]?\d*$",
-                    data["tag_name"],
-                    re.IGNORECASE,
-                ):
-                    continue
-                tag_name = data["tag_name"]
-                sel_release_data = data
-                break
-
-        if not sel_release_data or not tag_name:
+        if not update_data:
             logger.error("未找到合适的发布版本")
             return None
 
-        if self.compare_version(current_version, tag_name) >= 0:
+        sel_release_data = self._select_release_data(update_data, consider_prerelease)
+        if not sel_release_data:
+            logger.error("未找到合适的发布版本")
+            return None
+
+        tag_name = sel_release_data["tag_name"]
+        if not self._has_newer_version(current_version, tag_name):
             return None
         return ReleaseInfo(
             version=tag_name,

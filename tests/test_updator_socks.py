@@ -419,6 +419,41 @@ async def test_plugin_update_validates_archive_before_removing_existing_plugin(
 
 
 @pytest.mark.asyncio
+async def test_check_update_skips_stable_when_current_prerelease_is_newer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    updator = RepoZipUpdator()
+
+    async def fake_fetch_release_info(url: str, latest: bool = True):  # noqa: ARG001
+        return [
+            {
+                "version": "AstrBot v4.26.0-beta.1",
+                "published_at": "2026-06-20T00:00:00Z",
+                "body": "beta",
+                "tag_name": "v4.26.0-beta.1",
+                "zipball_url": "https://github.example/beta.zip",
+            },
+            {
+                "version": "AstrBot v4.25.6",
+                "published_at": "2026-06-19T00:00:00Z",
+                "body": "stable",
+                "tag_name": "v4.25.6",
+                "zipball_url": "https://github.example/stable.zip",
+            },
+        ]
+
+    monkeypatch.setattr(updator, "fetch_release_info", fake_fetch_release_info)
+
+    result = await updator.check_update(
+        "https://example.invalid/releases",
+        current_version="v4.26.0-dev",
+        consider_prerelease=False,
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_astrbot_updator_prefers_hosted_core_package(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
