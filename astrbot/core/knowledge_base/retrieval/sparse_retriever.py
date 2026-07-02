@@ -136,6 +136,12 @@ class SparseRetriever:
                     "doc_id": chunk_md["kb_doc_id"],
                     "kb_id": kb_id,
                     "text": doc["text"],
+                    "index_text": (
+                        chunk_md["index_text"]
+                        if isinstance(chunk_md.get("index_text"), str)
+                        and chunk_md["index_text"].strip()
+                        else doc["text"]
+                    ),
                 }
                 for doc, chunk_md in zip(result, chunk_mds)
             ]
@@ -146,7 +152,7 @@ class SparseRetriever:
             return []
 
         # 2. 准备文档和索引
-        corpus = [chunk["text"] for chunk in chunks]
+        corpus = [chunk["index_text"] for chunk in chunks]
         tokenized_corpus = [tokenize_text(doc, self.hit_stopwords) for doc in corpus]
 
         # 3. 构建 BM25 索引

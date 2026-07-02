@@ -2,8 +2,13 @@
   <div class="documents-tab">
     <!-- 操作栏 -->
     <div class="action-bar mb-4">
-      <v-btn prepend-icon="mdi-upload" color="primary" variant="outlined" @click="showUploadDialog = true">
+      <v-btn v-if="!isTable" prepend-icon="mdi-upload" color="primary" variant="outlined"
+        @click="showUploadDialog = true">
         {{ t('documents.upload') }}
+      </v-btn>
+      <v-btn v-else prepend-icon="mdi-table-arrow-up" color="primary" variant="outlined"
+        @click="showTableDialog = true">
+        {{ t('documents.importTable') }}
       </v-btn>
       <v-text-field v-model="searchQuery" prepend-inner-icon="mdi-magnify" :placeholder="'搜索文档...'" variant="outlined"
         density="compact" hide-details clearable style="max-width: 300px" />
@@ -233,11 +238,15 @@
 
     <!-- Tavily Key 配置对话框 -->
     <TavilyKeyDialog v-model="showTavilyDialog" @success="onTavilyKeySet" />
+
+    <!-- 表格导入对话框 -->
+    <TableImportDialog v-model="showTableDialog" :kb-id="kbId" @started="onTableImportStarted" />
   </div>
 </template>
 
 <script setup lang="ts">
 import TavilyKeyDialog from './TavilyKeyDialog.vue'
+import TableImportDialog from './TableImportDialog.vue'
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { configProfileApi, knowledgeApi, providerApi } from '@/api/v1'
@@ -250,6 +259,8 @@ const props = defineProps<{
   kbId: string
   kb: any
 }>()
+
+const isTable = computed(() => props.kb?.kb_type === 'table')
 
 const emit = defineEmits(['refresh'])
 
@@ -275,6 +286,7 @@ const uploadingTasks = ref<Map<string, any>>(new Map())
 const progressPollingInterval = ref<number | null>(null)
 const tavilyConfigStatus = ref('loading') // 'loading', 'configured', 'not_configured', 'error'
 const showTavilyDialog = ref(false)
+const showTableDialog = ref(false)
 
 const snackbar = ref({
   show: false,
@@ -563,6 +575,34 @@ const uploadFromUrl = async () => {
     showSnackbar(message, 'error')
   } finally {
     uploading.value = false
+  }
+}
+
+// 表格导入已在后台启动
+const onTableImportStarted = (payload: { taskId: string; fileName: string }) => {
+  const { taskId, fileName } = payload
+  showSnackbar(t('table.importStarted'), 'info')
+
+  const uploadingDoc = {
+    doc_id: `uploading_${taskId}_0`,
+    doc_name: fileName,
+    file_type: fileName.split('.').pop() || '',
+    file_size: 0,
+    chunk_count: 0,
+    created_at: new Date().toISOString(),
+    uploading: true,
+    taskId: taskId,
+    uploadProgress: {
+      stage: 'parsing',
+      current: 0,
+      total: 100
+    }
+  }
+
+  documents.value = [uploadingDoc, ...documents.value]
+
+  if (taskId) {
+    startProgressPolling(taskId)
   }
 }
 

@@ -19,6 +19,15 @@
 
         <template #title-extra>
           <v-chip
+            v-if="kb.kb_type === 'table'"
+            color="primary"
+            size="x-small"
+            variant="tonal"
+            prepend-icon="mdi-table"
+          >
+            {{ t('create.typeTable') }}
+          </v-chip>
+          <v-chip
             v-if="kb.init_error"
             color="error"
             size="x-small"
@@ -158,6 +167,13 @@
 
             <v-textarea v-model="formData.description" :label="t('create.descriptionLabel')"
               :placeholder="t('create.descriptionPlaceholder')" variant="outlined" rows="3" class="mb-4" />
+
+            <v-btn-toggle v-model="formData.kb_type" mandatory variant="outlined" divided
+              class="kb-type-toggle mb-1" :disabled="editingKB !== null">
+              <v-btn value="text" prepend-icon="mdi-text-box-outline">{{ t('create.typeText') }}</v-btn>
+              <v-btn value="table" prepend-icon="mdi-table">{{ t('create.typeTable') }}</v-btn>
+            </v-btn-toggle>
+            <p class="text-caption text-medium-emphasis mb-4">{{ t('create.typeHint') }}</p>
 
             <v-select v-model="formData.embedding_provider_id" :items="embeddingProviders"
               :item-title="item => item.embedding_model || item.id" :item-value="'id'"
@@ -308,6 +324,7 @@ const formData = ref({
   kb_name: '',
   description: '',
   emoji: '📚',
+  kb_type: 'text',
   embedding_provider_id: null,
   rerank_provider_id: null
 })
@@ -389,6 +406,7 @@ const editKB = (kb: any) => {
     kb_name: kb.kb_name,
     description: kb.description || '',
     emoji: kb.emoji || '📚',
+    kb_type: kb.kb_type || 'text',
     embedding_provider_id: kb.embedding_provider_id,
     rerank_provider_id: kb.rerank_provider_id
   }
@@ -443,12 +461,15 @@ const submitForm = async () => {
 
   saving.value = true
   try {
-    const payload = {
+    const payload: any = {
       kb_name: formData.value.kb_name,
       description: formData.value.description,
       emoji: formData.value.emoji,
       embedding_provider_id: formData.value.embedding_provider_id,
       rerank_provider_id: formData.value.rerank_provider_id
+    }
+    if (!editingKB.value) {
+      payload.kb_type = formData.value.kb_type
     }
 
     let response
@@ -484,6 +505,7 @@ const closeCreateDialog = () => {
     kb_name: '',
     description: '',
     emoji: '📚',
+    kb_type: 'text',
     embedding_provider_id: null,
     rerank_provider_id: null
   }
@@ -512,6 +534,14 @@ onMounted(() => {
 <style scoped>
 .kb-list-page {
   width: 100%;
+}
+
+.kb-type-toggle {
+  width: 100%;
+}
+
+.kb-type-toggle .v-btn {
+  flex: 1 1 0;
 }
 
 .kb-list {
