@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import Response
 
 from astrbot.dashboard.asgi_runtime import DashboardRequest
 from astrbot.dashboard.async_utils import run_maybe_async
@@ -50,6 +51,8 @@ def _model_dict(payload) -> dict[str, Any]:
 async def _run(operation):
     try:
         result = await run_maybe_async(operation)
+        if isinstance(result, Response):
+            return result
         return ok(result)
     except PlatformServiceError as exc:
         _raise_platform_error(exc)

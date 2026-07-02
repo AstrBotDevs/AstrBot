@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import unquote
 
+from fastapi.responses import Response as FastAPIResponse
 from requests import Response
 from wechatpy.enterprise import WeChatClient, parse_message
 from wechatpy.enterprise.crypto import WeChatCrypto
@@ -97,7 +98,7 @@ class WecomServer:
         """内部服务器的 GET 验证入口"""
         return await self.handle_verify(request)
 
-    async def handle_verify(self, request) -> str:
+    async def handle_verify(self, request) -> FastAPIResponse:
         """处理验证请求，可被统一 webhook 入口复用
 
         Args:
@@ -116,7 +117,7 @@ class WecomServer:
                 args.get("echostr"),
             )
             logger.info("验证请求有效性成功。")
-            return echo_str
+            return FastAPIResponse(content=echo_str, media_type="text/plain")
         except InvalidSignatureException:
             logger.error("验证请求有效性失败，签名异常，请检查配置。")
             raise
