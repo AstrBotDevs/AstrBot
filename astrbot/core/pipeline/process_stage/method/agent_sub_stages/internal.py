@@ -329,7 +329,10 @@ class InternalAgentSubStage(Stage):
                                 event,
                                 req,
                                 agent_runner.get_final_llm_resp(),
-                                agent_runner.run_context.messages,
+                                agent_runner.run_context.persisted_messages
+                                if agent_runner.run_context.persisted_messages
+                                is not None
+                                else agent_runner.run_context.messages,
                                 agent_runner.stats,
                                 user_aborted=agent_runner.was_aborted(),
                             )
@@ -404,7 +407,9 @@ class InternalAgentSubStage(Stage):
                             event,
                             req,
                             final_resp,
-                            agent_runner.run_context.messages,
+                            agent_runner.run_context.persisted_messages
+                            if agent_runner.run_context.persisted_messages is not None
+                            else agent_runner.run_context.messages,
                             agent_runner.stats,
                             user_aborted=agent_runner.was_aborted(),
                         )
