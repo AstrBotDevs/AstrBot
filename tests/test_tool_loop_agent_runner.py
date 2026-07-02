@@ -1365,6 +1365,177 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
 
 
 @pytest.mark.asyncio
+async def test_skills_like_requery_drops_malformed_tool_names():
+    captured_contexts = []
+
+    class MalformedToolNameProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="选择工具",
+                    tools_call_name=["test_tool", None],
+                    tools_call_args=[{"query": "test"}, {"query": "bad"}],
+                    tools_call_ids=["call_1", "call_bad"],
+                    usage=TokenUsage(input_other=10, output=5),
+                )
+            if self.call_count == 2:
+                captured_contexts.extend(kwargs.get("contexts") or [])
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="调用工具",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "actual"}],
+                    tools_call_ids=["call_2"],
+                    usage=TokenUsage(input_other=10, output=5),
+                )
+            return LLMResponse(
+                role="assistant",
+                completion_text="最终回复",
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+    provider = MalformedToolNameProvider()
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    req = ProviderRequest(
+        prompt="调用工具",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=req,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(Any, MockToolExecutor()),
+        agent_hooks=MockHooks(),
+        tool_schema_mode="skills_like",
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert provider.call_count == 2
+    assert captured_contexts[0]["content"].startswith(
+        "You have decided to call tool(s): test_tool."
+    )
+    tool_messages = [msg for msg in runner.run_context.messages if msg.role == "tool"]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_2"
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_drops_malformed_tool_names_before_execution():
+    class MalformedToolNameProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            return LLMResponse(
+                role="assistant",
+                completion_text="调用工具",
+                tools_call_name=["test_tool", None],
+                tools_call_args=[{"query": "actual"}, {"query": "bad"}],
+                tools_call_ids=["call_1", "call_bad"],
+                usage=TokenUsage(input_other=10, output=5),
+            )
+
+    provider = MalformedToolNameProvider()
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    req = ProviderRequest(
+        prompt="调用工具",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=req,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(Any, MockToolExecutor()),
+        agent_hooks=MockHooks(),
+    )
+
+    async for _ in runner.step():
+        pass
+
+    tool_messages = [msg for msg in runner.run_context.messages if msg.role == "tool"]
+    assert len(tool_messages) == 1
+    assert tool_messages[0].tool_call_id == "call_1"
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_sanitizes_malformed_tool_ids_args_and_extra_content():
+    class MalformedToolFieldsProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            response = LLMResponse(
+                role="assistant",
+                completion_text="调用工具",
+                tools_call_name=["test_tool", "test_tool"],
+                tools_call_args=[{"query": "actual"}, "bad-args"],
+                tools_call_ids=["call_1", None],
+                usage=TokenUsage(input_other=10, output=5),
+            )
+            response.tools_call_extra_content = None
+            return response
+
+    class CapturingHooks(MockHooks):
+        def __init__(self):
+            super().__init__()
+            self.tool_args_list = []
+
+        async def on_tool_start(self, run_context, tool, tool_args):
+            await super().on_tool_start(run_context, tool, tool_args)
+            self.tool_args_list.append(tool_args)
+
+    provider = MalformedToolFieldsProvider()
+    hooks = CapturingHooks()
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    req = ProviderRequest(
+        prompt="调用工具",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=req,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(Any, MockToolExecutor()),
+        agent_hooks=hooks,
+    )
+
+    async for _ in runner.step():
+        pass
+
+    tool_messages = [msg for msg in runner.run_context.messages if msg.role == "tool"]
+    assert len(tool_messages) == 2
+    tool_call_ids = [msg.tool_call_id for msg in tool_messages]
+    assert tool_call_ids[0] == "call_1"
+    assert tool_call_ids[1] is not None
+    assert tool_call_ids[1].startswith("call_")
+    assert hooks.tool_args_list == [{"query": "actual"}, {}]
+
+
+@pytest.mark.asyncio
 async def test_follow_up_accepted_when_active_and_not_stopping(
     runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
 ):
