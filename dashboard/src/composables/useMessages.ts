@@ -2,9 +2,7 @@ import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 import {
-  extractAskUserChoiceFromToolCall,
   isInteractiveChoicePayload,
-  unwrapInteractiveChoice,
   validateInteractiveChoice,
   truncateInteractiveChoice,
 } from "./parseInteractiveChoice";
@@ -1214,10 +1212,9 @@ export function displayParts(content: ChatContent): MessagePart[] {
 }
 
 export function messageBlocks(content: ChatContent): MessageDisplayBlock[] {
-  // 总是走 normalizePartsInternal,以便:
-  // - ask_user_choice 工具的 result 能从 tool_call part 中拆出为 interactive_choice part
-  // - reasoning → think 转换对历史/流式数据都生效
-  const parts = normalizeMessageParts(content.message, content.reasoning || "");
+  const parts = Array.isArray(content.message)
+    ? content.message
+    : normalizeMessageParts(content.message, content.reasoning || "");
 
   const blocks: MessageDisplayBlock[] = [];
   let currentKind: MessageDisplayBlock["kind"] | null = null;
@@ -1310,48 +1307,29 @@ function normalizePartsInternal(parts: unknown): MessagePart[] {
     return parts ? [{ type: "plain", text: parts }] : [];
   }
   if (!Array.isArray(parts)) return [];
-  const out: MessagePart[] = [];
-  for (const rawPart of parts) {
-    if (!rawPart || typeof rawPart !== "object") {
-      out.push({ type: "plain", text: String(rawPart ?? "") });
-      continue;
+  return parts.map((part: any) => {
+    if (!part || typeof part !== "object") {
+      return { type: "plain", text: String(part ?? "") };
     }
-    const part = rawPart as MessagePart;
     if (part.type === "reasoning") {
-      out.push({
+      return {
         ...part,
         type: "think",
-        think: String((part as { think?: string; text?: string }).think ?? part.text ?? ""),
-      });
-      continue;
+        think: String(part.think ?? part.text ?? ""),
+      };
     }
-    // ① 解包(plain 文本内嵌 JSON / 透传原生 interactive_choice)
-    const unwrapped = unwrapInteractiveChoice(part);
-    if (isInteractiveChoicePayload(unwrapped)) {
-      if (!validateInteractiveChoice(unwrapped)) {
-        // 非法(spec §2.3 步骤 2):降级为 unknown-part
-        out.push({ type: "plain", text: JSON.stringify(unwrapped) });
-        continue;
+    // ① v1.0 schema:InteractiveChoicePart 已通过 SSE 顶层 type 到达,
+    //    不再解 plain 文本/拆 tool_call(见 parseInteractiveChoice 模块注释)。
+    // ② 校验 + 截断(防御性兜底,后端已截过一遍)
+    if (isInteractiveChoicePayload(part)) {
+      if (!validateInteractiveChoice(part)) {
+        // 非法:降级为 plain JSON(spec §2.3 步骤 2),与 v0.3 行为一致
+        return { type: "plain", text: JSON.stringify(part) };
       }
-      out.push(truncateInteractiveChoice(unwrapped));
-      continue;
+      return truncateInteractiveChoice(part);
     }
-    // ② 拆 tool_call:提取 ask_user_choice 工具的 result 为独立 interactive_choice part
-    //    解决 SSE 路径下 tool_call_result 通过 finishToolCall 写入 tool_calls[].result
-    //    后,part.type 仍是 "tool_call"(被 isThinkingPart 归入折叠区)的问题。
-    if (part.type === "tool_call") {
-      const { remainingPart, extractedChoices } = extractAskUserChoiceFromToolCall(part);
-      if (remainingPart) {
-        out.push(remainingPart);
-      }
-      for (const choice of extractedChoices) {
-        out.push(choice);
-      }
-      continue;
-    }
-    out.push({ ...part });
-  }
-  return out;
+    return { ...part };
+  });
 }
 
 function isEmptyPlainPart(part: MessagePart) {

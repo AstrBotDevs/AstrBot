@@ -1,268 +1,95 @@
 // Author: elecvoid243
-// Date: 2026-06-28
-// Spec: docs/superpowers/specs/2026-06-28-dynamic-choice-box-rendering-design.md §2.3 / §3.2 / §7
+// Date: 2026-07-02
+// Spec: docs/superpowers/specs/2026-07-02-blocking-interactive-choice-design.md §5.1
 //
-// 纯函数模块:把"工具返回 JSON → 前端 InteractiveChoicePart"的翻译逻辑全部内聚到这里,
-// 不依赖 Vue / pinia / axios,确保可被 node --test 独立单测。
-// 镜像既有 parseSpcodeFileRestore.ts + useSpcodeFileRestore.ts 同构模式。
+// 纯函数模块:校验 + 截断 InteractiveChoicePart。v1.0 走 SSE 顶层 type,
+// 不再解 plain 文本/拆 tool_call,删除相关辅助函数。
 
-// ─── 类型定义 ─────────────────────────────────────────────────
-
-/** InteractiveChoicePart 的最小类型。完整字段见 spec §3.1。 */
 export interface InteractiveChoiceOption {
   id: string;
-    label: string;
-    description?: string;
-    /** 自 plugin v0.3+ 起不再是必填。缺省时 emit 文本回退到 id+label 拼接 */
-    value?: string;
-  }
+  label: string;
+  description?: string;
+  /** 旧 plugin 字段(v0.3),新代码忽略 */
+  value?: string;
+}
 
 export interface InteractiveChoicePart {
   type: "interactive_choice";
+  /** v1.0 必填:后端生成的 request_id,提交时用作路由 */
+  request_id: string;
   prompt: string;
   title?: string;
   options: InteractiveChoiceOption[];
   input_placeholder?: string;
+  /** v1.0 可选:unix ts,前端可显示倒计时 */
+  expires_at?: number;
   [key: string]: unknown;
 }
 
-/** 任意 MessagePart 的最小契约(避免 import useMessages 引起循环依赖) */
-export interface MaybePlainPart {
-  type?: string;
-  text?: string;
-  [key: string]: unknown;
-}
-
-// ─── 解包:判断 payload 是否是 InteractiveChoicePart ───────────
-
-/**
- * 检查某个对象是否是合法的 InteractiveChoicePart 形态。
- * 仅做"类型字段存在性"判断,**不**做字段校验(校验见 validateInteractiveChoice)。
- */
 export function isInteractiveChoicePayload(value: unknown): value is InteractiveChoicePart {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const obj = value as Record<string, unknown>;
   return obj.type === "interactive_choice";
 }
 
-// ─── 解包:plain 文本 → InteractiveChoicePart ────────────────
-
-/**
- * 把 MessagePart 数组中的某一项尽可能解包成 InteractiveChoicePart。
- *
- * 规则(spec §2.3 / §7):
- * - 原生 `type === "interactive_choice"` → 透传
- * - `type === "plain"` 且 text 以 "{" 开头 → JSON.parse,成功且结果是 InteractiveChoicePart → 替换
- * - 其他(普通文本、图片、工具调用等) → 原样返回,不重写
- * - JSON.parse 失败 → **保留原 plain 文本**(不降级为 unknown-part,避免误吃文本,spec §7)
- */
-export function unwrapInteractiveChoice<T extends MaybePlainPart>(part: T): T | InteractiveChoicePart {
-  if (part.type === "interactive_choice") {
-    return part as unknown as InteractiveChoicePart;
-  }
-  if (part.type === "plain" && typeof part.text === "string" && part.text.startsWith("{")) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(part.text);
-    } catch {
-      // 解析失败(spec §7):保留原 plain 文本,不重写
-      return part;
-    }
-    if (isInteractiveChoicePayload(parsed)) {
-      return parsed;
-    }
-    // 框架二次包装:AstrBot 的 tool_loop_agent_runner.py:1264 把工具 str 返回值
-    // 包成 Json({id, ts, result: <plugin return>}),经 message_chain_to_storage_message_parts
-    // 序列化为 {type:"plain", text: json.dumps({id, ts, result})},所以 dashboard 看到的是
-    // 双层 JSON:外层 {id, ts, result},内层 <plugin return>(可能本身就是 InteractiveChoicePart)。
-    // 从 result 字段再尝试一次解包。
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const inner = (parsed as Record<string, unknown>).result;
-      if (typeof inner === "string" && inner.startsWith("{")) {
-        try {
-          const innerParsed = JSON.parse(inner);
-          if (isInteractiveChoicePayload(innerParsed)) {
-            return innerParsed;
-          }
-        } catch {
-          // inner JSON.parse 失败 → fall through,保留原 plain
-        }
-      }
-    }
-  }
-  return part;
-}
-
-// ─── 校验:字段是否满足 spec §3.2 约束 ────────────────────────
-
-/**
- * 校验 InteractiveChoicePart 的字段是否满足 spec §3.2 约束。
- * 失败时返回 false(spec §2.3 步骤 2:非法则降级为 unknown-part)。
- */
 export function validateInteractiveChoice(obj: unknown): boolean {
   if (!isInteractiveChoicePayload(obj)) return false;
-
   const part = obj as Record<string, unknown>;
-  const prompt = part.prompt;
-  if (typeof prompt !== "string" || !prompt.trim()) return false;
-
-  const options = part.options;
-  if (!Array.isArray(options) || options.length < 2) return false;
-
-  const seenIds = new Set<string>();
-    for (const opt of options) {
-      if (!opt || typeof opt !== "object") return false;
-      const o = opt as Record<string, unknown>;
-      const id = o.id;
-      const label = o.label;
-      if (typeof id !== "string" || !id.trim()) return false;
-      if (typeof label !== "string" || !label.trim()) return false;
-      // value 自 plugin v0.3+ 起不再是必填——允许 undefined / 非 string
-      // (前端 emit 时回退到 id+label 拼接,见 getOptionSubmitText)
-      if (seenIds.has(id)) return false;
-      seenIds.add(id);
-    }
-    return true;
+  if (typeof part.request_id !== "string" || !part.request_id.trim()) return false;
+  if (typeof part.prompt !== "string" || !part.prompt.trim()) return false;
+  if (!Array.isArray(part.options) || part.options.length < 2) return false;
+  const seen = new Set<string>();
+  for (const opt of part.options) {
+    if (!opt || typeof opt !== "object") return false;
+    const o = opt as Record<string, unknown>;
+    if (typeof o.id !== "string" || !o.id.trim()) return false;
+    if (typeof o.label !== "string" || !o.label.trim()) return false;
+    if (seen.has(o.id)) return false;
+    seen.add(o.id);
   }
+  return true;
+}
 
-// ─── 截断:防御性兜底,工具层已截但前端再截一次(spec §3.2 footnote) ─
-
-/**
- * 截断超长字段(spec §3.2 长度上限 + 末尾 footnote 双重截断策略)。
- * 不可变:未发生截断时返回原对象(优化 + 便于测试 deepEqual)。
- */
 export function truncateInteractiveChoice(part: InteractiveChoicePart): InteractiveChoicePart {
-  const PROMPT_MAX = 200;
-  const TITLE_MAX = 30;
-  const LABEL_MAX = 30;
-  const DESC_MAX = 200;
-  const PLACEHOLDER_MAX = 60;
-
+  const LIMITS = { PROMPT_MAX: 200, TITLE_MAX: 30, LABEL_MAX: 30, DESC_MAX: 200, PLACEHOLDER_MAX: 60 };
   let mutated = false;
   const out: InteractiveChoicePart = { ...part };
-
-  if (out.prompt.length > PROMPT_MAX) {
-    out.prompt = out.prompt.slice(0, PROMPT_MAX);
+  if (out.prompt.length > LIMITS.PROMPT_MAX) {
+    out.prompt = out.prompt.slice(0, LIMITS.PROMPT_MAX);
     mutated = true;
   }
-  if (typeof out.title === "string" && out.title.length > TITLE_MAX) {
-    out.title = out.title.slice(0, TITLE_MAX);
+  if (typeof out.title === "string" && out.title.length > LIMITS.TITLE_MAX) {
+    out.title = out.title.slice(0, LIMITS.TITLE_MAX);
     mutated = true;
   }
-  if (typeof out.input_placeholder === "string" && out.input_placeholder.length > PLACEHOLDER_MAX) {
-    out.input_placeholder = out.input_placeholder.slice(0, PLACEHOLDER_MAX);
+  if (typeof out.input_placeholder === "string" && out.input_placeholder.length > LIMITS.PLACEHOLDER_MAX) {
+    out.input_placeholder = out.input_placeholder.slice(0, LIMITS.PLACEHOLDER_MAX);
     mutated = true;
   }
   if (Array.isArray(out.options)) {
-    const newOptions: InteractiveChoiceOption[] = [];
+    const newOpts: InteractiveChoiceOption[] = [];
     for (const opt of out.options) {
-      let optMutated = false;
       const o: InteractiveChoiceOption = { ...opt };
-      if (o.label.length > LABEL_MAX) {
-        o.label = o.label.slice(0, LABEL_MAX);
-        optMutated = true;
+      if (o.label.length > LIMITS.LABEL_MAX) {
+        o.label = o.label.slice(0, LIMITS.LABEL_MAX);
+        mutated = true;
       }
-      if (typeof o.description === "string" && o.description.length > DESC_MAX) {
-        o.description = o.description.slice(0, DESC_MAX);
-        optMutated = true;
+      if (typeof o.description === "string" && o.description.length > LIMITS.DESC_MAX) {
+        o.description = o.description.slice(0, LIMITS.DESC_MAX);
+        mutated = true;
       }
-      newOptions.push(o);
-      if (optMutated) mutated = true;
+      newOpts.push(o);
     }
-    out.options = newOptions;
+    out.options = newOpts;
   }
   return mutated ? out : part;
 }
 
-// ─── 提取:从 tool_call part 中拆出 ask_user_choice 结果 ──────────
-
-/** 工具调用的最小契约(避免 import useMessages 引起循环依赖) */
-export interface MaybeToolCall {
-  name?: string;
-  result?: unknown;
-  [key: string]: unknown;
+export function getOptionSubmitText(opt: InteractiveChoiceOption): string {
+  if (typeof opt.value === "string" && opt.value.length > 0) return opt.value;
+  const id = typeof opt.id === "string" ? opt.id : "";
+  const label = typeof opt.label === "string" ? opt.label : "";
+  if (id && label) return `${id}. ${label}`;
+  if (label) return label;
+  return id;
 }
-
-export interface MaybeToolCallPart {
-  type: string;
-  tool_calls?: MaybeToolCall[];
-  [key: string]: unknown;
-}
-
-export interface ExtractionResult<P extends MaybeToolCallPart> {
-  /** 剩余工具构成的 tool_call part;若剩余为 0 则 null(避免渲染空 card) */
-  remainingPart: P | null;
-  /** 从 ask_user_choice 工具 result 解析得到的 InteractiveChoicePart 列表 */
-  extractedChoices: InteractiveChoicePart[];
-}
-
-/**
- * 从 tool_call part 的 tool_calls[] 中提取所有 ask_user_choice 工具的 result
- * (若为合法 InteractiveChoicePart JSON),返回 { remainingPart, extractedChoices }。
- *
- * 处理路径:SSE 事件 ``{type:"plain", chain_type:"tool_call_result", data:<json>}`` →
- * ``finishToolCall`` 写入 ``botRecord.content.message`` 的 tool_call part,
- * result 字符串存于 ``tool.result``(可能是 plugin 返回的 JSON 字符串)。
- * 此函数把这种"嵌在 tool_call 里的"interactive_choice 拆出来,
- * 让渲染层 ``<InteractiveChoiceBox v-else-if="part.type === 'interactive_choice'">`` 能命中。
- *
- * 剩余工具仍留在原 tool_call part 中(若有),继续按原有逻辑渲染。
- */
-export function extractAskUserChoiceFromToolCall<P extends MaybeToolCallPart>(
-  part: P,
-): ExtractionResult<P> {
-  if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) {
-    return { remainingPart: part, extractedChoices: [] };
-  }
-
-  const remainingTools: MaybeToolCall[] = [];
-  const extractedChoices: InteractiveChoicePart[] = [];
-
-  for (const tool of part.tool_calls) {
-    if (
-      tool?.name === "ask_user_choice"
-      && typeof tool.result === "string"
-      && tool.result.startsWith("{")
-    ) {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(tool.result);
-      } catch {
-        // result 不是合法 JSON → 视为普通 tool,保留在 tool_calls[] 让 ToolCallCard 兜底
-        remainingTools.push(tool);
-        continue;
-      }
-      if (isInteractiveChoicePayload(parsed) && validateInteractiveChoice(parsed)) {
-        extractedChoices.push(truncateInteractiveChoice(parsed));
-        continue;
-      }
-    }
-    remainingTools.push(tool);
-  }
-
-  const remainingPart = remainingTools.length > 0
-      ? ({ ...part, tool_calls: remainingTools } as P)
-      : null;
-    return { remainingPart, extractedChoices };
-  }
-
-  // ─── emit 文本:点击按钮后发给 LLM 的字符串 ───────────────────
-
-  /**
-   * 计算选项点击后 emit 的文本(最终经 onInteractiveChoiceSubmit → SSE → 后端 → LLM)。
-   *
-   * 策略:
-   * - 优先用 ``option.value``(plugin 老 schema 字段,LLM 可自定义回传文本)
-   * - 否则用 ``id + label`` 拼接,格式 ``"A. GPT-4"``(plugin v0.3+ 新 schema)
-   * - 极端兜底:id / label 都缺时返回 id 单独 / 空字符串
-   */
-  export function getOptionSubmitText(opt: InteractiveChoiceOption): string {
-    if (typeof opt.value === "string" && opt.value.length > 0) {
-      return opt.value;
-    }
-    const id = typeof opt.id === "string" ? opt.id : "";
-    const label = typeof opt.label === "string" ? opt.label : "";
-    if (id && label) return `${id}. ${label}`;
-    if (label) return label;
-    return id;
-  }
