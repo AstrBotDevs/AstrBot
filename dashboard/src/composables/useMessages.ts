@@ -1,10 +1,12 @@
 import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
+import { useInteractiveChoiceStore } from "@/stores/interactiveChoice";
 import {
   isInteractiveChoicePayload,
   validateInteractiveChoice,
   truncateInteractiveChoice,
+  interactiveChoicePartFromSsePayload,
 } from "./parseInteractiveChoice";
 
 export type TransportMode = "sse" | "websocket";
@@ -991,6 +993,21 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (msgType === "end") {
       markMessageStarted(botRecord);
+      return;
+    }
+
+    // ── InteractiveChoice (Plan Amendment E.1 / spec §5.1) ──────────
+    // The backend's ask_user_choice plugin emits a top-level SSE event
+    // (not embedded in a tool_call part) via
+    // `_push_to_webchat_back_queue`. Convert that wire-format payload
+    // into an `InteractiveChoicePart` and hand it to the Pinia store;
+    // `ChatMessageList` mirrors the same key on every props.messages
+    // update so the box appears immediately.
+    if (msgType === "interactive_choice") {
+      const part = interactiveChoicePartFromSsePayload(normalized);
+      if (part) {
+        useInteractiveChoiceStore().addChoice(part);
+      }
       return;
     }
 
