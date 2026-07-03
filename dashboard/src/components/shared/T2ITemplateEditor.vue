@@ -1,19 +1,23 @@
 <template>
   <v-dialog v-model="dialog" max-width="1400px" persistent scrollable>
     <template v-slot:activator="{ props }">
-      <v-btn
-        v-bind="props"
-        variant="outlined"
-        color="primary"
-        size="small"
-        :loading="loading"
-      >
-        {{ tm('t2iTemplateEditor.buttonText') }}
-      </v-btn>
+      <div class="t2i-template-editor-trigger">
+        <v-btn
+          v-bind="props"
+          variant="tonal"
+          color="primary"
+          size="small"
+          class="t2i-template-editor-button"
+          :loading="loading"
+        >
+          <v-icon class="mr-2">mdi-code-tags</v-icon>
+          {{ tm('t2iTemplateEditor.buttonText') }}
+        </v-btn>
+      </div>
     </template>
     
     <v-card class="t2i-template-editor">
-      <v-card-title class="d-flex align-center justify-space-between">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between">
         <span>{{ tm('t2iTemplateEditor.dialogTitle') }}</span>
         <v-spacer></v-spacer>
         <div class="d-flex align-center gap-2" style="width: 60%">
@@ -180,6 +184,7 @@
             </v-btn>
             <v-btn
               color="primary"
+              variant="tonal"
               @click="promptApplyAndClose"
               :loading="saveLoading"
               :disabled="isCreatingNew || !selectedTemplate"
@@ -194,14 +199,14 @@
     <!-- 确认重置对话框 -->
     <v-dialog v-model="resetDialog" max-width="400px">
       <v-card>
-        <v-card-title>{{ tm('t2iTemplateEditor.confirmReset') }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('t2iTemplateEditor.confirmReset') }}</v-card-title>
         <v-card-text>
           {{ tm('t2iTemplateEditor.confirmResetMessage') }}
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="resetDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="warning" @click="confirmReset" :loading="resetLoading">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
+          <v-btn variant="text" @click="resetDialog = false">{{ t('core.common.cancel') }}</v-btn>
+          <v-btn color="warning" variant="tonal" @click="confirmReset" :loading="resetLoading">{{ tm('t2iTemplateEditor.confirmResetButton') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -209,14 +214,14 @@
     <!-- 删除确认对话框 -->
     <v-dialog v-model="deleteDialog" max-width="400px">
       <v-card>
-        <v-card-title>{{ tm('t2iTemplateEditor.confirmDelete') }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('t2iTemplateEditor.confirmDelete') }}</v-card-title>
         <v-card-text>
           {{ tm('t2iTemplateEditor.confirmDeleteMessage', { name: selectedTemplate }) }}
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="error" @click="confirmDelete" :loading="saveLoading">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
+          <v-btn variant="text" @click="deleteDialog = false">{{ t('core.common.cancel') }}</v-btn>
+          <v-btn color="error" variant="tonal" @click="confirmDelete" :loading="saveLoading">{{ tm('t2iTemplateEditor.confirmDeleteButton') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -224,14 +229,14 @@
     <!-- 保存并应用确认对话框 -->
     <v-dialog v-model="applyAndCloseDialog" max-width="500px">
       <v-card>
-        <v-card-title>{{ tm('t2iTemplateEditor.confirmAction') }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('t2iTemplateEditor.confirmAction') }}</v-card-title>
         <v-card-text>
           {{ tm('t2iTemplateEditor.confirmApplyMessage', { name: selectedTemplate }) }}
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="applyAndCloseDialog = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="primary" @click="confirmApplyAndClose" :loading="saveLoading">{{ t('core.common.confirm') }}</v-btn>
+          <v-btn variant="text" @click="applyAndCloseDialog = false">{{ t('core.common.cancel') }}</v-btn>
+          <v-btn color="primary" variant="tonal" @click="confirmApplyAndClose" :loading="saveLoading">{{ t('core.common.confirm') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -244,7 +249,7 @@ import { ref, computed, nextTick, watch } from 'vue'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { useToast } from '@/utils/toast'
-import axios from 'axios'
+import { statsApi, t2iApi } from '@/api/v1'
 
 const { t } = useI18n()
 const { tm } = useModuleI18n('core.shared')
@@ -288,7 +293,7 @@ const editorOptions = {
 const previewVersion = ref('v4.0.0')
 const syncPreviewVersion = async () => {
   try {
-    const res = await axios.get('/api/stat/version')
+    const res = await statsApi.version()
     const rawVersion = res?.data?.data?.version || res?.data?.version
     if (rawVersion) {
       previewVersion.value = rawVersion.startsWith('v') ? rawVersion : `v${rawVersion}`
@@ -363,16 +368,16 @@ const previewContent = computed(() => {
     let content = normalizeMarkdownSource(templateContent.value)
     content = content.replace(/\{\{\s*text\s*\|\s*safe\s*\}\}/g, () => previewData.value.text)
     content = content.replace(/\{\{\s*version\s*\}\}/g, () => previewData.value.version)
-    let usedLegacyShikiPlaceholder = false
+    let usedExistingShikiPlaceholder = false
     content = content.replace(/<script\b[^>]*>\s*\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}\s*<\/script>/gi, () => {
-      usedLegacyShikiPlaceholder = true
+      usedExistingShikiPlaceholder = true
       return getShikiRuntimeScript()
     })
     content = content.replace(/\{\{\s*shiki_runtime\s*\|\s*safe\s*\}\}/g, () => {
-      usedLegacyShikiPlaceholder = true
+      usedExistingShikiPlaceholder = true
       return getShikiRuntimeScript()
     })
-    return usedLegacyShikiPlaceholder ? content : injectShikiRuntime(content)
+    return usedExistingShikiPlaceholder ? content : injectShikiRuntime(content)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     return `<div style="color: red; padding: 20px;">模板渲染错误: ${errorMessage}</div>`
@@ -384,8 +389,8 @@ const loadInitialData = async () => {
   loading.value = true
   try {
     const [listRes, activeRes] = await Promise.all([
-      axios.get('/api/t2i/templates'),
-      axios.get('/api/t2i/templates/active')
+      t2iApi.listTemplates(),
+      t2iApi.getActiveTemplate()
     ])
 
     if (listRes.data.status === 'ok') {
@@ -416,7 +421,7 @@ const loadTemplateContent = async (name) => {
   if (!name) return
   previewLoading.value = true
   try {
-    const response = await axios.get(`/api/t2i/templates/${name}`)
+    const response = await t2iApi.getTemplate(name)
     if (response.data.status === 'ok') {
       templateContent.value = response.data.data.content
     } else {
@@ -435,7 +440,7 @@ const saveTemplate = async () => {
     if (isCreatingNew.value) {
       // --- 创建新模板 ---
       if (!editingName.value) return
-      const response = await axios.post('/api/t2i/templates/create', {
+      const response = await t2iApi.createTemplate({
         name: editingName.value,
         content: templateContent.value
       })
@@ -445,9 +450,7 @@ const saveTemplate = async () => {
     } else {
       // --- 更新现有模板 ---
       if (!selectedTemplate.value) return
-      await axios.put(`/api/t2i/templates/${selectedTemplate.value}`, {
-        content: templateContent.value
-      })
+      await t2iApi.updateTemplate(selectedTemplate.value, templateContent.value)
     }
   } catch (error) {
     const msg = error?.response?.data?.message || error?.message || String(error)
@@ -461,7 +464,7 @@ const saveTemplate = async () => {
 const setActiveTemplate = async (name) => {
   applyLoading.value = true
   try {
-    await axios.post('/api/t2i/templates/set_active', { name })
+    await t2iApi.setActiveTemplate(name)
     activeTemplate.value = name
   } catch (error) {
     const msg = error?.response?.data?.message || error?.message || String(error)
@@ -477,7 +480,7 @@ const confirmDelete = async () => {
   saveLoading.value = true
   try {
     const nameToDelete = selectedTemplate.value
-    await axios.delete(`/api/t2i/templates/${nameToDelete}`)
+    await t2iApi.deleteTemplate(nameToDelete)
     deleteDialog.value = false
 
     // 如果删除的是当前活动模板，则将活动模板重置为base
@@ -498,7 +501,7 @@ const confirmDelete = async () => {
 const confirmReset = async () => {
   resetLoading.value = true
   try {
-    await axios.post('/api/t2i/templates/reset_default')
+    await t2iApi.resetDefaultTemplate()
     resetDialog.value = false
     if (selectedTemplate.value === 'base') {
       await loadTemplateContent('base')
@@ -604,6 +607,19 @@ defineExpose({
 </script>
 
 <style scoped>
+.t2i-template-editor-trigger {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.t2i-template-editor-button {
+  min-height: 36px;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
 .preview-container {
   background-color: #f5f5f5;
   position: relative;

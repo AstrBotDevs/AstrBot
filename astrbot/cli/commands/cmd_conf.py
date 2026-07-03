@@ -5,12 +5,6 @@ from typing import Any
 
 import click
 
-from astrbot.core.utils.auth_password import (
-    hash_dashboard_password,
-    hash_legacy_dashboard_password,
-    validate_dashboard_password,
-)
-
 from ..utils import check_astrbot_root, get_astrbot_root
 
 
@@ -44,6 +38,8 @@ def _validate_dashboard_username(value: str) -> str:
 
 def _validate_dashboard_password(value: str) -> str:
     """Validate Dashboard password"""
+    from astrbot.core.utils.auth_password import validate_dashboard_password
+
     try:
         validate_dashboard_password(value)
     except ValueError as e:
@@ -139,6 +135,11 @@ def _get_nested_item(obj: dict[str, Any], path: str) -> Any:
 
 def _set_dashboard_password(config: dict[str, Any], raw_password: str) -> None:
     """Set dashboard password hashes and clear password migration flags."""
+    from astrbot.core.utils.auth_password import (
+        hash_dashboard_password,
+        hash_md5_dashboard_password,
+    )
+
     _set_nested_item(
         config,
         "dashboard.pbkdf2_password",
@@ -147,7 +148,7 @@ def _set_dashboard_password(config: dict[str, Any], raw_password: str) -> None:
     _set_nested_item(
         config,
         "dashboard.password",
-        hash_legacy_dashboard_password(raw_password),
+        hash_md5_dashboard_password(raw_password),
     )
     _set_nested_item(config, "dashboard.password_storage_upgraded", True)
     _set_nested_item(config, "dashboard.password_change_required", False)

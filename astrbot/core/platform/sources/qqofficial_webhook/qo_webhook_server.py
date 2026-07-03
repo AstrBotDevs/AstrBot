@@ -5,12 +5,14 @@ import time
 from binascii import Error as BinasciiError
 from typing import cast
 
-import quart
 from botpy import BotAPI, BotHttp, BotWebSocket, Client, ConnectionSession, Token
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from astrbot.api import logger
+from astrbot.core.platform.webhook_server import FastAPIWebhookServer
+
+from ..qqofficial.qqofficial_platform_adapter import _ensure_group_message_create_parser
 
 # remove logger handler
 for handler in logging.root.handlers[:]:
@@ -90,7 +92,7 @@ class QQOfficialWebhook:
         self.api: BotAPI = BotAPI(http=self.http)
         self.token = Token(self.appid, self.secret)
 
-        self.server = quart.Quart(__name__)
+        self.server = FastAPIWebhookServer("qq-official-webhook")
         self.server.add_url_rule(
             "/astrbot-qo-webhook/callback",
             view_func=self.callback,
@@ -120,6 +122,7 @@ class QQOfficialWebhook:
     def _setup_connection(self) -> None:
         if self._connection is not None:
             return
+        _ensure_group_message_create_parser()
         self.client.api = self.api
         self.client.http = self.http
 
@@ -159,29 +162,20 @@ class QQOfficialWebhook:
         """Pop and return extra fields cached from the raw webhook payload for a given message ID."""
         return self._extra_data_cache.pop(message_id, {})
 
-    async def callback(self):
+    async def callback(self, request):
         """内部服务器的回调入口"""
-        return await self.handle_callback(quart.request)
+        return await self.handle_callback(request)
 
-    async def handle_callback(self, request) -> dict:
+    async def handle_callback(self, request) -> dict | tuple[dict[str, str], int]:
         """处理 webhook 回调，可被统一 webhook 入口复用
 
         Args:
-            request: Quart 请求对象
+            request: FastAPI webhook request 对象
 
         Returns:
             响应数据
         """
         body = await request.get_data()
-        if not _verify_qq_webhook_signature(
-            self.secret,
-            request.headers.get(_SIGNATURE_TIMESTAMP_HEADER),
-            request.headers.get(_SIGNATURE_HEADER),
-            body,
-        ):
-            logger.warning("qq_official_webhook signature verification failed.")
-            return {"error": "Invalid signature"}, 401
-
         try:
             msg = json.loads(body.decode("utf-8"))
         except json.JSONDecodeError:
@@ -201,6 +195,15 @@ class QQOfficialWebhook:
             signed = await self.webhook_validation(cast(dict, data))
             logger.debug(f"webhook validation response: {signed}")
             return signed
+
+        if not _verify_qq_webhook_signature(
+            self.secret,
+            request.headers.get(_SIGNATURE_TIMESTAMP_HEADER),
+            request.headers.get(_SIGNATURE_HEADER),
+            body,
+        ):
+            logger.warning("qq_official_webhook signature verification failed.")
+            return {"error": "Invalid signature"}, 401
 
         event_id = msg.get("id")
         if event_id:
@@ -226,6 +229,7 @@ class QQOfficialWebhook:
                     "creating parser connection lazily.",
                 )
                 self._setup_connection()
+            connection = cast(ConnectionSession, self._connection)
 
             # Extract extra fields from raw payload before botpy parses and discards them
             if data:
@@ -240,7 +244,7 @@ class QQOfficialWebhook:
                     if extra:
                         self._extra_data_cache[msg_id] = extra
             try:
-                func = self._connection.parser[event]
+                func = connection.parser[event]
             except KeyError:
                 logger.error("_parser unknown event %s.", event)
                 if data:

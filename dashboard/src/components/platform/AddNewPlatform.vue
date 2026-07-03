@@ -5,15 +5,16 @@
     max-height="90%"
     @after-enter="prepareData"
   >
-    <v-card
-      :title="
-        updatingMode
-          ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm(
-              'dialog.adapter',
-            )}`
-          : tm('dialog.addPlatform')
-      "
-    >
+    <v-card>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+        {{
+          updatingMode
+            ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm(
+                'dialog.adapter',
+              )}`
+            : tm('dialog.addPlatform')
+        }}
+      </v-card-title>
       <v-card-text
         ref="dialogScrollContainer"
         class="pa-4 ml-2"
@@ -87,6 +88,17 @@
                       v-if="larkCreationMode === 'scan'"
                       class="registration-inline mt-3"
                     >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="larkCreationMode === 'scan'"
@@ -139,9 +151,21 @@
                       v-if="dingtalkCreationMode === 'scan'"
                       class="registration-inline mt-3"
                     >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="dingtalkCreationMode === 'scan'"
+                        @created="handlePlatformRegistrationCreated"
                         @success="showSuccess"
                         @error="showError"
                       />
@@ -170,10 +194,87 @@
                     </div>
                   </div>
 
+                  <div v-else-if="isQqOfficialPlatform">
+                    <div class="creation-mode-title mt-4 mb-1">
+                      {{ tm("registrationAction.mode.title") }}
+                    </div>
+                    <v-radio-group
+                      v-model="qqOfficialCreationMode"
+                      class="creation-mode-group"
+                      hide-details
+                    >
+                      <v-radio
+                        value="scan"
+                        :label="tm('registrationAction.mode.scan')"
+                      ></v-radio>
+                      <v-radio
+                        value="manual"
+                        :label="tm('registrationAction.mode.manual')"
+                      ></v-radio>
+                    </v-radio-group>
+
+                    <div
+                      v-if="qqOfficialCreationMode === 'scan'"
+                      class="registration-inline mt-3"
+                    >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
+                      <PlatformRegistrationAction
+                        :platform-config="selectedPlatformConfig"
+                        :active="qqOfficialCreationMode === 'scan'"
+                        @created="handlePlatformRegistrationCreated"
+                        @success="showSuccess"
+                        @error="showError"
+                      />
+                    </div>
+
+                    <div
+                      v-else-if="qqOfficialCreationMode === 'manual'"
+                      class="mt-2"
+                    >
+                      <div class="platform-action-row">
+                        <v-btn
+                          color="info"
+                          variant="tonal"
+                          @click="openTutorial"
+                          class="mt-2"
+                        >
+                          <v-icon start>mdi-book-open-variant</v-icon>
+                          {{ tm("dialog.viewTutorial") }}
+                        </v-btn>
+                      </div>
+                      <AstrBotConfig
+                        :iterable="selectedPlatformConfig"
+                        :metadata="metadata['platform_group']?.metadata"
+                        metadataKey="platform"
+                      />
+                    </div>
+                  </div>
+
                   <div
                     v-else-if="isWeixinOcPlatform"
-                    class="weixin-oc-registration-inline mt-4"
+                    class="registration-inline mt-4"
                   >
+                    <v-text-field
+                      :model-value="selectedPlatformConfig.id || ''"
+                      :label="tm('registrationAction.platformIdLabel')"
+                      :error="Boolean(scanPlatformIdError)"
+                      :error-messages="scanPlatformIdError"
+                      variant="outlined"
+                      density="compact"
+                      hide-details="auto"
+                      class="registration-platform-id-field"
+                      @update:model-value="setScanPlatformId"
+                    />
                     <PlatformRegistrationAction
                       :platform-config="selectedPlatformConfig"
                       :active="isWeixinOcPlatform"
@@ -259,7 +360,7 @@
               </div>
               <div>
                 <v-btn
-                  variant="plain"
+                  variant="text"
                   icon
                   @click="toggleConfigSection"
                   class="mt-2"
@@ -614,10 +715,11 @@
 
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn text @click="closeDialog">{{ tm("dialog.cancel") }}</v-btn>
+        <v-btn variant="text" @click="closeDialog">{{ tm("dialog.cancel") }}</v-btn>
         <v-btn
           :disabled="!canSave"
           color="primary"
+          variant="tonal"
           v-if="!updatingMode"
           @click="newPlatform"
           :loading="loading"
@@ -626,6 +728,7 @@
         <v-btn
           :disabled="!selectedAbConfId"
           color="primary"
+          variant="tonal"
           v-else
           @click="newPlatform"
           :loading="loading"
@@ -638,7 +741,7 @@
   <!-- ID冲突确认对话框 -->
   <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
     <v-card>
-      <v-card-title class="text-h6 bg-warning d-flex align-center">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
         <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
         {{ tm("dialog.idConflict.title") }}
       </v-card-title>
@@ -660,7 +763,7 @@
   <!-- 安全警告对话框 -->
   <v-dialog v-model="showOneBotEmptyTokenWarnDialog" max-width="600" persistent>
     <v-card>
-      <v-card-title>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm("dialog.securityWarning.title") }}
       </v-card-title>
       <v-card-text class="py-4">
@@ -677,12 +780,14 @@
         <v-spacer></v-spacer>
         <v-btn
           color="error"
+          variant="tonal"
           @click="handleOneBotEmptyTokenWarningDismiss(true)"
         >
           {{ tm("createDialog.warningContinue") }}
         </v-btn>
         <v-btn
           color="primary"
+          variant="text"
           @click="handleOneBotEmptyTokenWarningDismiss(false)"
         >
           {{ tm("createDialog.warningEditAgain") }}
@@ -726,7 +831,7 @@
 </template>
 
 <script>
-import axios from "axios";
+import { botApi, configProfileApi, configRouteApi, fileApi, sessionApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   getPlatformIcon,
@@ -777,6 +882,8 @@ export default {
       selectedPlatformConfig: null,
       larkCreationMode: "",
       dingtalkCreationMode: "",
+      qqOfficialCreationMode: "",
+      scanPlatformIdCustomized: false,
 
       aBConfigRadioVal: "0",
       selectedAbConfId: "default",
@@ -878,6 +985,19 @@ export default {
         }
       }
 
+      if (this.isQqOfficialPlatform && !this.qqOfficialCreationMode) {
+        return false;
+      }
+
+      if (this.isQqOfficialPlatform && this.qqOfficialCreationMode === "scan") {
+        if (
+          !this.selectedPlatformConfig?.appid ||
+          !this.selectedPlatformConfig?.secret
+        ) {
+          return false;
+        }
+      }
+
       if (
         this.isWeixinOcPlatform &&
         !this.selectedPlatformConfig?.weixin_oc_token
@@ -974,6 +1094,21 @@ export default {
     isDingtalkPlatform() {
       return this.selectedPlatformConfig?.type === "dingtalk";
     },
+    isQqOfficialPlatform() {
+      return ["qq_official", "qq_official_webhook"].includes(
+        this.selectedPlatformConfig?.type,
+      );
+    },
+    scanPlatformIdError() {
+      const platformId = String(this.selectedPlatformConfig?.id || "");
+      if (!platformId) {
+        return this.tm("registrationAction.platformIdRequired");
+      }
+      if (!this.isPlatformIdValid(platformId)) {
+        return this.tm("registrationAction.platformIdInvalid");
+      }
+      return "";
+    },
   },
   watch: {
     selectedPlatformType(newType) {
@@ -983,10 +1118,14 @@ export default {
         );
         this.larkCreationMode = "";
         this.dingtalkCreationMode = "";
+        this.qqOfficialCreationMode = "";
+        this.scanPlatformIdCustomized = false;
       } else {
         this.selectedPlatformConfig = null;
         this.larkCreationMode = "";
         this.dingtalkCreationMode = "";
+        this.qqOfficialCreationMode = "";
+        this.scanPlatformIdCustomized = false;
       }
     },
     selectedAbConfId(newConfigId) {
@@ -1063,7 +1202,7 @@ export default {
       // Check for plugin-provided logo_token first
       const template = this.platformTemplates?.[platformType];
       if (template && template.logo_token) {
-        return `/api/file/${template.logo_token}`;
+        return fileApi.tokenUrl(template.logo_token);
       }
       return getPlatformIcon(platformType);
     },
@@ -1073,6 +1212,8 @@ export default {
       this.selectedPlatformConfig = null;
       this.larkCreationMode = "";
       this.dingtalkCreationMode = "";
+      this.qqOfficialCreationMode = "";
+      this.scanPlatformIdCustomized = false;
 
       this.aBConfigRadioVal = "0";
       this.selectedAbConfId = "default";
@@ -1104,7 +1245,7 @@ export default {
       this.showDialog = false;
     },
     async getConfigInfoList() {
-      await axios.get("/api/config/abconfs").then((res) => {
+      await configProfileApi.list().then((res) => {
         this.configInfoList = res.data.data.info_list;
       });
     },
@@ -1119,9 +1260,7 @@ export default {
 
       this.configPreviewLoading = true;
       try {
-        const response = await axios.get("/api/config/abconf", {
-          params: { id: configId },
-        });
+        const response = await configProfileApi.get(configId);
 
         this.selectedConfigData = response.data.data.config;
         this.selectedConfigMetadata = response.data.data.metadata;
@@ -1138,7 +1277,7 @@ export default {
     async getDefaultConfigTemplate() {
       this.newConfigLoading = true;
       try {
-        const response = await axios.get("/api/config/default");
+        const response = await configProfileApi.schema();
         this.newConfigData = response.data.data.config;
         this.newConfigMetadata = response.data.data.metadata;
       } catch (error) {
@@ -1207,10 +1346,7 @@ export default {
 
       try {
         // 更新平台配置
-        let resp = await axios.post("/api/config/platform/update", {
-          id: id,
-          config: this.updatingPlatformConfig,
-        });
+        let resp = await botApi.update(id, this.updatingPlatformConfig);
 
         if (resp.data.status === "error") {
           throw new Error(
@@ -1265,10 +1401,7 @@ export default {
 
       try {
         // 先保存平台配置
-        const res = await axios.post(
-          "/api/config/platform/new",
-          this.selectedPlatformConfig,
-        );
+        const res = await botApi.create(this.selectedPlatformConfig);
 
         // 平台保存成功后，处理配置文件
         await this.handleConfigFile();
@@ -1316,10 +1449,7 @@ export default {
 
     async updateRoutingTable(umop, configId) {
       try {
-        await axios.post("/api/config/umo_abconf_route/update", {
-          umo: umop,
-          conf_id: configId,
-        });
+        await configRouteApi.upsert(umop, { config_id: configId });
 
         console.log(`成功更新路由表: ${umop} -> ${configId}`);
       } catch (err) {
@@ -1340,7 +1470,7 @@ export default {
             : undefined;
 
         // 创建新的配置文件（不传入umop）
-        const createRes = await axios.post("/api/config/abconf/new", {
+        const createRes = await configProfileApi.create({
           name: configName,
           config: configData, // 传入用户配置的数据
         });
@@ -1400,6 +1530,14 @@ export default {
       this.$emit("show-toast", { message: message, type: "error" });
     },
 
+    setScanPlatformId(value) {
+      if (!this.selectedPlatformConfig) {
+        return;
+      }
+      this.scanPlatformIdCustomized = true;
+      this.selectedPlatformConfig.id = String(value || "");
+    },
+
     buildRandomPlatformIdSuffix() {
       const letters = "abcdefghijklmnopqrstuvwxyz";
       let suffix = "_";
@@ -1409,8 +1547,18 @@ export default {
       return suffix;
     },
 
+    sanitizePlatformIdPart(value) {
+      return String(value || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .replace(/[!:]/g, "_");
+    },
+
     handlePlatformRegistrationCreated(data) {
       if (!this.selectedPlatformConfig || !data) {
+        return;
+      }
+      if (this.scanPlatformIdCustomized) {
         return;
       }
       const currentId = String(this.selectedPlatformConfig.id || "").trim();
@@ -1420,18 +1568,14 @@ export default {
       }
 
       let suffix = "";
-      const explicitSuffix = String(data.platform_id_suffix || "")
-        .trim()
-        .replace(/[!:]/g, "_");
+      const explicitSuffix = this.sanitizePlatformIdPart(data.platform_id_suffix);
       if (explicitSuffix) {
         suffix =
           explicitSuffix.startsWith("_") || explicitSuffix.startsWith("-")
             ? explicitSuffix
             : `_${explicitSuffix}`;
       } else if (data.bot_name) {
-        const safeBotName = String(data.bot_name || "")
-          .trim()
-          .replace(/[!:]/g, "_");
+        const safeBotName = this.sanitizePlatformIdPart(data.bot_name);
         if (safeBotName) {
           suffix = `-${safeBotName}`;
         }
@@ -1459,7 +1603,7 @@ export default {
       if (!id) {
         return false;
       }
-      return !/[!:]/.test(id);
+      return !/[!:\s]/.test(id);
     },
 
     // 获取该平台适配器使用的所有配置文件（新版本：直接操作路由表）
@@ -1471,7 +1615,7 @@ export default {
 
       try {
         // 获取路由表 (UMOP -> conf_id)
-        const routesRes = await axios.get("/api/config/umo_abconf_routes");
+        const routesRes = await configRouteApi.list();
         const routingTable = routesRes.data.data.routing;
 
         // 过滤出属于该平台的路由，并保持顺序
@@ -1518,7 +1662,7 @@ export default {
 
       this.loadingKnownRouteUmos = true;
       try {
-        const res = await axios.get("/api/session/active-umos");
+        const res = await sessionApi.activeUmos();
         if (res.data.status === "ok") {
           const umos = Array.isArray(res.data.data?.umos)
             ? res.data.data.umos
@@ -1680,7 +1824,7 @@ export default {
 
       try {
         // 获取完整的路由表
-        const routesRes = await axios.get("/api/config/umo_abconf_routes");
+        const routesRes = await configRouteApi.list();
         const fullRoutingTable = routesRes.data.data.routing;
 
         // 删除该平台的所有旧路由
@@ -1707,8 +1851,8 @@ export default {
           }
         }
 
-        // 使用 update_all 更新整个路由表
-        await axios.post("/api/config/umo_abconf_route/update_all", {
+        // 使用 v1 replace 更新整个路由表
+        await configRouteApi.replace({
           routing: fullRoutingTable,
         });
       } catch (err) {
@@ -1893,8 +2037,14 @@ export default {
 
 .registration-inline {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
   width: 320px;
+  gap: 8px;
+}
+
+.registration-platform-id-field {
+  width: 300px;
 }
 </style>

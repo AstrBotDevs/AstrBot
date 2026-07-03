@@ -260,6 +260,7 @@ import {
   CHAT_MARKDOWN_CUSTOM_TAGS,
   registerChatMarkdownComponents,
 } from "@/components/chat/chatMarkdownComponents";
+import { fileApi } from "@/api/v1";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
@@ -344,12 +345,10 @@ function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
   if (part.attachment_id) {
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
+    return fileApi.contentUrl(part.attachment_id);
   }
   if (part.filename) {
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+    return fileApi.byNameUrl(part.filename);
   }
   return "";
 }

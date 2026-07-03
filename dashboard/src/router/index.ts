@@ -22,7 +22,7 @@ interface AuthStore {
     password: string,
     code?: string,
     trustDeviceToken?: boolean,
-  ): Promise<void | 'totp_required'>;
+  ): Promise<void | 'totp_required' | 'upgrade_recovery_required'>;
   logout(): void;
   has_token(): boolean;
 }

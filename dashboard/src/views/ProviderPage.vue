@@ -216,7 +216,10 @@
     />
 
     <v-dialog v-model="showManualModelDialog" max-width="400">
-      <v-card :title="tm('models.manualDialogTitle')">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ tm('models.manualDialogTitle') }}
+        </v-card-title>
         <v-card-text class="py-4">
           <v-text-field
             v-model="manualModelId"
@@ -238,15 +241,16 @@
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showManualModelDialog = false">取消</v-btn>
-          <v-btn color="primary" @click="confirmManualModel">添加</v-btn>
+          <v-btn color="primary" variant="tonal" @click="confirmManualModel">添加</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <v-dialog v-model="showProviderCfg" width="900" persistent>
-      <v-card
-        :title="updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider')"
-      >
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ updatingMode ? tm('dialogs.config.editTitle') : tm('dialogs.config.addTitle') + ` ${newSelectedProviderName} ` + tm('dialogs.config.provider') }}
+        </v-card-title>
         <v-card-text class="py-4">
           <AstrBotConfig
             :iterable="newSelectedProviderConfig"
@@ -263,7 +267,7 @@
           <v-btn variant="text" :disabled="loading" @click="showProviderCfg = false">
             {{ tm('dialogs.config.cancel') }}
           </v-btn>
-          <v-btn color="primary" :loading="loading" @click="newProvider">
+          <v-btn color="primary" variant="tonal" :loading="loading" @click="newProvider">
             {{ tm('dialogs.config.save') }}
           </v-btn>
         </v-card-actions>
@@ -271,7 +275,10 @@
     </v-dialog>
 
     <v-dialog v-model="showProviderEditDialog" width="800">
-      <v-card :title="providerEditDialogTitle">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ providerEditDialogTitle }}
+        </v-card-title>
         <v-card-text class="py-4">
           <AstrBotConfig
             v-if="providerEditData"
@@ -292,6 +299,7 @@
           </v-btn>
           <v-btn
             color="primary"
+            variant="tonal"
             :loading="savingProviders.includes(providerEditData?.id)"
             @click="saveEditedProvider"
           >
@@ -307,7 +315,7 @@
 
     <v-dialog v-model="showAgentRunnerDialog" max-width="520" persistent>
       <v-card>
-        <v-card-title class="text-h3 d-flex align-center">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <v-icon start class="me-2">mdi-information</v-icon>
           请前往「配置文件」页测试 Agent 执行器
         </v-card-title>
@@ -323,7 +331,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="grey" variant="text" @click="showAgentRunnerDialog = false">好的</v-btn>
-          <v-btn color="primary" variant="flat" @click="goToConfigPage">点击前往</v-btn>
+          <v-btn color="primary" variant="tonal" @click="goToConfigPage">点击前往</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -333,7 +341,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import { providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue'
 import ItemCard from '@/components/shared/ItemCard.vue'
@@ -546,10 +554,10 @@ async function newProvider() {
   const wasUpdating = updatingMode.value
   try {
     if (wasUpdating) {
-      const res = await axios.post('/api/config/provider/update', {
-        id: newProviderOriginalId.value || newSelectedProviderName.value,
-        config: newSelectedProviderConfig.value
-      })
+      const res = await providerApi.update(
+        newProviderOriginalId.value || newSelectedProviderName.value,
+        newSelectedProviderConfig.value
+      )
       if (res.data.status === 'error') {
         showMessage(res.data.message || '更新失败!', 'error')
         return
@@ -559,7 +567,7 @@ async function newProvider() {
         updatingMode.value = false
       }
     } else {
-      const res = await axios.post('/api/config/provider/new', newSelectedProviderConfig.value)
+      const res = await providerApi.create(newSelectedProviderConfig.value)
       if (res.data.status === 'error') {
         showMessage(res.data.message || '添加失败!', 'error')
         return
@@ -593,7 +601,7 @@ async function copyProvider(providerToCopy) {
 
   loading.value = true
   try {
-    const res = await axios.post('/api/config/provider/new', newProviderConfig)
+    const res = await providerApi.create(newProviderConfig)
     showMessage(res.data.message || `成功复制并创建了 ${newProviderConfig.id}`)
     await loadConfig()
   } catch (err) {
@@ -607,10 +615,7 @@ async function toggleProviderEnable(provider, value) {
   provider.enable = value
 
   try {
-    const res = await axios.post('/api/config/provider/update', {
-      id: provider.id,
-      config: provider
-    })
+    const res = await providerApi.setEnabled(provider.id, { enabled: value })
 
     if (res.data.status === 'error') {
       throw new Error(res.data.message)
@@ -660,7 +665,7 @@ async function testSingleProvider(provider) {
     }
 
     const startTime = performance.now()
-    const res = await axios.get(`/api/config/provider/check_one?id=${provider.id}`)
+    const res = await providerApi.test(provider.id)
     if (!res.data || res.data.status !== 'ok') {
       throw new Error(res.data?.message || `Failed to check status for ${provider.id}`)
     }

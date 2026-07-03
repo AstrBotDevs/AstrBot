@@ -40,7 +40,7 @@
     return origin === SELF_ORIGIN;
   }
 
-  function send(kind, payload) {
+  function send(kind, payload, transfer) {
     window.parent.postMessage(
       {
         channel: CHANNEL,
@@ -48,19 +48,24 @@
         ...(payload || {}),
       },
       getTargetOrigin(),
+      transfer || [],
     );
   }
 
-  function makeRequest(action, payload) {
+  function makeRequest(action, payload, transfer) {
     return new Promise((resolve, reject) => {
       requestCounter += 1;
       const requestId = `plugin_req_${requestCounter}`;
       pendingRequests.set(requestId, { resolve, reject });
-      send("request", {
-        requestId,
-        action,
-        ...(payload || {}),
-      });
+      send(
+        "request",
+        {
+          requestId,
+          action,
+          ...(payload || {}),
+        },
+        transfer,
+      );
     });
   }
 
@@ -181,6 +186,7 @@
         handlers.onMessage({
           raw: message.data,
           parsed: parseMaybeJson(message.data),
+          eventType: message.eventType || "message",
           lastEventId: message.lastEventId,
         });
       }
@@ -235,12 +241,23 @@
     apiPost(endpoint, body) {
       return makeRequest("api:post", { endpoint, body });
     },
-    upload(endpoint, file) {
-      return makeRequest("files:upload", {
-        endpoint,
-        file,
-        fileName: file?.name || "upload.bin",
-      });
+    async upload(endpoint, file) {
+      if (!file || typeof file.arrayBuffer !== "function") {
+        throw new Error("Missing uploaded file payload.");
+      }
+      const fileBuffer = await file.arrayBuffer();
+      return makeRequest(
+        "files:upload",
+        {
+          endpoint,
+          fileName: file?.name || "upload.bin",
+          fileType: file?.type || "application/octet-stream",
+          fileLastModified:
+            typeof file?.lastModified === "number" ? file.lastModified : null,
+          fileBuffer,
+        },
+        [fileBuffer],
+      );
     },
     download(endpoint, params, filename) {
       return makeRequest("files:download", { endpoint, params, filename });

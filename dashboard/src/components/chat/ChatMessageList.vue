@@ -389,6 +389,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from "vue";
 import axios from "axios";
+import { fileApi } from "@/api/v1";
 import RegenerateMenu, {
   type RegenerateModelSelection,
 } from "@/components/chat/RegenerateMenu.vue";
@@ -688,12 +689,10 @@ function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
   if (part.attachment_id) {
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
+    return fileApi.contentUrl(part.attachment_id);
   }
   if (part.filename) {
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+    return fileApi.byNameUrl(part.filename);
   }
   return "";
 }

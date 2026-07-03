@@ -1,1 +1,3 @@
-__version__ = "4.25.3"
+from astrbot import __version__
+
+__all__ = ["__version__"]

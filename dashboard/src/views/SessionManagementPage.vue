@@ -253,7 +253,7 @@
       <!-- 分组编辑对话框 -->
       <v-dialog v-model="groupDialog" max-width="800" @after-enter="loadAvailableUmos">
         <v-card>
-          <v-card-title class="py-3 px-4">
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">
             {{ groupDialogMode === 'create' ? tm('groups.create') : tm('groups.edit') }}
           </v-card-title>
           <v-card-text>
@@ -360,7 +360,7 @@
       <!-- 添加规则对话框 - 选择 UMO -->
       <v-dialog v-model="addRuleDialog" max-width="600">
         <v-card>
-          <v-card-title class="py-3 px-4" style="display: flex; align-items: center">
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
             <span>{{ tm('addRule.title') }}</span>
             <v-spacer></v-spacer>
             <v-btn icon variant="text" @click="addRuleDialog = false">
@@ -407,7 +407,7 @@
       <!-- 规则编辑对话框 -->
       <v-dialog v-model="ruleDialog" max-width="550" scrollable>
         <v-card v-if="selectedUmo" class="d-flex flex-column" height="600">
-          <v-card-title class="py-3 px-6 d-flex align-center border-b">
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center border-b">
             <span>{{ tm('ruleEditor.title') }}</span>
             <v-chip size="x-small" class="ml-2 font-weight-regular" variant="outlined">
               {{ selectedUmo.umo }}
@@ -613,7 +613,7 @@
       <!-- 确认删除对话框 -->
       <v-dialog v-model="deleteDialog" max-width="400">
         <v-card>
-          <v-card-title class="text-h6">{{ tm('deleteConfirm.title') }}</v-card-title>
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('deleteConfirm.title') }}</v-card-title>
           <v-card-text>
             {{ tm('deleteConfirm.message') }}
             <br /><br />
@@ -630,7 +630,7 @@
       <!-- 批量删除确认对话框 -->
       <v-dialog v-model="batchDeleteDialog" max-width="500">
         <v-card>
-          <v-card-title class="text-h6">{{ tm('batchDeleteConfirm.title') }}</v-card-title>
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('batchDeleteConfirm.title') }}</v-card-title>
           <v-card-text>
             {{ tm('batchDeleteConfirm.message', { count: selectedItems.length }) }}
             <div class="mt-3" style="max-height: 200px; overflow-y: auto">
@@ -657,7 +657,7 @@
       <!-- 快速编辑备注名对话框 -->
       <v-dialog v-model="quickEditNameDialog" max-width="400">
         <v-card>
-          <v-card-title class="py-3 px-4">{{ tm('quickEditName.title') }}</v-card-title>
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('quickEditName.title') }}</v-card-title>
           <v-card-text class="pa-4">
             <v-text-field v-model="quickEditNameValue" :label="tm('ruleEditor.serviceConfig.customName')" variant="outlined" hide-details clearable autofocus @keyup.enter="saveQuickEditName" />
           </v-card-text>
@@ -675,7 +675,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import { sessionApi } from '@/api/v1'
 import UmoDisplay from '@/components/shared/UmoDisplay.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
@@ -1008,12 +1008,10 @@ export default {
     async loadData() {
       this.loading = true
       try {
-        const response = await axios.get('/api/session/list-rule', {
-          params: {
-            page: this.currentPage,
-            page_size: this.itemsPerPage,
-            search: this.searchQuery || '',
-          },
+        const response = await sessionApi.listRules({
+          page: this.currentPage,
+          page_size: this.itemsPerPage,
+          search: this.searchQuery || '',
         })
         if (response.data.status === 'ok') {
           const data = response.data.data
@@ -1051,7 +1049,7 @@ export default {
     async loadUmos() {
       this.loadingUmos = true
       try {
-        const response = await axios.get('/api/session/active-umos')
+        const response = await sessionApi.activeUmos()
         if (response.data.status === 'ok') {
           this.mergeUmoInfos(response.data.data.umo_infos || [])
           // 过滤掉已有规则的 umo
@@ -1232,7 +1230,7 @@ export default {
         if (!config.custom_name) delete config.custom_name
         if (config.persona_id === null) delete config.persona_id
 
-        const response = await axios.post('/api/session/update-rule', {
+        const response = await sessionApi.upsertRule({
           umo: this.selectedUmo.umo,
           rule_key: 'session_service_config',
           rule_value: config,
@@ -1277,7 +1275,7 @@ export default {
           if (value && value !== FOLLOW_CONFIG_VALUE) {
             // 有值时更新
             updateTasks.push(
-              axios.post('/api/session/update-rule', {
+              sessionApi.upsertRule({
                 umo: this.selectedUmo.umo,
                 rule_key: `provider_perf_${type}`,
                 rule_value: value,
@@ -1286,7 +1284,7 @@ export default {
           } else if (this.editingRules[`provider_perf_${type}`]) {
             // 选择了"跟随配置文件" (__astrbot_follow_config__) 且之前有配置，则删除
             deleteTasks.push(
-              axios.post('/api/session/delete-rule', {
+              sessionApi.deleteRules({
                 umo: this.selectedUmo.umo,
                 rule_key: `provider_perf_${type}`,
               }),
@@ -1338,7 +1336,7 @@ export default {
         // 如果两个列表都为空，删除配置
         if (config.enabled_plugins.length === 0 && config.disabled_plugins.length === 0) {
           if (this.editingRules.session_plugin_config) {
-            await axios.post('/api/session/delete-rule', {
+            await sessionApi.deleteRules({
               umo: this.selectedUmo.umo,
               rule_key: 'session_plugin_config',
             })
@@ -1348,7 +1346,7 @@ export default {
           }
           this.showSuccess(this.tm('messages.saveSuccess'))
         } else {
-          const response = await axios.post('/api/session/update-rule', {
+          const response = await sessionApi.upsertRule({
             umo: this.selectedUmo.umo,
             rule_key: 'session_plugin_config',
             rule_value: config,
@@ -1392,7 +1390,7 @@ export default {
         // 如果 kb_ids 为空，删除配置
         if (config.kb_ids.length === 0) {
           if (this.editingRules.kb_config) {
-            await axios.post('/api/session/delete-rule', {
+            await sessionApi.deleteRules({
               umo: this.selectedUmo.umo,
               rule_key: 'kb_config',
             })
@@ -1402,7 +1400,7 @@ export default {
           }
           this.showSuccess(this.tm('messages.saveSuccess'))
         } else {
-          const response = await axios.post('/api/session/update-rule', {
+          const response = await sessionApi.upsertRule({
             umo: this.selectedUmo.umo,
             rule_key: 'kb_config',
             rule_value: config,
@@ -1442,7 +1440,7 @@ export default {
 
       this.deleting = true
       try {
-        const response = await axios.post('/api/session/delete-rule', {
+        const response = await sessionApi.deleteRules({
           umo: this.deleteTarget.umo,
         })
 
@@ -1477,7 +1475,7 @@ export default {
       this.deleting = true
       try {
         const umos = this.selectedItems.map((item) => item.umo)
-        const response = await axios.post('/api/session/batch-delete-rule', {
+        const response = await sessionApi.deleteRules({
           umos: umos,
         })
 
@@ -1536,7 +1534,7 @@ export default {
           delete config.custom_name
         }
 
-        const response = await axios.post('/api/session/update-rule', {
+        const response = await sessionApi.upsertRule({
           umo: this.quickEditNameTarget.umo,
           rule_key: 'session_service_config',
           rule_value: config,
@@ -1603,13 +1601,13 @@ export default {
           if (this.batchTtsStatus !== null) {
             serviceData.tts_enabled = this.batchTtsStatus
           }
-          tasks.push(axios.post('/api/session/batch-update-service', serviceData))
+          tasks.push(sessionApi.batchUpdateService(serviceData))
         }
 
         if (this.batchChatProvider !== null) {
           if (this.batchChatProvider === FOLLOW_CONFIG_VALUE) {
             tasks.push(
-              axios.post('/api/session/batch-delete-rule', {
+              sessionApi.deleteRules({
                 scope,
                 umos,
                 group_id: groupId,
@@ -1618,7 +1616,7 @@ export default {
             )
           } else {
             tasks.push(
-              axios.post('/api/session/batch-update-provider', {
+              sessionApi.batchUpdateProvider({
                 scope,
                 umos,
                 group_id: groupId,
@@ -1632,7 +1630,7 @@ export default {
         if (this.batchTtsProvider !== null) {
           if (this.batchTtsProvider === FOLLOW_CONFIG_VALUE) {
             tasks.push(
-              axios.post('/api/session/batch-delete-rule', {
+              sessionApi.deleteRules({
                 scope,
                 umos,
                 group_id: groupId,
@@ -1641,7 +1639,7 @@ export default {
             )
           } else {
             tasks.push(
-              axios.post('/api/session/batch-update-provider', {
+              sessionApi.batchUpdateProvider({
                 scope,
                 umos,
                 group_id: groupId,
@@ -1682,7 +1680,7 @@ export default {
     async loadGroups() {
       this.groupsLoading = true
       try {
-        const response = await axios.get('/api/session/groups')
+        const response = await sessionApi.listGroups()
         if (response.data.status === 'ok') {
           this.groups = response.data.data.groups || []
         }
@@ -1696,7 +1694,7 @@ export default {
       if (this.availableUmos.length > 0) return
       this.loadingUmos = true
       try {
-        const response = await axios.get('/api/session/active-umos')
+        const response = await sessionApi.activeUmos()
         if (response.data.status === 'ok') {
           this.mergeUmoInfos(response.data.data.umo_infos || [])
           this.availableUmos = response.data.data.umos || []
@@ -1758,13 +1756,12 @@ export default {
       try {
         let response
         if (this.groupDialogMode === 'create') {
-          response = await axios.post('/api/session/group/create', {
+          response = await sessionApi.createGroup({
             name: this.editingGroup.name,
             umos: this.editingGroup.umos,
           })
         } else {
-          response = await axios.post('/api/session/group/update', {
-            id: this.editingGroup.id,
+          response = await sessionApi.updateGroup(this.editingGroup.id, {
             name: this.editingGroup.name,
             umos: this.editingGroup.umos,
           })
@@ -1787,9 +1784,7 @@ export default {
       if (!(await askForConfirmationDialog(message, this.confirmDialog))) return
 
       try {
-        const response = await axios.post('/api/session/group/delete', {
-          id: group.id,
-        })
+        const response = await sessionApi.deleteGroup(group.id)
         if (response.data.status === 'ok') {
           this.showSuccess(response.data.data.message)
           await this.loadGroups()
@@ -1813,8 +1808,7 @@ export default {
       }
 
       try {
-        const response = await axios.post('/api/session/group/update', {
-          id: groupId,
+        const response = await sessionApi.updateGroup(groupId, {
           add_umos: this.selectedItems.map((item) => item.umo),
         })
         if (response.data.status === 'ok') {

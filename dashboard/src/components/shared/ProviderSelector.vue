@@ -34,8 +34,7 @@
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
       <v-card-title
-        class="text-h3 py-4 d-flex align-center justify-space-between gap-4 flex-wrap"
-        style="font-weight: normal;"
+        class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between gap-4 flex-wrap"
       >
         <span>{{ tm('providerSelector.dialogTitle') }}</span>
         <v-btn
@@ -146,6 +145,7 @@
         <v-btn variant="text" @click="cancelSelection">{{ tm('providerSelector.cancelSelection') }}</v-btn>
         <v-btn 
           color="primary" 
+          variant="tonal"
           @click="confirmSelection">
           {{ tm('providerSelector.confirmSelection') }}
         </v-btn>
@@ -179,7 +179,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import axios from 'axios'
+import { providerApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import ProviderChatCompletionPanel from '@/components/provider/ProviderChatCompletionPanel.vue'
 import ProviderPage from '@/views/ProviderPage.vue'
@@ -263,11 +263,7 @@ async function openDialog() {
 async function loadProviders() {
   loading.value = true
   try {
-    const response = await axios.get('/api/config/provider/list', {
-      params: {
-        provider_type: props.providerType
-      }
-    })
+    const response = await providerApi.listByProviderType(props.providerType)
     if (response.data.status === 'ok') {
       const providers = response.data.data || []
       providerList.value = props.providerSubtype

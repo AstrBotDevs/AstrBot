@@ -26,6 +26,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import (
+    MediaResolver,
     convert_audio_format,
     convert_video_format,
     extract_video_cover,
@@ -274,7 +275,12 @@ class DingtalkPlatformAdapter(Platform):
                         voice_ext,
                     )
                     if f_path:
-                        abm.message.append(Record.fromFileSystem(f_path))
+                        path_wav = await MediaResolver(
+                            f_path,
+                            media_type="audio",
+                            default_suffix=".wav",
+                        ).to_path(target_format="wav")
+                        abm.message.append(Record(file=path_wav, url=path_wav))
             case "file":
                 download_code = cast(str, raw_content.get("downloadCode") or "")
                 if not download_code:
@@ -747,17 +753,26 @@ class DingtalkPlatformAdapter(Platform):
                 # at_str=at_str,
             )
 
-    async def handle_msg(self, abm: AstrBotMessage) -> None:
-        event = DingtalkMessageEvent(
-            message_str=abm.message_str,
-            message_obj=abm,
+    def create_event(self, message: AstrBotMessage) -> DingtalkMessageEvent:
+        """Creates a Dingtalk message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Dingtalk message event.
+        """
+        return DingtalkMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
             platform_meta=self.meta(),
-            session_id=abm.session_id,
+            session_id=message.session_id,
             client=self.client,
             adapter=self,
         )
 
-        self._event_queue.put_nowait(event)
+    async def handle_msg(self, abm: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(abm))
 
     async def run(self) -> None:
         # await self.client_.start()

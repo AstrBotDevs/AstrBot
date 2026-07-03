@@ -56,7 +56,8 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
-import axios from "axios";
+import { chatApi } from "@/api/v1";
+import { fetchWithAuth } from "@/api/http";
 import {
   appendPlain,
   appendReasoningPart,
@@ -110,9 +111,7 @@ function close() {
 
 async function loadThread(threadId: string) {
   try {
-    const response = await axios.get("/api/chat/thread/get", {
-      params: { thread_id: threadId },
-    });
+    const response = await chatApi.getThread(threadId);
     const history = response.data?.data?.history || [];
     messages.value = history.map(normalizeRecord);
     scrollToBottom();
@@ -153,14 +152,12 @@ async function send() {
   const abort = new AbortController();
   sending.value = true;
   try {
-    const response = await fetch("/api/chat/thread/send", {
+    const response = await fetchWithAuth(chatApi.sendThreadMessageUrl(props.thread.thread_id), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
       },
       body: JSON.stringify({
-        thread_id: props.thread.thread_id,
         message: [{ type: "plain", text }],
         enable_streaming: true,
       }),
@@ -330,9 +327,10 @@ function scrollToBottom() {
 <style scoped>
 .thread-panel {
   width: 380px;
-  height: 100%;
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  background: rgb(var(--v-theme-surface));
+  height: calc(100% - var(--chat-panel-top-offset, 0px));
+  margin-top: var(--chat-panel-top-offset, 0px);
+  border-left: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+  background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
@@ -443,13 +441,14 @@ function scrollToBottom() {
     z-index: 1300;
     width: 100vw;
     height: 100dvh;
+    margin-top: 0;
     border-left: 0;
   }
 
   .thread-panel-header {
     min-height: 52px;
     padding: calc(10px + env(safe-area-inset-top)) 12px 8px;
-    border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+    border-bottom: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.12));
   }
 
   .thread-selected-text {
@@ -467,7 +466,7 @@ function scrollToBottom() {
   .thread-composer {
     gap: 8px;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-    background: rgb(var(--v-theme-surface));
+    background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   }
 
   .thread-input {

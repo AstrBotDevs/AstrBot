@@ -206,7 +206,7 @@
         <!-- 对话详情对话框 -->
         <v-dialog v-model="dialogView" max-width="900px" scrollable>
             <v-card class="conversation-detail-card">
-                <v-card-title class="ml-2 mt-2 conversation-detail-title">
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6 conversation-detail-title">
                     <div class="conversation-detail-heading">
                         <span class="text-truncate">{{ selectedConversation?.title || tm('status.noTitle') }}</span>
                         <UmoDisplay v-if="selectedConversation?.user_id && hasConversationUmoReadableName(selectedConversation)"
@@ -280,8 +280,8 @@
         <!-- 编辑对话框 -->
         <v-dialog v-model="dialogEdit" max-width="500px">
             <v-card>
-                <v-card-title class="bg-primary text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-pencil</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="primary" class="me-2">mdi-pencil</v-icon>
                     <span>{{ tm('dialogs.edit.title') }}</span>
                 </v-card-title>
 
@@ -300,7 +300,7 @@
                     <v-btn variant="text" @click="dialogEdit = false" :disabled="loading">
                         {{ tm('dialogs.edit.cancel') }}
                     </v-btn>
-                    <v-btn color="primary" @click="saveConversation" :loading="loading">
+                    <v-btn color="primary" variant="tonal" @click="saveConversation" :loading="loading">
                         {{ tm('dialogs.edit.save') }}
                     </v-btn>
                 </v-card-actions>
@@ -310,8 +310,8 @@
         <!-- 删除确认对话框 -->
         <v-dialog v-model="dialogDelete" max-width="500px">
             <v-card>
-                <v-card-title class="bg-error text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-alert</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="error" class="me-2">mdi-alert</v-icon>
                     <span>{{ tm('dialogs.delete.title') }}</span>
                 </v-card-title>
 
@@ -327,7 +327,7 @@
                     <v-btn variant="text" @click="dialogDelete = false" :disabled="loading">
                         {{ tm('dialogs.delete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" @click="deleteConversation" :loading="loading">
+                    <v-btn color="error" variant="tonal" @click="deleteConversation" :loading="loading">
                         {{ tm('dialogs.delete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -337,8 +337,8 @@
         <!-- 批量删除确认对话框 -->
         <v-dialog v-model="dialogBatchDelete" max-width="600px">
             <v-card>
-                <v-card-title class="bg-error text-white py-3">
-                    <v-icon color="white" class="me-2">mdi-delete</v-icon>
+                <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+                    <v-icon color="error" class="me-2">mdi-delete</v-icon>
                     <span>{{ tm('dialogs.batchDelete.title') }}</span>
                 </v-card-title>
 
@@ -369,7 +369,7 @@
                     <v-btn variant="text" @click="dialogBatchDelete = false" :disabled="loading">
                         {{ tm('dialogs.batchDelete.cancel') }}
                     </v-btn>
-                    <v-btn color="error" @click="batchDeleteConversations" :loading="loading">
+                    <v-btn color="error" variant="tonal" @click="batchDeleteConversations" :loading="loading">
                         {{ tm('dialogs.batchDelete.confirm') }}
                     </v-btn>
                 </v-card-actions>
@@ -384,9 +384,10 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { isCancel } from 'axios';
 import { debounce } from 'lodash';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+import { conversationApi } from '@/api/v1';
 import { useCommonStore } from '@/stores/common';
 import { useCustomizerStore } from '@/stores/customizer';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
@@ -760,9 +761,8 @@ export default {
                     params.exclude_ids = 'astrbot';
                     params.exclude_platforms = 'webchat';
 
-                    const response = await axios.get('/api/conversation/list', {
+                    const response = await conversationApi.list(params, {
                         signal: controller.signal,
-                        params
                     });
 
                     this.lastAppliedFilters = { ...this.currentFilters }; // 记录已应用的筛选条件
@@ -803,7 +803,7 @@ export default {
                         this.showErrorMessage(response.data.message || this.tm('messages.fetchError'));
                     }
                 } catch (error) {
-                    if (axios.isCancel(error)) return;
+                    if (isCancel(error)) return;
                     
                     console.error('获取对话列表出错:', error);
                     if (error.response) {
@@ -825,10 +825,7 @@ export default {
 
             try {
                 console.log(`正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`);
-                const response = await axios.post('/api/conversation/detail', {
-                    user_id: item.user_id,
-                    cid: item.cid
-                });
+                const response = await conversationApi.get(item.user_id, item.cid);
 
                 if (response.data.status === "ok") {
                     try {
@@ -878,11 +875,13 @@ export default {
                     return;
                 }
 
-                const response = await axios.post('/api/conversation/update_history', {
-                    user_id: this.selectedConversation.user_id,
-                    cid: this.selectedConversation.cid,
+                const response = await conversationApi.replaceMessages(
+                    this.selectedConversation.user_id,
+                    this.selectedConversation.cid,
+                    {
                     history: historyJson
-                });
+                    }
+                );
 
                 if (response.data.status === "ok") {
                     this.conversationHistory = historyJson;
@@ -923,11 +922,13 @@ export default {
 
             this.loading = true;
             try {
-                const response = await axios.post('/api/conversation/update', {
-                    user_id: this.editedItem.user_id,
-                    cid: this.editedItem.cid,
+                const response = await conversationApi.update(
+                    this.editedItem.user_id,
+                    this.editedItem.cid,
+                    {
                     title: this.editedItem.title
-                });
+                    }
+                );
 
                 if (response.data.status === "ok") {
                     // 更新本地数据
@@ -963,10 +964,10 @@ export default {
         async deleteConversation() {
             this.loading = true;
             try {
-                const response = await axios.post('/api/conversation/delete', {
-                    user_id: this.selectedConversation.user_id,
-                    cid: this.selectedConversation.cid
-                });
+                const response = await conversationApi.delete(
+                    this.selectedConversation.user_id,
+                    this.selectedConversation.cid
+                );
 
                 if (response.data.status === "ok") {
                     const index = this.conversations.findIndex(item => item.user_id === this.selectedConversation.user_id && item.cid === this.selectedConversation.cid
@@ -1032,7 +1033,7 @@ export default {
                     cid: item.cid
                 }));
 
-                const response = await axios.post('/api/conversation/delete', {
+                const response = await conversationApi.batchDelete({
                     conversations: conversations
                 });
 
@@ -1085,10 +1086,8 @@ export default {
                     cid: item.cid
                 }));
 
-                const response = await axios.post('/api/conversation/export', {
+                const response = await conversationApi.export({
                     conversations: conversations
-                }, {
-                    responseType: 'blob' // 重要：告诉 axios 响应是一个 blob
                 });
 
                 // 创建一个下载链接

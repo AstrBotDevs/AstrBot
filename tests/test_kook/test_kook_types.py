@@ -17,6 +17,7 @@ from astrbot.core.platform.sources.kook.kook_types import (
     KmarkdownElement,
     KookApiResponseBase,
     KookCardMessage,
+    KookCardMessageContainer,
     KookMessageSignal,
     KookModuleType,
     KookUserMeResponse,
@@ -25,7 +26,6 @@ from astrbot.core.platform.sources.kook.kook_types import (
     ParagraphStructure,
     PlainTextElement,
     SectionModule,
-    KookCardMessageContainer,
 )
 from tests.test_kook.shared import TEST_DATA_DIR, KookApiDataPath, KookEventDataPath
 
