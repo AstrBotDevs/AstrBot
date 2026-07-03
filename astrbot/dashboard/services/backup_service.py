@@ -221,11 +221,16 @@ class BackupService:
             with zipfile.ZipFile(zip_path, "r") as zf:
                 if "manifest.json" in zf.namelist():
                     manifest_data = zf.read("manifest.json")
-                    return json.loads(manifest_data.decode("utf-8"))
+                    manifest = json.loads(manifest_data.decode("utf-8"))
+                    return manifest if isinstance(manifest, dict) else None
                 return None
         except Exception as exc:
             logger.debug(f"读取备份 manifest 失败: {exc}")
         return None
+
+    def validate_uploaded_backup(self, zip_path: str) -> None:
+        if self.get_backup_manifest(zip_path) is None:
+            raise BackupServiceError("无效的备份文件：缺少或无法读取 manifest.json")
 
     def list_backups(self, *, page: int, page_size: int) -> dict:
         self.ensure_cleanup_task_started()
@@ -315,7 +320,13 @@ class BackupService:
 
         Path(self.backup_dir).mkdir(parents=True, exist_ok=True)
         zip_path = os.path.join(self.backup_dir, unique_filename)
-        await self._save_upload(file, zip_path)
+        try:
+            await self._save_upload(file, zip_path)
+            self.validate_uploaded_backup(zip_path)
+        except Exception:
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+            raise
 
         logger.info(
             f"上传的备份文件已保存: {unique_filename} (原始名称: {file.filename})"
@@ -463,6 +474,7 @@ class BackupService:
                             outfile.write(data_block)
 
             file_size = os.path.getsize(output_path)
+            self.validate_uploaded_backup(output_path)
             self.mark_backup_as_uploaded(output_path)
             logger.info(f"分片上传完成: {filename}, size={file_size}, chunks={total}")
             await self.cleanup_upload_session(upload_id)

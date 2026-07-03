@@ -3,8 +3,10 @@
 import json
 import os
 import re
+import time
 import zipfile
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,6 +31,8 @@ from astrbot.core.db.po import (
 )
 from astrbot.core.utils.version_comparator import VersionComparator
 from astrbot.dashboard.services.backup_service import (
+    BackupService,
+    BackupServiceError,
     generate_unique_filename,
     secure_filename,
 )
@@ -749,6 +753,79 @@ class TestSecureFilename:
         assert result.startswith("my_backup_file_")
         assert result.endswith(".zip")
         assert re.search(r"my_backup_file_\d{8}_\d{6}\.zip", result)
+
+
+class TestBackupUploadValidation:
+    """备份上传校验测试"""
+
+    @pytest.mark.asyncio
+    async def test_upload_backup_rejects_invalid_zip(
+        self, mock_main_db, tmp_path, monkeypatch
+    ):
+        """测试直接上传无效 ZIP 会失败且不留下文件"""
+        backup_dir = tmp_path / "backups"
+        data_dir = tmp_path / "data"
+        backup_dir.mkdir()
+        data_dir.mkdir()
+        monkeypatch.setattr(
+            "astrbot.dashboard.services.backup_service.get_astrbot_backups_path",
+            lambda: str(backup_dir),
+        )
+        monkeypatch.setattr(
+            "astrbot.dashboard.services.backup_service.get_astrbot_data_path",
+            lambda: str(data_dir),
+        )
+        core_lifecycle = MagicMock()
+        core_lifecycle.astrbot_config = {}
+        service = BackupService(mock_main_db, core_lifecycle)
+        upload = MagicMock()
+        upload.filename = "bad.zip"
+        upload.save = AsyncMock(
+            side_effect=lambda target: Path(target).write_bytes(b"not a zip")
+        )
+
+        with pytest.raises(BackupServiceError, match="无效的备份文件"):
+            await service.upload_backup(upload)
+
+        assert list(backup_dir.glob("*.zip")) == []
+
+    @pytest.mark.asyncio
+    async def test_upload_complete_rejects_invalid_zip(
+        self, mock_main_db, tmp_path, monkeypatch
+    ):
+        """测试分片上传无效 ZIP 会失败且清理合并文件"""
+        backup_dir = tmp_path / "backups"
+        data_dir = tmp_path / "data"
+        chunk_dir = backup_dir / ".chunks" / "upload-1"
+        chunk_dir.mkdir(parents=True)
+        data_dir.mkdir()
+        monkeypatch.setattr(
+            "astrbot.dashboard.services.backup_service.get_astrbot_backups_path",
+            lambda: str(backup_dir),
+        )
+        monkeypatch.setattr(
+            "astrbot.dashboard.services.backup_service.get_astrbot_data_path",
+            lambda: str(data_dir),
+        )
+        core_lifecycle = MagicMock()
+        core_lifecycle.astrbot_config = {}
+        service = BackupService(mock_main_db, core_lifecycle)
+        (chunk_dir / "0.part").write_bytes(b"not a zip")
+        service.upload_sessions["upload-1"] = {
+            "filename": "bad.zip",
+            "original_filename": "bad.zip",
+            "total_size": len(b"not a zip"),
+            "total_chunks": 1,
+            "received_chunks": {0},
+            "created_at": time.time(),
+            "last_activity": time.time(),
+            "chunk_dir": str(chunk_dir),
+        }
+
+        with pytest.raises(BackupServiceError, match="无效的备份文件"):
+            await service.upload_complete({"upload_id": "upload-1"})
+
+        assert not (backup_dir / "bad.zip").exists()
 
 
 class TestVersionComparison:
