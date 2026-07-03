@@ -1193,6 +1193,34 @@ async def test_v1_openapi_uses_pydantic_request_bodies(
 
 
 @pytest.mark.asyncio
+async def test_v1_knowledge_base_create_validation_uses_api_error_shape(
+    asgi_client: httpx.AsyncClient,
+):
+    headers = _jwt_headers()
+
+    missing_name_response = await asgi_client.post(
+        "/api/v1/knowledge-bases",
+        json={"embedding_provider_id": "embedding-1"},
+        headers=headers,
+    )
+    missing_provider_response = await asgi_client.post(
+        "/api/v1/knowledge-bases",
+        json={"name": "Docs"},
+        headers=headers,
+    )
+
+    assert missing_name_response.status_code == 200
+    assert missing_name_response.json()["status"] == "error"
+    assert missing_name_response.json()["message"] == "知识库名称不能为空"
+    assert missing_provider_response.status_code == 200
+    assert missing_provider_response.json()["status"] == "error"
+    assert (
+        missing_provider_response.json()["message"]
+        == "缺少参数 embedding_provider_id"
+    )
+
+
+@pytest.mark.asyncio
 async def test_v1_conversation_path_id_allows_slash(asgi_client: httpx.AsyncClient):
     response = await asgi_client.get(
         "/api/v1/conversations/conversation%2Fwith%2Fslash",

@@ -3381,7 +3381,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/KnowledgeBaseRequest"
+              $ref: "#/components/schemas/KnowledgeBaseCreateRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5705,21 +5705,39 @@ components:
 
     KnowledgeBaseRequest:
       type: object
-      required: [name]
       properties:
-        name:
+        kb_name:
           type: string
         description:
           type: string
+        emoji:
+          type: string
         embedding_provider_id:
-          type: string
+          type: [string, "null"]
         rerank_provider_id:
-          type: string
-        chunking:
-          $ref: "#/components/schemas/DynamicConfig"
-        metadata:
-          $ref: "#/components/schemas/DynamicConfig"
+          type: [string, "null"]
+        chunk_size:
+          type: integer
+        chunk_overlap:
+          type: integer
+        top_k_dense:
+          type: integer
+        top_k_sparse:
+          type: integer
+        top_m_final:
+          type: integer
       additionalProperties: false
+
+    KnowledgeBaseCreateRequest:
+      allOf:
+        - $ref: "#/components/schemas/KnowledgeBaseRequest"
+        - type: object
+          required: [kb_name, embedding_provider_id]
+          properties:
+            kb_name:
+              type: string
+            embedding_provider_id:
+              type: string
 
     KnowledgeDocumentUploadRequest:
       type: object
@@ -5728,8 +5746,6 @@ components:
         file:
           type: string
           format: binary
-        parser:
-          type: string
 
     KnowledgeDocumentImportRequest:
       type: object

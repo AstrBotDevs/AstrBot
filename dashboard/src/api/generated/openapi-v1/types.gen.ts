@@ -259,13 +259,22 @@ export type JsonSchema = {
     [key: string]: unknown;
 };
 
+export type KnowledgeBaseCreateRequest = KnowledgeBaseRequest & {
+    kb_name: string;
+    embedding_provider_id: string;
+};
+
 export type KnowledgeBaseRequest = {
-    name: string;
+    kb_name?: string;
     description?: string;
-    embedding_provider_id?: string;
-    rerank_provider_id?: string;
-    chunking?: DynamicConfig;
-    metadata?: DynamicConfig;
+    emoji?: string;
+    embedding_provider_id?: (string) | null;
+    rerank_provider_id?: (string) | null;
+    chunk_size?: number;
+    chunk_overlap?: number;
+    top_k_dense?: number;
+    top_k_sparse?: number;
+    top_m_final?: number;
 };
 
 export type KnowledgeDocumentImportRequest = {
@@ -275,7 +284,6 @@ export type KnowledgeDocumentImportRequest = {
 
 export type KnowledgeDocumentUploadRequest = {
     file: (Blob | File);
-    parser?: string;
 };
 
 export type KnowledgeDocumentUrlImportRequest = {
@@ -2610,7 +2618,7 @@ export type ListKnowledgeBasesResponse = (SuccessEnvelope);
 export type ListKnowledgeBasesError = unknown;
 
 export type CreateKnowledgeBaseData = {
-    body: KnowledgeBaseRequest;
+    body: KnowledgeBaseCreateRequest;
 };
 
 export type CreateKnowledgeBaseResponse = (SuccessEnvelope);
