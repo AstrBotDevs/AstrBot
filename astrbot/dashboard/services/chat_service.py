@@ -26,6 +26,10 @@ from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queu
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
+from astrbot.core.utils.media_utils import (
+    MEDIA_MIME_EXTENSIONS,
+    detect_image_mime_type_async,
+)
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 
@@ -584,6 +588,22 @@ class ChatService:
             raise ChatServiceError("Invalid filename")
 
         await file.save(str(file_path))
+        if attach_type == "image":
+            detected_mime_type = await detect_image_mime_type_async(
+                file_path,
+                default_mime_type=None,
+            )
+            if detected_mime_type:
+                content_type = detected_mime_type
+                detected_suffix = MEDIA_MIME_EXTENSIONS.get(detected_mime_type)
+                if detected_suffix and file_path.suffix.lower() != detected_suffix:
+                    target_path = file_path.with_suffix(detected_suffix)
+                    if target_path.exists():
+                        target_path = (
+                            attachments_dir / f"{uuid.uuid4().hex}{detected_suffix}"
+                        )
+                    await asyncio.to_thread(file_path.rename, target_path)
+                    file_path = target_path
         attachment = await self.db.insert_attachment(
             path=str(file_path),
             type=attach_type,

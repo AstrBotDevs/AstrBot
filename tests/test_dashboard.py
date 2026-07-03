@@ -20,6 +20,7 @@ from werkzeug.datastructures import FileStorage
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db.sqlite import SQLiteDatabase
+from astrbot.core.desktop_runtime import DESKTOP_MANAGED_RESTART_MESSAGE
 from astrbot.core.star.star import StarMetadata, star_registry
 from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.auth_password import (
@@ -1248,6 +1249,23 @@ async def test_version_endpoints_use_md5_password_hint(
     assert _removed_md5_hint_alias_key() not in data["data"]
 
 
+@pytest.mark.asyncio
+async def test_public_versions_endpoint_does_not_require_auth(app: FastAPIAppAdapter):
+    test_client = app.test_client()
+
+    response = await test_client.get("/api/stat/versions")
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["astrbot_version"]
+    assert "webui_version" in data["data"]
+    assert "astrbot_code_version" in data["data"]
+    assert "change_pwd_hint" not in data["data"]
+    assert "md5_pwd_hint" not in data["data"]
+    assert "password_upgrade_required" not in data["data"]
+
+
 def test_password_hash_lookup_falls_back_to_md5_when_pbkdf2_missing(
     core_lifecycle_td: AstrBotCoreLifecycle,
 ):
@@ -1755,6 +1773,12 @@ async def test_plugin_page_content_issues_scoped_asset_token(
     assert '"pageTitle": "Bridge 演示页"' in bridge_js
     css_response = await anonymous_client.get(css_url.group(1))
     assert css_response.status_code == 200
+
+    stale_cookie_response = await anonymous_client.get(
+        app_js_url.group(1),
+        headers={"Cookie": f"{DASHBOARD_JWT_COOKIE_NAME}=stale.dashboard.token"},
+    )
+    assert stale_cookie_response.status_code == 200
 
     out_of_scope_response = await anonymous_client.get(
         f"/api/plugin/get?asset_token={asset_token}"
@@ -2277,6 +2301,10 @@ async def test_plugins(
         installed_at = target["installed_at"]
         assert installed_at is not None
         datetime.fromisoformat(installed_at)
+        assert target["install_source"]["install_method"] == "github"
+        assert target["install_source"]["repo"] == test_repo_url
+        assert target["updates_enabled"] is True
+        assert target["update_disabled_reason"] == ""
 
         response = await test_client.get(
             f"/api/plugin/detail?name={test_plugin_name}",
@@ -2293,7 +2321,7 @@ async def test_plugins(
         exists = any(md.name == test_plugin_name for md in star_registry)
         assert exists is True, f"插件 {test_plugin_name} 未成功载入"
 
-        # 插件更新
+        # Git URL installs can be explicitly reinstalled from their repository.
         response = await test_client.post(
             "/api/plugin/update",
             json={"name": test_plugin_name},
@@ -2303,9 +2331,8 @@ async def test_plugins(
         data = await response.get_json()
         assert data["status"] == "ok"
 
-        # 验证更新标记文件
         plugin_dir = builder.get_plugin_path(test_plugin_name)
-        assert (plugin_dir / ".updated").exists()
+        assert (plugin_dir / ".updated").read_text(encoding="utf-8") == "ok"
 
         # 插件卸载
         response = await test_client.post(
@@ -2637,6 +2664,35 @@ async def test_check_update(
 
 
 @pytest.mark.asyncio
+async def test_restart_core_rejects_desktop_managed_backend(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    restart_called = False
+
+    async def mock_restart():
+        nonlocal restart_called
+        restart_called = True
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setattr(core_lifecycle_td, "restart", mock_restart)
+
+    response = await test_client.post(
+        "/api/stat/restart-core",
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 400
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == DESKTOP_MANAGED_RESTART_MESSAGE
+    assert restart_called is False
+
+
+@pytest.mark.asyncio
 async def test_do_update(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
@@ -2798,6 +2854,44 @@ async def test_do_update_does_not_apply_files_when_core_download_fails(
     )
     assert progress_data["data"]["status"] == "error"
     assert calls == ["download-dashboard", "download-core"]
+
+
+@pytest.mark.asyncio
+async def test_do_update_rejects_desktop_managed_backend(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch,
+):
+    test_client = app.test_client()
+    calls = []
+
+    async def mock_download_core(*args, **kwargs):
+        del args, kwargs
+        calls.append("download-core")
+
+    async def mock_restart():
+        calls.append("restart")
+
+    monkeypatch.setenv("ASTRBOT_DESKTOP_MANAGED", "1")
+    monkeypatch.setattr(
+        core_lifecycle_td.astrbot_updator,
+        "download_update_package",
+        mock_download_core,
+    )
+    monkeypatch.setattr(core_lifecycle_td, "restart", mock_restart)
+
+    response = await test_client.post(
+        "/api/update/do",
+        headers=authenticated_header,
+        json={"version": "v3.4.0", "progress_id": "desktop-progress"},
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == DESKTOP_MANAGED_RESTART_MESSAGE
+    assert calls == []
 
 
 @pytest.mark.asyncio

@@ -83,7 +83,11 @@ export type ChatProjectRequest = {
     title?: string;
     emoji?: string;
     description?: string;
+    workspace_type?: 'session' | 'project' | 'custom';
+    workspace_path?: string;
 };
+
+export type workspace_type = 'session' | 'project' | 'custom';
 
 export type ChatRequest = {
     /**
@@ -194,7 +198,7 @@ export type ConversationRef = {
 
 export type CreateApiKeyRequest = {
     name: string;
-    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'file' | 'plugin' | 'mcp' | 'skill')>;
+    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill')>;
     expires_at?: string;
     expires_in_days?: number;
 };
@@ -462,6 +466,15 @@ export type PluginGithubInstallRequest = {
     download_url?: string;
     proxy?: string;
     ignore_version_check?: boolean;
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
+};
+
+export type PluginSourceBindRequest = {
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
 };
 
 export type PluginSourceRequest = {
@@ -486,6 +499,15 @@ export type PluginUrlInstallRequest = {
     download_url?: string;
     proxy?: string;
     ignore_version_check?: boolean;
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
+};
+
+export type PluginValidateRepoRequest = {
+    repository?: string;
+    url?: string;
+    proxy?: string;
 };
 
 export type PluginVersionSupportRequest = {
@@ -1900,6 +1922,17 @@ export type ReloadPluginResponse = (SuccessEnvelope);
 
 export type ReloadPluginError = unknown;
 
+export type BindPluginSourceData = {
+    body: PluginSourceBindRequest;
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type BindPluginSourceResponse = (SuccessEnvelope);
+
+export type BindPluginSourceError = unknown;
+
 export type SetPluginEnabledData = {
     body: EnabledPatch;
     path: {
@@ -1937,6 +1970,14 @@ export type CheckPluginVersionSupportData = {
 export type CheckPluginVersionSupportResponse = (SuccessEnvelope);
 
 export type CheckPluginVersionSupportError = unknown;
+
+export type ValidatePluginRepoData = {
+    body: PluginValidateRepoRequest;
+};
+
+export type ValidatePluginRepoResponse = (SuccessEnvelope);
+
+export type ValidatePluginRepoError = unknown;
 
 export type ListFailedPluginsResponse = (SuccessEnvelope);
 
@@ -2645,6 +2686,10 @@ export type ListKnowledgeDocumentsData = {
     query?: {
         page?: number;
         page_size?: number;
+        /**
+         * Filter documents by name (case-insensitive partial match).
+         */
+        search?: string;
     };
 };
 
@@ -3114,6 +3159,10 @@ export type GetProviderTokenStatsError = unknown;
 export type GetVersionResponse = (SuccessEnvelope);
 
 export type GetVersionError = unknown;
+
+export type GetPublicVersionsResponse = (SuccessEnvelope);
+
+export type GetPublicVersionsError = unknown;
 
 export type GetFirstNoticeData = {
     query?: {

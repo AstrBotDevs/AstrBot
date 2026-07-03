@@ -491,6 +491,7 @@ function closeImage() {
 }
 
 .welcome-title {
+  font-family: "Outfit", "Noto Sans", sans-serif;
   font-size: 24px;
   font-weight: 700;
 }
@@ -499,6 +500,7 @@ function closeImage() {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  font-weight: 410;
 }
 
 .message-row {

@@ -8,7 +8,7 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, file, plugin, mcp, skill. The config scope also
+    persona, im, config, chat, data, file, plugin, mcp, skill. The config scope also
     grants bot and provider access.
 servers:
   - url: http://localhost:6185
@@ -2195,6 +2195,24 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/plugins/{plugin_id}/source:
+    post:
+      tags: [Plugins]
+      summary: Bind an installed plugin to a marketplace source
+      operationId: bindPluginSource
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginSourceBindRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/plugins/{plugin_id}/enabled:
     patch:
       tags: [Plugins]
@@ -2259,6 +2277,22 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/PluginVersionSupportRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/validate/repo:
+    post:
+      tags: [Plugins]
+      summary: Validate a GitHub plugin repository before installation
+      operationId: validatePluginRepo
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginValidateRepoRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -3441,6 +3475,12 @@ paths:
         - $ref: "#/components/parameters/KbId"
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter documents by name (case-insensitive partial match).
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -4160,6 +4200,16 @@ paths:
       summary: Get AstrBot version
       operationId: getVersion
       x-astrbot-scope: system
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/stats/versions:
+    get:
+      tags: [Stats]
+      summary: Get public WebUI and AstrBot versions
+      operationId: getPublicVersions
+      security: []
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5156,8 +5206,8 @@ components:
           type: array
           items:
             type: string
-            enum: [bot, provider, persona, im, config, chat, file, plugin, mcp, skill]
-          example: [bot, provider, persona, im, config, chat, file, plugin, mcp, skill]
+            enum: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
+          example: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
         expires_at:
           type: string
           format: date-time
@@ -5412,6 +5462,11 @@ components:
           type: string
         description:
           type: string
+        workspace_type:
+          type: string
+          enum: [session, project, custom]
+        workspace_path:
+          type: string
       additionalProperties: false
 
     MessagePart:
@@ -5463,6 +5518,18 @@ components:
           default: false
       additionalProperties: false
 
+    PluginSourceBindRequest:
+      type: object
+      properties:
+        install_method:
+          type: string
+        registry_url:
+          type: string
+          nullable: true
+        market_plugin_id:
+          type: string
+      additionalProperties: false
+
     PluginBatchUpdateRequest:
       type: object
       properties:
@@ -5504,6 +5571,13 @@ components:
           type: string
         ignore_version_check:
           type: boolean
+        install_method:
+          type: string
+        registry_url:
+          type: string
+          nullable: true
+        market_plugin_id:
+          type: string
       additionalProperties: false
 
     PluginUrlInstallRequest:
@@ -5521,6 +5595,24 @@ components:
           type: string
         ignore_version_check:
           type: boolean
+        install_method:
+          type: string
+        registry_url:
+          type: string
+          nullable: true
+        market_plugin_id:
+          type: string
+      additionalProperties: false
+
+    PluginValidateRepoRequest:
+      type: object
+      properties:
+        repository:
+          type: string
+        url:
+          type: string
+        proxy:
+          type: string
       additionalProperties: false
 
     PluginUploadInstallRequest:

@@ -95,6 +95,8 @@ class ChatProjectRequest(OpenModel):
     title: str | None = None
     emoji: str | None = None
     description: str | None = None
+    workspace_type: str | None = None
+    workspace_path: str | None = None
 
 
 class ChatProjectSessionRequest(OpenModel):
@@ -502,6 +504,18 @@ class PluginInstallRequest(OpenModel):
     download_url: str | None = None
     proxy: str | None = None
     ignore_version_check: bool | None = None
+
+
+class PluginValidateRepoRequest(OpenModel):
+    repository: str | None = None
+    url: str | None = None
+    proxy: str | None = None
+
+
+class PluginSourceBindRequest(OpenModel):
+    install_method: str | None = None
+    registry_url: str | None = None
+    market_plugin_id: str | None = None
 
 
 class PluginUpdateRequest(OpenModel):

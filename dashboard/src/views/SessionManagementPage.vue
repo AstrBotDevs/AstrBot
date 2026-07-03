@@ -253,7 +253,7 @@
       <!-- 分组编辑对话框 -->
       <v-dialog v-model="groupDialog" max-width="800" @after-enter="loadAvailableUmos">
         <v-card>
-          <v-card-title class="py-3 px-4">
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">
             {{ groupDialogMode === 'create' ? tm('groups.create') : tm('groups.edit') }}
           </v-card-title>
           <v-card-text>
@@ -360,7 +360,7 @@
       <!-- 添加规则对话框 - 选择 UMO -->
       <v-dialog v-model="addRuleDialog" max-width="600">
         <v-card>
-          <v-card-title class="py-3 px-4" style="display: flex; align-items: center">
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
             <span>{{ tm('addRule.title') }}</span>
             <v-spacer></v-spacer>
             <v-btn icon variant="text" @click="addRuleDialog = false">
@@ -407,7 +407,7 @@
       <!-- 规则编辑对话框 -->
       <v-dialog v-model="ruleDialog" max-width="550" scrollable>
         <v-card v-if="selectedUmo" class="d-flex flex-column" height="600">
-          <v-card-title class="py-3 px-6 d-flex align-center border-b">
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center border-b">
             <span>{{ tm('ruleEditor.title') }}</span>
             <v-chip size="x-small" class="ml-2 font-weight-regular" variant="outlined">
               {{ selectedUmo.umo }}
@@ -613,7 +613,7 @@
       <!-- 确认删除对话框 -->
       <v-dialog v-model="deleteDialog" max-width="400">
         <v-card>
-          <v-card-title class="text-h6">{{ tm('deleteConfirm.title') }}</v-card-title>
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('deleteConfirm.title') }}</v-card-title>
           <v-card-text>
             {{ tm('deleteConfirm.message') }}
             <br /><br />
@@ -630,7 +630,7 @@
       <!-- 批量删除确认对话框 -->
       <v-dialog v-model="batchDeleteDialog" max-width="500">
         <v-card>
-          <v-card-title class="text-h6">{{ tm('batchDeleteConfirm.title') }}</v-card-title>
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('batchDeleteConfirm.title') }}</v-card-title>
           <v-card-text>
             {{ tm('batchDeleteConfirm.message', { count: selectedItems.length }) }}
             <div class="mt-3" style="max-height: 200px; overflow-y: auto">
@@ -657,7 +657,7 @@
       <!-- 快速编辑备注名对话框 -->
       <v-dialog v-model="quickEditNameDialog" max-width="400">
         <v-card>
-          <v-card-title class="py-3 px-4">{{ tm('quickEditName.title') }}</v-card-title>
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('quickEditName.title') }}</v-card-title>
           <v-card-text class="pa-4">
             <v-text-field v-model="quickEditNameValue" :label="tm('ruleEditor.serviceConfig.customName')" variant="outlined" hide-details clearable autofocus @keyup.enter="saveQuickEditName" />
           </v-card-text>
