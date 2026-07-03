@@ -195,9 +195,14 @@ async function handleDeleteSession(session: Session) {
   background-color: transparent !important;
 }
 
+.project-sessions-list :deep(.v-list) {
+  background: transparent !important;
+}
+
 .project-session-item {
   margin-bottom: 8px;
   border-radius: 12px !important;
+  background: transparent !important;
   cursor: pointer;
 }
 

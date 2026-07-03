@@ -124,6 +124,9 @@ const desktopUpdateStatus = ref("");
 const isChatPath = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
+const isDarkTheme = computed(
+  () => theme.global.current.value.dark || customizer.uiTheme.includes("Dark"),
+);
 const chatHeaderStyle = computed(() => {
   if (!isChatPath.value) return undefined;
   const sidebarWidth = lgAndUp.value
@@ -1048,7 +1051,10 @@ onMounted(async () => {
     elevation="0"
     height="50"
     class="top-header"
-    :class="{ 'chat-mode-header': isChatPath }"
+    :class="{
+      'chat-mode-header': isChatPath,
+      'chat-mode-header--dark': isChatPath && isDarkTheme,
+    }"
     :absolute="isChatPath"
     :style="chatHeaderStyle"
   >
@@ -2031,12 +2037,13 @@ onMounted(async () => {
   box-shadow: none !important;
 }
 
-.v-theme--dark .top-header.chat-mode-header {
-  background: rgb(var(--v-theme-surface)) !important;
+.top-header.chat-mode-header.chat-mode-header--dark {
+  background: rgb(var(--v-theme-background)) !important;
 }
 
 .top-header.chat-mode-header .v-toolbar__content {
   padding: 0 16px 0 20px;
+  background: transparent !important;
 }
 
 .chat-mobile-sidebar-toggle {

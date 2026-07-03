@@ -8,7 +8,10 @@
   >
     <div
       class="input-container"
-      :class="{ 'is-multiline': inputIsMultiline }"
+      :class="{
+        'is-multiline': inputIsMultiline,
+        'has-attachments': hasStagedAttachments,
+      }"
       :style="{
         width: 'var(--chat-content-width, 76%)',
         maxWidth: 'var(--chat-content-max-width, 760px)',
@@ -1114,6 +1117,13 @@ defineExpose({
   border-radius: 34px !important;
 }
 
+.input-container.has-attachments {
+  justify-content: flex-start;
+  min-height: 130px;
+  padding: 14px 18px 10px !important;
+  border-radius: 30px !important;
+}
+
 .input-area.is-dark .input-container {
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   background: #2d2d2d !important;
@@ -1402,27 +1412,32 @@ defineExpose({
   max-height: 72px;
 }
 
+.input-container.has-attachments .attachments-preview {
+  margin: 0 0 8px;
+  padding: 0;
+}
+
 .attachment-card {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  width: 220px;
-  height: 64px;
+  width: 210px;
+  height: 54px;
   flex: 0 0 auto;
   min-width: 0;
-  padding: 8px 34px 8px 10px;
+  padding: 7px 32px 7px 10px;
   overflow: hidden;
   color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.035);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 14px;
 }
 
 .image-preview {
-  width: 64px;
-  flex-basis: 64px;
+  width: 54px;
+  flex-basis: 54px;
   padding: 0;
   background: rgba(var(--v-theme-on-surface), 0.06);
 }
@@ -1431,7 +1446,7 @@ defineExpose({
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 11px;
+  border-radius: 13px;
 }
 
 .attachment-icon {
@@ -1464,7 +1479,7 @@ defineExpose({
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  line-height: 18px;
+  line-height: 17px;
 }
 
 .remove-attachment-btn {
@@ -1544,6 +1559,13 @@ defineExpose({
   .input-container.is-multiline {
     justify-content: flex-start;
     min-height: 128px;
+    padding: 10px !important;
+    border-radius: 26px !important;
+  }
+
+  .input-container.has-attachments {
+    justify-content: flex-start;
+    min-height: 124px;
     padding: 10px !important;
     border-radius: 26px !important;
   }
@@ -1672,14 +1694,18 @@ defineExpose({
     gap: 8px;
   }
 
+  .input-container.has-attachments .attachments-preview {
+    margin: 0 0 8px;
+  }
+
   .attachment-card {
     width: min(220px, calc(100vw - 28px));
-    height: 58px;
+    height: 54px;
   }
 
   .image-preview {
-    width: 58px;
-    flex-basis: 58px;
+    width: 54px;
+    flex-basis: 54px;
   }
 }
 </style>
