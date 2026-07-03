@@ -4,6 +4,15 @@ import type { Project } from '@/components/chat/ProjectList.vue';
 
 type WorkspaceType = 'session' | 'project' | 'custom';
 
+function projectErrorMessage(error: unknown, fallback: string) {
+    const responseMessage = (error as any)?.response?.data?.message;
+    if (typeof responseMessage === 'string' && responseMessage.trim()) {
+        return responseMessage;
+    }
+    const message = (error as Error)?.message;
+    return message || fallback;
+}
+
 export function useProjects() {
     const projects = ref<Project[]>([]);
     const selectedProjectId = ref<string | null>(null);
@@ -39,8 +48,10 @@ export function useProjects() {
                 await getProjects();
                 return res.data.data;
             }
+            throw new Error(res.data.message || 'Failed to create project');
         } catch (error) {
             console.error('Failed to create project:', error);
+            throw new Error(projectErrorMessage(error, 'Failed to create project'));
         }
     }
 
@@ -62,9 +73,12 @@ export function useProjects() {
             });
             if (res.data.status === 'ok') {
                 await getProjects();
+                return;
             }
+            throw new Error(res.data.message || 'Failed to update project');
         } catch (error) {
             console.error('Failed to update project:', error);
+            throw new Error(projectErrorMessage(error, 'Failed to update project'));
         }
     }
 

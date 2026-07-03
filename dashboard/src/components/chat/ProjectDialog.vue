@@ -14,11 +14,20 @@
                     :label="tm('project.workspace.type')" variant="outlined" hide-details class="mb-3" />
                 <v-text-field v-if="form.workspace_type === 'custom'" v-model="form.workspace_path"
                     :label="tm('project.workspace.path')" variant="outlined" hide-details class="mb-1" />
+                <v-alert
+                    v-if="props.errorMessage"
+                    class="mt-3"
+                    type="error"
+                    variant="tonal"
+                    density="compact"
+                >
+                    {{ props.errorMessage }}
+                </v-alert>
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
-                <v-btn variant="text" @click="handleCancel" color="grey-darken-1">{{ t('core.common.cancel') }}</v-btn>
-                <v-btn variant="text" @click="handleSave" color="primary" :disabled="!canSave">{{ t('core.common.save') }}</v-btn>
+                <v-btn variant="text" @click="handleCancel" color="grey-darken-1" :disabled="props.saving">{{ t('core.common.cancel') }}</v-btn>
+                <v-btn variant="text" @click="handleSave" color="primary" :disabled="!canSave || props.saving" :loading="props.saving">{{ t('core.common.save') }}</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
@@ -53,11 +62,15 @@ export interface ProjectFormData {
 interface Props {
     modelValue: boolean;
     project?: Project | null;
+    errorMessage?: string;
+    saving?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
     modelValue: false,
-    project: null
+    project: null,
+    errorMessage: '',
+    saving: false
 });
 
 const emit = defineEmits<{
@@ -137,8 +150,6 @@ function handleSave() {
         ...form.value,
         workspace_path: form.value.workspace_path.trim()
     }, props.project?.project_id);
-    isOpen.value = false;
-    emit('update:modelValue', false);
 }
 
 </script>

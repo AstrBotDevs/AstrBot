@@ -481,6 +481,8 @@
     <ProjectDialog
       v-model="projectDialogOpen"
       :project="editingProject"
+      :error-message="projectDialogError"
+      :saving="savingProject"
       @save="saveProject"
     />
     <v-dialog v-model="sessionTitleDialogOpen" max-width="420">
@@ -652,6 +654,8 @@ type WorkspaceView = "chat" | "providers";
 const activeWorkspace = ref<WorkspaceView>("chat");
 const projectDialogOpen = ref(false);
 const editingProject = ref<Project | null>(null);
+const projectDialogError = ref("");
+const savingProject = ref(false);
 const sessionTitleDialogOpen = ref(false);
 const sessionTitleDraft = ref("");
 const editingSessionTitleId = ref("");
@@ -960,11 +964,13 @@ async function startNewChat() {
 
 function openCreateProjectDialog() {
   editingProject.value = null;
+  projectDialogError.value = "";
   projectDialogOpen.value = true;
 }
 
 function openEditProjectDialog(project: Project) {
   editingProject.value = project;
+  projectDialogError.value = "";
   projectDialogOpen.value = true;
 }
 
@@ -1105,26 +1111,43 @@ async function deleteProjectSession(
 }
 
 async function saveProject(formData: ProjectFormData, projectId?: string) {
-  if (projectId) {
-    await updateProject(
-      projectId,
-      formData.title,
-      formData.emoji,
-      formData.description,
-      formData.workspace_type,
-      formData.workspace_path,
-    );
-    return;
+  savingProject.value = true;
+  projectDialogError.value = "";
+  try {
+    if (projectId) {
+      await updateProject(
+        projectId,
+        formData.title,
+        formData.emoji,
+        formData.description,
+        formData.workspace_type,
+        formData.workspace_path,
+      );
+    } else {
+      await createProject(
+        formData.title,
+        formData.emoji,
+        formData.description,
+        formData.workspace_type,
+        formData.workspace_path,
+      );
+    }
+    projectDialogOpen.value = false;
+    editingProject.value = null;
+  } catch (error) {
+    projectDialogError.value =
+      error instanceof Error ? error.message : "Failed to save project";
+  } finally {
+    savingProject.value = false;
   }
-
-  await createProject(
-    formData.title,
-    formData.emoji,
-    formData.description,
-    formData.workspace_type,
-    formData.workspace_path,
-  );
 }
+
+watch(projectDialogOpen, (open) => {
+  if (!open) {
+    projectDialogError.value = "";
+    savingProject.value = false;
+  }
+});
 
 async function selectSession(sessionId: string, pushRoute = true) {
   showChatWorkspace();
