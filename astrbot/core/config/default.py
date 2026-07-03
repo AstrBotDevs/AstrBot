@@ -1597,6 +1597,20 @@ CONFIG_METADATA_2 = {
                         "timeout": "20",
                         "proxy": "",
                     },
+                    "StepFun ASR(API)": {
+                        "id": "stepfun_asr",
+                        "provider": "stepfun",
+                        "type": "stepfun_asr",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.stepfun.com/step_plan/v1",
+                        "model": "stepaudio-2.5-asr",
+                        "stepfun-asr-language": "zh",
+                        "stepfun-asr-enable-itn": True,
+                        "timeout": "20",
+                        "proxy": "",
+                    },
                     "Whisper(Local)": {
                         "provider": "openai",
                         "type": "openai_whisper_selfhost",
@@ -2595,6 +2609,26 @@ CONFIG_METADATA_2 = {
                         "description": "超时时间",
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
+                    },
+                    "mimo-stt-system-prompt": {
+                        "description": "系统提示词",
+                        "type": "string",
+                        "hint": "用于指导 MiMo STT 转录行为的 system prompt。",
+                    },
+                    "mimo-stt-user-prompt": {
+                        "description": "用户提示词",
+                        "type": "string",
+                        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。",
+                    },
+                    "stepfun-asr-language": {
+                        "description": "语言",
+                        "type": "string",
+                        "hint": "StepFun ASR 的识别语言。默认 zh。",
+                    },
+                    "stepfun-asr-enable-itn": {
+                        "description": "数字规整",
+                        "type": "bool",
+                        "hint": "是否启用 StepFun ASR 的 ITN 数字规整。",
                     },
                     "openai-tts-voice": {
                         "description": "voice",
