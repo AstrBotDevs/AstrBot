@@ -93,3 +93,68 @@ export function getOptionSubmitText(opt: InteractiveChoiceOption): string {
   if (label) return label;
   return id;
 }
+
+/**
+ * Convert a raw SSE payload from `webchat_queue_mgr.back_queue` into a
+ * fully-validated, truncated `InteractiveChoicePart` ready for
+ * `useInteractiveChoiceStore().addChoice(...)`.
+ *
+ * Wire format (verified from `astrbot_plugin_ask_user_choice/
+ * ask_user_choice_tool.py::_push_to_webchat_back_queue`):
+ *
+ *   {
+ *     "type": "interactive_choice",
+ *     "data": {
+ *       "request_id": "<uuid>",
+ *       "spec": {
+ *         "type": "interactive_choice",
+ *         "prompt": "<text>",
+ *         "options": [{ "id": "<id>", "label": "<label>" }, ...]
+ *       },
+ *       "expires_at": <unix ts>
+ *     }
+ *   }
+ *
+ * Returns `null` when the payload does not match the wire format, the
+ * spec fails validation, or the request_id is missing/empty. The
+ * returned part is already run through :func:`truncateInteractiveChoice`
+ * so callers can hand it straight to the Pinia store.
+ */
+export function interactiveChoicePartFromSsePayload(
+  payload: unknown,
+): InteractiveChoicePart | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  const root = payload as Record<string, unknown>;
+  if (root.type !== "interactive_choice") return null;
+  const data = root.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const dataObj = data as Record<string, unknown>;
+  const spec = dataObj.spec;
+  if (!isInteractiveChoicePayload(spec)) return null;
+  const specPart = spec as InteractiveChoicePart;
+
+  // `data.request_id` is the authoritative id (matches the registry
+  // entry the backend will resolve on submit). Fall back to
+  // `spec.request_id` only if the outer envelope omits it.
+  const outerId =
+    typeof dataObj.request_id === "string" && dataObj.request_id.trim()
+      ? dataObj.request_id
+      : "";
+  const innerId =
+    typeof specPart.request_id === "string" ? specPart.request_id : "";
+  const requestId = outerId || innerId;
+
+  const part: InteractiveChoicePart = {
+    ...specPart,
+    request_id: requestId,
+  };
+  if (typeof dataObj.expires_at === "number") {
+    part.expires_at = dataObj.expires_at;
+  } else {
+    delete part.expires_at;
+  }
+  if (!validateInteractiveChoice(part)) return null;
+  return truncateInteractiveChoice(part);
+}
