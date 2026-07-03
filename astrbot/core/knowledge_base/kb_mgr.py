@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from sqlalchemy.exc import IntegrityError  # type: ignore
+
 from astrbot.core import logger
 from astrbot.core.provider.manager import ProviderManager
 from astrbot.core.utils.astrbot_path import get_astrbot_knowledge_base_path
@@ -131,8 +133,11 @@ class KnowledgeBaseManager:
                 await session.commit()
                 self.kb_insts[kb.kb_id] = kb_helper
                 return kb_helper
-        except Exception as e:
-            logger.error(f"创建知识库失败: {e}")
+        except IntegrityError as e:
+            logger.exception("创建知识库失败：唯一约束冲突")
+            raise ValueError(f"知识库名称 '{kb_name}' 已存在") from e
+        except Exception:
+            logger.exception("创建知识库失败")
             raise
 
     async def get_kb(self, kb_id: str) -> KBHelper | None:
