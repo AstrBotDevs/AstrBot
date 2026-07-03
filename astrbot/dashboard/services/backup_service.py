@@ -222,7 +222,13 @@ class BackupService:
                 if "manifest.json" in zf.namelist():
                     manifest_data = zf.read("manifest.json")
                     manifest = json.loads(manifest_data.decode("utf-8"))
-                    return manifest if isinstance(manifest, dict) else None
+                    if not isinstance(manifest, dict):
+                        logger.debug(
+                            "备份 manifest 格式无效: expected dict, got %s",
+                            type(manifest).__name__,
+                        )
+                        return None
+                    return manifest
                 return None
         except Exception as exc:
             logger.debug(f"读取备份 manifest 失败: {exc}")
@@ -324,8 +330,11 @@ class BackupService:
             await self._save_upload(file, zip_path)
             self.validate_uploaded_backup(zip_path)
         except Exception:
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
+            try:
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+            except Exception as exc:
+                logger.warning(f"清理失败的备份文件失败: {exc}")
             raise
 
         logger.info(
@@ -474,7 +483,11 @@ class BackupService:
                             outfile.write(data_block)
 
             file_size = os.path.getsize(output_path)
-            self.validate_uploaded_backup(output_path)
+            try:
+                self.validate_uploaded_backup(output_path)
+            except Exception:
+                await self.cleanup_upload_session(upload_id)
+                raise
             self.mark_backup_as_uploaded(output_path)
             logger.info(f"分片上传完成: {filename}, size={file_size}, chunks={total}")
             await self.cleanup_upload_session(upload_id)
@@ -485,8 +498,11 @@ class BackupService:
                 "size": file_size,
             }
         except Exception:
-            if os.path.exists(output_path):
-                os.remove(output_path)
+            try:
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+            except Exception as exc:
+                logger.warning(f"清理失败的备份文件失败: {exc}")
             raise
 
     async def upload_abort(self, data: object) -> tuple[dict | None, str | None]:

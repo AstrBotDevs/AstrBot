@@ -826,6 +826,8 @@ class TestBackupUploadValidation:
             await service.upload_complete({"upload_id": "upload-1"})
 
         assert not (backup_dir / "bad.zip").exists()
+        assert "upload-1" not in service.upload_sessions
+        assert not chunk_dir.exists()
 
 
 class TestVersionComparison:
