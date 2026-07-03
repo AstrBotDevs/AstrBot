@@ -320,10 +320,15 @@ class KBSQLiteDatabase:
         return metadata_map
 
     async def delete_document_by_id(self, doc_id: str, vec_db: "FaissVecDB") -> None:
-        """删除单个文档及其相关数据"""
+        """删除单个文档及其相关数据（包括多媒体记录）"""
+        # 删除多媒体记录
+        async with self.get_db() as session, session.begin():
+            delete_media_stmt = delete(KBMedia).where(col(KBMedia.doc_id) == doc_id)
+            await session.execute(delete_media_stmt)
+            await session.commit()
+
         # 在知识库表中删除
         async with self.get_db() as session, session.begin():
-            # 删除文档记录
             delete_stmt = delete(KBDocument).where(col(KBDocument.doc_id) == doc_id)
             await session.execute(delete_stmt)
             await session.commit()
@@ -349,7 +354,7 @@ class KBSQLiteDatabase:
 
     async def update_kb_stats(self, kb_id: str, vec_db: "FaissVecDB") -> None:
         """更新知识库统计信息"""
-        chunk_cnt = await vec_db.count_documents()
+        chunk_cnt = await vec_db.count_documents(metadata_filter={"kb_id": kb_id})
 
         async with self.get_db() as session, session.begin():
             update_stmt = (
