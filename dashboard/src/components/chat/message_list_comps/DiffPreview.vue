@@ -153,13 +153,17 @@
               @mouseenter="onUnifiedRowEnter(line, hi)"
               @mouseleave="onUnifiedRowLeave"
             >
-              <!-- Inline-comment gutter: only on lines that exist in
-                   the new file (ctx / add). Always rendered (even
-                   when invisible) so the layout doesn't shift when
-                   the user hovers in. Positioned as the FIRST child
-                   of .diff-line so it sits at the left edge. -->
+              <!-- Inline-comment gutter: a fixed 24px column on EVERY
+                   line (ctx / add / del). The outer v-if must NOT
+                   gate on `line.newNo` — del rows have newNo="" but
+                   still need the 24px placeholder so the line-prefix
+                   and content stay column-aligned with ctx / add
+                   rows. The inner <button> elements gate on
+                   `Number(line.newNo)` (see onUnifiedRowEnter, which
+                   refuses to set hover state for del rows) so no
+                   button ever renders on a del row. -->
               <span
-                v-if="isCommentable && line.newNo"
+                v-if="isCommentable"
                 class="diff-line-gutter"
               >
                 <button
@@ -507,7 +511,7 @@
                     @mouseleave="onUnifiedRowLeave"
                   >
                     <span
-                      v-if="isCommentable && line.newNo"
+                      v-if="isCommentable"
                       class="diff-line-gutter"
                     >
                       <button
