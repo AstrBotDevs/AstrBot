@@ -81,6 +81,14 @@ async def prepare_audio_input(audio_source: str) -> tuple[str, list[Path]]:
     return audio_data.to_data_url(), []
 
 
+def _decode_base64_header(base64_data: str) -> bytes:
+    chunk = "".join(base64_data[:64].split())
+    padding = len(chunk) % 4
+    if padding:
+        chunk += "=" * (4 - padding)
+    return base64.b64decode(chunk)
+
+
 def _validate_wav_payload(base64_data: str, audio_source: str) -> None:
     """Reject audio payloads whose bytes are not RIFF/WAVE.
 
@@ -96,7 +104,7 @@ def _validate_wav_payload(base64_data: str, audio_source: str) -> None:
         MiMoAPIError: Raised when the payload is not valid WAV data.
     """
     try:
-        header = base64.b64decode(base64_data[:64])
+        header = _decode_base64_header(base64_data)
     except Exception:
         header = b""
     if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE":

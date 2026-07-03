@@ -6,6 +6,7 @@ import pytest
 
 from astrbot.core.provider.sources.mimo_api_common import (
     MiMoAPIError,
+    _validate_wav_payload,
     build_headers,
     prepare_audio_input,
 )
@@ -396,6 +397,12 @@ async def test_mimo_stt_prepare_audio_input_rejects_non_wav_payload(monkeypatch)
 
     with pytest.raises(MiMoAPIError, match="SILK"):
         await prepare_audio_input("/tmp/test.wav")
+
+
+def test_mimo_stt_wav_validation_accepts_unpadded_base64_header():
+    wav_base64 = base64.b64encode(MIMO_STT_TEST_WAV_HEADER).decode().rstrip("=")
+
+    _validate_wav_payload(wav_base64, "/tmp/test.wav")
 
 
 @pytest.mark.asyncio
