@@ -372,7 +372,7 @@ class _FakeFirecrawlSession:
 
 
 class _CycleSession:
-    """每次 post() 调用返回列表中的下一个响应，支持多 key 轮询的测试"""
+    """Return the next response for each post() call in key rotation tests."""
 
     def __init__(self, responses: list):
         self.responses = responses
@@ -398,7 +398,7 @@ class _CycleSession:
 
 
 class _TavilyResponse:
-    """模拟 Tavily API 的 HTTP 响应"""
+    """Fake HTTP response for Tavily API tests."""
 
     def __init__(self, status=200, jsonData=None, textData=""):
         self.status = status
@@ -420,7 +420,7 @@ class _TavilyResponse:
 
 @pytest.fixture(autouse=True)
 def _resetKeyRotators():
-    """重置所有 KeyRotator 的索引，避免测试间状态干扰"""
+    """Reset KeyRotator indexes to avoid state leakage between tests."""
     tools._TAVILY_KEY_ROTATOR.index = 0
     tools._BOCHA_KEY_ROTATOR.index = 0
     tools._BRAVE_KEY_ROTATOR.index = 0
@@ -433,13 +433,13 @@ def _resetKeyRotators():
 
 
 # ---------------------------------------------------------------------------
-# Issue #8886: Tavily 多 Key 轮询不会在失败时切换到下一个 Key
+# Issue #8886: Tavily key rotation did not fail over to the next key.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_tavily_search_raises_value_error_when_no_key_configured():
-    """未配置 Tavily API Key 时，应抛出 ValueError"""
+    """Raise ValueError when no Tavily API key is configured."""
     with pytest.raises(
         ValueError,
         match="Error: Tavily API key is not configured in AstrBot.",
@@ -451,7 +451,7 @@ async def test_tavily_search_raises_value_error_when_no_key_configured():
 async def test_tavily_search_key_failover_on_quota_exceeded_432(
     monkeypatch,
 ):
-    """第一个 key 返回 432（额度耗尽），应自动切换到第二个 key 并成功"""
+    """Fail over to the second key when the first key returns 432."""
     session = _CycleSession(
         [
             _TavilyResponse(
@@ -482,14 +482,14 @@ async def test_tavily_search_key_failover_on_quota_exceeded_432(
     assert len(results) == 1
     assert results[0].title == "AstrBot"
     assert results[0].url == "https://example.com"
-    assert len(session.calls) == 2  # 确认两个 key 都被尝试过
+    assert len(session.calls) == 2  # Both keys were attempted.
 
 
 @pytest.mark.asyncio
 async def test_tavily_search_key_failover_on_rate_limited_429(
     monkeypatch,
 ):
-    """第一个 key 返回 429（限流），应自动切换到第二个 key 并成功"""
+    """Fail over to the second key when the first key returns 429."""
     session = _CycleSession(
         [
             _TavilyResponse(
@@ -519,15 +519,15 @@ async def test_tavily_search_key_failover_on_rate_limited_429(
 
     assert len(results) == 1
     assert results[0].title == "RateLimitOK"
-    assert len(session.calls) == 2  # 确认两个 key 都被尝试过
+    assert len(session.calls) == 2  # Both keys were attempted.
 
 
 @pytest.mark.asyncio
 async def test_tavily_search_fails_when_all_keys_exhausted_8886(
     monkeypatch,
 ):
-    """所有 key 都失败时，应该抛出最后一个错误"""
-    # 两个响应都返回 432
+    """Raise the last error when all keys are exhausted."""
+    # Both responses are retryable failures.
     session = _CycleSession(
         [
             _TavilyResponse(
@@ -555,14 +555,14 @@ async def test_tavily_search_fails_when_all_keys_exhausted_8886(
     ):
         await tools._tavily_search(providerSettings, {"query": "test"})
 
-    assert len(session.calls) == 2  # 确认两个 key 都被尝试过
+    assert len(session.calls) == 2  # Both keys were attempted.
 
 
 @pytest.mark.asyncio
 async def test_tavily_search_does_not_failover_on_server_error_500(
     monkeypatch,
 ):
-    """非 key 相关错误（500）不应触发 key 切换，应直接抛出"""
+    """Raise immediately for non-key-related errors such as 500 responses."""
     session = _CycleSession(
         [
             _TavilyResponse(
@@ -594,7 +594,7 @@ async def test_tavily_search_does_not_failover_on_server_error_500(
     ):
         await tools._tavily_search(providerSettings, {"query": "test"})
 
-    # 只尝试了 1 个 key（500 不是可重试状态码，不会切换到第二个 key）
+    # Only one key is attempted because 500 is not retryable.
     assert len(session.calls) == 1
 
 

@@ -54,10 +54,10 @@ class SearchResult:
 
 @std_dataclass
 class _KeyRotator:
-    """API Key 轮询器，多协程安全的 Round-Robin 实现
+    """Concurrency-safe round-robin API key rotator.
 
-    每次调用 get() 返回当前的 Key 并将索引推进到下一个，
-    配合搜索函数中的 failover 循环可实现失败自动切换。
+    Each call returns the current key and advances the index. Search functions
+    combine this with failover loops to retry with the next configured key.
     """
 
     setting_name: str
@@ -66,7 +66,17 @@ class _KeyRotator:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def get(self, provider_settings: dict) -> str:
-        """获取当前轮到的 Key 并推进索引（取模循环）"""
+        """Return the current key and advance the round-robin index.
+
+        Args:
+            provider_settings: Provider settings containing API key lists.
+
+        Returns:
+            The API key selected for this call.
+
+        Raises:
+            ValueError: If the configured key list is empty or missing.
+        """
         keys = provider_settings.get(self.setting_name, [])
         if not keys:
             raise ValueError(
@@ -74,18 +84,19 @@ class _KeyRotator:
             )
 
         async with self.lock:
-            # 防止运行时热更新减少 key 列表导致 index 越界
+            # Keep the index valid if runtime config reloads shrink the key list.
             self.index = self.index % len(keys)
             key = keys[self.index]
             self.index = (self.index + 1) % len(keys)
             return key
 
 
-# 遇到以下 HTTP 状态码时，尝试切换到下一个 API Key 重试
-# 401 - Unauthorized（Key 无效或已过期）
-# 403 - Forbidden（Key 被禁用）
-# 429 - Rate Limited（请求限流）
-# 432 - Tavily Quota Exceeded（额度耗尽）
+# Retry with the next API key when these HTTP statuses indicate key-specific
+# auth, quota, or rate-limit failures.
+# 401 - Unauthorized, usually invalid or expired key.
+# 403 - Forbidden, usually disabled key.
+# 429 - Rate limited.
+# 432 - Tavily quota exceeded.
 _RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({401, 403, 429, 432})
 
 _TAVILY_KEY_ROTATOR = _KeyRotator("websearch_tavily_key", "Tavily")
@@ -159,13 +170,26 @@ async def _tavily_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    """调用 Tavily Search API，支持多 Key 失败自动切换"""
+    """Call the Tavily Search API with API key failover.
+
+    Args:
+        provider_settings: Provider settings containing Tavily API keys.
+        payload: Request payload for the Tavily search endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        ValueError: If Tavily API keys are not configured.
+        Exception: If the request fails after all retryable keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
     keys = provider_settings.get("websearch_tavily_key", [])
     if not keys:
         raise ValueError("Error: Tavily API key is not configured in AstrBot.")
 
-    # 遍历所有 Key：遇到可重试状态码（额度耗尽/限流/Key 失效）时自动换下一个 Key
-    # 不可重试的错误（如 5xx 服务端错误）立即抛出，不做无意义切换
+    # Retry key-specific failures with the next key, but fail fast for
+    # non-retryable errors such as server-side 5xx responses.
     last_error = None
     for _ in range(len(keys)):
         tavily_key = await _TAVILY_KEY_ROTATOR.get(provider_settings)
@@ -191,25 +215,37 @@ async def _tavily_search(
                         for item in data.get("results", [])
                     ]
                 reason = await response.text()
-                # 可重试错误：记录并继续尝试下一个 Key
+                # Retryable errors are saved so the final failure is meaningful.
                 if response.status in _RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
                         f"Tavily web search failed: {reason}, status: {response.status}",
                     )
                     continue
-                # 不可重试错误：直接抛出
                 raise Exception(
                     f"Tavily web search failed: {reason}, status: {response.status}",
                 )
 
-    # 所有 Key 均已尝试且全部失败
     if last_error is not None:
         raise last_error
     raise Exception("Tavily web search failed with all configured keys.")
 
 
 async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
-    """调用 Tavily Extract API，支持多 Key 失败自动切换"""
+    """Call the Tavily Extract API with API key failover.
+
+    Args:
+        provider_settings: Provider settings containing Tavily API keys.
+        payload: Request payload for the Tavily extract endpoint.
+
+    Returns:
+        Raw Tavily extraction results.
+
+    Raises:
+        ValueError: If Tavily API keys are not configured or no results are
+            returned.
+        Exception: If the request fails after all retryable keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
     keys = provider_settings.get("websearch_tavily_key", [])
     if not keys:
         raise ValueError("Error: Tavily API key is not configured in AstrBot.")
@@ -236,7 +272,6 @@ async def _tavily_extract(provider_settings: dict, payload: dict) -> list[dict]:
                         )
                     return results
                 reason = await response.text()
-                # 可重试错误：记录并继续尝试下一个 Key
                 if response.status in _RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
                         f"Tavily web search failed: {reason}, status: {response.status}",
@@ -255,7 +290,20 @@ async def _bocha_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    """调用 BoCha Search API，支持多 Key 失败自动切换"""
+    """Call the BoCha Search API with API key failover.
+
+    Args:
+        provider_settings: Provider settings containing BoCha API keys.
+        payload: Request payload for the BoCha search endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        ValueError: If BoCha API keys are not configured.
+        Exception: If the request fails after all retryable keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
     keys = provider_settings.get("websearch_bocha_key", [])
     if not keys:
         raise ValueError("Error: BoCha API key is not configured in AstrBot.")
@@ -266,8 +314,9 @@ async def _bocha_search(
         header = {
             "Authorization": f"Bearer {bocha_key}",
             "Content-Type": "application/json",
-            # 显式禁用 brotli 编码，避免 aiohttp >= 3.13.3 的解压缩兼容性问题
-            # 参见: https://github.com/aio-libs/aiohttp/issues/11898
+            # Explicitly disable brotli encoding to avoid aiohttp >= 3.13.3
+            # decompression incompatibility.
+            # See: https://github.com/aio-libs/aiohttp/issues/11898
             "Accept-Encoding": "gzip, deflate",
         }
         async with aiohttp.ClientSession(trust_env=True) as session:
@@ -289,7 +338,6 @@ async def _bocha_search(
                         for item in rows
                     ]
                 reason = await response.text()
-                # 可重试错误：记录并继续尝试下一个 Key
                 if response.status in _RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
                         f"BoCha web search failed: {reason}, status: {response.status}",
@@ -308,7 +356,20 @@ async def _brave_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    """调用 Brave Search API，支持多 Key 失败自动切换"""
+    """Call the Brave Search API with API key failover.
+
+    Args:
+        provider_settings: Provider settings containing Brave API keys.
+        payload: Request payload for the Brave search endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        ValueError: If Brave API keys are not configured.
+        Exception: If the request fails after all retryable keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
     keys = provider_settings.get("websearch_brave_key", [])
     if not keys:
         raise ValueError("Error: Brave API key is not configured in AstrBot.")
@@ -338,7 +399,6 @@ async def _brave_search(
                         for item in rows
                     ]
                 reason = await response.text()
-                # 可重试错误：记录并继续尝试下一个 Key
                 if response.status in _RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
                         f"Brave web search failed: {reason}, status: {response.status}",
@@ -357,7 +417,20 @@ async def _firecrawl_search(
     provider_settings: dict,
     payload: dict,
 ) -> list[SearchResult]:
-    """调用 Firecrawl Search API，支持多 Key 失败自动切换"""
+    """Call the Firecrawl Search API with API key failover.
+
+    Args:
+        provider_settings: Provider settings containing Firecrawl API keys.
+        payload: Request payload for the Firecrawl search endpoint.
+
+    Returns:
+        Normalized search results.
+
+    Raises:
+        ValueError: If Firecrawl API keys are not configured.
+        Exception: If the request fails after all retryable keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
     keys = provider_settings.get("websearch_firecrawl_key", [])
     if not keys:
         raise ValueError("Error: Firecrawl API key is not configured in AstrBot.")
@@ -395,7 +468,6 @@ async def _firecrawl_search(
                         if item.get("url")
                     ]
                 reason = await response.text()
-                # 可重试错误：记录并继续尝试下一个 Key
                 if response.status in _RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
                         f"Firecrawl web search failed: {reason}, status: {response.status}",
@@ -411,7 +483,21 @@ async def _firecrawl_search(
 
 
 async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
-    """调用 Firecrawl Scrape API，支持多 Key 失败自动切换"""
+    """Call the Firecrawl Scrape API with API key failover.
+
+    Args:
+        provider_settings: Provider settings containing Firecrawl API keys.
+        payload: Request payload for the Firecrawl scrape endpoint.
+
+    Returns:
+        Raw Firecrawl scrape result data.
+
+    Raises:
+        ValueError: If Firecrawl API keys are not configured or no result data
+            is returned.
+        Exception: If the request fails after all retryable keys are exhausted,
+            or if a non-retryable HTTP error is returned.
+    """
     keys = provider_settings.get("websearch_firecrawl_key", [])
     if not keys:
         raise ValueError("Error: Firecrawl API key is not configured in AstrBot.")
@@ -438,7 +524,6 @@ async def _firecrawl_scrape(provider_settings: dict, payload: dict) -> dict:
                         )
                     return result
                 reason = await response.text()
-                # 可重试错误：记录并继续尝试下一个 Key
                 if response.status in _RETRYABLE_HTTP_STATUSES:
                     last_error = Exception(
                         f"Firecrawl web scraper failed: {reason}, status: {response.status}",
