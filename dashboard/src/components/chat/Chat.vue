@@ -22,10 +22,29 @@
           :class="{ collapsed: isSidebarCollapsed }"
         >
           <div v-if="!isSidebarCollapsed" class="chat-sidebar-brand-title Outfit">
-            <span class="chat-sidebar-brand-name">AstrBot</span>
-            <span class="chat-sidebar-brand-mode">ChatUI</span>
+            <ChatUILogo class="chat-sidebar-brand-logo" />
+            <span class="chat-sidebar-brand-copy">
+              <span class="chat-sidebar-brand-name">AstrBot</span>
+              <span class="chat-sidebar-brand-mode">ChatUI</span>
+            </span>
           </div>
+          <button
+            v-if="isSidebarCollapsed"
+            class="chat-sidebar-brand-toggle chat-sidebar-rail-btn"
+            type="button"
+            aria-label="Toggle sidebar"
+            @click.stop="toggleChatSidebar"
+          >
+            <span class="chat-sidebar-rail-icon-stack">
+              <ChatUILogo class="chat-sidebar-brand-logo chat-sidebar-brand-logo--collapsed" />
+              <PanelLeft
+                :size="20"
+                class="sidebar-panel-toggle-icon"
+              />
+            </span>
+          </button>
           <v-btn
+            v-else
             class="chat-sidebar-brand-toggle"
             icon
             rounded="sm"
@@ -39,35 +58,44 @@
           </v-btn>
         </div>
 
-        <v-btn
-          class="new-chat-btn sidebar-provider-btn"
-          :class="{
-            'icon-only': isSidebarCollapsed,
-            'sidebar-workspace-btn--active': isProviderWorkspace,
-          }"
-          variant="text"
-          :icon="isSidebarCollapsed"
+        <button
+          v-if="isSidebarCollapsed"
+          class="new-chat-btn sidebar-provider-btn icon-only chat-sidebar-rail-btn"
+          :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
+          type="button"
+          :title="tm('actions.providerConfig')"
           @click="openProviderWorkspace"
         >
-          <Box
-            :size="18"
-            :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
-          />
-          <span v-if="!isSidebarCollapsed">{{ tm("actions.providerConfig") }}</span>
+          <Box :size="18" class="sidebar-action-icon" />
+        </button>
+        <v-btn
+          v-else
+          class="new-chat-btn sidebar-provider-btn"
+          :class="{ 'sidebar-workspace-btn--active': isProviderWorkspace }"
+          variant="text"
+          @click="openProviderWorkspace"
+        >
+          <Box :size="18" class="sidebar-action-icon mr-2" />
+          <span>{{ tm("actions.providerConfig") }}</span>
         </v-btn>
 
-        <v-btn
-          class="new-chat-btn"
-          :class="{ 'icon-only': isSidebarCollapsed }"
-          variant="text"
-          :icon="isSidebarCollapsed"
+        <button
+          v-if="isSidebarCollapsed"
+          class="new-chat-btn icon-only chat-sidebar-rail-btn"
+          type="button"
+          :title="tm('actions.newChat')"
           @click="startNewChat"
         >
-          <SquarePen
-            :size="18"
-            :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
-          />
-          <span v-if="!isSidebarCollapsed">{{ tm("actions.newChat") }}</span>
+          <SquarePen :size="18" class="sidebar-action-icon" />
+        </button>
+        <v-btn
+          v-else
+          class="new-chat-btn"
+          variant="text"
+          @click="startNewChat"
+        >
+          <SquarePen :size="18" class="sidebar-action-icon mr-2" />
+          <span>{{ tm("actions.newChat") }}</span>
         </v-btn>
 
       </div>
@@ -175,7 +203,7 @@
               <template #activator="{ props: transportMenuProps }">
                 <v-list-item
                   v-bind="transportMenuProps"
-                  class="styled-menu-item"
+                  class="styled-menu-item settings-menu-item"
                   rounded="md"
                 >
                   <template #prepend>
@@ -229,7 +257,7 @@
               <template #activator="{ props: languageMenuProps }">
                 <v-list-item
                   v-bind="languageMenuProps"
-                  class="styled-menu-item"
+                  class="styled-menu-item settings-menu-item"
                   rounded="md"
                 >
                   <template #prepend>
@@ -276,7 +304,7 @@
             </v-menu>
 
             <v-list-item
-              class="styled-menu-item"
+              class="styled-menu-item settings-menu-item"
               rounded="md"
               @click="toggleTheme"
             >
@@ -299,10 +327,7 @@
 
     <main
       class="chat-main"
-      :class="{
-        'empty-chat': !isProviderWorkspace &&
-          !selectedProject && !loadingMessages && !activeMessages.length,
-      }"
+      :class="{ 'empty-chat': isEmptyChat }"
     >
       <section v-if="isProviderWorkspace" class="provider-workspace-shell">
         <ProviderChatCompletionPanel
@@ -352,7 +377,11 @@
         </section>
       </ProjectView>
 
-      <template v-else>
+      <div
+        v-else
+        class="conversation-stack"
+        :class="{ 'is-empty': isEmptyChat }"
+      >
         <section
           ref="messagesContainer"
           class="messages-panel"
@@ -360,12 +389,6 @@
         >
           <div v-if="loadingMessages" class="center-state">
             <v-progress-circular indeterminate size="32" width="3" />
-          </div>
-
-          <div v-else-if="sessionProject" class="session-project-breadcrumb">
-            <span>{{ sessionProject.title }}</span>
-            <ChevronRight :size="16" class="session-project-breadcrumb-chevron" />
-            <span>{{ currentSessionTitle }}</span>
           </div>
 
           <div v-else-if="!activeMessages.length" class="welcome-state">
@@ -435,7 +458,7 @@
             @clear-reply="replyTarget = null"
           />
         </section>
-      </template>
+      </div>
     </main>
 
     <div
@@ -544,6 +567,7 @@ import ProjectList, { type Project } from "@/components/chat/ProjectList.vue";
 import ProjectView from "@/components/chat/ProjectView.vue";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
+import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
@@ -788,6 +812,13 @@ const selectedProject = computed(
     projects.value.find(
       (project) => project.project_id === selectedProjectId.value,
     ) || null,
+);
+const isEmptyChat = computed(
+  () =>
+    !isProviderWorkspace.value &&
+    !selectedProject.value &&
+    !loadingMessages.value &&
+    !activeMessages.value.length,
 );
 const chatHeaderTitle = computed(
   () => currentSessionTitle.value || selectedProject.value?.title || "",
@@ -1576,7 +1607,12 @@ function toggleTheme() {
 }
 
 .chat-sidebar.collapsed .sidebar-top {
-  padding-inline: 10px;
+  width: 56px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0 2px;
 }
 
 .chat-sidebar-brand {
@@ -1589,6 +1625,7 @@ function toggleTheme() {
 }
 
 .chat-sidebar-brand.collapsed {
+  width: 36px;
   justify-content: center;
   padding: 0 0 2px;
 }
@@ -1596,10 +1633,24 @@ function toggleTheme() {
 .chat-sidebar-brand-title {
   min-width: 0;
   display: flex;
-  align-items: baseline;
-  gap: 5px;
+  align-items: center;
+  gap: 8px;
   color: rgb(var(--v-theme-on-surface));
   line-height: 1.05;
+}
+
+.chat-sidebar-brand-logo {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: block;
+}
+
+.chat-sidebar-brand-copy {
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
 }
 
 .chat-sidebar-brand-name {
@@ -1620,9 +1671,61 @@ function toggleTheme() {
   color: var(--chat-muted);
 }
 
+.chat-sidebar-rail-btn {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
 .chat-sidebar-brand-toggle:hover {
   background: var(--chat-session-active-bg);
   color: rgb(var(--v-theme-on-surface));
+}
+
+.chat-sidebar-rail-icon-stack {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+}
+
+.chat-sidebar-rail-icon-stack > * {
+  grid-area: 1 / 1;
+}
+
+.chat-sidebar-brand-logo--collapsed {
+  width: 20px;
+  height: 20px;
+  transition:
+    opacity 0.14s ease,
+    visibility 0.14s ease;
+  opacity: 1;
+  visibility: visible;
+}
+
+.chat-sidebar-rail-icon-stack .sidebar-panel-toggle-icon {
+  transition:
+    opacity 0.14s ease,
+    visibility 0.14s ease;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.chat-sidebar-brand-toggle:hover .chat-sidebar-brand-logo--collapsed,
+.chat-sidebar-brand-toggle:focus-visible .chat-sidebar-brand-logo--collapsed {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.chat-sidebar-brand-toggle:hover .sidebar-panel-toggle-icon,
+.chat-sidebar-brand-toggle:focus-visible .sidebar-panel-toggle-icon {
+  opacity: 1;
+  visibility: visible;
 }
 
 .sidebar-panel-toggle-icon {
@@ -1669,9 +1772,18 @@ function toggleTheme() {
 
 .new-chat-btn.icon-only,
 .settings-btn.icon-only {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  margin-inline: auto;
+  padding: 0 !important;
+  justify-content: center;
+}
+
+.chat-sidebar.collapsed .new-chat-btn.icon-only :deep(.v-btn__content),
+.chat-sidebar.collapsed .settings-btn.icon-only :deep(.v-btn__content) {
+  display: flex;
+  align-items: center;
   justify-content: center;
 }
 
@@ -1765,7 +1877,9 @@ function toggleTheme() {
   top: 50%;
   transform: translateY(-50%);
   flex-shrink: 0;
-  transition: right 0.16s ease;
+  transition:
+    opacity 0.14s ease,
+    visibility 0.14s ease;
 }
 
 .session-actions {
@@ -1791,7 +1905,8 @@ function toggleTheme() {
 
 .session-item:hover .session-progress,
 .session-item:focus-within .session-progress {
-  right: 52px;
+  opacity: 0;
+  visibility: hidden;
 }
 
 .session-action-btn {
@@ -1808,12 +1923,42 @@ function toggleTheme() {
 }
 
 .chat-sidebar.collapsed .sidebar-footer {
+  width: 56px;
+  box-sizing: border-box;
   padding-inline: 10px;
 }
 
 .settings-menu-content {
-  min-width: 230px;
+  min-width: 270px;
   padding: 6px;
+}
+
+.settings-menu-item {
+  min-height: 42px;
+}
+
+.settings-menu-content :deep(.settings-menu-item .v-list-item__prepend) {
+  width: 28px;
+  margin-inline-end: 12px;
+  align-self: center;
+}
+
+.settings-menu-content :deep(.settings-menu-item .v-list-item__content) {
+  min-width: 0;
+}
+
+.settings-menu-content :deep(.settings-menu-item .v-list-item-title) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-menu-content :deep(.settings-menu-item .v-list-item__append) {
+  margin-inline-start: auto;
+  padding-inline-start: 18px;
+  gap: 8px;
+  align-self: center;
 }
 
 .styled-menu-lucide-icon {
@@ -1849,10 +1994,6 @@ function toggleTheme() {
   padding-top: 50px;
 }
 
-.chat-main.empty-chat {
-  justify-content: center;
-}
-
 .provider-workspace-shell {
   flex: 1;
   min-height: 0;
@@ -1864,18 +2005,35 @@ function toggleTheme() {
   min-height: 0;
 }
 
+.conversation-stack {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.conversation-stack.is-empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 28px;
+}
+
 .messages-panel {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 0 18px;
+  padding: 24px 0 116px;
+  scroll-padding-bottom: 116px;
 }
 
-.empty-chat .messages-panel {
-  flex: 0 0 auto;
+.conversation-stack.is-empty .messages-panel {
+  flex: none;
   min-height: auto;
   overflow: visible;
-  padding: 0 0 20px;
+  padding: 0;
+  scroll-padding-bottom: 0;
 }
 
 .messages-list-shell {
@@ -1894,7 +2052,7 @@ function toggleTheme() {
   text-align: center;
 }
 
-.empty-chat .welcome-state {
+.conversation-stack.is-empty .welcome-state {
   height: auto;
 }
 
@@ -1908,30 +2066,6 @@ function toggleTheme() {
   margin-top: 8px;
   color: var(--chat-muted);
   font-size: 16px;
-}
-
-.session-project-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: var(--chat-content-width);
-  max-width: var(--chat-content-max-width);
-  margin-inline: auto;
-  margin-bottom: 18px;
-  color: var(--chat-muted);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.session-project-breadcrumb span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-project-breadcrumb-chevron {
-  flex: 0 0 auto;
 }
 
 .thread-selection-action {
@@ -1955,37 +2089,51 @@ function toggleTheme() {
 
 .composer-shell {
   position: relative;
-  z-index: 1;
-  background: var(--chat-page-bg);
+  z-index: 3;
+  isolation: isolate;
+  background: transparent;
   padding: 0 0 18px;
 }
 
-.composer-shell::before {
-  content: "";
+.conversation-stack:not(.is-empty) .composer-shell {
   position: absolute;
-  z-index: -1;
-  left: 0;
   right: 0;
-  top: -36px;
-  height: 36px;
+  bottom: 0;
+  left: 0;
   pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(var(--v-theme-background), 0),
-    var(--chat-page-bg)
-  );
 }
 
-.composer-shell :deep(.input-area) {
+.conversation-stack:not(.is-empty) .composer-shell::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 32px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  background: var(--chat-page-bg);
+}
+
+.composer-shell :deep(.input-area),
+.project-composer-shell :deep(.input-area) {
+  padding-top: 0;
   border-top: 0;
 }
 
-.empty-chat .composer-shell {
-  padding-bottom: 0;
+.conversation-stack:not(.is-empty) .composer-shell :deep(.input-area) {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+  background: transparent;
 }
 
-.empty-chat .composer-shell::before {
-  display: none;
+.conversation-stack:not(.is-empty) .composer-shell :deep(.input-container) {
+  pointer-events: auto;
+}
+
+.conversation-stack.is-empty .composer-shell {
+  padding-bottom: 0;
 }
 
 kbd {
@@ -2019,15 +2167,16 @@ kbd {
   }
 
   .messages-panel {
-    padding: 18px 0;
+    padding: 18px 0 92px;
+    scroll-padding-bottom: 92px;
+  }
+
+  .conversation-stack.is-empty .messages-panel {
+    padding: 0;
+    scroll-padding-bottom: 0;
   }
 
   .messages-list-shell {
-    width: calc(100% - 20px);
-    max-width: 100%;
-  }
-
-  .session-project-breadcrumb {
     width: calc(100% - 20px);
     max-width: 100%;
   }

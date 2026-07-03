@@ -443,12 +443,15 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   top: 50%;
   transform: translateY(-50%);
   flex-shrink: 0;
-  transition: right 0.16s ease;
+  transition:
+    opacity 0.14s ease,
+    visibility 0.14s ease;
 }
 
 .project-session-row:hover .project-session-progress,
 .project-session-row:focus-within .project-session-progress {
-  right: 52px;
+  opacity: 0;
+  visibility: hidden;
 }
 
 .project-session-empty {

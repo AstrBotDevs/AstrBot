@@ -1526,19 +1526,24 @@ defineExpose({
   }
 
   .input-container {
-    display: block !important;
+    display: flex !important;
+    flex-direction: column;
+    justify-content: center;
     width: calc(100% - 20px) !important;
     max-width: 100% !important;
+    min-height: 64px;
     margin: 0 10px calc(8px + env(safe-area-inset-bottom)) !important;
-    padding: 10px 10px 10px !important;
+    padding: 6px 8px 6px 10px !important;
     overflow: hidden;
     border: 1px solid rgba(var(--v-theme-on-surface), 0.14) !important;
-    border-radius: 26px !important;
+    border-radius: 999px !important;
     background: #fff !important;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
   }
 
   .input-container.is-multiline {
+    justify-content: flex-start;
+    min-height: 128px;
     padding: 10px !important;
     border-radius: 26px !important;
   }
@@ -1551,18 +1556,31 @@ defineExpose({
 
   .composer-row {
     display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "left field right";
+    min-height: 52px;
+    row-gap: 0;
+    column-gap: 8px;
+    align-items: center;
+  }
+
+  .input-container.is-multiline .composer-row {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
       "field field"
       "left right";
     min-height: auto;
     row-gap: 4px;
-    column-gap: 8px;
-    align-items: center;
   }
 
   .input-field-shell {
+    min-height: 52px;
+    align-items: center;
+  }
+
+  .input-container.is-multiline .input-field-shell {
     min-height: 56px;
+    align-items: flex-start;
   }
 
   .input-left-actions,
@@ -1586,7 +1604,7 @@ defineExpose({
 
   .chat-text-input,
   .chat-textarea {
-    min-height: 56px !important;
+    min-height: 52px !important;
     max-height: 132px !important;
     border: 0 !important;
     border-radius: 0 !important;
@@ -1596,8 +1614,8 @@ defineExpose({
   }
 
   .chat-text-input {
-    height: 56px !important;
-    padding: 0 10px !important;
+    height: 52px !important;
+    padding: 0 2px !important;
     line-height: normal !important;
     overflow: hidden;
   }
