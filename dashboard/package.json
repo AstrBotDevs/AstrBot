@@ -18,6 +18,7 @@
   "dependencies": {
     "@guolao/vue-monaco-editor": "^1.5.4",
     "@hey-api/client-axios": "0.2.12",
+    "@lucide/vue": "^1.23.0",
     "@tiptap/starter-kit": "2.1.7",
     "@tiptap/vue-3": "2.1.7",
     "apexcharts": "3.42.0",

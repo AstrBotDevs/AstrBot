@@ -496,6 +496,10 @@
   content: "\F024B";
 }
 
+.mdi-folder-cog-outline::before {
+  content: "\F1080";
+}
+
 .mdi-folder-move::before {
   content: "\F0252";
 }
@@ -978,10 +982,6 @@
 
 .mdi-source-branch::before {
   content: "\F062C";
-}
-
-.mdi-square-edit-outline::before {
-  content: "\F090C";
 }
 
 .mdi-star::before {

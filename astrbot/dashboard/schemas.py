@@ -95,6 +95,8 @@ class ChatProjectRequest(OpenModel):
     title: str | None = None
     emoji: str | None = None
     description: str | None = None
+    workspace_type: str | None = None
+    workspace_path: str | None = None
 
 
 class ChatProjectSessionRequest(OpenModel):

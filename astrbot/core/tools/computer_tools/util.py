@@ -1,20 +1,48 @@
-import re
 from pathlib import Path
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.astr_agent_context import AstrAgentContext
+from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_workspaces_path
-
-
-def normalize_umo_for_workspace(umo: str) -> str:
-    normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", umo.strip())
-    return normalized or "unknown"
+from astrbot.core.workspace import (
+    normalize_umo_for_workspace,
+    resolve_workspace_root_for_umo,
+)
 
 
 def workspace_root(umo: str) -> Path:
-    """Root directory for relative paths in local runtime"""
-    normalized_umo = normalize_umo_for_workspace(umo)
-    return (Path(get_astrbot_workspaces_path()) / normalized_umo).resolve(strict=False)
+    """Return the legacy workspace root for compatibility.
+
+    Args:
+        umo: Unified message origin.
+
+    Returns:
+        Legacy per-session workspace root.
+    """
+    return (
+        Path(get_astrbot_workspaces_path()) / normalize_umo_for_workspace(umo)
+    ).resolve(strict=False)
+
+
+async def workspace_root_for_context(
+    context: ContextWrapper[AstrAgentContext],
+) -> Path:
+    """Resolve the workspace root for a tool call context.
+
+    Args:
+        context: Tool call context.
+
+    Returns:
+        Workspace root used as cwd.
+    """
+    umo = context.context.event.unified_msg_origin
+    db = getattr(context.context.context, "_db", None)
+    if not isinstance(db, BaseDatabase):
+        return workspace_root(umo)
+    try:
+        return await resolve_workspace_root_for_umo(umo, db)
+    except Exception:
+        return workspace_root(umo)
 
 
 def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:

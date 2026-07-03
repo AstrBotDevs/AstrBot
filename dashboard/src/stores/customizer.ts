@@ -14,6 +14,7 @@ export const useCustomizerStore = defineStore('customizer', {
     themeMode: config.themeMode as ThemeMode,
     inputBg: config.inputBg,
     chatSidebarOpen: false, // chat mode mobile sidebar state
+    chatSidebarCollapsed: false, // chat mode desktop sidebar state
   }),
 
   getters: {
@@ -52,6 +53,9 @@ export const useCustomizerStore = defineStore('customizer', {
     },
     SET_CHAT_SIDEBAR(payload: boolean) {
       this.chatSidebarOpen = payload;
+    },
+    SET_CHAT_SIDEBAR_COLLAPSED(payload: boolean) {
+      this.chatSidebarCollapsed = payload;
     },
   },
 });

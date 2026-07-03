@@ -20,6 +20,7 @@ from astrbot.core.tools.computer_tools.util import (
     check_admin_permission,
     is_local_runtime,
     workspace_root,
+    workspace_root_for_context,
 )
 from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import (
@@ -28,10 +29,13 @@ from astrbot.core.utils.astrbot_path import (
 )
 
 
-def _file_send_allowed_roots(umo: str | None) -> tuple[Path, ...]:
+def _file_send_allowed_roots(
+    umo: str | None,
+    current_workspace_root: Path | None = None,
+) -> tuple[Path, ...]:
     roots = []
     if umo:
-        roots.append(workspace_root(umo))
+        roots.append(current_workspace_root or workspace_root(umo))
     roots.extend(
         [
             Path(get_astrbot_temp_path()).resolve(strict=False),
@@ -59,9 +63,10 @@ def _is_restricted_local_env(context: ContextWrapper[AstrAgentContext]) -> bool:
 def _can_send_local_file(
     context: ContextWrapper[AstrAgentContext],
     local_path: Path,
+    current_workspace_root: Path | None = None,
 ) -> bool:
     umo = context.context.event.unified_msg_origin
-    allowed_roots = _file_send_allowed_roots(umo)
+    allowed_roots = _file_send_allowed_roots(umo, current_workspace_root)
     if _is_path_within(local_path, allowed_roots):
         return True
     return is_local_runtime(context) and not _is_restricted_local_env(context)
@@ -137,12 +142,18 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         if not path:
             raise FileNotFoundError(f"{component_type} path is empty")
 
+        current_workspace_root = (
+            await workspace_root_for_context(context)
+            if is_local_runtime(context)
+            else None
+        )
+
         # Relative host paths are resolved only inside the user's workspace.
         if not os.path.isabs(path):
             unified_msg_origin = context.context.event.unified_msg_origin
             if unified_msg_origin:
+                ws_path = current_workspace_root or workspace_root(unified_msg_origin)
                 try:
-                    ws_path = workspace_root(unified_msg_origin)
                     ws_candidate = (ws_path / path).resolve(strict=False)
                     if ws_candidate.is_file() and ws_candidate.is_relative_to(ws_path):
                         return str(ws_candidate), False
@@ -151,13 +162,16 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
         else:
             local_candidate = Path(path).expanduser().resolve(strict=False)
             if local_candidate.is_file():
-                if _can_send_local_file(context, local_candidate):
+                if _can_send_local_file(
+                    context, local_candidate, current_workspace_root
+                ):
                     return str(local_candidate), False
                 if is_local_runtime(context):
                     allowed = ", ".join(
                         str(root)
                         for root in _file_send_allowed_roots(
-                            context.context.event.unified_msg_origin
+                            context.context.event.unified_msg_origin,
+                            current_workspace_root,
                         )
                     )
                     raise PermissionError(

@@ -18,6 +18,9 @@ importers:
       '@hey-api/client-axios':
         specifier: 0.2.12
         version: 0.2.12(axios@1.13.5)
+      '@lucide/vue':
+        specifier: ^1.23.0
+        version: 1.23.0(vue@3.3.4)
       '@tiptap/starter-kit':
         specifier: 2.1.7
         version: 2.1.7(@tiptap/pm@2.27.2)
@@ -500,6 +503,11 @@ packages:
 
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
+
+  '@lucide/vue@1.23.0':
+    resolution: {integrity: sha512-9SIYeY5K+R1iv8F8JUKMGSL7Pck/86BJ8djtZz/lnYsoHtKFUj1H2z6+PvKnC/8blZ8tqTDeDXAoTKobuX80hg==}
+    peerDependencies:
+      vue: '>=3.0.1'
 
   '@mdi/font@7.2.96':
     resolution: {integrity: sha512-e//lmkmpFUMZKhmCY9zdjRe4zNXfbOIJnn6xveHbaV2kSw5aJ5dLXUxcRt1Gxfi7ZYpFLUWlkG2MGSFAiqAu7w==}
@@ -3495,6 +3503,10 @@ snapshots:
       keyv: 5.6.0
 
   '@keyv/serialize@1.1.1': {}
+
+  '@lucide/vue@1.23.0(vue@3.3.4)':
+    dependencies:
+      vue: 3.3.4
 
   '@mdi/font@7.2.96': {}
 
