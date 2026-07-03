@@ -1,7 +1,10 @@
 import asyncio
 import inspect
+import logging
 import re
 import sys
+import typing
+import types
 from typing import Any, cast
 
 import discord
@@ -384,10 +387,8 @@ class DiscordPlatformAdapter(Platform):
         registered_commands = []
 
         for handler_md in star_handlers_registry:
-            try:
-                if not star_map[handler_md.handler_module_path].activated:
-                    continue
-            except KeyError:
+            plugin = star_map.get(handler_md.handler_module_path)
+            if not plugin or not plugin.activated:
                 continue
             if not handler_md.enabled:
                 continue
@@ -451,9 +452,25 @@ class DiscordPlatformAdapter(Platform):
             for name, param in sig.parameters.items():
                 if name in ("self", "event"):
                     continue
+                annotation = param.annotation
+                # 处理 Optional[T] 或 T | None
+                origin = typing.get_origin(annotation)
+                union_types = {typing.Union}
+                if hasattr(types, "UnionType"):
+                    union_types.add(types.UnionType)
+                if origin in union_types:
+                    args = typing.get_args(annotation)
+                    non_none = [a for a in args if a is not type(None)]
+                    if len(non_none) == 1:
+                        annotation = non_none[0]
+                # 类型映射
                 opt_type = discord.SlashCommandOptionType.string
-                if param.annotation is int:
+                if annotation is int:
                     opt_type = discord.SlashCommandOptionType.integer
+                elif annotation is float:
+                    opt_type = discord.SlashCommandOptionType.number
+                elif annotation is bool:
+                    opt_type = discord.SlashCommandOptionType.boolean
                 required = param.default is inspect.Parameter.empty
                 options.append(
                     discord.Option(
@@ -463,8 +480,8 @@ class DiscordPlatformAdapter(Platform):
                         required=required,
                     )
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to build slash options for {handler!r}: {e}", exc_info=True)
         return options
 
     def _create_dynamic_callback(self, cmd_name: str, param_names: list | None = None):
@@ -492,8 +509,11 @@ class DiscordPlatformAdapter(Platform):
             # 将平台特定的前缀'/'剥离，以适配通用的CommandFilter
             logger.debug(f"[Discord] Callback triggered: {cmd_name}")
             logger.debug(f"[Discord] Callback context: {ctx}")
-            # 从 kwargs 收集参数值，拼接为命令字符串
-            params_str = " ".join(str(v) for v in kwargs.values() if v is not None)
+            # 按 param_names 顺序提取参数值，保证与函数签名一致
+            if param_names:
+                params_str = " ".join(str(kwargs[name]) for name in param_names if kwargs.get(name) is not None)
+            else:
+                params_str = " ".join(str(v) for v in kwargs.values() if v is not None)
             logger.debug(f"[Discord] Callback params: {params_str}, kwargs: {kwargs}")
             message_str_for_filter = cmd_name
             if params_str:
