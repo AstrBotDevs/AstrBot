@@ -171,8 +171,8 @@ class RetrievalManager:
 
         # 5. Rerank
         first_rerank = None
-        for kb_id in kb_ids:
-            vec_db = kb_options[kb_id].get("vec_db")
+        for kb_opt in kb_options.values():
+            vec_db = kb_opt.get("vec_db")
             rerank_provider = (
                 getattr(vec_db, "rerank_provider", None) if vec_db else None
             )
@@ -228,7 +228,10 @@ class RetrievalManager:
 
                 all_results.extend(vec_results)
             except Exception as e:
-                logger.error(f"知识库 {kb_id} 稠密检索失败: {e}", exc_info=True)
+                logger.error(
+                    f"知识库 {kb_id} 稠密检索失败: {type(e).__name__}: {e}",
+                    exc_info=True,
+                )
                 # skip the faulty KB and continue
 
         # 按相似度排序并返回 top_k
