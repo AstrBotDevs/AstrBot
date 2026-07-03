@@ -24,8 +24,33 @@ DEFAULT_SPLIT_WORDS = ["。", "？", "！", "~", "…"]
 DEFAULT_INTERVAL_RANGE = (1.5, 3.5)
 
 
+def _normalize_split_words(split_words: list[str]) -> list[str]:
+    if not isinstance(split_words, (list, tuple)):
+        return []
+    result = []
+    for word in split_words:
+        if word is None:
+            continue
+        word = str(word)
+        if word:
+            result.append(word)
+    return result
+
+
+def _normalize_regex_segments(segments) -> list[str]:
+    result = []
+    for seg in segments:
+        if isinstance(seg, tuple):
+            seg = "".join(part for part in seg if isinstance(part, str))
+        elif not isinstance(seg, str):
+            seg = str(seg)
+        result.append(seg)
+    return result
+
+
 def compile_split_words_pattern(split_words: list[str]) -> re.Pattern | None:
     """编译分段词列表对应的正则。split_words 为空时返回 None。"""
+    split_words = _normalize_split_words(split_words)
     if not split_words:
         return None
     escaped_words = sorted(
@@ -43,6 +68,7 @@ def split_text_by_words(
     if not split_words_pattern:
         return [text]
 
+    split_words = _normalize_split_words(split_words)
     segments = split_words_pattern.findall(text)
     result = []
     for seg in segments:
@@ -63,13 +89,20 @@ def split_text_by_words(
 
 def split_text_by_regex(text: str, regex: str) -> list[str]:
     """使用正则表达式分段文本，正则非法时回退到默认分段正则。"""
+    if not isinstance(regex, str):
+        logger.error(f"分段回复正则表达式类型错误，使用默认分段方式: {type(regex)}")
+        regex = DEFAULT_SPLIT_REGEX
     try:
-        return re.findall(regex, text, re.DOTALL | re.MULTILINE)
-    except re.error:
+        return _normalize_regex_segments(
+            re.findall(regex, text, re.DOTALL | re.MULTILINE),
+        )
+    except Exception:
         logger.error(
             f"分段回复正则表达式错误，使用默认分段方式: {traceback.format_exc()}",
         )
-        return re.findall(DEFAULT_SPLIT_REGEX, text, re.DOTALL | re.MULTILINE)
+        return _normalize_regex_segments(
+            re.findall(DEFAULT_SPLIT_REGEX, text, re.DOTALL | re.MULTILINE),
+        )
 
 
 def cleanup_segments(segments: list[str], content_cleanup_rule: str) -> list[str]:
@@ -117,8 +150,19 @@ def calc_segment_interval(
     if interval_method == "log":
         if text is not None:
             wc = count_words(text)
-            i = math.log(wc + 1, log_base)
-            return random.uniform(i, i + 0.5)
-        return random.uniform(1, 1.75)
+            safe_log_base = (
+                log_base
+                if isinstance(log_base, (int, float)) and log_base > 1.0
+                else 2.6
+            )
+            try:
+                i = math.log(wc + 1, safe_log_base)
+                interval = random.uniform(i, i + 0.5)
+            except Exception:
+                interval = random.uniform(1, 1.75)
+            return max(0.0, interval)
+        return max(0.0, random.uniform(1, 1.75))
     # random
-    return random.uniform(interval_range[0], interval_range[1])
+    low = max(0.0, float(interval_range[0]))
+    high = max(0.0, float(interval_range[1]))
+    return max(0.0, random.uniform(low, high))
