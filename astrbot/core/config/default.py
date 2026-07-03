@@ -1,38 +1,12 @@
 """如需修改配置，请在 `data/cmd_config.json` 中修改或者在管理面板中可视化修改。"""
 
 import os
-import re
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as package_version
-from pathlib import Path
 
+from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
-from astrbot.core.utils.toml_parser import read_pyproject_project_version
 
-try:
-    import tomllib
-except ModuleNotFoundError:
-    # <= Python 3.10 compatibility
-    tomllib = None
-
-try:
-    pyproject_path = Path(__file__).resolve().parents[3] / "pyproject.toml"
-    if tomllib is None:
-        VERSION = read_pyproject_project_version(pyproject_path)
-    else:
-        with pyproject_path.open("rb") as f:
-            VERSION = tomllib.load(f)["project"]["version"]
-except (FileNotFoundError, IndexError, KeyError, TypeError, ValueError):
-    try:
-        VERSION = package_version("astrbot")  # PEP 440 version style, e.g. 1.2.3a4
-        match = re.match(r"^(\d+(?:\.\d+)*)(a|b|rc)(\d+)$", VERSION)
-        if match:
-            release, prerelease, number = match.groups()
-            prerelease = {"a": "alpha", "b": "beta", "rc": "rc"}[prerelease]
-            VERSION = f"{release}-{prerelease}.{number}"
-    except PackageNotFoundError:
-        VERSION = "0.0.0"
+VERSION = __version__
 
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
@@ -141,6 +115,7 @@ DEFAULT_CONFIG = {
         "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
         "websearch_firecrawl_key": [],
+        "websearch_exa_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -161,8 +136,8 @@ DEFAULT_CONFIG = {
         ),
         "llm_compress_keep_recent_ratio": 0.15,
         "llm_compress_provider_id": "",
-        "max_context_length": 50,
-        "dequeue_context_length": 10,
+        "max_context_length": -1,  # 默认不限制
+        "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -1619,8 +1594,6 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "api_base": "https://api.xiaomimimo.com/v1",
                         "model": "mimo-v2-omni",
-                        "mimo-stt-system-prompt": "You are a speech transcription assistant. Transcribe the spoken content from the audio exactly and return only the transcription text.",
-                        "mimo-stt-user-prompt": "Please transcribe the content of the audio and return only the transcription text.",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -2623,16 +2596,6 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
                     },
-                    "mimo-stt-system-prompt": {
-                        "description": "系统提示词",
-                        "type": "string",
-                        "hint": "用于指导 MiMo STT 转录行为的 system prompt。",
-                    },
-                    "mimo-stt-user-prompt": {
-                        "description": "用户提示词",
-                        "type": "string",
-                        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。",
-                    },
                     "openai-tts-voice": {
                         "description": "voice",
                         "type": "string",
@@ -3321,6 +3284,7 @@ CONFIG_METADATA_3 = {
                             "bocha",
                             "brave",
                             "firecrawl",
+                            "exa",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3372,6 +3336,16 @@ CONFIG_METADATA_3 = {
                         "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
                         "condition": {
                             "provider_settings.websearch_provider": "baidu_ai_search",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_exa_key": {
+                        "description": "Exa API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。Get a key at https://dashboard.exa.ai",
+                        "condition": {
+                            "provider_settings.websearch_provider": "exa",
                             "provider_settings.web_search": True,
                         },
                     },

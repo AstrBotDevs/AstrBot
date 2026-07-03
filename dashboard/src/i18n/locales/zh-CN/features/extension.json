@@ -50,6 +50,7 @@
     "save": "保存",
     "saveAndClose": "保存并关闭",
     "cancel": "取消",
+    "next": "下一步",
     "actions": "操作",
     "back": "返回",
     "selectFile": "选择文件",
@@ -168,6 +169,7 @@
     "sourceUpdated": "插件源更新成功",
     "defaultOfficialSource": "默认官方源",
     "sourceExists": "该插件源已存在",
+    "sourceResolved": "插件源可用",
     "installPlugin": "安装插件",
     "randomPlugins": "🎲 随机插件",
     "sourceSafetyWarning": "即使是默认插件源，我们也不能完全保证插件的稳定性和安全性，使用前请谨慎核查。"
@@ -206,7 +208,7 @@
       "deleteConfig": "同时删除插件配置文件",
       "deleteData": "同时删除插件持久化数据",
       "configHint": "配置文件位于 data/config 目录",
-      "dataHint": "删除 data/plugin_data 和 data/plugins_data 目录下的数据"
+      "dataHint": "删除 data/plugin_data、plugins_data 目录下的数据，以及数据库中插件的 KV 数据"
     },
     "install": {
       "title": "安装插件",
@@ -244,6 +246,16 @@
       "title": "确认更新全部插件",
       "message": "确定要更新全部 {count} 个插件吗？此操作可能需要一些时间。",
       "confirm": "确认更新"
+    },
+    "sourceBinding": {
+      "title": "更换插件源",
+      "selectTitle": "选择插件安装源",
+      "noCandidates": "未在已配置的插件源中找到匹配记录，且当前插件缺少可用仓库地址。",
+      "repoOption": "直接使用仓库地址",
+      "repoOptionId": "通过 repo 重新安装",
+      "installDestination": "安装目的地",
+      "confirm": "使用该插件源",
+      "confirmAndContinue": "使用并继续"
     }
   },
   "messages": {
@@ -270,13 +282,24 @@
     "updateAllSuccess": "所有可更新的插件都已更新！",
     "updateAllFailed": "有 {failed}/{total} 个插件更新失败:",
     "noUpdatesAvailable": "当前没有可更新的插件",
-    "fillSourceNameAndUrl": "请填写完整的插件源名称和地址",
+    "updateDisabled": "该插件缺少可用的安装源或仓库地址，无法更新或重新安装",
+    "changeSourceDisabled": "当前插件缺少可用仓库地址，无法更换插件源",
+    "fillSourceUrl": "请填写插件源地址",
+    "fillSourceName": "请填写插件源名称",
+    "resolveSourceFirst": "请先解析并校验插件源地址",
+    "sourceResolveFailed": "插件源解析失败",
     "invalidUrl": "请输入有效的URL地址",
+    "invalidGithubRepo": "请输入有效的 GitHub 仓库链接",
     "enterJsonUrl": "请输入返回插件列表JSON数据的URL地址",
     "pluginNotFound": "未找到该插件",
     "pluginDisabled": "该插件当前已禁用，请先启用后再访问页面",
     "pluginPageNotFound": "未找到该插件页面",
-    "pluginPageLoadFailed": "加载插件页面失败"
+    "pluginPageLoadFailed": "加载插件页面失败",
+    "missingMarketPluginId": "缺少合法的插件标识，无法从该插件市场源安装",
+    "sourceBindSuccess": "插件源已更新",
+    "validatingPlugin": "正在校验插件...",
+    "pluginValidateSuccess": "插件校验通过",
+    "pluginValidateFailed": "插件校验失败"
   },
   "upload": {
     "fromFile": "从文件安装",
@@ -401,7 +424,8 @@
       "togglePlugin": "插件",
       "viewHandlers": "查看行为",
       "updateTo": "更新到",
-      "reinstall": "重新安装"
+      "reinstall": "重新安装",
+      "changeSource": "更换插件源"
     },
     "status": {
       "hasUpdate": "有新版本可用",

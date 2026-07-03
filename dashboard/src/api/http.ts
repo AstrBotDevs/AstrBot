@@ -48,6 +48,55 @@ function attachAxiosHeaders(config: InternalAxiosRequestConfig) {
 }
 
 function normalizeAxiosError(error: AxiosError) {
+  if (error.response?.status === 401) {
+    let requestPath = '';
+    try {
+      const url = error.config?.url || '';
+      const baseURL = error.config?.baseURL;
+      const resolvedUrl =
+        url && baseURL && !/^([a-z][a-z\d+\-.]*:)?\/\//i.test(url)
+          ? `${baseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`
+          : url;
+      const requestUrl = new URL(resolvedUrl || '/', window.location.origin);
+      if (requestUrl.origin === window.location.origin) {
+        requestPath = requestUrl.pathname;
+      }
+    } catch {
+      requestPath = '';
+    }
+
+    const isAuthChallenge =
+      [
+        '/api/auth/login',
+        '/api/auth/setup',
+        '/api/auth/setup-status',
+        '/api/v1/auth/login',
+        '/api/v1/auth/setup',
+        '/api/v1/auth/setup-status',
+      ].includes(requestPath) ||
+      Boolean(
+        (
+          error.response.data as
+            | { data?: { totp_required?: boolean } }
+            | undefined
+        )?.data?.totp_required,
+      );
+
+    if (requestPath.startsWith('/api/') && !isAuthChallenge) {
+      [
+        'user',
+        'token',
+        'change_pwd_hint',
+        'md5_pwd_hint',
+        'password_upgrade_required',
+      ].forEach((key) => localStorage.removeItem(key));
+
+      if (!window.location.hash.startsWith('#/auth/login')) {
+        window.location.hash = '/auth/login';
+      }
+    }
+  }
+
   if (error.response?.status === 429) {
     const data = error.response.data as { message?: string } | undefined;
     if (data?.message) {

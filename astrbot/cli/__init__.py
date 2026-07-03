@@ -1,3 +1,3 @@
-from astrbot.core.config.default import VERSION
+from astrbot import __version__
 
-__version__ = VERSION
+__all__ = ["__version__"]

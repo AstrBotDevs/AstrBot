@@ -83,9 +83,16 @@ export type ChatProjectRequest = {
     title?: string;
     emoji?: string;
     description?: string;
+    workspace_type?: 'session' | 'project' | 'custom';
+    workspace_path?: string;
 };
 
+export type workspace_type = 'session' | 'project' | 'custom';
+
 export type ChatRequest = {
+    /**
+     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     */
     username?: string;
     session_id?: string;
     /**
@@ -191,7 +198,7 @@ export type ConversationRef = {
 
 export type CreateApiKeyRequest = {
     name: string;
-    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'file' | 'plugin' | 'mcp' | 'skill')>;
+    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill')>;
     expires_at?: string;
     expires_in_days?: number;
 };
@@ -252,13 +259,22 @@ export type JsonSchema = {
     [key: string]: unknown;
 };
 
+export type KnowledgeBaseCreateRequest = KnowledgeBaseRequest & {
+    kb_name: string;
+    embedding_provider_id: string;
+};
+
 export type KnowledgeBaseRequest = {
-    name: string;
+    kb_name?: string;
     description?: string;
-    embedding_provider_id?: string;
-    rerank_provider_id?: string;
-    chunking?: DynamicConfig;
-    metadata?: DynamicConfig;
+    emoji?: string;
+    embedding_provider_id?: (string) | null;
+    rerank_provider_id?: (string) | null;
+    chunk_size?: number;
+    chunk_overlap?: number;
+    top_k_dense?: number;
+    top_k_sparse?: number;
+    top_m_final?: number;
 };
 
 export type KnowledgeDocumentImportRequest = {
@@ -268,7 +284,6 @@ export type KnowledgeDocumentImportRequest = {
 
 export type KnowledgeDocumentUploadRequest = {
     file: (Blob | File);
-    parser?: string;
 };
 
 export type KnowledgeDocumentUrlImportRequest = {
@@ -459,6 +474,15 @@ export type PluginGithubInstallRequest = {
     download_url?: string;
     proxy?: string;
     ignore_version_check?: boolean;
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
+};
+
+export type PluginSourceBindRequest = {
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
 };
 
 export type PluginSourceRequest = {
@@ -483,6 +507,15 @@ export type PluginUrlInstallRequest = {
     download_url?: string;
     proxy?: string;
     ignore_version_check?: boolean;
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
+};
+
+export type PluginValidateRepoRequest = {
+    repository?: string;
+    url?: string;
+    proxy?: string;
 };
 
 export type PluginVersionSupportRequest = {
@@ -1876,6 +1909,17 @@ export type ReloadPluginResponse = (SuccessEnvelope);
 
 export type ReloadPluginError = unknown;
 
+export type BindPluginSourceData = {
+    body: PluginSourceBindRequest;
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type BindPluginSourceResponse = (SuccessEnvelope);
+
+export type BindPluginSourceError = unknown;
+
 export type SetPluginEnabledData = {
     body: EnabledPatch;
     path: {
@@ -1913,6 +1957,14 @@ export type CheckPluginVersionSupportData = {
 export type CheckPluginVersionSupportResponse = (SuccessEnvelope);
 
 export type CheckPluginVersionSupportError = unknown;
+
+export type ValidatePluginRepoData = {
+    body: PluginValidateRepoRequest;
+};
+
+export type ValidatePluginRepoResponse = (SuccessEnvelope);
+
+export type ValidatePluginRepoError = unknown;
 
 export type ListFailedPluginsResponse = (SuccessEnvelope);
 
@@ -2566,7 +2618,7 @@ export type ListKnowledgeBasesResponse = (SuccessEnvelope);
 export type ListKnowledgeBasesError = unknown;
 
 export type CreateKnowledgeBaseData = {
-    body: KnowledgeBaseRequest;
+    body: KnowledgeBaseCreateRequest;
 };
 
 export type CreateKnowledgeBaseResponse = (SuccessEnvelope);
@@ -2621,6 +2673,10 @@ export type ListKnowledgeDocumentsData = {
     query?: {
         page?: number;
         page_size?: number;
+        /**
+         * Filter documents by name (case-insensitive partial match).
+         */
+        search?: string;
     };
 };
 
@@ -3090,6 +3146,10 @@ export type GetProviderTokenStatsError = unknown;
 export type GetVersionResponse = (SuccessEnvelope);
 
 export type GetVersionError = unknown;
+
+export type GetPublicVersionsResponse = (SuccessEnvelope);
+
+export type GetPublicVersionsError = unknown;
 
 export type GetFirstNoticeData = {
     query?: {

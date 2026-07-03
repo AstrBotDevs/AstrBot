@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, file, plugin, mcp, skill. The config scope also grants bot and provider access.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill. The config scope also grants bot and provider access.\n"
   },
   "servers": [
     {
@@ -3253,6 +3253,36 @@
         }
       }
     },
+    "/api/v1/plugins/{plugin_id}/source": {
+      "post": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Bind an installed plugin to a marketplace source",
+        "operationId": "bindPluginSource",
+        "x-astrbot-scope": "plugin",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PluginId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginSourceBindRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
     "/api/v1/plugins/{plugin_id}/enabled": {
       "patch": {
         "tags": [
@@ -6210,6 +6240,19 @@
           "reinstall": {
             "type": "boolean",
             "default": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PluginSourceBindRequest": {
+        "type": "object",
+        "properties": {
+          "registry_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "market_plugin_id": {
+            "type": "string"
           }
         },
         "additionalProperties": false

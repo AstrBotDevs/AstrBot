@@ -26,7 +26,9 @@
       "release": "😊 Release"
     },
     "advancedSettings": "Advanced settings",
+    "releases": "Releases",
     "updateToLatest": "Update to Latest Version",
+    "showPreReleases": "Show pre-release versions",
     "preRelease": "Pre-release",
     "preReleaseWarning": {
       "title": "Pre-release Version Notice",
