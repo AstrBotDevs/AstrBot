@@ -48,7 +48,15 @@ export interface SpcodeFileBrowserFileSnapshot {
     size: number;
     mtime: number | null;
     maxBytes: number;
-    encoding: "utf-8" | null;
+    /**
+     * Encoding name actually used to decode the file content.
+     * Broadened from `"utf-8" | null` in 2026-07-03 PR (v3.7 of file-browser
+     * endpoint) to support non-UTF-8 encodings like GBK/GB18030/cp936/UTF-8-BOM
+     * on Chinese Windows. Backend reports whatever it actually used; null when
+     * the file is binary, too large, or unreadable. Backward-compatible: all
+     * existing clients comparing against the literal "utf-8" keep working.
+     */
+    encoding: string | null;
     isBinary: boolean | null;
     reason: string | null;
     elapsedMs: number;
@@ -81,7 +89,12 @@ export interface SpcodeFileBrowserRawResponse {
   mtime: number | null;
   is_symlink: boolean;
   // file
-  encoding?: "utf-8" | null;
+  /**
+   * 2026-07-03 PR: broadened from "utf-8" | null to string | null.
+   * Backend may return "utf-8", "utf-8-sig", "cp936", "gbk", "gb18030",
+   * or "latin-1" depending on the file's actual encoding.
+   */
+  encoding?: string | null;
   is_binary?: boolean | null;
   content?: string | null;
   max_bytes?: number;

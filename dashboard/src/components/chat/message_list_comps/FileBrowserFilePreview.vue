@@ -427,6 +427,19 @@ function onDeleteComment(commentId: string): void {
         <span class="preview-file-path" :title="state.snapshot.meta.path">{{
           state.snapshot.meta.name
         }}</span>
+        <!-- 2026-07-03 ANSI/GBK 支持:当文件编码不是 utf-8 时,
+             在元信息头显示一个 subtle 灰色 chip 提示用户。utf-8
+             不显示(主流情况,避免视觉噪声);cp936/gbk/gb18030/
+             latin-1/utf-8-sig 等显示完整编码名。 -->
+        <span
+          v-if="state.snapshot.meta.encoding && state.snapshot.meta.encoding !== 'utf-8'"
+          class="preview-file-encoding"
+          :title="tm('spcodeProjectLoad.fileBrowser.preview.encodingLabel', {
+            encoding: state.snapshot.meta.encoding,
+          })"
+        >
+          {{ state.snapshot.meta.encoding }}
+        </span>
         <span class="preview-file-size">{{
           formatBytes(state.snapshot.meta.size)
         }}</span>
@@ -566,6 +579,20 @@ function onDeleteComment(commentId: string): void {
 .preview-file-mtime {
   font-variant-numeric: tabular-nums;
   color: rgba(var(--v-theme-on-surface), 0.4);
+}
+/* 2026-07-03 ANSI/GBK 支持:非 utf-8 文件在元信息头显示编码徽章。
+   视觉上与 .preview-file-size 同级但用 monospace + 浅色背景区分,
+   让用户一眼看出"这不是 utf-8"。hover 时显示 i18n 完整提示。 */
+.preview-file-encoding {
+  font-family: ui-monospace, monospace;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  cursor: help;
+  user-select: none;
 }
 .preview-file-content {
   flex: 1;

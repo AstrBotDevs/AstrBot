@@ -331,7 +331,8 @@
         "copy": "Copy",
         "copySuccess": "Copied",
         "copyFail": "Copy failed",
-        "goToTarget": "Go to target"
+        "goToTarget": "Go to target",
+        "encodingLabel": "Encoding: {encoding}"
       },
       "comment": {
         "addButton": "Add comment",
