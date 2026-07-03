@@ -993,6 +993,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 ),
             )
 
+        # 获取 trace span：优先使用 subagent trace_span，否则回退到 event.trace
+        _agent_ctx = getattr(self.run_context, "context", None)
+        _trace = getattr(_agent_ctx, "trace_span", None)
+        if _trace is None and _agent_ctx is not None:
+            _event = getattr(_agent_ctx, "event", None)
+            _trace = getattr(_event, "trace", None)
+
         # 执行函数调用
         for func_tool_name, func_tool_args, func_tool_id in zip(
             llm_response.tools_call_name,
@@ -1016,10 +1023,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     ],
                 )
             )
+            # 记录工具调用追踪
+            if _trace:
+                _trace.record("agent_tool_call", tool_name=func_tool_name)
             try:
                 if not req.func_tool:
                     return
 
+                # Resolve tool from regular tool sets
+                if (
+                    self.tool_schema_mode == "skills_like"
+                    and self._skill_like_raw_tool_set
+                ):
+                    # in 'skills_like' mode, raw.func_tool is light schema, does not have handler
+                    # so we need to get the tool from the raw tool set
+                    func_tool = self._skill_like_raw_tool_set.get_tool(func_tool_name)
+                else:
+                    func_tool = req.func_tool.get_tool(func_tool_name)
                 if (
                     self.tool_schema_mode == "skills_like"
                     and self._skill_like_raw_tool_set
@@ -1233,6 +1253,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 )
                 logger.info(f"Tool `{func_tool_name}` Result: {tool_result_content}")
+                # 记录工具结果追踪
+                if _trace:
+                    _trace.record(
+                        "agent_tool_result",
+                        tool_name=func_tool_name,
+                        tool_result=tool_result_content[:500]
+                        if tool_result_content
+                        else None,
+                    )
 
         # 处理函数调用响应
         if tool_call_result_blocks:
@@ -1363,13 +1392,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         llm_resp: LLMResponse | None = None,
     ) -> AgentResponse:
         logger.info("Agent execution was requested to stop by user.")
+
         if llm_resp is None:
             llm_resp = LLMResponse(role="assistant", completion_text="")
+
         if llm_resp.role != "assistant":
             llm_resp = LLMResponse(
                 role="assistant",
                 completion_text=self.USER_INTERRUPTION_MESSAGE,
             )
+
         self.final_llm_resp = llm_resp
         self._aborted = True
         self._transition_state(AgentState.DONE)

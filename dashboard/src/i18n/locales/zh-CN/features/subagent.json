@@ -14,7 +14,8 @@
     "expand": "展开设置",
     "collapse": "收起设置",
     "delete": "删除",
-    "close": "关闭"
+    "close": "关闭",
+    "resetDefault": "恢复默认"
   },
   "overview": {
     "totalAgents": "子代理总数",
@@ -29,17 +30,21 @@
     "enable": "启用子代理编排",
     "enableHint": "启用子代理功能",
     "dedupe": "主 LLM 去重重复工具（与子代理重叠的工具将被隐藏）",
-    "dedupeHint": "从主代理中移除与子代理重复的工具"
+    "dedupeHint": "从主代理中移除与子代理重复的工具",
+    "editRouterPrompt": "编辑路由提示词",
+    "editRulePrompt": "编辑行为约束提示词"
   },
   "description": {
     "disabled": "未启动子代理编排功能。",
     "enabled": "子代理将作为工具放在主代理的工具集中，主代理会在适当的时机调用子代理完成任务。"
   },
   "section": {
-    "title": "子代理配置",
-    "subtitle": "为主代理配置可委派的子代理、人格与描述信息",
-    "globalSettings": "全局设置",
-    "agentSetup": "Agent 设置"
+    "title": "静态子代理配置",
+    "subtitle": "为主代理配置可委派的静态子代理、人格与描述信息。这些子代理会在Astrbot启动时就创建",
+    "globalSettings": "全局配置",
+    "agentSetup": "Agent 设置",
+    "enhancedSettings": "动态子代理设置",
+    "enhancedSettingsHint": "配置动态子代理的运行参数、资源限制和工具策略"
   },
   "cards": {
     "statusEnabled": "启用",
@@ -79,9 +84,74 @@
     "nameRequired": "名称必填",
     "namePattern": "仅支持小写字母、数字和下划线"
   },
+  "routerSystemPrompt": {
+    "label": "路由提示词",
+    "hint": "主Agent的路由提示词，用于指导主Agent如何识别用户意图并委派任务给子代理。仅在未启用动态子代理时有效。"
+  },
+  "historyEnabled": {
+    "label": "启用历史记忆",
+    "hint": "是否启用子代理的上下文历史功能，开启后子代理可以保留跨多轮对话的记忆"
+  },
   "empty": {
     "title": "未配置子代理",
     "subtitle": "添加一个新的子代理以开始",
     "action": "创建第一个 Agent"
+  },
+  "dag": {
+    "orchestrationMode": "编排方式",
+    "orchestrationModeHint": "选择子代理任务的编排模式。「默认」由LLM手动逐个委派；「DAG 编排」使用有向无环图进行管理。",
+    "maxNodes": "DAG 最大任务节点数",
+    "maxNodesHint": "单个 DAG 编排中允许的最大任务节点数量",
+    "maxParallel": "DAG 单层最大并行数",
+    "maxParallelHint": "每层节点的最大并行数，若节点数超出并行数，会分批处理",
+    "maxInjectLength": "DAG 前置结果注入长度",
+    "maxInjectLengthHint": "将前置任务结果注入到后继任务上下文时的最大字符数，超出部分截断"
+  },
+  "enhancedSwitches": {
+    "enable": "启用动态子代理",
+    "enableHint": "启用动态子代理创建、管理和回收能力。开启后主Agent可在运行时通过create_subagent等工具动态创建子代理。与静态子代理编排可同时存在",
+    "autoCleanup": "每轮自动清理",
+    "autoCleanupHint": "每轮对话结束后自动清理未受保护的动态子代理",
+    "sharedContext": "启用共享上下文",
+    "sharedContextHint": "启用子代理间的公共上下文共享，子代理可通过send_shared_context工具互相通信"
+  },
+  "enhancedFields": {
+    "maxSubagentCount": "最大子代理数量",
+    "maxSubagentCountHint": "设置最大子代理数量。动态子代理数量 = 最大子代理数量 - 已有静态子代理数量",
+    "defaultProviderId": "默认 Chat Provider",
+    "defaultProviderIdHint": "动态子代理未指定 provider 时的默认值。留空则使用主代理的 provider",
+    "sharedContextMaxlen": "共享上下文最大长度",
+    "sharedContextMaxlenHint": "共享上下文消息的最大数量（条）",
+    "subagentHistoryMaxlen": "最大历史消息数",
+    "subagentHistoryMaxlenHint": "每个子代理最多保留的历史消息条数",
+    "executionTimeout": "执行超时时间(秒)",
+    "executionTimeoutHint": "子代理执行任务的最大超时时间，-1表示不限制",
+    "rulePrompt": "行为约束提示词",
+    "rulePromptHint": "注入到动态子代理的固定行为约束，为空时使用默认规则",
+    "timePromptEnabled": "启用时间感知",
+    "timePromptEnabledHint": "使子代理能感受到系统时间"
+  },
+  "enhancedSection": {
+    "runtimeParams": "运行参数",
+    "runtimeParamsHint": "控制动态子代理的数量、历史和执行超时",
+    "sharedContext": "共享上下文",
+    "sharedContextHint": "动态子代理之间的上下文共享策略",
+    "toolStrategy": "工具策略",
+    "toolStrategyHint": "控制动态子代理可使用哪些工具"
+  },
+  "enhancedTools": {
+    "blacklist": "工具黑名单",
+    "blacklistHint": "动态子代理禁止使用的工具列表。被加入黑名单的工具将不会分配给动态子代理，即使主Agent试图分配。（注：插件注入的工具不会出现在编辑列表，请手动输入）",
+    "inherent": "固有工具名单",
+    "inherentHint": "动态子代理固有的工具名单，在该名单内的工具会确保分配给动态子代理，即使主Agent没有分配。（注：插件注入的工具不会出现在编辑列表，请手动输入）",
+    "selectTool": "选择工具",
+    "addTool": "添加工具",
+    "resetDefault": "恢复默认",
+    "selectBlacklistTool": "添加工具到黑名单",
+    "selectInherentTool": "添加工具到固有名单",
+    "emptyBlacklist": "暂无黑名单工具（已恢复默认值）",
+    "emptyInherent": "暂无固有工具（已恢复默认值）",
+    "selectOrInputTool": "选择或输入工具名称",
+    "availableTools": "可用工具列表"
   }
 }

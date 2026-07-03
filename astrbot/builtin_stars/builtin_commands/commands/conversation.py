@@ -189,6 +189,18 @@ class ConversationCommands:
 
         ret = "✅ Conversation reset successfully."
 
+        # 清理该会话下的所有 subagent
+        try:
+            from astrbot.core.subagent_manager import SubAgentManager
+
+            cleanup_result = await SubAgentManager.cleanup_session(umo)
+            if cleanup_result["status"] == "cleaned":
+                cleaned_count = len(cleanup_result["cleaned_agents"])
+                if cleaned_count > 0:
+                    ret += f" 🧹 Also cleaned {cleaned_count} subagent(s): {', '.join(cleanup_result['cleaned_agents'])}."
+        except Exception as e:
+            logger.warning(f"[SubAgent] Failed to cleanup subagents on /reset: {e}")
+
         message.set_extra("_clean_group_context_session", True)
 
         message.set_result(MessageEventResult().message(ret))

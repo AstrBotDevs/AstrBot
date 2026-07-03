@@ -1,65 +1,148 @@
 <script setup>
 import { logApi } from '@/api/v1';
 import { EventSourcePolyfill } from 'event-source-polyfill';
+import { useModuleI18n } from '@/i18n/composables';
+
+const { tm } = useModuleI18n('features/trace');
 </script>
 
 <template>
   <div class="trace-wrapper">
     <div class="trace-table" ref="scrollEl" :style="{ height: tableHeight }">
-      <div class="trace-row trace-header">
-        <div class="trace-cell time">Time</div>
-        <div class="trace-cell span">Event ID</div>
-        <div class="trace-cell umo">UMO</div>
-        <!-- <div class="trace-cell count">Records</div> -->
-        <!-- <div class="trace-cell last">Last</div> -->
-        <div class="trace-cell sender">Sender</div>
-        <div class="trace-cell outline">Outline</div>
-        <div class="trace-cell fields"></div>
-      </div>
-      <div class="trace-group" :class="{ highlight: highlightMap[event.span_id] }" v-for="event in events"
-        :key="event.span_id">
-        <div class="trace-row trace-event">
-          <div class="trace-cell time">{{ formatTime(event.first_time) }}</div>
-          <div class="trace-cell span" :title="event.span_id">
-            <div class="event-title">
-              {{ shortSpan(event.span_id) }}
+
+      <!-- Main Agent Section -->
+      <section class="trace-section main-section">
+        <div class="section-header">
+          <span class="section-title main">{{ tm('mainTitle') }}</span>
+          <span class="section-count main">{{ mainEvents.length }}</span>
+        </div>
+        <div class="trace-row trace-header">
+          <div class="trace-cell time">Time</div>
+          <div class="trace-cell span">Event ID</div>
+          <div class="trace-cell umo">UMO</div>
+          <div class="trace-cell sender">Sender</div>
+          <div class="trace-cell outline">Outline</div>
+          <div class="trace-cell fields"></div>
+        </div>
+        <div v-for="event in mainEvents" :key="event.span_id"
+             class="trace-group"
+             :class="{ highlight: highlightMap[event.span_id] }"
+             :data-span-id="event.span_id">
+          <div class="trace-row main">
+            <div class="trace-cell time cell-text">{{ formatTime(event.first_time) }}</div>
+            <div class="trace-cell span" :title="event.span_id">
+              <div class="event-title cell-text">{{ shortSpan(event.span_id) }}</div>
+            </div>
+            <div class="trace-cell umo cell-text">{{ event.umo }}</div>
+            <div class="trace-cell sender">
+              <div class="event-sub sender-text">{{ event.sender_name || '-' }}</div>
+            </div>
+            <div class="trace-cell outline">
+              <div class="event-sub outline">{{ event.message_outline || '-' }}</div>
+            </div>
+            <div class="trace-cell fields event-controls">
+              <v-btn size="x-small" variant="text" color="primary"
+                     @click="toggleEvent(event.span_id)">
+                {{ event.collapsed ? 'Expand' : 'Collapse' }}
+                <span v-if="event.hasAgentPrepare" class="agent-dot" />
+              </v-btn>
             </div>
           </div>
-          <div class="trace-cell umo">{{ event.umo }}</div>
-          <!-- <div class="trace-cell count">
-            <div class="event-meta">{{ event.records.length }}</div>
-          </div> -->
-          <!-- <div class="trace-cell last">
-            <div class="event-meta">{{ formatTime(event.last_time) }}</div>
-          </div> -->
-          <div class="trace-cell sender">
-            <div class="event-sub" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{
-              event.sender_name || '-' }}</div>
-          </div>
-          <div class="trace-cell outline">
-            <div class="event-sub outline">{{ event.message_outline || '-' }}</div>
-          </div>
-          <div class="trace-cell fields event-controls">
-            <v-btn size="x-small" variant="text" color="primary" @click="toggleEvent(event.span_id)">
-              {{ event.collapsed ? 'Expand' : 'Collapse' }}
-              <span v-if="event.hasAgentPrepare" class="agent-dot" />
-            </v-btn>
+          <div v-if="!event.collapsed" class="trace-records">
+            <div class="trace-record" v-for="record in getVisibleRecords(event)" :key="record.key"
+                 :data-record-key="record.key">
+              <div class="trace-record-time">{{ record.timeLabel }}</div>
+              <div class="trace-record-action">{{ record.action }}</div>
+              <pre class="trace-record-fields">{{ record.fieldsText }}</pre>
+            </div>
+            <div class="event-more" v-if="event.visibleCount < event.records.length">
+              <v-btn size="x-small" variant="tonal" color="primary"
+                     @click="showMore(event.span_id)">
+                Show more
+              </v-btn>
+            </div>
           </div>
         </div>
-        <div class="trace-records" v-if="!event.collapsed">
-          <div class="trace-record" v-for="record in getVisibleRecords(event)" :key="record.key">
-            <div class="trace-record-time">{{ record.timeLabel }}</div>
-            <div class="trace-record-action">{{ record.action }}</div>
-            <pre class="trace-record-fields">{{ record.fieldsText }}</pre>
+        <div v-if="mainEvents.length === 0" class="trace-empty">
+          {{ tm('mainEmpty') }}
+        </div>
+      </section>
+
+      <hr v-if="subagentEvents.length > 0 && mainEvents.length > 0"
+          class="section-divider" />
+
+      <!-- SubAgent Section -->
+      <section class="trace-section sub-section">
+        <div class="section-header">
+          <span class="section-title sub">{{ tm('subTitle') }}</span>
+          <span class="section-count sub">{{ subagentEvents.length }}</span>
+        </div>
+        <div class="trace-row trace-header sub">
+          <div class="trace-cell parent">Parent</div>
+          <div class="trace-cell time">Time</div>
+          <div class="trace-cell span">Event ID</div>
+          <div class="trace-cell umo">UMO</div>
+          <div class="trace-cell sender">Sender</div>
+          <div class="trace-cell outline">Outline</div>
+          <div class="trace-cell fields"></div>
+        </div>
+        <div v-for="event in subagentEvents" :key="event.span_id"
+             class="trace-group sub"
+             :class="{ highlight: highlightMap[event.span_id] }"
+             :data-span-id="event.span_id">
+          <div class="trace-row sub">
+            <div class="trace-cell parent">
+              <a v-if="event.parent_span_id" href="#"
+                 class="parent-link"
+                 :title="`Parent span: ${event.parent_span_id}`"
+                 @click.prevent="jumpToCaller(event)">
+                <span class="parent-arrow">↳</span>
+                <span class="parent-id">{{ shortSpan(event.parent_span_id) }}</span>
+              </a>
+              <span v-else class="parent-none">—</span>
+            </div>
+            <div class="trace-cell time cell-text">{{ formatTime(event.first_time) }}</div>
+            <div class="trace-cell span" :title="event.span_id">
+              <div class="event-title cell-text">
+                <span v-if="isBackgroundSubagent(event)" class="agent-badge bg">BG</span>
+                {{ shortSpan(event.span_id) }}
+              </div>
+            </div>
+            <div class="trace-cell umo cell-text">{{ event.umo }}</div>
+            <div class="trace-cell sender">
+              <div class="event-sub sender-text">{{ event.sender_name || '-' }}</div>
+            </div>
+            <div class="trace-cell outline">
+              <div class="event-sub outline">{{ event.message_outline || '-' }}</div>
+            </div>
+            <div class="trace-cell fields event-controls">
+              <v-btn size="x-small" variant="text" color="primary"
+                     @click="toggleEvent(event.span_id)">
+                {{ event.collapsed ? 'Expand' : 'Collapse' }}
+                <span v-if="event.hasAgentPrepare" class="agent-dot" />
+              </v-btn>
+            </div>
           </div>
-          <div class="event-more" v-if="event.visibleCount < event.records.length">
-            <v-btn size="x-small" variant="tonal" color="primary" @click="showMore(event.span_id)">
-              Show more
-            </v-btn>
+          <div v-if="!event.collapsed" class="trace-records">
+            <div class="trace-record" v-for="record in getVisibleRecords(event)" :key="record.key"
+                 :data-record-key="record.key">
+              <div class="trace-record-time">{{ record.timeLabel }}</div>
+              <div class="trace-record-action">{{ record.action }}</div>
+              <pre class="trace-record-fields">{{ record.fieldsText }}</pre>
+            </div>
+            <div class="event-more" v-if="event.visibleCount < event.records.length">
+              <v-btn size="x-small" variant="tonal" color="primary"
+                     @click="showMore(event.span_id)">
+                Show more
+              </v-btn>
+            </div>
           </div>
         </div>
-      </div>
-      <div v-if="events.length === 0" class="trace-empty">No trace data yet.</div>
+        <div v-if="subagentEvents.length === 0" class="trace-empty">
+          {{ tm('subEmpty') }}
+        </div>
+      </section>
+
     </div>
   </div>
 </template>
@@ -92,6 +175,14 @@ export default {
       tableHeight: 'auto'
     };
   },
+  computed: {
+    mainEvents() {
+      return this.events.filter(this.isMainSpan);
+    },
+    subagentEvents() {
+      return this.events.filter(this.isSubagentSpan);
+    },
+  },
   async mounted() {
     await this.fetchTraceHistory();
     this.connectSSE();
@@ -111,6 +202,38 @@ export default {
     window.removeEventListener('resize', this.updateTableHeight);
   },
   methods: {
+    isMainSpan(e) {
+      return !e.parent_span_id && e.name === 'AstrMessageEvent';
+    },
+    isSubagentSpan(e) {
+      return /^SubAgent[A-Za-z]*:/.test(e.name || '')
+          || (!!e.parent_span_id && !this.isMainSpan(e));
+    },
+    isBackgroundSubagent(e) {
+      return /^SubAgentBackground:/.test(e.name || '');
+    },
+    shortSpan(id) {
+      if (!id) return '';
+      return id.slice(0, 8);
+    },
+    jumpToCaller(subagentEvent) {
+      const parentId = subagentEvent.parent_span_id;
+      if (!parentId) return;
+      const mainEvent = this.eventIndex[parentId];
+      if (!mainEvent) {
+        console.warn('[TraceDisplayer] Parent trace has been cleared:', parentId);
+        alert(this.tm('parentMissing'));
+        return;
+      }
+      mainEvent.collapsed = false;
+      this.pulseEvent(parentId);
+      this.$nextTick(() => {
+        const el = this.$refs.scrollEl?.querySelector(
+          `.main-section [data-span-id="${parentId}"]`
+        );
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    },
     updateTableHeight() {
       this.$nextTick(() => {
         const el = this.$refs.scrollEl;
@@ -212,6 +335,7 @@ export default {
         if (!event) {
           event = {
             span_id: trace.span_id,
+            parent_span_id: trace.parent_span_id || null,
             name: trace.name,
             umo: trace.umo,
             sender_name: trace.sender_name,
@@ -316,18 +440,10 @@ export default {
       const ms = String(date.getMilliseconds()).padStart(3, '0');
       return `${base}.${ms}`;
     },
-    shortSpan(spanId) {
-      if (!spanId) return '';
-      return spanId.slice(0, 8);
-    },
     formatFields(fields) {
       if (!fields) return '';
       try {
-        const text = JSON.stringify(fields, null, 2);
-        if (text.length > 2000) {
-          return `${text}`;
-        }
-        return text;
+        return JSON.stringify(fields, null, 2);
       } catch (e) {
         return String(fields);
       }
@@ -337,9 +453,7 @@ export default {
 </script>
 
 <style scoped>
-.trace-wrapper {
-  height: 100%;
-}
+.trace-wrapper { height: 100%; }
 
 .trace-table {
   background: transparent;
@@ -351,82 +465,154 @@ export default {
   font-family: 'Fira Code', monospace;
 }
 
+/* 段间分隔符 */
+.section-divider {
+  border: none;
+  height: 1px;
+  margin: 20px 0 4px;
+  background: rgba(15, 23, 42, 0.12);
+  border-radius: 1px;
+}
+:global(.is-dark) .section-divider {
+  background: rgba(226, 232, 240, 0.18);
+}
+
+/* Section headers */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0 8px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  margin: 16px 0 8px;
+}
+.section-title { font-weight: 600; font-size: 14px; }
+.section-title.main { color: #2563eb; }
+.section-title.sub  { color: #16a34a; }
+.section-count {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #fff;
+  font-weight: 600;
+}
+.section-count.main { background: #2563eb; }
+.section-count.sub  { background: #16a34a; }
+
+/* Trace rows */
 .trace-row {
   display: grid;
-  grid-template-columns: 200px 100px 300px 90px 180px 140px 200px 1fr;
+  grid-template-columns: 180px 100px minmax(320px, 1fr) 130px 240px 100px;
   gap: 12px;
 }
-
-.trace-group {
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  background: transparent;
-  padding: 8px 0;
+.trace-row.sub {
+  grid-template-columns: 105px 150px 110px minmax(240px, 1fr) 100px 264px 80px;
 }
-
-.trace-group.highlight {
-  background: rgba(59, 130, 246, 0.08);
-  transition: background 0.6s ease;
-}
-
-.trace-event {
-  align-items: start;
-}
-
-.trace-header {
+.trace-row.trace-header {
   font-weight: 600;
   color: #6b7280;
   border-bottom: 1px solid rgba(15, 23, 42, 0.12);
   padding-bottom: 10px;
 }
 
+/* Cells */
 .trace-cell {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
+  min-width: 0;
 }
-
-.event-title {
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.event-meta {
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 4px;
-}
-
-.event-sub {
-  font-size: 12px;
-  color: #4b5563;
-  margin-top: 2px;
+.trace-cell.outline {
+  white-space: normal;
   word-break: break-word;
 }
+.cell-text { font-size: 12px; }
+.event-title { font-weight: 600; color: #1f2937; }
+.event-sub { font-size: 12px; color: #4b5563; margin-top: 2px; word-break: break-word; }
+.event-sub.outline { color: #6b7280; }
+.event-sub.sender-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.event-controls { display: flex; justify-content: flex-end; }
 
-.event-sub.outline {
+/* SubAgent 专属 */
+.trace-section.sub .trace-group.sub {
+  border-left: 3px solid #16a34a;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: transparent;
+  padding: 8px 0 8px 8px;
+  transition: background 0.3s;
+}
+.trace-section.sub .trace-row.trace-header.sub {
+  font-weight: 600;
   color: #6b7280;
 }
-
-.event-controls {
-  display: flex;
-  justify-content: flex-end;
+.trace-section.sub .trace-group.highlight {
+  background: rgba(22, 163, 74, 0.08);
 }
 
 .agent-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 8px; height: 8px;
   border-radius: 50%;
   background: #22c55e;
   margin-left: 6px;
   vertical-align: middle;
 }
 
-.trace-cell.fields pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #4b5563;
+.agent-badge {
+  display: inline-block;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: middle;
+  letter-spacing: 0.3px;
+}
+.agent-badge.bg { background: #f59e0b; }
+
+.parent-link {
+  color: #16a34a;
+  text-decoration: underline;
+  text-decoration-color: rgba(22, 163, 74, 0.4);
+  font-family: 'Fira Code', monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+.parent-link:hover { text-decoration-color: #16a34a; }
+.parent-arrow { color: #16a34a; margin-right: 2px; font-weight: bold; }
+.parent-none  { color: #9ca3af; }
+
+/* Expanded records */
+.trace-records { padding: 4px 0 2px 0; }
+.trace-record {
+  display: grid;
+  grid-template-columns: 200px 120px 1fr;
+  gap: 8px;
+  padding: 2px 0;
+}
+.trace-record-time { color: #6b7280; font-size: 11px; }
+.trace-record-action { color: #1f2937; font-weight: 600; font-size: 11px; }
+.trace-record-fields {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  color: #4b5563; font-size: 10px;
+}
+.event-more { display: flex; justify-content: center; padding: 6px 0 2px; }
+
+/* Group */
+.trace-group {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: transparent;
+  padding: 8px 0;
+}
+.trace-group.highlight {
+  background: rgba(59, 130, 246, 0.08);
+  transition: background 0.6s ease;
 }
 
 .trace-empty {
@@ -437,51 +623,13 @@ export default {
 
 @media (max-width: 1200px) {
   .trace-row {
-    grid-template-columns: 140px 160px 300px 70px 140px 180px 1fr;
+    grid-template-columns: 130px 70px minmax(220px, 1fr) 90px 140px 70px;
   }
-
+  .trace-row.sub {
+    grid-template-columns: 95px 130px 90px minmax(160px, 1fr) 85px 200px 70px;
+  }
   .trace-cell.fields {
     grid-column: 1 / -1;
   }
-}
-
-.trace-record {
-  display: grid;
-  grid-template-columns: 200px 120px 1fr;
-  gap: 8px;
-  padding: 2px 0;
-}
-
-.trace-record:last-child {
-  border-bottom: none;
-}
-
-.trace-record-time {
-  color: #6b7280;
-  font-size: 11px;
-}
-
-.trace-record-action {
-  color: #1f2937;
-  font-weight: 600;
-  font-size: 11px;
-}
-
-.trace-record-fields {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #4b5563;
-  font-size: 10px;
-}
-
-.event-more {
-  display: flex;
-  justify-content: center;
-  padding: 6px 0 2px;
-}
-
-.trace-records {
-  padding: 4px 0 2px 0;
 }
 </style>
