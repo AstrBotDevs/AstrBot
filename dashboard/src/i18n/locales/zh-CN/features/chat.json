@@ -331,7 +331,8 @@
         "copy": "复制",
         "copySuccess": "已复制",
         "copyFail": "复制失败",
-        "goToTarget": "前往目标"
+        "goToTarget": "前往目标",
+        "encodingLabel": "编码: {encoding}"
       },
       "comment": {
         "addButton": "添加评论",
