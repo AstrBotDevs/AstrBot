@@ -6,8 +6,8 @@ import {
   isInteractiveChoicePayload,
   validateInteractiveChoice,
   truncateInteractiveChoice,
-  interactiveChoicePartFromSsePayload,
 } from "./parseInteractiveChoice";
+import { applyInteractiveChoiceSse } from "./dispatchInteractiveChoice";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -999,15 +999,17 @@ export function useMessages(options: UseMessagesOptions) {
     // ── InteractiveChoice (Plan Amendment E.1 / spec §5.1) ──────────
     // The backend's ask_user_choice plugin emits a top-level SSE event
     // (not embedded in a tool_call part) via
-    // `_push_to_webchat_back_queue`. Convert that wire-format payload
-    // into an `InteractiveChoicePart` and hand it to the Pinia store;
-    // `ChatMessageList` mirrors the same key on every props.messages
-    // update so the box appears immediately.
+    // `_push_to_webchat_back_queue`. The dispatcher:
+    //   1. parses + validates the wire payload into a part,
+    //   2. pushes the part into `botRecord.content.message` so
+    //      `ChatMessageList.vue` (which iterates `messageParts(msg)`)
+    //      can render `<InteractiveChoiceBox>` immediately,
+    //   3. mirrors the part into the Pinia store for hydrate / reconcile.
+    // The store-only path is insufficient because the v-else-if
+    // branch in `ChatMessageList.vue` reads from `messageParts(msg)`,
+    // not from the store — without step (2) the box never mounts.
     if (msgType === "interactive_choice") {
-      const part = interactiveChoicePartFromSsePayload(normalized);
-      if (part) {
-        useInteractiveChoiceStore().addChoice(part);
-      }
+      applyInteractiveChoiceSse(botRecord, normalized);
       return;
     }
 
