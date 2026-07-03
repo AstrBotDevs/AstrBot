@@ -98,6 +98,11 @@ class KnowledgeBaseManager:
         """创建新的知识库实例"""
         if embedding_provider_id is None:
             raise ValueError("创建知识库时必须提供embedding_provider_id")
+        # 预先检查名称是否已存在，避免依赖异常字符串匹配
+        existing = await self.kb_db.get_kb_by_name(kb_name)
+        if existing:
+            raise ValueError(f"知识库名称 '{kb_name}' 已存在")
+
         kb = KnowledgeBase(
             kb_name=kb_name,
             description=description,
@@ -127,8 +132,7 @@ class KnowledgeBaseManager:
                 self.kb_insts[kb.kb_id] = kb_helper
                 return kb_helper
         except Exception as e:
-            if "kb_name" in str(e):
-                raise ValueError(f"知识库名称 '{kb_name}' 已存在")
+            logger.error(f"创建知识库失败: {e}")
             raise
 
     async def get_kb(self, kb_id: str) -> KBHelper | None:
