@@ -1646,6 +1646,10 @@ function toggleTheme() {
   display: block;
 }
 
+.chat-sidebar-brand-title .chat-sidebar-brand-logo {
+  transform: translateX(-2px);
+}
+
 .chat-sidebar-brand-copy {
   min-width: 0;
   display: inline-flex;
