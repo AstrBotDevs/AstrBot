@@ -118,10 +118,10 @@ def test_custom_workspace_rejects_workspaces_root(tmp_path, monkeypatch):
         )
 
 
-def test_custom_workspace_rejects_absolute_path_outside_workspaces(
+def test_custom_workspace_accepts_absolute_path_outside_workspaces(
     tmp_path, monkeypatch
 ):
-    """Absolute custom workspace paths must not escape AstrBot workspaces."""
+    """Absolute custom workspace paths may point outside AstrBot workspaces."""
     outside_workspace = tmp_path / "outside"
     workspaces_root = tmp_path / "workspaces"
     outside_workspace.mkdir()
@@ -131,10 +131,12 @@ def test_custom_workspace_rejects_absolute_path_outside_workspaces(
         lambda: str(workspaces_root),
     )
 
-    with pytest.raises(ChatUIProjectServiceError, match="must stay within"):
-        ChatUIProjectService._normalize_workspace_config(
-            {
-                "workspace_type": "custom",
-                "workspace_path": str(outside_workspace),
-            }
-        )
+    workspace_type, workspace_path = ChatUIProjectService._normalize_workspace_config(
+        {
+            "workspace_type": "custom",
+            "workspace_path": str(outside_workspace),
+        }
+    )
+
+    assert workspace_type == "custom"
+    assert workspace_path == str(outside_workspace)
