@@ -481,7 +481,7 @@ class DiscordPlatformAdapter(Platform):
                     )
                 )
         except Exception as e:
-            logger.debug(f"Failed to build slash options for {handler!r}: {e}", exc_info=True)
+            logger.warning(f"Failed to build slash options for {handler!r}: {e}", exc_info=True)
         return options
 
     def _create_dynamic_callback(self, cmd_name: str, param_names: list | None = None):
