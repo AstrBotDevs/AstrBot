@@ -861,7 +861,9 @@ class PluginManager:
                         break
 
             if specified_module_path:
-                inactivated_plugins = await sp.global_get("inactivated_plugins", [])
+                inactivated_plugins = (
+                    await sp.global_get("inactivated_plugins", [])
+                ) or []
                 if specified_module_path in inactivated_plugins:
                     # 已停用插件没有实例，无需重载；此处若继续执行 _unbind_plugin，
                     # 会将其在 __init__ 中通过 add_llm_tools 注册的工具从
