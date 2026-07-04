@@ -26,6 +26,10 @@ import {
 } from "./dispatchInteractiveChoice.ts";
 import type { InteractiveChoicePart } from "./parseInteractiveChoice.ts";
 import { useInteractiveChoiceStore } from "../stores/interactiveChoice.ts";
+// Bug Y1 fix: dispatcher now requires an explicit UMO so the store
+// write cannot accidentally pool two sessions together.
+const TEST_UMO = "webchat:sse-test!1!sess";
+
 
 const SPEC_PART: InteractiveChoicePart = {
   type: "interactive_choice",
@@ -66,7 +70,7 @@ beforeEach(() => {
 
 test("applyInteractiveChoiceSse pushes the part into botRecord.content.message", () => {
   const botRecord = makeBotRecord();
-  applyInteractiveChoiceSse(botRecord, VALID_SSE_PAYLOAD);
+  applyInteractiveChoiceSse(TEST_UMO, botRecord, VALID_SSE_PAYLOAD);
 
   assert.equal(botRecord.content.message.length, 1);
   const part = botRecord.content.message[0] as InteractiveChoicePart;
@@ -81,7 +85,7 @@ test("applyInteractiveChoiceSse clears the loading state", () => {
   const botRecord = makeBotRecord();
   assert.equal(botRecord.content.isLoading, true);
 
-  applyInteractiveChoiceSse(botRecord, VALID_SSE_PAYLOAD);
+  applyInteractiveChoiceSse(TEST_UMO, botRecord, VALID_SSE_PAYLOAD);
 
   assert.equal(botRecord.content.isLoading, false);
 });
@@ -90,10 +94,10 @@ test("applyInteractiveChoiceSse mirrors the part into the Pinia store", () => {
   const botRecord = makeBotRecord();
   const store = useInteractiveChoiceStore();
 
-  applyInteractiveChoiceSse(botRecord, VALID_SSE_PAYLOAD);
+  applyInteractiveChoiceSse(TEST_UMO, botRecord, VALID_SSE_PAYLOAD);
 
-  const stored = store.activeChoices[SPEC_PART.request_id];
-  assert.ok(stored, "store must contain an entry keyed by request_id");
+  const stored = store.activeChoices[TEST_UMO]?.[SPEC_PART.request_id];
+  assert.ok(stored, "store must contain an entry keyed by TEST_UMO.request_id");
   assert.equal(stored.request_id, SPEC_PART.request_id);
 });
 
@@ -101,11 +105,34 @@ test("applyInteractiveChoiceSse is a no-op when the payload fails validation", (
   const botRecord = makeBotRecord();
   const badPayload = { type: "interactive_choice", data: {} };
 
-  applyInteractiveChoiceSse(botRecord, badPayload);
+  applyInteractiveChoiceSse(TEST_UMO, botRecord, badPayload);
 
   assert.equal(botRecord.content.message.length, 0);
   assert.equal(
-    Object.keys(useInteractiveChoiceStore().activeChoices).length,
+    Object.keys(
+      useInteractiveChoiceStore().activeChoices[TEST_UMO] ?? {},
+    ).length,
     0,
   );
 });
+
+test("applyInteractiveChoiceSse throws when umo is missing (Bug Y1)", () => {
+  const botRecord = makeBotRecord();
+  assert.throws(
+    () => applyInteractiveChoiceSse("", botRecord, VALID_SSE_PAYLOAD),
+    /missing required 'umo'/,
+  );
+});
+
+test("applyInteractiveChoiceSse writes under the supplied UMO bucket, not a global pool (Bug Y1)", () => {
+  const botRecord = makeBotRecord();
+  const SSO_UMO = "webchat:sso!1!sess";
+  applyInteractiveChoiceSse(SSO_UMO, botRecord, VALID_SSE_PAYLOAD);
+
+  const store = useInteractiveChoiceStore();
+  // The part lives in the supplied bucket only — not in any other
+  // session's bucket and not at the top level.
+  assert.ok(store.activeChoices[SSO_UMO]?.[SPEC_PART.request_id]);
+  assert.equal(store.activeChoices[TEST_UMO], undefined);
+});
+

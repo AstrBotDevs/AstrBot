@@ -55,14 +55,26 @@ export interface BotMessageLike {
  *     clears `isLoading`.
  *   - Mirrors the part into `useInteractiveChoiceStore().activeChoices`
  *     keyed by `request_id` (store dedups by id internally).
+ *
+ * The `umo` argument scopes the write to a single session's bucket.
+ * It is **required** (Bug Y1 fix — see `stores/interactiveChoice.ts`
+ * header). Callers must have the live UMO handy; the SSE pipeline in
+ * `useMessages.ts` already passes `sessionId`, which is the same
+ * value as `props.currentUmo` on the message list side.
  */
 export function applyInteractiveChoiceSse(
+  umo: string,
   botRecord: BotMessageLike,
   payload: unknown,
 ): void {
+  if (!umo) {
+    throw new Error(
+      "applyInteractiveChoiceSse: missing required 'umo' (Bug Y1 fix)",
+    );
+  }
   const part = interactiveChoicePartFromSsePayload(payload);
   if (!part) return;
   botRecord.content.message.push(part);
   botRecord.content.isLoading = false;
-  useInteractiveChoiceStore().addChoice(part);
+  useInteractiveChoiceStore().addChoice(umo, part);
 }

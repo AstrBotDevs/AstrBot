@@ -1009,7 +1009,17 @@ export function useMessages(options: UseMessagesOptions) {
     // branch in `ChatMessageList.vue` reads from `messageParts(msg)`,
     // not from the store — without step (2) the box never mounts.
     if (msgType === "interactive_choice") {
-      applyInteractiveChoiceSse(botRecord, normalized);
+      // Bug Y1 fix: scope the store write to the live session. We
+      // guard on `sessionId` for safety — if a caller forgets to
+      // thread sessionId through to a stream consumer, we skip the
+      // write rather than dump the part into a phantom bucket.
+      if (!sessionId) {
+        console.warn(
+          "[interactiveChoice] SSE event without sessionId; dropping",
+        );
+        return;
+      }
+      applyInteractiveChoiceSse(sessionId, botRecord, normalized);
       return;
     }
 

@@ -11,7 +11,11 @@
         class="message-row"
         :class="isUserMessage(msg) ? 'from-user' : 'from-bot'"
       >
-        <v-avatar v-if="!isUserMessage(msg)" class="bot-avatar" :size="avatarSize">
+        <v-avatar
+          v-if="!isUserMessage(msg)"
+          class="bot-avatar"
+          :size="avatarSize"
+        >
           <v-progress-circular
             v-if="isMessageStreaming(msg, msgIndex)"
             class="bot-streaming-spinner"
@@ -148,7 +152,9 @@
                       @click="scrollToMessage(part.message_id)"
                     >
                       <v-icon size="15">mdi-reply</v-icon>
-                      <span>{{ replyPreview(part.message_id, part.selected_text) }}</span>
+                      <span>{{
+                        replyPreview(part.message_id, part.selected_text)
+                      }}</span>
                     </button>
 
                     <div
@@ -159,7 +165,9 @@
                     </div>
 
                     <div
-                      v-else-if="part.type === 'plain' && messageThreads(msg).length"
+                      v-else-if="
+                        part.type === 'plain' && messageThreads(msg).length
+                      "
                       class="threaded-message-content"
                     >
                       <ThreadedMarkdownMessagePart
@@ -188,7 +196,10 @@
                       type="button"
                       @click="openImage(partUrl(part))"
                     >
-                      <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+                      <img
+                        :src="partUrl(part)"
+                        :alt="part.filename || 'image'"
+                      />
                     </button>
 
                     <audio
@@ -221,12 +232,18 @@
                       />
                     </div>
 
-                    <div v-else-if="part.type === 'tool_call'" class="tool-call-block">
+                    <div
+                      v-else-if="part.type === 'tool_call'"
+                      class="tool-call-block"
+                    >
                       <template
                         v-for="tool in part.tool_calls || []"
                         :key="tool.id || tool.name"
                       >
-                        <ToolCallItem v-if="isIPythonToolCall(tool)" :is-dark="isDark">
+                        <ToolCallItem
+                          v-if="isIPythonToolCall(tool)"
+                          :is-dark="isDark"
+                        >
                           <template #label>
                             <v-icon size="16">mdi-code-json</v-icon>
                             <span>{{ tool.name || "python" }}</span>
@@ -253,7 +270,9 @@
 
                     <InteractiveChoiceBox
                       v-else-if="part.type === 'interactive_choice'"
+                      :key="(part as InteractiveChoicePart).request_id"
                       :part="part as unknown as InteractiveChoicePart"
+                      :umo="props.currentUmo"
                       :is-dark="isDark"
                       :is-ignored="isInteractiveChoiceIgnored(msg)"
                       @submit="onInteractiveChoiceSubmit"
@@ -314,19 +333,30 @@
                 </div>
                 <div class="stats-row">
                   <span>{{ tm("stats.inputTokens") }}</span>
-                  <strong>{{ inputTokens(messageContent(msg).agentStats) }}</strong>
+                  <strong>{{
+                    inputTokens(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
                 <div class="stats-row">
                   <span>{{ tm("stats.outputTokens") }}</span>
-                  <strong>{{ outputTokens(messageContent(msg).agentStats) }}</strong>
+                  <strong>{{
+                    outputTokens(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
-                <div v-if="agentTtft(messageContent(msg).agentStats)" class="stats-row">
+                <div
+                  v-if="agentTtft(messageContent(msg).agentStats)"
+                  class="stats-row"
+                >
                   <span>{{ tm("stats.ttft") }}</span>
-                  <strong>{{ agentTtft(messageContent(msg).agentStats) }}</strong>
+                  <strong>{{
+                    agentTtft(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
                 <div class="stats-row">
                   <span>{{ tm("stats.duration") }}</span>
-                  <strong>{{ agentDuration(messageContent(msg).agentStats) }}</strong>
+                  <strong>{{
+                    agentDuration(messageContent(msg).agentStats)
+                  }}</strong>
                 </div>
               </v-card>
             </v-menu>
@@ -343,7 +373,9 @@
                   type="button"
                 >
                   <v-icon size="14">mdi-source-branch</v-icon>
-                  <span>{{ threadCountLabel(messageThreads(msg).length) }}</span>
+                  <span>{{
+                    threadCountLabel(messageThreads(msg).length)
+                  }}</span>
                 </button>
               </template>
               <v-list-item
@@ -488,7 +520,10 @@ const emit = defineEmits<{
   openThread: [thread: ChatThread];
   openReasoning: [payload: { message: ChatRecord; blockIndex: number }];
   openRefs: [refs: unknown];
-  submitChoice: [requestId: string, payload: { choice_id: string; free_text: string }];
+  submitChoice: [
+    requestId: string,
+    payload: { choice_id: string; free_text: string },
+  ];
 }>();
 
 setCustomComponents("chat-message", {
@@ -529,8 +564,14 @@ async function onInteractiveChoiceSubmit(
   requestId: string,
   payload: { choice_id: string; free_text: string },
 ): Promise<void> {
+  // Bug Y1 fix: carry the current UMO into the store so the
+  // removeChoice() cleanup targets this session's bucket only.
   try {
-    await interactiveChoiceStore.submitChoice(requestId, payload);
+    await interactiveChoiceStore.submitChoice(
+      props.currentUmo,
+      requestId,
+      payload,
+    );
   } catch (e) {
     console.error("[interactiveChoice] submit failed:", e);
   }
@@ -552,8 +593,19 @@ function mirrorInteractiveChoiceParts(records: ChatRecord[]): void {
     for (const part of messageParts(message)) {
       if (!isInteractiveChoicePayload(part)) continue;
       if (typeof part.request_id !== "string" || !part.request_id) continue;
-      if (interactiveChoiceStore.activeChoices[part.request_id]) continue;
-      interactiveChoiceStore.addChoice(truncateInteractiveChoice(part));
+      // Bug Y1 fix: dedup against the per-UMO bucket, not a flat
+      // global map, so a part belonging to another session cannot
+      // block re-mirroring here.
+      if (
+        interactiveChoiceStore.activeChoices[props.currentUmo]?.[
+          part.request_id
+        ]
+      )
+        continue;
+      interactiveChoiceStore.addChoice(
+        props.currentUmo,
+        truncateInteractiveChoice(part),
+      );
     }
   }
 }
@@ -561,9 +613,40 @@ function mirrorInteractiveChoiceParts(records: ChatRecord[]): void {
 onMounted(() => {
   // Spec §5.2: hydrate from localStorage so a hard refresh during a
   // pending choice does not lose the prompt.
-  interactiveChoiceStore.hydrate();
+  //
+  // Bug Y1 / Y2 fix: hydrate is scoped to a single UMO so a refresh
+  // on session B cannot drag in session A's pending boxes. Passing
+  // `null` / empty is a programmer error here — the parent always
+  // hands us a real UMO before mount.
+  interactiveChoiceStore.hydrate(props.currentUmo);
+  // Bug X1 / X2 fix: re-attach orphan store parts (those restored
+  // from localStorage but absent from chat history) to the nearest
+  // bot message so <InteractiveChoiceBox> has a render source after
+  // a hard refresh. Must run *before* `mirrorInteractiveChoiceParts`
+  // so the mirror's dedup check (`if (activeChoices[id]) continue`)
+  // sees the injected parts and skips re-mirroring — preventing a
+  // reactive-update loop.
+  //
+  // Bug Y1: scope the scan to the current UMO so injected orphan
+  // parts come only from this session's bucket — not every session's.
+  const injected = interactiveChoiceStore.injectOrphans(
+    props.currentUmo,
+    props.messages as unknown as Parameters<
+      typeof interactiveChoiceStore.injectOrphans
+    >[1],
+  );
+  if (injected > 0) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[interactiveChoice] injected ${injected} orphan part(s) from store`,
+    );
+  }
   // Mirror whatever interactive_choice parts the parent already loaded.
   mirrorInteractiveChoiceParts(props.messages);
+  // Refresh-safe ignored-set: scan messages so any choice box that
+  // already had a later user message in history is marked ignored
+  // now, even if hydrate came back empty (e.g. fresh tab).
+  recomputeIgnored(props.messages);
   // Spec §5.2: reconcile against the backend's view of pending requests
   // for this conversation so a tab-switch catches up.
   if (props.currentUmo) {
@@ -577,6 +660,9 @@ watch(
   () => props.messages,
   (next) => {
     mirrorInteractiveChoiceParts(next);
+    // Track "this ask_user_choice has been passed over" each time
+    // the message stream mutates. Idempotent — see `recomputeIgnored`.
+    recomputeIgnored(next);
   },
   { deep: true },
 );
@@ -584,23 +670,100 @@ watch(
 watch(
   () => props.currentUmo,
   (nextUmo) => {
-    if (nextUmo) {
-      void interactiveChoiceStore.reconcile(nextUmo);
+    if (!nextUmo) return;
+    // Bug Y1 fix: re-hydrate under the new UMO *first* so the store
+    // drops the previous session's bucket, otherwise `reconcile`
+    // would still leak the old parts into messages on the next
+    // render. `hydrate` is the documented single entry point for
+    // switching sessions.
+    interactiveChoiceStore.hydrate(nextUmo);
+    const injected = interactiveChoiceStore.injectOrphans(
+      nextUmo,
+      props.messages as unknown as Parameters<
+        typeof interactiveChoiceStore.injectOrphans
+      >[1],
+    );
+    if (injected > 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[interactiveChoice] umo-switch injected ${injected} orphan part(s)`,
+      );
     }
+    void interactiveChoiceStore.reconcile(nextUmo);
   },
 );
 
 /**
- * 判定本 bot message 之后是否出现了 user message(用于 InteractiveChoiceBox 的 isIgnored)。
- * 基于 messages 数组顺序,不需要额外 store / event bus(spec §4.2 ignored 信号协议)。
+ * 判断本 bot message 上挂的 InteractiveChoiceBox 是否已进入"已忽略"
+ * 状态 — 即后续出现了 user message,用户已对这条 ask_user_choice
+ * 不再作答。
+ *
+ * 优先读 store 里持久化的忽略集合(refresh-safe);回落为基于 messages
+ * 数组顺序的推导,作为消息流变化时的即时判定。
  */
 function isInteractiveChoiceIgnored(message: ChatRecord): boolean {
+  if (!props.currentUmo) return false;
+  // 1) Persisted wins: if any interactive_choice request_id on this
+  //    bot message was already marked "passed over by a user message"
+  //    by a previous render pass, treat the whole box as ignored —
+  //    even if history reload has not yet caught up to the user_msg
+  //    that flipped it.
+  const parts = messageParts(message);
+  for (const part of parts) {
+    if (
+      isInteractiveChoicePayload(part) &&
+      typeof part.request_id === "string" &&
+      interactiveChoiceStore.isIgnored(props.currentUmo, part.request_id)
+    ) {
+      return true;
+    }
+  }
+  // 2) Fallback: any user message later in the messages array means
+  //    this box is past tense — derived purely from in-memory state.
   const idx = props.messages.findIndex((m) => m === message);
   if (idx < 0) return false;
   for (let i = idx + 1; i < props.messages.length; i += 1) {
     if (isUserMessage(props.messages[i])) return true;
   }
   return false;
+}
+
+/**
+ * Walk `messages` backwards and mark every interactive_choice
+ * `request_id` that sits *before* a user message as ignored in the
+ * store. Cheap (O(n) since the merge happens in a single pass), and
+ * `markIgnored` is itself idempotent so it's safe to call on every
+ * messages update.
+ *
+ * Called from `onMounted` and the messages watcher. The watcher
+ * already invokes `mirrorInteractiveChoiceParts` so a new bot chunk
+ * carrying an interactive_choice part gets this scan right behind
+ * it.
+ */
+function recomputeIgnored(records: ChatRecord[]): void {
+  if (!props.currentUmo) return;
+  const toIgnore: string[] = [];
+  let hasUserAfter = false;
+  for (let i = records.length - 1; i >= 0; i -= 1) {
+    const m = records[i];
+    if (isUserMessage(m)) {
+      hasUserAfter = true;
+      continue;
+    }
+    if (!hasUserAfter) continue;
+    for (const part of messageParts(m)) {
+      if (
+        isInteractiveChoicePayload(part) &&
+        typeof part.request_id === "string" &&
+        part.request_id
+      ) {
+        toIgnore.push(part.request_id);
+      }
+    }
+  }
+  if (toIgnore.length > 0) {
+    interactiveChoiceStore.markIgnored(props.currentUmo, toIgnore);
+  }
 }
 
 function messageContent(message: ChatRecord): ChatContent {
@@ -626,13 +789,13 @@ function userAttachmentParts(message: ChatRecord) {
 function hasImageOnlyAttachments(message: ChatRecord) {
   const attachments = userAttachmentParts(message);
   return (
-    attachments.length > 0 &&
-    attachments.every((part) => part.type === "image")
+    attachments.length > 0 && attachments.every((part) => part.type === "image")
   );
 }
 
 function bubbleParts(message: ChatRecord) {
-  if (!isUserMessage(message)) return displayMessageParts(messageContent(message));
+  if (!isUserMessage(message))
+    return displayMessageParts(messageContent(message));
   return messageParts(message).filter((part) => !isAttachmentPart(part));
 }
 
@@ -886,8 +1049,8 @@ function normalizeRefs(refs: unknown) {
   const used = Array.isArray((refs as any)?.used)
     ? (refs as any).used
     : Array.isArray(refs)
-      ? refs
-      : [];
+    ? refs
+    : [];
   return { used: normalizeRefItems(used) };
 }
 
