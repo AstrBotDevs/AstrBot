@@ -5455,6 +5455,8 @@ components:
           type: string
         filename:
           type: string
+        stored_filename:
+          type: string
         mime_type:
           type: string
       additionalProperties: true

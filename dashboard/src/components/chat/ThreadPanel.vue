@@ -70,6 +70,7 @@ import {
   payloadText,
   upsertToolCall,
   type ChatRecord,
+  type MessagePart,
   type ChatThread,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
@@ -305,13 +306,22 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
 
   if (["image", "record", "file", "video"].includes(type)) {
     markMessageStarted(botRecord);
-    const filename = String(data)
+    const rawFilename = String(data)
       .replace("[IMAGE]", "")
       .replace("[RECORD]", "")
       .replace("[FILE]", "")
-      .replace("[VIDEO]", "")
-      .split("|", 1)[0];
-    botRecord.content.message.push({ type, filename });
+      .replace("[VIDEO]", "");
+    const separatorIndex = rawFilename.indexOf("|");
+    const storedFilename =
+      separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
+    const displayFilename =
+      separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
+    const filename = displayFilename || storedFilename;
+    const mediaPart: MessagePart = { type, filename };
+    if (storedFilename && storedFilename !== filename) {
+      mediaPart.stored_filename = storedFilename;
+    }
+    botRecord.content.message.push(mediaPart);
   }
 }
 
