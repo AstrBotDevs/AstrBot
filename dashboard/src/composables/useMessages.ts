@@ -8,6 +8,7 @@ import {
   truncateInteractiveChoice,
 } from "./parseInteractiveChoice";
 import { applyInteractiveChoiceSse } from "./dispatchInteractiveChoice";
+import { abandonPendingInteractiveChoices } from "./abandonPendingInteractiveChoices";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -286,7 +287,11 @@ export function useMessages(options: UseMessagesOptions) {
     const tasks: Promise<void>[] = [];
     for (const record of records) {
       for (const part of record.content?.message || []) {
-        if (mediaTypes.includes(part.type) && !part.embedded_url && (part.attachment_id || part.filename)) {
+        if (
+          mediaTypes.includes(part.type) &&
+          !part.embedded_url &&
+          (part.attachment_id || part.filename)
+        ) {
           tasks.push(resolvePartMedia(part));
         }
       }
@@ -322,6 +327,13 @@ export function useMessages(options: UseMessagesOptions) {
   }: CreateLocalExchangeOptions) {
     loadedSessions[sessionId] = true;
     messagesBySession[sessionId] = messagesBySession[sessionId] || [];
+
+    // Bug 3 fix: see `abandonPendingInteractiveChoices` for the full
+    // rationale. A typed chat-input message abandons any pending
+    // ask_user_choice prompt — mark the current active set ignored
+    // before pushing the new user_msg so the runtime reverse-walk
+    // in `ChatMessageList.vue` no longer has to derive this state.
+    abandonPendingInteractiveChoices(sessionId);
 
     const userRecord: ChatRecord = {
       id: `local-user-${messageId}`,
@@ -403,7 +415,9 @@ export function useMessages(options: UseMessagesOptions) {
       content: content as unknown as Record<string, unknown>,
     });
     const payload = response.data?.data || {};
-    const updated = payload.message ? normalizeHistoryRecord(payload.message) : null;
+    const updated = payload.message
+      ? normalizeHistoryRecord(payload.message)
+      : null;
     if (updated) {
       Object.assign(record, updated);
       await resolveRecordMedia([record]);
@@ -492,17 +506,20 @@ export function useMessages(options: UseMessagesOptions) {
     };
 
     try {
-      const response = await fetchWithAuth(chatApi.regenerateMessageUrl(sessionId, targetMessageId), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetchWithAuth(
+        chatApi.regenerateMessageUrl(sessionId, targetMessageId),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            selected_provider: selectedProvider,
+            selected_model: selectedModel,
+          }),
+          signal: abort.signal,
         },
-        body: JSON.stringify({
-          selected_provider: selectedProvider,
-          selected_model: selectedModel,
-        }),
-        signal: abort.signal,
-      });
+      );
       if (!response.ok || !response.body) {
         throw new Error(`Regenerate failed: ${response.status}`);
       }
@@ -517,7 +534,10 @@ export function useMessages(options: UseMessagesOptions) {
       });
     } catch (error) {
       if (!abort.signal.aborted) {
-        appendPlain(botRecord, `\n\n${String((error as Error)?.message || error)}`);
+        appendPlain(
+          botRecord,
+          `\n\n${String((error as Error)?.message || error)}`,
+        );
         console.error("Regenerate failed:", error);
       }
     } finally {
@@ -554,7 +574,10 @@ export function useMessages(options: UseMessagesOptions) {
     const normalizedContent: ChatContent = {
       type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
       message: normalizedMessage,
-      reasoning: extractReasoningText(normalizedMessage, content.reasoning || ""),
+      reasoning: extractReasoningText(
+        normalizedMessage,
+        content.reasoning || "",
+      ),
       agentStats: content.agentStats || content.agent_stats,
       refs: content.refs,
     };
@@ -916,7 +939,8 @@ export function useMessages(options: UseMessagesOptions) {
   ): ToolCall | null {
     if (callId == null) return null;
     for (const part of record.content.message) {
-      if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
+      if (part.type !== "tool_call" || !Array.isArray(part.tool_calls))
+        continue;
       const matched = part.tool_calls.find((item) => item.id === callId);
       if (matched) return matched;
     }
@@ -1045,9 +1069,9 @@ export function useMessages(options: UseMessagesOptions) {
           const matched = findToolCallById(botRecord, callId);
           const toolName = matched?.name;
           if (
-            toolName
-            && TODO_TOOL_NAMES.has(toolName)
-            && typeof (parsed as any).result === "string"
+            toolName &&
+            TODO_TOOL_NAMES.has(toolName) &&
+            typeof (parsed as any).result === "string"
           ) {
             const snapshot = parseTodoToolResult(
               toolName,
@@ -1166,7 +1190,10 @@ export function normalizeMessageParts(
   fallbackReasoning = "",
 ): MessagePart[] {
   const normalizedParts = normalizePartsInternal(parts);
-  if (fallbackReasoning && !normalizedParts.some((part) => part.type === "think")) {
+  if (
+    fallbackReasoning &&
+    !normalizedParts.some((part) => part.type === "think")
+  ) {
     normalizedParts.unshift({ type: "think", think: fallbackReasoning });
   }
   return normalizedParts;
@@ -1212,16 +1239,18 @@ export function reasoningActivityTitle(
   counts: ReturnType<typeof reasoningActivityCounts>,
   tm: (key: string, params?: Record<string, string | number>) => string,
 ) {
-  return [
-    counts.thinkCount > 0
-      ? tm("reasoning.thinkSummary", { count: counts.thinkCount })
-      : "",
-    counts.toolCount > 0
-      ? tm("reasoning.toolSummary", { count: counts.toolCount })
-      : "",
-  ]
-    .filter(Boolean)
-    .join(tm("reasoning.summarySeparator")) || tm("reasoning.thinking");
+  return (
+    [
+      counts.thinkCount > 0
+        ? tm("reasoning.thinkSummary", { count: counts.thinkCount })
+        : "",
+      counts.toolCount > 0
+        ? tm("reasoning.toolSummary", { count: counts.toolCount })
+        : "",
+    ]
+      .filter(Boolean)
+      .join(tm("reasoning.summarySeparator")) || tm("reasoning.thinking")
+  );
 }
 
 export function thinkingParts(content: ChatContent): MessagePart[] {
@@ -1403,7 +1432,8 @@ export function upsertToolCall(record: ChatRecord, toolCall: any) {
   const targetId = toolCall.id;
   if (targetId != null) {
     for (const part of record.content.message) {
-      if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
+      if (part.type !== "tool_call" || !Array.isArray(part.tool_calls))
+        continue;
       const matched = part.tool_calls.find((item) => item.id === targetId);
       if (matched) {
         Object.assign(matched, toolCall);
@@ -1411,7 +1441,10 @@ export function upsertToolCall(record: ChatRecord, toolCall: any) {
       }
     }
   }
-  record.content.message.push({ type: "tool_call", tool_calls: [{ ...toolCall }] });
+  record.content.message.push({
+    type: "tool_call",
+    tool_calls: [{ ...toolCall }],
+  });
 }
 
 export function finishToolCall(record: ChatRecord, result: any) {

@@ -656,13 +656,24 @@ onMounted(() => {
 
 // React to (a) new parts streamed in via the chat SSE pipeline and
 // (b) conversation switches that change the current umo.
+//
+// Bug 3 fix: `recomputeIgnored` is no longer called here. Earlier
+// runs reverse-walked `props.messages` on every SSE mutation to
+// derive the "已忽略" set, but that algorithm is order-sensitive:
+// when the user types a chat-input reply to Q1, the LLM's response
+// may carry Q2 in the same bot record as the answer text, and the
+// runtime walk would briefly mis-classify Q2 as ignored because
+// its `hasUserAfter` reset was satisfied by the typed-input user
+// message — not by any user activity that followed Q2. Driving
+// "已忽略" from an explicit event in
+// `useMessages.createLocalExchange` (the chat-input send path)
+// replaces the derivation with a deterministic, race-free trigger.
+// `recomputeIgnored` is still called once from `onMounted` below
+// so a fresh tab back-fills ignored state from chat history.
 watch(
   () => props.messages,
   (next) => {
     mirrorInteractiveChoiceParts(next);
-    // Track "this ask_user_choice has been passed over" each time
-    // the message stream mutates. Idempotent — see `recomputeIgnored`.
-    recomputeIgnored(next);
   },
   { deep: true },
 );

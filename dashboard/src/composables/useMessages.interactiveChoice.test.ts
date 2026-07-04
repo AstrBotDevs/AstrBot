@@ -24,12 +24,12 @@ import {
   applyInteractiveChoiceSse,
   type BotMessageLike,
 } from "./dispatchInteractiveChoice.ts";
+import { abandonPendingInteractiveChoices } from "./abandonPendingInteractiveChoices.ts";
 import type { InteractiveChoicePart } from "./parseInteractiveChoice.ts";
 import { useInteractiveChoiceStore } from "../stores/interactiveChoice.ts";
 // Bug Y1 fix: dispatcher now requires an explicit UMO so the store
 // write cannot accidentally pool two sessions together.
 const TEST_UMO = "webchat:sse-test!1!sess";
-
 
 const SPEC_PART: InteractiveChoicePart = {
   type: "interactive_choice",
@@ -109,9 +109,8 @@ test("applyInteractiveChoiceSse is a no-op when the payload fails validation", (
 
   assert.equal(botRecord.content.message.length, 0);
   assert.equal(
-    Object.keys(
-      useInteractiveChoiceStore().activeChoices[TEST_UMO] ?? {},
-    ).length,
+    Object.keys(useInteractiveChoiceStore().activeChoices[TEST_UMO] ?? {})
+      .length,
     0,
   );
 });
@@ -136,3 +135,88 @@ test("applyInteractiveChoiceSse writes under the supplied UMO bucket, not a glob
   assert.equal(store.activeChoices[TEST_UMO], undefined);
 });
 
+// Bug 3 fix: when the user types a chat-input message while an
+// ask_user_choice prompt is pending, the prompt must be marked
+// ignored. The deterministic trigger is
+// `abandonPendingInteractiveChoices(umo)`, which
+// `useMessages.createLocalExchange` calls before pushing the new
+// user_msg. The old approach — a runtime reverse-walk of
+// `props.messages` on every SSE mutation — could mis-classify a
+// follow-up Q2 (emitted in the same bot record as the response to
+// the typed input) as ignored, because the walk's `hasUserAfter`
+// reset was satisfied by the typed-input user message itself.
+// Tested in isolation here so the regression suite can run under
+// the raw `node --test` runner without resolving the `@/api`
+// aliases that `useMessages.ts` pulls in.
+test("abandonPendingInteractiveChoices flags every active request_id (Bug 3)", () => {
+  const store = useInteractiveChoiceStore();
+  store.hydrate(TEST_UMO);
+  store.addChoice(TEST_UMO, {
+    type: "interactive_choice",
+    request_id: "req-pending-1",
+    prompt: "Pick a color",
+    options: [
+      { id: "A", label: "Red" },
+      { id: "B", label: "Blue" },
+    ],
+    expires_at: 9_999_999_999,
+  });
+  store.addChoice(TEST_UMO, {
+    type: "interactive_choice",
+    request_id: "req-pending-2",
+    prompt: "Pick a fruit",
+    options: [
+      { id: "A", label: "Apple" },
+      { id: "B", label: "Banana" },
+    ],
+    expires_at: 9_999_999_999,
+  });
+  assert.equal(store.isIgnored(TEST_UMO, "req-pending-1"), false);
+  assert.equal(store.isIgnored(TEST_UMO, "req-pending-2"), false);
+
+  // The chat-input send path calls this before pushing the new
+  // user_msg.
+  abandonPendingInteractiveChoices(TEST_UMO);
+
+  // Both pending prompts are now flagged ignored. A follow-up Q2
+  // emitted by the LLM after the typed reply will arrive in a
+  // later bot record and will *not* be in this set — it has not
+  // been "passed over" by a typed message yet.
+  assert.equal(store.isIgnored(TEST_UMO, "req-pending-1"), true);
+  assert.equal(store.isIgnored(TEST_UMO, "req-pending-2"), true);
+});
+
+test("abandonPendingInteractiveChoices is a no-op when no choice is active (Bug 3)", () => {
+  const store = useInteractiveChoiceStore();
+  store.hydrate(TEST_UMO);
+  // No addChoice — activeChoices[TEST_UMO] is undefined.
+  abandonPendingInteractiveChoices(TEST_UMO);
+  // No ignored bucket is created, so the in-memory state stays
+  // empty (the `persist` call would warn "localStorage is not
+  // defined" under the raw `node --test` runner, but it must not
+  // throw and must not write into the store).
+  const ignoredStates = (
+    store as unknown as { ignoredStates: Record<string, unknown> }
+  ).ignoredStates;
+  assert.equal(ignoredStates[TEST_UMO], undefined);
+});
+
+test("abandonPendingInteractiveChoices is a no-op for an empty umo (Bug 3)", () => {
+  const store = useInteractiveChoiceStore();
+  store.hydrate(TEST_UMO);
+  store.addChoice(TEST_UMO, {
+    type: "interactive_choice",
+    request_id: "req-still-active",
+    prompt: "Pick",
+    options: [
+      { id: "A", label: "a" },
+      { id: "B", label: "b" },
+    ],
+    expires_at: 9_999_999_999,
+  });
+  // An empty umo is treated as a no-op (defensive — useMessages
+  // always has a real sessionId by this point, but the helper must
+  // not blow up if a future caller forgets to guard).
+  abandonPendingInteractiveChoices("");
+  assert.equal(store.isIgnored(TEST_UMO, "req-still-active"), false);
+});

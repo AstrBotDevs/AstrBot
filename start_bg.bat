@@ -13,14 +13,7 @@ set "SCRIPT_NAME=main_bg.py"
 set "PYW="
 
 REM ---- 1. locate pythonw.exe ----
-if exist "%~dp0.venv\Scripts\pythonw.exe" (
-    set "PYW=%~dp0.venv\Scripts\pythonw.exe"
-    goto found
-)
-if exist "%~dp0venv\Scripts\pythonw.exe" (
-    set "PYW=%~dp0venv\Scripts\pythonw.exe"
-    goto found
-)
+
 if exist "D:\anaconda3\envs\astrbot\pythonw.exe" (
     set "PYW=D:\anaconda3\envs\astrbot\pythonw.exe"
     goto found
