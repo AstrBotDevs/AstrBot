@@ -1,6 +1,5 @@
 """Unit tests for the DashScope embedding provider."""
 
-import dashscope
 import pytest
 
 from astrbot.core.provider.sources.dashscope_embedding_source import (
@@ -30,6 +29,16 @@ def _make_provider(config: dict | None = None) -> DashScopeEmbeddingProvider:
     config = config or {}
     config.setdefault("embedding_api_key", "sk-test")
     return DashScopeEmbeddingProvider(config, {})
+
+
+def _patch_sdk(monkeypatch, *, text=None, multimodal=None):
+    """Patch TextEmbedding.call / MultiModalEmbedding.call in the source module."""
+    import astrbot.core.provider.sources.dashscope_embedding_source as mod
+
+    if text is not None:
+        monkeypatch.setattr(mod.TextEmbedding, "call", text)
+    if multimodal is not None:
+        monkeypatch.setattr(mod.MultiModalEmbedding, "call", multimodal)
 
 
 # ---------------------------------------------------------------------------
@@ -78,14 +87,19 @@ def test_user_values_preserved():
 
 @pytest.mark.asyncio
 async def test_text_model_routes_to_text_embedding(monkeypatch):
-    provider = _make_provider({"embedding_dimensions": 1024})
+    provider = _make_provider(
+        {
+            "embedding_api_base": "https://custom.example.com/api/v1",
+            "embedding_dimensions": 1024,
+        }
+    )
     captured: dict = {}
 
     def fake_call(**kwargs):
         captured["kwargs"] = kwargs
-        captured["base_http_api_url"] = dashscope.base_http_api_url
         return _FakeResponse(
             output={
+                # Intentionally out of order to verify text_index sorting.
                 "embeddings": [
                     {"embedding": [0.4, 0.5], "text_index": 1},
                     {"embedding": [0.1, 0.2], "text_index": 0},
@@ -93,13 +107,12 @@ async def test_text_model_routes_to_text_embedding(monkeypatch):
             }
         )
 
-    import astrbot.core.provider.sources.dashscope_embedding_source as mod
-
-    monkeypatch.setattr(mod.TextEmbedding, "call", fake_call)
-    monkeypatch.setattr(
-        mod.MultiModalEmbedding,
-        "call",
-        lambda **kw: pytest.fail("should not call MultiModalEmbedding for text models"),
+    _patch_sdk(
+        monkeypatch,
+        text=fake_call,
+        multimodal=lambda **kw: pytest.fail(
+            "should not call MultiModalEmbedding for text models"
+        ),
     )
 
     result = await provider.get_embeddings(["a", "b"])
@@ -109,7 +122,8 @@ async def test_text_model_routes_to_text_embedding(monkeypatch):
     assert captured["kwargs"]["input"] == ["a", "b"]
     assert captured["kwargs"]["api_key"] == "sk-test"
     assert captured["kwargs"]["dimension"] == 1024
-    assert captured["base_http_api_url"] == ("https://dashscope.aliyuncs.com/api/v1")
+    # base_address is passed per-call instead of mutating the module global.
+    assert captured["kwargs"]["base_address"] == "https://custom.example.com/api/v1"
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +140,6 @@ async def test_multimodal_model_routes_to_multimodal_embedding(monkeypatch):
 
     def fake_call(**kwargs):
         captured["kwargs"] = kwargs
-        captured["base_http_api_url"] = dashscope.base_http_api_url
         # Multimodal response uses "index" instead of "text_index".
         return _FakeResponse(
             output={
@@ -137,13 +150,12 @@ async def test_multimodal_model_routes_to_multimodal_embedding(monkeypatch):
             }
         )
 
-    import astrbot.core.provider.sources.dashscope_embedding_source as mod
-
-    monkeypatch.setattr(mod.MultiModalEmbedding, "call", fake_call)
-    monkeypatch.setattr(
-        mod.TextEmbedding,
-        "call",
-        lambda **kw: pytest.fail("should not call TextEmbedding for multimodal models"),
+    _patch_sdk(
+        monkeypatch,
+        multimodal=fake_call,
+        text=lambda **kw: pytest.fail(
+            "should not call TextEmbedding for multimodal models"
+        ),
     )
 
     result = await provider.get_embeddings(["hello", "world"])
@@ -154,7 +166,9 @@ async def test_multimodal_model_routes_to_multimodal_embedding(monkeypatch):
     assert captured["kwargs"]["input"] == [{"text": "hello"}, {"text": "world"}]
     assert captured["kwargs"]["api_key"] == "sk-test"
     assert captured["kwargs"]["dimension"] == 1024
-    assert captured["base_http_api_url"] == ("https://dashscope.aliyuncs.com/api/v1")
+    assert captured["kwargs"]["base_address"] == (
+        "https://dashscope.aliyuncs.com/api/v1"
+    )
 
 
 @pytest.mark.asyncio
@@ -169,12 +183,66 @@ async def test_tongyi_vision_model_routes_to_multimodal(monkeypatch):
             output={"embeddings": [{"embedding": [0.1, 0.2], "index": 0}]}
         )
 
-    import astrbot.core.provider.sources.dashscope_embedding_source as mod
-
-    monkeypatch.setattr(mod.MultiModalEmbedding, "call", fake_call)
+    _patch_sdk(monkeypatch, multimodal=fake_call)
 
     result = await provider.get_embeddings(["hi"])
     assert result == [[0.1, 0.2]]
+
+
+# ---------------------------------------------------------------------------
+# get_embeddings — edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_empty_input_returns_early(monkeypatch):
+    """An empty input list must not invoke the SDK at all."""
+    provider = _make_provider()
+
+    _patch_sdk(
+        monkeypatch,
+        text=lambda **kw: pytest.fail("should not call SDK for empty input"),
+        multimodal=lambda **kw: pytest.fail("should not call SDK for empty input"),
+    )
+
+    result = await provider.get_embeddings([])
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_zero_embedding_dimension_omitted(monkeypatch):
+    """A zero dimension is invalid and must be omitted from the SDK call."""
+    provider = _make_provider({"embedding_dimensions": 0})
+    captured: dict = {}
+
+    def fake_call(**kwargs):
+        captured["kwargs"] = kwargs
+        return _FakeResponse(
+            output={"embeddings": [{"embedding": [0.1], "text_index": 0}]}
+        )
+
+    _patch_sdk(monkeypatch, text=fake_call)
+
+    await provider.get_embeddings(["hi"])
+    assert "dimension" not in captured["kwargs"]
+
+
+@pytest.mark.asyncio
+async def test_non_int_embedding_dimension_omitted(monkeypatch):
+    """A non-integer dimension is invalid and must be omitted from the SDK call."""
+    provider = _make_provider({"embedding_dimensions": "abc"})
+    captured: dict = {}
+
+    def fake_call(**kwargs):
+        captured["kwargs"] = kwargs
+        return _FakeResponse(
+            output={"embeddings": [{"embedding": [0.1], "text_index": 0}]}
+        )
+
+    _patch_sdk(monkeypatch, text=fake_call)
+
+    await provider.get_embeddings(["hi"])
+    assert "dimension" not in captured["kwargs"]
 
 
 # ---------------------------------------------------------------------------
@@ -211,9 +279,7 @@ async def test_error_surfaces_status_code_and_request_id(monkeypatch):
             request_id="req-123",
         )
 
-    import astrbot.core.provider.sources.dashscope_embedding_source as mod
-
-    monkeypatch.setattr(mod.TextEmbedding, "call", fake_call)
+    _patch_sdk(monkeypatch, text=fake_call)
 
     with pytest.raises(
         Exception,
@@ -231,9 +297,7 @@ async def test_multimodal_error_url_uses_multimodal_path(monkeypatch):
     def fake_call(**kwargs):
         return _FakeResponse(status_code=404, code="Unkonwn", message="")
 
-    import astrbot.core.provider.sources.dashscope_embedding_source as mod
-
-    monkeypatch.setattr(mod.MultiModalEmbedding, "call", fake_call)
+    _patch_sdk(monkeypatch, multimodal=fake_call)
 
     with pytest.raises(
         Exception,
@@ -245,10 +309,7 @@ async def test_multimodal_error_url_uses_multimodal_path(monkeypatch):
 @pytest.mark.asyncio
 async def test_no_embeddings_raises(monkeypatch):
     provider = _make_provider()
-    monkeypatch.setattr(
-        "astrbot.core.provider.sources.dashscope_embedding_source.TextEmbedding.call",
-        lambda **kw: _FakeResponse(output={}),
-    )
+    _patch_sdk(monkeypatch, text=lambda **kw: _FakeResponse(output={}))
     with pytest.raises(Exception, match="No embeddings"):
         await provider.get_embeddings(["hi"])
 

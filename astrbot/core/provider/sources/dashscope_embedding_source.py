@@ -2,7 +2,6 @@ import asyncio
 import os
 from http import HTTPStatus
 
-import dashscope
 from dashscope import MultiModalEmbedding, TextEmbedding
 
 from astrbot import logger
@@ -61,13 +60,16 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
         multimodal-embedding endpoint and accept text wrapped in content dicts;
         text models use the text-embedding endpoint directly.
         """
+        if not text:
+            return []
+
         is_multimodal = (
             "vl-embedding" in self.model
             or self.model.startswith("multimodal-embedding")
             or self.model.startswith("tongyi-embedding-vision")
         )
 
-        kwargs: dict = {}
+        kwargs: dict = {"base_address": self.base_url}
         if "embedding_dimensions" in self.provider_config:
             try:
                 dimensions = int(self.provider_config["embedding_dimensions"])
@@ -79,11 +81,10 @@ class DashScopeEmbeddingProvider(EmbeddingProvider):
                     f"'{self.provider_config['embedding_dimensions']}', ignored."
                 )
 
-        # The dashscope SDK is synchronous and reads the API base from a
-        # module-level global. Set it inside the worker thread right before the
-        # call so this request targets the configured endpoint.
+        # The dashscope SDK is synchronous; run it in a worker thread.
+        # base_address is passed per-call to avoid racing on the module-level
+        # dashscope.base_http_api_url global under concurrent usage.
         def _call():
-            dashscope.base_http_api_url = self.base_url
             if is_multimodal:
                 return MultiModalEmbedding.call(
                     model=self.model,
