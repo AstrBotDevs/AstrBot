@@ -381,6 +381,34 @@ async def test_mcp_shutdown_cleanup_runs_in_lifecycle_task(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_mcp_shutdown_cleanup_survives_late_cancellation(monkeypatch):
+    """A cancellation arriving mid-cleanup must not abort the cleanup."""
+    manager = FunctionToolManager()
+    cleanup_calls = []
+
+    async def fake_connect(self, config, name):
+        pass
+
+    async def fake_list_tools(self):
+        self.tools = []
+
+    async def fake_cleanup(self):
+        cleanup_calls.append(asyncio.current_task())
+        if len(cleanup_calls) == 1:
+            raise asyncio.CancelledError()
+
+    monkeypatch.setattr(ftm.MCPClient, "connect_to_server", fake_connect)
+    monkeypatch.setattr(ftm.MCPClient, "list_tools_and_save", fake_list_tools)
+    monkeypatch.setattr(ftm.MCPClient, "cleanup", fake_cleanup)
+
+    await manager.enable_mcp_server("dummy", {"command": "python"}, timeout=5)
+    await manager.disable_mcp_server("dummy", timeout=5)
+
+    assert len(cleanup_calls) == 2
+    assert "dummy" not in manager.mcp_client_dict
+
+
+@pytest.mark.asyncio
 async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
     class FakeResponse:
         status = 200

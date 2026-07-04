@@ -723,10 +723,19 @@ class FunctionToolManager:
                 logger.debug(f"MCP client {name} task was cancelled")
                 raise
             finally:
-                # Cleanup in the same task that entered the anyio contexts.
-                # No asyncio.shield() here: it would run the cleanup in a new
-                # task, and anyio cancel scopes cannot exit across tasks (#9068).
-                await self._terminate_mcp_client(name)
+                # Cleanup in the same task that entered the anyio contexts:
+                # asyncio.shield() would schedule the coroutine as a separate
+                # Task, and anyio cancel scopes cannot exit across tasks (#9068).
+                # Absorb late cancellations so a forced shutdown cannot abort
+                # the cleanup halfway.
+                task = asyncio.current_task()
+                while True:
+                    try:
+                        await self._terminate_mcp_client(name)
+                        break
+                    except asyncio.CancelledError:
+                        if task is not None:
+                            task.uncancel()
 
         lifecycle_task = asyncio.create_task(
             connect_and_lifecycle(), name=f"mcp-client:{name}"
