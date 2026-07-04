@@ -329,6 +329,7 @@ export type MessagePart = {
     attachment_id?: string;
     url?: string;
     filename?: string;
+    stored_filename?: string;
     mime_type?: string;
     [key: string]: unknown | string;
 };

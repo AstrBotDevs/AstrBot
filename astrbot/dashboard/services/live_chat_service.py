@@ -205,7 +205,7 @@ class LiveChatService:
             logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
 
     async def create_attachment_from_file(
-        self, filename: str, attach_type: str
+        self, filename: str, attach_type: str, display_name: str | None = None
     ) -> dict | None:
         return await create_attachment_part_from_existing_file(
             filename,
@@ -213,6 +213,7 @@ class LiveChatService:
             insert_attachment=self.db.insert_attachment,
             attachments_dir=self.attachments_dir,
             fallback_dirs=[self.webchat_img_dir],
+            display_name=display_name,
         )
 
     @staticmethod
@@ -650,13 +651,27 @@ class LiveChatService:
                     message_accumulator.add_attachment(part)
                     await send_attachment_saved_event(part)
                 elif result_type == "file":
-                    filename = str(result_text).replace("[FILE]", "").split("|", 1)[0]
-                    part = await self.create_attachment_from_file(filename, "file")
+                    filename = str(result_text).replace("[FILE]", "", 1)
+                    display_name = None
+                    if "|" in filename:
+                        filename, display_name = filename.split("|", 1)
+                    part = await self.create_attachment_from_file(
+                        filename,
+                        "file",
+                        display_name=display_name,
+                    )
                     message_accumulator.add_attachment(part)
                     await send_attachment_saved_event(part)
                 elif result_type == "video":
-                    filename = str(result_text).replace("[VIDEO]", "").split("|", 1)[0]
-                    part = await self.create_attachment_from_file(filename, "video")
+                    filename = str(result_text).replace("[VIDEO]", "", 1)
+                    display_name = None
+                    if "|" in filename:
+                        filename, display_name = filename.split("|", 1)
+                    part = await self.create_attachment_from_file(
+                        filename,
+                        "video",
+                        display_name=display_name,
+                    )
                     message_accumulator.add_attachment(part)
                     await send_attachment_saved_event(part)
 

@@ -501,7 +501,7 @@ class ChatService:
         )
 
     async def create_attachment_from_file(
-        self, filename: str, attach_type: str
+        self, filename: str, attach_type: str, display_name: str | None = None
     ) -> dict | None:
         return await create_attachment_part_from_existing_file(
             filename,
@@ -509,6 +509,7 @@ class ChatService:
             insert_attachment=self.db.insert_attachment,
             attachments_dir=self.attachments_dir,
             fallback_dirs=[self.webchat_img_dir],
+            display_name=display_name,
         )
 
     async def resolve_webchat_file(
@@ -897,9 +898,14 @@ class ChatService:
                             ):
                                 yield attachment_saved_event
                         elif msg_type == "file":
-                            filename = result_text.replace("[FILE]", "")
+                            filename = result_text.replace("[FILE]", "", 1)
+                            display_name = None
+                            if "|" in filename:
+                                filename, display_name = filename.split("|", 1)
                             part = await self.create_attachment_from_file(
-                                filename, "file"
+                                filename,
+                                "file",
+                                display_name=display_name,
                             )
                             message_accumulator.add_attachment(part)
                             if attachment_saved_event := build_attachment_saved_event(
