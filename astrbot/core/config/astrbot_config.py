@@ -115,7 +115,9 @@ class AstrBotConfig(dict):
         object.__setattr__(
             self,
             "_generated_dashboard_password",
-            generated_password,
+            generated_password
+            if DASHBOARD_INITIAL_PASSWORD_ENV not in os.environ
+            else None,
         )
         object.__setattr__(
             self,

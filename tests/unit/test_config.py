@@ -234,7 +234,7 @@ class TestAstrBotConfigLoad:
     def test_empty_dashboard_password_uses_initial_password_env(
         self, temp_config_path, monkeypatch
     ):
-        """Test that the generated dashboard password can be provided by env."""
+        """Test that env-provided dashboard passwords are hashed but not exposed."""
         env_password = "CustomInitial123"
         monkeypatch.setenv("ASTRBOT_DASHBOARD_INITIAL_PASSWORD", env_password)
         default_config = {
@@ -249,7 +249,7 @@ class TestAstrBotConfigLoad:
             default_config=default_config,
         )
 
-        assert getattr(config, "_generated_dashboard_password", None) == env_password
+        assert getattr(config, "_generated_dashboard_password", None) is None
         assert verify_dashboard_password(
             config["dashboard"]["pbkdf2_password"],
             env_password,
