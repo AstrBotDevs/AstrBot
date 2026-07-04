@@ -99,10 +99,14 @@ class DiscordPlatformAdapter(Platform):
 
         message_obj.message_str = message_chain.get_plain_text()
         message_obj.sender = MessageMember(
-            user_id=str(self.bot_self_id) if self.bot_self_id is not None else "unknown",
+            user_id=str(self.bot_self_id)
+            if self.bot_self_id is not None
+            else "unknown",
             nickname=self.client.user.display_name,
         )
-        message_obj.self_id = str(self.bot_self_id) if self.bot_self_id is not None else "unknown"
+        message_obj.self_id = (
+            str(self.bot_self_id) if self.bot_self_id is not None else "unknown"
+        )
         message_obj.session_id = session.session_id
         message_obj.message = message_chain.chain
 
@@ -266,7 +270,9 @@ class DiscordPlatformAdapter(Platform):
                     )
         abm.message = message_chain
         abm.raw_message = message
-        abm.self_id = str(self.bot_self_id) if self.bot_self_id is not None else "unknown"
+        abm.self_id = (
+            str(self.bot_self_id) if self.bot_self_id is not None else "unknown"
+        )
         abm.session_id = str(message.channel.id)
         abm.message_id = str(message.id)
         return abm
@@ -274,7 +280,19 @@ class DiscordPlatformAdapter(Platform):
     async def convert_message(self, data: dict) -> AstrBotMessage:
         """将平台消息转换成 AstrBotMessage"""
         # 由于 on_interaction 已被禁用，我们只处理普通消息
-        return self._convert_message_to_abm(data)
+        abm = self._convert_message_to_abm(data)
+        for component in abm.message:
+            if isinstance(component, Record):
+                audio_ref = component.file
+                if audio_ref:
+                    path_wav = await MediaResolver(
+                        audio_ref,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_path(target_format="wav")
+                    component.file = path_wav
+                    component.url = path_wav
+        return abm
 
     async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
         """处理消息"""
@@ -573,7 +591,9 @@ class DiscordPlatformAdapter(Platform):
             )
             abm.message = [Plain(text=message_str_for_filter)]
             abm.raw_message = ctx.interaction
-            abm.self_id = str(self.bot_self_id) if self.bot_self_id is not None else "unknown"
+            abm.self_id = (
+                str(self.bot_self_id) if self.bot_self_id is not None else "unknown"
+            )
             abm.session_id = str(ctx.channel_id)
             abm.message_id = str(ctx.interaction.id)
 
