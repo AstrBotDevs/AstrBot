@@ -1,10 +1,9 @@
 import asyncio
 import inspect
-import logging
 import re
 import sys
-import typing
 import types
+import typing
 from typing import Any, cast
 
 import discord
@@ -481,16 +480,16 @@ class DiscordPlatformAdapter(Platform):
                     )
                 )
         except Exception as e:
-            logger.warning(f"Failed to build slash options for {handler!r}: {e}", exc_info=True)
+            logger.warning(
+                f"Failed to build slash options for {handler!r}: {e}", exc_info=True
+            )
         return options
 
     def _create_dynamic_callback(self, cmd_name: str, param_names: list | None = None):
         """为每个指令动态创建一个异步回调函数"""
         param_names = param_names or []
 
-        async def dynamic_callback(
-            ctx: discord.ApplicationContext, **kwargs
-        ) -> None:
+        async def dynamic_callback(ctx: discord.ApplicationContext, **kwargs) -> None:
             # 1. 嘗試立即响应，防止超时 (移到最前面)
             followup_webhook = None
             try:
@@ -511,7 +510,11 @@ class DiscordPlatformAdapter(Platform):
             logger.debug(f"[Discord] Callback context: {ctx}")
             # 按 param_names 顺序提取参数值，保证与函数签名一致
             if param_names:
-                params_str = " ".join(str(kwargs[name]) for name in param_names if kwargs.get(name) is not None)
+                params_str = " ".join(
+                    str(kwargs[name])
+                    for name in param_names
+                    if kwargs.get(name) is not None
+                )
             else:
                 params_str = " ".join(str(v) for v in kwargs.values() if v is not None)
             logger.debug(f"[Discord] Callback params: {params_str}, kwargs: {kwargs}")
@@ -591,7 +594,11 @@ class DiscordPlatformAdapter(Platform):
 
         # 优先用 handler 的 docstring 作为命令描述
         handler = handler_metadata.handler
-        description = (handler.__doc__ or "").strip().split("\n")[0] if hasattr(handler, "__doc__") and handler.__doc__ else ""
+        description = (
+            (handler.__doc__ or "").strip().split("\n")[0]
+            if hasattr(handler, "__doc__") and handler.__doc__
+            else ""
+        )
         if not description:
             description = handler_metadata.desc or f"Command: {cmd_name}"
         if len(description) > 100:
