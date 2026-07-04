@@ -2218,6 +2218,51 @@ async def test_batch_delete_sessions_uses_batch_lookup(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path_template",
+    [
+        "/api/chat/get_session?session_id={session_id}",
+        "/api/v1/chat/sessions/{session_id}",
+    ],
+)
+async def test_get_chat_session_rejects_session_owned_by_another_user(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    path_template: str,
+):
+    test_client = app.test_client()
+    session_id = f"foreign_get_session_{uuid.uuid4().hex[:8]}"
+    await core_lifecycle_td.db.create_platform_session(
+        creator="not_dashboard_user",
+        platform_id="webchat",
+        session_id=session_id,
+        display_name="Foreign Session",
+        is_group=0,
+    )
+    await core_lifecycle_td.platform_message_history_manager.insert(
+        platform_id="webchat",
+        user_id=session_id,
+        content={
+            "type": "user",
+            "message": [{"type": "text", "text": "foreign session secret"}],
+        },
+        sender_id="not_dashboard_user",
+        sender_name="not_dashboard_user",
+    )
+
+    response = await test_client.get(
+        path_template.format(session_id=session_id),
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Permission denied"
+
+
+@pytest.mark.asyncio
 async def test_plugins(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
