@@ -6,8 +6,10 @@ from astrbot.dashboard.services.chatui_project_service import (
 )
 
 
-def test_custom_workspace_accepts_existing_directory(tmp_path, monkeypatch):
-    """Custom workspace paths should accept existing usable directories."""
+def test_custom_workspace_accepts_absolute_existing_workspace_subdirectory(
+    tmp_path, monkeypatch
+):
+    """Custom workspace paths should accept workspace subdirectories."""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     monkeypatch.setattr(
@@ -60,9 +62,7 @@ def test_custom_workspace_rejects_file_path(tmp_path, monkeypatch):
         )
 
 
-def test_custom_workspace_relative_path_uses_astrbot_workspaces(
-    tmp_path, monkeypatch
-):
+def test_custom_workspace_relative_path_uses_astrbot_workspaces(tmp_path, monkeypatch):
     """Relative custom workspace paths should resolve under AstrBot workspaces."""
     relative_workspace = tmp_path / "relative-workspace"
     relative_workspace.mkdir()
@@ -118,10 +118,10 @@ def test_custom_workspace_rejects_workspaces_root(tmp_path, monkeypatch):
         )
 
 
-def test_custom_workspace_accepts_absolute_path_outside_workspaces(
+def test_custom_workspace_rejects_absolute_path_outside_workspaces(
     tmp_path, monkeypatch
 ):
-    """Absolute custom workspace paths may point outside AstrBot workspaces."""
+    """Absolute custom workspace paths must stay under AstrBot workspaces."""
     outside_workspace = tmp_path / "outside"
     workspaces_root = tmp_path / "workspaces"
     outside_workspace.mkdir()
@@ -131,12 +131,10 @@ def test_custom_workspace_accepts_absolute_path_outside_workspaces(
         lambda: str(workspaces_root),
     )
 
-    workspace_type, workspace_path = ChatUIProjectService._normalize_workspace_config(
-        {
-            "workspace_type": "custom",
-            "workspace_path": str(outside_workspace),
-        }
-    )
-
-    assert workspace_type == "custom"
-    assert workspace_path == str(outside_workspace)
+    with pytest.raises(ChatUIProjectServiceError, match="must stay within"):
+        ChatUIProjectService._normalize_workspace_config(
+            {
+                "workspace_type": "custom",
+                "workspace_path": str(outside_workspace),
+            }
+        )

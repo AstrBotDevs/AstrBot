@@ -95,24 +95,24 @@ def workspace_path_to_root(path: str) -> Path:
 
     Args:
         path: Stored workspace path. Relative values are rooted under AstrBot
-            workspaces. Absolute values are allowed and resolved as provided.
+            workspaces. Absolute values must resolve to a workspaces subdirectory.
 
     Returns:
         Absolute resolved path.
 
     Raises:
-        ValueError: If a relative path escapes or targets the AstrBot workspaces
-            root.
+        ValueError: If the path escapes or targets the AstrBot workspaces root.
     """
     workspaces_root = Path(get_astrbot_workspaces_path()).resolve(strict=False)
     candidate = Path(path).expanduser()
-    if candidate.is_absolute():
-        return candidate.resolve(strict=False)
-
-    resolved = (workspaces_root / candidate).resolve(strict=False)
+    resolved = (
+        candidate.resolve(strict=False)
+        if candidate.is_absolute()
+        else (workspaces_root / candidate).resolve(strict=False)
+    )
     if resolved == workspaces_root or not resolved.is_relative_to(workspaces_root):
         raise ValueError(
-            "Relative workspace path must stay within a subdirectory of AstrBot workspaces"
+            "Custom workspace path must stay within a subdirectory of AstrBot workspaces"
         )
     return resolved
 
