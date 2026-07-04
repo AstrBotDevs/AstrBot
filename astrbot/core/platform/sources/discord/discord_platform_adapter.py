@@ -292,6 +292,7 @@ class DiscordPlatformAdapter(Platform):
                     ).to_path(target_format="wav")
                     component.file = path_wav
                     component.url = path_wav
+                    component.path = path_wav
         return abm
 
     async def handle_msg(self, message: AstrBotMessage, followup_webhook=None) -> None:
