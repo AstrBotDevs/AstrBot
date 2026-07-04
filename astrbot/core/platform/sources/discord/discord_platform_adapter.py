@@ -26,6 +26,9 @@ from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import StarHandlerMetadata, star_handlers_registry
+from astrbot.core.utils.media_utils import (
+    MediaResolver,  # noqa: F401  # 供外部 monkeypatch 使用
+)
 
 from .client import DiscordBotClient
 from .discord_platform_event import DiscordPlatformEvent
