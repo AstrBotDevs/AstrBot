@@ -106,6 +106,125 @@ def collect_plain_text_from_message_parts(message_parts: list[dict]) -> str:
     return "".join(text_parts)
 
 
+# Author: elecvoid243
+# Date: 2026-07-05
+# Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+# §2.2 Amendment F (follow-up — read-path defence).
+#
+# `BotMessageAccumulator`'s write-path filter (see `_store_tool_call` /
+# `_store_tool_call_result`) prevents NEW `tool_call` and `tool_call_result`
+# events for `ask_user_choice` from materialising into history parts. Bot
+# records persisted BEFORE that filter shipped — or while a still-running
+# AstrBot still had the old code — carry two stale halves per invocation:
+#
+#   Part A (args only)::
+#
+#       {"type": "tool_call",
+#        "tool_calls": [{"name": "ask_user_choice", "args": {...}, "ts": ...}]}
+#
+#   Part B (synthesised result fallback)::
+#
+#       {"type": "tool_call",
+#        "tool_calls": [{"id": "...", "result": "...", "finished_ts": ...}]}
+#
+# Both render in the dashboard as separate ToolCallCards next to the
+# InteractiveChoiceBox on a hard refresh. We strip them on the read path so
+# the API response is clean regardless of when the record was created. The
+# `interactive_choice` part written by the plugin's chain_type event is the
+# canonical user-visible representation; the box state itself comes from
+# the round-2 per-UMO `submissionStates` store, so no information is lost.
+_ASK_USER_CHOICE_TOOL_NAME = "ask_user_choice"
+
+
+def _sanitize_ask_user_choice_tool_call_parts(parts: object) -> object:
+    """Drop stale `ask_user_choice` `tool_call` parts from a bot message.
+
+    Args:
+        parts: The `content.message` list of a bot history record. May be
+            ``None`` or non-list — those pass through untouched.
+
+    Returns:
+        A new list with the matching `tool_call` parts (or matching entries
+        inside a multi-entry `tool_call` part) removed. Non-`tool_call`
+        parts are preserved unchanged. When no stale entries are found the
+        original list is returned so the no-op case stays allocation-free
+        in the common (new-history) path.
+    """
+    if not isinstance(parts, list):
+        return parts
+
+    ask_user_choice_ids: set[str] = set()
+    anonymous_result_ids: set[str] = set()
+    for part in parts:
+        if not isinstance(part, dict) or part.get("type") != "tool_call":
+            continue
+        for tc in part.get("tool_calls") or []:
+            if not isinstance(tc, dict):
+                continue
+            tc_id = str(tc.get("id") or "")
+            if not tc_id:
+                continue
+            if tc.get("name") == _ASK_USER_CHOICE_TOOL_NAME:
+                ask_user_choice_ids.add(tc_id)
+            elif not tc.get("name") and tc.get("result"):
+                anonymous_result_ids.add(tc_id)
+
+    # Only drop anonymous result halves whose id is paired with an
+    # ask_user_choice args half in the same message. A truly anonymous
+    # result with no ask_user_choice peer (which shouldn't happen in
+    # practice — runtime always sends `name` in tool_call events) is left
+    # alone to avoid hiding any legitimate tool call whose name was lost.
+    drop_ids = ask_user_choice_ids | (ask_user_choice_ids & anonymous_result_ids)
+
+    if not drop_ids:
+        return parts
+
+    sanitized: list[dict] = []
+    for part in parts:
+        if not isinstance(part, dict) or part.get("type") != "tool_call":
+            sanitized.append(part)
+            continue
+        kept_tool_calls: list = []
+        for tc in part.get("tool_calls") or []:
+            # Defensive: a malformed (non-dict) or id-less entry has no
+            # `call_id` to match, so it can never be a stale half. Keep it
+            # as-is so we don't silently drop or reshape corrupted data.
+            if not isinstance(tc, dict):
+                kept_tool_calls.append(tc)
+                continue
+            if str(tc.get("id") or "") not in drop_ids:
+                kept_tool_calls.append(tc)
+        if kept_tool_calls:
+            sanitized.append({**part, "tool_calls": kept_tool_calls})
+    return sanitized
+
+
+def _sanitize_history_bot_records(history_data: list[dict]) -> list[dict]:
+    """Apply :func:`_sanitize_ask_user_choice_tool_call_parts` to bot rows.
+
+    Args:
+        history_data: List of platform-history record dicts (as produced by
+            ``record.model_dump()``). User rows and rows without a ``content``
+            dict are passed through untouched.
+
+    Returns:
+        The same list with stale `tool_call` parts stripped from every bot
+        record's `content.message`. Mutates the input dicts in place for
+        the rows that need cleaning and returns the same list.
+    """
+    for record in history_data:
+        if not isinstance(record, dict):
+            continue
+        content = record.get("content")
+        if not isinstance(content, dict) or content.get("type") != "bot":
+            continue
+        message = content.get("message")
+        sanitized = _sanitize_ask_user_choice_tool_call_parts(message)
+        if sanitized is not message:
+            content["message"] = sanitized
+    return history_data
+
+
 def build_bot_history_content(
     message_parts: list[dict],
     *,
@@ -1325,8 +1444,17 @@ class ChatService:
             creator=username,
         )
 
+        # Author: elecvoid243
+        # Date: 2026-07-05
+        # Read-path defence: strip stale ask_user_choice `tool_call` parts
+        # from bot records before sending to the dashboard (see
+        # `_sanitize_ask_user_choice_tool_call_parts` for the rationale).
+        history_payload = _sanitize_history_bot_records(
+            [history.model_dump() for history in history_ls]
+        )
+
         response_data = {
-            "history": [history.model_dump() for history in history_ls],
+            "history": history_payload,
             "threads": [serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),
         }
@@ -1440,9 +1568,14 @@ class ChatService:
             page=1,
             page_size=1000,
         )
+        # See `get_session` — same read-path defence for stale
+        # ask_user_choice `tool_call` parts.
+        history_payload = _sanitize_history_bot_records(
+            [history.model_dump() for history in history_ls]
+        )
         return {
             "thread": serialize_thread(thread),
-            "history": [history.model_dump() for history in history_ls],
+            "history": history_payload,
             "is_running": self.running_convs.get(thread_id, False),
         }
 
