@@ -592,6 +592,13 @@ def test_file_uri_to_path_supports_standard_and_legacy_posix_file_uris(tmp_path)
         assert media_utils.file_uri_to_path(legacy_file_uri) == str(media_path)
 
 
+def test_file_uri_to_path_preserves_posix_root_for_container_paths():
+    if os.name != "nt":
+        assert media_utils.file_uri_to_path("file:///AstrBot/data/cache/image.png") == (
+            "/AstrBot/data/cache/image.png"
+        )
+
+
 def test_from_file_system_uses_pathlib_file_uri(tmp_path):
     media_path = tmp_path / "media file.bin"
     media_path.write_bytes(b"media")
