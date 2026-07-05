@@ -1,6 +1,7 @@
-// Author: task16_impl
-// Date: 2026-07-03
+// Author: task16_impl (original); elecvoid243 (v1.1 update)
+// Date: 2026-07-03 (original); 2026-07-05 (wire format update)
 // Spec: docs/superpowers/specs/2026-07-02-blocking-interactive-choice-design.md §5.1
+// Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md §2.4
 //
 // TDD: tests for the pure helper that converts a raw SSE
 // `interactive_choice` payload (as emitted by the backend's
@@ -10,7 +11,19 @@
 // The actual SSE integration in `useMessages.ts processStreamPayload`
 // delegates to this helper, so we keep it pure & exported.
 //
-// Wire format (verified in astrbot_plugin_ask_user_choice/ask_user_choice_tool.py):
+// v1.1 wire format (verified in
+// astrbot_plugin_ask_user_choice/ask_user_choice_tool.py):
+//   {
+//     "type": "plain",                       // generic SSE channel
+//     "chain_type": "interactive_choice",    // dispatched by chat_service
+//     "data": "<JSON string of the v1.0 envelope>",
+//     "message_id": "<sse stream id>"
+//   }
+//
+// `useMessages.ts processStreamPayload` parses `data` and rewraps it
+// into the v1.0 envelope before calling this helper, so the function
+// contract is unchanged:
+//
 //   {
 //     "type": "interactive_choice",
 //     "data": {

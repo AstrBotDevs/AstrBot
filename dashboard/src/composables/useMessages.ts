@@ -1057,6 +1057,37 @@ export function useMessages(options: UseMessagesOptions) {
         upsertToolCall(botRecord, parseJsonSafe(data));
         return;
       }
+      // Author: elecvoid243
+      // Date: 2026-07-05
+      // Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md §2.4
+      // The plugin emits the box as a chain_type event
+      // (`type: "plain"`, `chain_type: "interactive_choice"`,
+      // `data: <json string>`) so the chat_service can persist the
+      // part into the bot record. We unwrap the JSON string into
+      // the historical envelope `{type, data}` so
+      // `applyInteractiveChoiceSse` and its downstream
+      // `interactiveChoicePartFromSsePayload` helper need no
+      // contract change.
+      if (chainType === "interactive_choice") {
+        if (!sessionId) {
+          console.warn(
+            "[interactiveChoice] SSE event without sessionId; dropping",
+          );
+          return;
+        }
+        const inner = parseJsonSafe(data);
+        if (!inner || typeof inner !== "object") {
+          console.warn(
+            "[interactiveChoice] SSE data is not a JSON object; dropping",
+          );
+          return;
+        }
+        applyInteractiveChoiceSse(sessionId, botRecord, {
+          type: "interactive_choice",
+          data: inner,
+        });
+        return;
+      }
       if (chainType === "tool_call_result") {
         const parsed = parseJsonSafe(data);
         finishToolCall(botRecord, parsed);

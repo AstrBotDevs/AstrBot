@@ -156,6 +156,20 @@ class BotMessageAccumulator:
             self._append_think_part(result_text)
             return
 
+        # Author: elecvoid243
+        # Date: 2026-07-05
+        # Bug fix: history round-trip for `ask_user_choice` (Plan
+        # `docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md`).
+        # The plugin emits the box as a chain_type event so this
+        # accumulator can persist an `interactive_choice` part into
+        # the bot record. Without this, a hard refresh has no part
+        # to render in the right slot and orphan-injection dumps
+        # every box at the page tail.
+        if chain_type == "interactive_choice":
+            self._flush_pending_text()
+            self._store_interactive_choice(result_text)
+            return
+
         if streaming:
             self.pending_text += result_text
         else:
@@ -228,6 +242,62 @@ class BotMessageAccumulator:
         tool_call["result"] = tool_result.get("result")
         tool_call["finished_ts"] = tool_result.get("ts")
         self.parts.append({"type": "tool_call", "tool_calls": [tool_call]})
+
+    # Author: elecvoid243
+    # Date: 2026-07-05
+    # Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md §2.2
+    # Persist an `interactive_choice` part alongside the bot record
+    # so the box round-trips through history reload. The plugin emits
+    # the event with `type="plain"`, `chain_type="interactive_choice"`,
+    # and `data` = json string of
+    #   {"request_id": ..., "spec": {...}, "expires_at": ...}.
+    def _store_interactive_choice(self, result_text: str) -> None:
+        """Parse an interactive_choice chain_type event and append a part.
+
+        Args:
+            result_text: JSON-stringified envelope produced by
+                ``astrbot_plugin_ask_user_choice.ask_user_choice_tool.
+                _push_to_webchat_back_queue``. Schema::
+
+                    {
+                        "request_id": "<uuid>",
+                        "spec": {
+                            "type": "interactive_choice",
+                            "prompt": "...",
+                            "options": [{"id": "...", "label": "..."}],
+                            "title": "...",            # optional
+                            "input_placeholder": "..." # optional
+                        },
+                        "expires_at": <unix ts>       # optional
+                    }
+        """
+        payload = self._parse_json_object(result_text)
+        if not payload:
+            return
+        request_id = str(payload.get("request_id") or "").strip()
+        spec = payload.get("spec")
+        if not request_id or not isinstance(spec, dict):
+            return
+        prompt = str(spec.get("prompt") or "").strip()
+        options = spec.get("options")
+        if not prompt or not isinstance(options, list):
+            return
+        part: dict = {
+            "type": "interactive_choice",
+            "request_id": request_id,
+            "prompt": prompt,
+            "options": options,
+        }
+        title = spec.get("title")
+        if isinstance(title, str) and title.strip():
+            part["title"] = title
+        placeholder = spec.get("input_placeholder")
+        if isinstance(placeholder, str) and placeholder.strip():
+            part["input_placeholder"] = placeholder
+        expires_at = payload.get("expires_at")
+        if isinstance(expires_at, (int, float)):
+            part["expires_at"] = expires_at
+        self.parts.append(part)
 
     @staticmethod
     def _parse_json_object(raw_text: str) -> dict | None:
