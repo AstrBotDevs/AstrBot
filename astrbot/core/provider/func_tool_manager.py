@@ -734,7 +734,9 @@ class FunctionToolManager:
                         await self._terminate_mcp_client(name)
                         break
                     except asyncio.CancelledError:
-                        if task is not None:
+                        # Task.uncancel() is 3.11+; on 3.10 absorbing the
+                        # cancellation is sufficient.
+                        if task is not None and hasattr(task, "uncancel"):
                             task.uncancel()
 
         lifecycle_task = asyncio.create_task(
