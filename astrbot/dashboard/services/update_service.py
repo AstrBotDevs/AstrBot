@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import tempfile
 import traceback
 import uuid
 import zipfile
@@ -22,7 +23,7 @@ from astrbot.core.desktop_runtime import (
 from astrbot.core.updator import AstrBotUpdator
 from astrbot.core.utils.astrbot_path import (
     get_astrbot_data_path,
-    get_astrbot_system_tmp_path,
+    get_astrbot_temp_path,
 )
 from astrbot.core.utils.io import (
     download_dashboard as _download_dashboard,
@@ -206,158 +207,168 @@ class UpdateService:
             reboot: Whether to restart AstrBot after applying files.
             proxy: Optional GitHub proxy URL.
         """
-        update_temp_dir = Path(get_astrbot_system_tmp_path()) / "updates"
-        update_temp_dir.mkdir(parents=True, exist_ok=True)
-        update_token = uuid.uuid4().hex
-        dashboard_zip_path = update_temp_dir / f"{update_token}-dashboard.zip"
-        core_zip_path = update_temp_dir / f"{update_token}-core.zip"
+        update_temp_parent = Path(get_astrbot_temp_path()) / "updates"
         try:
-            self._set_update_stage(
-                progress_id,
-                "dashboard",
-                "running",
-                "正在下载 WebUI...",
-                0,
-            )
-            await self.download_dashboard(
-                path=str(dashboard_zip_path),
-                latest=latest,
-                version=version,
-                proxy=proxy or "",
-                progress_callback=self._make_progress_callback(
+            if update_temp_parent.is_symlink():
+                update_temp_parent.unlink()
+            update_temp_parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            update_temp_parent.chmod(0o700)
+            with tempfile.TemporaryDirectory(
+                prefix="project-update-",
+                dir=update_temp_parent,
+            ) as update_temp_dir_name:
+                update_temp_dir = Path(update_temp_dir_name)
+                update_token = uuid.uuid4().hex
+                dashboard_zip_path = update_temp_dir / f"{update_token}-dashboard.zip"
+                core_zip_path = update_temp_dir / f"{update_token}-core.zip"
+                self._set_update_stage(
                     progress_id,
                     "dashboard",
+                    "running",
+                    "正在下载 WebUI...",
                     0,
-                    45,
-                ),
-                extract=False,
-            )
-            self._set_update_stage(
-                progress_id,
-                "dashboard",
-                "done",
-                "WebUI 下载完成。",
-                45,
-            )
-
-            self._set_update_stage(
-                progress_id,
-                "core",
-                "running",
-                "正在下载 AstrBot 项目代码...",
-                45,
-            )
-            core_zip_path = Path(
-                await self.astrbot_updator.download_update_package(
+                )
+                await self.download_dashboard(
+                    path=str(dashboard_zip_path),
                     latest=latest,
                     version=version,
                     proxy=proxy or "",
-                    path=core_zip_path,
                     progress_callback=self._make_progress_callback(
                         progress_id,
-                        "core",
-                        45,
+                        "dashboard",
+                        0,
                         45,
                     ),
+                    extract=False,
                 )
-            )
-            self._set_update_stage(
-                progress_id,
-                "core",
-                "done",
-                "项目代码下载完成。",
-                90,
-            )
-
-            self._set_update_stage(
-                progress_id,
-                "verify",
-                "running",
-                "下载完成，正在校验更新包...",
-                90,
-            )
-
-            def _verify_update_packages() -> None:
-                for zip_path in (dashboard_zip_path, core_zip_path):
-                    with zipfile.ZipFile(zip_path, "r") as archive:
-                        corrupt_member = archive.testzip()
-                    if corrupt_member:
-                        raise UpdateServiceError(f"更新包校验失败: {corrupt_member}")
-
-            await asyncio.to_thread(_verify_update_packages)
-            self._set_update_stage(
-                progress_id,
-                "verify",
-                "done",
-                "更新包校验完成。",
-                91,
-            )
-
-            self._set_update_stage(
-                progress_id,
-                "apply",
-                "running",
-                "下载完成，正在应用更新...",
-                91,
-            )
-            await asyncio.to_thread(
-                self.astrbot_updator.apply_update_package,
-                core_zip_path,
-            )
-            await self.extract_dashboard(
-                dashboard_zip_path,
-                Path(get_astrbot_data_path()),
-            )
-            self._set_update_stage(
-                progress_id,
-                "apply",
-                "done",
-                "更新文件应用完成。",
-                92,
-            )
-
-            self._set_update_stage(
-                progress_id,
-                "dependencies",
-                "running",
-                "正在更新依赖...",
-                92,
-            )
-            logger.info("更新依赖中...")
-            try:
-                await self.pip_install(requirements_path="requirements.txt")
-            except Exception as exc:
-                logger.error(f"更新依赖失败: {exc}")
-            self._set_update_stage(
-                progress_id,
-                "dependencies",
-                "done",
-                "依赖更新完成。",
-                96,
-            )
-
-            if reboot:
                 self._set_update_stage(
                     progress_id,
-                    "restart",
-                    "running",
-                    "更新成功，正在准备重启...",
-                    98,
+                    "dashboard",
+                    "done",
+                    "WebUI 下载完成。",
+                    45,
                 )
-                await self.core_lifecycle.restart()
-                message = "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。"
-            else:
-                message = "更新成功，AstrBot 将在下次启动时应用新的代码。"
 
-            self.update_progress[progress_id].update(
-                {
-                    "status": "success",
-                    "stage": "done",
-                    "message": message,
-                    "overall_percent": 100,
-                },
-            )
-            logger.info(message)
+                self._set_update_stage(
+                    progress_id,
+                    "core",
+                    "running",
+                    "正在下载 AstrBot 项目代码...",
+                    45,
+                )
+                core_zip_path = Path(
+                    await self.astrbot_updator.download_update_package(
+                        latest=latest,
+                        version=version,
+                        proxy=proxy or "",
+                        path=core_zip_path,
+                        progress_callback=self._make_progress_callback(
+                            progress_id,
+                            "core",
+                            45,
+                            45,
+                        ),
+                    )
+                )
+                self._set_update_stage(
+                    progress_id,
+                    "core",
+                    "done",
+                    "项目代码下载完成。",
+                    90,
+                )
+
+                self._set_update_stage(
+                    progress_id,
+                    "verify",
+                    "running",
+                    "下载完成，正在校验更新包...",
+                    90,
+                )
+
+                def _verify_update_packages() -> None:
+                    for zip_path in (dashboard_zip_path, core_zip_path):
+                        with zipfile.ZipFile(zip_path, "r") as archive:
+                            corrupt_member = archive.testzip()
+                        if corrupt_member:
+                            raise UpdateServiceError(
+                                f"更新包校验失败: {corrupt_member}"
+                            )
+
+                await asyncio.to_thread(_verify_update_packages)
+                self._set_update_stage(
+                    progress_id,
+                    "verify",
+                    "done",
+                    "更新包校验完成。",
+                    91,
+                )
+
+                self._set_update_stage(
+                    progress_id,
+                    "apply",
+                    "running",
+                    "下载完成，正在应用更新...",
+                    91,
+                )
+                await asyncio.to_thread(
+                    self.astrbot_updator.apply_update_package,
+                    core_zip_path,
+                )
+                await self.extract_dashboard(
+                    dashboard_zip_path,
+                    Path(get_astrbot_data_path()),
+                )
+                self._set_update_stage(
+                    progress_id,
+                    "apply",
+                    "done",
+                    "更新文件应用完成。",
+                    92,
+                )
+
+                self._set_update_stage(
+                    progress_id,
+                    "dependencies",
+                    "running",
+                    "正在更新依赖...",
+                    92,
+                )
+                logger.info("更新依赖中...")
+                try:
+                    await self.pip_install(requirements_path="requirements.txt")
+                except Exception as exc:
+                    logger.error(f"更新依赖失败: {exc}")
+                self._set_update_stage(
+                    progress_id,
+                    "dependencies",
+                    "done",
+                    "依赖更新完成。",
+                    96,
+                )
+
+                if reboot:
+                    self._set_update_stage(
+                        progress_id,
+                        "restart",
+                        "running",
+                        "更新成功，正在准备重启...",
+                        98,
+                    )
+                    await self.core_lifecycle.restart()
+                    message = "更新成功，AstrBot 将在 2 秒内全量重启以应用新的代码。"
+                else:
+                    message = "更新成功，AstrBot 将在下次启动时应用新的代码。"
+
+                self.update_progress[progress_id].update(
+                    {
+                        "status": "success",
+                        "stage": "done",
+                        "message": message,
+                        "overall_percent": 100,
+                    },
+                )
+                logger.info(message)
         except asyncio.CancelledError:
             self.update_progress[progress_id].update(
                 {
@@ -376,13 +387,6 @@ class UpdateService:
             )
             logger.error(f"/api/update_project: {traceback.format_exc()}")
             logger.debug(f"Update task failed: {exc!s}")
-        finally:
-            for zip_path in (dashboard_zip_path, core_zip_path):
-                try:
-                    if zip_path.exists():
-                        zip_path.unlink()
-                except Exception as cleanup_exc:
-                    logger.warning(f"清理更新临时文件失败: {zip_path}, {cleanup_exc}")
 
     async def update_dashboard(self) -> UpdateServiceResult:
         try:
