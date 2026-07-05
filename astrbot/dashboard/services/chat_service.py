@@ -1196,7 +1196,11 @@ class ChatService:
 
     async def get_session(self, username: str, session_id: str) -> dict:
         session = await self.db.get_platform_session_by_id(session_id)
-        platform_id = session.platform_id if session else "webchat"
+        if not session:
+            raise ChatServiceError(f"Session {session_id} not found")
+        if session.creator != username:
+            raise ChatServiceError("Permission denied")
+        platform_id = session.platform_id
 
         project_info = await self.db.get_project_by_session(
             session_id=session_id, creator=username
