@@ -221,6 +221,79 @@ chat_service 消费 loop:
 | 模块 | 改动量 | 风险 |
 |---|---|---|
 | `astrbot_plugin_ask_user_choice/ask_user_choice_tool.py` | +1 import, ~5 行修改 | 低（向后兼容：旧 plugin + 新 chat_service 会丢失 part；新 plugin + 旧 chat_service 会落 part 为空——两端必须同步发布） |
+
+---
+
+## 8. Round-2 修复：前端迁移层（2026-07-05 20:35）
+
+**触发**：Round-1 合并后用户测试发现 bug 仍存在 —— 截图显示 bot 文本里仍有
+`{"request_id": "...", "spec": {...}, "expires_at": ...}` 的 JSON 字符串，且 box
+仍堆积在对话末尾。
+
+**根因**（经 `Get-Process python*` 确认）：
+
+```
+Id    ProcessName StartTime
+10372 pythonw      2026/7/5 19:34:32
+```
+
+AstrBot 进程在 `chat_service.py` 修改之前启动，Round-1 改动并未在内存里生效。
+旧 chat_service 收到新插件发的 `chain_type: "interactive_choice"` 事件后**没
+有分发分支**，把 `data` 字段（JSON 字符串）当成 plain text 写进 bot 消息。`injectOrphans`
+拿不到结构化 part，只能把 box 全塞最后一条 bot 消息 —— 即截图里页底两个 box。
+
+**Round-2 方案**：加前端迁移层，刷新页面时把 plain text 里的旧 wire format JSON
+还原成 `InteractiveChoicePart`，这样**无论 chat_service 是否重启，旧历史都正确**。
+
+### 8.1 新增纯函数
+
+`dashboard/src/composables/parseInteractiveChoice.ts` 末尾追加：
+
+- `tryRecoverInteractiveChoiceFromPlainText(text: string): InteractiveChoicePart | null`
+  - 用 `text.indexOf('{"request_id"')` 找边界，大括号配对走到匹配 `}` 收尾（防
+    LLM 文本里的尾随 `}` 干扰）
+  - 调 `JSON.parse` 解析；失败/缺字段返回 `null`
+  - 通过 `validateInteractiveChoice` 验证后返回 `truncateInteractiveChoice` 截好的 part
+
+### 8.2 接入 ChatMessageList.vue
+
+新加 `migrateOldInteractiveChoiceText(records: ChatRecord[]): number`，**就地**
+替换 plain text part 为结构化 part。挂载在 3 处：
+
+| 位置 | 顺序 |
+|---|---|
+| `onMounted` | `hydrate` → `migrateOldInteractiveChoiceText` → `injectOrphans` → `mirror` → `recomputeIgnored` |
+| `watch(props.messages)` | `migrateOldInteractiveChoiceText` → `mirrorInteractiveChoiceParts` |
+| `watch(props.currentUmo)` | `hydrate(newUmo)` → `migrateOldInteractiveChoiceText` → `injectOrphans` |
+
+顺序必须保证 migrate **在 injectOrphans 之前**：后者看到还原后的结构化 part 就
+会走 `alreadyAttached = true` 短路，不会把 box 再塞到页底。
+
+### 8.3 测试
+
+`parseInteractiveChoice.test.ts` 加 9 个 case 覆盖：
+
+- 纯 JSON 字符串还原
+- LLM narrative + JSON 尾部（对应截图里的"好的，再次调用 ask_user_choice 工具：{JSON}"）
+- LLM narrative + JSON 中部 + 尾部干扰
+- narrative-only / null / undefined 兜底
+- spec 校验失败、request_id 缺失
+- 截断 JSON 大括号没闭合 → 干净返回 null 不抛
+- `expires_at` 非数字时正确丢弃
+
+`pnpm exec node --test src/composables/parseInteractiveChoice.test.ts`
+`pnpm exec node --test src/composables/parseInteractiveChoice.sse.test.ts`
+`pnpm exec node --test src/stores/interactiveChoice.test.ts`
+→ **71/71 全过**；`pnpm exec vue-tsc --noEmit` 静默通过。
+
+### 8.4 部署注意
+
+**chat_service.py 是 Python 模块，AstrBot 启动后不会热加载。** 用户必须重启
+AstrBot 进程让新代码进内存（之前的 10372 进程是 19:34 启动的，跑的还是旧代码）。
+重启方法按用户工作流而定（一般是关掉当前运行的 `main.py` 再 `uv run main.py`）。
+
+Round-2 前端迁移层对未重启场景做了兜底，旧历史也能正确显示；新历史在重启后
+会走 chat_service 的新分支，DB 里就是结构化 part，前端迁移变成 no-op。
 | `astrbot/dashboard/services/chat_service.py` | +1 method (~40 行) + 1 分支 (~5 行) | 低（新增分支不影响已有 plain / tool_call / tool_call_result / reasoning 路径） |
 | `astrbot/dashboard/services/live_chat_service.py` | 0（共享 `BotMessageAccumulator`） | — |
 | `astrbot/dashboard/services/open_api_service.py` | 0（同上） | — |

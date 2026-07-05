@@ -95,6 +95,120 @@ export function getOptionSubmitText(opt: InteractiveChoiceOption): string {
 }
 
 /**
+ * Recover an `InteractiveChoicePart` from a plain-text part whose
+ * `text` field accidentally contains the OLD plugin wire format.
+ *
+ * Background: the round-1 fix changed the plugin to emit
+ * `type: "plain" + chain_type: "interactive_choice"` (data = JSON
+ * string of the v1.0 envelope). Pre-fix `BotMessageAccumulator.add_plain`
+ * had no such branch, so the JSON string was *appended to the bot
+ * message's pending text* and persisted as a plain-text part. After
+ * the chat_service is upgraded, NEW conversations persist a proper
+ * `interactive_choice` part instead — but OLD conversations still
+ * have the JSON in their plain-text parts.
+ *
+ * This helper is the defensive one-time migration that turns those
+ * stale plain-text parts into real `InteractiveChoicePart`s so a hard
+ * refresh renders the box at the original chronological position
+ * (not at the page tail via orphan-injection).
+ *
+ * Args:
+ *   text: The plain text to scan. The function only fires when the
+ *     text actually contains a wire-format JSON object — narrative
+ *     text is left alone.
+ *
+ * Returns:
+ *   The recovered `InteractiveChoicePart` (validated + truncated) or
+ *   `null` when no wire-format JSON is present.
+ */
+export function tryRecoverInteractiveChoiceFromPlainText(
+  text: string,
+): InteractiveChoicePart | null {
+  if (typeof text !== "string" || !text) return null;
+  // Scan for the wire format by looking for a `{` that opens a
+  // JSON object containing both `"request_id"` and `"spec"`. The
+  // LLM's narrative never produces both keys, so this is safe.
+  const startIdx = text.indexOf('{"request_id"');
+  if (startIdx < 0) return null;
+  // Walk to the matching closing brace so a trailing `}` from
+  // unrelated LLM text doesn't break the parse.
+  let depth = 0;
+  let endIdx = -1;
+  for (let i = startIdx; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        endIdx = i;
+        break;
+      }
+    }
+  }
+  if (endIdx < 0) return null;
+  const jsonStr = text.slice(startIdx, endIdx + 1);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+  const obj = parsed as Record<string, unknown>;
+  const spec = obj.spec;
+  if (!isInteractiveChoicePayload(spec)) return null;
+  const outerRequestId =
+    typeof obj.request_id === "string" ? obj.request_id.trim() : "";
+  if (!outerRequestId) return null;
+  const part: InteractiveChoicePart = {
+    ...(spec as InteractiveChoicePart),
+    request_id: outerRequestId,
+  };
+  if (typeof obj.expires_at === "number") {
+    part.expires_at = obj.expires_at;
+  } else {
+    delete part.expires_at;
+  }
+  if (!validateInteractiveChoice(part)) return null;
+  return truncateInteractiveChoice(part);
+}
+
+/**
+ * Migrate a flat parts array in place: any plain-text part whose
+ * text accidentally contains the OLD wire format is replaced by a
+ * recovered `interactive_choice` part.
+ *
+ * Returns the same array reference (mutated in place) for ergonomic
+ * chaining. Plain-text parts that don't match the wire format are
+ * left untouched. Non-plain parts are also untouched.
+ *
+ * Idempotent — running it twice is a no-op.
+ */
+export function migrateInteractiveChoicePartsInPlace<
+  T extends { type: string; text?: unknown },
+>(parts: T[]): T[] {
+  if (!Array.isArray(parts)) return parts;
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i];
+    if (
+      part &&
+      part.type === "plain" &&
+      typeof (part as { text?: unknown }).text === "string"
+    ) {
+      const recovered = tryRecoverInteractiveChoiceFromPlainText(
+        (part as { text: string }).text,
+      );
+      if (recovered) {
+        parts[i] = recovered as unknown as T;
+      }
+    }
+  }
+  return parts;
+}
+
+/**
  * Convert a raw SSE payload from `webchat_queue_mgr.back_queue` into a
  * fully-validated, truncated `InteractiveChoicePart` ready for
  * `useInteractiveChoiceStore().addChoice(...)`.

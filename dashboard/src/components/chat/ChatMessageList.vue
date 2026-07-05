@@ -448,7 +448,9 @@ import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMe
 import InteractiveChoiceBox from "@/components/chat/message_list_comps/InteractiveChoiceBox.vue";
 import {
   isInteractiveChoicePayload,
+  validateInteractiveChoice,
   truncateInteractiveChoice,
+  tryRecoverInteractiveChoiceFromPlainText,
   type InteractiveChoicePart,
 } from "@/composables/parseInteractiveChoice";
 import { useInteractiveChoiceStore } from "@/stores/interactiveChoice";
@@ -578,6 +580,53 @@ async function onInteractiveChoiceSubmit(
 }
 
 /**
+ * One-time migration for OLD chat_service history: any plain-text
+ * part whose text accidentally contains the pre-fix plugin wire
+ * format JSON is replaced *in place* with a recovered
+ * `interactive_choice` part.
+ *
+ * Why this is needed: the round-1 fix changed the plugin to emit
+ * `type: "plain" + chain_type: "interactive_choice"` and added the
+ * matching `BotMessageAccumulator._store_interactive_choice` branch.
+ * Conversations started before *both* pieces are deployed still have
+ * the JSON dumped into a plain-text part. A hard refresh would then
+ * show JSON text *and* dump every box at the page tail via the
+ * `injectOrphans` fallback.
+ *
+ * Idempotent — running it twice is a no-op. Safe to call on every
+ * messages change (live messages from the upgraded chat_service
+ * already contain proper `interactive_choice` parts, so this loop
+ * short-circuits on the first non-plain check).
+ *
+ * Returns the number of parts recovered (for debug logging only).
+ */
+function migrateOldInteractiveChoiceText(records: ChatRecord[]): number {
+  let count = 0;
+  for (const m of records) {
+    if (isUserMessage(m)) continue;
+    const parts = m?.content?.message;
+    if (!Array.isArray(parts)) continue;
+    for (let i = 0; i < parts.length; i += 1) {
+      const part = parts[i] as { type?: string; text?: unknown };
+      if (
+        part &&
+        part.type === "plain" &&
+        typeof part.text === "string"
+      ) {
+        const recovered = tryRecoverInteractiveChoiceFromPlainText(
+          part.text as string,
+        );
+        if (recovered) {
+          (parts as unknown[])[i] = recovered;
+          count += 1;
+        }
+      }
+    }
+  }
+  return count;
+}
+
+/**
  * Mirror any `interactive_choice` parts present in `props.messages` into
  * the Pinia store. This is the "SSE → store" wiring for the chat-history
  * path: a part appearing in messages (whether from an initial load, from
@@ -619,6 +668,18 @@ onMounted(() => {
   // `null` / empty is a programmer error here — the parent always
   // hands us a real UMO before mount.
   interactiveChoiceStore.hydrate(props.currentUmo);
+  // Round-2 defensive migration: turn OLD plain-text wire-format
+  // JSON (round-1 pre-fix) into proper `interactive_choice` parts
+  // in place. Must run *before* `injectOrphans` so its
+  // `alreadyAttached` check sees the recovered parts and skips
+  // dumping them at the page tail.
+  const recovered = migrateOldInteractiveChoiceText(props.messages);
+  if (recovered > 0) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[interactiveChoice] migrated ${recovered} old plain-text wire-format part(s) into interactive_choice`,
+    );
+  }
   // Bug X1 / X2 fix: re-attach orphan store parts (those restored
   // from localStorage but absent from chat history) to the nearest
   // bot message so <InteractiveChoiceBox> has a render source after
@@ -673,6 +734,10 @@ onMounted(() => {
 watch(
   () => props.messages,
   (next) => {
+    // Round-2 defensive migration runs first so a freshly arrived
+    // old-history batch (e.g. paginated load) is upgraded before
+    // the store mirror sees it.
+    migrateOldInteractiveChoiceText(next);
     mirrorInteractiveChoiceParts(next);
   },
   { deep: true },
@@ -688,6 +753,9 @@ watch(
     // render. `hydrate` is the documented single entry point for
     // switching sessions.
     interactiveChoiceStore.hydrate(nextUmo);
+    // Round-2: also migrate before orphan-injection on a UMO switch
+    // so a tab-switch into an old session still recovers its parts.
+    migrateOldInteractiveChoiceText(props.messages);
     const injected = interactiveChoiceStore.injectOrphans(
       nextUmo,
       props.messages as unknown as Parameters<
