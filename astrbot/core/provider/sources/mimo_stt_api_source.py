@@ -4,6 +4,8 @@ from ..register import register_provider_adapter
 from .mimo_api_common import (
     DEFAULT_MIMO_API_BASE,
     DEFAULT_MIMO_STT_MODEL,
+    DEFAULT_MIMO_STT_SYSTEM_PROMPT,
+    DEFAULT_MIMO_STT_USER_PROMPT,
     MiMoAPIError,
     build_api_url,
     build_headers,
@@ -33,23 +35,49 @@ class ProviderMiMoSTTAPI(STTProvider):
         self.set_model(provider_config.get("model", DEFAULT_MIMO_STT_MODEL))
         self.client = create_http_client(self.timeout, self.proxy)
 
+    def _is_asr_model(self) -> bool:
+        return "asr" in (self.model_name or "").lower()
+
+    def _build_messages(self, audio_data_url: str) -> list[dict]:
+        audio_content = {
+            "type": "input_audio",
+            "input_audio": {
+                "data": audio_data_url,
+            },
+        }
+        if self._is_asr_model():
+            # Dedicated ASR models (speech-recognition docs) take bare audio.
+            return [
+                {
+                    "role": "user",
+                    "content": [audio_content],
+                },
+            ]
+        # Multimodal models such as mimo-v2.5 (audio-understanding docs)
+        # require a text instruction alongside the audio, otherwise the API
+        # rejects the request.
+        return [
+            {
+                "role": "system",
+                "content": DEFAULT_MIMO_STT_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": [
+                    audio_content,
+                    {
+                        "type": "text",
+                        "text": DEFAULT_MIMO_STT_USER_PROMPT,
+                    },
+                ],
+            },
+        ]
+
     async def get_text(self, audio_url: str) -> str:
         audio_data_url, cleanup_paths = await prepare_audio_input(audio_url)
         payload = {
             "model": self.model_name,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "input_audio",
-                            "input_audio": {
-                                "data": audio_data_url,
-                            },
-                        },
-                    ],
-                },
-            ],
+            "messages": self._build_messages(audio_data_url),
             "max_completion_tokens": 1024,
         }
 
