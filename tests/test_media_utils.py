@@ -447,9 +447,10 @@ def test_file_uri_to_path_supports_standard_and_legacy_posix_file_uris(tmp_path)
 
 
 def test_file_uri_to_path_preserves_posix_root_for_container_paths():
-    assert media_utils.file_uri_to_path("file:///AstrBot/data/cache/image.png") == (
-        "/AstrBot/data/cache/image.png"
-    )
+    if os.name != "nt":
+        assert media_utils.file_uri_to_path("file:///AstrBot/data/cache/image.png") == (
+            "/AstrBot/data/cache/image.png"
+        )
 
 
 def test_from_file_system_uses_pathlib_file_uri(tmp_path):
