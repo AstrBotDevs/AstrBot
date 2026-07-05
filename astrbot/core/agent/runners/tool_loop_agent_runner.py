@@ -695,7 +695,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
         llm_resp: LLMResponse,
     ) -> None:
-        """Normalize malformed tool call names while preserving list alignment.
+        """Normalize malformed tool call names.
 
         Args:
             llm_resp: The LLM response whose tool call lists should be sanitized.
