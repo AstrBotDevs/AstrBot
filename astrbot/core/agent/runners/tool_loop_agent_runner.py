@@ -702,7 +702,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         """
         llm_resp.tools_call_name = [
             self.MALFORMED_TOOL_NAME_PLACEHOLDER
-            if tool_name is None or tool_name == ""
+            if tool_name is None or tool_name.strip() == ""
             else tool_name
             for tool_name in llm_resp.tools_call_name
         ]
