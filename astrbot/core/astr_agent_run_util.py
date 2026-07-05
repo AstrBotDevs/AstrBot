@@ -25,7 +25,11 @@ AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
 
 def _should_stop_agent(astr_event) -> bool:
-    return astr_event.is_stopped() or bool(astr_event.get_extra("agent_stop_requested"))
+    return (
+        astr_event.is_stopped()
+        or bool(astr_event.get_extra("agent_stop_requested"))
+        or bool(astr_event.get_extra("agent_user_aborted"))
+    )
 
 
 def _truncate_tool_result(text: str, limit: int = 70) -> str:
@@ -159,17 +163,8 @@ async def run_agent(
                     agent_runner.request_stop()
 
                 if resp.type == "aborted":
-                    if can_buffer_llm_result:
-                        merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
-                        if merged_chain:
-                            astr_event.set_result(
-                                MessageEventResult(
-                                    chain=merged_chain.chain,
-                                    result_content_type=ResultContentType.LLM_RESULT,
-                                ),
-                            )
-                            yield merged_chain
-                            astr_event.clear_result()
+                    buffered_llm_chains.clear()
+                    astr_event.clear_result()
                     if not stop_watcher.done():
                         stop_watcher.cancel()
                         try:
@@ -272,16 +267,27 @@ async def run_agent(
                     yield resp.data["chain"]  # MessageChain
 
             if can_buffer_llm_result and agent_runner.done():
-                merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
-                if merged_chain:
-                    astr_event.set_result(
-                        MessageEventResult(
-                            chain=merged_chain.chain,
-                            result_content_type=ResultContentType.LLM_RESULT,
-                        ),
-                    )
-                    yield merged_chain
+                if _should_stop_agent(astr_event):
+                    buffered_llm_chains.clear()
                     astr_event.clear_result()
+                    discard_late_result = getattr(
+                        agent_runner,
+                        "discard_late_aborted_result",
+                        None,
+                    )
+                    if callable(discard_late_result):
+                        discard_late_result()
+                else:
+                    merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
+                    if merged_chain:
+                        astr_event.set_result(
+                            MessageEventResult(
+                                chain=merged_chain.chain,
+                                result_content_type=ResultContentType.LLM_RESULT,
+                            ),
+                        )
+                        yield merged_chain
+                        astr_event.clear_result()
 
             if not stop_watcher.done():
                 stop_watcher.cancel()
@@ -439,6 +445,11 @@ async def run_live_agent(
             if queue_item is None:
                 break
 
+            if agent_runner.was_aborted() or _should_stop_agent(
+                agent_runner.run_context.context.event
+            ):
+                continue
+
             text = None
             if isinstance(queue_item, tuple):
                 text, audio_data = queue_item
@@ -550,8 +561,12 @@ async def _run_agent_feeder(
                     # 更新 buffer 为剩余部分
                     buffer = temp_buffer + parts[-1]
 
-        # 处理剩余 buffer
-        if buffer.strip():
+        # 处理剩余 buffer。若 stop 已到达，未送出的文本不能再进入 TTS。
+        if (
+            buffer.strip()
+            and not agent_runner.was_aborted()
+            and not _should_stop_agent(agent_runner.run_context.context.event)
+        ):
             await text_queue.put(buffer)
 
     except Exception as e:
@@ -596,13 +611,20 @@ async def _simulated_stream_tts(
             text = await text_queue.get()
             if text is None:
                 break
+            if _should_stop_agent(astr_event):
+                continue
 
             try:
                 audio_path = await tts_provider.get_audio(text)
 
+                if _should_stop_agent(astr_event):
+                    continue
+
                 if audio_path:
                     with open(audio_path, "rb") as f:
                         audio_data = f.read()
+                    if _should_stop_agent(astr_event):
+                        continue
                     astr_event.track_temporary_local_file(audio_path)
                     await audio_queue.put((text, audio_data))
             except Exception as e:

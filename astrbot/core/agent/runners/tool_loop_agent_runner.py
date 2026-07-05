@@ -112,10 +112,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
     EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
-    USER_INTERRUPTION_MESSAGE = (
-        "[SYSTEM: User actively interrupted the response generation. "
-        "Partial output before interruption is preserved.]"
-    )
     FOLLOW_UP_NOTICE_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] User sent follow-up messages while tool execution "
         "was in progress. Prioritize these follow-up instructions in your next "
@@ -176,8 +172,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         event = getattr(self.run_context.context, "event", None)
         return extract_persona_custom_error_message_from_event(event)
 
-    async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> None:
+    async def _complete_with_assistant_response(self, llm_resp: LLMResponse) -> bool:
         """Finalize the current step as a plain assistant response with no tool calls."""
+        if self._is_stop_requested():
+            await self._finalize_aborted_step(llm_resp)
+            return False
+
         self.final_llm_resp = llm_resp
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
@@ -196,11 +196,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             logger.warning("LLM returned empty assistant message with no tool calls.")
         self.run_context.messages.append(Message(role="assistant", content=parts))
 
+        if self._is_stop_requested():
+            if self._is_message_from_llm_response(
+                self.run_context.messages[-1], llm_resp
+            ):
+                self.run_context.messages.pop()
+            await self._finalize_aborted_step(llm_resp)
+            return False
+
         try:
             await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
         except Exception as e:
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
+        if self._is_stop_requested():
+            self.discard_late_aborted_result()
+            self._resolve_unconsumed_follow_ups()
+            return False
         self._resolve_unconsumed_follow_ups()
+        return True
 
     @override
     async def reset(
@@ -282,6 +295,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
         self._same_tool_streak = 0
+        self._recorded_usage_ids: set[int] = set()
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -322,6 +336,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+
+    def _record_llm_usage(self, llm_resp: LLMResponse) -> None:
+        if not llm_resp.usage:
+            return
+        usage_id = id(llm_resp.usage)
+        if usage_id in self._recorded_usage_ids:
+            return
+        self._recorded_usage_ids.add(usage_id)
+        self.stats.token_usage += llm_resp.usage
+        if self.req.conversation:
+            self.req.conversation.token_usage = llm_resp.usage.total
 
     def _read_tool_hint(self) -> str:
         if self.read_tool is not None:
@@ -488,6 +513,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         last_err_response: LLMResponse | None = None
 
         for idx, candidate in enumerate(candidates):
+            if self._is_stop_requested():
+                return
+
             candidate_id = candidate.provider_config.get("id", "<unknown>")
             is_last_candidate = idx == total_candidates - 1
             if idx > 0:
@@ -526,6 +554,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     and not has_stream_output
                                     and (not is_last_candidate)
                                 ):
+                                    if self._is_stop_requested():
+                                        return
                                     last_err_response = resp
                                     logger.warning(
                                         "Chat Model %s returns error response, trying fallback to next provider.",
@@ -734,6 +764,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
         async for llm_response in self._iter_llm_responses_with_fallback():
+            if self._is_stop_requested():
+                llm_resp_result = llm_response
+                break
+
             if llm_response.is_chunk:
                 if self.stats.time_to_first_token == 0:
                     self.stats.time_to_first_token = time.time() - self.stats.start_time
@@ -747,11 +781,17 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ),
                         ),
                     )
+                    if self._is_stop_requested():
+                        llm_resp_result = llm_response
+                        break
                 if llm_response.result_chain:
                     yield AgentResponse(
                         type="streaming_delta",
                         data=AgentResponseData(chain=llm_response.result_chain),
                     )
+                    if self._is_stop_requested():
+                        llm_resp_result = llm_response
+                        break
                 elif llm_response.completion_text:
                     yield AgentResponse(
                         type="streaming_delta",
@@ -759,22 +799,18 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             chain=MessageChain().message(llm_response.completion_text),
                         ),
                     )
+                    if self._is_stop_requested():
+                        llm_resp_result = llm_response
+                        break
                 if self._is_stop_requested():
-                    llm_resp_result = LLMResponse(
-                        role="assistant",
-                        completion_text=self.USER_INTERRUPTION_MESSAGE,
-                        reasoning_content=llm_response.reasoning_content,
-                        reasoning_signature=llm_response.reasoning_signature,
-                    )
+                    llm_resp_result = llm_response
                     break
                 continue
             llm_resp_result = llm_response
 
             if not llm_response.is_chunk and llm_response.usage:
                 # only count the token usage of the final response for computation purpose
-                self.stats.token_usage += llm_response.usage
-                if self.req.conversation:
-                    self.req.conversation.token_usage = llm_response.usage.total
+                self._record_llm_usage(llm_response)
             break  # got final response
 
         if not llm_resp_result:
@@ -809,7 +845,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
 
         if not llm_resp.tools_call_name:
-            await self._complete_with_assistant_response(llm_resp)
+            if not await self._complete_with_assistant_response(llm_resp):
+                yield AgentResponse(
+                    type="aborted",
+                    data=AgentResponseData(chain=MessageChain(type="aborted")),
+                )
+                return
 
         # 返回 LLM 结果
         if llm_resp.reasoning_content:
@@ -838,11 +879,21 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.tools_call_name:
             if self.tool_schema_mode == "skills_like":
                 requery_resp, _ = await self._resolve_tool_exec(llm_resp)
+                if self._is_stop_requested():
+                    yield await self._finalize_aborted_step(requery_resp)
+                    return
                 if not requery_resp.tools_call_name:
                     llm_resp = requery_resp
                     logger.warning(
                         "skills_like tool re-query returned no tool calls; fallback to assistant response."
                     )
+                    if not await self._complete_with_assistant_response(llm_resp):
+                        yield AgentResponse(
+                            type="aborted",
+                            data=AgentResponseData(chain=MessageChain(type="aborted")),
+                        )
+                        return
+
                     if llm_resp.reasoning_content:
                         yield AgentResponse(
                             type="llm_result",
@@ -864,8 +915,6 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 chain=MessageChain().message(llm_resp.completion_text),
                             ),
                         )
-
-                    await self._complete_with_assistant_response(llm_resp)
                     return
                 else:
                     llm_resp.tools_call_name = requery_resp.tools_call_name
@@ -1332,6 +1381,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     llm_resp = requery_resp
                     self._sanitize_malformed_tool_calls(llm_resp)
 
+                if self._is_stop_requested():
+                    return llm_resp, subset
+
                 # If the re-query still returns no tool calls, and also does not have a meaningful assistant reply,
                 # we consider it as a failure of the LLM to follow the tool-use instruction,
                 # and we will retry once with a stronger instruction that explicitly requires the LLM to either call the tool or give an explanation.
@@ -1370,7 +1422,24 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._abort_signal.set()
 
     def _is_stop_requested(self) -> bool:
-        return self._abort_signal.is_set()
+        if self._abort_signal.is_set():
+            return True
+
+        event = getattr(self.run_context.context, "event", None)
+        if event is None:
+            return False
+
+        is_stopped = getattr(event, "is_stopped", None)
+        if callable(is_stopped) and is_stopped():
+            return True
+
+        get_extra = getattr(event, "get_extra", None)
+        if callable(get_extra):
+            return bool(get_extra("agent_stop_requested")) or bool(
+                get_extra("agent_user_aborted")
+            )
+
+        return False
 
     def was_aborted(self) -> bool:
         return self._aborted
@@ -1378,38 +1447,72 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def get_final_llm_resp(self) -> LLMResponse | None:
         return self.final_llm_resp
 
+    def _build_aborted_llm_response(
+        self,
+        llm_resp: LLMResponse | None = None,
+    ) -> LLMResponse:
+        """构造不会泄露迟到模型正文的空响应。"""
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            id=getattr(llm_resp, "id", None) if llm_resp else None,
+            usage=getattr(llm_resp, "usage", None) if llm_resp else None,
+        )
+
+    def _is_message_from_llm_response(
+        self,
+        message: Message,
+        llm_resp: LLMResponse | None,
+    ) -> bool:
+        if llm_resp is None or message.role != "assistant" or message.tool_calls:
+            return False
+        content = message.content
+        if not isinstance(content, list):
+            return False
+        for part in content:
+            if isinstance(part, TextPart) and part.text != llm_resp.completion_text:
+                return False
+            if isinstance(part, ThinkPart) and part.think != (
+                llm_resp.reasoning_content or ""
+            ):
+                return False
+        return True
+
+    def discard_late_aborted_result(self) -> None:
+        """丢弃已完成但尚未对用户可见发送的迟到模型正文。"""
+        original_llm_resp = self.final_llm_resp
+        if original_llm_resp:
+            self._record_llm_usage(original_llm_resp)
+        self.final_llm_resp = self._build_aborted_llm_response(self.final_llm_resp)
+        self._aborted = True
+        event = getattr(self.run_context.context, "event", None)
+        if event is not None:
+            event.set_extra("agent_user_aborted", True)
+            event.set_extra("agent_stop_requested", False)
+        if self.run_context.messages and self._is_message_from_llm_response(
+            self.run_context.messages[-1],
+            original_llm_resp,
+        ):
+            self.run_context.messages.pop()
+
     async def _finalize_aborted_step(
         self,
         llm_resp: LLMResponse | None = None,
     ) -> AgentResponse:
         logger.info("Agent execution was requested to stop by user.")
-        if llm_resp is None:
-            llm_resp = LLMResponse(role="assistant", completion_text="")
-        if llm_resp.role != "assistant":
-            llm_resp = LLMResponse(
-                role="assistant",
-                completion_text=self.USER_INTERRUPTION_MESSAGE,
-            )
-        self.final_llm_resp = llm_resp
+        safe_llm_resp = self._build_aborted_llm_response(llm_resp)
+        self.final_llm_resp = safe_llm_resp
+        self._record_llm_usage(safe_llm_resp)
         self._aborted = True
+        event = getattr(self.run_context.context, "event", None)
+        if event is not None:
+            event.set_extra("agent_user_aborted", True)
+            event.set_extra("agent_stop_requested", False)
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
 
-        parts = []
-        if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
-            parts.append(
-                ThinkPart(
-                    think=llm_resp.reasoning_content or "",
-                    encrypted=llm_resp.reasoning_signature,
-                )
-            )
-        if llm_resp.completion_text:
-            parts.append(TextPart(text=llm_resp.completion_text))
-        if parts:
-            self.run_context.messages.append(Message(role="assistant", content=parts))
-
         try:
-            await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
+            await self.agent_hooks.on_agent_done(self.run_context, safe_llm_resp)
         except Exception as e:
             logger.error(f"Error in on_agent_done hook: {e}", exc_info=True)
 

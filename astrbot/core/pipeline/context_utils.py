@@ -9,6 +9,25 @@ from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 
+def _event_requests_agent_stop(event: AstrMessageEvent) -> bool:
+    get_extra = getattr(event, "get_extra", None)
+    return (
+        event.is_stopped()
+        or (bool(get_extra("agent_user_aborted")) if callable(get_extra) else False)
+        or (bool(get_extra("agent_stop_requested")) if callable(get_extra) else False)
+    )
+
+
+def _should_stop_hook_propagation(
+    event: AstrMessageEvent, hook_type: EventType
+) -> bool:
+    if event.is_stopped():
+        return True
+    return hook_type == EventType.OnLLMResponseEvent and _event_requests_agent_stop(
+        event
+    )
+
+
 async def call_handler(
     event: AstrMessageEvent,
     handler: T.Callable[..., T.Awaitable[T.Any] | T.AsyncGenerator[T.Any, None]],
@@ -90,6 +109,9 @@ async def call_event_hook(
         plugins_name=event.plugins_name,
     )
     for handler in handlers:
+        if _should_stop_hook_propagation(event, hook_type):
+            return True
+
         try:
             assert inspect.iscoroutinefunction(handler.handler)
             logger.debug(
@@ -99,10 +121,10 @@ async def call_event_hook(
         except BaseException:
             logger.error(traceback.format_exc())
 
-        if event.is_stopped():
+        if _should_stop_hook_propagation(event, hook_type):
             logger.info(
                 f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
             )
             return True
 
-    return event.is_stopped()
+    return _should_stop_hook_propagation(event, hook_type)

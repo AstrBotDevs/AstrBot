@@ -320,6 +320,13 @@ class InternalAgentSubStage(Stage):
                             ),
                         )
                         yield
+                        if agent_runner.was_aborted():
+                            event.set_result(
+                                MessageEventResult(
+                                    chain=MessageChain().chain,
+                                    result_content_type=ResultContentType.STREAMING_FINISH,
+                                ),
+                            )
 
                         # 保存历史记录
                         if agent_runner.done() and (
@@ -351,7 +358,14 @@ class InternalAgentSubStage(Stage):
                             ),
                         )
                         yield
-                        if agent_runner.done():
+                        if agent_runner.done() and agent_runner.was_aborted():
+                            event.set_result(
+                                MessageEventResult(
+                                    chain=MessageChain().chain,
+                                    result_content_type=ResultContentType.STREAMING_FINISH,
+                                ),
+                            )
+                        elif agent_runner.done():
                             if final_llm_resp := agent_runner.get_final_llm_resp():
                                 if final_llm_resp.completion_text:
                                     chain = (
