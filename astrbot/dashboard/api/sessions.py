@@ -8,6 +8,9 @@ from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
     BatchSessionProviderRequest,
     BatchSessionServiceRequest,
+    SessionAliasRequest,
+    SessionConfigOverrideDeleteRequest,
+    SessionConfigOverrideRequest,
     SessionGroupRequest,
     SessionRuleRequest,
     UmoListRequest,
@@ -163,6 +166,80 @@ async def delete_session_rule(
         return _service_error(exc)
     except Exception as exc:
         return _unexpected_error("删除会话规则失败", exc)
+
+
+@router.get("/sessions/config-overrides")
+async def list_session_config_overrides(
+    page: int = Query(1),
+    page_size: int = Query(10),
+    search: str = Query(""),
+    _auth: AuthContext = Depends(require_data_scope),
+    service: SessionManagementService = Depends(get_service),
+):
+    try:
+        return ok(
+            await service.list_session_config_overrides(
+                page=page,
+                page_size=page_size,
+                search=search.strip(),
+            )
+        )
+    except SessionManagementServiceError as exc:
+        return _service_error(exc)
+    except Exception as exc:
+        return _unexpected_error("获取会话配置覆盖项列表失败", exc)
+
+
+@router.post("/sessions/config-overrides")
+async def upsert_session_config_override(
+    payload: SessionConfigOverrideRequest,
+    _auth: AuthContext = Depends(require_data_scope),
+    service: SessionManagementService = Depends(get_service),
+):
+    try:
+        return ok(
+            await service.update_session_config_override(
+                payload.model_dump(exclude_unset=True)
+            )
+        )
+    except SessionManagementServiceError as exc:
+        return _service_error(exc)
+    except Exception as exc:
+        return _unexpected_error("更新会话配置覆盖项失败", exc)
+
+
+@router.post("/sessions/config-overrides/delete")
+async def delete_session_config_override(
+    payload: SessionConfigOverrideDeleteRequest,
+    _auth: AuthContext = Depends(require_data_scope),
+    service: SessionManagementService = Depends(get_service),
+):
+    try:
+        return ok(
+            await service.delete_session_config_override(
+                payload.model_dump(exclude_none=True)
+            )
+        )
+    except SessionManagementServiceError as exc:
+        return _service_error(exc)
+    except Exception as exc:
+        return _unexpected_error("删除会话配置覆盖项失败", exc)
+
+
+@router.post("/sessions/aliases")
+async def upsert_session_alias(
+    payload: SessionAliasRequest,
+    _auth: AuthContext = Depends(require_data_scope),
+    service: SessionManagementService = Depends(get_service),
+):
+    try:
+        return ok(
+            await service.update_session_alias(payload.model_dump(exclude_unset=True))
+        )
+    except SessionManagementServiceError as exc:
+        return _service_error(exc)
+    except Exception as exc:
+        return _unexpected_error("更新会话备注失败", exc)
 
 
 @router.patch("/sessions/provider")

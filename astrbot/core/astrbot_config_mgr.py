@@ -1,10 +1,22 @@
 import os
 import uuid
+from contextvars import Token
 from typing import TypedDict, TypeVar
 
 from astrbot.core import AstrBotConfig, logger
 from astrbot.core.config.astrbot_config import ASTRBOT_CONFIG_PATH
 from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.config.overrides import (
+    CORE_CONFIG_OVERRIDE_KEY,
+    build_effective_core_config,
+    build_effective_core_config_sync,
+    get_current_effective_config,
+    normalize_config_override_payload,
+    remove_core_config_override_paths,
+    reset_current_effective_config,
+    set_current_effective_config,
+    update_core_config_override_paths,
+)
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.utils.astrbot_path import get_astrbot_config_path
@@ -30,6 +42,8 @@ DEFAULT_CONFIG_CONF_INFO = ConfInfo(
 
 class AstrBotConfigManager:
     """A class to manage the system configuration of AstrBot, aka ACM"""
+
+    core_config_override_key = CORE_CONFIG_OVERRIDE_KEY
 
     def __init__(
         self,
@@ -121,8 +135,15 @@ class AstrBotConfigManager:
         self.sp.put("abconf_mapping", abconf_data, scope="global", scope_id="global")
         self.abconf_data = abconf_data
 
-    def get_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
-        """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
+    def get_base_conf(self, umo: str | MessageSession | None) -> AstrBotConfig:
+        """Get the base config profile for a UMO without applying overrides.
+
+        Args:
+            umo: Unified message origin or message session.
+
+        Returns:
+            Shared base config profile selected for the UMO.
+        """
         if not umo:
             return self.confs["default"]
         if isinstance(umo, MessageSession):
@@ -135,6 +156,116 @@ class AstrBotConfigManager:
             conf = self.confs["default"]  # default MUST exists
 
         return conf
+
+    def get_conf(self, umo: str | MessageSession | None = None) -> AstrBotConfig:
+        """获取指定 umo 的配置文件。如果不存在，则 fallback 到默认配置文件。"""
+        umo_str = None
+        if umo:
+            umo_str = (
+                f"{umo.platform_id}:{umo.message_type}:{umo.session_id}"
+                if isinstance(umo, MessageSession)
+                else str(umo)
+            )
+
+        effective_config = get_current_effective_config(umo_str)
+        if effective_config:
+            return effective_config
+
+        if not umo:
+            effective_config = get_current_effective_config()
+            if effective_config:
+                return effective_config
+            return self.confs["default"]
+
+        base_config = self.get_base_conf(umo)
+        return build_effective_core_config_sync(
+            base_config, self.sp, umo_str or str(umo)
+        )
+
+    def get_current_conf(self, default: AstrBotConfig | None = None) -> AstrBotConfig:
+        """Get the active task config or a caller-provided default config.
+
+        Args:
+            default: Config returned when no event-scoped config is active.
+
+        Returns:
+            Active effective config, default config, or the global default profile.
+        """
+        return get_current_effective_config() or default or self.confs["default"]
+
+    async def build_effective_conf(
+        self,
+        umo: str,
+        base_config: AstrBotConfig | None = None,
+    ) -> AstrBotConfig:
+        """Build an effective config for one UMO.
+
+        Args:
+            umo: Unified message origin.
+            base_config: Optional already-selected base config profile.
+
+        Returns:
+            Config view with UMO overrides applied.
+        """
+        return await build_effective_core_config(
+            base_config or self.get_base_conf(umo),
+            self.sp,
+            umo,
+        )
+
+    def activate_effective_conf(
+        self,
+        umo: str,
+        config: AstrBotConfig,
+    ) -> Token:
+        """Bind an effective config to the current async task.
+
+        Args:
+            umo: Unified message origin.
+            config: Effective config for the current event.
+
+        Returns:
+            Context variable token used to reset the binding.
+        """
+        return set_current_effective_config(umo, config)
+
+    def reset_effective_conf(self, token: Token) -> None:
+        """Reset the current task's effective config binding.
+
+        Args:
+            token: Token returned by activate_effective_conf.
+        """
+        reset_current_effective_config(token)
+
+    async def update_conf_overrides(self, umo: str, paths: dict) -> None:
+        """Merge config override paths for one UMO.
+
+        Args:
+            umo: Unified message origin.
+            paths: Dot-separated config path to override value mapping.
+        """
+        await update_core_config_override_paths(self.sp, umo, paths)
+
+    @staticmethod
+    def normalize_conf_override_payload(payload: object) -> dict:
+        """Normalize a config override payload into path-value pairs.
+
+        Args:
+            payload: Raw preference value for a config override.
+
+        Returns:
+            Dot-separated config path to override value mapping.
+        """
+        return normalize_config_override_payload(payload)
+
+    async def remove_conf_overrides(self, umo: str, paths: list[str]) -> None:
+        """Remove config override paths for one UMO.
+
+        Args:
+            umo: Unified message origin.
+            paths: Dot-separated config paths to remove.
+        """
+        await remove_core_config_override_paths(self.sp, umo, paths)
 
     @property
     def default_conf(self) -> AstrBotConfig:

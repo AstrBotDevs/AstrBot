@@ -30,6 +30,9 @@
     "notActivated": "Not activated",
     "note": "*System plugins and disabled plugins are not shown.",
     "selectedPluginsLabel": "Selected Plugins:",
+    "disabledPluginsLabel": "Disabled Plugins:",
+    "noDisabledPlugins": "No disabled plugins",
+    "selectDisabledPlugins": "Select disabled plugins",
     "allPluginsLabel": "All Plugins"
   },
   "providerSelector": {

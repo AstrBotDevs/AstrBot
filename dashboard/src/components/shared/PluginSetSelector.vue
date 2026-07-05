@@ -4,7 +4,7 @@
     <div class="d-flex align-center justify-space-between mb-2">
       <div class="flex-grow-1">
         <span v-if="!modelValue || modelValue.length === 0" style="color: rgb(var(--v-theme-primaryText));">
-          {{ tm('pluginSetSelector.notSelected') }}
+          {{ notSelectedLabel || tm('pluginSetSelector.notSelected') }}
         </span>
         <span v-else-if="isAllPlugins" style="color: rgb(var(--v-theme-primaryText));">
           {{ tm('pluginSetSelector.allPlugins') }}
@@ -32,19 +32,20 @@
         <div v-if="!loading">
           <!-- 预设选项 -->
           <v-radio-group v-model="selectionMode" class="mb-4" hide-details>
-            <v-radio 
+            <v-radio
+              v-if="showAllOption"
               value="all" 
-              :label="tm('pluginSetSelector.enableAll')" 
+              :label="allLabel || tm('pluginSetSelector.enableAll')"
               color="primary"
             ></v-radio>
             <v-radio 
               value="none" 
-              :label="tm('pluginSetSelector.enableNone')" 
+              :label="noneLabel || tm('pluginSetSelector.enableNone')"
               color="primary"
             ></v-radio>
             <v-radio 
               value="custom" 
-              :label="tm('pluginSetSelector.customSelect')" 
+              :label="customLabel || tm('pluginSetSelector.customSelect')"
               color="primary"
             ></v-radio>
           </v-radio-group>
@@ -120,6 +121,26 @@ const props = defineProps({
   maxDisplayItems: {
     type: Number,
     default: 3
+  },
+  showAllOption: {
+    type: Boolean,
+    default: true
+  },
+  allLabel: {
+    type: String,
+    default: ''
+  },
+  noneLabel: {
+    type: String,
+    default: ''
+  },
+  customLabel: {
+    type: String,
+    default: ''
+  },
+  notSelectedLabel: {
+    type: String,
+    default: ''
   }
 })
 
@@ -138,7 +159,7 @@ const pluginDescription = (plugin) => pluginDesc(plugin)
 
 // 判断是否为"所有插件"模式
 const isAllPlugins = computed(() => {
-  return props.modelValue && props.modelValue.length === 1 && props.modelValue[0] === '*'
+  return props.showAllOption && props.modelValue && props.modelValue.length === 1 && props.modelValue[0] === '*'
 })
 
 // 移除插件
@@ -154,7 +175,7 @@ watch(() => props.modelValue, (newValue) => {
   if (!newValue || newValue.length === 0) {
     selectionMode.value = 'none'
     selectedPlugins.value = []
-  } else if (newValue.length === 1 && newValue[0] === '*') {
+  } else if (props.showAllOption && newValue.length === 1 && newValue[0] === '*') {
     selectionMode.value = 'all'
     selectedPlugins.value = []
   } else {
@@ -195,7 +216,7 @@ function confirmSelection() {
   
   switch (selectionMode.value) {
     case 'all':
-      newValue = ['*']
+      newValue = props.showAllOption ? ['*'] : []
       break
     case 'none':
       newValue = []
@@ -215,7 +236,7 @@ function cancelSelection() {
   if (currentValue.length === 0) {
     selectionMode.value = 'none'
     selectedPlugins.value = []
-  } else if (currentValue.length === 1 && currentValue[0] === '*') {
+  } else if (props.showAllOption && currentValue.length === 1 && currentValue[0] === '*') {
     selectionMode.value = 'all'
     selectedPlugins.value = []
   } else {

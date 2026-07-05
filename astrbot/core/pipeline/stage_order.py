@@ -3,7 +3,6 @@
 STAGES_ORDER = [
     "WakingCheckStage",  # 检查是否需要唤醒
     "WhitelistCheckStage",  # 检查是否在群聊/私聊白名单
-    "SessionStatusCheckStage",  # 检查会话是否整体启用
     "RateLimitStage",  # 检查会话是否超过频率限制
     "ContentSafetyCheckStage",  # 检查内容安全
     "PreProcessStage",  # 预处理

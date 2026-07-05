@@ -28,6 +28,12 @@ class FakeEvent:
             self.temporary_local_files.append(path)
 
 
+def _make_preprocess_stage(config: dict) -> PreProcessStage:
+    stage = PreProcessStage()
+    stage.ctx = SimpleNamespace(astrbot_config=config)
+    return stage
+
+
 @pytest.mark.asyncio
 async def test_preprocess_preserves_image_formats_and_tracks_temp_files(
     tmp_path, monkeypatch
@@ -77,10 +83,7 @@ async def test_preprocess_preserves_image_formats_and_tracks_temp_files(
             ),
         ]
     )
-    stage = PreProcessStage()
-    stage.config = {}
-    stage.platform_settings = {}
-    stage.stt_settings = {"enable": False}
+    stage = _make_preprocess_stage({"provider_stt_settings": {"enable": False}})
 
     await stage.process(event)
 
@@ -114,10 +117,12 @@ async def test_preprocess_path_mapping_accepts_file_uri(tmp_path):
     target_image = target_root / "photo.jpg"
     PILImage.new("RGB", (2, 2), (255, 0, 0)).save(target_image)
     event = FakeEvent([Image(file="", url=source_image.as_uri())])
-    stage = PreProcessStage()
-    stage.config = {}
-    stage.platform_settings = {"path_mapping": [f"{source_root}:{target_root}"]}
-    stage.stt_settings = {"enable": False}
+    stage = _make_preprocess_stage(
+        {
+            "platform_settings": {"path_mapping": [f"{source_root}:{target_root}"]},
+            "provider_stt_settings": {"enable": False},
+        }
+    )
 
     await stage.process(event)
 

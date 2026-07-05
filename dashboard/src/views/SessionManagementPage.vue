@@ -405,12 +405,12 @@
       </v-dialog>
 
       <!-- 规则编辑对话框 -->
-      <v-dialog v-model="ruleDialog" max-width="550" scrollable>
-        <v-card v-if="selectedUmo" class="d-flex flex-column" height="600">
-          <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center border-b">
+      <v-dialog v-model="ruleDialog" max-width="650" scrollable>
+        <v-card v-if="selectedUmo" class="d-flex flex-column" height="680">
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
             <span>{{ tm('ruleEditor.title') }}</span>
-            <v-chip size="x-small" class="ml-2 font-weight-regular" variant="outlined">
-              {{ selectedUmo.umo }}
+            <v-chip size="x-small" class="ml-2 font-weight-regular" color="primary" variant="tonal">
+              {{ tm('ruleEditor.overrideCount', { count: ruleOverrideCount }) }}
             </v-chip>
             <v-spacer></v-spacer>
             <v-btn icon="mdi-close" variant="text" @click="closeRuleEditor"></v-btn>
@@ -418,195 +418,199 @@
 
           <v-card-text class="pa-0 overflow-y-auto">
             <div class="px-6 py-4">
-              <!-- Service Config Section -->
-              <div class="d-flex align-center mb-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.serviceConfig.title') }}
-                </h3>
+              <div class="rule-editor-session mb-4">
+                <UmoDisplay v-bind="getAvailableUmoDisplayProps(selectedUmo.umo)" compact />
               </div>
 
-              <v-row dense>
-                <v-col cols="12">
-                  <v-checkbox v-model="serviceConfig.session_enabled" :label="tm('ruleEditor.serviceConfig.sessionEnabled')" color="success" hide-details class="mb-2" />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-checkbox v-model="serviceConfig.llm_enabled" :label="tm('ruleEditor.serviceConfig.llmEnabled')" color="primary" hide-details />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-checkbox v-model="serviceConfig.tts_enabled" :label="tm('ruleEditor.serviceConfig.ttsEnabled')" color="secondary" hide-details />
-                </v-col>
-                <v-col cols="12" class="mt-2">
-                  <v-text-field v-model="serviceConfig.custom_name" :label="tm('ruleEditor.serviceConfig.customName')" variant="outlined" hide-details clearable />
-                </v-col>
-              </v-row>
+              <div class="setting-section">
+                <div class="setting-section-title">{{ tm('ruleEditor.note.title') }}</div>
+                <div class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ tm('ruleEditor.serviceConfig.customName') }}</div>
+                    <div class="setting-path">{{ tm('ruleEditor.note.source') }}</div>
+                  </div>
+                  <v-text-field v-model="serviceConfig.custom_name" variant="outlined" density="compact" hide-details clearable class="setting-control" />
+                </div>
+                <div class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ tm('ruleEditor.serviceConfig.sessionEnabled') }}</div>
+                    <div class="setting-hint">{{ tm('ruleEditor.serviceConfig.sessionEnabledHint') }}</div>
+                  </div>
+                  <v-switch v-model="serviceConfig.session_enabled" color="primary" density="compact" hide-details inset class="setting-switch" />
+                </div>
+              </div>
 
-              <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving" prepend-icon="mdi-content-save">
-                  {{ tm('buttons.save') }}
+              <div class="setting-add-row">
+                <v-select
+                  v-model="selectedOverrideKey"
+                  :items="availableOverrideOptions"
+                  item-title="label"
+                  item-value="value"
+                  :label="tm('ruleEditor.addOverride.select')"
+                  variant="outlined"
+                  density="compact"
+                  hide-details
+                  :disabled="availableOverrideOptions.length === 0"
+                  class="setting-control"
+                >
+                  <template #item="{ props, item }">
+                    <v-list-item v-bind="props">
+                      <template #title>{{ item.raw.label }}</template>
+                      <template #subtitle>
+                        <span v-if="item.raw.hint" class="override-option-hint">{{ item.raw.hint }}</span>
+                      </template>
+                    </v-list-item>
+                  </template>
+                  <template #selection="{ item }">
+                    <div class="override-selection">
+                      <span>{{ item.raw.label }}</span>
+                      <span v-if="item.raw.hint" class="override-selection-hint">{{ item.raw.hint }}</span>
+                    </div>
+                  </template>
+                </v-select>
+                <v-btn color="primary" variant="tonal" :disabled="!selectedOverrideKey" @click="addOverride">
+                  {{ tm('ruleEditor.addOverride.button') }}
                 </v-btn>
               </div>
 
-              <!-- Provider Config Section -->
-              <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.providerConfig.title') }}
-                </h3>
+              <div v-if="activeOverrideKeys.length === 0" class="setting-empty-overrides">
+                {{ tm('ruleEditor.addOverride.empty') }}
               </div>
 
-              <v-row dense>
-                <v-col cols="12">
-                  <v-select
-                    v-model="providerConfig.chat_completion"
-                    :items="chatProviderOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.providerConfig.chatProvider')"
-                    variant="outlined"
-                    hide-details
-                    class="mb-2"
-                  />
-                </v-col>
-                <v-col cols="12">
-                  <v-select
-                    v-model="providerConfig.speech_to_text"
-                    :items="sttProviderOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.providerConfig.sttProvider')"
-                    variant="outlined"
-                    hide-details
-                    :disabled="availableSttProviders.length === 0"
-                    class="mb-2"
-                  />
-                </v-col>
-                <v-col cols="12">
-                  <v-select
-                    v-model="providerConfig.text_to_speech"
-                    :items="ttsProviderOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.providerConfig.ttsProvider')"
-                    variant="outlined"
-                    hide-details
-                    :disabled="availableTtsProviders.length === 0"
-                  />
-                </v-col>
-              </v-row>
-
-              <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveProviderConfig" :loading="saving" prepend-icon="mdi-content-save">
-                  {{ tm('buttons.save') }}
-                </v-btn>
+              <div v-if="hasAnyOverride(aiOverrideKeys)" class="setting-section">
+                <div class="setting-section-title">{{ tm('ruleEditor.groups.ai') }}</div>
+                <div v-if="hasOverride('llm_enabled')" class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ getOverrideLabel('llm_enabled') }}</div>
+                    <div v-if="getOverrideHint('llm_enabled')" class="setting-hint">{{ getOverrideHint('llm_enabled') }}</div>
+                  </div>
+                  <div class="setting-control-with-action">
+                    <ConfigItemRenderer :model-value="getOverrideValue('llm_enabled')" :item-meta="getOverrideItemMeta('llm_enabled')" :config-key="getOverrideConfigPath('llm_enabled')" class="setting-control-fill" @update:model-value="setOverrideValue('llm_enabled', $event)" />
+                    <v-btn icon size="small" variant="text" class="setting-remove-btn" @click="removeOverride('llm_enabled')">
+                      <v-icon>mdi-close</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('ruleEditor.addOverride.remove') }}</v-tooltip>
+                    </v-btn>
+                  </div>
+                </div>
+                <div v-if="hasOverride('chat_completion')" class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ getOverrideLabel('chat_completion') }}</div>
+                    <div v-if="getOverrideHint('chat_completion')" class="setting-hint">{{ getOverrideHint('chat_completion') }}</div>
+                  </div>
+                  <div class="setting-control-with-action">
+                    <ConfigItemRenderer :model-value="getOverrideValue('chat_completion')" :item-meta="getOverrideItemMeta('chat_completion')" :config-key="getOverrideConfigPath('chat_completion')" class="setting-control-fill" @update:model-value="setOverrideValue('chat_completion', $event)" />
+                    <v-btn icon size="small" variant="text" class="setting-remove-btn" @click="removeOverride('chat_completion')">
+                      <v-icon>mdi-close</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('ruleEditor.addOverride.remove') }}</v-tooltip>
+                    </v-btn>
+                  </div>
+                </div>
+                <div v-if="hasOverride('tts_enabled')" class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ getOverrideLabel('tts_enabled') }}</div>
+                    <div v-if="getOverrideHint('tts_enabled')" class="setting-hint">{{ getOverrideHint('tts_enabled') }}</div>
+                  </div>
+                  <div class="setting-control-with-action">
+                    <ConfigItemRenderer :model-value="getOverrideValue('tts_enabled')" :item-meta="getOverrideItemMeta('tts_enabled')" :config-key="getOverrideConfigPath('tts_enabled')" class="setting-control-fill" @update:model-value="setOverrideValue('tts_enabled', $event)" />
+                    <v-btn icon size="small" variant="text" class="setting-remove-btn" @click="removeOverride('tts_enabled')">
+                      <v-icon>mdi-close</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('ruleEditor.addOverride.remove') }}</v-tooltip>
+                    </v-btn>
+                  </div>
+                </div>
+                <div v-if="hasOverride('text_to_speech')" class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ getOverrideLabel('text_to_speech') }}</div>
+                    <div v-if="getOverrideHint('text_to_speech')" class="setting-hint">{{ getOverrideHint('text_to_speech') }}</div>
+                  </div>
+                  <div class="setting-control-with-action">
+                    <ConfigItemRenderer :model-value="getOverrideValue('text_to_speech')" :item-meta="getOverrideItemMeta('text_to_speech')" :config-key="getOverrideConfigPath('text_to_speech')" class="setting-control-fill" @update:model-value="setOverrideValue('text_to_speech', $event)" />
+                    <v-btn icon size="small" variant="text" class="setting-remove-btn" @click="removeOverride('text_to_speech')">
+                      <v-icon>mdi-close</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('ruleEditor.addOverride.remove') }}</v-tooltip>
+                    </v-btn>
+                  </div>
+                </div>
+                <div v-if="hasOverride('speech_to_text')" class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ getOverrideLabel('speech_to_text') }}</div>
+                    <div v-if="getOverrideHint('speech_to_text')" class="setting-hint">{{ getOverrideHint('speech_to_text') }}</div>
+                  </div>
+                  <div class="setting-control-with-action">
+                    <ConfigItemRenderer :model-value="getOverrideValue('speech_to_text')" :item-meta="getOverrideItemMeta('speech_to_text')" :config-key="getOverrideConfigPath('speech_to_text')" class="setting-control-fill" @update:model-value="setOverrideValue('speech_to_text', $event)" />
+                    <v-btn icon size="small" variant="text" class="setting-remove-btn" @click="removeOverride('speech_to_text')">
+                      <v-icon>mdi-close</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('ruleEditor.addOverride.remove') }}</v-tooltip>
+                    </v-btn>
+                  </div>
+                </div>
+                <div v-if="hasOverride('persona_id')" class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ getOverrideLabel('persona_id') }}</div>
+                    <div v-if="getOverrideHint('persona_id')" class="setting-hint">{{ getOverrideHint('persona_id') }}</div>
+                  </div>
+                  <div class="setting-control-with-action">
+                    <ConfigItemRenderer :model-value="getOverrideValue('persona_id')" :item-meta="getOverrideItemMeta('persona_id')" :config-key="getOverrideConfigPath('persona_id')" class="setting-control-fill" @update:model-value="setOverrideValue('persona_id', $event)" />
+                    <v-btn icon size="small" variant="text" class="setting-remove-btn" @click="removeOverride('persona_id')">
+                      <v-icon>mdi-close</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('ruleEditor.addOverride.remove') }}</v-tooltip>
+                    </v-btn>
+                  </div>
+                </div>
+                <div v-if="hasOverride('kb_names')" class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ getOverrideLabel('kb_names') }}</div>
+                    <div v-if="getOverrideHint('kb_names')" class="setting-hint">{{ getOverrideHint('kb_names') }}</div>
+                  </div>
+                  <div class="setting-control-with-action">
+                    <ConfigItemRenderer :model-value="getOverrideValue('kb_names')" :item-meta="getOverrideItemMeta('kb_names')" :config-key="getOverrideConfigPath('kb_names')" class="setting-control-fill" @update:model-value="setOverrideValue('kb_names', $event)" />
+                    <v-btn icon size="small" variant="text" class="setting-remove-btn" @click="removeOverride('kb_names')">
+                      <v-icon>mdi-close</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('ruleEditor.addOverride.remove') }}</v-tooltip>
+                    </v-btn>
+                  </div>
+                </div>
+                <div v-if="hasOverride('kb_top_k')" class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ getOverrideLabel('kb_top_k') }}</div>
+                    <div v-if="getOverrideHint('kb_top_k')" class="setting-hint">{{ getOverrideHint('kb_top_k') }}</div>
+                  </div>
+                  <div class="setting-control-with-action">
+                    <ConfigItemRenderer :model-value="getOverrideValue('kb_top_k')" :item-meta="getOverrideItemMeta('kb_top_k')" :config-key="getOverrideConfigPath('kb_top_k')" class="setting-control-fill setting-control-narrow" @update:model-value="setOverrideValue('kb_top_k', $event)" />
+                    <v-btn icon size="small" variant="text" class="setting-remove-btn" @click="removeOverride('kb_top_k')">
+                      <v-icon>mdi-close</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('ruleEditor.addOverride.remove') }}</v-tooltip>
+                    </v-btn>
+                  </div>
+                </div>
               </div>
 
-              <!-- Persona Config Section -->
-              <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.personaConfig.title') }}
-                </h3>
+              <div v-if="hasAnyOverride(pluginOverrideKeys)" class="setting-section">
+                <div class="setting-section-title">{{ tm('ruleEditor.pluginConfig.title') }}</div>
+                <div v-if="hasOverride('disabled_plugins')" class="setting-row">
+                  <div class="setting-meta">
+                    <div class="setting-label">{{ getOverrideLabel('disabled_plugins') }}</div>
+                    <div v-if="getOverrideHint('disabled_plugins')" class="setting-hint">{{ getOverrideHint('disabled_plugins') }}</div>
+                  </div>
+                  <div class="setting-control-with-action">
+                    <ConfigItemRenderer :model-value="getOverrideValue('disabled_plugins')" :item-meta="getOverrideItemMeta('disabled_plugins')" :config-key="getOverrideConfigPath('disabled_plugins')" class="setting-control-fill" @update:model-value="setOverrideValue('disabled_plugins', $event)" />
+                    <v-btn icon size="small" variant="text" class="setting-remove-btn" @click="removeOverride('disabled_plugins')">
+                      <v-icon>mdi-close</v-icon>
+                      <v-tooltip activator="parent" location="top">{{ tm('ruleEditor.addOverride.remove') }}</v-tooltip>
+                    </v-btn>
+                  </div>
+                </div>
               </div>
 
-              <v-row dense>
-                <v-col cols="12">
-                  <v-select
-                    v-model="serviceConfig.persona_id"
-                    :items="personaOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.personaConfig.selectPersona')"
-                    variant="outlined"
-                    hide-details
-                    clearable
-                  />
-                </v-col>
-                <v-col cols="12">
-                  <v-alert type="info" variant="tonal" class="mt-2" icon="mdi-information-outline">
-                    {{ tm('ruleEditor.personaConfig.hint') }}
-                  </v-alert>
-                </v-col>
-              </v-row>
-
-              <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveServiceConfig" :loading="saving" prepend-icon="mdi-content-save">
-                  {{ tm('buttons.save') }}
-                </v-btn>
-              </div>
-
-              <!-- Plugin Config Section -->
-              <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.pluginConfig.title') }}
-                </h3>
-              </div>
-
-              <v-row dense>
-                <v-col cols="12">
-                  <v-select
-                    v-model="pluginConfig.disabled_plugins"
-                    :items="pluginOptions"
-                    item-title="label"
-                    item-value="value"
-                    :label="tm('ruleEditor.pluginConfig.disabledPlugins')"
-                    variant="outlined"
-                    hide-details
-                    multiple
-                    chips
-                    closable-chips
-                    clearable
-                  />
-                </v-col>
-                <v-col cols="12">
-                  <v-alert type="info" variant="tonal" class="mt-2" icon="mdi-information-outline">
-                    {{ tm('ruleEditor.pluginConfig.hint') }}
-                  </v-alert>
-                </v-col>
-              </v-row>
-
-              <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="savePluginConfig" :loading="saving" prepend-icon="mdi-content-save">
-                  {{ tm('buttons.save') }}
-                </v-btn>
-              </div>
-
-              <!-- KB Config Section -->
-              <div class="d-flex align-center mb-4 mt-4">
-                <h3 class="font-weight-bold mb-0">
-                  {{ tm('ruleEditor.kbConfig.title') }}
-                </h3>
-              </div>
-
-              <v-row dense>
-                <v-col cols="12">
-                  <v-select
-                    v-model="kbConfig.kb_ids"
-                    :items="kbOptions"
-                    item-title="label"
-                    item-value="value"
-                    :disabled="availableKbs.length === 0"
-                    :label="tm('ruleEditor.kbConfig.selectKbs')"
-                    variant="outlined"
-                    hide-details
-                    multiple
-                    chips
-                    closable-chips
-                    clearable
-                  />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-text-field v-model.number="kbConfig.top_k" :label="tm('ruleEditor.kbConfig.topK')" variant="outlined" hide-details type="number" min="1" max="20" class="mt-3" />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-checkbox v-model="kbConfig.enable_rerank" :label="tm('ruleEditor.kbConfig.enableRerank')" color="primary" hide-details class="mt-3" />
-                </v-col>
-              </v-row>
-
-              <div class="d-flex justify-end mt-4">
-                <v-btn color="primary" variant="tonal" size="small" @click="saveKbConfig" :loading="saving" prepend-icon="mdi-content-save">
-                  {{ tm('buttons.save') }}
-                </v-btn>
-              </div>
             </div>
           </v-card-text>
+          <v-card-actions class="px-6 py-3 border-t">
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="closeRuleEditor">{{ tm('buttons.cancel') }}</v-btn>
+            <v-btn color="primary" variant="tonal" @click="saveRuleEditor" :loading="saving">
+              {{ tm('buttons.save') }}
+            </v-btn>
+          </v-card-actions>
         </v-card>
       </v-dialog>
 
@@ -675,7 +679,8 @@
 </template>
 
 <script>
-import { sessionApi } from '@/api/v1'
+import { providerApi, sessionApi } from '@/api/v1'
+import ConfigItemRenderer from '@/components/shared/ConfigItemRenderer.vue'
 import UmoDisplay from '@/components/shared/UmoDisplay.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from '@/utils/confirmDialog'
@@ -685,16 +690,20 @@ const FOLLOW_CONFIG_VALUE = '__astrbot_follow_config__'
 export default {
   name: 'SessionManagementPage',
   components: {
+    ConfigItemRenderer,
     UmoDisplay,
   },
   setup() {
     const { t } = useI18n()
     const { tm } = useModuleI18n('features/session-management')
+    const { tm: tmConfig, getRaw: getConfigRaw } = useModuleI18n('features/config-metadata')
     const confirmDialog = useConfirmDialog()
 
     return {
       t,
       tm,
+      tmConfig,
+      getConfigRaw,
       confirmDialog,
     }
   },
@@ -714,12 +723,7 @@ export default {
       searchTimeout: null,
 
       // 可用选项
-      availablePersonas: [],
       availableChatProviders: [],
-      availableSttProviders: [],
-      availableTtsProviders: [],
-      availablePlugins: [],
-      availableKbs: [],
 
       // 添加规则
       addRuleDialog: false,
@@ -731,6 +735,8 @@ export default {
       ruleDialog: false,
       selectedUmo: null,
       editingRules: {},
+      activeOverrideKeys: [],
+      selectedOverrideKey: '',
 
       // 服务配置
       serviceConfig: {
@@ -738,14 +744,14 @@ export default {
         llm_enabled: true,
         tts_enabled: true,
         custom_name: '',
-        persona_id: null,
+        persona_id: '',
       },
 
       // Provider 配置
       providerConfig: {
-        chat_completion: FOLLOW_CONFIG_VALUE,
-        speech_to_text: FOLLOW_CONFIG_VALUE,
-        text_to_speech: FOLLOW_CONFIG_VALUE,
+        chat_completion: '',
+        speech_to_text: '',
+        text_to_speech: '',
       },
 
       // 插件配置
@@ -756,9 +762,8 @@ export default {
 
       // 知识库配置
       kbConfig: {
-        kb_ids: [],
+        kb_names: [],
         top_k: 5,
-        enable_rerank: true,
       },
 
       // 删除确认
@@ -833,46 +838,6 @@ export default {
       return this.rulesList
     },
 
-    personaOptions() {
-      return [
-        { label: this.tm('persona.none'), value: null },
-        ...this.availablePersonas.map((p) => ({
-          label: p.name,
-          value: p.name,
-        })),
-      ]
-    },
-
-    chatProviderOptions() {
-      return [
-        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableChatProviders.map((p) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ]
-    },
-
-    sttProviderOptions() {
-      return [
-        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableSttProviders.map((p) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ]
-    },
-
-    ttsProviderOptions() {
-      return [
-        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableTtsProviders.map((p) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ]
-    },
-
     batchChatProviderOptions() {
       return [
         { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
@@ -883,29 +848,6 @@ export default {
       ]
     },
 
-    batchTtsProviderOptions() {
-      return [
-        { label: this.tm('provider.followConfig'), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableTtsProviders.map((p) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ]
-    },
-
-    pluginOptions() {
-      return this.availablePlugins.map((p) => ({
-        label: p.display_name || p.name,
-        value: p.name,
-      }))
-    },
-
-    kbOptions() {
-      return this.availableKbs.map((kb) => ({
-        label: `${kb.emoji || '📚'} ${kb.kb_name}`,
-        value: kb.kb_id,
-      }))
-    },
     batchScopeOptions() {
       const options = [
         { label: this.tm('batchOperations.scopeSelected'), value: 'selected' },
@@ -958,6 +900,105 @@ export default {
       return hasChanges
     },
 
+    aiOverrideKeys() {
+      return ['llm_enabled', 'chat_completion', 'tts_enabled', 'text_to_speech', 'speech_to_text', 'persona_id', 'kb_names', 'kb_top_k']
+    },
+
+    pluginOverrideKeys() {
+      return ['disabled_plugins']
+    },
+
+    overrideOptions() {
+      const configText = (key) => (this.getConfigRaw(key) ? this.tmConfig(key) : '')
+      return [
+        {
+          label: this.tm('ruleEditor.serviceConfig.llmEnabled'),
+          value: 'llm_enabled',
+          path: 'provider_settings.enable',
+          hint: configText('ai_group.agent_runner.provider_settings.enable.hint'),
+          meta: { type: 'bool' },
+        },
+        {
+          label: this.tm('ruleEditor.providerConfig.chatProvider'),
+          value: 'chat_completion',
+          path: 'provider_settings.default_provider_id',
+          hint: configText('ai_group.ai.provider_settings.default_provider_id.hint'),
+          meta: { type: 'string', _special: 'select_provider' },
+        },
+        {
+          label: this.tm('ruleEditor.serviceConfig.ttsEnabled'),
+          value: 'tts_enabled',
+          path: 'provider_tts_settings.enable',
+          hint: configText('ai_group.ai.provider_tts_settings.enable.hint'),
+          meta: { type: 'bool' },
+        },
+        {
+          label: this.tm('ruleEditor.providerConfig.ttsProvider'),
+          value: 'text_to_speech',
+          path: 'provider_tts_settings.provider_id',
+          hint: configText('ai_group.ai.provider_tts_settings.provider_id.hint'),
+          meta: { type: 'string', _special: 'select_provider_tts' },
+        },
+        {
+          label: this.tm('ruleEditor.providerConfig.sttProvider'),
+          value: 'speech_to_text',
+          path: 'provider_stt_settings.provider_id',
+          hint: configText('ai_group.ai.provider_stt_settings.provider_id.hint'),
+          meta: { type: 'string', _special: 'select_provider_stt' },
+        },
+        {
+          label: this.tm('ruleEditor.personaConfig.selectPersona'),
+          value: 'persona_id',
+          path: 'provider_settings.default_personality',
+          hint: configText('ai_group.persona.provider_settings.default_personality.hint'),
+          meta: { type: 'string', _special: 'select_persona' },
+        },
+        {
+          label: this.tm('ruleEditor.kbConfig.selectKbs'),
+          value: 'kb_names',
+          path: 'kb_names',
+          hint: configText('ai_group.knowledgebase.kb_names.hint'),
+          meta: { type: 'list', items: { type: 'string' }, _special: 'select_knowledgebase' },
+        },
+        {
+          label: this.tm('ruleEditor.kbConfig.topK'),
+          value: 'kb_top_k',
+          path: 'kb_final_top_k',
+          hint: configText('ai_group.knowledgebase.kb_final_top_k.hint'),
+          meta: { type: 'int', default: 5 },
+        },
+        {
+          label: this.tm('ruleEditor.pluginConfig.disabledPlugins'),
+          value: 'disabled_plugins',
+          path: 'plugin_disabled_set',
+          hint: configText('plugin_group.plugin.plugin_disabled_set.hint'),
+          meta: { type: 'bool', _special: 'select_plugin_set' },
+        },
+      ]
+    },
+
+    availableOverrideOptions() {
+      return this.overrideOptions.filter((option) => !this.activeOverrideKeys.includes(option.value))
+    },
+
+    ruleOverrideCount() {
+      const rules = this.editingRules || {}
+      const serviceConfig = rules.session_service_config || {}
+      let count = 0
+      for (const key of ['session_enabled', 'llm_enabled', 'tts_enabled', 'persona_id']) {
+        if (Object.prototype.hasOwnProperty.call(serviceConfig, key)) count += 1
+      }
+      for (const key of ['provider_perf_chat_completion', 'provider_perf_speech_to_text', 'provider_perf_text_to_speech']) {
+        if (Object.prototype.hasOwnProperty.call(rules, key)) count += 1
+      }
+      const pluginConfig = rules.session_plugin_config || {}
+      if (Object.prototype.hasOwnProperty.call(pluginConfig, 'disabled_plugins')) count += 1
+      const kbConfig = rules.kb_config || {}
+      if (Object.prototype.hasOwnProperty.call(kbConfig, 'kb_names') || Object.prototype.hasOwnProperty.call(kbConfig, 'kb_ids')) count += 1
+      if (Object.prototype.hasOwnProperty.call(kbConfig, 'top_k')) count += 1
+      return count
+    },
+
     // 穿梭框：未选中的UMO列表
     unselectedUmos() {
       const selected = new Set(this.editingGroup.umos || [])
@@ -996,6 +1037,7 @@ export default {
   mounted() {
     this.loadData()
     this.loadGroups()
+    this.loadBatchProviders()
   },
 
   beforeUnmount() {
@@ -1008,7 +1050,7 @@ export default {
     async loadData() {
       this.loading = true
       try {
-        const response = await sessionApi.listRules({
+        const response = await sessionApi.listConfigOverrides({
           page: this.currentPage,
           page_size: this.itemsPerPage,
           search: this.searchQuery || '',
@@ -1018,12 +1060,6 @@ export default {
           this.rulesList = data.rules
           this.mergeUmoInfos(data.rules)
           this.totalItems = data.total
-          this.availablePersonas = data.available_personas
-          this.availableChatProviders = data.available_chat_providers
-          this.availableSttProviders = data.available_stt_providers
-          this.availableTtsProviders = data.available_tts_providers
-          this.availablePlugins = data.available_plugins || []
-          this.availableKbs = data.available_kbs || []
         } else {
           this.showError(response.data.message || this.tm('messages.loadError'))
         }
@@ -1031,6 +1067,17 @@ export default {
         this.showError(error.response?.data?.message || this.tm('messages.loadError'))
       }
       this.loading = false
+    },
+
+    async loadBatchProviders() {
+      try {
+        const response = await providerApi.listByProviderType('chat_completion')
+        if (response.data.status === 'ok') {
+          this.availableChatProviders = response.data.data || []
+        }
+      } catch (error) {
+        this.availableChatProviders = []
+      }
     },
 
     onTableOptionsUpdate(options) {
@@ -1068,7 +1115,11 @@ export default {
     },
 
     hasProviderConfig(rules) {
-      return rules && (rules['provider_perf_chat_completion'] || rules['provider_perf_speech_to_text'] || rules['provider_perf_text_to_speech'])
+      return rules && (
+        Object.prototype.hasOwnProperty.call(rules, 'provider_perf_chat_completion')
+        || Object.prototype.hasOwnProperty.call(rules, 'provider_perf_speech_to_text')
+        || Object.prototype.hasOwnProperty.call(rules, 'provider_perf_text_to_speech')
+      )
     },
 
     parseUmoInfo(umo) {
@@ -1159,6 +1210,78 @@ export default {
       }
     },
 
+    hasOverride(key) {
+      return this.activeOverrideKeys.includes(key)
+    },
+
+    hasAnyOverride(keys) {
+      return keys.some((key) => this.activeOverrideKeys.includes(key))
+    },
+
+    getOverrideDefinition(key) {
+      return this.overrideOptions.find((option) => option.value === key) || {}
+    },
+
+    getOverrideLabel(key) {
+      return this.getOverrideDefinition(key).label || key
+    },
+
+    getOverrideHint(key) {
+      return this.getOverrideDefinition(key).hint || ''
+    },
+
+    getOverrideConfigPath(key) {
+      return this.getOverrideDefinition(key).path || key
+    },
+
+    getOverrideItemMeta(key) {
+      return this.getOverrideDefinition(key).meta || {}
+    },
+
+    getOverrideValue(key) {
+      if (key === 'llm_enabled') return this.serviceConfig.llm_enabled
+      if (key === 'tts_enabled') return this.serviceConfig.tts_enabled
+      if (key === 'persona_id') return this.serviceConfig.persona_id
+      if (key === 'chat_completion') return this.providerConfig.chat_completion
+      if (key === 'speech_to_text') return this.providerConfig.speech_to_text
+      if (key === 'text_to_speech') return this.providerConfig.text_to_speech
+      if (key === 'disabled_plugins') return this.pluginConfig.disabled_plugins
+      if (key === 'kb_names') return this.kbConfig.kb_names
+      if (key === 'kb_top_k') return this.kbConfig.top_k
+      return null
+    },
+
+    setOverrideValue(key, value) {
+      if (key === 'llm_enabled') this.serviceConfig.llm_enabled = Boolean(value)
+      if (key === 'tts_enabled') this.serviceConfig.tts_enabled = Boolean(value)
+      if (key === 'persona_id') this.serviceConfig.persona_id = value || ''
+      if (key === 'chat_completion') this.providerConfig.chat_completion = value || ''
+      if (key === 'speech_to_text') this.providerConfig.speech_to_text = value || ''
+      if (key === 'text_to_speech') this.providerConfig.text_to_speech = value || ''
+      if (key === 'disabled_plugins') this.pluginConfig.disabled_plugins = Array.isArray(value) ? value : []
+      if (key === 'kb_names') this.kbConfig.kb_names = Array.isArray(value) ? value : []
+      if (key === 'kb_top_k') this.kbConfig.top_k = Number(value) || 5
+    },
+
+    addOverride() {
+      if (!this.selectedOverrideKey || this.activeOverrideKeys.includes(this.selectedOverrideKey)) return
+      this.activeOverrideKeys.push(this.selectedOverrideKey)
+      this.selectedOverrideKey = ''
+    },
+
+    removeOverride(key) {
+      this.activeOverrideKeys = this.activeOverrideKeys.filter((overrideKey) => overrideKey !== key)
+      if (key === 'llm_enabled') this.serviceConfig.llm_enabled = true
+      if (key === 'tts_enabled') this.serviceConfig.tts_enabled = true
+      if (key === 'persona_id') this.serviceConfig.persona_id = ''
+      if (key === 'chat_completion') this.providerConfig.chat_completion = ''
+      if (key === 'speech_to_text') this.providerConfig.speech_to_text = ''
+      if (key === 'text_to_speech') this.providerConfig.text_to_speech = ''
+      if (key === 'disabled_plugins') this.pluginConfig.disabled_plugins = []
+      if (key === 'kb_names') this.kbConfig.kb_names = []
+      if (key === 'kb_top_k') this.kbConfig.top_k = 5
+    },
+
     async openAddRuleDialog() {
       this.addRuleDialog = true
       this.selectedNewUmo = null
@@ -1186,14 +1309,14 @@ export default {
         llm_enabled: svcConfig.llm_enabled !== false,
         tts_enabled: svcConfig.tts_enabled !== false,
         custom_name: svcConfig.custom_name || '',
-        persona_id: svcConfig.persona_id || null,
+        persona_id: svcConfig.persona_id || '',
       }
 
       // 初始化 Provider 配置
       this.providerConfig = {
-        chat_completion: this.editingRules['provider_perf_chat_completion'] || FOLLOW_CONFIG_VALUE,
-        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || FOLLOW_CONFIG_VALUE,
-        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || FOLLOW_CONFIG_VALUE,
+        chat_completion: this.editingRules['provider_perf_chat_completion'] || '',
+        speech_to_text: this.editingRules['provider_perf_speech_to_text'] || '',
+        text_to_speech: this.editingRules['provider_perf_text_to_speech'] || '',
       }
 
       // 初始化插件配置
@@ -1205,11 +1328,24 @@ export default {
 
       // 初始化知识库配置
       const kbCfg = this.editingRules.kb_config || {}
+      const kbRefs = kbCfg.kb_names || kbCfg.kb_ids || []
       this.kbConfig = {
-        kb_ids: kbCfg.kb_ids || [],
+        kb_names: [...kbRefs],
         top_k: kbCfg.top_k ?? 5,
-        enable_rerank: kbCfg.enable_rerank !== false,
       }
+
+      const activeOverrideKeys = []
+      if (Object.prototype.hasOwnProperty.call(svcConfig, 'llm_enabled')) activeOverrideKeys.push('llm_enabled')
+      if (Object.prototype.hasOwnProperty.call(svcConfig, 'tts_enabled')) activeOverrideKeys.push('tts_enabled')
+      if (Object.prototype.hasOwnProperty.call(svcConfig, 'persona_id')) activeOverrideKeys.push('persona_id')
+      if (Object.prototype.hasOwnProperty.call(this.editingRules, 'provider_perf_chat_completion')) activeOverrideKeys.push('chat_completion')
+      if (Object.prototype.hasOwnProperty.call(this.editingRules, 'provider_perf_speech_to_text')) activeOverrideKeys.push('speech_to_text')
+      if (Object.prototype.hasOwnProperty.call(this.editingRules, 'provider_perf_text_to_speech')) activeOverrideKeys.push('text_to_speech')
+      if (Object.prototype.hasOwnProperty.call(pluginCfg, 'disabled_plugins')) activeOverrideKeys.push('disabled_plugins')
+      if (Object.prototype.hasOwnProperty.call(kbCfg, 'kb_names') || Object.prototype.hasOwnProperty.call(kbCfg, 'kb_ids')) activeOverrideKeys.push('kb_names')
+      if (Object.prototype.hasOwnProperty.call(kbCfg, 'top_k')) activeOverrideKeys.push('kb_top_k')
+      this.activeOverrideKeys = activeOverrideKeys
+      this.selectedOverrideKey = ''
 
       this.ruleDialog = true
     },
@@ -1218,216 +1354,197 @@ export default {
       this.ruleDialog = false
       this.selectedUmo = null
       this.editingRules = {}
+      this.activeOverrideKeys = []
+      this.selectedOverrideKey = ''
     },
 
-    async saveServiceConfig() {
+    async saveRuleEditor() {
       if (!this.selectedUmo) return
 
       this.saving = true
       try {
-        const config = { ...this.serviceConfig }
-        // 清理空值
-        if (!config.custom_name) delete config.custom_name
-        if (config.persona_id === null) delete config.persona_id
+        const umo = this.selectedUmo.umo
+        const tasks = []
 
-        const response = await sessionApi.upsertRule({
-          umo: this.selectedUmo.umo,
-          rule_key: 'session_service_config',
-          rule_value: config,
-        })
-
-        if (response.data.status === 'ok') {
-          this.showSuccess(this.tm('messages.saveSuccess'))
-          this.editingRules.session_service_config = config
-
-          // 更新或添加到列表
-          let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
-          if (item) {
-            item.rules = { ...item.rules, session_service_config: config }
-          } else {
-            // 新规则，添加到列表
-            this.rulesList.push(
-              this.buildUmoItem(this.selectedUmo.umo, {
-                session_service_config: config,
-              }),
-            )
-          }
-        } else {
-          this.showError(response.data.message || this.tm('messages.saveError'))
+        const previousServiceConfig = this.editingRules.session_service_config || {}
+        const previousOverridePaths = []
+        if (Object.prototype.hasOwnProperty.call(previousServiceConfig, 'llm_enabled')) {
+          previousOverridePaths.push('provider_settings.enable')
         }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.saveError'))
-      }
-      this.saving = false
-    },
+        if (Object.prototype.hasOwnProperty.call(previousServiceConfig, 'tts_enabled')) {
+          previousOverridePaths.push('provider_tts_settings.enable')
+        }
+        if (Object.prototype.hasOwnProperty.call(previousServiceConfig, 'persona_id')) {
+          previousOverridePaths.push('provider_settings.default_personality')
+        }
+        if (Object.prototype.hasOwnProperty.call(previousServiceConfig, 'session_enabled')) {
+          previousOverridePaths.push('platform_settings.id_blacklist')
+        }
 
-    async saveProviderConfig() {
-      if (!this.selectedUmo) return
-
-      this.saving = true
-      try {
-        const updateTasks = []
-        const deleteTasks = []
-        const providerTypes = ['chat_completion', 'speech_to_text', 'text_to_speech']
-
-        for (const type of providerTypes) {
-          const value = this.providerConfig[type]
-          if (value && value !== FOLLOW_CONFIG_VALUE) {
-            // 有值时更新
-            updateTasks.push(
-              sessionApi.upsertRule({
-                umo: this.selectedUmo.umo,
-                rule_key: `provider_perf_${type}`,
-                rule_value: value,
-              }),
-            )
-          } else if (this.editingRules[`provider_perf_${type}`]) {
-            // 选择了"跟随配置文件" (__astrbot_follow_config__) 且之前有配置，则删除
-            deleteTasks.push(
-              sessionApi.deleteRules({
-                umo: this.selectedUmo.umo,
-                rule_key: `provider_perf_${type}`,
-              }),
-            )
+        const providerPathMap = {
+          chat_completion: 'provider_settings.default_provider_id',
+          speech_to_text: 'provider_stt_settings.provider_id',
+          text_to_speech: 'provider_tts_settings.provider_id',
+        }
+        for (const type of ['chat_completion', 'speech_to_text', 'text_to_speech']) {
+          const ruleKey = `provider_perf_${type}`
+          if (Object.prototype.hasOwnProperty.call(this.editingRules, ruleKey)) {
+            previousOverridePaths.push(providerPathMap[type])
           }
         }
 
-        const allTasks = [...updateTasks, ...deleteTasks]
-        if (allTasks.length > 0) {
-          await Promise.all(allTasks)
-          this.showSuccess(this.tm('messages.saveSuccess'))
+        const previousPluginConfig = this.editingRules.session_plugin_config || {}
+        if (Object.prototype.hasOwnProperty.call(previousPluginConfig, 'disabled_plugins')) {
+          previousOverridePaths.push('plugin_disabled_set')
+        }
 
-          // 更新或添加到列表
-          let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
-          if (!item) {
-            item = this.buildUmoItem(this.selectedUmo.umo)
-            this.rulesList.push(item)
-          }
-          for (const type of providerTypes) {
-            const val = this.providerConfig[type]
-            if (val && val !== FOLLOW_CONFIG_VALUE) {
-              item.rules[`provider_perf_${type}`] = val
-              this.editingRules[`provider_perf_${type}`] = val
-            } else {
-              // 删除本地数据
-              delete item.rules[`provider_perf_${type}`]
-              delete this.editingRules[`provider_perf_${type}`]
-            }
-          }
-        } else {
+        const previousKbConfig = this.editingRules.kb_config || {}
+        if (Object.prototype.hasOwnProperty.call(previousKbConfig, 'kb_names') || Object.prototype.hasOwnProperty.call(previousKbConfig, 'kb_ids')) {
+          previousOverridePaths.push('kb_names')
+        }
+        if (Object.prototype.hasOwnProperty.call(previousKbConfig, 'top_k')) {
+          previousOverridePaths.push('kb_final_top_k')
+        }
+
+        const pathsToDelete = [...new Set(previousOverridePaths)]
+        if (pathsToDelete.length > 0) {
+          tasks.push(() =>
+            sessionApi.deleteConfigOverride({
+              umo,
+              paths: pathsToDelete,
+            }),
+          )
+        }
+
+        if (this.serviceConfig.custom_name || previousServiceConfig.custom_name) {
+          tasks.push(() =>
+            sessionApi.upsertAlias({
+              umo,
+              custom_name: this.serviceConfig.custom_name || '',
+            }),
+          )
+        }
+
+        const overrideValues = {
+          llm_enabled: this.serviceConfig.llm_enabled,
+          chat_completion: this.providerConfig.chat_completion || '',
+          tts_enabled: this.serviceConfig.tts_enabled,
+          text_to_speech: this.providerConfig.text_to_speech || '',
+          speech_to_text: this.providerConfig.speech_to_text || '',
+          persona_id: this.serviceConfig.persona_id || '',
+          kb_names: Array.isArray(this.kbConfig.kb_names) ? this.kbConfig.kb_names : [],
+          kb_top_k: Number(this.kbConfig.top_k) || 5,
+          disabled_plugins: Array.isArray(this.pluginConfig.disabled_plugins) ? this.pluginConfig.disabled_plugins : [],
+        }
+
+        if (this.serviceConfig.session_enabled === false) {
+          tasks.push(() =>
+            sessionApi.upsertConfigOverride({
+              umo,
+              path: 'platform_settings.id_blacklist',
+              value: [umo],
+            }),
+          )
+        }
+
+        for (const key of this.activeOverrideKeys) {
+          const path = this.getOverrideConfigPath(key)
+          if (!path) continue
+          tasks.push(() =>
+            sessionApi.upsertConfigOverride({
+              umo,
+              path,
+              value: overrideValues[key],
+            }),
+          )
+        }
+
+        if (tasks.length === 0) {
           this.showSuccess(this.tm('messages.noChanges'))
-        }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.saveError'))
-      }
-      this.saving = false
-    },
-
-    async savePluginConfig() {
-      if (!this.selectedUmo) return
-
-      this.saving = true
-      try {
-        const config = {
-          enabled_plugins: this.pluginConfig.enabled_plugins,
-          disabled_plugins: this.pluginConfig.disabled_plugins,
+          return
         }
 
-        // 如果两个列表都为空，删除配置
-        if (config.enabled_plugins.length === 0 && config.disabled_plugins.length === 0) {
-          if (this.editingRules.session_plugin_config) {
-            await sessionApi.deleteRules({
-              umo: this.selectedUmo.umo,
-              rule_key: 'session_plugin_config',
-            })
-            delete this.editingRules.session_plugin_config
-            let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
-            if (item) delete item.rules.session_plugin_config
+        const responses = []
+        for (const task of tasks) {
+          responses.push(await task())
+        }
+        const allOk = responses.every((response) => response.data.status === 'ok')
+        if (!allOk) {
+          this.showError(this.tm('messages.saveError'))
+          return
+        }
+
+        this.showSuccess(this.tm('messages.saveSuccess'))
+
+        const nextRules = {}
+        const nextServiceConfig = {}
+        if (this.serviceConfig.custom_name) {
+          nextServiceConfig.custom_name = this.serviceConfig.custom_name
+        }
+        if (this.serviceConfig.session_enabled === false) {
+          nextServiceConfig.session_enabled = false
+        }
+        if (this.hasOverride('llm_enabled')) {
+          nextServiceConfig.llm_enabled = this.serviceConfig.llm_enabled
+        }
+        if (this.hasOverride('tts_enabled')) {
+          nextServiceConfig.tts_enabled = this.serviceConfig.tts_enabled
+        }
+        if (this.hasOverride('persona_id')) {
+          nextServiceConfig.persona_id = this.serviceConfig.persona_id || ''
+        }
+        if (Object.keys(nextServiceConfig).length > 0) {
+          nextRules.session_service_config = nextServiceConfig
+        }
+
+        for (const type of ['chat_completion', 'speech_to_text', 'text_to_speech']) {
+          const value = this.providerConfig[type]
+          const ruleKey = `provider_perf_${type}`
+          if (this.hasOverride(type)) {
+            nextRules[ruleKey] = value || ''
           }
-          this.showSuccess(this.tm('messages.saveSuccess'))
-        } else {
-          const response = await sessionApi.upsertRule({
-            umo: this.selectedUmo.umo,
-            rule_key: 'session_plugin_config',
-            rule_value: config,
-          })
+        }
+        if (this.hasOverride('disabled_plugins')) {
+          nextRules.session_plugin_config = {
+            disabled_plugins: Array.isArray(this.pluginConfig.disabled_plugins) ? this.pluginConfig.disabled_plugins : [],
+          }
+        }
 
-          if (response.data.status === 'ok') {
-            this.showSuccess(this.tm('messages.saveSuccess'))
-            this.editingRules.session_plugin_config = config
+        const nextKbConfig = {}
+        if (this.hasOverride('kb_names')) {
+          nextKbConfig.kb_names = Array.isArray(this.kbConfig.kb_names) ? this.kbConfig.kb_names : []
+        }
+        if (this.hasOverride('kb_top_k')) {
+          nextKbConfig.top_k = this.kbConfig.top_k
+        }
+        if (Object.keys(nextKbConfig).length > 0) {
+          nextRules.kb_config = nextKbConfig
+        }
 
-            let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
-            if (item) {
-              item.rules.session_plugin_config = config
-            } else {
-              this.rulesList.push(
-                this.buildUmoItem(this.selectedUmo.umo, {
-                  session_plugin_config: config,
-                }),
-              )
-            }
+        let item = this.rulesList.find((rule) => rule.umo === umo)
+        if (Object.keys(nextRules).length > 0) {
+          if (item) {
+            item.rules = nextRules
           } else {
-            this.showError(response.data.message || this.tm('messages.saveError'))
+            item = this.buildUmoItem(umo, nextRules)
+            this.rulesList.push(item)
+            this.totalItems += 1
           }
+          this.selectedUmo = item
+        } else if (item) {
+          const index = this.rulesList.findIndex((rule) => rule.umo === umo)
+          if (index > -1) {
+            this.rulesList.splice(index, 1)
+            this.totalItems = Math.max(0, this.totalItems - 1)
+          }
+          this.selectedUmo = this.buildUmoItem(umo)
         }
+        this.editingRules = nextRules
       } catch (error) {
         this.showError(error.response?.data?.message || this.tm('messages.saveError'))
+      } finally {
+        this.saving = false
       }
-      this.saving = false
-    },
-
-    async saveKbConfig() {
-      if (!this.selectedUmo) return
-
-      this.saving = true
-      try {
-        const config = {
-          kb_ids: this.kbConfig.kb_ids,
-          top_k: this.kbConfig.top_k,
-          enable_rerank: this.kbConfig.enable_rerank,
-        }
-
-        // 如果 kb_ids 为空，删除配置
-        if (config.kb_ids.length === 0) {
-          if (this.editingRules.kb_config) {
-            await sessionApi.deleteRules({
-              umo: this.selectedUmo.umo,
-              rule_key: 'kb_config',
-            })
-            delete this.editingRules.kb_config
-            let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
-            if (item) delete item.rules.kb_config
-          }
-          this.showSuccess(this.tm('messages.saveSuccess'))
-        } else {
-          const response = await sessionApi.upsertRule({
-            umo: this.selectedUmo.umo,
-            rule_key: 'kb_config',
-            rule_value: config,
-          })
-
-          if (response.data.status === 'ok') {
-            this.showSuccess(this.tm('messages.saveSuccess'))
-            this.editingRules.kb_config = config
-
-            let item = this.rulesList.find((u) => u.umo === this.selectedUmo.umo)
-            if (item) {
-              item.rules.kb_config = config
-            } else {
-              this.rulesList.push(
-                this.buildUmoItem(this.selectedUmo.umo, {
-                  kb_config: config,
-                }),
-              )
-            }
-          } else {
-            this.showError(response.data.message || this.tm('messages.saveError'))
-          }
-        }
-      } catch (error) {
-        this.showError(error.response?.data?.message || this.tm('messages.saveError'))
-      }
-      this.saving = false
     },
 
     confirmDeleteRules(item) {
@@ -1440,11 +1557,23 @@ export default {
 
       this.deleting = true
       try {
-        const response = await sessionApi.deleteRules({
-          umo: this.deleteTarget.umo,
-        })
+        const overridePaths = [
+          ...this.overrideOptions.map((option) => option.path),
+          'platform_settings.id_blacklist',
+        ]
+        const responses = [
+          await sessionApi.deleteConfigOverride({
+            umo: this.deleteTarget.umo,
+            paths: overridePaths,
+          }),
+          await sessionApi.upsertAlias({
+            umo: this.deleteTarget.umo,
+            custom_name: '',
+          }),
+        ]
+        const allOk = responses.every((response) => response.data.status === 'ok')
 
-        if (response.data.status === 'ok') {
+        if (allOk) {
           this.showSuccess(this.tm('messages.deleteSuccess'))
           // 从列表中移除
           const index = this.rulesList.findIndex((u) => u.umo === this.deleteTarget.umo)
@@ -1456,7 +1585,7 @@ export default {
           // 重新加载数据以更新 totalItems
           await this.loadData()
         } else {
-          this.showError(response.data.message || this.tm('messages.deleteError'))
+          this.showError(this.tm('messages.deleteError'))
         }
       } catch (error) {
         this.showError(error.response?.data?.message || this.tm('messages.deleteError'))
@@ -1475,19 +1604,30 @@ export default {
       this.deleting = true
       try {
         const umos = this.selectedItems.map((item) => item.umo)
-        const response = await sessionApi.deleteRules({
-          umos: umos,
-        })
+        const overridePaths = [
+          ...this.overrideOptions.map((option) => option.path),
+          'platform_settings.id_blacklist',
+        ]
+        const responses = [
+          await sessionApi.deleteConfigOverride({
+            umos,
+            paths: overridePaths,
+          }),
+          await sessionApi.upsertAlias({
+            umos,
+            custom_name: '',
+          }),
+        ]
+        const allOk = responses.every((response) => response.data.status === 'ok')
 
-        if (response.data.status === 'ok') {
-          const data = response.data.data
-          this.showSuccess(data.message || this.tm('messages.batchDeleteSuccess'))
+        if (allOk) {
+          this.showSuccess(this.tm('messages.batchDeleteSuccess'))
           this.batchDeleteDialog = false
           this.selectedItems = []
           // 重新加载数据
           await this.loadData()
         } else {
-          this.showError(response.data.message || this.tm('messages.batchDeleteError'))
+          this.showError(this.tm('messages.batchDeleteError'))
         }
       } catch (error) {
         this.showError(error.response?.data?.message || this.tm('messages.batchDeleteError'))
@@ -1518,26 +1658,15 @@ export default {
 
       this.saving = true
       try {
-        // 获取现有的 session_service_config 或创建新的
         const existingConfig = this.quickEditNameTarget.rules?.session_service_config || {}
         const config = {
-          session_enabled: existingConfig.session_enabled !== false,
-          llm_enabled: existingConfig.llm_enabled !== false,
-          tts_enabled: existingConfig.tts_enabled !== false,
           ...existingConfig,
+          custom_name: this.quickEditNameValue || '',
         }
 
-        // 更新 custom_name
-        if (this.quickEditNameValue) {
-          config.custom_name = this.quickEditNameValue
-        } else {
-          delete config.custom_name
-        }
-
-        const response = await sessionApi.upsertRule({
+        const response = await sessionApi.upsertAlias({
           umo: this.quickEditNameTarget.umo,
-          rule_key: 'session_service_config',
-          rule_value: config,
+          custom_name: this.quickEditNameValue || '',
         })
 
         if (response.data.status === 'ok') {
@@ -1545,16 +1674,31 @@ export default {
 
           // 更新或添加到列表
           let item = this.rulesList.find((u) => u.umo === this.quickEditNameTarget.umo)
+          const nextConfig = { ...config }
+          if (!this.quickEditNameValue) delete nextConfig.custom_name
           if (item) {
             if (!item.rules) item.rules = {}
-            item.rules.session_service_config = config
+            if (Object.keys(nextConfig).length > 0) {
+              item.rules.session_service_config = nextConfig
+            } else {
+              delete item.rules.session_service_config
+            }
+            if (Object.keys(item.rules).length === 0) {
+              const index = this.rulesList.findIndex((rule) => rule.umo === item.umo)
+              if (index > -1) {
+                this.rulesList.splice(index, 1)
+                this.totalItems = Math.max(0, this.totalItems - 1)
+              }
+            }
           } else {
             // 新规则，添加到列表
-            this.rulesList.push(
-              this.buildUmoItem(this.quickEditNameTarget.umo, {
-                session_service_config: config,
-              }),
-            )
+            if (Object.keys(nextConfig).length > 0) {
+              this.rulesList.push(
+                this.buildUmoItem(this.quickEditNameTarget.umo, {
+                  session_service_config: nextConfig,
+                }),
+              )
+            }
           }
 
           this.quickEditNameDialog = false
@@ -1589,6 +1733,7 @@ export default {
             this.batchUpdating = false
             return
           }
+          scope = null
         }
 
         const tasks = []
@@ -1607,11 +1752,11 @@ export default {
         if (this.batchChatProvider !== null) {
           if (this.batchChatProvider === FOLLOW_CONFIG_VALUE) {
             tasks.push(
-              sessionApi.deleteRules({
+              sessionApi.deleteConfigOverride({
                 scope,
                 umos,
                 group_id: groupId,
-                rule_key: 'provider_perf_chat_completion',
+                path: 'provider_settings.default_provider_id',
               }),
             )
           } else {
@@ -1630,11 +1775,11 @@ export default {
         if (this.batchTtsProvider !== null) {
           if (this.batchTtsProvider === FOLLOW_CONFIG_VALUE) {
             tasks.push(
-              sessionApi.deleteRules({
+              sessionApi.deleteConfigOverride({
                 scope,
                 umos,
                 group_id: groupId,
-                rule_key: 'provider_perf_text_to_speech',
+                path: 'provider_tts_settings.provider_id',
               }),
             )
           } else {
@@ -1894,5 +2039,141 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.rule-editor-session {
+  min-height: 36px;
+}
+
+.setting-section {
+  padding: 14px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.setting-section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.setting-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.setting-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 0 8px;
+}
+
+.setting-empty-overrides {
+  padding: 4px 0 10px;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.override-selection {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.override-selection-hint,
+.override-option-hint {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 250px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  min-height: 48px;
+  padding: 6px 0;
+}
+
+.setting-meta {
+  min-width: 0;
+}
+
+.setting-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.setting-path {
+  margin-top: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.55);
+  overflow-wrap: anywhere;
+}
+
+.setting-hint {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.setting-control {
+  width: 100%;
+}
+
+.setting-control-with-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.setting-control-with-action-end {
+  justify-content: flex-end;
+}
+
+.setting-control-fill {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-control-narrow {
+  max-width: 180px;
+  justify-self: end;
+}
+
+.setting-remove-btn {
+  flex: 0 0 auto;
+}
+
+.setting-switch {
+  justify-self: end;
+}
+
+@media (max-width: 700px) {
+  .setting-add-row {
+    grid-template-columns: 1fr;
+  }
+
+  .setting-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .setting-switch {
+    justify-self: start;
+  }
+
+  .setting-control-narrow {
+    max-width: none;
+  }
 }
 </style>

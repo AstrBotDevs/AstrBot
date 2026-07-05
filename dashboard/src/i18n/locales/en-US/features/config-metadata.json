@@ -807,6 +807,10 @@
           "description": "Whitelist ID List",
           "hint": "Use /sid to get IDs. If the list is empty, it means whitelist is disabled (all IDs are in the whitelist)."
         },
+        "id_blacklist": {
+          "description": "Blacklist ID List",
+          "hint": "Use /sid to get IDs. Sessions in the blacklist are rejected, and blacklist rules take priority over the whitelist."
+        },
         "id_whitelist_log": {
           "description": "Output Logs",
           "hint": "When enabled, INFO level logs will be output when a message doesn't pass the whitelist."
@@ -933,6 +937,10 @@
       "plugin_set": {
         "description": "Available Plugins",
         "hint": "All non-disabled plugins are enabled by default. If a plugin is disabled on the plugins page, selections here will not take effect."
+      },
+      "plugin_disabled_set": {
+        "description": "Disabled Plugins",
+        "hint": "Plugins explicitly listed here will not trigger in sessions."
       }
     }
   },

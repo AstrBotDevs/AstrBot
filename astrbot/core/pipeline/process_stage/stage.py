@@ -14,7 +14,6 @@ from .method.star_request import StarRequestSubStage
 class ProcessStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
-        self.config = ctx.astrbot_config
         self.plugin_manager = ctx.plugin_manager
 
         # initialize agent sub stage

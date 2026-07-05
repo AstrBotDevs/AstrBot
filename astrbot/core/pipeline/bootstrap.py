@@ -7,7 +7,6 @@ from .stage import registered_stages
 _BUILTIN_STAGE_MODULES = (
     "astrbot.core.pipeline.waking_check.stage",
     "astrbot.core.pipeline.whitelist_check.stage",
-    "astrbot.core.pipeline.session_status_check.stage",
     "astrbot.core.pipeline.rate_limit_check.stage",
     "astrbot.core.pipeline.content_safety_check.stage",
     "astrbot.core.pipeline.preprocess_stage.stage",
@@ -19,7 +18,6 @@ _BUILTIN_STAGE_MODULES = (
 _EXPECTED_STAGE_NAMES = {
     "WakingCheckStage",
     "WhitelistCheckStage",
-    "SessionStatusCheckStage",
     "RateLimitStage",
     "ContentSafetyCheckStage",
     "PreProcessStage",

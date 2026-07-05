@@ -1,5 +1,4 @@
 import asyncio
-import re
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
@@ -287,8 +286,6 @@ async def test_webhook_group_send_by_session_without_cached_msg_id_omits_msg_id(
 
 def test_qqofficial_ws_is_not_excluded_from_segmented_reply():
     stage = RespondStage()
-    stage.enable_seg = True
-    stage.only_llm_result = False
     result = MessageEventResult(chain=[Plain("hello")])
 
     event = SimpleNamespace(
@@ -296,13 +293,11 @@ def test_qqofficial_ws_is_not_excluded_from_segmented_reply():
         get_platform_name=lambda: "qq_official",
     )
 
-    assert stage.is_seg_reply_required(cast(Any, event)) is True
+    assert stage.is_seg_reply_required(cast(Any, event), True, False) is True
 
 
 def test_qqofficial_webhook_remains_excluded_from_segmented_reply():
     stage = RespondStage()
-    stage.enable_seg = True
-    stage.only_llm_result = False
     result = MessageEventResult(chain=[Plain("hello")])
 
     event = SimpleNamespace(
@@ -310,26 +305,12 @@ def test_qqofficial_webhook_remains_excluded_from_segmented_reply():
         get_platform_name=lambda: "qq_official_webhook",
     )
 
-    assert stage.is_seg_reply_required(cast(Any, event)) is False
+    assert stage.is_seg_reply_required(cast(Any, event), True, False) is False
 
 
 @pytest.mark.asyncio
 async def test_result_decorate_segments_qqofficial_ws_plain_result():
     stage = ResultDecorateStage()
-    stage.reply_prefix = ""
-    stage.content_safe_check_reply = False
-    stage.enable_segmented_reply = True
-    stage.only_llm_result = False
-    stage.words_count_threshold = 100
-    stage.split_mode = "words"
-    stage.split_words = ["。"]
-    stage.split_words_pattern = re.compile(r"(.*?(。)|.+$)", re.DOTALL)
-    stage.content_cleanup_rule = ""
-    stage.show_reasoning = False
-    stage.tts_trigger_probability = 0
-    stage.reply_with_mention = False
-    stage.reply_with_quote = False
-    stage.forward_threshold = 1000
     setattr(
         stage,
         "ctx",
@@ -338,13 +319,33 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
                 context=SimpleNamespace(get_using_tts_provider=lambda _umo: None)
             ),
             astrbot_config={
+                "platform_settings": {
+                    "reply_prefix": "",
+                    "reply_with_mention": False,
+                    "reply_with_quote": False,
+                    "forward_threshold": 1000,
+                    "segmented_reply": {
+                        "enable": True,
+                        "only_llm_result": False,
+                        "words_count_threshold": 100,
+                        "split_mode": "words",
+                        "split_words": ["。"],
+                        "content_cleanup_rule": "",
+                    },
+                },
                 "provider_tts_settings": {
                     "enable": False,
                     "use_file_service": False,
                     "dual_output": False,
+                    "trigger_probability": 0,
                 },
+                "provider_settings": {"display_reasoning_text": False},
+                "content_safety": {"also_use_in_response": False},
                 "callback_api_base": "",
                 "t2i": False,
+                "t2i_word_threshold": 150,
+                "t2i_strategy": "local",
+                "t2i_active_template": "",
             },
         ),
     )

@@ -96,9 +96,15 @@ class _DummyRespondEvent:
 def _make_respond_stage() -> RespondStage:
     """Build a minimally initialized RespondStage for unit tests."""
     stage = RespondStage()
-    stage.config = {"provider_settings": {}}
-    stage.platform_settings = {"path_mapping": []}
-    stage.enable_seg = False
+    stage.ctx = SimpleNamespace(
+        astrbot_config={
+            "provider_settings": {},
+            "platform_settings": {
+                "path_mapping": [],
+                "segmented_reply": {"enable": False},
+            },
+        }
+    )
     return stage
 
 

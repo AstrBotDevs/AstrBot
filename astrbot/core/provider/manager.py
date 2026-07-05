@@ -159,10 +159,14 @@ class ProviderManager:
         if provider_id not in self.inst_map:
             raise ValueError(f"提供商 {provider_id} 不存在，无法设置。")
         if umo:
-            await sp.session_put(
+            provider_path_map = {
+                ProviderType.CHAT_COMPLETION: "provider_settings.default_provider_id",
+                ProviderType.SPEECH_TO_TEXT: "provider_stt_settings.provider_id",
+                ProviderType.TEXT_TO_SPEECH: "provider_tts_settings.provider_id",
+            }
+            await self.acm.update_conf_overrides(
                 umo,
-                f"provider_perf_{provider_type.value}",
-                provider_id,
+                {provider_path_map[provider_type]: provider_id},
             )
             self._notify_provider_changed(provider_id, provider_type, umo)
             return
@@ -225,18 +229,9 @@ class ProviderManager:
         """
         provider = None
         provider_id = None
-        if umo:
-            provider_id = sp.get(
-                f"provider_perf_{provider_type.value}",
-                None,
-                scope="umo",
-                scope_id=umo,
-            )
-            if provider_id:
-                provider = self.inst_map.get(provider_id)
+        config = self.acm.get_conf(umo)
         if not provider:
             # default setting
-            config = self.acm.get_conf(umo)
             if provider_type == ProviderType.CHAT_COMPLETION:
                 provider_id = config["provider_settings"].get("default_provider_id")
                 provider = self.inst_map.get(provider_id)

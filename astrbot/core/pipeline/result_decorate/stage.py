@@ -10,7 +10,6 @@ from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
-from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
@@ -22,98 +21,30 @@ from ..stage import Stage, register_stage, registered_stages
 class ResultDecorateStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
-        self.reply_prefix = ctx.astrbot_config["platform_settings"]["reply_prefix"]
-        self.reply_with_mention = ctx.astrbot_config["platform_settings"][
-            "reply_with_mention"
-        ]
-        self.reply_with_quote = ctx.astrbot_config["platform_settings"][
-            "reply_with_quote"
-        ]
-        self.t2i_word_threshold = ctx.astrbot_config["t2i_word_threshold"]
-        try:
-            self.t2i_word_threshold = int(self.t2i_word_threshold)
-            self.t2i_word_threshold = max(self.t2i_word_threshold, 50)
-        except BaseException:
-            self.t2i_word_threshold = 150
-        self.t2i_strategy = ctx.astrbot_config["t2i_strategy"]
-        self.t2i_use_network = self.t2i_strategy == "remote"
-        self.t2i_active_template = ctx.astrbot_config["t2i_active_template"]
-
-        self.forward_threshold = ctx.astrbot_config["platform_settings"][
-            "forward_threshold"
-        ]
-
-        trigger_probability = ctx.astrbot_config["provider_tts_settings"].get(
-            "trigger_probability",
-            1,
-        )
-        try:
-            self.tts_trigger_probability = max(
-                0.0,
-                min(float(trigger_probability), 1.0),
-            )
-        except (TypeError, ValueError):
-            self.tts_trigger_probability = 1.0
-
-        # 分段回复
-        self.words_count_threshold = int(
-            ctx.astrbot_config["platform_settings"]["segmented_reply"][
-                "words_count_threshold"
-            ],
-        )
-        self.enable_segmented_reply = ctx.astrbot_config["platform_settings"][
-            "segmented_reply"
-        ]["enable"]
-        self.only_llm_result = ctx.astrbot_config["platform_settings"][
-            "segmented_reply"
-        ]["only_llm_result"]
-        self.split_mode = ctx.astrbot_config["platform_settings"][
-            "segmented_reply"
-        ].get("split_mode", "regex")
-        self.regex = ctx.astrbot_config["platform_settings"]["segmented_reply"]["regex"]
-        self.split_words = ctx.astrbot_config["platform_settings"][
-            "segmented_reply"
-        ].get("split_words", ["。", "？", "！", "~", "…"])
-        if self.split_words:
-            escaped_words = sorted(
-                [re.escape(word) for word in self.split_words], key=len, reverse=True
-            )
-            self.split_words_pattern = re.compile(
-                f"(.*?({'|'.join(escaped_words)})|.+$)", re.DOTALL
-            )
-        else:
-            self.split_words_pattern = None
-        self.content_cleanup_rule = ctx.astrbot_config["platform_settings"][
-            "segmented_reply"
-        ]["content_cleanup_rule"]
-
-        # exception
-        self.content_safe_check_reply = ctx.astrbot_config["content_safety"][
-            "also_use_in_response"
-        ]
         self.content_safe_check_stage = None
-        if self.content_safe_check_reply:
-            for stage_cls in registered_stages:
-                if stage_cls.__name__ == "ContentSafetyCheckStage":
-                    self.content_safe_check_stage = stage_cls()
-                    await self.content_safe_check_stage.initialize(ctx)
+        for stage_cls in registered_stages:
+            if stage_cls.__name__ == "ContentSafetyCheckStage":
+                self.content_safe_check_stage = stage_cls()
+                await self.content_safe_check_stage.initialize(ctx)
 
-        provider_cfg = ctx.astrbot_config.get("provider_settings", {})
-        self.show_reasoning = provider_cfg.get("display_reasoning_text", False)
-
-    def _split_text_by_words(self, text: str) -> list[str]:
+    def _split_text_by_words(
+        self,
+        text: str,
+        split_words_pattern: re.Pattern[str] | None,
+        split_words: list[str],
+    ) -> list[str]:
         """使用分段词列表分段文本"""
-        if not self.split_words_pattern:
+        if not split_words_pattern:
             return [text]
 
-        segments = self.split_words_pattern.findall(text)
+        segments = split_words_pattern.findall(text)
         result = []
         for seg in segments:
             if isinstance(seg, tuple):
                 content = seg[0]
                 if not isinstance(content, str):
                     continue
-                for word in self.split_words:
+                for word in split_words:
                     if content.endswith(word):
                         content = content[: -len(word)]
                         break
@@ -135,10 +66,64 @@ class ResultDecorateStage(Stage):
             return
 
         is_stream = result.result_content_type == ResultContentType.STREAMING_FINISH
+        config = self.ctx.astrbot_config
+        platform_settings = config.get("platform_settings", {})
+        segmented_reply = platform_settings.get("segmented_reply", {})
+        reply_prefix = platform_settings.get("reply_prefix", "")
+        reply_with_mention = platform_settings.get("reply_with_mention", False)
+        reply_with_quote = platform_settings.get("reply_with_quote", False)
+        forward_threshold = platform_settings.get("forward_threshold", 1500)
+        t2i_word_threshold = config.get("t2i_word_threshold", 150)
+        try:
+            t2i_word_threshold = max(int(t2i_word_threshold), 50)
+        except BaseException:
+            t2i_word_threshold = 150
+        t2i_strategy = config.get("t2i_strategy", "local")
+        t2i_use_network = t2i_strategy == "remote"
+        t2i_active_template = config.get("t2i_active_template", "")
+
+        tts_settings = config.get("provider_tts_settings", {})
+        trigger_probability = tts_settings.get("trigger_probability", 1)
+        try:
+            tts_trigger_probability = max(
+                0.0,
+                min(float(trigger_probability), 1.0),
+            )
+        except (TypeError, ValueError):
+            tts_trigger_probability = 1.0
+
+        words_count_threshold = int(segmented_reply.get("words_count_threshold", 150))
+        enable_segmented_reply = segmented_reply.get("enable", False)
+        only_llm_result = segmented_reply.get("only_llm_result", True)
+        split_mode = segmented_reply.get("split_mode", "regex")
+        split_regex = segmented_reply.get("regex", r".*?[。？！~…]+|.+$")
+        split_words = segmented_reply.get(
+            "split_words",
+            ["。", "？", "！", "~", "…"],
+        )
+        if split_words:
+            escaped_words = sorted(
+                [re.escape(word) for word in split_words],
+                key=len,
+                reverse=True,
+            )
+            split_words_pattern = re.compile(
+                f"(.*?({'|'.join(escaped_words)})|.+$)",
+                re.DOTALL,
+            )
+        else:
+            split_words_pattern = None
+        content_cleanup_rule = segmented_reply.get("content_cleanup_rule", "")
+        content_safe_check_reply = config.get("content_safety", {}).get(
+            "also_use_in_response",
+            False,
+        )
+        provider_cfg = config.get("provider_settings", {})
+        show_reasoning = provider_cfg.get("display_reasoning_text", False)
 
         # 回复时检查内容安全
         if (
-            self.content_safe_check_reply
+            content_safe_check_reply
             and self.content_safe_check_stage
             and result.is_llm_result()
             and not is_stream  # 流式输出不检查内容安全
@@ -195,36 +180,40 @@ class ResultDecorateStage(Stage):
 
         if len(result.chain) > 0:
             # 回复前缀
-            if self.reply_prefix:
+            if reply_prefix:
                 for comp in result.chain:
                     if isinstance(comp, Plain):
-                        comp.text = self.reply_prefix + comp.text
+                        comp.text = reply_prefix + comp.text
                         break
 
             # 分段回复
-            if self.enable_segmented_reply and event.get_platform_name() not in [
+            if enable_segmented_reply and event.get_platform_name() not in [
                 "qq_official_webhook",
                 "weixin_official_account",
                 "dingtalk",
             ]:
                 if (
-                    self.only_llm_result and result.is_model_result()
-                ) or not self.only_llm_result:
+                    only_llm_result and result.is_model_result()
+                ) or not only_llm_result:
                     new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
-                            if len(comp.text) > self.words_count_threshold:
+                            if len(comp.text) > words_count_threshold:
                                 # 不分段回复
                                 new_chain.append(comp)
                                 continue
 
                             # 根据 split_mode 选择分段方式
-                            if self.split_mode == "words":
-                                split_response = self._split_text_by_words(comp.text)
+                            if split_mode == "words":
+                                split_response = self._split_text_by_words(
+                                    comp.text,
+                                    split_words_pattern,
+                                    split_words,
+                                )
                             else:  # regex 模式
                                 try:
                                     split_response = re.findall(
-                                        self.regex,
+                                        split_regex,
                                         comp.text,
                                         re.DOTALL | re.MULTILINE,
                                     )
@@ -242,8 +231,8 @@ class ResultDecorateStage(Stage):
                                 new_chain.append(comp)
                                 continue
                             for seg in split_response:
-                                if self.content_cleanup_rule:
-                                    seg = re.sub(self.content_cleanup_rule, "", seg)
+                                if content_cleanup_rule:
+                                    seg = re.sub(content_cleanup_rule, "", seg)
                                 seg = seg.strip()
                                 if seg:
                                     new_chain.append(Plain(seg))
@@ -258,10 +247,9 @@ class ResultDecorateStage(Stage):
             )
 
             should_tts = (
-                bool(self.ctx.astrbot_config["provider_tts_settings"]["enable"])
+                bool(tts_settings.get("enable", False))
                 and result.is_llm_result()
-                and await SessionServiceManager.should_process_tts_request(event)
-                and random.random() <= self.tts_trigger_probability
+                and random.random() <= tts_trigger_probability
                 and tts_provider
             )
             if should_tts and not tts_provider:
@@ -271,7 +259,7 @@ class ResultDecorateStage(Stage):
 
             if (
                 not should_tts
-                and self.show_reasoning
+                and show_reasoning
                 and event.get_extra("_llm_reasoning_content")
             ):
                 # inject reasoning content to chain
@@ -310,15 +298,12 @@ class ResultDecorateStage(Stage):
 
                             event.track_temporary_local_file(audio_path)
 
-                            use_file_service = self.ctx.astrbot_config[
-                                "provider_tts_settings"
-                            ]["use_file_service"]
-                            callback_api_base = self.ctx.astrbot_config[
-                                "callback_api_base"
-                            ]
-                            dual_output = self.ctx.astrbot_config[
-                                "provider_tts_settings"
-                            ]["dual_output"]
+                            use_file_service = tts_settings.get(
+                                "use_file_service",
+                                False,
+                            )
+                            callback_api_base = config.get("callback_api_base", "")
+                            dual_output = tts_settings.get("dual_output", False)
 
                             url = None
                             if use_file_service and callback_api_base:
@@ -347,7 +332,7 @@ class ResultDecorateStage(Stage):
 
             # 文本转图片
             elif (
-                result.use_t2i_ is None and self.ctx.astrbot_config["t2i"]
+                result.use_t2i_ is None and config.get("t2i", False)
             ) or result.use_t2i_:
                 parts = []
                 for comp in result.chain:
@@ -356,14 +341,14 @@ class ResultDecorateStage(Stage):
                     else:
                         break
                 plain_str = "".join(parts)
-                if plain_str and len(plain_str) > self.t2i_word_threshold:
+                if plain_str and len(plain_str) > t2i_word_threshold:
                     render_start = time.time()
                     try:
                         url = await html_renderer.render_t2i(
                             plain_str,
                             return_url=True,
-                            use_network=self.t2i_use_network,
-                            template_name=self.t2i_active_template,
+                            use_network=t2i_use_network,
+                            template_name=t2i_active_template,
                         )
                     except BaseException:
                         logger.error("文本转图片失败，使用文本发送。")
@@ -375,12 +360,11 @@ class ResultDecorateStage(Stage):
                     if url:
                         if url.startswith("http"):
                             result.chain = [Image.fromURL(url)]
-                        elif (
-                            self.ctx.astrbot_config["t2i_use_file_service"]
-                            and self.ctx.astrbot_config["callback_api_base"]
+                        elif config.get("t2i_use_file_service", False) and config.get(
+                            "callback_api_base", ""
                         ):
                             token = await file_token_service.register_file(url)
-                            url = f"{self.ctx.astrbot_config['callback_api_base']}/api/file/{token}"
+                            url = f"{config['callback_api_base']}/api/file/{token}"
                             logger.debug(f"已注册：{url}")
                             result.chain = [Image.fromURL(url)]
                         else:
@@ -392,7 +376,7 @@ class ResultDecorateStage(Stage):
                 for comp in result.chain:
                     if isinstance(comp, Plain):
                         word_cnt += len(comp.text)
-                if word_cnt > self.forward_threshold:
+                if word_cnt > forward_threshold:
                     node = Node(
                         uin=event.get_self_id(),
                         name="AstrBot",
@@ -407,7 +391,7 @@ class ResultDecorateStage(Stage):
             if can_decorate:
                 # at 回复
                 if (
-                    self.reply_with_mention
+                    reply_with_mention
                     and event.get_message_type() != MessageType.FRIEND_MESSAGE
                 ):
                     result.chain.insert(
@@ -418,5 +402,5 @@ class ResultDecorateStage(Stage):
                         result.chain[1].text = "\n" + result.chain[1].text
 
                 # 引用回复
-                if self.reply_with_quote:
+                if reply_with_quote:
                     result.chain.insert(0, Reply(id=event.message_obj.message_id))

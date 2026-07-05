@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from .rate_limit_check.stage import RateLimitStage
     from .respond.stage import RespondStage
     from .result_decorate.stage import ResultDecorateStage
-    from .session_status_check.stage import SessionStatusCheckStage
     from .waking_check.stage import WakingCheckStage
     from .whitelist_check.stage import WhitelistCheckStage
 
@@ -53,10 +52,6 @@ _LAZY_EXPORTS = {
         "astrbot.core.pipeline.result_decorate.stage",
         "ResultDecorateStage",
     ),
-    "SessionStatusCheckStage": (
-        "astrbot.core.pipeline.session_status_check.stage",
-        "SessionStatusCheckStage",
-    ),
     "WakingCheckStage": (
         "astrbot.core.pipeline.waking_check.stage",
         "WakingCheckStage",
@@ -75,7 +70,6 @@ if TYPE_CHECKING:
     from .rate_limit_check.stage import RateLimitStage
     from .respond.stage import RespondStage
     from .result_decorate.stage import ResultDecorateStage
-    from .session_status_check.stage import SessionStatusCheckStage
     from .waking_check.stage import WakingCheckStage
     from .whitelist_check.stage import WhitelistCheckStage
 
@@ -88,7 +82,6 @@ __all__ = [
     "RateLimitStage",
     "RespondStage",
     "ResultDecorateStage",
-    "SessionStatusCheckStage",
     "STAGES_ORDER",
     "WakingCheckStage",
     "WhitelistCheckStage",

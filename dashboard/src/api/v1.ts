@@ -46,6 +46,9 @@ import {
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
   type SetupAuthRequest,
+  type SessionAliasRequest,
+  type SessionConfigOverrideDeleteRequest,
+  type SessionConfigOverrideRequest,
   type SessionGroupRequest,
   type SessionRuleRequest,
   type UmoListRequest,
@@ -942,11 +945,29 @@ export const sessionApi = {
       openApiV1.listSessionRules({ query: generatedQuery(params) }),
     );
   },
+  listConfigOverrides(params?: SessionRuleListParams) {
+    return typed<any>(
+      openApiV1.listSessionConfigOverrides({ query: generatedQuery(params) }),
+    );
+  },
   upsertRule(payload: SessionRuleRequest) {
     return typed<any>(openApiV1.upsertSessionRule({ body: payload }));
   },
   deleteRules(payload: UmoListRequest) {
     return typed<any>(openApiV1.deleteSessionRules({ body: payload }));
+  },
+  upsertConfigOverride(payload: SessionConfigOverrideRequest) {
+    return typed<any>(
+      openApiV1.upsertSessionConfigOverride({ body: payload }),
+    );
+  },
+  deleteConfigOverride(payload: SessionConfigOverrideDeleteRequest) {
+    return typed<any>(
+      openApiV1.deleteSessionConfigOverride({ body: payload }),
+    );
+  },
+  upsertAlias(payload: SessionAliasRequest) {
+    return typed<any>(openApiV1.upsertSessionAlias({ body: payload }));
   },
   batchUpdateProvider(payload: BatchSessionProviderRequest) {
     return typed<any>(

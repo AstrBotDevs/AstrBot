@@ -77,7 +77,6 @@ def test_builtin_stage_bootstrap_is_idempotent() -> None:
     expected_stage_names = {
         "WakingCheckStage",
         "WhitelistCheckStage",
-        "SessionStatusCheckStage",
         "RateLimitStage",
         "ContentSafetyCheckStage",
         "PreProcessStage",

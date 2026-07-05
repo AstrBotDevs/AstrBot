@@ -56,9 +56,25 @@
   "ruleEditor": {
     "title": "编辑自定义规则",
     "description": "为此会话配置自定义规则，这些规则将优先于全局配置生效。",
+    "overrideCount": "{count} 项覆盖",
+    "groups": {
+      "ai": "AI 配置",
+      "platform": "平台配置"
+    },
+    "note": {
+      "title": "通用",
+      "source": "UMO 备注"
+    },
+    "addOverride": {
+      "select": "选择要覆盖的配置项",
+      "button": "添加覆盖",
+      "empty": "尚未添加配置覆盖项",
+      "remove": "移除覆盖"
+    },
     "serviceConfig": {
       "title": "服务配置",
-      "sessionEnabled": "启用该消息会话来源的消息处理",
+      "sessionEnabled": "允许交互",
+      "sessionEnabledHint": "禁用后将禁止该来源与 AstrBot 交互",
       "llmEnabled": "启用 LLM",
       "ttsEnabled": "启用 TTS",
       "customName": "消息会话来源备注名称"
@@ -77,13 +93,14 @@
     "pluginConfig": {
       "title": "插件配置",
       "disabledPlugins": "禁用的插件",
+      "noneDisabled": "不禁用插件",
+      "selectDisabled": "选择禁用插件",
       "hint": "选择要在此会话中禁用的插件。未选择的插件将保持启用状态。"
     },
     "kbConfig": {
       "title": "知识库配置",
       "selectKbs": "选择知识库",
-      "topK": "返回结果数量 (Top K)",
-      "enableRerank": "启用重排序"
+      "topK": "返回结果数量 (Top K)"
     }
   },
   "deleteConfirm": {
