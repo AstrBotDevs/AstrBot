@@ -3,7 +3,7 @@
 Author: elecvoid243
 Date: 2026-07-05
 Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
-§2.2 Amendment F (read-path defence).
+§2.2 Amendment F (read-path defence, v2 — interactive_choice-aware widening).
 
 Why this file exists
 --------------------
@@ -15,19 +15,44 @@ the broken pair. A hard refresh then surfaces two phantom cards next to
 the InteractiveChoiceBox.
 
 ``_sanitize_ask_user_choice_tool_call_parts`` is the read-path defence:
-it strips both halves before the chat API returns history to the
-dashboard. These tests pin the rules:
+it strips the broken halves before the chat API returns history to the
+dashboard.
 
-1. Any ``tool_call`` whose entry has ``name == "ask_user_choice"`` is
-   dropped (call-args half; redundant with the ``interactive_choice``
-   part written by the plugin's ``chain_type`` event).
-2. Any paired anonymous result half (no ``name`` + has ``result``, same
-   ``call_id`` as an ask_user_choice entry in the same message) is also
-   dropped — that's the synthesised-fallback half.
-3. Real tool calls (with a non-empty ``name``) are preserved.
-4. Non-``tool_call`` parts (text, image, ``interactive_choice``, …) are
+Rule (v2, interactive_choice-aware)
+-----------------------------------
+The sanitiser runs in one of two modes depending on whether the message
+already carries an ``interactive_choice`` part (the canonical
+representation written by the plugin's ``chain_type`` event):
+
+* **Message HAS ``interactive_choice``** — every tool_call entry that
+  looks like a stale ask_user_choice half is dropped unconditionally.
+  This covers the original ``args-only`` half (``name ==
+  "ask_user_choice"``) AND the orphan ``synthesised result`` half
+  (no ``name`` but has a ``result``) — even when they no longer share
+  a call_id in the same message. The runtime always sends ``name`` in
+  tool_call events, so a name-less tool_call entry with a result is
+  unambiguously the synthesised fallback created by
+  ``_store_tool_call_result`` for an ask_user_choice call whose
+  ``tool_call`` half was filtered out — never a legitimate other tool.
+
+* **Message has NO ``interactive_choice``** — the conservative pairing
+  rule applies: collect ask_user_choice ids in the message and drop
+  only those PLUS their paired anonymous result halves. This keeps
+  malformed multi-tool messages whose ask_user_choice part somehow
+  landed without its box (a pre-feature DB row) cleaned, without
+  hiding truly anonymous results that have no ask_user_choice peer.
+
+Other rules pinned by these tests
+---------------------------------
+1. Real tool calls (with a non-empty ``name`` that is NOT
+   ``ask_user_choice``) are preserved even in messages that also have
+   an ``interactive_choice`` part (multi-tool round-trip).
+2. Non-``tool_call`` parts (text, image, ``interactive_choice``, …) are
    preserved unchanged regardless of their content.
-5. Malformed input (``None``, non-list, missing keys, …) never raises.
+3. Malformed input (``None``, non-list, missing keys, …) never raises
+   and never reshapes corrupted entries into ``{}``.
+4. The bot-record wrapper only touches rows whose content is a bot
+   message; user rows and rows with non-bot content are passed through.
 """
 
 from __future__ import annotations
@@ -109,18 +134,39 @@ def _other_tool_result_part(call_id: str = "call-xyz") -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_drops_ask_user_choice_args_part_alone() -> None:
-    """A standalone ask_user_choice args part must be stripped."""
-    parts = [_ask_args_part()]
+def test_drops_ask_user_choice_args_part_when_interactive_choice_present() -> None:
+    """When the message also has an ``interactive_choice`` part (the
+    canonical representation for ask_user_choice), the args-only stale
+    half must be dropped — even if there is no paired anonymous result
+    half in the same message."""
+    parts = [_interactive_choice_part(), _ask_args_part()]
 
     sanitized = _sanitize_ask_user_choice_tool_call_parts(parts)
 
-    assert sanitized == []
+    assert sanitized == [_interactive_choice_part()]
+
+
+def test_drops_orphan_anonymous_result_when_interactive_choice_present() -> None:
+    """The exact bug reported in the v2 follow-up: a NEW message whose
+    write-path filter dropped the ``tool_call`` half (Part A) leaves an
+    orphan synthesised result half (Part B, name-less, has a result) in
+    the DB next to a well-formed ``interactive_choice`` part. Without
+    the ``interactive_choice``-aware rule the orphan would be paired
+    with nothing and slip through."""
+    parts = [
+        _interactive_choice_part(),
+        _anonymous_result_part("call-abc"),
+    ]
+
+    sanitized = _sanitize_ask_user_choice_tool_call_parts(parts)
+
+    assert sanitized == [_interactive_choice_part()]
 
 
 def test_drops_paired_anonymous_result_part() -> None:
     """The synthesised-result half paired with an ask_user_choice args
-    half in the same message must be dropped too."""
+    half in the same message must be dropped (conservative fallback
+    path used when no ``interactive_choice`` part is present)."""
     parts = [_ask_args_part(), _anonymous_result_part()]
 
     sanitized = _sanitize_ask_user_choice_tool_call_parts(parts)
@@ -151,6 +197,31 @@ def test_preserves_non_ask_user_choice_tool_calls() -> None:
     sanitized = _sanitize_ask_user_choice_tool_call_parts(parts)
 
     assert sanitized == parts
+
+
+def test_keeps_other_tool_call_when_interactive_choice_present() -> None:
+    """When the same message contains an ``interactive_choice`` part AND
+    a separate legitimate other-tool call, the other tool's part must
+    survive — only the ask_user_choice stale entries are dropped."""
+    parts = [
+        _interactive_choice_part(),
+        _ask_args_part("call-abc"),
+        _anonymous_result_part("call-abc"),
+        _other_tool_args_part("call-xyz"),
+        _other_tool_result_part("call-xyz"),
+    ]
+
+    sanitized = _sanitize_ask_user_choice_tool_call_parts(parts)
+
+    # The sanitiser preserves the original part order — the
+    # ``interactive_choice`` part stays where it was, the other tool
+    # call's args + result parts also stay where they were, and only
+    # the ask_user_choice args + synthesised result halves are removed.
+    assert sanitized == [
+        _interactive_choice_part(),
+        _other_tool_args_part("call-xyz"),
+        _other_tool_result_part("call-xyz"),
+    ]
 
 
 def test_mixed_message_with_ask_user_choice_and_other_tool() -> None:
@@ -340,13 +411,69 @@ def test_sanitize_bot_records_only_touches_bot_rows() -> None:
 
     # Row 1: untouched.
     assert sanitized[0] == history[0]
-    # Row 2: bot message parts cleaned.
+    # Row 2: bot message parts cleaned (paired halves).
     assert sanitized[1]["content"]["message"] == []
     # Row 3: legitimate tool call preserved.
     assert sanitized[2]["content"]["message"] == [_other_tool_args_part()]
     # Rows 4 and 5: untouched.
     assert sanitized[3] == history[3]
     assert sanitized[4] == history[4]
+
+
+def test_sanitize_bot_records_drops_orphan_tool_with_interactive_choice() -> None:
+    """Regression for the v2 bug: a NEW bot record that contains a
+    well-formed ``interactive_choice`` part AND an orphan
+    name-less-with-result ``tool_call`` half (the synthesised fallback
+    left behind when the write-path filter dropped the args half) must
+    be cleaned to just the ``interactive_choice`` part on the read
+    path. Without the ``interactive_choice``-aware widening this row
+    would survive sanitisation and the dashboard would still show a
+    phantom 'tool' card next to the InteractiveChoiceBox."""
+    history = [
+        {
+            "id": 99,
+            "content": {
+                "type": "bot",
+                "message": [
+                    _interactive_choice_part(),
+                    _anonymous_result_part("call-orphan"),
+                ],
+            },
+        },
+    ]
+
+    sanitized = _sanitize_history_bot_records(history)
+
+    assert sanitized[0]["content"]["message"] == [_interactive_choice_part()]
+
+
+def test_sanitize_bot_records_keeps_other_tool_with_interactive_choice() -> None:
+    """Same message with ``interactive_choice`` AND a separate real
+    tool call must keep the real tool (its part has a name, so the
+    ask_user_choice stale-entry predicate never matches it). The
+    sanitiser preserves the original part order — ``interactive_choice``
+    stays in its original slot."""
+    history = [
+        {
+            "id": 100,
+            "content": {
+                "type": "bot",
+                "message": [
+                    _interactive_choice_part(),
+                    _other_tool_args_part("call-real"),
+                    _other_tool_result_part("call-real"),
+                ],
+            },
+        },
+    ]
+
+    sanitized = _sanitize_history_bot_records(history)
+
+    assert sanitized[0]["content"]["message"] == [
+        _interactive_choice_part(),
+        _other_tool_args_part("call-real"),
+        _other_tool_result_part("call-real"),
+    ]
 
 
 def test_sanitize_bot_records_no_op_when_no_stale_parts() -> None:

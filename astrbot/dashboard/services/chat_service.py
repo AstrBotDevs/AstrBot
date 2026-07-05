@@ -109,7 +109,8 @@ def collect_plain_text_from_message_parts(message_parts: list[dict]) -> str:
 # Author: elecvoid243
 # Date: 2026-07-05
 # Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
-# §2.2 Amendment F (follow-up — read-path defence).
+# §2.2 Amendment F (read-path defence, v2 — see `tests/unit/test_chat_service_sanitize_history.py`
+# for the cases that motivated widening the rule).
 #
 # `BotMessageAccumulator`'s write-path filter (see `_store_tool_call` /
 # `_store_tool_call_result`) prevents NEW `tool_call` and `tool_call_result`
@@ -136,6 +137,59 @@ def collect_plain_text_from_message_parts(message_parts: list[dict]) -> str:
 _ASK_USER_CHOICE_TOOL_NAME = "ask_user_choice"
 
 
+def _is_ask_user_choice_stale_entry(tool_call_entry: object) -> bool:
+    """True if a single tool_call entry looks like a stale ask_user_choice half.
+
+    Used both for the interactive_choice-paired mode (drop when there's a
+    matching `interactive_choice` part in the same message) and for the
+    pairing-based mode (drop when paired with another entry in the same
+    part). The runtime always sends ``name`` in tool_call events, so a
+    name-less entry with a result is unambiguously the synthesised
+    fallback created by `_store_tool_call_result` for an ask_user_choice
+    call whose `tool_call` half was filtered out — never a legitimate
+    real tool invocation.
+    """
+    if not isinstance(tool_call_entry, dict):
+        return False
+    if tool_call_entry.get("name") == _ASK_USER_CHOICE_TOOL_NAME:
+        return True
+    if not tool_call_entry.get("name") and tool_call_entry.get("result"):
+        return True
+    return False
+
+
+def _drop_stale_entries_from_part(
+    part: dict, drop_predicate: callable | None
+) -> dict | None:
+    """Return a new tool_call part with stale entries removed.
+
+    Args:
+        part: A tool_call part dict.
+        drop_predicate: Callable returning True for stale entries. If
+            ``None``, the entry is kept (used as the safe default — a
+            malformed record must not silently drop more than it should).
+
+    Returns:
+        A new part with the surviving entries, or ``None`` if every entry
+        was dropped (so the caller can omit the empty shell). For
+        non-dict / id-less entries the predicate is bypassed and the
+        entry passes through unchanged so we never reshape corrupted
+        data into ``{}`` on the read path.
+    """
+    if drop_predicate is None:
+        return part
+    kept_tool_calls: list = []
+    for tc in part.get("tool_calls") or []:
+        if not isinstance(tc, dict) or not str(tc.get("id") or ""):
+            kept_tool_calls.append(tc)
+            continue
+        if not drop_predicate(tc):
+            kept_tool_calls.append(tc)
+    if not kept_tool_calls:
+        return None
+    return {**part, "tool_calls": kept_tool_calls}
+
+
 def _sanitize_ask_user_choice_tool_call_parts(parts: object) -> object:
     """Drop stale `ask_user_choice` `tool_call` parts from a bot message.
 
@@ -149,53 +203,78 @@ def _sanitize_ask_user_choice_tool_call_parts(parts: object) -> object:
         parts are preserved unchanged. When no stale entries are found the
         original list is returned so the no-op case stays allocation-free
         in the common (new-history) path.
+
+    Notes:
+        The rule is split by whether the message also carries an
+        ``interactive_choice`` part written by the ask_user_choice plugin:
+
+        * **Message HAS ``interactive_choice``**: every tool_call entry
+          that *looks* like an ask_user_choice stale half is dropped
+          unconditionally — this catches BOTH the original
+          args-only half and the orphan synthesised result half (the
+          latter no longer requires a paired `ask_user_choice` named
+          half in the same message). The runtime always sends
+          ``name`` in tool_call events, so a name-less entry with a
+          result is unambiguously the synthesised fallback and never a
+          legitimate other-tool call.
+
+        * **Message has NO ``interactive_choice``**: apply the
+          conservative pairing rule so a multi-tool message whose
+          ask_user_choice part is somehow present without its box
+          (a malformed pre-feature DB row) still gets cleaned, but a
+          truly anonymous result with no ask_user_choice peer is
+          left alone.
     """
     if not isinstance(parts, list):
         return parts
 
-    ask_user_choice_ids: set[str] = set()
-    anonymous_result_ids: set[str] = set()
-    for part in parts:
-        if not isinstance(part, dict) or part.get("type") != "tool_call":
-            continue
-        for tc in part.get("tool_calls") or []:
-            if not isinstance(tc, dict):
-                continue
-            tc_id = str(tc.get("id") or "")
-            if not tc_id:
-                continue
-            if tc.get("name") == _ASK_USER_CHOICE_TOOL_NAME:
-                ask_user_choice_ids.add(tc_id)
-            elif not tc.get("name") and tc.get("result"):
-                anonymous_result_ids.add(tc_id)
+    has_interactive_choice = any(
+        isinstance(p, dict) and p.get("type") == "interactive_choice" for p in parts
+    )
 
-    # Only drop anonymous result halves whose id is paired with an
-    # ask_user_choice args half in the same message. A truly anonymous
-    # result with no ask_user_choice peer (which shouldn't happen in
-    # practice — runtime always sends `name` in tool_call events) is left
-    # alone to avoid hiding any legitimate tool call whose name was lost.
-    drop_ids = ask_user_choice_ids | (ask_user_choice_ids & anonymous_result_ids)
+    if has_interactive_choice:
+        drop_predicate = _is_ask_user_choice_stale_entry
+    else:
+        # Conservative mode: collect ask_user_choice ids in the message
+        # and drop only those PLUS paired anonymous result halves.
+        ask_user_choice_ids: set[str] = set()
+        anonymous_result_ids: set[str] = set()
+        for part in parts:
+            if not isinstance(part, dict) or part.get("type") != "tool_call":
+                continue
+            for tc in part.get("tool_calls") or []:
+                if not isinstance(tc, dict):
+                    continue
+                tc_id = str(tc.get("id") or "")
+                if not tc_id:
+                    continue
+                if tc.get("name") == _ASK_USER_CHOICE_TOOL_NAME:
+                    ask_user_choice_ids.add(tc_id)
+                elif not tc.get("name") and tc.get("result"):
+                    anonymous_result_ids.add(tc_id)
+        paired_ids = ask_user_choice_ids & anonymous_result_ids
+        drop_ids = ask_user_choice_ids | paired_ids
+        if not drop_ids:
+            return parts
 
-    if not drop_ids:
-        return parts
+        def drop_predicate(tc: dict, _drop: set[str] = drop_ids) -> bool:
+            return str(tc.get("id") or "") in _drop
 
     sanitized: list[dict] = []
+    mutated = False
     for part in parts:
         if not isinstance(part, dict) or part.get("type") != "tool_call":
             sanitized.append(part)
             continue
-        kept_tool_calls: list = []
-        for tc in part.get("tool_calls") or []:
-            # Defensive: a malformed (non-dict) or id-less entry has no
-            # `call_id` to match, so it can never be a stale half. Keep it
-            # as-is so we don't silently drop or reshape corrupted data.
-            if not isinstance(tc, dict):
-                kept_tool_calls.append(tc)
-                continue
-            if str(tc.get("id") or "") not in drop_ids:
-                kept_tool_calls.append(tc)
-        if kept_tool_calls:
-            sanitized.append({**part, "tool_calls": kept_tool_calls})
+        new_part = _drop_stale_entries_from_part(part, drop_predicate)
+        if new_part is None:
+            mutated = True
+            continue
+        if new_part is not part:
+            mutated = True
+        sanitized.append(new_part)
+    if not mutated:
+        return parts
     return sanitized
 
 
