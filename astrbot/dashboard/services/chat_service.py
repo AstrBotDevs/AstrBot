@@ -130,6 +130,19 @@ class BotMessageAccumulator:
         self.parts: list[dict] = []
         self.pending_text = ""
         self.pending_tool_calls: dict[str, dict] = {}
+        # Author: elecvoid243
+        # Date: 2026-07-05
+        # Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+        # §2.2 Amendment F — `ask_user_choice` is rendered exclusively as an
+        # `interactive_choice` part, so its underlying `tool_call` and
+        # `tool_call_result` events must NOT produce a `tool_call` part.
+        # We still need to remember which call_ids were filtered so the
+        # later `tool_call_result` event can be silently discarded too
+        # (otherwise the existing fallback in `_store_tool_call_result`
+        # would synthesise a part with only {id, result, finished_ts} —
+        # a name-less "tool" entry that renders next to the
+        # InteractiveChoiceBox after a hard refresh).
+        self._filtered_tool_call_ids: set[str] = set()
 
     def has_content(self) -> bool:
         return bool(self.parts or self.pending_text or self.pending_tool_calls)
@@ -218,12 +231,37 @@ class BotMessageAccumulator:
         else:
             self.parts.append({"type": "think", "think": text})
 
+    # Author: elecvoid243
+    # Date: 2026-07-05
+    # Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+    # §2.2 Amendment F.
+    #
+    # `ask_user_choice` is rendered as an `interactive_choice` part on
+    # the dashboard. Persisting its `tool_call` as well would cause the
+    # ToolCallCard to render a phantom "tool" entry next to the
+    # InteractiveChoiceBox after a hard refresh.
+    #
+    # We still record the call_id in `_filtered_tool_call_ids` so the
+    # later `tool_call_result` event is silently dropped (see
+    # `_store_tool_call_result`). The runtime's `Json` payload for
+    # `tool_call` always carries the `name` field, so this check is
+    # reliable — unlike `tool_call_result` which omits `name`.
+    _ASK_USER_CHOICE_NAME = "ask_user_choice"
+
     def _store_tool_call(self, result_text: str) -> None:
         tool_call = self._parse_json_object(result_text)
         if not tool_call:
             return
         tool_call_id = str(tool_call.get("id") or "")
         if not tool_call_id:
+            return
+        if tool_call.get("name") == self._ASK_USER_CHOICE_NAME:
+            # Mark the id as filtered so the matching tool_call_result
+            # is dropped in `_store_tool_call_result`. Do not add to
+            # `pending_tool_calls` so a subsequent non-ask_user_choice
+            # call cannot accidentally collide on the same id (the
+            # `name` filter is per-event, not global).
+            self._filtered_tool_call_ids.add(tool_call_id)
             return
         self.pending_tool_calls[tool_call_id] = tool_call
 
@@ -234,6 +272,17 @@ class BotMessageAccumulator:
 
         tool_call_id = str(tool_result.get("id") or "")
         if not tool_call_id:
+            return
+
+        # Drop the result if the original `tool_call` was filtered
+        # (e.g. `ask_user_choice`). Without this branch the fallback
+        # below would synthesise a `tool_call` part with only
+        # `{id, result, finished_ts}` — a name-less entry that the
+        # dashboard renders as "tool" (the ToolCallCard name
+        # fallback), producing the duplicate visible in the bug
+        # report.
+        if tool_call_id in self._filtered_tool_call_ids:
+            self._filtered_tool_call_ids.discard(tool_call_id)
             return
 
         tool_call = self.pending_tool_calls.pop(tool_call_id, None) or {

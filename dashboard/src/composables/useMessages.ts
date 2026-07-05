@@ -9,6 +9,24 @@ import {
 } from "./parseInteractiveChoice";
 import { applyInteractiveChoiceSse } from "./dispatchInteractiveChoice";
 import { abandonPendingInteractiveChoices } from "./abandonPendingInteractiveChoices";
+// Author: elecvoid243
+// Date: 2026-07-05
+// Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+// §2.4 Amendment F — keep the live SSE handler and the history
+// reload path using the same predicates. The leaf module
+// `askUserChoiceToolFilter.ts` has no `@/api` dependency so it is
+// testable from a node-only test runner.
+import {
+  isAskUserChoiceToolCall,
+  isAskUserChoiceToolCallResult,
+} from "./askUserChoiceToolFilter";
+// Author: elecvoid243
+// Date: 2026-07-05
+// Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+// §2.4 Amendment F — `normalizePartsInternal` was extracted to a
+// leaf module so the ask_user_choice history-reload filter can be
+// unit-tested without pulling in `@/api`.
+import { normalizeMessageParts as normalizeMessagePartsFromLeaf } from "./normalizeMessageParts";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -962,6 +980,23 @@ export function useMessages(options: UseMessagesOptions) {
     };
   }
 
+  // Author: elecvoid243
+  // Date: 2026-07-05
+  // Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+  // §2.4 Amendment F — closure-scoped set of call_ids whose `tool_call`
+  // was filtered as `ask_user_choice`. The matching `tool_call_result`
+  // event is dropped using this set (the result payload itself does
+  // not carry the tool name, so we cannot tell from the payload
+  // alone).
+  //
+  // Scoping note: this is a per-SSE-connection set. The dashboard
+  // opens a fresh SSE stream for each message send, so cross-session
+  // leakage is structurally impossible — there is no shared
+  // long-lived store. The history reload path
+  // (`normalizePartsInternal`) handles the persistent-data side
+  // independently.
+  const filteredToolCallIds = new Set<string>();
+
   function processStreamPayload(
     botRecord: ChatRecord,
     payload: any,
@@ -1054,7 +1089,24 @@ export function useMessages(options: UseMessagesOptions) {
         return;
       }
       if (chainType === "tool_call") {
-        upsertToolCall(botRecord, parseJsonSafe(data));
+        const parsed = parseJsonSafe(data);
+        // Author: elecvoid243
+        // Date: 2026-07-05
+        // Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+        // §2.4 Amendment F — `ask_user_choice` is rendered exclusively as
+        // an `interactive_choice` part. Skip the corresponding
+        // `tool_call` (and the matching `tool_call_result` below) so the
+        // dashboard never shows a phantom "tool" entry next to the
+        // InteractiveChoiceBox. Remember the id so the result can be
+        // dropped in turn.
+        if (isAskUserChoiceToolCall(parsed)) {
+          const callId = (parsed as { id?: unknown } | null)?.id;
+          if (typeof callId === "string" || typeof callId === "number") {
+            filteredToolCallIds.add(String(callId));
+          }
+          return;
+        }
+        upsertToolCall(botRecord, parsed);
         return;
       }
       // Author: elecvoid243
@@ -1090,6 +1142,16 @@ export function useMessages(options: UseMessagesOptions) {
       }
       if (chainType === "tool_call_result") {
         const parsed = parseJsonSafe(data);
+        // Author: elecvoid243
+        // Date: 2026-07-05
+        // Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+        // §2.4 Amendment F — Drop `tool_call_result` events whose matching
+        // `tool_call` was an `ask_user_choice` (already filtered above).
+        // `finishToolCall` would otherwise synthesise a name-less part on
+        // miss, which renders as "tool" next to the InteractiveChoiceBox.
+        if (isAskUserChoiceToolCallResult(botRecord, parsed, filteredToolCallIds)) {
+          return;
+        }
         finishToolCall(botRecord, parsed);
 
         // todo 工具结果 → 解析并写入按 sessionId 隔离的快照。
@@ -1392,33 +1454,16 @@ async function readSseStream(
 }
 
 function normalizePartsInternal(parts: unknown): MessagePart[] {
-  if (typeof parts === "string") {
-    return parts ? [{ type: "plain", text: parts }] : [];
-  }
-  if (!Array.isArray(parts)) return [];
-  return parts.map((part: any) => {
-    if (!part || typeof part !== "object") {
-      return { type: "plain", text: String(part ?? "") };
-    }
-    if (part.type === "reasoning") {
-      return {
-        ...part,
-        type: "think",
-        think: String(part.think ?? part.text ?? ""),
-      };
-    }
-    // ① v1.0 schema:InteractiveChoicePart 已通过 SSE 顶层 type 到达,
-    //    不再解 plain 文本/拆 tool_call(见 parseInteractiveChoice 模块注释)。
-    // ② 校验 + 截断(防御性兜底,后端已截过一遍)
-    if (isInteractiveChoicePayload(part)) {
-      if (!validateInteractiveChoice(part)) {
-        // 非法:降级为 plain JSON(spec §2.3 步骤 2),与 v0.3 行为一致
-        return { type: "plain", text: JSON.stringify(part) };
-      }
-      return truncateInteractiveChoice(part);
-    }
-    return { ...part };
-  });
+  // Author: elecvoid243
+  // Date: 2026-07-05
+  // Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+  // §2.4 Amendment F — `normalizePartsInternal` was moved to a leaf
+  // module (`normalizeMessageParts.ts`) so the ask_user_choice
+  // history-reload filter can be unit-tested from a bare node
+  // runner. This thin wrapper exists only to preserve the
+  // `useMessages.ts` internal call sites and the public
+  // `normalizeMessageParts` re-export.
+  return normalizeMessagePartsFromLeaf(parts) as MessagePart[];
 }
 
 function isEmptyPlainPart(part: MessagePart) {
@@ -1502,6 +1547,18 @@ export function finishToolCall(record: ChatRecord, result: any) {
     ],
   });
 }
+
+// Author: elecvoid243
+// Date: 2026-07-05
+// Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+// §2.4 Amendment F — the predicate helpers
+// `isAskUserChoiceToolCall` / `isAskUserChoiceToolCallResult` live
+// in `askUserChoiceToolFilter.ts` (a leaf module with no `@/api`
+// dependency) so the live SSE handler and the history reload path
+// share one source of truth. The const
+// `ASK_USER_CHOICE_TOOL_NAME` is exported from there directly;
+// any consumer that previously imported it from `useMessages.ts`
+// can switch to the leaf module without behavioural change.
 
 export function markMessageStarted(record: ChatRecord) {
   record.content.isLoading = false;

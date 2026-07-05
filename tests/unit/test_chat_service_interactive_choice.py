@@ -164,3 +164,137 @@ def test_add_plain_unknown_chain_type_falls_through_to_streaming() -> None:
 
     [part] = accumulator.build_message_parts()
     assert part == {"type": "plain", "text": "hello"}
+
+
+# ---------------------------------------------------------------------------
+# Bug fix: ask_user_choice tool_call / tool_call_result must not produce a
+# tool_call part. The interactive_choice part already represents the same
+# invocation; persisting both causes a duplicate "tool" entry to render next
+# to the InteractiveChoiceBox after a hard refresh.
+#
+# Plan: docs/superpowers/plans/2026-07-05-interactive-choice-history-roundtrip.md
+# (Amendment F: skip ask_user_choice in BotMessageAccumulator)
+# ---------------------------------------------------------------------------
+
+
+ASK_USER_CHOICE_NAME = "ask_user_choice"
+
+
+def _tool_call_envelope(
+    call_id: str,
+    name: str = ASK_USER_CHOICE_NAME,
+    args: dict | None = None,
+    ts: float = 1.0,
+) -> str:
+    return json.dumps(
+        {
+            "id": call_id,
+            "name": name,
+            "args": args if args is not None else {"prompt": "Pick one"},
+            "ts": ts,
+        },
+        ensure_ascii=False,
+    )
+
+
+def _tool_call_result_envelope(
+    call_id: str,
+    result: str,
+    ts: float = 2.0,
+) -> str:
+    return json.dumps(
+        {"id": call_id, "ts": ts, "result": result},
+        ensure_ascii=False,
+    )
+
+
+def test_tool_call_for_ask_user_choice_is_skipped() -> None:
+    """A `tool_call` event for ask_user_choice must NOT append a tool_call part."""
+    accumulator = BotMessageAccumulator()
+
+    accumulator.add_plain(
+        _tool_call_envelope("call-abc"),
+        chain_type="tool_call",
+        streaming=False,
+    )
+
+    assert accumulator.build_message_parts() == []
+
+
+def test_tool_call_result_for_ask_user_choice_is_skipped() -> None:
+    """The matching `tool_call_result` for a skipped ask_user_choice call
+    must not fall back to creating a tool_call part (the call was filtered,
+    so there is no pending entry to attach to)."""
+    accumulator = BotMessageAccumulator()
+
+    # tool_call arrives first (filtered)
+    accumulator.add_plain(
+        _tool_call_envelope("call-abc"),
+        chain_type="tool_call",
+        streaming=False,
+    )
+    # tool_call_result arrives (no pending entry → fallback would create
+    # a tool_call part with only {id, result, finished_ts}; we must NOT do
+    # that for ask_user_choice)
+    accumulator.add_plain(
+        _tool_call_result_envelope("call-abc", "User selected: A (id=A)"),
+        chain_type="tool_call_result",
+        streaming=False,
+    )
+
+    assert accumulator.build_message_parts() == []
+
+
+def test_tool_call_for_other_tool_still_persists() -> None:
+    """Regression guard: the skip filter must not affect other tool names."""
+    accumulator = BotMessageAccumulator()
+
+    accumulator.add_plain(
+        _tool_call_envelope("call-xyz", name="astrbot_file_read_tool"),
+        chain_type="tool_call",
+        streaming=False,
+    )
+    accumulator.add_plain(
+        _tool_call_result_envelope("call-xyz", "file contents"),
+        chain_type="tool_call_result",
+        streaming=False,
+    )
+
+    [part] = accumulator.build_message_parts()
+    assert part["type"] == "tool_call"
+    assert part["tool_calls"][0]["name"] == "astrbot_file_read_tool"
+    assert part["tool_calls"][0]["id"] == "call-xyz"
+    assert part["tool_calls"][0]["result"] == "file contents"
+
+
+def test_interactive_choice_and_ask_user_choice_tool_call_yield_only_interactive_part() -> None:
+    """End-to-end: emitting both the tool_call + tool_call_result for
+    ask_user_choice AND the interactive_choice chain_type should yield
+    a single `interactive_choice` part — the InteractiveChoiceBox is the
+    sole user-visible representation."""
+    accumulator = BotMessageAccumulator()
+
+    # The LLM runtime emits tool_call (filtered by name)
+    accumulator.add_plain(
+        _tool_call_envelope("call-abc"),
+        chain_type="tool_call",
+        streaming=False,
+    )
+    # The LLM runtime emits tool_call_result (filtered, paired with the
+    # skipped tool_call)
+    accumulator.add_plain(
+        _tool_call_result_envelope("call-abc", "User selected: A (id=A)"),
+        chain_type="tool_call_result",
+        streaming=False,
+    )
+    # The plugin emits the interactive_choice chain_type
+    accumulator.add_plain(
+        _envelope(request_id="req-1"),
+        chain_type="interactive_choice",
+        streaming=False,
+    )
+
+    parts = accumulator.build_message_parts()
+    assert len(parts) == 1
+    assert parts[0]["type"] == "interactive_choice"
+    assert parts[0]["request_id"] == "req-1"
