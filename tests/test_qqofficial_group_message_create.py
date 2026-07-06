@@ -497,3 +497,69 @@ async def test_result_decorate_yields_after_tts_fallback(monkeypatch):
     assert yielded_count == 1
     tts_provider.get_audio.assert_awaited_once_with("hello")
     assert [comp.text for comp in result.chain if isinstance(comp, Plain)] == ["hello"]
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_yields_after_t2i_fallback(monkeypatch):
+    stage = ResultDecorateStage()
+    stage.reply_prefix = ""
+    stage.content_safe_check_reply = False
+    stage.enable_segmented_reply = False
+    stage.only_llm_result = False
+    stage.content_cleanup_rule = ""
+    stage.show_reasoning = False
+    stage.tts_trigger_probability = 1
+    stage.reply_with_mention = False
+    stage.reply_with_quote = False
+    stage.forward_threshold = 1000
+    stage.t2i_word_threshold = 5
+    stage.t2i_use_network = False
+    stage.t2i_active_template = "default"
+    setattr(
+        stage,
+        "ctx",
+        SimpleNamespace(
+            plugin_manager=SimpleNamespace(
+                context=SimpleNamespace(
+                    get_using_tts_provider=lambda _umo: None,
+                ),
+            ),
+            astrbot_config={
+                "provider_tts_settings": {
+                    "enable": False,
+                    "use_file_service": False,
+                    "dual_output": False,
+                },
+                "callback_api_base": "",
+                "t2i": True,
+                "t2i_use_file_service": False,
+            },
+        ),
+    )
+    result = MessageEventResult(
+        chain=[Plain("hello fallback text")],
+        result_content_type=ResultContentType.LLM_RESULT,
+    )
+    event = SimpleNamespace(
+        plugins_name=None,
+        unified_msg_origin="qq_official:GroupMessage:group-1",
+        get_result=lambda: result,
+        get_platform_name=lambda: "qq_official",
+        is_stopped=lambda: False,
+        get_extra=lambda *_args, **_kwargs: None,
+    )
+    render_t2i = AsyncMock(side_effect=RuntimeError("t2i failed"))
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.result_decorate.stage.html_renderer.render_t2i",
+        render_t2i,
+    )
+
+    yielded_count = 0
+    async for _ in cast(Any, stage.process(cast(Any, event))):
+        yielded_count += 1
+
+    assert yielded_count == 1
+    render_t2i.assert_awaited_once()
+    assert [comp.text for comp in result.chain if isinstance(comp, Plain)] == [
+        "hello fallback text",
+    ]
