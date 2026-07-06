@@ -813,6 +813,24 @@ class ProviderManager:
             )
             del self.inst_map[provider_id]
 
+    @staticmethod
+    def _sync_fallback_chat_models(
+        config: dict, old_id: str, new_id: str | None = None
+    ) -> None:
+        """Remove or remap a provider id in fallback_chat_models after delete/rename."""
+        provider_settings = config.get("provider_settings")
+        if not isinstance(provider_settings, dict):
+            return
+        fallback_ids = provider_settings.get("fallback_chat_models")
+        if not isinstance(fallback_ids, list) or old_id not in fallback_ids:
+            return
+        updated_ids = []
+        for fallback_id in fallback_ids:
+            mapped_id = new_id if fallback_id == old_id else fallback_id
+            if mapped_id is not None and mapped_id not in updated_ids:
+                updated_ids.append(mapped_id)
+        provider_settings["fallback_chat_models"] = updated_ids
+
     async def delete_provider(
         self, provider_id: str | None = None, provider_source_id: str | None = None
     ) -> None:
@@ -832,6 +850,7 @@ class ProviderManager:
                 config["provider"] = [
                     prov for prov in config["provider"] if prov.get("id") != tpid
                 ]
+                self._sync_fallback_chat_models(config, tpid)
             config.save_config()
             logger.info(f"Provider {target_prov_ids} 已从配置中删除。")
 
@@ -855,6 +874,8 @@ class ProviderManager:
                     break
             else:
                 raise ValueError(f"Provider ID {origin_provider_id} not found")
+            if npid != origin_provider_id:
+                self._sync_fallback_chat_models(config, origin_provider_id, npid)
             config.save_config()
             # reload instance
             await self.reload(new_config)
