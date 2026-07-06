@@ -64,7 +64,7 @@ class PatchedMessage(botpy.message.Message):
         event_id: str | None,
         data: dict[str, Any],
     ) -> None:
-        super().__init__(api, event_id, data) # type: ignore
+        super().__init__(api, event_id, data)  # type: ignore
         _set_raw_message_fields(self, data)
 
 
@@ -77,7 +77,7 @@ class PatchedDirectMessage(botpy.message.DirectMessage):
         event_id: str | None,
         data: dict[str, Any],
     ) -> None:
-        super().__init__(api, event_id, data) # type: ignore
+        super().__init__(api, event_id, data)  # type: ignore
         _set_raw_message_fields(self, data)
 
 
@@ -90,7 +90,7 @@ class PatchedC2CMessage(botpy.message.C2CMessage):
         event_id: str | None,
         data: dict[str, Any],
     ) -> None:
-        super().__init__(api, event_id, data) # type: ignore
+        super().__init__(api, event_id, data)  # type: ignore
         _set_raw_message_fields(self, data)
 
 
@@ -103,7 +103,7 @@ class PatchedGroupMessage(botpy.message.GroupMessage):
         event_id: str | None,
         data: dict[str, Any],
     ) -> None:
-        super().__init__(api, event_id, data) # type: ignore
+        super().__init__(api, event_id, data)  # type: ignore
         _set_raw_message_fields(self, data)
 
     class _User:
