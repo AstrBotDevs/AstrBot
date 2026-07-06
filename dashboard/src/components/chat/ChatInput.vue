@@ -242,6 +242,27 @@
             class="mr-1"
             width="1.5"
           />
+          <v-tooltip
+            v-if="tokenUsageVisible"
+            location="top"
+            max-width="320"
+          >
+            <template #activator="{ props: tokenTooltipProps }">
+              <span
+                v-bind="tokenTooltipProps"
+                class="token-usage-indicator"
+                :style="{ '--token-usage-color': tokenUsageColor }"
+              >
+                <v-progress-circular
+                  :model-value="tokenUsagePercent"
+                  size="24"
+                  width="2.5"
+                  class="token-usage-progress"
+                />
+              </span>
+            </template>
+            <span>{{ props.tokenUsage?.tooltip }}</span>
+          </v-tooltip>
           <!-- <v-btn @click="$emit('openLiveMode')"
                         icon
                         variant="text"
@@ -332,6 +353,13 @@ interface ReplyInfo {
   selectedText?: string;
 }
 
+interface TokenUsageInfo {
+  used: number;
+  limit: number;
+  percent: number;
+  tooltip: string;
+}
+
 interface Props {
   prompt: string;
   stagedImagesUrl: string[];
@@ -347,6 +375,7 @@ interface Props {
   replyTo?: ReplyInfo | null;
   sendShortcut?: "enter" | "shift_enter";
   showProviderSelector?: boolean;
+  tokenUsage?: TokenUsageInfo | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -357,6 +386,7 @@ const props = withDefaults(defineProps<Props>(), {
   replyTo: null,
   sendShortcut: "shift_enter",
   showProviderSelector: true,
+  tokenUsage: null,
 });
 
 const emit = defineEmits<{
@@ -568,6 +598,29 @@ function handleReplyAfterLeave() {
 }
 
 const { mobile } = useDisplay();
+
+const tokenUsageVisible = computed(() => {
+  const usage = props.tokenUsage;
+  return Boolean(
+    usage &&
+      Number.isFinite(usage.used) &&
+      Number.isFinite(usage.limit) &&
+      usage.used > 0 &&
+      usage.limit > 0,
+  );
+});
+
+const tokenUsagePercent = computed(() => {
+  const percent = props.tokenUsage?.percent || 0;
+  if (!Number.isFinite(percent)) return 0;
+  return Math.min(100, Math.max(0, percent));
+});
+
+const tokenUsageColor = computed(() =>
+  isDark.value
+    ? "rgba(var(--v-theme-on-surface), 0.82)"
+    : "rgba(var(--v-theme-on-surface), 0.72)",
+);
 
 // Auto-resize textarea
 function autoResize() {
@@ -994,6 +1047,31 @@ defineExpose({
 
 .input-icon-btn:hover {
   background: rgba(var(--v-theme-on-surface), 0.04) !important;
+}
+
+.token-usage-indicator {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  border-radius: 50%;
+  color: var(--token-usage-color);
+}
+
+.token-usage-progress {
+  color: currentColor;
+}
+
+.token-usage-progress :deep(.v-progress-circular__underlay) {
+  color: rgba(var(--v-theme-on-surface), 0.18);
+  stroke: currentColor;
+  opacity: 0.24;
+}
+
+.token-usage-progress :deep(.v-progress-circular__overlay) {
+  stroke: currentColor;
 }
 
 .input-outline-control {
