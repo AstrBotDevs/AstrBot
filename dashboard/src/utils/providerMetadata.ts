@@ -19,15 +19,28 @@ export interface ProviderCapabilityBadge {
   tooltip: string
 }
 
+export function contextLimit(
+  provider: ProviderMetadataSource | null | undefined,
+  metadata?: ProviderModelMetadata | null
+): number {
+  const context = Number(metadata?.limit?.context || provider?.max_context_tokens || 0)
+  return Number.isFinite(context) && context > 0 ? context : 0
+}
+
+export function formatTokenCount(value: number): string {
+  if (!Number.isFinite(value)) return ''
+  const absValue = Math.abs(value)
+  if (absValue >= 1_000_000) return `${formatCompactNumber(value / 1_000_000)}M`
+  if (absValue >= 1_000) return `${formatCompactNumber(value / 1_000)}K`
+  return `${Math.round(value)}`
+}
+
 export function formatContextLimit(
   provider: ProviderMetadataSource | null | undefined,
   metadata?: ProviderModelMetadata | null
 ): string {
-  const context = metadata?.limit?.context || provider?.max_context_tokens
-  if (!context || typeof context !== 'number') return ''
-  if (context >= 1_000_000) return `${Math.round(context / 1_000_000)}M`
-  if (context >= 1_000) return `${Math.round(context / 1_000)}K`
-  return `${context}`
+  const context = contextLimit(provider, metadata)
+  return context ? formatTokenCount(context) : ''
 }
 
 export function providerCapabilityBadges(
@@ -80,4 +93,10 @@ export function providerCapabilityBadges(
           ? tm('models.metadata.supportedDisabled', { capability: item.label })
           : tm('models.metadata.enabled', { capability: item.label })
     }))
+}
+
+function formatCompactNumber(value: number): string {
+  const absValue = Math.abs(value)
+  const rounded = absValue >= 10 ? Math.round(value) : Math.round(value * 10) / 10
+  return String(rounded).replace(/\.0$/, '')
 }
