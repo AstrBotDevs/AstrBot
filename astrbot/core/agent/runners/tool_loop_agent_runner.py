@@ -295,7 +295,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
         self._same_tool_streak = 0
-        self._recorded_usage_ids: set[int] = set()
+        self._recorded_usages: list[T.Any] = []
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -340,10 +340,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def _record_llm_usage(self, llm_resp: LLMResponse) -> None:
         if not llm_resp.usage:
             return
-        usage_id = id(llm_resp.usage)
-        if usage_id in self._recorded_usage_ids:
+        if any(usage is llm_resp.usage for usage in self._recorded_usages):
             return
-        self._recorded_usage_ids.add(usage_id)
+        self._recorded_usages.append(llm_resp.usage)
         self.stats.token_usage += llm_resp.usage
         if self.req.conversation:
             self.req.conversation.token_usage = llm_resp.usage.total
@@ -1470,11 +1469,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not isinstance(content, list):
             return False
         for part in content:
-            if isinstance(part, TextPart) and part.text != llm_resp.completion_text:
-                return False
-            if isinstance(part, ThinkPart) and part.think != (
-                llm_resp.reasoning_content or ""
-            ):
+            if isinstance(part, TextPart):
+                if part.text != llm_resp.completion_text:
+                    return False
+            elif isinstance(part, ThinkPart):
+                if part.think != (llm_resp.reasoning_content or ""):
+                    return False
+            else:
                 return False
         return True
 

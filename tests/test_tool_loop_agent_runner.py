@@ -626,6 +626,35 @@ def runner():
     return ToolLoopAgentRunner()
 
 
+def test_record_llm_usage_keeps_usage_reference_to_prevent_id_reuse(runner):
+    usage = TokenUsage(input_other=10, output=5)
+    runner.req = SimpleNamespace(conversation=SimpleNamespace(token_usage=0))
+    runner.stats = SimpleNamespace(token_usage=TokenUsage())
+    runner._recorded_usages = []
+
+    runner._record_llm_usage(LLMResponse(role="assistant", usage=usage))
+    runner._record_llm_usage(LLMResponse(role="assistant", usage=usage))
+
+    assert runner.stats.token_usage.total == usage.total
+    assert runner.req.conversation.token_usage == usage.total
+    assert runner._recorded_usages == [usage]
+
+
+def test_is_message_from_llm_response_rejects_extra_content_parts(runner):
+    llm_resp = LLMResponse(role="assistant", completion_text="late text")
+    message = Message(
+        role="assistant",
+        content=[
+            TextPart(text="late text"),
+            ImageURLPart(
+                image_url=ImageURLPart.ImageURL(url="https://example.com/a.png")
+            ),
+        ],
+    )
+
+    assert runner._is_message_from_llm_response(message, llm_resp) is False
+
+
 def _make_large_tool_result_text() -> str:
     return "x" * 100000
 
