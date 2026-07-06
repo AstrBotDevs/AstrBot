@@ -351,13 +351,16 @@ class ResultDecorateStage(Stage):
             ) or result.use_t2i_:
                 parts = []
                 records = []
-                for comp in result.chain:
+                remain = []
+                for i, comp in enumerate(result.chain):
                     if isinstance(comp, Plain):
                         parts.append("\n\n" + comp.text)
                     elif isinstance(comp, Record):
                         # TTS 双输出时语音段与文本段交错，跳过语音段并在转图后保留
                         records.append(comp)
                     else:
+                        # 其余消息段不参与转图，转图后追加回结果链避免丢失
+                        remain = result.chain[i:]
                         break
                 plain_str = "".join(parts)
                 if plain_str and len(plain_str) > self.t2i_word_threshold:
@@ -378,7 +381,7 @@ class ResultDecorateStage(Stage):
                         )
                     if url:
                         if url.startswith("http"):
-                            result.chain = [*records, Image.fromURL(url)]
+                            result.chain = [*records, Image.fromURL(url), *remain]
                         elif (
                             self.ctx.astrbot_config["t2i_use_file_service"]
                             and self.ctx.astrbot_config["callback_api_base"]
@@ -386,9 +389,9 @@ class ResultDecorateStage(Stage):
                             token = await file_token_service.register_file(url)
                             url = f"{self.ctx.astrbot_config['callback_api_base']}/api/file/{token}"
                             logger.debug(f"已注册：{url}")
-                            result.chain = [*records, Image.fromURL(url)]
+                            result.chain = [*records, Image.fromURL(url), *remain]
                         else:
-                            result.chain = [*records, Image.fromFileSystem(url)]
+                            result.chain = [*records, Image.fromFileSystem(url), *remain]
 
             # 触发转发消息
             if event.get_platform_name() == "aiocqhttp":

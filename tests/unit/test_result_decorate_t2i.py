@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 import astrbot.core.pipeline.result_decorate.stage as stage_module
-from astrbot.core.message.components import Image, Plain, Record
+from astrbot.core.message.components import At, Image, Plain, Record
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
@@ -160,6 +160,21 @@ async def test_dual_output_below_threshold_keeps_voice_and_text(monkeypatch):
 
     assert isinstance(result.chain[0], Record)
     assert isinstance(result.chain[1], Plain)
+
+
+@pytest.mark.asyncio
+async def test_t2i_keeps_components_after_text(monkeypatch):
+    result = MessageEventResult(
+        chain=[Plain(LONG_TEXT), At(qq="10001", name="someone")]
+    ).set_result_content_type(ResultContentType.LLM_RESULT)
+    await _run_stage(
+        _build_config(tts_enable=False, dual_output=False, t2i=True),
+        result,
+        monkeypatch,
+    )
+
+    assert isinstance(result.chain[0], Image)
+    assert isinstance(result.chain[1], At)
 
 
 @pytest.mark.asyncio
