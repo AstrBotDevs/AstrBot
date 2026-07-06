@@ -30,5 +30,26 @@ def mark_tool_as_sandbox_provider_tool(tool: Any, provider_id: str) -> Any:
     return tool
 
 
+def sandbox_provider_tool(provider_id: str, **metadata: Any):
+    """Mark a provider-specific sandbox tool class or instance.
+
+    Args:
+        provider_id: Sandbox provider identifier that owns the tool.
+        **metadata: Optional metadata kept on the decorated object for provider
+            plugins that inspect it later.
+
+    Returns:
+        A decorator that marks the tool as provider-specific.
+    """
+
+    def _decorator(tool: Any) -> Any:
+        marked_tool = mark_tool_as_sandbox_provider_tool(tool, provider_id)
+        for key, value in metadata.items():
+            setattr(marked_tool, key, value)
+        return marked_tool
+
+    return _decorator
+
+
 def _normalize_provider_id(provider_id: str | None) -> str:
     return "" if provider_id is None else str(provider_id).strip().lower()
