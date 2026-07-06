@@ -24,7 +24,6 @@ from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
-from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.totp import (
     is_totp_enabled,
     revoke_user_trusted_devices,
@@ -1299,14 +1298,18 @@ class ProviderConfigService:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
         providers = copy.deepcopy(self.config.get("provider", []))
+        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
+        model_metadata = {}
         for provider in providers:
             model_id = provider.get("model")
             if isinstance(model_id, str) and model_id in LLM_METADATAS:
-                provider["model_metadata"] = LLM_METADATAS[model_id]
+                model_metadata[model_id] = LLM_METADATAS[model_id]
         return {
             "config_schema": config_schema,
             "providers": providers,
             "provider_sources": self.config.get("provider_sources", []),
+            "model_metadata": model_metadata,
         }
 
     def list_provider_sources(self) -> dict:
@@ -1549,8 +1552,11 @@ class ProviderConfigService:
         source_id: str | None = None,
         enabled: bool | None = None,
     ) -> dict:
+        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
         provider_type = self._resolve_provider_type(capability)
         providers = []
+        model_metadata = {}
         source_provider_type = {
             source["id"]: source.get("provider_type", "chat_completion")
             for source in self.provider_manager.provider_sources_config
@@ -1575,9 +1581,9 @@ class ProviderConfigService:
                 provider_response = copy.deepcopy(provider)
             model_id = provider_response.get("model")
             if isinstance(model_id, str) and model_id in LLM_METADATAS:
-                provider_response["model_metadata"] = LLM_METADATAS[model_id]
+                model_metadata[model_id] = LLM_METADATAS[model_id]
             providers.append(provider_response)
-        return {"providers": providers}
+        return {"providers": providers, "model_metadata": model_metadata}
 
     def list_providers_for_dashboard_types(
         self, provider_type: str | None
@@ -1607,10 +1613,14 @@ class ProviderConfigService:
         )
         if provider is None:
             raise ValueError(f"Provider {provider_id} not found")
-        model_id = provider.get("model")
+        provider_response = copy.deepcopy(provider)
+        from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
+        model_id = provider_response.get("model")
+        model_metadata = {}
         if isinstance(model_id, str) and model_id in LLM_METADATAS:
-            provider["model_metadata"] = LLM_METADATAS[model_id]
-        return {"provider": provider}
+            model_metadata[model_id] = LLM_METADATAS[model_id]
+        return {"provider": provider_response, "model_metadata": model_metadata}
 
     async def create_provider(self, config: dict, source_id: str | None = None) -> None:
         config = copy.deepcopy(config)

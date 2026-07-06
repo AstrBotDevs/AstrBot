@@ -125,7 +125,7 @@
               {{ provider.type || provider.provider_type || tm('providerSelector.unknownType') }}
               <span v-if="provider.model">- {{ provider.model }}</span>
               <span
-                v-if="capabilityBadges(provider).length || formatContextLimit(provider)"
+                v-if="capabilityBadges(provider).length || formatContextLimit(provider, metadataForProvider(provider))"
                 class="provider-selector-meta"
               >
                 <v-tooltip
@@ -147,7 +147,7 @@
                   <span>{{ item.tooltip }}</span>
                 </v-tooltip>
                 <v-tooltip
-                  v-if="formatContextLimit(provider)"
+                  v-if="formatContextLimit(provider, metadataForProvider(provider))"
                   location="top"
                   max-width="320"
                 >
@@ -157,12 +157,12 @@
                       class="provider-selector-meta__context"
                       @click.stop
                     >
-                      {{ formatContextLimit(provider) }}
+                      {{ formatContextLimit(provider, metadataForProvider(provider)) }}
                     </span>
                   </template>
                   <span>{{
                     providerTm('models.metadata.context', {
-                      tokens: formatContextLimit(provider)
+                      tokens: formatContextLimit(provider, metadataForProvider(provider))
                     })
                   }}</span>
                 </v-tooltip>
@@ -280,6 +280,7 @@ const selectedProvider = ref('')
 const selectedProviders = ref([])
 const providerDrawer = ref(false)
 const testingProviders = ref([])
+const modelMetadata = ref({})
 
 const hasSelection = computed(() => {
   if (props.multiple) {
@@ -329,6 +330,7 @@ async function loadProviders() {
   try {
     const response = await providerApi.listByProviderType(props.providerType)
     if (response.data.status === 'ok') {
+      modelMetadata.value = response.data.model_metadata || {}
       const providers = response.data.data || []
       providerList.value = props.providerSubtype
         ? providers.filter((provider) => matchesProviderSubtype(provider, props.providerSubtype))
@@ -398,7 +400,11 @@ function isProviderSelected(providerId) {
 }
 
 function capabilityBadges(provider) {
-  return providerCapabilityBadges(provider, providerTm)
+  return providerCapabilityBadges(provider, metadataForProvider(provider), providerTm)
+}
+
+function metadataForProvider(provider) {
+  return provider?.model ? modelMetadata.value[provider.model] || null : null
 }
 
 function isProviderTesting(providerId) {

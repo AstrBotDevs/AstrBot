@@ -73,7 +73,7 @@
                   <span>{{ item.tooltip }}</span>
                 </v-tooltip>
                 <v-tooltip
-                  v-if="formatContextLimit(provider)"
+                  v-if="formatContextLimit(provider, metadataForProvider(provider))"
                   location="top"
                   max-width="320"
                 >
@@ -83,12 +83,15 @@
                       class="meta-context-badge"
                       @click.stop
                     >
-                      {{ formatContextLimit(provider) }}
+                      {{ formatContextLimit(provider, metadataForProvider(provider)) }}
                     </span>
                   </template>
                   <span>{{
                     tm("models.metadata.context", {
-                      tokens: formatContextLimit(provider),
+                      tokens: formatContextLimit(
+                        provider,
+                        metadataForProvider(provider),
+                      ),
                     })
                   }}</span>
                 </v-tooltip>
@@ -141,6 +144,7 @@ import { useToast } from "@/utils/toast";
 import {
   formatContextLimit,
   providerCapabilityBadges,
+  type ProviderModelMetadata,
   type ProviderMetadataSource,
 } from "@/utils/providerMetadata";
 
@@ -170,6 +174,7 @@ const menuOpen = ref(false);
 const loadingProviders = ref(false);
 const providersLoaded = ref(false);
 const testingProviderIds = ref<string[]>([]);
+const modelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 const { tm } = useModuleI18n("features/provider");
 const { success: toastSuccess, error: toastError } = useToast();
 
@@ -230,6 +235,9 @@ async function loadProviderConfigs(force = false) {
   try {
     const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
+      modelMetadata.value = (
+        response.data.model_metadata || {}
+      ) as Record<string, ProviderModelMetadata>;
       providerConfigs.value = (
         (response.data.data || []) as unknown as ProviderConfig[]
       ).filter((provider: ProviderConfig) => provider.enable !== false);
@@ -255,7 +263,11 @@ function selectProvider(provider: ProviderConfig) {
 }
 
 function capabilityBadges(provider: ProviderConfig) {
-  return providerCapabilityBadges(provider, tm);
+  return providerCapabilityBadges(provider, metadataForProvider(provider), tm);
+}
+
+function metadataForProvider(provider: ProviderConfig) {
+  return provider.model ? modelMetadata.value[provider.model] || null : null;
 }
 
 async function testProvider(provider: ProviderConfig) {

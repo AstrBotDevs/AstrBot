@@ -151,7 +151,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   const mergedModelEntries = computed(() => {
     const configuredEntries = (sourceProviders.value || []).map((provider: any) => {
-      const metadata = getModelMetadata(provider.model) || provider.model_metadata || null
+      const metadata = getModelMetadata(provider.model)
       return {
         type: 'configured',
         provider,
@@ -691,6 +691,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           providerTemplates.value = configSchema.value.provider.config_template
         }
         providerSources.value = response.data.data.provider_sources || []
+        modelMetadata.value = (response.data.data.model_metadata || {}) as Record<string, any>
         providers.value = response.data.data.providers || []
       }
     } catch (error) {
