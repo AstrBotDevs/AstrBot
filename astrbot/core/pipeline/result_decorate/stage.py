@@ -346,13 +346,17 @@ class ResultDecorateStage(Stage):
                 result.chain = new_chain
 
             # 文本转图片
-            elif (
+            if (
                 result.use_t2i_ is None and self.ctx.astrbot_config["t2i"]
             ) or result.use_t2i_:
                 parts = []
+                records = []
                 for comp in result.chain:
                     if isinstance(comp, Plain):
                         parts.append("\n\n" + comp.text)
+                    elif isinstance(comp, Record):
+                        # TTS 双输出时语音段与文本段交错，跳过语音段并在转图后保留
+                        records.append(comp)
                     else:
                         break
                 plain_str = "".join(parts)
@@ -374,7 +378,7 @@ class ResultDecorateStage(Stage):
                         )
                     if url:
                         if url.startswith("http"):
-                            result.chain = [Image.fromURL(url)]
+                            result.chain = [*records, Image.fromURL(url)]
                         elif (
                             self.ctx.astrbot_config["t2i_use_file_service"]
                             and self.ctx.astrbot_config["callback_api_base"]
@@ -382,9 +386,9 @@ class ResultDecorateStage(Stage):
                             token = await file_token_service.register_file(url)
                             url = f"{self.ctx.astrbot_config['callback_api_base']}/api/file/{token}"
                             logger.debug(f"已注册：{url}")
-                            result.chain = [Image.fromURL(url)]
+                            result.chain = [*records, Image.fromURL(url)]
                         else:
-                            result.chain = [Image.fromFileSystem(url)]
+                            result.chain = [*records, Image.fromFileSystem(url)]
 
             # 触发转发消息
             if event.get_platform_name() == "aiocqhttp":
