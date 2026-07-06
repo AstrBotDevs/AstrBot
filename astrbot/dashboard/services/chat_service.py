@@ -345,6 +345,23 @@ def serialize_thread(thread) -> dict:
     }
 
 
+def serialize_history_entry(history) -> dict:
+    """Serialize a PlatformMessageHistory record with UTC-aware timestamps.
+
+    Args:
+        history: A PlatformMessageHistory instance. Must not be None.
+
+    Returns:
+        Dict with all model fields plus created_at/updated_at serialized as
+        UTC-aware ISO strings (e.g. ``2026-07-06T04:00:00+00:00``).
+    """
+    return {
+        **history.model_dump(),
+        "created_at": to_utc_isoformat(history.created_at),
+        "updated_at": to_utc_isoformat(history.updated_at),
+    }
+
+
 def find_checkpoint_index(history: list[dict], checkpoint_id: str) -> int | None:
     for index, message in enumerate(history):
         if get_checkpoint_id(message) == checkpoint_id:
@@ -1217,7 +1234,7 @@ class ChatService:
         )
 
         response_data = {
-            "history": [history.model_dump() for history in history_ls],
+            "history": [serialize_history_entry(history) for history in history_ls],
             "threads": [serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),
         }
@@ -1333,7 +1350,7 @@ class ChatService:
         )
         return {
             "thread": serialize_thread(thread),
-            "history": [history.model_dump() for history in history_ls],
+            "history": [serialize_history_entry(history) for history in history_ls],
             "is_running": self.running_convs.get(thread_id, False),
         }
 
@@ -1487,7 +1504,7 @@ class ChatService:
         await self.db.update_platform_session(session_id=session_id)
         updated = await self.db.get_platform_message_history_by_id(message_id)
         return {
-            "message": updated.model_dump() if updated else None,
+            "message": serialize_history_entry(updated) if updated else None,
             "needs_regenerate": True,
             "truncated_after_message": True,
         }
