@@ -225,28 +225,6 @@ async def test_sandbox_file_download_keeps_original_filename(
     assert sent_file.name == "sandbox_evaluation_report.md"
 
 
-def _make_sandbox_context(
-    *,
-    role: str = "admin",
-    umo: str = "qq:friend:user-1",
-):
-    config_holder = SimpleNamespace(
-        get_config=lambda umo=None: {
-            "provider_settings": {
-                "computer_use_require_admin": True,
-                "computer_use_runtime": "sandbox",
-            }
-        }
-    )
-    event = SimpleNamespace(
-        role=role,
-        unified_msg_origin=umo,
-        send=AsyncMock(),
-    )
-    astr_ctx = SimpleNamespace(context=config_holder, event=event)
-    return ContextWrapper(context=astr_ctx)
-
-
 def _make_large_text() -> str:
     return "".join(f"line-{index:05d}-{'x' * 48}\n" for index in range(6000))
 

@@ -9,6 +9,8 @@ DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS = 600.0
 
 
 def _coerce_timeout(value: Any, default: float) -> float:
+    if isinstance(value, bool):
+        return default
     try:
         timeout = float(value)
     except (TypeError, ValueError):
@@ -78,9 +80,8 @@ def idle_cleanup_at_from_record(
     current_timeout = _coerce_timeout(idle_timeout, 0.0)
     if current_timeout <= 0:
         return None
-    current_time = time.time() if now is None else now
     candidate = float(last_used_at) + current_timeout
-    return candidate if candidate > current_time else candidate
+    return candidate
 
 
 def get_provider_sandbox_config(context: Any, session_id: str) -> dict[str, Any]:

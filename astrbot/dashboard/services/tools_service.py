@@ -5,6 +5,9 @@ from typing import Any
 
 from astrbot.core import logger, sp
 from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
+from astrbot.core.computer.sandbox_tool_binding import (
+    get_sandbox_provider_tool_config_statuses,
+)
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 from astrbot.core.tools.registry import get_builtin_tool_config_statuses
@@ -286,12 +289,20 @@ class ToolsService:
                     "name and permission (admin or member) are required"
                 )
 
+            tool = next(
+                (t for t in self.tool_mgr.func_list if t.name == tool_name), None
+            )
+            if getattr(tool, "sandbox_provider_id", None):
+                raise ToolsServiceError(
+                    "Sandbox provider tools do not support per-tool permission configuration."
+                )
+
             if self.tool_mgr.is_builtin_tool(tool_name):
                 raise ToolsServiceError(
                     "Builtin tools do not support per-tool permission configuration."
                 )
 
-            if not any(t.name == tool_name for t in self.tool_mgr.func_list):
+            if tool is None:
                 raise ToolsServiceError(f"Tool '{tool_name}' not found")
 
             perms_store = sp.get(
@@ -330,6 +341,14 @@ class ToolsService:
 
             if not tool_name or action is None:
                 raise ToolsServiceError("Missing required parameters: name or activate")
+
+            tool = next(
+                (t for t in self.tool_mgr.func_list if t.name == tool_name), None
+            )
+            if getattr(tool, "sandbox_provider_id", None):
+                raise ToolsServiceError(
+                    "Sandbox provider tools are read-only and cannot be toggled."
+                )
 
             if self.tool_mgr.is_builtin_tool(tool_name):
                 raise ToolsServiceError(
@@ -527,7 +546,19 @@ class ToolsService:
         readonly = False
         builtin_config_statuses = []
         builtin_config_tags = []
-        if self.tool_mgr.is_builtin_tool(tool.name):
+        sandbox_provider_id = getattr(tool, "sandbox_provider_id", None)
+        if sandbox_provider_id:
+            origin = "sandbox"
+            origin_name = str(sandbox_provider_id)
+            readonly = True
+            builtin_config_statuses = get_sandbox_provider_tool_config_statuses(
+                tool.name,
+                config_entries,
+            )
+            builtin_config_tags = [
+                status for status in builtin_config_statuses if status["enabled"]
+            ]
+        elif self.tool_mgr.is_builtin_tool(tool.name):
             origin = "builtin"
             origin_name = "AstrBot Core"
             readonly = True

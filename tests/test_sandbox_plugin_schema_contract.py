@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig
-from astrbot.core.config.default import DEFAULT_CONFIG
+from astrbot.core.config.default import CONFIG_METADATA_3, DEFAULT_CONFIG
 
 ROOT = Path(__file__).resolve().parents[1]
 SHIPYARD_COMPOSE = (ROOT / "compose-with-shipyard.yml").read_text(encoding="utf-8")
@@ -69,6 +69,17 @@ def test_core_sandbox_timeout_defaults_live_in_bot_config():
     assert sandbox["sandbox_ttl"] == 3600
     assert sandbox["sandbox_idle_timeout"] == 1800
     assert sandbox["sandbox_lease_timeout"] == 600
+
+
+def test_dashboard_schema_exposes_sandbox_lease_timeout():
+    schema = CONFIG_METADATA_3["ai_group"]["metadata"]["agent_computer_use"]["items"]
+
+    lease_timeout = schema["provider_settings.sandbox.sandbox_lease_timeout"]
+    assert lease_timeout["type"] == "int"
+    assert "每次 Agent 成功访问沙盒" in lease_timeout["hint"]
+    assert "默认 600 秒" in lease_timeout["hint"]
+    assert "当前会话不再绑定该沙盒" in lease_timeout["hint"]
+    assert "其他会话可接管" in lease_timeout["hint"]
 
 
 def test_cua_schema_defaults_match_documented_hints():
@@ -188,26 +199,65 @@ def test_existing_plugin_config_keeps_saved_values_when_schema_defaults_change(
     assert config["ttl"] == 0
 
 
-def test_cua_screenshot_tool_does_not_send_to_user_by_default():
+def test_cua_adapter_uses_core_screenshot_operation():
     _require_plugin_files("data/plugins/astrbot_sandbox_cua/tools/cua.py")
-    from data.plugins.astrbot_sandbox_cua.tools.cua import CuaScreenshotTool
+    from data.plugins.astrbot_sandbox_cua.provider import CuaSandboxProvider
+    from data.plugins.astrbot_sandbox_cua.tools import cua as cua_tools
 
-    tool = CuaScreenshotTool()
+    provider = CuaSandboxProvider()
 
-    send_to_user = tool.parameters["properties"]["send_to_user"]["default"]
-    return_image_to_llm = tool.parameters["properties"]["return_image_to_llm"][
-        "default"
-    ]
+    assert "screenshot" in provider.capabilities
+    assert "astrbot_cua_screenshot" not in provider.tool_names
+    assert provider.tool_names == {
+        "astrbot_cua_keyboard_type",
+        "astrbot_cua_mouse_click",
+    }
+    assert not hasattr(cua_tools, "CuaScreenshotTool")
 
-    assert send_to_user is True
-    assert return_image_to_llm is True
+
+def test_core_sandbox_screenshot_operation_can_return_image_to_llm():
+    from astrbot.core.tools.computer_tools.sandbox import SandboxOperationTool
+
+    tool = SandboxOperationTool()
+    properties = tool.parameters["properties"]
+
+    assert "capture_screenshot" in properties["action"]["enum"]
+    assert properties["send_to_user"]["description"]
+    assert properties["return_image_to_llm"]["default"] is False
 
 
-def test_cua_screenshot_tool_can_send_result_to_user_when_requested():
-    _require_plugin_files("data/plugins/astrbot_sandbox_cua/tools/cua.py")
-    from data.plugins.astrbot_sandbox_cua.tools.cua import CuaScreenshotTool
+@pytest.mark.asyncio
+async def test_shipyard_neo_execution_history_ignores_empty_optional_filters(
+    monkeypatch,
+):
+    _require_plugin_files(
+        "data/plugins/astrbot_sandbox_shipyard_neo/tools/shipyard_neo/neo_skills.py"
+    )
+    from data.plugins.astrbot_sandbox_shipyard_neo.tools.shipyard_neo import (
+        neo_skills,
+    )
 
-    tool = CuaScreenshotTool()
+    captured = {}
 
-    assert tool.parameters["properties"]["send_to_user"]["description"]
-    assert tool.parameters["properties"]["return_image_to_llm"]["default"] is True
+    class Sandbox:
+        async def get_execution_history(self, **kwargs):
+            captured.update(kwargs)
+            return []
+
+    async def fake_get_neo_context(context):
+        return object(), Sandbox()
+
+    monkeypatch.setattr(neo_skills, "_get_neo_context", fake_get_neo_context)
+    monkeypatch.setattr(neo_skills, "check_admin_permission", lambda *args: None)
+
+    result = await neo_skills.GetExecutionHistoryTool().call(
+        object(),
+        exec_type="",
+        tags="",
+        limit=5,
+        offset=0,
+    )
+
+    assert result == "[]"
+    assert captured["exec_type"] is None
+    assert captured["tags"] is None

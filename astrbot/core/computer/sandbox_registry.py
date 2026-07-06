@@ -297,9 +297,17 @@ class SandboxRegistry:
             return False
         record["controller_session_id"] = session_id
         record["controller_user_id"] = user_id
-        record["lease_expires_at"] = lease_expires_at_from_timeout(
-            ttl, now=current_time
-        )
+        next_lease_expires_at = lease_expires_at_from_timeout(ttl, now=current_time)
+        if controller_session_id == session_id and lease_is_active(
+            controller_session_id, lease_expires_at, now=current_time
+        ):
+            if lease_expires_at is None:
+                next_lease_expires_at = None
+            elif next_lease_expires_at is not None:
+                next_lease_expires_at = max(
+                    float(lease_expires_at), next_lease_expires_at
+                )
+        record["lease_expires_at"] = next_lease_expires_at
         return True
 
     def release_lease(self, sandbox_id: str) -> dict[str, Any] | None:
@@ -334,22 +342,17 @@ class SandboxRegistry:
     def reconcile_startup(self) -> None:
         self._payload["session_current"] = {}
         for sandbox_id, record in list(self._payload["sandboxes"].items()):
+            if record.get("retention_policy") != "persistent":
+                self._payload["sandboxes"].pop(sandbox_id, None)
+                continue
             record["controller_session_id"] = None
             record["controller_user_id"] = None
             record["lease_expires_at"] = None
-            if record.get("retention_policy") == "persistent":
-                if record.get("status") == SandboxStatus.RUNNING:
-                    record["status"] = SandboxStatus.UNKNOWN.value
-                elif record.get("status") in {
-                    SandboxStatus.CREATING,
-                    SandboxStatus.RESTORING,
-                }:
-                    record["status"] = SandboxStatus.ERROR.value
+            if record.get("status") == SandboxStatus.RUNNING:
+                record["status"] = SandboxStatus.UNKNOWN.value
             elif record.get("status") in {
-                SandboxStatus.RUNNING,
                 SandboxStatus.CREATING,
                 SandboxStatus.RESTORING,
-                SandboxStatus.UNKNOWN,
             }:
                 record["status"] = SandboxStatus.ERROR.value
         self._prune_default_references()

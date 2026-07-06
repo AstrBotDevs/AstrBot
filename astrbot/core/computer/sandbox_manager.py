@@ -25,6 +25,7 @@ from astrbot.core.star.context import Context
 SANDBOX_LEASE_SECONDS = int(DEFAULT_SANDBOX_LEASE_TIMEOUT_SECONDS)
 MAX_SANDBOX_LEASE_ATTEMPTS = 3
 MAX_IDLE_DESTROY_ATTEMPTS = 3
+SANDBOX_TTL_DESTROY_RETRY_SECONDS = 60
 
 
 @dataclass(slots=True)
@@ -36,6 +37,7 @@ class SandboxIdleState:
 @dataclass(slots=True)
 class SandboxExpirationState:
     expires_at: float
+    monotonic_expires_at: float
     task: asyncio.Task
 
 
@@ -142,7 +144,7 @@ class SandboxManager:
         try:
             max_sandboxes = int(sandbox_cfg.get("max_sandboxes", 10))
         except (TypeError, ValueError):
-            return 0
+            return 10
         if max_sandboxes < 0:
             return 0
         return max_sandboxes
@@ -178,7 +180,7 @@ class SandboxManager:
         for sandbox_id in list(self.session_booter):
             self.clear_runtime_state(sandbox_id)
         for sandbox_id in list(self.idle_state):
-            self.clear_runtime_state(sandbox_id)
+            self.clear_runtime_state_and_drop_lock(sandbox_id)
         for sandbox_id in list(self.expiration_state):
             self.clear_runtime_state(sandbox_id)
         self.boot_locks.clear()
@@ -292,14 +294,14 @@ class SandboxManager:
     async def booter_available(self, booter: ComputerBooter) -> bool:
         available = getattr(booter, "available", None)
         if available is None:
-            return True
+            return False
         if getattr(available, "__isabstractmethod__", False):
-            return True
+            return False
         result = available() if callable(available) else available
         if inspect.isawaitable(result):
             result = await result
         if result is None:
-            return True
+            return False
         return bool(result)
 
     def acquire_lease(
@@ -320,6 +322,18 @@ class SandboxManager:
             record.get("controller_session_id"),
             record.get("lease_expires_at"),
         )
+
+    def _release_expired_lease(self, record: dict) -> dict:
+        sandbox_id = record.get("sandbox_id")
+        controller_session_id = record.get("controller_session_id")
+        if not sandbox_id or not controller_session_id:
+            return record
+        if lease_is_active(controller_session_id, record.get("lease_expires_at")):
+            return record
+        released = self.registry.release_lease(sandbox_id) or record
+        if self.registry.get_current_sandbox_id(controller_session_id) == sandbox_id:
+            self.registry.set_current_sandbox_id(controller_session_id, None)
+        return released
 
     def sandbox_controlled_by_other_session(
         self, sandbox_id: str, session_id: str
@@ -386,7 +400,12 @@ class SandboxManager:
         )
 
     async def get_or_create_booter(
-        self, context: Context, session_id: str, provider_id: str
+        self,
+        context: Context,
+        session_id: str,
+        provider_id: str,
+        *,
+        exclude_sandbox_ids: set[str] | None = None,
     ) -> ComputerBooter:
         provider = self.get_provider(provider_id)
         create_config = provider.build_create_config(context, session_id)
@@ -395,6 +414,7 @@ class SandboxManager:
 
         current_sandbox_id = self.registry.get_current_sandbox_id(session_id)
         current_record = self.registry.get_sandbox(current_sandbox_id)
+        excluded_stale_current_ids = set(exclude_sandbox_ids or set())
         if current_sandbox_id and (
             current_record is None or current_record.get("provider") != provider_id
         ):
@@ -407,6 +427,23 @@ class SandboxManager:
             await self.save_registry_async()
             current_sandbox_id = None
             current_record = None
+        if current_sandbox_id and current_record:
+            status = current_record.get("status")
+            current_controller_session_id = current_record.get("controller_session_id")
+            if status == SandboxStatus.RUNNING and (
+                current_controller_session_id != session_id
+                or not lease_is_active(
+                    current_controller_session_id,
+                    current_record.get("lease_expires_at"),
+                )
+            ):
+                self._release_expired_lease(current_record)
+                self.registry.set_current_sandbox_id(session_id, None)
+                await self.save_registry_async()
+                excluded_stale_current_ids.add(current_sandbox_id)
+                current_sandbox_id = None
+                current_record = None
+                status = None
         if current_sandbox_id and current_record:
             status = current_record.get("status")
             if status == SandboxStatus.CREATING:
@@ -463,6 +500,8 @@ class SandboxManager:
 
         created_target_record = False
         target_sandbox_id = self.get_default_sandbox_id(provider_id)
+        if target_sandbox_id in excluded_stale_current_ids:
+            target_sandbox_id = None
         target_record = self.registry.get_sandbox(target_sandbox_id)
         if (
             target_sandbox_id
@@ -582,6 +621,7 @@ class SandboxManager:
             target_sandbox_id,
             session_id=session_id,
             idle_timeout=idle_timeout,
+            remove_record_on_failure=created_target_record,
         )
         await self._invoke_sandbox_created_hook(provider, target_sandbox_id)
         return self.session_booter[target_sandbox_id]
@@ -593,6 +633,7 @@ class SandboxManager:
         *,
         session_id: str | None = None,
         idle_timeout: float,
+        remove_record_on_failure: bool = False,
     ) -> None:
         """Common post-creation steps: persist, idle cleanup, skill sync, hooks."""
         booter = self.session_booter.get(sandbox_id)
@@ -625,6 +666,11 @@ class SandboxManager:
                         destroy_err,
                     )
             self.clear_runtime_state(sandbox_id)
+            if remove_record_on_failure:
+                self.registry.delete_sandbox(sandbox_id)
+            else:
+                self.registry.release_lease(sandbox_id)
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.UNKNOWN)
             if session_id is not None:
                 self.registry.set_current_sandbox_id(session_id, None)
             raise
@@ -732,9 +778,13 @@ class SandboxManager:
                 client = await provider.create_booter(
                     context, session_id, sandbox_id, create_config
                 )
+            except asyncio.CancelledError:
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.ERROR)
+                self.clear_runtime_state(sandbox_id)
+                await self.save_registry_async()
+                raise
             except Exception:
                 self.registry.update_sandbox_status(sandbox_id, SandboxStatus.ERROR)
-                self.registry.delete_sandbox(sandbox_id)
                 self.clear_runtime_state(sandbox_id)
                 await self.save_registry_async()
                 raise
@@ -742,7 +792,11 @@ class SandboxManager:
             setattr(client, "provider_id", provider_id)
             self.session_booter[sandbox_id] = client
             await self._finalize_created_booter(
-                provider, sandbox_id, session_id=None, idle_timeout=idle_timeout
+                provider,
+                sandbox_id,
+                session_id=None,
+                idle_timeout=idle_timeout,
+                remove_record_on_failure=True,
             )
             return self.registry.get_sandbox(sandbox_id) or record
 
@@ -842,7 +896,11 @@ class SandboxManager:
                 setattr(client, "provider_id", provider.provider_id)
                 self.session_booter[sandbox_id] = client
                 await self._finalize_created_booter(
-                    provider, sandbox_id, session_id=None, idle_timeout=idle_timeout
+                    provider,
+                    sandbox_id,
+                    session_id=None,
+                    idle_timeout=idle_timeout,
+                    remove_record_on_failure=True,
                 )
         finally:
             self.pending_boot_tasks.pop(sandbox_id, None)
@@ -883,6 +941,7 @@ class SandboxManager:
                 continue
             if "booter_type" in record:
                 record = SandboxRecord.from_dict(record).to_dict()
+            record = self._release_expired_lease(record)
             provider = self.providers.get(record.get("provider"))
             updated = dict(record)
             updated["capabilities"] = sorted(
@@ -904,6 +963,38 @@ class SandboxManager:
                 )
             records.append(updated)
         return records
+
+    async def list_sandboxes_checked(self) -> list[dict]:
+        changed = False
+        for record in self.registry.list_sandboxes():
+            sandbox_id = record.get("sandbox_id")
+            if not sandbox_id or not record.get("managed"):
+                continue
+            booter = self.session_booter.get(sandbox_id)
+            if booter is None:
+                continue
+            try:
+                available = await self.booter_available(booter)
+            except Exception as exc:
+                logger.warning(
+                    "[Computer] Sandbox health check failed for %s: %s",
+                    sandbox_id,
+                    exc,
+                )
+                available = False
+            if available:
+                continue
+            self.clear_runtime_state_and_drop_lock(sandbox_id)
+            next_status = (
+                SandboxStatus.UNKNOWN
+                if record.get("retention_policy") == "persistent"
+                else SandboxStatus.ERROR
+            )
+            self.registry.update_sandbox_status(sandbox_id, next_status)
+            changed = True
+        if changed:
+            await self.save_registry_async()
+        return self.list_sandboxes()
 
     def set_default_sandbox(self, sandbox_id: str) -> dict:
         record = self.registry.get_sandbox(sandbox_id)
@@ -1059,6 +1150,15 @@ class SandboxManager:
                         sandbox_id,
                         create_config,
                     )
+                except asyncio.CancelledError:
+                    latest = self.registry.get_sandbox(sandbox_id)
+                    if (
+                        latest is not None
+                        and latest.get("status") == SandboxStatus.RESTORING
+                    ):
+                        self.registry.update_sandbox_status(sandbox_id, previous_status)
+                        await self.save_registry_async()
+                    raise
                 except Exception:
                     latest = self.registry.get_sandbox(sandbox_id)
                     if (
@@ -1123,12 +1223,40 @@ class SandboxManager:
         await self.save_registry_async()
         return self.registry.get_sandbox(sandbox_id) or record
 
-    def get_current_sandbox(self, session_id: str) -> dict:
+    def get_current_sandbox(
+        self, session_id: str, *, include_stale_current_id: bool = False
+    ) -> dict:
         sandbox_id = self.registry.get_current_sandbox_id(session_id)
-        return {
+        sandbox = self.registry.get_sandbox(sandbox_id) if sandbox_id else None
+        stale_current_sandbox_id = None
+        if sandbox:
+            controller_session_id = sandbox.get("controller_session_id")
+            if controller_session_id != session_id or not lease_is_active(
+                controller_session_id, sandbox.get("lease_expires_at")
+            ):
+                stale_current_sandbox_id = sandbox_id
+                self._release_expired_lease(sandbox)
+                self.registry.set_current_sandbox_id(session_id, None)
+                self.save_registry()
+                sandbox_id = None
+                sandbox = None
+        if sandbox:
+            provider = self.providers.get(sandbox.get("provider"))
+            if provider:
+                sandbox = dict(sandbox)
+                sandbox["capabilities"] = sorted(
+                    getattr(provider, "capabilities", sandbox.get("capabilities", []))
+                )
+                sandbox["tool_names"] = sorted(
+                    getattr(provider, "tool_names", sandbox.get("tool_names", []))
+                )
+        result = {
             "current_sandbox_id": sandbox_id,
-            "sandbox": self.registry.get_sandbox(sandbox_id) if sandbox_id else None,
+            "sandbox": sandbox,
         }
+        if include_stale_current_id:
+            result["stale_current_sandbox_id"] = stale_current_sandbox_id
+        return result
 
     def release_current_sandbox(
         self, session_id: str, sandbox_id: str | None = None
@@ -1177,7 +1305,8 @@ class SandboxManager:
         ttl_seconds: int | float | None = None,
         context: Context | None = None,
     ) -> dict:
-        sandbox_id = self.registry.get_current_sandbox_id(session_id)
+        current = self.get_current_sandbox(session_id)
+        sandbox_id = current.get("current_sandbox_id")
         if sandbox_id is None:
             raise RuntimeError("No current sandbox")
         record = self.registry.get_sandbox(sandbox_id)
@@ -1295,24 +1424,32 @@ class SandboxManager:
         sandbox_id: str,
         record: dict,
     ) -> None:
+        destroy_err: Exception | None = None
         async with self._sandbox_boot_lock(sandbox_id):
             current = self.registry.get_sandbox(sandbox_id) or record
             booter = self.session_booter.get(sandbox_id)
             if booter is not None:
                 try:
                     await provider.destroy_booter(booter, current)
-                except Exception as destroy_err:
+                except Exception as exc:
+                    destroy_err = exc
                     logger.warning(
                         "[Computer] destroy_booter failed for %s: %s",
                         sandbox_id,
-                        destroy_err,
+                        exc,
                     )
-                finally:
+                    self.registry.update_sandbox_status(sandbox_id, SandboxStatus.ERROR)
+                    await self.save_registry_async()
+                else:
                     self.clear_runtime_state(sandbox_id)
-            self.registry.delete_sandbox(sandbox_id)
-            await self.save_registry_async()
+            if destroy_err is None:
+                self.registry.delete_sandbox(sandbox_id)
+                await self.save_registry_async()
 
         self.drop_boot_lock(sandbox_id)
+
+        if destroy_err is not None:
+            raise destroy_err
 
         if hasattr(provider, "on_sandbox_destroyed"):
             try:
@@ -1337,7 +1474,15 @@ class SandboxManager:
             and self.sandbox_has_active_lease(sandbox_id)
         ):
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
-        provider = self.get_provider(record.get("provider", ""))
+        try:
+            provider = self.get_provider(record.get("provider", ""))
+        except RuntimeError:
+            if record.get("retention_policy") != "persistent":
+                raise
+            self.clear_runtime_state_and_drop_lock(sandbox_id)
+            self.registry.delete_sandbox(sandbox_id)
+            await self.save_registry_async()
+            return record
         self.registry.update_sandbox_status(sandbox_id, SandboxStatus.STOPPING)
         await self.save_registry_async()
         await self.cancel_pending_boot_task(sandbox_id)
@@ -1357,7 +1502,15 @@ class SandboxManager:
             and self.sandbox_has_active_lease(sandbox_id)
         ):
             raise RuntimeError(f"Sandbox {sandbox_id} is controlled by another session")
-        provider = self.get_provider(record.get("provider", ""))
+        try:
+            provider = self.get_provider(record.get("provider", ""))
+        except RuntimeError:
+            if record.get("retention_policy") != "persistent":
+                raise
+            self.clear_runtime_state_and_drop_lock(sandbox_id)
+            self.registry.delete_sandbox(sandbox_id)
+            await self.save_registry_async()
+            return record
         self.registry.update_sandbox_status(sandbox_id, SandboxStatus.STOPPING)
         await self.save_registry_async()
 
@@ -1606,12 +1759,20 @@ class SandboxManager:
 
     def clear_idle_state(self, sandbox_id: str) -> None:
         state = self.idle_state.pop(sandbox_id, None)
-        if state is not None and not state.task.done():
+        if (
+            state is not None
+            and not state.task.done()
+            and state.task is not asyncio.current_task()
+        ):
             state.task.cancel()
 
     def clear_expiration_state(self, sandbox_id: str) -> None:
         state = self.expiration_state.pop(sandbox_id, None)
-        if state is not None and not state.task.done():
+        if (
+            state is not None
+            and not state.task.done()
+            and state.task is not asyncio.current_task()
+        ):
             state.task.cancel()
 
     def schedule_idle_cleanup(self, sandbox_id: str, timeout: float) -> None:
@@ -1629,11 +1790,18 @@ class SandboxManager:
         self.clear_expiration_state(sandbox_id)
         if expires_at is None:
             return
+        monotonic_expires_at = time.monotonic() + max(
+            0.0, float(expires_at) - time.time()
+        )
         task = asyncio.create_task(
-            self._expire_at_fixed_time(sandbox_id, float(expires_at))
+            self._expire_at_fixed_time(
+                sandbox_id, float(expires_at), monotonic_expires_at
+            )
         )
         self.expiration_state[sandbox_id] = SandboxExpirationState(
-            expires_at=float(expires_at), task=task
+            expires_at=float(expires_at),
+            monotonic_expires_at=monotonic_expires_at,
+            task=task,
         )
 
     def schedule_lifecycle_cleanup(
@@ -1649,44 +1817,66 @@ class SandboxManager:
         self.clear_idle_state(sandbox_id)
         self.schedule_ttl_cleanup(sandbox_id, expires_at)
 
-    async def _expire_at_fixed_time(self, sandbox_id: str, expires_at: float) -> None:
+    async def _expire_at_fixed_time(
+        self,
+        sandbox_id: str,
+        expires_at: float,
+        monotonic_expires_at: float,
+    ) -> None:
         current_task = asyncio.current_task()
+        destroy_attempts = 0
         try:
-            remaining = float(expires_at) - time.time()
-            if remaining > 0:
-                await asyncio.sleep(remaining)
-            state = self.expiration_state.get(sandbox_id)
-            if (
-                state is None
-                or state.task is not current_task
-                or state.expires_at != float(expires_at)
-            ):
-                return
-            record = self.registry.get_sandbox(sandbox_id)
-            if record is None:
-                self.session_booter.pop(sandbox_id, None)
-                return
-            if float(record.get("expires_at") or 0) != float(expires_at):
-                return
-            booter = self.session_booter.get(sandbox_id)
-            if booter is not None:
-                try:
-                    provider = self.get_provider(record.get("provider", ""))
-                    await provider.destroy_booter(booter, record)
-                except Exception as shutdown_err:
-                    logger.warning(
-                        "[Computer] Failed to shutdown expired sandbox %s: %s",
-                        sandbox_id,
-                        shutdown_err,
-                    )
+            while True:
+                remaining = monotonic_expires_at - time.monotonic()
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+                state = self.expiration_state.get(sandbox_id)
+                if (
+                    state is None
+                    or state.task is not current_task
+                    or state.expires_at != float(expires_at)
+                ):
                     return
-            self.clear_runtime_state(sandbox_id)
-            if record.get("retention_policy") == "persistent":
-                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.STOPPED)
-            else:
-                self.registry.delete_sandbox(sandbox_id)
-                self.drop_boot_lock(sandbox_id)
-            await self.save_registry_async()
+                record = self.registry.get_sandbox(sandbox_id)
+                if record is None:
+                    self.session_booter.pop(sandbox_id, None)
+                    return
+                if float(record.get("expires_at") or 0) != float(expires_at):
+                    return
+                booter = self.session_booter.get(sandbox_id)
+                if booter is not None:
+                    try:
+                        provider = self.get_provider(record.get("provider", ""))
+                        await provider.destroy_booter(booter, record)
+                    except Exception as shutdown_err:
+                        logger.warning(
+                            "[Computer] Failed to shutdown expired sandbox %s: %s",
+                            sandbox_id,
+                            shutdown_err,
+                        )
+                        destroy_attempts += 1
+                        if destroy_attempts < MAX_IDLE_DESTROY_ATTEMPTS:
+                            self.registry.update_sandbox_status(
+                                sandbox_id, SandboxStatus.UNKNOWN
+                            )
+                            await self.save_registry_async()
+                            await asyncio.sleep(SANDBOX_TTL_DESTROY_RETRY_SECONDS)
+                            continue
+                        self.registry.update_sandbox_status(
+                            sandbox_id, SandboxStatus.ERROR
+                        )
+                        await self.save_registry_async()
+                        return
+                self.clear_runtime_state(sandbox_id)
+                if record.get("retention_policy") == "persistent":
+                    self.registry.update_sandbox_status(
+                        sandbox_id, SandboxStatus.STOPPED
+                    )
+                else:
+                    self.registry.delete_sandbox(sandbox_id)
+                    self.drop_boot_lock(sandbox_id)
+                await self.save_registry_async()
+                return
         finally:
             state = self.expiration_state.get(sandbox_id)
             if (
@@ -1761,6 +1951,7 @@ class SandboxManager:
                             self.registry.update_sandbox_status(
                                 sandbox_id, SandboxStatus.ERROR
                             )
+                            self.idle_state.pop(sandbox_id, None)
                             await self.save_registry_async()
                             return
                         self.clear_runtime_state(sandbox_id)

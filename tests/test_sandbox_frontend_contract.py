@@ -41,13 +41,13 @@ def test_sandbox_management_page_does_not_gate_destroy_by_provider_capability():
     assert "hasCapability(item, 'destroy')" not in content
 
 
-def test_sandbox_management_page_disables_destroy_for_occupied_sandboxes():
+def test_sandbox_management_page_allows_admin_destroy_for_occupied_sandboxes():
     content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
         encoding="utf-8"
     )
 
     assert "case 'destroy':" in content
-    assert "return status !== 'stopping' && !item.controller_session_id" in content
+    assert "return status !== 'stopping'" in content
 
 
 def test_sandbox_management_page_replaces_console_history_after_command_updates():
@@ -55,20 +55,27 @@ def test_sandbox_management_page_replaces_console_history_after_command_updates(
         encoding="utf-8"
     )
 
-    assert (
-        "consoleHistory.value = [...consoleHistory.value]" in content
-        or "await nextTick()" in content
-    )
+    assert "consoleHistory.value = [...consoleHistory.value]" in content
 
 
-def test_sandbox_management_page_release_is_not_limited_to_dashboard_controller():
+def test_sandbox_management_page_release_uses_admin_force_endpoint():
     content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
         encoding="utf-8"
     )
 
-    assert "item.controller_session_id === 'dashboard'" not in content
     assert "case 'release':" in content
     assert "return status !== 'stopping' && !!item.controller_session_id" in content
+    assert "sandboxApiPath(item, '/force-release')" in content
+
+
+def test_sandbox_management_page_console_and_screenshot_use_admin_endpoints():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert "sandboxApiPath(item, '/admin-screenshot')" in content
+    assert "sandboxApiPath(sandboxId, '/admin-shell')" in content
+    assert "sandboxApiPath(targetId, '/force')" in content
 
 
 def test_sandbox_management_page_uses_backend_create_record_without_local_status_guess():
@@ -158,7 +165,7 @@ def test_sandbox_management_page_destroy_closes_dialog_before_backend_cleanup():
     assert "const targetId = target.sandbox_id" in content
     assert "destroyDialog.value = false" in content
     assert "startDestroyPolling(targetId)" in content
-    assert "const res = await axios.delete(sandboxApiPath(targetId)" in content
+    assert "const res = await axios.delete(sandboxApiPath(targetId, '/force')" in content
     assert "status: 'stopping'" not in content
     assert "upsertSandboxRecord(stoppingRecord)" not in content
     assert "destroying" not in content
@@ -168,6 +175,18 @@ def test_sandbox_management_page_destroy_closes_dialog_before_backend_cleanup():
     assert "upsertSandboxRecord(sandbox)" in content
     assert "void loadSandboxes({ silent: true })" in content
     assert "destroyQueued" not in content
+
+
+def test_sandbox_management_page_starts_destroy_polling_only_after_backend_accepts():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "if (res.data.status === 'ok') {\n      startDestroyPolling(targetId)"
+        in content
+    )
+    assert "stopDestroyPollingForSandbox(targetId)" in content
 
 
 def test_sandbox_management_page_polls_until_destroyed_sandbox_disappears():
@@ -206,14 +225,19 @@ def test_sandbox_management_page_shows_controller_session_in_status_tooltip():
 
 
 def test_sandbox_management_page_confirms_dangerous_console_commands():
-    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+    page = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+    console_utils = (ROOT / "dashboard/src/views/sandbox/consoleUtils.ts").read_text(
         encoding="utf-8"
     )
 
-    assert "function isDangerousConsoleCommand" in content
-    assert "window.confirm(tm('console.dangerConfirm'" in content
-    assert "rm\\s+(?:-" in content
-    assert "(?:--\\s+)?" in content
+    assert "import { isDangerousConsoleCommand } from './sandbox/consoleUtils'" in page
+    assert "isDangerousConsoleCommand(command) && !window.confirm" in page
+    assert "window.confirm(tm('console.dangerConfirm'" in page
+    assert "function isDangerousConsoleCommand" in console_utils
+    assert "rm\\s+(?:-" in console_utils
+    assert "(?:--\\s+)?" in console_utils
 
 
 def test_sandbox_management_page_displays_console_cwd_relative_to_sandbox_home():
@@ -239,6 +263,17 @@ def test_sandbox_management_page_strips_console_cwd_markers_from_output():
     assert "stripConsoleCwdMarkers(stdout)" in content
     assert "stripConsoleCwdMarkers(visibleStdout)" in content
     assert "!line.includes('__ASTRBOT_CWD__')" in content
+
+
+def test_sandbox_management_page_records_console_api_errors_in_history():
+    content = (ROOT / "dashboard/src/views/SandboxManagementPage.vue").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "throw new Error(res.data.message || tm('messages.operationFailed'))" in content
+    )
+    assert "entry.stderr = normalizeTerminalOutput(e?.message || String(e))" in content
 
 
 def test_sandbox_management_page_console_cwd_prefix_does_not_hide_failed_cd():

@@ -113,9 +113,7 @@ def test_registry_saves_loads_and_reconciles_runtime_state(tmp_path):
 
     loaded.reconcile_startup()
 
-    record = loaded.get_sandbox("generic-1")
-    assert record is not None
-    assert record["status"] == "error"
+    assert loaded.get_sandbox("generic-1") is None
     assert loaded.get_current_sandbox_id("session-a") is None
 
     payload = json.loads((tmp_path / "sandbox_registry.json").read_text())
@@ -162,7 +160,7 @@ def test_registry_loads_non_object_payload_as_empty_registry(tmp_path):
     assert registry.list_sandboxes() == []
 
 
-def test_registry_reconcile_startup_marks_non_persistent_creating_records_error(
+def test_registry_reconcile_startup_removes_non_persistent_creating_records(
     tmp_path,
 ):
     registry = _registry(tmp_path)
@@ -180,12 +178,10 @@ def test_registry_reconcile_startup_marks_non_persistent_creating_records_error(
 
     registry.reconcile_startup()
 
-    record = registry.get_sandbox("generic-1")
-    assert record is not None
-    assert record["status"] == "error"
+    assert registry.get_sandbox("generic-1") is None
 
 
-def test_registry_reconcile_startup_retains_temporary_records_as_error(tmp_path):
+def test_registry_reconcile_startup_removes_temporary_records(tmp_path):
     registry = _registry(tmp_path)
     registry.upsert_sandbox(
         sandbox_id="generic-1",
@@ -202,14 +198,10 @@ def test_registry_reconcile_startup_retains_temporary_records_as_error(tmp_path)
 
     registry.reconcile_startup()
 
-    record = registry.get_sandbox("generic-1")
-    assert record is not None
-    assert record["status"] == "error"
-    assert record["controller_session_id"] is None
-    assert record["lease_expires_at"] is None
+    assert registry.get_sandbox("generic-1") is None
 
 
-def test_registry_reconcile_startup_marks_non_persistent_restoring_records_error(
+def test_registry_reconcile_startup_removes_non_persistent_restoring_records(
     tmp_path,
 ):
     registry = _registry(tmp_path)
@@ -227,9 +219,7 @@ def test_registry_reconcile_startup_marks_non_persistent_restoring_records_error
 
     registry.reconcile_startup()
 
-    record = registry.get_sandbox("generic-1")
-    assert record is not None
-    assert record["status"] == "error"
+    assert registry.get_sandbox("generic-1") is None
 
 
 def test_registry_reconcile_startup_marks_persistent_running_unknown(tmp_path):

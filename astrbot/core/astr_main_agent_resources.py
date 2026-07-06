@@ -18,8 +18,12 @@ SANDBOX_MODE_PROMPT = (
     " If there is no current sandbox, list sandboxes and inspect each sandbox's access field for this session."
     " Prefer reusing access.status=current first, then access.status=idle. Never treat status=running alone as reusable."
     " If access.status=occupied or access.can_switch=false, another active session controls that sandbox; do not switch to it unless the user explicitly asks to take it over."
-    " If you need a different provider, call astrbot_list_sandbox_providers first and pass provider_id explicitly to astrbot_create_sandbox."
+    " If you need a different provider, use astrbot_sandbox_query with action=list_providers first and pass provider_id explicitly to astrbot_sandbox_lifecycle with action=create."
     " You can create a new sandbox only when the user explicitly asks for a fresh or separate environment, or when no existing sandbox can be reused safely."
+    " Each successful sandbox operation that accesses a sandbox automatically renews this session's lease to now plus the configured sandbox lease timeout."
+    " Sandbox-bound tool results include lease metadata such as lease_expires_at and lease_expires_in_seconds."
+    " When this session's lease expires, this session no longer has a current sandbox; use list_sandboxes and then switch, takeover, or create before continuing sandbox work."
+    " For long-running work, monitor lease metadata; if the remaining time is low before a long idle period or external wait, call astrbot_sandbox_lifecycle with action=renew_lease."
     # "Your have extended skills library, such as PDF processing, image generation, data analysis, etc. "
     # "Before handling complex tasks, please retrieve and review the documentation in the in /app/skills/ directory. "
     # "If the current task matches the description of a specific skill, prioritize following the workflow defined by that skill."
@@ -30,9 +34,10 @@ SANDBOX_MODE_PROMPT = (
 )
 
 SANDBOX_GUI_PROMPT = (
-    " When working with GUI-capable sandboxes, send screenshots to the user to show progress whenever it is helpful, especially after each meaningful GUI step."
-    " Especially after each meaningful GUI step, send a screenshot so the user can directly follow the work progress."
-    " If the task is completed successfully, also send a final result screenshot to show the outcome clearly."
+    " When working with GUI-capable sandboxes, use astrbot_sandbox_operation with action=capture_screenshot to show progress whenever it is helpful, especially after each meaningful GUI step."
+    " If the screenshot should be visible to the user, set send_to_user=true in that same capture_screenshot call instead of taking a screenshot first and then calling send_message_to_user separately."
+    " Set return_image_to_llm=true only when you need to inspect the screenshot yourself before deciding the next step."
+    " If the task is completed successfully, also send a final result screenshot with send_to_user=true to show the outcome clearly."
 )
 
 TOOL_CALL_PROMPT = (

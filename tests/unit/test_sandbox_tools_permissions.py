@@ -1,22 +1,16 @@
 import json
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
+import mcp
 import pytest
 
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.tools.computer_tools.sandbox import (
-    CopyFileBetweenSandboxesTool,
-    CreateSandboxTool,
-    DestroySandboxTool,
-    GetCurrentSandboxTool,
-    KeepAliveSandboxTool,
-    ListSandboxesTool,
-    ListSandboxProvidersTool,
-    ScreenshotSandboxTool,
-    SetSandboxRetentionPolicyTool,
-    SwitchSandboxTool,
-    TakeoverSandboxTool,
+    SandboxLifecycleTool,
+    SandboxOperationTool,
+    SandboxQueryTool,
 )
 
 
@@ -96,22 +90,164 @@ def _sandbox_context(default_provider: str = "generic"):
 
 @pytest.mark.asyncio
 async def test_screenshot_sandbox_tool_requires_admin_permission():
-    result = await ScreenshotSandboxTool().call(_context(), "sandbox-1")
+    result = await SandboxOperationTool().call(
+        _context(), "capture_screenshot", sandbox_id="sandbox-1"
+    )
 
     assert "Permission denied" in str(result)
 
 
 @pytest.mark.asyncio
 async def test_copy_file_between_sandboxes_tool_requires_admin_permission():
-    result = await CopyFileBetweenSandboxesTool().call(
+    result = await SandboxOperationTool().call(
         _context(),
-        "source-1",
-        "/tmp/source.txt",
-        "target-1",
-        "/tmp/target.txt",
+        "copy_file",
+        source_sandbox_id="source-1",
+        source_path="/tmp/source.txt",
+        target_sandbox_id="target-1",
+        target_path="/tmp/target.txt",
     )
 
     assert "Permission denied" in str(result)
+
+
+@pytest.mark.asyncio
+async def test_copy_file_between_sandboxes_handles_windows_target_filename(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.tools.computer_tools import sandbox as sandbox_tools
+
+    copied: dict[str, str] = {}
+
+    class SourceBooter:
+        async def download_file(self, source_path, local_path):
+            copied["source_path"] = source_path
+            copied["local_path"] = local_path
+            Path(local_path).write_text("payload", encoding="utf-8")
+
+    class TargetBooter:
+        async def upload_file(self, local_path, target_path):
+            copied["upload_local_path"] = local_path
+            copied["target_path"] = target_path
+            return {"ok": True}
+
+    class Manager:
+        async def get_observer_booter_by_id(self, sandbox_id, *args, **kwargs):
+            return SourceBooter() if sandbox_id == "source-1" else TargetBooter()
+
+    monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        sandbox_tools.computer_client,
+        "sandbox_manager",
+        Manager(),
+    )
+
+    result = await SandboxOperationTool().call(
+        _admin_context_without_admin_requirement(),
+        "copy_file",
+        source_sandbox_id="source-1",
+        source_path="/tmp/source.txt",
+        target_sandbox_id="target-1",
+        target_path=r"C:\Users\AstrBot\target.txt",
+    )
+
+    assert json.loads(result)["upload_result"] == {"ok": True}
+    assert Path(copied["local_path"]).name.endswith("-target.txt")
+    assert copied["target_path"] == r"C:\Users\AstrBot\target.txt"
+
+
+@pytest.mark.asyncio
+async def test_copy_file_between_sandboxes_includes_lease_metadata(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.tools.computer_tools import sandbox as sandbox_tools
+
+    expires_at = time.time() + 600
+
+    class SourceBooter:
+        async def download_file(self, source_path, local_path):
+            Path(local_path).write_text("payload", encoding="utf-8")
+
+    class TargetBooter:
+        async def upload_file(self, local_path, target_path):
+            return {"ok": True}
+
+    class Manager:
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "controller_session_id": "session-a",
+                "lease_expires_at": expires_at,
+            }
+        )
+
+        async def get_observer_booter_by_id(self, sandbox_id, *args, **kwargs):
+            return SourceBooter() if sandbox_id == "source-1" else TargetBooter()
+
+    monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(sandbox_tools.computer_client, "sandbox_manager", Manager())
+
+    result = await SandboxOperationTool().call(
+        _sandbox_context(),
+        "copy_file",
+        source_sandbox_id="source-1",
+        source_path="/tmp/source.txt",
+        target_sandbox_id="target-1",
+        target_path="/tmp/target.txt",
+    )
+    payload = json.loads(str(result))
+
+    assert payload["lease"]["sandbox_id"] == "target-1"
+    assert payload["lease"]["lease_expires_at"]
+    assert payload["lease"]["lease_expires_in_seconds"] > 0
+    assert payload["lease"]["auto_renew_interval_seconds"] == 600
+
+
+@pytest.mark.asyncio
+async def test_sandbox_operation_can_return_screenshot_image_to_llm(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.tools.computer_tools import sandbox as sandbox_tools
+
+    class Gui:
+        async def screenshot(self, path):
+            Path(path).write_bytes(b"image")
+            return {"base64": "aW1hZ2U=", "mime_type": "image/png"}
+
+    class Booter:
+        gui = Gui()
+
+    class Manager:
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "controller_session_id": "session-a",
+                "lease_expires_at": time.time() + 600,
+            }
+        )
+
+        async def get_observer_booter_by_id(self, sandbox_id, *args, **kwargs):
+            return Booter()
+
+    monkeypatch.setattr(sandbox_tools, "get_astrbot_temp_path", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        sandbox_tools.computer_client,
+        "sandbox_manager",
+        Manager(),
+    )
+
+    result = await SandboxOperationTool().call(
+        _admin_context_without_admin_requirement(),
+        "capture_screenshot",
+        sandbox_id="sandbox-1",
+        return_image_to_llm=True,
+    )
+
+    assert isinstance(result, mcp.types.CallToolResult)
+    assert isinstance(result.content[0], mcp.types.TextContent)
+    assert isinstance(result.content[1], mcp.types.ImageContent)
+    assert json.loads(result.content[0].text)["lease"]["sandbox_id"] == "sandbox-1"
+    assert result.content[1].data == "aW1hZ2U="
 
 
 @pytest.mark.asyncio
@@ -119,17 +255,20 @@ async def test_sensitive_sandbox_tools_require_strict_admin_permission():
     context = _member_context_with_sandbox_permissions(set_retention_policy=True)
 
     assert "Permission denied" in str(
-        await TakeoverSandboxTool().call(context, "sandbox-1")
+        await SandboxLifecycleTool().call(context, "takeover", sandbox_id="sandbox-1")
     )
     assert "Permission denied" in str(
-        await DestroySandboxTool().call(context, "sandbox-1")
+        await SandboxLifecycleTool().call(context, "destroy", sandbox_id="sandbox-1")
     )
 
 
 @pytest.mark.asyncio
 async def test_set_sandbox_retention_policy_tool_respects_admin_requirement():
-    result = await SetSandboxRetentionPolicyTool().call(
-        _context(), "persistent", "sandbox-1"
+    result = await SandboxLifecycleTool().call(
+        _context(),
+        "set_retention",
+        retention_policy="persistent",
+        sandbox_id="sandbox-1",
     )
 
     assert "Permission denied" in str(result)
@@ -153,9 +292,15 @@ async def test_readonly_sandbox_tools_respect_admin_requirement(monkeypatch):
     )
     context = _context()
 
-    assert "Permission denied" in str(await ListSandboxesTool().call(context))
-    assert "Permission denied" in str(await ListSandboxProvidersTool().call(context))
-    assert "Permission denied" in str(await GetCurrentSandboxTool().call(context))
+    assert "Permission denied" in str(
+        await SandboxQueryTool().call(context, "list_sandboxes")
+    )
+    assert "Permission denied" in str(
+        await SandboxQueryTool().call(context, "list_providers")
+    )
+    assert "Permission denied" in str(
+        await SandboxQueryTool().call(context, "get_current")
+    )
 
 
 @pytest.mark.asyncio
@@ -189,15 +334,19 @@ async def test_member_sandbox_management_permissions_default_to_disabled(monkeyp
     )
     context = _member_context_with_sandbox_permissions()
 
-    assert "Permission denied" in str(await CreateSandboxTool().call(context))
     assert "Permission denied" in str(
-        await SetSandboxRetentionPolicyTool().call(context, "persistent")
+        await SandboxLifecycleTool().call(context, "create")
     )
     assert "Permission denied" in str(
-        await DestroySandboxTool().call(context, "sandbox-1")
+        await SandboxLifecycleTool().call(
+            context, "set_retention", retention_policy="persistent"
+        )
     )
     assert "Permission denied" in str(
-        await TakeoverSandboxTool().call(context, "sandbox-1")
+        await SandboxLifecycleTool().call(context, "destroy", sandbox_id="sandbox-1")
+    )
+    assert "Permission denied" in str(
+        await SandboxLifecycleTool().call(context, "takeover", sandbox_id="sandbox-1")
     )
 
 
@@ -214,8 +363,10 @@ async def test_member_takeover_sandbox_requires_explicit_permission(monkeypatch)
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await TakeoverSandboxTool().call(
-        _member_context_with_sandbox_permissions(takeover=True), "sandbox-1"
+    result = await SandboxLifecycleTool().call(
+        _member_context_with_sandbox_permissions(takeover=True),
+        "takeover",
+        sandbox_id="sandbox-1",
     )
 
     assert "sandbox-1" in str(result)
@@ -234,8 +385,8 @@ async def test_create_sandbox_tool_reports_max_sandbox_limit(monkeypatch):
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await CreateSandboxTool().call(
-        _member_context_with_sandbox_permissions(create=True)
+    result = await SandboxLifecycleTool().call(
+        _member_context_with_sandbox_permissions(create=True), "create"
     )
 
     assert "Error creating sandbox" in str(result)
@@ -288,7 +439,9 @@ async def test_member_list_sandboxes_includes_all_sandboxes_with_status(
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await ListSandboxesTool().call(_member_context_without_admin_requirement())
+    result = await SandboxQueryTool().call(
+        _member_context_without_admin_requirement(), "list_sandboxes"
+    )
     payload = json.loads(str(result))
     by_id = {item["sandbox_id"]: item for item in payload["sandboxes"]}
 
@@ -340,7 +493,9 @@ async def test_list_sandboxes_includes_access_status_for_admin(monkeypatch):
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await ListSandboxesTool().call(_admin_context_without_admin_requirement())
+    result = await SandboxQueryTool().call(
+        _admin_context_without_admin_requirement(), "list_sandboxes"
+    )
     payload = json.loads(str(result))
     by_id = {item["sandbox_id"]: item for item in payload["sandboxes"]}
 
@@ -372,7 +527,9 @@ async def test_sandbox_tools_use_current_computer_client_manager(monkeypatch):
 
     monkeypatch.setattr(computer_client, "sandbox_manager", FakeManager())
 
-    result = await ListSandboxesTool().call(_member_context_without_admin_requirement())
+    result = await SandboxQueryTool().call(
+        _member_context_without_admin_requirement(), "list_sandboxes"
+    )
 
     assert "dynamic-manager" in str(result)
 
@@ -393,7 +550,7 @@ async def test_list_sandbox_providers_tool_exposes_loaded_provider_capabilities(
         ],
     )
 
-    result = await ListSandboxProvidersTool().call(_sandbox_context())
+    result = await SandboxQueryTool().call(_sandbox_context(), "list_providers")
     payload = json.loads(str(result))
 
     assert payload["providers"] == [
@@ -423,7 +580,7 @@ async def test_get_current_sandbox_tool_formats_agent_timestamps(monkeypatch):
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await GetCurrentSandboxTool().call(_sandbox_context())
+    result = await SandboxQueryTool().call(_sandbox_context(), "get_current")
     payload = json.loads(str(result))
 
     assert payload["sandbox"]["retention_policy"] == "persistent"
@@ -448,8 +605,10 @@ async def test_create_sandbox_tool_defaults_to_configured_provider(monkeypatch):
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await CreateSandboxTool().call(
-        _member_context_with_sandbox_permissions(create=True), sandbox_name="Fresh"
+    result = await SandboxLifecycleTool().call(
+        _member_context_with_sandbox_permissions(create=True),
+        "create",
+        sandbox_name="Fresh",
     )
     payload = json.loads(str(result))
 
@@ -474,8 +633,9 @@ async def test_create_sandbox_tool_accepts_explicit_provider_id(monkeypatch):
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await CreateSandboxTool().call(
+    result = await SandboxLifecycleTool().call(
         _member_context_with_sandbox_permissions(create=True),
+        "create",
         sandbox_name="Fresh",
         provider_id="other",
     )
@@ -509,8 +669,10 @@ async def test_member_switch_sandbox_allows_idle_default_sandbox(monkeypatch):
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await SwitchSandboxTool().call(
-        _member_context_without_admin_requirement(), "default-idle"
+    result = await SandboxLifecycleTool().call(
+        _member_context_without_admin_requirement(),
+        "switch",
+        sandbox_id="default-idle",
     )
 
     assert "default-idle" in str(result)
@@ -541,8 +703,10 @@ async def test_member_switch_sandbox_allows_idle_dashboard_sandbox(monkeypatch):
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await SwitchSandboxTool().call(
-        _member_context_without_admin_requirement(), "ordinary-idle"
+    result = await SandboxLifecycleTool().call(
+        _member_context_without_admin_requirement(),
+        "switch",
+        sandbox_id="ordinary-idle",
     )
 
     assert "ordinary-idle" in str(result)
@@ -573,8 +737,10 @@ async def test_member_switch_sandbox_allows_idle_sandbox_from_any_session(monkey
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await SwitchSandboxTool().call(
-        _member_context_without_admin_requirement(), "other-idle"
+    result = await SandboxLifecycleTool().call(
+        _member_context_without_admin_requirement(),
+        "switch",
+        sandbox_id="other-idle",
     )
 
     assert "other-idle" in str(result)
@@ -606,8 +772,10 @@ async def test_member_switch_sandbox_allows_expired_lease_sandbox(monkeypatch):
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await SwitchSandboxTool().call(
-        _member_context_without_admin_requirement(), "expired-id"
+    result = await SandboxLifecycleTool().call(
+        _member_context_without_admin_requirement(),
+        "switch",
+        sandbox_id="expired-id",
     )
 
     assert "expired-id" in str(result)
@@ -635,8 +803,10 @@ async def test_member_switch_sandbox_rejects_other_session_sandbox(monkeypatch):
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await SwitchSandboxTool().call(
-        _member_context_without_admin_requirement(), "other-idle"
+    result = await SandboxLifecycleTool().call(
+        _member_context_without_admin_requirement(),
+        "switch",
+        sandbox_id="other-idle",
     )
 
     assert "Permission denied" in str(result)
@@ -650,19 +820,23 @@ async def test_keep_alive_sandbox_tool_renews_current_sandbox(monkeypatch):
         async def renew_current_sandbox_lease(
             self, session_id, ttl_seconds=None, context=None
         ):
-            calls.append((session_id, ttl_seconds))
-            return {"sandbox_id": "sandbox-1", "lease_expires_at": 123.0}
+            calls.append((session_id, ttl_seconds, context))
+            return {"sandbox_id": "sandbox-1", "lease_expires_at": time.time() + 3600}
 
     monkeypatch.setattr(
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await KeepAliveSandboxTool().call(
-        _member_context_without_admin_requirement(), ttl_seconds=3600
-    )
+    context = _member_context_without_admin_requirement()
+    result = await SandboxLifecycleTool().call(context, "renew_lease", ttl_seconds=3600)
 
     assert "sandbox-1" in str(result)
-    assert calls == [("session-a", 3600)]
+    assert calls == [("session-a", 3600, context.context.context)]
+
+    payload = json.loads(str(result))
+    assert payload["lease"]["sandbox_id"] == "sandbox-1"
+    assert payload["lease"]["lease_expires_in_seconds"] > 0
+    assert payload["lease"]["auto_renew_interval_seconds"] == 600
 
 
 @pytest.mark.asyncio
@@ -691,7 +865,9 @@ async def test_set_sandbox_retention_policy_tool_updates_current_sandbox(monkeyp
     )
 
     context = _member_context_with_sandbox_permissions(set_retention_policy=True)
-    result = await SetSandboxRetentionPolicyTool().call(context, "persistent")
+    result = await SandboxLifecycleTool().call(
+        context, "set_retention", retention_policy="persistent"
+    )
     payload = json.loads(str(result))
 
     assert payload["sandbox"]["retention_policy"] == "persistent"
@@ -718,10 +894,11 @@ async def test_set_sandbox_retention_policy_tool_rejects_other_session_sandbox(
         "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
     )
 
-    result = await SetSandboxRetentionPolicyTool().call(
+    result = await SandboxLifecycleTool().call(
         _member_context_with_sandbox_permissions(set_retention_policy=True),
-        "persistent",
-        "sandbox-1",
+        "set_retention",
+        retention_policy="persistent",
+        sandbox_id="sandbox-1",
     )
 
     assert "Permission denied" in str(result)

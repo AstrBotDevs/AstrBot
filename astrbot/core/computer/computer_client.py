@@ -27,6 +27,7 @@ sandbox_registry = SandboxRegistry()
 sandbox_manager = SandboxManager(registry=sandbox_registry, providers={})
 _MANAGED_SKILLS_FILE = ".astrbot_managed_skills.json"
 _SANDBOX_SKILLS_SYNC_LOCK = asyncio.Lock()
+_SANDBOX_SKILLS_PREPARE_UPLOAD_ATTEMPTS = 3
 
 # Tracks tools registered per provider so core can remove them on unregister.
 _provider_tools: dict[str, list[FunctionTool]] = {}
@@ -205,7 +206,13 @@ async def cleanup_sandbox_provider(provider_id: str) -> None:
             preserved += 1
             continue
         if booter is not None and provider is not None:
-            await _safe_destroy_booter(provider, booter, record)
+            if not await _safe_destroy_booter(provider, booter, record):
+                sandbox_manager.session_booter[sandbox_id] = booter
+                sandbox_manager.registry.update_sandbox_status(
+                    sandbox_id,
+                    "error",
+                )
+                continue
         sandbox_manager.registry.delete_sandbox(sandbox_id)
         removed += 1
 
@@ -225,7 +232,14 @@ async def cleanup_sandbox_provider(provider_id: str) -> None:
         sandbox_manager.clear_idle_state(sandbox_id)
         sandbox_manager.drop_boot_lock(sandbox_id)
         if provider is not None:
-            await _safe_destroy_booter(provider, booter, record)
+            if not await _safe_destroy_booter(provider, booter, record):
+                sandbox_manager.session_booter[sandbox_id] = booter
+                if sandbox_manager.registry.get_sandbox(sandbox_id) is not None:
+                    sandbox_manager.registry.update_sandbox_status(
+                        sandbox_id,
+                        "error",
+                    )
+                continue
         if sandbox_manager.registry.get_sandbox(sandbox_id) is not None:
             sandbox_manager.registry.delete_sandbox(sandbox_id)
         removed += 1
@@ -252,15 +266,17 @@ def detach_sandbox_provider(provider_id: str) -> None:
 
 async def _safe_destroy_booter(
     provider: SandboxProvider, booter: ComputerBooter, record: dict
-) -> None:
+) -> bool:
     try:
         await provider.destroy_booter(booter, record)
+        return True
     except Exception as exc:
         logger.warning(
             "Background destroy_booter failed for sandbox %s: %s",
             record.get("sandbox_id"),
             exc,
         )
+        return False
 
 
 async def _safe_shutdown_booter(booter: ComputerBooter, record: dict) -> None:
@@ -282,10 +298,8 @@ def get_sandbox_provider_info(provider_id: str) -> dict | None:
 
 
 def get_current_sandbox_provider_id(session_id: str) -> str | None:
-    current_sandbox_id = sandbox_manager.registry.get_current_sandbox_id(session_id)
-    if not current_sandbox_id:
-        return None
-    current_record = sandbox_manager.registry.get_sandbox(current_sandbox_id)
+    current = sandbox_manager.get_current_sandbox(session_id)
+    current_record = current.get("sandbox")
     if current_record is None:
         return None
     if current_record.get("status") in {
@@ -676,10 +690,31 @@ async def _sync_skills_to_sandbox(
                     shutil.copytree(skill_dir, bundle_root / skill_name)
                 shutil.make_archive(str(zip_base), "zip", str(bundle_root))
                 logger.info("Uploading skills bundle to sandbox...")
-                await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
-                upload_result = await booter.upload_file(str(zip_path), str(remote_zip))
+                upload_result = {"success": False}
+                for attempt in range(1, _SANDBOX_SKILLS_PREPARE_UPLOAD_ATTEMPTS + 1):
+                    try:
+                        await booter.shell.exec(f"mkdir -p {SANDBOX_SKILLS_ROOT}")
+                        upload_result = await booter.upload_file(
+                            str(zip_path), str(remote_zip)
+                        )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as exc:
+                        upload_result = {"success": False, "error": str(exc)}
+                    if upload_result.get("success", False):
+                        break
+                    if attempt < _SANDBOX_SKILLS_PREPARE_UPLOAD_ATTEMPTS:
+                        logger.warning(
+                            "[Computer] Skills bundle prepare/upload attempt %d/%d failed: %s",
+                            attempt,
+                            _SANDBOX_SKILLS_PREPARE_UPLOAD_ATTEMPTS,
+                            upload_result.get("error") or upload_result,
+                        )
+                        await asyncio.sleep(1)
                 if not upload_result.get("success", False):
-                    raise RuntimeError("Failed to upload skills bundle to sandbox.")
+                    raise RuntimeError(
+                        f"Failed to upload skills bundle to sandbox: {upload_result}"
+                    )
             else:
                 logger.info(
                     "No local skills found. Keeping sandbox built-ins and refreshing metadata."
@@ -727,16 +762,18 @@ async def get_booter(
     elif runtime == "none":
         raise RuntimeError("Sandbox runtime is disabled by configuration.")
 
-    current_sandbox_id = sandbox_manager.registry.get_current_sandbox_id(session_id)
-    if current_sandbox_id:
-        current_record = sandbox_manager.registry.get_sandbox(current_sandbox_id)
-        if current_record and current_record.get("managed"):
-            return await sandbox_manager.get_observer_booter_by_id(
-                current_sandbox_id,
-                session_id,
-                require_lease=True,
-                context=context,
-            )
+    current = sandbox_manager.get_current_sandbox(
+        session_id, include_stale_current_id=True
+    )
+    current_sandbox_id = current.get("current_sandbox_id")
+    current_record = current.get("sandbox")
+    if current_sandbox_id and current_record and current_record.get("managed"):
+        return await sandbox_manager.get_observer_booter_by_id(
+            current_sandbox_id,
+            session_id,
+            require_lease=True,
+            context=context,
+        )
 
     sandbox_cfg = config.get("provider_settings", {}).get("sandbox", {})
     provider_id = str(sandbox_cfg.get("booter", "")).strip()
@@ -753,6 +790,9 @@ async def get_booter(
             context,
             session_id,
             provider_id,
+            exclude_sandbox_ids={current["stale_current_sandbox_id"]}
+            if current.get("stale_current_sandbox_id")
+            else None,
         )
     raise ValueError(
         f"Unknown sandbox provider: {provider_id}. Install and enable a sandbox provider plugin, then select it in provider_settings.sandbox.booter."

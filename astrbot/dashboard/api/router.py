@@ -34,32 +34,40 @@ API_V1_PREFIX = "/api/v1"
 
 
 def build_api_router() -> APIRouter:
-    router = APIRouter(prefix=API_V1_PREFIX)
-    router.include_router(auth_router)
-    router.include_router(backups_router)
-    router.include_router(config_profiles_router)
-    router.include_router(api_keys_router)
-    router.include_router(bots_router)
-    router.include_router(providers_router)
-    router.include_router(plugins_router)
-    router.include_router(chat_router)
-    router.include_router(chat_projects_router)
-    router.include_router(conversations_router)
-    router.include_router(cron_router)
-    router.include_router(files_router)
-    router.include_router(knowledge_bases_router)
-    router.include_router(extensions_router)
-    router.include_router(skills_router)
-    router.include_router(sandbox_router)
-    router.include_router(sessions_router)
-    router.include_router(subagents_router)
-    router.include_router(logs_router)
-    router.include_router(stats_router)
-    router.include_router(tools_router)
-    router.include_router(platform_router)
-    router.include_router(t2i_router)
-    router.include_router(personas_router)
-    router.include_router(updates_router)
-    router.include_router(open_api_router)
-    router.include_router(live_chat_router)
+    """Build the versioned dashboard API router.
+
+    Returns:
+        APIRouter containing all `/api/v1` dashboard routes.
+    """
+    router = APIRouter()
+    for api_router in (
+        auth_router,
+        backups_router,
+        config_profiles_router,
+        api_keys_router,
+        bots_router,
+        providers_router,
+        plugins_router,
+        chat_router,
+        chat_projects_router,
+        conversations_router,
+        cron_router,
+        files_router,
+        knowledge_bases_router,
+        extensions_router,
+        sandbox_router,
+        skills_router,
+        sessions_router,
+        subagents_router,
+        logs_router,
+        stats_router,
+        tools_router,
+        platform_router,
+        t2i_router,
+        personas_router,
+        updates_router,
+        open_api_router,
+        live_chat_router,
+    ):
+        router.include_router(api_router, prefix=API_V1_PREFIX)
     return router

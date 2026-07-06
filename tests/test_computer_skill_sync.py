@@ -23,10 +23,15 @@ class _FakeShell:
     def __init__(self, sync_payload_json: str):
         self.sync_payload_json = sync_payload_json
         self.commands: list[str] = []
+        self.fail_next_error: str | None = None
 
     async def exec(self, command: str, **kwargs):
         _ = kwargs
         self.commands.append(command)
+        if self.fail_next_error is not None:
+            error = self.fail_next_error
+            self.fail_next_error = None
+            raise RuntimeError(error)
         if "PYBIN" in command and "managed_skills" in command:
             return {
                 "success": True,
@@ -147,6 +152,55 @@ def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
             "path": "skills/custom-agent-skill/SKILL.md",
         }
     ]
+
+
+def test_sync_skills_retries_transient_upload_failure(
+    monkeypatch,
+    tmp_path: Path,
+):
+    skills_root = tmp_path / "skills"
+    temp_root = tmp_path / "temp"
+    skill_dir = skills_root / "custom-agent-skill"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    skill_dir.joinpath("SKILL.md").write_text("# demo", encoding="utf-8")
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    async def _no_sleep(_delay):
+        return None
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.SkillManager.set_sandbox_skills_cache",
+        lambda self, skills, provider_id=None: None,
+    )
+    monkeypatch.setattr(computer_client.asyncio, "sleep", _no_sleep)
+
+    class _RetryBooter(_FakeBooter):
+        def __init__(self):
+            super().__init__(
+                '{"skills":[{"name":"custom-agent-skill","description":"","path":"skills/custom-agent-skill/SKILL.md"}]}'
+            )
+            self.upload_attempts = 0
+            self.shell.fail_next_error = "All connection attempts failed"
+
+        async def upload_file(self, path: str, file_name: str) -> dict:
+            self.upload_attempts += 1
+            return await super().upload_file(path, file_name)
+
+    booter = _RetryBooter()
+
+    asyncio.run(computer_client._sync_skills_to_sandbox(cast(ComputerBooter, booter)))
+
+    assert booter.upload_attempts == 1
+    assert len(booter.uploads) == 1
+    assert sum(command == "mkdir -p skills" for command in booter.shell.commands) == 2
 
 
 def test_sync_skills_includes_plugin_provided_skills(

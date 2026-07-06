@@ -4,11 +4,15 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from astrbot.core import logger
+from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.services.sandbox import SandboxService, SandboxServiceError
+from astrbot.dashboard.services.sandbox_helpers import (
+    DEMO_MODE_ERROR_MESSAGE,
+    is_demo_mode,
+)
 
-from .auth import AuthContext, require_scope
+from .auth import AuthContext, require_dashboard_user, require_scope
 
 router = APIRouter(tags=["Sandbox"])
 legacy_router = APIRouter(
@@ -23,7 +27,7 @@ def get_service(request: Request) -> SandboxService:
 
 
 async def require_sandbox_scope(request: Request) -> AuthContext:
-    return await require_scope(request, "config")
+    return await require_scope(request, "sandbox")
 
 
 async def _json_or_empty(request: Request) -> dict[str, Any]:
@@ -34,59 +38,52 @@ async def _json_or_empty(request: Request) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+async def _run(operation):
+    try:
+        result = await run_maybe_async(operation)
+        return ok(result)
+    except SandboxServiceError as exc:
+        if exc.log_traceback:
+            return error("Sandbox operation failed.")
+        return error(exc.public_message)
+
+
 def _session_id(session_id: str | None) -> str:
     return session_id or "dashboard"
 
 
-async def _run(operation, message: str):
-    try:
-        result = operation()
-        if hasattr(result, "__await__"):
-            result = await result
-        return ok(result)
-    except SandboxServiceError as exc:
-        return error(str(exc))
-    except Exception as exc:
-        logger.error("%s: %s", message, exc, exc_info=True)
-        return error(f"{message}: {exc!s}")
+def _demo_mode_error():
+    if is_demo_mode():
+        return error(DEMO_MODE_ERROR_MESSAGE)
+    return None
 
 
-@router.get("/sandbox/providers")
 @legacy_router.get("/providers")
 async def list_providers(
     session_id: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
-    return await _run(
-        lambda: service.list_providers(_session_id(session_id)),
-        "Failed to list sandbox providers",
-    )
+    return await _run(lambda: service.list_providers(_session_id(session_id)))
 
 
-@router.get("/sandbox")
 @legacy_router.get("")
 async def list_sandboxes(
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
-    return await _run(service.list_sandboxes, "Failed to list sandboxes")
+    return await _run(service.list_sandboxes)
 
 
-@router.get("/sandbox/current")
 @legacy_router.get("/current")
 async def get_current_sandbox(
     session_id: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
-    return await _run(
-        lambda: service.get_current_sandbox(_session_id(session_id)),
-        "Failed to get current sandbox",
-    )
+    return await _run(lambda: service.get_current_sandbox(_session_id(session_id)))
 
 
-@router.delete("/sandbox/current")
 @legacy_router.delete("/current")
 async def release_current_sandbox(
     session_id: str | None = Query(default=None),
@@ -94,13 +91,13 @@ async def release_current_sandbox(
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
+    if demo_response := _demo_mode_error():
+        return demo_response
     return await _run(
-        lambda: service.release_current_sandbox(_session_id(session_id), sandbox_id),
-        "Failed to release sandbox",
+        lambda: service.release_current_sandbox(_session_id(session_id), sandbox_id)
     )
 
 
-@router.post("/sandbox")
 @legacy_router.post("")
 async def create_sandbox(
     request: Request,
@@ -108,19 +105,12 @@ async def create_sandbox(
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
+    if demo_response := _demo_mode_error():
+        return demo_response
     data = await _json_or_empty(request)
-    provider_id = str(data.get("provider_id") or "").strip()
-    return await _run(
-        lambda: service.create_sandbox(
-            _session_id(session_id),
-            provider_id,
-            data.get("sandbox_name"),
-        ),
-        "Failed to create sandbox",
-    )
+    return await _run(lambda: service.create_sandbox(_session_id(session_id), data))
 
 
-@router.post("/sandbox/{sandbox_id}/switch")
 @legacy_router.post("/{sandbox_id}/switch")
 async def switch_sandbox(
     sandbox_id: str,
@@ -128,13 +118,13 @@ async def switch_sandbox(
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
+    if demo_response := _demo_mode_error():
+        return demo_response
     return await _run(
-        lambda: service.switch_sandbox(_session_id(session_id), sandbox_id),
-        "Failed to switch sandbox",
+        lambda: service.switch_sandbox(_session_id(session_id), sandbox_id)
     )
 
 
-@router.post("/sandbox/{sandbox_id}/takeover")
 @legacy_router.post("/{sandbox_id}/takeover")
 async def takeover_sandbox(
     sandbox_id: str,
@@ -142,73 +132,102 @@ async def takeover_sandbox(
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
+    if demo_response := _demo_mode_error():
+        return demo_response
     return await _run(
-        lambda: service.takeover_sandbox(_session_id(session_id), sandbox_id),
-        "Failed to takeover sandbox",
+        lambda: service.takeover_sandbox(_session_id(session_id), sandbox_id)
     )
 
 
-@router.post("/sandbox/{sandbox_id}/default")
+@legacy_router.post("/{sandbox_id}/force-release")
+async def force_release_sandbox(
+    sandbox_id: str,
+    _username: str = Depends(require_dashboard_user),
+    service: SandboxService = Depends(get_service),
+):
+    if demo_response := _demo_mode_error():
+        return demo_response
+    return await _run(lambda: service.force_release_sandbox(sandbox_id))
+
+
 @legacy_router.post("/{sandbox_id}/default")
 async def set_default_sandbox(
     sandbox_id: str,
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
-    return await _run(
-        lambda: service.set_default_sandbox(sandbox_id),
-        "Failed to set default sandbox",
-    )
+    if demo_response := _demo_mode_error():
+        return demo_response
+    return await _run(lambda: service.set_default_sandbox(sandbox_id))
 
 
-@router.post("/sandbox/{sandbox_id}/shell")
 @legacy_router.post("/{sandbox_id}/shell")
 async def run_shell(
-    request: Request,
     sandbox_id: str,
+    request: Request,
     session_id: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
+    if demo_response := _demo_mode_error():
+        return demo_response
     data = await _json_or_empty(request)
     return await _run(
-        lambda: service.run_shell(_session_id(session_id), sandbox_id, data),
-        "Failed to run sandbox shell",
+        lambda: service.run_shell(_session_id(session_id), sandbox_id, data)
     )
 
 
-@router.post("/sandbox/{sandbox_id}/screenshot")
+@legacy_router.post("/{sandbox_id}/admin-shell")
+async def admin_run_shell(
+    sandbox_id: str,
+    request: Request,
+    _username: str = Depends(require_dashboard_user),
+    service: SandboxService = Depends(get_service),
+):
+    if demo_response := _demo_mode_error():
+        return demo_response
+    data = await _json_or_empty(request)
+    return await _run(lambda: service.admin_run_shell(sandbox_id, data))
+
+
 @legacy_router.post("/{sandbox_id}/screenshot")
 async def capture_screenshot(
-    request: Request,
     sandbox_id: str,
+    request: Request,
     session_id: str | None = Query(default=None),
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
     data = await _json_or_empty(request)
     return await _run(
-        lambda: service.capture_screenshot(_session_id(session_id), sandbox_id, data),
-        "Failed to capture sandbox screenshot",
+        lambda: service.capture_screenshot(_session_id(session_id), sandbox_id, data)
     )
 
 
-@router.patch("/sandbox/{sandbox_id}")
-@legacy_router.patch("/{sandbox_id}")
-async def update_sandbox(
-    request: Request,
+@legacy_router.post("/{sandbox_id}/admin-screenshot")
+async def admin_capture_screenshot(
     sandbox_id: str,
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    request: Request,
+    _username: str = Depends(require_dashboard_user),
     service: SandboxService = Depends(get_service),
 ):
     data = await _json_or_empty(request)
-    return await _run(
-        lambda: service.update_sandbox(sandbox_id, data),
-        "Failed to update sandbox",
-    )
+    return await _run(lambda: service.admin_capture_screenshot(sandbox_id, data))
 
 
-@router.delete("/sandbox/{sandbox_id}")
+@legacy_router.patch("/{sandbox_id}")
+async def update_sandbox(
+    sandbox_id: str,
+    request: Request,
+    _auth: AuthContext = Depends(require_sandbox_scope),
+    service: SandboxService = Depends(get_service),
+):
+    if demo_response := _demo_mode_error():
+        return demo_response
+    data = await _json_or_empty(request)
+    return await _run(lambda: service.update_sandbox(sandbox_id, data))
+
+
 @legacy_router.delete("/{sandbox_id}")
 async def destroy_sandbox(
     sandbox_id: str,
@@ -216,7 +235,19 @@ async def destroy_sandbox(
     _auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
+    if demo_response := _demo_mode_error():
+        return demo_response
     return await _run(
-        lambda: service.destroy_sandbox(_session_id(session_id), sandbox_id),
-        "Failed to destroy sandbox",
+        lambda: service.destroy_sandbox(_session_id(session_id), sandbox_id)
     )
+
+
+@legacy_router.delete("/{sandbox_id}/force")
+async def force_destroy_sandbox(
+    sandbox_id: str,
+    _username: str = Depends(require_dashboard_user),
+    service: SandboxService = Depends(get_service),
+):
+    if demo_response := _demo_mode_error():
+        return demo_response
+    return await _run(lambda: service.force_destroy_sandbox(sandbox_id))

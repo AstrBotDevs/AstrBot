@@ -180,7 +180,7 @@
           },
           "sandbox_lease_timeout": {
             "description": "Sandbox lease timeout",
-            "hint": "Seconds. The lease period after an agent takes control of a sandbox, default 600 seconds. Renew it to extend control. `0` means the lease never expires and must be released manually."
+            "hint": "Seconds. Each successful sandbox access renews this session's lease to now plus this duration. Default 600 seconds. When it expires, this session no longer has a current sandbox and other sessions can take over. `0` means the lease never expires and must be released manually."
           },
           "sandbox_idle_timeout": {
             "description": "Sandbox idle cleanup timeout",

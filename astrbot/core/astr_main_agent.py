@@ -24,6 +24,7 @@ from astrbot.core.astr_main_agent_resources import (
     CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT,
     LIVE_MODE_SYSTEM_PROMPT,
     LLM_SAFETY_MODE_SYSTEM_PROMPT,
+    SANDBOX_GUI_PROMPT,
     SANDBOX_MODE_PROMPT,
     TOOL_CALL_PROMPT,
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
@@ -50,27 +51,18 @@ from astrbot.core.star.context import Context
 from astrbot.core.star.star import star_registry
 from astrbot.core.star.star_handler import star_map
 from astrbot.core.tools.computer_tools import (
-    CopyFileBetweenSandboxesTool,
-    CreateSandboxTool,
-    DestroySandboxTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
     FileReadTool,
     FileUploadTool,
     FileWriteTool,
-    GetCurrentSandboxTool,
     GrepTool,
-    KeepAliveSandboxTool,
-    ListSandboxesTool,
-    ListSandboxProvidersTool,
     LocalPythonTool,
     PythonTool,
-    ReleaseSandboxTool,
-    ScreenshotSandboxTool,
-    SetSandboxRetentionPolicyTool,
-    SwitchSandboxTool,
-    TakeoverSandboxTool,
+    SandboxLifecycleTool,
+    SandboxOperationTool,
+    SandboxQueryTool,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
@@ -78,6 +70,7 @@ from astrbot.core.tools.knowledge_base_tools import (
     retrieve_knowledge_base,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.registry import get_builtin_tool_config_rule
 from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
@@ -478,17 +471,39 @@ def _filter_skills_for_current_config(
     return filtered
 
 
-def _tool_available_for_current_runtime(tool: FunctionTool, cfg: dict) -> bool:
+def _tool_available_for_current_runtime(
+    tool: FunctionTool, cfg: dict, provider_id: str | None = None
+) -> bool:
     runtime = str(cfg.get("computer_use_runtime", "local"))
-    return tool_available_in_runtime(tool, runtime)
+    if (
+        runtime == "sandbox"
+        and provider_id is None
+        and getattr(tool, "sandbox_provider_id", None)
+    ):
+        return True
+    if not tool_available_in_runtime(tool, runtime, provider_id):
+        return False
+    rule = get_builtin_tool_config_rule(tool.name)
+    if rule is None:
+        return True
+    conditions = rule.evaluate({"provider_settings": cfg})
+    runtime_conditions = [
+        condition
+        for condition in conditions
+        if str(condition.get("key")) == "provider_settings.computer_use_runtime"
+    ]
+    if not runtime_conditions:
+        return True
+    return all(bool(condition.get("matched")) for condition in runtime_conditions)
 
 
 def _filter_tools_for_current_config(
     toolset: ToolSet, cfg: dict, session_id: str
 ) -> ToolSet:
     filtered = ToolSet()
+    provider_id = computer_client.get_current_sandbox_provider_id(session_id)
     for tool in toolset:
-        if _tool_available_for_current_runtime(tool, cfg):
+        if _tool_available_for_current_runtime(tool, cfg, provider_id):
             filtered.add_tool(tool)
     return filtered
 
@@ -571,6 +586,13 @@ async def _ensure_persona_and_skills(
                     "If you need to use these capabilities, ask the user to enable Computer Use in the AstrBot WebUI -> Config."
                 )
     tmgr = plugin_context.get_llm_tool_manager()
+    persona_tools_configured = bool(persona and persona.get("tools") is not None)
+    req._persona_tools_configured = persona_tools_configured
+    req._persona_allowed_tool_names = (
+        {str(tool_name) for tool_name in persona.get("tools", [])}
+        if persona_tools_configured
+        else None
+    )
 
     # inject toolset in the persona
     if (persona and persona.get("tools") is None) or not persona:
@@ -583,13 +605,14 @@ async def _ensure_persona_and_skills(
                 persona_toolset.remove_tool(tool.name)
     else:
         persona_toolset = ToolSet()
+        provider_id = computer_client.get_current_sandbox_provider_id(session_id)
         if persona["tools"]:
             for tool_name in persona["tools"]:
                 tool = tmgr.get_func(tool_name)
                 if (
                     tool
                     and tool.active
-                    and _tool_available_for_current_runtime(tool, cfg)
+                    and _tool_available_for_current_runtime(tool, cfg, provider_id)
                 ):
                     persona_toolset.add_tool(tool)
     if not req.func_tool:
@@ -628,7 +651,13 @@ async def _ensure_persona_and_skills(
                             tool.name
                             for tool in tmgr.func_list
                             if not isinstance(tool, HandoffTool)
-                            and _tool_available_for_current_runtime(tool, cfg)
+                            and _tool_available_for_current_runtime(
+                                tool,
+                                cfg,
+                                computer_client.get_current_sandbox_provider_id(
+                                    session_id
+                                ),
+                            )
                         ]
                     )
                     continue
@@ -1143,28 +1172,35 @@ def _apply_sandbox_tools(
         req.func_tool = ToolSet()
     if req.system_prompt is None:
         req.system_prompt = ""
+    allowed_tool_names = getattr(req, "_persona_allowed_tool_names", None)
+    persona_tools_configured = bool(getattr(req, "_persona_tools_configured", False))
+
     tool_mgr = llm_tools
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExecuteShellTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSandboxesTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ListSandboxProvidersTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GetCurrentSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(CreateSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(SwitchSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(KeepAliveSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ReleaseSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(SetSandboxRetentionPolicyTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(TakeoverSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(DestroySandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(ScreenshotSandboxTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(CopyFileBetweenSandboxesTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(PythonTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileUploadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileDownloadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileReadTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileWriteTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(FileEditTool))
-    req.func_tool.add_tool(tool_mgr.get_builtin_tool(GrepTool))
-    req.system_prompt = f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}\n"
+    added_tool = False
+
+    def add_sandbox_tool(tool_cls) -> None:
+        nonlocal added_tool
+        tool = tool_mgr.get_builtin_tool(tool_cls)
+        if persona_tools_configured and tool.name not in allowed_tool_names:
+            return
+        req.func_tool.add_tool(tool)
+        added_tool = True
+
+    add_sandbox_tool(ExecuteShellTool)
+    add_sandbox_tool(SandboxQueryTool)
+    add_sandbox_tool(SandboxLifecycleTool)
+    add_sandbox_tool(SandboxOperationTool)
+    add_sandbox_tool(PythonTool)
+    add_sandbox_tool(FileUploadTool)
+    add_sandbox_tool(FileDownloadTool)
+    add_sandbox_tool(FileReadTool)
+    add_sandbox_tool(FileWriteTool)
+    add_sandbox_tool(FileEditTool)
+    add_sandbox_tool(GrepTool)
+    if added_tool:
+        req.system_prompt = (
+            f"{req.system_prompt or ''}\n{SANDBOX_MODE_PROMPT}{SANDBOX_GUI_PROMPT}\n"
+        )
 
 
 def _proactive_cron_job_tools(req: ProviderRequest, plugin_context: Context) -> None:

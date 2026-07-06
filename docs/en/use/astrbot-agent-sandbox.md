@@ -3,7 +3,7 @@
 > [!TIP]
 > This feature is currently in technical preview and may have some bugs. If you encounter any issues, please submit an issue on [GitHub](https://github.com/AstrBotDevs/AstrBot/issues).
 
-Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environment to replace the previous code executor functionality. It gives Agents a safer and more flexible way to run code and automation tasks.
+Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environment to replace the previous code executor functionality. It lets Agents run shell, Python, file, and desktop automation tasks in an isolated environment instead of directly on the AstrBot host.
 
 ![](https://files.astrbot.app/docs/source/images/astrbot-agent-sandbox/image.png)
 
@@ -11,23 +11,39 @@ Starting from version `v4.12.0`, AstrBot introduced the Agent sandbox environmen
 
 If you are migrating existing settings, start with the config mapping. Sandbox drivers are now shipped as separate plugins, and AstrBot Core only handles routing, reuse, and cleanup. What you need to update is the `Computer Use Runtime`, the `Sandbox Driver`, and the driver-specific settings.
 
-Starting with the current version, concrete sandbox drivers such as `Shipyard Neo`, `Shipyard`, and `CUA` are shipped as **separate plugins**, not built into AstrBot Core by default.
+Starting with the current version, concrete sandbox drivers such as `Shipyard Neo`, `BoxLite`, `Shipyard`, and `CUA` are shipped as **separate plugins**, not built into AstrBot Core by default.
 
 That means enabling sandbox mode always has two steps:
 
 1. Install the sandbox plugin you want to use
 2. Then select and configure that driver in the AstrBot WebUI
 
-If you only switch `Computer Use Runtime` to `sandbox` in the WebUI without installing a matching plugin first, AstrBot will not have that sandbox driver available.
+Install and load the sandbox driver plugin first. The driver only appears in the WebUI after its plugin is installed and loaded. If you only switch `Computer Use Runtime` to `sandbox` without installing a matching plugin, there will be no driver to select or configure.
 
 AstrBot currently supports the following sandbox drivers:
 
-- `Shipyard Neo` (recommended)
-- `BoxLite` (a lightweight local sandbox for shell, Python, and file operations only)
-- `Shipyard` (legacy option, still supported)
-- `CUA` (local or cloud computer-use sandbox, suitable for desktop interaction tasks)
+- [`Shipyard Neo`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo) (recommended for long-running and multi-user usage)
+- [`BoxLite`](https://github.com/AstrBotDevs/astrbot_sandbox_boxlite) (a lightweight local sandbox for shell, Python, and file operations only)
+- [`Shipyard`](https://github.com/AstrBotDevs/astrbot_sandbox_shipyard) (legacy option, still supported)
+- [`CUA`](https://github.com/AstrBotDevs/astrbot_sandbox_cua) (local or cloud computer-use sandbox, suitable for desktop interaction tasks)
 
-Installation example:
+If you just want to get started, choose based on the task:
+
+- Use `Shipyard Neo` for stable shell, Python, filesystem access, and Skills sync.
+- Use `BoxLite` for a lightweight local runtime.
+- Use `CUA` when you need screenshots, mouse clicks, or keyboard input.
+- Keep using `Shipyard` only if you already have an old deployment.
+
+Recommended installation method: open the WebUI plugin management page, click the `+` button in the lower-right corner, choose URL installation, and enter the plugin repository URL:
+
+```text
+https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo
+https://github.com/AstrBotDevs/astrbot_sandbox_boxlite
+https://github.com/AstrBotDevs/astrbot_sandbox_shipyard
+https://github.com/AstrBotDevs/astrbot_sandbox_cua
+```
+
+If the plugin panel is not available in your deployment, you can manually install plugins under `data/plugins`. This is not recommended as the default path, because updates, enable/disable actions, and status checks are easier from the plugin panel.
 
 ```bash
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
@@ -41,7 +57,7 @@ After installation, restart AstrBot or reload plugins from the plugin management
 Then open the AstrBot console, go to **AI Settings** -> **Agent Computer Use**, and select:
 
 - `Computer Use Runtime` = `sandbox`
-- `Sandbox Driver` = `Shipyard Neo`, `Shipyard`, or `CUA`
+- `Sandbox Driver` = `Shipyard Neo`, `BoxLite`, `Shipyard`, or `CUA`
 
 `Shipyard Neo` is the recommended default driver. It consists of Bay, Ship, and Gull:
 
@@ -54,11 +70,32 @@ For `Shipyard Neo`, the workspace root is fixed at `/workspace`. When using file
 > [!TIP]
 > Browser capability is not available in every `Shipyard Neo` profile. AstrBot only mounts browser-related tools when the selected profile supports the `browser` capability. A common example is `browser-python`.
 
+## Managed sandboxes, leases, and retention
+
+After sandbox mode is enabled, the WebUI sandbox page shows the sandboxes managed by AstrBot. These terms are worth keeping separate:
+
+- **Managed sandbox**: a sandbox recorded and managed by AstrBot. It may come from `Shipyard Neo`, `BoxLite`, `CUA`, or legacy `Shipyard`.
+- **Default sandbox**: the sandbox AstrBot tries to reuse first for a driver.
+- **Occupied**: a session is currently controlling the sandbox. Other sessions cannot use it directly unless takeover is allowed.
+- **Lease**: how long the current session keeps control. The default is 600 seconds. Agents can renew an active lease, and later normal tool calls will not shorten a longer active lease. When the lease expires, the session no longer has a current sandbox; the agent must list sandboxes and switch, take over, or create one before continuing sandbox work.
+- **Temporary sandbox**: can be cleaned up after it is released and stays idle or reaches its expiry time.
+- **Persistent sandbox**: keeps its environment for reuse. It can still be occupied or released, but release alone does not delete it.
+
+In the sandbox page, `Last used` means the last time AstrBot occupied, renewed, or switched to the sandbox. `Occupied until` is the lease expiry for the current controlling session.
+
+Driver TTL and AstrBot leases are different. For example, `CUA Sandbox TTL` controls the lifetime of the CUA instance, while AstrBot's `Sandbox lease timeout` controls how long one message session keeps control of it.
+
 ## CUA Runtime
 
 `CUA` is a sandbox runtime designed for computer-use scenarios. It can create Linux, macOS, Windows, Android, and other sandbox types through a unified Python SDK, and exposes shell, screenshot, mouse, keyboard, and filesystem interfaces.
 
-Before configuring the `CUA` driver in AstrBot, install the plugin first:
+Before configuring the `CUA` driver in AstrBot, install the plugin from the WebUI plugin management page. Click the `+` button in the lower-right corner and install it from this URL:
+
+```text
+https://github.com/AstrBotDevs/astrbot_sandbox_cua
+```
+
+If the plugin panel is not available, install it manually under `data/plugins`:
 
 ```bash
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_cua.git data/plugins/astrbot_sandbox_cua
@@ -111,7 +148,13 @@ We recommend that your host machine have at least 2 CPUs, 4 GB of memory, and sw
 
 ### Deploy Shipyard Neo Separately (Recommended)
 
-Before configuring `Shipyard Neo` in AstrBot, install the plugin on the AstrBot side first:
+Before configuring `Shipyard Neo` in AstrBot, install its plugin from the WebUI plugin management page. Click the `+` button in the lower-right corner and install it from this URL:
+
+```text
+https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo
+```
+
+If the plugin panel is not available, install it manually under `data/plugins`:
 
 ```bash
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_shipyard_neo.git data/plugins/astrbot_sandbox_shipyard_neo
@@ -352,7 +395,14 @@ For more detailed explanations of TTL and persistence behavior, see the later se
 
 ### Install the BoxLite Plugin
 
-Before configuring `BoxLite`, install the plugin into AstrBot's plugin directory and keep the `Shipyard` plugin source available in the same plugin tree:
+Before configuring `BoxLite`, install it from the WebUI plugin management page. Click the `+` button in the lower-right corner and install it from this URL. `BoxLite` currently depends on part of the legacy `Shipyard` plugin code, so install the `Shipyard` plugin as well.
+
+```text
+https://github.com/AstrBotDevs/astrbot_sandbox_boxlite
+https://github.com/AstrBotDevs/astrbot_sandbox_shipyard
+```
+
+If the plugin panel is not available, install both plugins manually under `data/plugins`:
 
 ```bash
 git clone https://github.com/AstrBotDevs/astrbot_sandbox_boxlite.git data/plugins/astrbot_sandbox_boxlite

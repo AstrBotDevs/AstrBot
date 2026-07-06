@@ -44,6 +44,13 @@ def test_resolve_sandbox_timeout_falls_back_for_invalid_values():
     )
 
 
+def test_resolve_sandbox_timeout_rejects_boolean_values():
+    assert (
+        resolve_sandbox_timeout({"sandbox_ttl": True}, "sandbox_ttl", default=3600)
+        == 3600
+    )
+
+
 def test_zero_lease_timeout_is_an_indefinite_active_lease():
     assert lease_is_active("session-a", None, now=100.0) is True
     assert lease_is_active(None, None, now=100.0) is False
@@ -62,8 +69,6 @@ def test_idle_cleanup_at_from_record_uses_last_used_time():
         is None
     )
     assert (
-        idle_cleanup_at_from_record(
-            last_used_at=100.0, idle_timeout=30, now=100.0
-        )
+        idle_cleanup_at_from_record(last_used_at=100.0, idle_timeout=30, now=100.0)
         == 130.0
     )

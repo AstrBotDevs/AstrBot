@@ -174,7 +174,9 @@ async def test_get_booter_prefers_current_sandbox_over_configured_provider(
 
 
 @pytest.mark.asyncio
-async def test_get_booter_renews_current_sandbox_lease(monkeypatch, tmp_path):
+async def test_get_booter_does_not_reacquire_expired_current_binding(
+    monkeypatch, tmp_path
+):
     from astrbot.core.computer import computer_client
     from astrbot.core.computer.sandbox_manager import SandboxManager
     from astrbot.core.computer.sandbox_registry import SandboxRegistry
@@ -191,11 +193,13 @@ async def test_get_booter_renews_current_sandbox_lease(monkeypatch, tmp_path):
         "lease_expires_at"
     ] = time.time() - 1
 
-    await computer_client.get_booter(FakeContext(), "session-a")
+    booter = await computer_client.get_booter(FakeContext(), "session-a")
 
-    renewed = manager.registry.get_sandbox(current["sandbox_id"])
-    assert renewed["controller_session_id"] == "session-a"
-    assert renewed["lease_expires_at"] > time.time()
+    expired = manager.registry.get_sandbox(current["sandbox_id"])
+    current_sandbox_id = manager.registry.get_current_sandbox_id("session-a")
+    assert expired["controller_session_id"] is None
+    assert current_sandbox_id != current["sandbox_id"]
+    assert booter is manager.session_booter[current_sandbox_id]
 
 
 def test_computer_client_does_not_expose_legacy_session_cache():
@@ -367,6 +371,38 @@ def test_current_sandbox_provider_ignores_terminal_status(monkeypatch, tmp_path)
     manager.registry.set_current_sandbox_id("session-a", "generic-1")
 
     assert computer_client.get_current_sandbox_provider_id("session-a") is None
+
+
+def test_current_sandbox_provider_clears_expired_current(monkeypatch, tmp_path):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Expired",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() - 1,
+    )
+    manager.registry.set_current_sandbox_id("session-a", "generic-1")
+
+    assert computer_client.get_current_sandbox_provider_id("session-a") is None
+    assert manager.registry.get_current_sandbox_id("session-a") is None
+    assert manager.registry.get_sandbox("generic-1")["controller_session_id"] is None
 
 
 def test_unregister_provider_rejects_active_managed_sandboxes(monkeypatch, tmp_path):
@@ -612,6 +648,49 @@ async def test_cleanup_sandbox_provider_destroys_temporary_and_preserves_persist
     assert manager.registry.get_sandbox("generic-persistent") is not None
     assert destroyed == ["generic-temp"]
     assert persistent_booter.shutdown_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_cleanup_sandbox_provider_preserves_temporary_record_when_destroy_fails(
+    monkeypatch, tmp_path
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeProvider()
+
+    async def fake_destroy_booter(booter, record):
+        raise RuntimeError("destroy failed")
+
+    provider.destroy_booter = fake_destroy_booter
+    manager = SandboxManager(
+        registry=SandboxRegistry(tmp_path / "sandbox_registry.json"),
+        providers={provider.provider_id: provider},
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-temp",
+        sandbox_name="Temp",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={},
+        retention_policy="temporary",
+        status="running",
+    )
+    booter = FakeBooter()
+    booter.provider_id = provider.provider_id
+    manager.session_booter["generic-temp"] = booter
+
+    await computer_client.cleanup_sandbox_provider("generic")
+
+    record = manager.registry.get_sandbox("generic-temp")
+    assert record is not None
+    assert record["status"] == "error"
+    assert manager.session_booter["generic-temp"] is booter
 
 
 @pytest.mark.asyncio

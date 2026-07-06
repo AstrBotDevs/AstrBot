@@ -32,6 +32,11 @@ class BaseDefaultAvailableBooter:
     pass
 
 
+class NoneAvailableBooter:
+    async def available(self):
+        return None
+
+
 class UnavailablePropertyBooter:
     available = False
 
@@ -124,6 +129,18 @@ class ImmediateDestroyProvider(FakeProvider):
         await super().destroy_booter(booter, record)
 
 
+class FailsOnceDestroyProvider(FakeProvider):
+    def __init__(self):
+        super().__init__()
+        self.destroy_attempts = 0
+
+    async def destroy_booter(self, booter, record):
+        self.destroy_attempts += 1
+        if self.destroy_attempts == 1:
+            raise RuntimeError("transient destroy failure")
+        await super().destroy_booter(booter, record)
+
+
 class SlowCreatedHookProvider(FakeProvider):
     def __init__(self):
         super().__init__()
@@ -202,6 +219,11 @@ class AlwaysFailingIdleDestroyProvider(FakeProvider):
     async def destroy_booter(self, booter, record):
         self.destroy_calls += 1
         self.destroy_started.set()
+        raise RuntimeError("destroy failed")
+
+
+class AlwaysFailingDestroyProvider(FakeProvider):
+    async def destroy_booter(self, booter, record):
         raise RuntimeError("destroy failed")
 
 
@@ -368,6 +390,43 @@ async def test_create_sandbox_uncontrolled_returns_authoritative_registry_state(
 
 
 @pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_cleans_up_on_cancellation(tmp_path):
+    provider = DeferredBootProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    task = asyncio.create_task(
+        manager.create_sandbox_uncontrolled(None, "session-a", "generic", "Named")
+    )
+    await asyncio.wait_for(provider.boot_started.wait(), timeout=1)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    records = manager.registry.list_sandboxes()
+    assert len(records) == 1
+    assert records[0]["status"] == "error"
+    assert manager.session_booter == {}
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uncontrolled_keeps_error_record_on_boot_failure(
+    tmp_path,
+):
+    provider = FailingReconnectProvider()
+    manager, _provider = _manager(tmp_path, provider)
+
+    with pytest.raises(RuntimeError, match="boot failed"):
+        await manager.create_sandbox_uncontrolled(None, "session-a", "generic", "Named")
+
+    records = manager.registry.list_sandboxes()
+    assert len(records) == 1
+    assert records[0]["sandbox_name"] == "Named"
+    assert records[0]["status"] == "error"
+    assert manager.session_booter == {}
+
+
+@pytest.mark.asyncio
 async def test_create_sandbox_uncontrolled_rejects_duplicate_name(tmp_path):
     manager, _provider = _manager(tmp_path)
 
@@ -403,6 +462,17 @@ async def test_get_or_create_booter_respects_global_max_sandboxes(tmp_path):
 async def test_create_sandbox_uses_default_max_sandboxes_when_config_missing(tmp_path):
     manager, _provider = _manager(tmp_path)
     context = FakeContext({})
+    for index in range(10):
+        await manager.create_sandbox(context, f"session-{index}", "generic")
+
+    with pytest.raises(RuntimeError, match="Maximum managed sandboxes: 10"):
+        await manager.create_sandbox(context, "session-over-limit", "generic")
+
+
+@pytest.mark.asyncio
+async def test_create_sandbox_uses_default_max_sandboxes_when_config_invalid(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    context = FakeContext({"max_sandboxes": "invalid"})
     for index in range(10):
         await manager.create_sandbox(context, f"session-{index}", "generic")
 
@@ -628,15 +698,14 @@ async def test_manager_waits_for_current_creating_sandbox_instead_of_creating_an
         manager.get_or_create_booter(None, "session-a", "generic")
     )
     with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(get_booter_task, timeout=0.1)
+        await asyncio.wait_for(asyncio.shield(get_booter_task), timeout=0.1)
 
     assert len(manager.registry.list_sandboxes()) == 1
     assert provider.create_calls == 1
     assert created["sandbox_id"] in manager.pending_boot_tasks
 
     provider.allow_boot.set()
-    await wait_until(lambda: created["sandbox_id"] in manager.session_booter)
-    booter = await manager.get_or_create_booter(None, "session-a", "generic")
+    booter = await get_booter_task
 
     assert booter is manager.session_booter[created["sandbox_id"]]
     assert len(provider.created) == 1
@@ -750,6 +819,21 @@ async def test_destroy_persistent_sandbox_removes_record(tmp_path):
     assert destroyed["sandbox_id"] == created["sandbox_id"]
     assert manager.registry.get_sandbox(created["sandbox_id"]) is None
     assert provider.destroyed[0][1] == created["sandbox_id"]
+
+
+@pytest.mark.asyncio
+async def test_destroy_sandbox_preserves_record_when_provider_destroy_fails(tmp_path):
+    provider = AlwaysFailingDestroyProvider()
+    manager, _provider = _manager(tmp_path, provider)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+
+    with pytest.raises(RuntimeError, match="destroy failed"):
+        await manager.destroy_sandbox("session-a", created["sandbox_id"])
+
+    record = manager.registry.get_sandbox(created["sandbox_id"])
+    assert record is not None
+    assert record["status"] == "error"
+    assert created["sandbox_id"] in manager.session_booter
 
 
 @pytest.mark.asyncio
@@ -917,6 +1001,8 @@ async def test_get_or_create_booter_rolls_back_on_registry_save_failure(tmp_path
 
     assert manager.session_booter == {}
     assert provider.destroyed
+    assert manager.list_sandboxes() == []
+    assert manager.get_current_sandbox("session-a")["current_sandbox_id"] is None
 
 
 @pytest.mark.asyncio
@@ -971,6 +1057,88 @@ def test_manager_treats_expired_lease_sandbox_as_idle(tmp_path):
     assert manager._find_idle_provider_sandbox_id("generic") == "generic-1"
 
 
+def test_manager_list_sandboxes_releases_expired_lease(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Expired",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Expired"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() - 1,
+    )
+    manager.registry.set_current_sandbox_id("session-a", "generic-1")
+
+    listed = manager.list_sandboxes()[0]
+    persisted = manager.registry.get_sandbox("generic-1")
+
+    assert listed["controller_session_id"] is None
+    assert listed["controller_user_id"] is None
+    assert listed["lease_expires_at"] is None
+    assert persisted["controller_session_id"] is None
+    assert manager.registry.get_current_sandbox_id("session-a") is None
+
+
+def test_manager_get_current_clears_expired_current_binding(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Expired",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Expired"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() - 1,
+    )
+    manager.registry.set_current_sandbox_id("session-a", "generic-1")
+
+    current = manager.get_current_sandbox("session-a")
+    record = manager.registry.get_sandbox("generic-1")
+
+    assert current == {"current_sandbox_id": None, "sandbox": None}
+    assert record["controller_session_id"] is None
+    assert record["controller_user_id"] is None
+    assert record["lease_expires_at"] is None
+    assert manager.registry.get_current_sandbox_id("session-a") is None
+
+
+def test_manager_get_current_clears_binding_taken_by_other_session(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Taken",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Taken"},
+        status="running",
+        controller_user_id="session-b",
+        controller_session_id="session-b",
+        lease_expires_at=time.time() + 60,
+    )
+    manager.registry.set_current_sandbox_id("session-a", "generic-1")
+
+    current = manager.get_current_sandbox("session-a")
+    record = manager.registry.get_sandbox("generic-1")
+
+    assert current == {"current_sandbox_id": None, "sandbox": None}
+    assert record["controller_session_id"] == "session-b"
+    assert manager.registry.get_current_sandbox_id("session-a") is None
+
+
 @pytest.mark.asyncio
 async def test_manager_creates_new_sandbox_when_current_binding_is_busy(tmp_path):
     manager, provider = _manager(tmp_path)
@@ -989,6 +1157,36 @@ async def test_manager_creates_new_sandbox_when_current_binding_is_busy(tmp_path
     first_record = manager.registry.get_sandbox(first_sandbox_id)
     assert first_record["controller_session_id"] == "session-a"
     assert first_record["lease_expires_at"] > time.time()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_booter_does_not_reacquire_expired_current_binding(
+    tmp_path,
+):
+    manager, provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Expired")
+    expired_id = created["sandbox_id"]
+    manager.registry.upsert_sandbox(
+        sandbox_id=expired_id,
+        sandbox_name=created["sandbox_name"],
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info=created["connect_info"],
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() - 1,
+    )
+
+    booter = await manager.get_or_create_booter(None, "session-a", "generic")
+    current_id = manager.get_current_sandbox("session-a")["current_sandbox_id"]
+
+    assert current_id != expired_id
+    assert booter is manager.session_booter[current_id]
+    assert manager.registry.get_sandbox(expired_id)["controller_session_id"] is None
+    assert len(provider.created) == 2
 
 
 @pytest.mark.asyncio
@@ -1235,11 +1433,53 @@ async def test_manager_renews_current_sandbox_lease_with_requested_ttl(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_manager_same_session_lease_acquire_does_not_shorten_longer_lease(
+    tmp_path,
+):
+    manager, _provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    renewed = await manager.renew_current_sandbox_lease("session-a", ttl_seconds=7200)
+
+    switched = await manager.switch_current_sandbox_checked(
+        "session-a",
+        created["sandbox_id"],
+        context=FakeContext({"sandbox_lease_timeout": 12}),
+    )
+
+    assert switched["lease_expires_at"] == renewed["lease_expires_at"]
+    assert switched["last_used_at"] >= renewed["last_used_at"]
+
+
+@pytest.mark.asyncio
 async def test_manager_renew_current_sandbox_rejects_missing_current(tmp_path):
     manager, _provider = _manager(tmp_path)
 
     with pytest.raises(RuntimeError, match="No current sandbox"):
         await manager.renew_current_sandbox_lease("session-a")
+
+
+@pytest.mark.asyncio
+async def test_manager_renew_current_sandbox_rejects_expired_current(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    created = await manager.create_sandbox(None, "session-a", "generic", "Named")
+    manager.registry.upsert_sandbox(
+        sandbox_id=created["sandbox_id"],
+        sandbox_name=created["sandbox_name"],
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info=created["connect_info"],
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() - 1,
+    )
+
+    with pytest.raises(RuntimeError, match="No current sandbox"):
+        await manager.renew_current_sandbox_lease("session-a")
+
+    assert manager.registry.get_current_sandbox_id("session-a") is None
 
 
 @pytest.mark.asyncio
@@ -1323,6 +1563,28 @@ async def test_manager_ttl_cleanup_removes_temporary_sandbox_when_idle_cleanup_d
     )
 
     await asyncio.sleep(0.05)
+
+    assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
+    assert provider.destroyed[0][1] == sandbox["sandbox_id"]
+
+
+@pytest.mark.asyncio
+async def test_manager_ttl_cleanup_uses_monotonic_delay_when_wall_clock_moves_back(
+    tmp_path,
+    monkeypatch,
+):
+    manager, provider = _manager(tmp_path)
+    original_time = time.time
+
+    sandbox = await manager.create_sandbox(
+        FakeContext({"sandbox_idle_timeout": 0, "sandbox_ttl": 0.02}),
+        "session-a",
+        "generic",
+        "TTL",
+    )
+    monkeypatch.setattr(time, "time", lambda: original_time() - 3600)
+
+    await asyncio.sleep(0.08)
 
     assert manager.registry.get_sandbox(sandbox["sandbox_id"]) is None
     assert provider.destroyed[0][1] == sandbox["sandbox_id"]
@@ -1415,6 +1677,32 @@ async def test_manager_revives_persistent_sandbox_for_switch_access(tmp_path):
     assert switched["sandbox_id"] == "generic-1"
     assert len(provider.created) == 1
     assert manager.registry.get_sandbox("generic-1")["status"] == "running"
+
+
+def test_manager_current_sandbox_uses_current_provider_tool_names(tmp_path):
+    manager, provider = _manager(tmp_path)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=time.time() + 60,
+        tool_names=["stale_provider_screenshot"],
+        capabilities=["stale"],
+    )
+    manager.registry.set_current_sandbox_id("session-a", "generic-1")
+
+    current = manager.get_current_sandbox("session-a")
+
+    assert current["sandbox"]["tool_names"] == sorted(provider.tool_names)
+    assert current["sandbox"]["capabilities"] == sorted(provider.capabilities)
 
 
 @pytest.mark.asyncio
@@ -1526,9 +1814,10 @@ async def test_manager_marks_persistent_reconnect_as_restoring(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_manager_treats_base_available_stub_as_available(tmp_path):
+async def test_manager_treats_unknown_available_state_as_unavailable(tmp_path):
     manager, _provider = _manager(tmp_path)
-    assert await manager.booter_available(BaseDefaultAvailableBooter()) is True
+    assert await manager.booter_available(BaseDefaultAvailableBooter()) is False
+    assert await manager.booter_available(NoneAvailableBooter()) is False
 
 
 @pytest.mark.asyncio
@@ -1557,6 +1846,34 @@ async def test_manager_persistent_health_failure_marks_unknown_for_retry(tmp_pat
 
     assert manager.registry.get_sandbox("generic-1")["status"] == "unknown"
     assert "generic-1" not in manager.session_booter
+
+
+@pytest.mark.asyncio
+async def test_manager_checked_list_marks_stale_persistent_booter_unknown(tmp_path):
+    manager, _provider = _manager(tmp_path)
+    booter = FakeBooter()
+    booter.available_result = False
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+    manager.session_booter["generic-1"] = booter
+    manager.boot_locks["generic-1"] = asyncio.Lock()
+
+    listed = await manager.list_sandboxes_checked()
+
+    assert listed[0]["status"] == "unknown"
+    assert manager.registry.get_sandbox("generic-1")["status"] == "unknown"
+    assert "generic-1" not in manager.session_booter
+    assert "generic-1" not in manager.boot_locks
 
 
 @pytest.mark.asyncio
@@ -1835,7 +2152,48 @@ async def test_manager_restore_persistent_sandboxes_times_out_and_keeps_record(
     assert record["status"] == "unknown"
 
 
-def test_manager_reconcile_on_startup_marks_temporary_records_error(tmp_path):
+@pytest.mark.asyncio
+async def test_manager_restore_persistent_sandboxes_cancellation_restores_previous_status(
+    tmp_path,
+):
+    provider = FailingReconnectProvider()
+    manager, _provider = _manager(tmp_path, provider)
+    restore_started = asyncio.Event()
+
+    async def slow_create_booter(context, session_id, sandbox_id, config):
+        restore_started.set()
+        await asyncio.sleep(3600)
+        return await FakeProvider().create_booter(
+            context, session_id, sandbox_id, config
+        )
+
+    provider.create_booter = slow_create_booter
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    task = asyncio.create_task(manager.restore_persistent_sandboxes(object()))
+    await asyncio.wait_for(restore_started.wait(), timeout=1)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    record = manager.registry.get_sandbox("generic-1")
+    assert record is not None
+    assert record["status"] == "running"
+
+
+def test_manager_reconcile_on_startup_removes_temporary_records(tmp_path):
     manager, _provider = _manager(tmp_path)
     manager.registry.upsert_sandbox(
         sandbox_id="generic-1",
@@ -1853,9 +2211,7 @@ def test_manager_reconcile_on_startup_marks_temporary_records_error(tmp_path):
     manager.registry.save()
     manager.registry.reconcile_startup()
 
-    record = manager.registry.get_sandbox("generic-1")
-    assert record is not None
-    assert record["status"] == "error"
+    assert manager.registry.get_sandbox("generic-1") is None
 
 
 @pytest.mark.asyncio
@@ -1973,7 +2329,10 @@ async def test_manager_idle_cleanup_stops_retrying_after_max_attempts(tmp_path):
     manager.release_current_sandbox("session-a", sandbox["sandbox_id"])
 
     await asyncio.wait_for(provider.destroy_started.wait(), timeout=1)
-    await asyncio.sleep(0.12)
+    await wait_until(
+        lambda: sandbox["sandbox_id"] not in manager.idle_state,
+        timeout=1,
+    )
 
     assert provider.destroy_calls == sandbox_manager_module.MAX_IDLE_DESTROY_ATTEMPTS
     record = manager.registry.get_sandbox(sandbox["sandbox_id"])
@@ -2049,6 +2408,54 @@ async def test_manager_cleanup_clears_persistent_runtime_memory_state(tmp_path):
     assert persistent_id not in manager.boot_locks
     assert provider.destroyed == []
     assert persistent_booter.shutdown_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_ttl_cleanup_retries_transient_destroy_failure(monkeypatch, tmp_path):
+    from astrbot.core.computer import sandbox_manager as sandbox_manager_module
+
+    manager, provider = _manager(tmp_path, FailsOnceDestroyProvider())
+    monkeypatch.setattr(
+        sandbox_manager_module, "SANDBOX_TTL_DESTROY_RETRY_SECONDS", 0, raising=False
+    )
+    sandbox = await manager.create_sandbox(
+        FakeContext({"sandbox_idle_timeout": 0, "sandbox_ttl": 60}),
+        "session-a",
+        "generic",
+    )
+    sandbox_id = sandbox["sandbox_id"]
+    expired_at = time.time() - 1
+    manager.registry.update_sandbox_config(sandbox_id, expires_at=expired_at)
+    manager.schedule_ttl_cleanup(sandbox_id, expired_at)
+    cleanup_task = manager.expiration_state[sandbox_id].task
+
+    await asyncio.wait_for(cleanup_task, timeout=5)
+
+    assert provider.destroy_attempts == 2
+    assert manager.registry.get_sandbox(sandbox_id) is None
+    assert sandbox_id not in manager.session_booter
+
+
+@pytest.mark.asyncio
+async def test_destroy_persistent_sandbox_with_missing_provider_removes_stale_record(
+    tmp_path,
+):
+    manager, _provider = _manager(tmp_path)
+    sandbox = await manager.create_sandbox(None, "session-a", "generic")
+    sandbox_id = sandbox["sandbox_id"]
+    manager.update_sandbox_config(
+        sandbox_id,
+        idle_timeout=None,
+        expires_at=None,
+        retention_policy="persistent",
+    )
+    manager.providers.pop("generic")
+
+    removed = await manager.destroy_sandbox_deferred("session-a", sandbox_id)
+
+    assert removed["sandbox_id"] == sandbox_id
+    assert manager.registry.get_sandbox(sandbox_id) is None
+    assert sandbox_id not in manager.session_booter
 
 
 def test_manager_update_sandbox_config_rejects_duplicate_name(tmp_path):

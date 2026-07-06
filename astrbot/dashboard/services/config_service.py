@@ -187,37 +187,6 @@ def get_schema_item(schema: dict | None, key_path: str) -> dict | None:
     return _get_schema_item(schema, key_path)
 
 
-def _find_config_metadata_item(metadata: dict, key_path: str) -> dict | None:
-    if key_path in metadata and isinstance(metadata[key_path], dict):
-        return metadata[key_path]
-    for value in metadata.values():
-        if isinstance(value, dict):
-            found = _find_config_metadata_item(value, key_path)
-            if found is not None:
-                return found
-    return None
-
-
-def _inject_sandbox_provider_metadata_options(metadata: dict) -> None:
-    sandbox_booter_meta = _find_config_metadata_item(
-        metadata,
-        "provider_settings.sandbox.booter",
-    )
-    if not isinstance(sandbox_booter_meta, dict):
-        return
-    sandbox_providers = computer_client.list_sandbox_providers()
-    sandbox_booter_meta["options"] = [
-        str(provider.get("provider_id") or "")
-        for provider in sandbox_providers
-        if provider.get("provider_id")
-    ]
-    sandbox_booter_meta["labels"] = [
-        str(provider.get("display_name") or provider.get("provider_id") or "")
-        for provider in sandbox_providers
-        if provider.get("provider_id")
-    ]
-
-
 def _sanitize_filename(name: str) -> str:
     cleaned = os.path.basename(name).strip()
     if not cleaned or cleaned in {".", ".."}:
@@ -405,40 +374,24 @@ def _protected_2fa_config_changed(old_config: dict, new_config: dict) -> bool:
     )
 
 
+def _normalize_unavailable_sandbox_booter(config: dict) -> dict:
+    sandbox = config.get("provider_settings", {}).get("sandbox", {})
+    if not isinstance(sandbox, dict):
+        return config
+    booter = str(sandbox.get("booter") or "").strip()
+    if not booter:
+        return config
+    provider_ids = {
+        str(provider.get("provider_id") or "")
+        for provider in computer_client.list_sandbox_providers()
+    }
+    if booter not in provider_ids:
+        sandbox["booter"] = ""
+    return config
+
+
 async def _validate_neo_connectivity(post_config: dict) -> str | None:
-    ps = post_config.get("provider_settings", {})
-    runtime = ps.get("computer_use_runtime", "none")
-    sandbox = ps.get("sandbox", {})
-    booter = sandbox.get("booter", "")
-
-    if runtime != "sandbox" or booter != "shipyard_neo":
-        return None
-
-    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
-    if not endpoint:
-        return "⚠️ Shipyard Neo endpoint 未设置"
-
-    access_token = sandbox.get("shipyard_neo_access_token", "")
-    if not access_token:
-        return "⚠️ 未找到 Bay API Key。请填写访问令牌。"
-
-    import aiohttp
-
-    health_url = f"{endpoint}/health"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                health_url,
-                timeout=aiohttp.ClientTimeout(total=5),
-            ) as resp:
-                if resp.status != 200:
-                    return (
-                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
-                        f"请确认 Bay 正在运行: {endpoint}"
-                    )
-    except Exception:
-        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
-
+    _ = post_config
     return None
 
 
@@ -484,11 +437,14 @@ class ConfigProfileService:
         self.db = db
 
     def get_profile_schema(self) -> dict:
-        metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
-        _inject_sandbox_provider_metadata_options(metadata)
+        metadata = self._inject_sandbox_provider_options(
+            copy.deepcopy(CONFIG_METADATA_3)
+        )
         return {
-            "config": DEFAULT_CONFIG,
-            "metadata": metadata,
+            "config": _normalize_unavailable_sandbox_booter(
+                copy.deepcopy(DEFAULT_CONFIG)
+            ),
+            "metadata": ConfigMetadataI18n.convert_to_i18n_keys(metadata),
         }
 
     def get_system_schema(self) -> dict:
@@ -522,11 +478,14 @@ class ConfigProfileService:
     def get_profile(self, config_id: str) -> dict:
         if config_id not in self.acm.confs:
             raise ValueError(f"Config file {config_id} does not exist")
-        metadata = ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3)
-        _inject_sandbox_provider_metadata_options(metadata)
+        metadata = self._inject_sandbox_provider_options(
+            copy.deepcopy(CONFIG_METADATA_3)
+        )
         return {
-            "config": self.acm.confs[config_id],
-            "metadata": metadata,
+            "config": _normalize_unavailable_sandbox_booter(
+                copy.deepcopy(dict(self.acm.confs[config_id]))
+            ),
+            "metadata": ConfigMetadataI18n.convert_to_i18n_keys(metadata),
         }
 
     def get_profile_from_dashboard_query(
@@ -627,6 +586,21 @@ class ConfigProfileService:
                 allow_recovery=False,
             )
         )
+
+    @staticmethod
+    def _inject_sandbox_provider_options(metadata: dict) -> dict:
+        try:
+            items = metadata["ai_group"]["metadata"]["agent_computer_use"]["items"]
+            booter = items.get("provider_settings.sandbox.booter")
+        except (KeyError, TypeError):
+            return metadata
+        if not isinstance(booter, dict):
+            return metadata
+        providers = computer_client.list_sandbox_providers()
+        options = [provider["provider_id"] for provider in providers]
+        booter["options"] = options
+        booter["labels"] = options.copy()
+        return metadata
 
     def rename_profile(self, config_id: str, name: str | None) -> None:
         if not self.acm.update_conf_info(config_id, name=name):
@@ -782,8 +756,6 @@ class ConfigDisplayService:
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
-
-        _inject_sandbox_provider_metadata_options(metadata)
 
         return {
             "metadata": metadata,
@@ -1327,19 +1299,10 @@ class ProviderConfigService:
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
-        providers = copy.deepcopy(self.config.get("provider", []))
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
-
-        model_metadata = {}
-        for provider in providers:
-            model_id = provider.get("model")
-            if isinstance(model_id, str) and model_id in LLM_METADATAS:
-                model_metadata[model_id] = LLM_METADATAS[model_id]
         return {
             "config_schema": config_schema,
-            "providers": providers,
+            "providers": self.config.get("provider", []),
             "provider_sources": self.config.get("provider_sources", []),
-            "model_metadata": model_metadata,
         }
 
     def list_provider_sources(self) -> dict:
@@ -1582,11 +1545,8 @@ class ProviderConfigService:
         source_id: str | None = None,
         enabled: bool | None = None,
     ) -> dict:
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
-
         provider_type = self._resolve_provider_type(capability)
         providers = []
-        model_metadata = {}
         source_provider_type = {
             source["id"]: source.get("provider_type", "chat_completion")
             for source in self.provider_manager.provider_sources_config
@@ -1604,16 +1564,12 @@ class ProviderConfigService:
             if provider_type and effective_type != provider_type:
                 continue
             if provider.get("provider_source_id"):
-                provider_response = self.provider_manager.get_merged_provider_config(
-                    provider
+                providers.append(
+                    self.provider_manager.get_merged_provider_config(provider)
                 )
             else:
-                provider_response = copy.deepcopy(provider)
-            model_id = provider_response.get("model")
-            if isinstance(model_id, str) and model_id in LLM_METADATAS:
-                model_metadata[model_id] = LLM_METADATAS[model_id]
-            providers.append(provider_response)
-        return {"providers": providers, "model_metadata": model_metadata}
+                providers.append(copy.deepcopy(provider))
+        return {"providers": providers}
 
     def list_providers_for_dashboard_types(
         self, provider_type: str | None
@@ -1643,14 +1599,7 @@ class ProviderConfigService:
         )
         if provider is None:
             raise ValueError(f"Provider {provider_id} not found")
-        provider_response = copy.deepcopy(provider)
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
-
-        model_id = provider_response.get("model")
-        model_metadata = {}
-        if isinstance(model_id, str) and model_id in LLM_METADATAS:
-            model_metadata[model_id] = LLM_METADATAS[model_id]
-        return {"provider": provider_response, "model_metadata": model_metadata}
+        return {"provider": provider}
 
     async def create_provider(self, config: dict, source_id: str | None = None) -> None:
         config = copy.deepcopy(config)

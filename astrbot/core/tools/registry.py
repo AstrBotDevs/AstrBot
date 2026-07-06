@@ -119,6 +119,10 @@ def _build_rule_from_config_map(
     return BuiltinToolConfigRule(conditions=tuple(conditions))
 
 
+def build_builtin_tool_config_rule(config_map: dict[str, Any]) -> BuiltinToolConfigRule:
+    return _build_rule_from_config_map(config_map)
+
+
 def _evaluate_send_message_tool(config: dict[str, Any]) -> list[dict[str, Any]]:
     platform_configs = config.get("platform", [])
     if not isinstance(platform_configs, list):
@@ -380,6 +384,7 @@ def get_builtin_tool_config_tags(
 
 __all__ = [
     "builtin_tool",
+    "build_builtin_tool_config_rule",
     "ensure_builtin_tools_loaded",
     "get_builtin_tool_config_rule",
     "get_builtin_tool_config_statuses",

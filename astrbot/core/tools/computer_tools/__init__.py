@@ -7,20 +7,7 @@ from .fs import (
     GrepTool,
 )
 from .python import LocalPythonTool, PythonTool
-from .sandbox import (
-    CopyFileBetweenSandboxesTool,
-    CreateSandboxTool,
-    DestroySandboxTool,
-    GetCurrentSandboxTool,
-    KeepAliveSandboxTool,
-    ListSandboxesTool,
-    ListSandboxProvidersTool,
-    ReleaseSandboxTool,
-    ScreenshotSandboxTool,
-    SetSandboxRetentionPolicyTool,
-    SwitchSandboxTool,
-    TakeoverSandboxTool,
-)
+from .sandbox import SandboxLifecycleTool, SandboxOperationTool, SandboxQueryTool
 from .shell import ExecuteShellTool
 from .util import check_admin_permission, normalize_umo_for_workspace
 
@@ -34,18 +21,9 @@ __all__ = [
     "GrepTool",
     "LocalPythonTool",
     "PythonTool",
-    "CreateSandboxTool",
-    "ListSandboxProvidersTool",
-    "ListSandboxesTool",
-    "GetCurrentSandboxTool",
-    "SwitchSandboxTool",
-    "KeepAliveSandboxTool",
-    "ReleaseSandboxTool",
-    "SetSandboxRetentionPolicyTool",
-    "TakeoverSandboxTool",
-    "DestroySandboxTool",
-    "ScreenshotSandboxTool",
-    "CopyFileBetweenSandboxesTool",
+    "SandboxQueryTool",
+    "SandboxLifecycleTool",
+    "SandboxOperationTool",
     "normalize_umo_for_workspace",
     "check_admin_permission",
 ]

@@ -307,60 +307,15 @@
 import axios, { type AxiosRequestConfig } from 'axios'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useModuleI18n } from '@/i18n/composables'
-
-type SandboxRecord = {
-  sandbox_id: string
-  sandbox_name?: string
-  provider?: string
-  managed?: boolean
-  created_by_astrbot?: boolean
-  is_default?: boolean
-  owner_session_id?: string | null
-  controller_session_id?: string | null
-  lease_expires_at?: number | null
-  last_used_at?: number | null
-  idle_timeout?: number | null
-  idle_cleanup_at?: number | null
-  expires_at?: number | null
-  retention_policy?: string | null
-  status?: string
-  connect_info?: Record<string, unknown>
-  capabilities?: string[]
-  tool_names?: string[]
-}
-
-type LoadSandboxesResult = {
-  ok: boolean
-  records: SandboxRecord[]
-  error?: string
-}
-
-type ProviderOption = {
-  title: string
-  value: string
-}
-
-type SandboxProviderInfo = {
-  provider_id: string
-}
-
-type SandboxAction =
-  | 'setDefault'
-  | 'configure'
-  | 'console'
-  | 'release'
-  | 'screenshot'
-  | 'destroy'
-
-type ConsoleHistoryEntry = {
-  id: number
-  cwd: string
-  command: string
-  stdout: string
-  stderr: string
-  exitCode: unknown
-  running?: boolean
-}
+import { isDangerousConsoleCommand } from './sandbox/consoleUtils'
+import type {
+  ConsoleHistoryEntry,
+  LoadSandboxesResult,
+  ProviderOption,
+  SandboxAction,
+  SandboxProviderInfo,
+  SandboxRecord,
+} from './sandbox/types'
 
 const { tm } = useModuleI18n('features/sandbox')
 
@@ -430,13 +385,6 @@ const CREATE_POLL_MAX_REFRESH_FAILURES = 3
 const DESTROY_POLL_INTERVAL_MS = 2000
 const DESTROY_POLL_MAX_ATTEMPTS = 60
 const DESTROY_POLL_MAX_REFRESH_FAILURES = 3
-const DANGEROUS_CONSOLE_COMMAND_PATTERNS = [
-  /(^|[;&|]\s*)rm\s+(?:-[\w-]*r[\w-]*f[\w-]*|-[\w-]*f[\w-]*r[\w-]*)\s+(?:--\s+)?(?:\/(?:\S*)?|~(?:\S*)?|\$HOME(?:\S*)?)(?:\s|$)/i,
-  /(^|[;&|]\s*)mkfs(?:\.[\w-]+)?\s+/,
-  /(^|[;&|]\s*)dd\s+[^\n]*(?:of=\/dev\/|of=\/)/,
-  /(^|[;&|]\s*):\(\)\s*\{\s*:\|:\s*&\s*\}\s*;/,
-]
-
 function toast(message: string, color: 'success' | 'error' | 'warning' = 'success') {
   snackbar.value = { show: true, message, color }
 }
@@ -522,7 +470,7 @@ function canUseAction(item: SandboxRecord, action: SandboxAction) {
     case 'screenshot':
       return status === 'running' && hasCapability(item, 'screenshot')
     case 'destroy':
-      return status !== 'stopping' && !item.controller_session_id
+      return status !== 'stopping'
   }
 }
 
@@ -683,7 +631,8 @@ async function sandboxAction(
   path: string,
   payload?: Record<string, unknown>,
   successMessage?: string,
-  config: AxiosRequestConfig = {}
+  config: AxiosRequestConfig = {},
+  throwOnError = false
 ) {
   try {
     let res
@@ -699,8 +648,10 @@ async function sandboxAction(
       await loadSandboxes()
       return res.data.data
     }
+    if (throwOnError) throw new Error(res.data.message || tm('messages.operationFailed'))
     toast(res.data.message || tm('messages.operationFailed'), 'error')
   } catch (e: any) {
+    if (throwOnError) throw e
     toast(e?.response?.data?.message || tm('messages.operationFailed'), 'error')
   }
   return null
@@ -733,6 +684,11 @@ function clearDestroyPollingTimer(sandboxId: string) {
     delete next[sandboxId]
     destroyPollingTimers.value = next
   }
+}
+
+function stopDestroyPollingForSandbox(sandboxId: string) {
+  clearDestroyPollingTimer(sandboxId)
+  removePendingDestroySandbox(sandboxId)
 }
 
 function stopDestroyPolling() {
@@ -998,13 +954,10 @@ async function saveConfig() {
 
 function releaseSandbox(item: SandboxRecord) {
   return sandboxAction(
-    'delete',
-    '/api/sandbox/current',
+    'post',
+    sandboxApiPath(item, '/force-release'),
     undefined,
-    tm('messages.released'),
-    {
-      params: { session_id: 'dashboard', sandbox_id: item.sandbox_id }
-    }
+    tm('messages.released')
   )
 }
 
@@ -1030,29 +983,31 @@ async function confirmDestroySandbox() {
   const targetId = target.sandbox_id
   destroyDialog.value = false
   destroySandboxTarget.value = null
-  startDestroyPolling(targetId)
   try {
-    const res = await axios.delete(sandboxApiPath(targetId), {
-      params: { session_id: 'dashboard', _t: Date.now() }
+    const res = await axios.delete(sandboxApiPath(targetId, '/force'), {
+      params: { _t: Date.now() }
     })
     if (res.data.status === 'ok') {
+      startDestroyPolling(targetId)
       const sandbox = res.data.data?.sandbox as SandboxRecord | undefined
       if (sandbox?.sandbox_id) {
         upsertSandboxRecord(sandbox)
       }
       void loadSandboxes({ silent: true })
     } else {
+      stopDestroyPollingForSandbox(targetId)
       toast(res.data.message || tm('messages.operationFailed'), 'error')
       await loadSandboxes({ silent: true })
     }
   } catch (e: any) {
+    stopDestroyPollingForSandbox(targetId)
     toast(e?.response?.data?.message || tm('messages.operationFailed'), 'error')
     await loadSandboxes({ silent: true })
   }
 }
 
 async function screenshotSandbox(item: SandboxRecord) {
-  const data = await sandboxAction('post', sandboxApiPath(item, '/screenshot'))
+  const data = await sandboxAction('post', sandboxApiPath(item, '/admin-screenshot'))
   if (!data) return
   const screenshot = data?.screenshot
   const legacyResult = data?.result
@@ -1085,10 +1040,13 @@ async function runConsoleCommand() {
   consoleRunning.value = true
   try {
     const shellCommand = buildConsoleShellCommand(command, cwd)
-    const data = await sandboxAction('post', sandboxApiPath(sandboxId, '/shell'), {
+    const data = await sandboxAction('post', sandboxApiPath(sandboxId, '/admin-shell'), {
       command: shellCommand,
       timeout: 300
-    })
+    }, undefined, {}, true)
+    if (!data?.result) {
+      throw new Error(tm('messages.operationFailed'))
+    }
     if (data?.result) {
       const { stdout, nextCwd } = parseConsoleShellResult(String(data.result.stdout ?? ''), cwd)
       entry.stdout = normalizeTerminalOutput(stdout)
@@ -1107,7 +1065,7 @@ async function runConsoleCommand() {
       consoleHistory.value = [...consoleHistory.value]
     }
   } catch (e: any) {
-    entry.stderr = e?.message || String(e)
+    entry.stderr = normalizeTerminalOutput(e?.message || String(e))
     entry.running = false
     consoleHistory.value = [...consoleHistory.value]
   } finally {
@@ -1117,11 +1075,6 @@ async function runConsoleCommand() {
     await nextTick()
     focusConsoleInput()
   }
-}
-
-function isDangerousConsoleCommand(command: string) {
-  const normalized = command.trim()
-  return DANGEROUS_CONSOLE_COMMAND_PATTERNS.some((pattern) => pattern.test(normalized))
 }
 
 function quoteForShell(value: string) {
