@@ -1934,6 +1934,9 @@ class PluginManager:
             func_tool.active = func_tool.name not in inactivated_llm_tools
 
         await self.reload(plugin_name)
+        current_plugin = self.context.get_registered_star(plugin_name)
+        if current_plugin:
+            current_plugin.activated = True
 
     async def install_plugin_from_file(
         self, zip_file_path: str, ignore_version_check: bool = False

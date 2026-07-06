@@ -2240,9 +2240,6 @@ async def test_turn_on_plugin_after_deactivated_reload_reactivates_tools(
 
     async def mock_reload(plugin_name_arg):
         assert plugin_name_arg == plugin_name
-        # Simulate what load() does: re-register with activated=True
-        # since it's no longer in inactivated_plugins
-        plugin.activated = True
         return True, None
 
     monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
