@@ -391,7 +391,11 @@ class ResultDecorateStage(Stage):
                             logger.debug(f"已注册：{url}")
                             result.chain = [*records, Image.fromURL(url), *remain]
                         else:
-                            result.chain = [*records, Image.fromFileSystem(url), *remain]
+                            result.chain = [
+                                *records,
+                                Image.fromFileSystem(url),
+                                *remain,
+                            ]
 
             # 触发转发消息
             if event.get_platform_name() == "aiocqhttp":
