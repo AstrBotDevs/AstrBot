@@ -1295,8 +1295,7 @@ class PluginManager:
                     star_registry.append(metadata)
 
                 # 禁用/启用插件
-                if metadata.module_path in inactivated_plugins:
-                    metadata.activated = False
+                metadata.activated = metadata.module_path not in inactivated_plugins
 
                 # Plugin logo path
                 if os.path.exists(logo_path):
