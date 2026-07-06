@@ -47,6 +47,8 @@ def _set_raw_message_fields(message: Any, data: dict[str, Any]) -> None:
     Returns:
         None.
     """
+    if not isinstance(data, dict):
+        data = {}
     message.raw_data = data
     message.message_type = data.get("message_type")
     msg_elements = data.get("msg_elements")
