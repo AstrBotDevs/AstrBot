@@ -17,7 +17,7 @@ from botpy.gateway import BotWebSocket
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import (
     AstrBotMessage,
     MessageMember,
@@ -37,7 +37,75 @@ for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 
 
+def _set_raw_message_fields(message: Any, data: dict[str, Any]) -> None:
+    """Preserve QQ message fields that qq-botpy does not expose.
+
+    Args:
+        message: Patched qq-botpy message object.
+        data: Raw message payload from QQ.
+
+    Returns:
+        None.
+    """
+    if not isinstance(data, dict):
+        data = {}
+    message.raw_data = data
+    message.message_type = data.get("message_type")
+    msg_elements = data.get("msg_elements")
+    message.msg_elements = msg_elements if isinstance(msg_elements, list) else []
+
+
+class PatchedMessage(botpy.message.Message):
+    __slots__ = ("raw_data", "message_type", "msg_elements")
+
+    def __init__(
+        self,
+        api: Any,
+        event_id: str | None,
+        data: dict[str, Any],
+    ) -> None:
+        super().__init__(api, event_id, data)  # type: ignore
+        _set_raw_message_fields(self, data)
+
+
+class PatchedDirectMessage(botpy.message.DirectMessage):
+    __slots__ = ("raw_data", "message_type", "msg_elements")
+
+    def __init__(
+        self,
+        api: Any,
+        event_id: str | None,
+        data: dict[str, Any],
+    ) -> None:
+        super().__init__(api, event_id, data)  # type: ignore
+        _set_raw_message_fields(self, data)
+
+
+class PatchedC2CMessage(botpy.message.C2CMessage):
+    __slots__ = ("raw_data", "message_type", "msg_elements")
+
+    def __init__(
+        self,
+        api: Any,
+        event_id: str | None,
+        data: dict[str, Any],
+    ) -> None:
+        super().__init__(api, event_id, data)  # type: ignore
+        _set_raw_message_fields(self, data)
+
+
 class PatchedGroupMessage(botpy.message.GroupMessage):
+    __slots__ = ("raw_data", "message_type", "msg_elements")
+
+    def __init__(
+        self,
+        api: Any,
+        event_id: str | None,
+        data: dict[str, Any],
+    ) -> None:
+        super().__init__(api, event_id, data)  # type: ignore
+        _set_raw_message_fields(self, data)
+
     class _User:
         def __init__(self, data: dict[str, Any]) -> None:
             self.id = data.get("id", None)
@@ -53,21 +121,43 @@ class PatchedGroupMessage(botpy.message.GroupMessage):
 
 
 def _ensure_group_message_create_parser() -> None:
-    """Register the missing qq-botpy parser for GROUP_MESSAGE_CREATE."""
+    """Register qq-botpy message parsers with QQ quote payload preservation."""
 
-    if hasattr(ConnectionState, "parse_group_message_create"):
-        return
+    def build_parser(event_name: str, message_cls: type) -> Any:
+        """Build a ConnectionState parser for one QQ message event.
 
-    def parse_group_message_create(self, payload: dict[str, Any]) -> None:
-        group_message = PatchedGroupMessage(
-            self.api,
-            payload.get("id", None),
-            payload.get("d", {}),
+        Args:
+            event_name: botpy dispatch event name.
+            message_cls: Patched message class used to retain raw fields.
+
+        Returns:
+            Parser function bound by qq-botpy's ConnectionState.
+        """
+
+        def parse_message(self, payload: dict[str, Any]) -> None:
+            qq_message = message_cls(
+                self.api,
+                payload.get("id", None),
+                payload.get("d", {}),
+            )
+            self._dispatch(event_name, qq_message)
+
+        return parse_message
+
+    parser_specs = {
+        "message_create": ("message_create", PatchedMessage),
+        "at_message_create": ("at_message_create", PatchedMessage),
+        "direct_message_create": ("direct_message_create", PatchedDirectMessage),
+        "group_at_message_create": ("group_at_message_create", PatchedGroupMessage),
+        "c2c_message_create": ("c2c_message_create", PatchedC2CMessage),
+        "group_message_create": ("group_message_create", PatchedGroupMessage),
+    }
+    for parser_name, (event_name, message_cls) in parser_specs.items():
+        setattr(
+            ConnectionState,
+            f"parse_{parser_name}",
+            build_parser(event_name, message_cls),
         )
-        logger.debug("[QQOfficial] Received group message: %s", group_message)
-        self._dispatch("group_message_create", group_message)
-
-    setattr(ConnectionState, "parse_group_message_create", parse_group_message_create)
 
 
 class ManagedBotWebSocket(BotWebSocket):
@@ -491,25 +581,41 @@ class QQOfficialPlatformAdapter(Platform):
             return
 
         for attachment in attachments:
-            content_type = cast(
-                str,
-                getattr(attachment, "content_type", "") or "",
-            ).lower()
-            url = QQOfficialPlatformAdapter._normalize_attachment_url(
-                cast(str | None, getattr(attachment, "url", None))
-            )
-            if not url:
-                continue
-
-            if content_type.startswith("image"):
-                msg.append(Image.fromURL(url))
+            if isinstance(attachment, dict):
+                content_type = str(
+                    attachment.get("content_type")
+                    or attachment.get("contentType")
+                    or "",
+                ).lower()
+                url = QQOfficialPlatformAdapter._normalize_attachment_url(
+                    cast(str | None, attachment.get("url"))
+                )
+                filename = cast(
+                    str,
+                    attachment.get("filename")
+                    or attachment.get("name")
+                    or "attachment",
+                )
             else:
+                content_type = cast(
+                    str,
+                    getattr(attachment, "content_type", "") or "",
+                ).lower()
+                url = QQOfficialPlatformAdapter._normalize_attachment_url(
+                    cast(str | None, getattr(attachment, "url", None))
+                )
                 filename = cast(
                     str,
                     getattr(attachment, "filename", None)
                     or getattr(attachment, "name", None)
                     or "attachment",
                 )
+            if not url:
+                continue
+
+            if content_type.startswith("image"):
+                msg.append(Image.fromURL(url))
+            else:
                 ext = Path(filename).suffix.lower()
                 image_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
                 audio_exts = {
@@ -607,6 +713,53 @@ class QQOfficialPlatformAdapter(Platform):
         abm.message_id = message.id
         # abm.tag = "qq_official"
         msg: list[BaseMessageComponent] = []
+        message_reference = getattr(message, "message_reference", None)
+        quoted_message_id = getattr(message_reference, "message_id", None)
+        raw_message_type = getattr(message, "message_type", None)
+        try:
+            is_quoted_message = int(raw_message_type or 0) == 103
+        except (TypeError, ValueError):
+            is_quoted_message = False
+        msg_elements = getattr(message, "msg_elements", None)
+        quoted_message_str = ""
+        quoted_element_message_id = ""
+        quoted_chain: list[BaseMessageComponent] = []
+        if is_quoted_message and isinstance(msg_elements, list) and msg_elements:
+            quoted_element = msg_elements[0]
+            if isinstance(quoted_element, dict):
+                quoted_content = quoted_element.get("content")
+                quoted_attachments = quoted_element.get("attachments")
+                quoted_element_message_id = str(
+                    quoted_element.get("id") or quoted_element.get("message_id") or "",
+                )
+            else:
+                quoted_content = getattr(quoted_element, "content", None)
+                quoted_attachments = getattr(quoted_element, "attachments", None)
+                quoted_element_message_id = str(
+                    getattr(quoted_element, "id", None)
+                    or getattr(quoted_element, "message_id", None)
+                    or "",
+                )
+
+            quoted_message_str = QQOfficialPlatformAdapter._parse_face_message(
+                str(quoted_content or "").strip()
+            )
+            if quoted_message_str:
+                quoted_chain.append(Plain(quoted_message_str))
+            if isinstance(quoted_attachments, list):
+                await QQOfficialPlatformAdapter._append_attachments(
+                    quoted_chain,
+                    quoted_attachments,
+                )
+        if quoted_message_id or quoted_element_message_id or quoted_chain:
+            msg.append(
+                Reply(
+                    id=str(quoted_message_id or quoted_element_message_id or ""),
+                    chain=quoted_chain,
+                    message_str=quoted_message_str,
+                    text=quoted_message_str,
+                )
+            )
 
         if isinstance(message, botpy.message.GroupMessage) or isinstance(
             message,
