@@ -240,6 +240,13 @@ def _set_trusted_device_cookie(
     response: JSONResponse,
     token: str,
 ) -> None:
+    response.delete_cookie(
+        TOTP_TRUSTED_DEVICE_COOKIE_NAME,
+        httponly=True,
+        samesite="strict",
+        secure=_use_secure_dashboard_jwt_cookie(request),
+        path="/api/auth",
+    )
     response.set_cookie(
         TOTP_TRUSTED_DEVICE_COOKIE_NAME,
         token,
@@ -247,7 +254,7 @@ def _set_trusted_device_cookie(
         httponly=True,
         samesite="strict",
         secure=_use_secure_dashboard_jwt_cookie(request),
-        path="/api/auth",
+        path="/api",
     )
 
 

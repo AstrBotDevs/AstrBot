@@ -74,6 +74,21 @@ def _assert_cookie_samesite_strict(cookie_header: str) -> None:
     assert "samesite=strict" in cookie_header.lower()
 
 
+def _find_cookie_header(
+    cookie_headers: list[str],
+    cookie_name: str,
+    path: str,
+) -> str:
+    return next(
+        (
+            value
+            for value in cookie_headers
+            if cookie_name in value and f"Path={path};" in value
+        ),
+        "",
+    )
+
+
 async def _wait_for_update_progress(
     test_client,
     authenticated_header: dict,
@@ -805,18 +820,21 @@ async def test_auth_login_sets_trusted_device_cookie_when_flag_true(
         data = await response.get_json()
         assert data["status"] == "ok"
         set_cookie_headers = response.headers.getlist("Set-Cookie")
-        trusted_cookie_header = next(
-            (
-                value
-                for value in set_cookie_headers
-                if TOTP_TRUSTED_DEVICE_COOKIE_NAME in value
-            ),
-            "",
+        legacy_cookie_clear_header = _find_cookie_header(
+            set_cookie_headers,
+            TOTP_TRUSTED_DEVICE_COOKIE_NAME,
+            "/api/auth",
         )
+        trusted_cookie_header = _find_cookie_header(
+            set_cookie_headers,
+            TOTP_TRUSTED_DEVICE_COOKIE_NAME,
+            "/api",
+        )
+        assert legacy_cookie_clear_header
+        assert "Max-Age=0" in legacy_cookie_clear_header
         assert trusted_cookie_header
         assert "HttpOnly" in trusted_cookie_header
         _assert_cookie_samesite_strict(trusted_cookie_header)
-        assert "Path=/api/auth" in trusted_cookie_header
     finally:
         await _restore_dashboard_password_state(
             core_lifecycle_td,
@@ -856,6 +874,68 @@ async def test_auth_login_skips_totp_when_trusted_cookie_valid(
 
         second_login = await test_client.post(
             "/api/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+            },
+        )
+        second_data = await second_login.get_json()
+        assert second_login.status_code == 200
+        assert second_data["status"] == "ok"
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_v1_auth_login_skips_totp_when_trusted_cookie_valid(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    _, recovery_code_hash = generate_recovery_code()
+    secret = pyotp.random_base32()
+
+    try:
+        core_lifecycle_td.astrbot_config["dashboard"]["totp"] = {
+            "enable": True,
+            "secret": secret,
+            "recovery_code_hash": recovery_code_hash,
+        }
+        first_login = await test_client.post(
+            "/api/v1/auth/login",
+            json={
+                "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+                "password": _resolve_dashboard_password(core_lifecycle_td),
+                "code": pyotp.TOTP(secret).now(),
+                "trust_device_flag": True,
+            },
+        )
+        first_data = await first_login.get_json()
+        assert first_data["status"] == "ok"
+
+        set_cookie_headers = first_login.headers.getlist("Set-Cookie")
+        legacy_cookie_clear_header = _find_cookie_header(
+            set_cookie_headers,
+            TOTP_TRUSTED_DEVICE_COOKIE_NAME,
+            "/api/auth",
+        )
+        trusted_cookie_header = _find_cookie_header(
+            set_cookie_headers,
+            TOTP_TRUSTED_DEVICE_COOKIE_NAME,
+            "/api",
+        )
+        assert legacy_cookie_clear_header
+        assert "Max-Age=0" in legacy_cookie_clear_header
+        assert trusted_cookie_header
+
+        second_login = await test_client.post(
+            "/api/v1/auth/login",
             json={
                 "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
                 "password": _resolve_dashboard_password(core_lifecycle_td),
