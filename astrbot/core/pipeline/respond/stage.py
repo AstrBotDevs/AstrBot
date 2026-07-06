@@ -205,6 +205,7 @@ class RespondStage(Stage):
 
         logger.info(
             f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
+            extra={"category": "user_chat"},
         )
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:

@@ -32,6 +32,7 @@ class _RecordEnricherFilter(logging.Filter):
         record.source_file = _build_source_file(record.pathname)
         record.source_line = record.lineno
         record.is_trace = record.name == "astrbot.trace"
+        record.category = getattr(record, "category", "system")
         return True
 
 
@@ -88,6 +89,7 @@ def _patch_record(record: "Record") -> None:
     extra.setdefault("source_file", _build_source_file(record["file"].path))
     extra.setdefault("source_line", record["line"])
     extra.setdefault("is_trace", False)
+    extra.setdefault("category", "system")
 
 
 _loguru = _raw_loguru_logger.patch(_patch_record)
@@ -161,6 +163,7 @@ class LogQueueHandler(logging.Handler):
                 "level": record.levelname,
                 "time": time.time(),
                 "data": log_entry,
+                "category": getattr(record, "category", "system"),
             },
         )
 
