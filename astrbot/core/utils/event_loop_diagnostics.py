@@ -1,6 +1,5 @@
 import asyncio
 import faulthandler
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
@@ -8,19 +7,12 @@ from typing import TextIO
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-LAG_MONITOR_ENABLED_ENV = "ASTRBOT_EVENT_LOOP_LAG_MONITOR"
-LAG_MONITOR_INTERVAL_ENV = "ASTRBOT_EVENT_LOOP_LAG_INTERVAL"
-LAG_MONITOR_THRESHOLD_ENV = "ASTRBOT_EVENT_LOOP_LAG_THRESHOLD"
-WATCHDOG_ENABLED_ENV = "ASTRBOT_EVENT_LOOP_WATCHDOG"
-WATCHDOG_INTERVAL_ENV = "ASTRBOT_EVENT_LOOP_WATCHDOG_INTERVAL"
-WATCHDOG_TIMEOUT_ENV = "ASTRBOT_EVENT_LOOP_WATCHDOG_TIMEOUT"
-WATCHDOG_LOG_PATH_ENV = "ASTRBOT_EVENT_LOOP_WATCHDOG_LOG_PATH"
-WATCHDOG_LOG_MAX_BYTES_ENV = "ASTRBOT_EVENT_LOOP_WATCHDOG_LOG_MAX_BYTES"
-
-DEFAULT_LAG_MONITOR_INTERVAL = 1.0
-DEFAULT_LAG_MONITOR_THRESHOLD = 5.0
-DEFAULT_WATCHDOG_INTERVAL = 1.0
-DEFAULT_WATCHDOG_TIMEOUT = 15.0
+DEFAULT_LAG_MONITOR_ENABLED = True
+DEFAULT_LAG_MONITOR_INTERVAL = 5.0
+DEFAULT_LAG_MONITOR_THRESHOLD = 15.0
+DEFAULT_WATCHDOG_ENABLED = True
+DEFAULT_WATCHDOG_INTERVAL = 5.0
+DEFAULT_WATCHDOG_TIMEOUT = 30.0
 DEFAULT_WATCHDOG_LOG_RELATIVE_PATH = Path("logs") / "event_loop_watchdog.log"
 DEFAULT_WATCHDOG_LOG_MAX_BYTES = 1024 * 1024
 
@@ -50,146 +42,30 @@ class EventLoopDiagnosticSettings:
     watchdog_log_max_bytes: int
 
 
-def _env_flag(name: str, default: bool) -> bool:
-    """Read a boolean flag from the environment.
-
-    Args:
-        name: Environment variable name.
-        default: Value to use when the variable is unset or empty.
-
-    Returns:
-        Parsed boolean value.
-    """
-    value = os.environ.get(name)
-    if value is None or value.strip() == "":
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _env_float(name: str, default: float, minimum: float) -> float:
-    """Read a bounded float from the environment.
-
-    Args:
-        name: Environment variable name.
-        default: Value to use when parsing fails or the value is too small.
-        minimum: Smallest accepted value.
-
-    Returns:
-        Parsed float value or the default.
-    """
-    value = os.environ.get(name)
-    if value is None or value.strip() == "":
-        return default
-    try:
-        parsed = float(value)
-    except ValueError:
-        logger.warning(
-            "Invalid %s=%r, fallback to %.3fs.",
-            name,
-            value,
-            default,
-        )
-        return default
-    if parsed < minimum:
-        logger.warning(
-            "Invalid %s=%r, expected at least %.3fs; fallback to %.3fs.",
-            name,
-            value,
-            minimum,
-            default,
-        )
-        return default
-    return parsed
-
-
-def _env_int(name: str, default: int, minimum: int) -> int:
-    """Read a bounded integer from the environment.
-
-    Args:
-        name: Environment variable name.
-        default: Value to use when parsing fails or the value is too small.
-        minimum: Smallest accepted value.
-
-    Returns:
-        Parsed integer value or the default.
-    """
-    value = os.environ.get(name)
-    if value is None or value.strip() == "":
-        return default
-    try:
-        parsed = int(value)
-    except ValueError:
-        logger.warning(
-            "Invalid %s=%r, fallback to %d.",
-            name,
-            value,
-            default,
-        )
-        return default
-    if parsed < minimum:
-        logger.warning(
-            "Invalid %s=%r, expected at least %d; fallback to %d.",
-            name,
-            value,
-            minimum,
-            default,
-        )
-        return default
-    return parsed
-
-
 def _watchdog_log_path() -> Path:
     """Resolve the watchdog stack dump log path.
 
     Returns:
         Absolute path for watchdog stack dump output.
     """
-    configured = os.environ.get(WATCHDOG_LOG_PATH_ENV, "").strip()
-    path = (
-        Path(configured).expanduser()
-        if configured
-        else DEFAULT_WATCHDOG_LOG_RELATIVE_PATH
-    )
-    if not path.is_absolute():
-        path = Path(get_astrbot_data_path()) / path
-    return path
+    return Path(get_astrbot_data_path()) / DEFAULT_WATCHDOG_LOG_RELATIVE_PATH
 
 
 def load_event_loop_diagnostic_settings() -> EventLoopDiagnosticSettings:
-    """Load event loop diagnostic settings from environment variables.
+    """Load fixed event loop diagnostic settings.
 
     Returns:
         Event loop diagnostic settings.
     """
     return EventLoopDiagnosticSettings(
-        lag_monitor_enabled=_env_flag(LAG_MONITOR_ENABLED_ENV, True),
-        lag_monitor_interval=_env_float(
-            LAG_MONITOR_INTERVAL_ENV,
-            DEFAULT_LAG_MONITOR_INTERVAL,
-            0.1,
-        ),
-        lag_monitor_threshold=_env_float(
-            LAG_MONITOR_THRESHOLD_ENV,
-            DEFAULT_LAG_MONITOR_THRESHOLD,
-            0.1,
-        ),
-        watchdog_enabled=_env_flag(WATCHDOG_ENABLED_ENV, False),
-        watchdog_interval=_env_float(
-            WATCHDOG_INTERVAL_ENV,
-            DEFAULT_WATCHDOG_INTERVAL,
-            0.1,
-        ),
-        watchdog_timeout=_env_float(
-            WATCHDOG_TIMEOUT_ENV,
-            DEFAULT_WATCHDOG_TIMEOUT,
-            1.0,
-        ),
+        lag_monitor_enabled=DEFAULT_LAG_MONITOR_ENABLED,
+        lag_monitor_interval=DEFAULT_LAG_MONITOR_INTERVAL,
+        lag_monitor_threshold=DEFAULT_LAG_MONITOR_THRESHOLD,
+        watchdog_enabled=DEFAULT_WATCHDOG_ENABLED,
+        watchdog_interval=DEFAULT_WATCHDOG_INTERVAL,
+        watchdog_timeout=DEFAULT_WATCHDOG_TIMEOUT,
         watchdog_log_path=_watchdog_log_path(),
-        watchdog_log_max_bytes=_env_int(
-            WATCHDOG_LOG_MAX_BYTES_ENV,
-            DEFAULT_WATCHDOG_LOG_MAX_BYTES,
-            1024,
-        ),
+        watchdog_log_max_bytes=DEFAULT_WATCHDOG_LOG_MAX_BYTES,
     )
 
 
