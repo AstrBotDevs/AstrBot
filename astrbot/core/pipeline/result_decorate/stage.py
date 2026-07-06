@@ -374,6 +374,7 @@ class ResultDecorateStage(Stage):
                 plain_str = "".join(parts)
                 if plain_str and len(plain_str) > self.t2i_word_threshold:
                     render_start = time.time()
+                    url = None
                     try:
                         url = await html_renderer.render_t2i(
                             plain_str,
@@ -385,7 +386,6 @@ class ResultDecorateStage(Stage):
                         logger.error(
                             "Text-to-image rendering failed; sending text instead."
                         )
-                        return
                     if time.time() - render_start > 3:
                         logger.warning(
                             "Text-to-image rendering took more than 3 seconds. Disable "
