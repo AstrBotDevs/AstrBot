@@ -146,6 +146,17 @@
     "manualModelRequired": "Please enter a model ID",
     "manualModelExists": "Model already exists",
     "configure": "Configure",
+    "testButton": "Test model",
+    "metadata": {
+      "image": "Image input",
+      "audio": "Audio input",
+      "toolUse": "Tool use",
+      "reasoning": "Reasoning",
+      "context": "{tokens} context window",
+      "available": "Model metadata supports {capability}",
+      "enabled": "{capability} enabled",
+      "supportedDisabled": "Model metadata supports {capability}, but it is not enabled in this provider's modalities."
+    },
     "tooltips": {
       "providerId": "Provider ID",
       "modelId": "Model ID"

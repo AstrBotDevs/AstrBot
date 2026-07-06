@@ -54,28 +54,70 @@
             <v-list-item-subtitle class="provider-subtitle">
               <span class="model-name">{{ provider.model }}</span>
               <span class="meta-icons">
-                <v-icon v-if="supportsImageInput(provider)" size="13">
-                  mdi-eye-outline
-                </v-icon>
-                <v-icon v-if="supportsAudioInput(provider)" size="13">
-                  mdi-music-note-outline
-                </v-icon>
-                <v-icon v-if="supportsToolCall(provider)" size="13">
-                  mdi-wrench
-                </v-icon>
-                <v-icon v-if="supportsReasoning(provider)" size="13">
-                  mdi-brain
-                </v-icon>
+                <v-tooltip
+                  v-for="item in capabilityBadges(provider)"
+                  :key="item.key"
+                  location="top"
+                  max-width="320"
+                >
+                  <template #activator="{ props: badgeTooltipProps }">
+                    <span
+                      v-bind="badgeTooltipProps"
+                      class="meta-icon-badge"
+                      :class="{ 'meta-icon-badge--disabled': !item.enabled }"
+                      @click.stop
+                    >
+                      <v-icon size="13">{{ item.icon }}</v-icon>
+                    </span>
+                  </template>
+                  <span>{{ item.tooltip }}</span>
+                </v-tooltip>
+                <v-tooltip
+                  v-if="formatContextLimit(provider)"
+                  location="top"
+                  max-width="320"
+                >
+                  <template #activator="{ props: contextTooltipProps }">
+                    <span
+                      v-bind="contextTooltipProps"
+                      class="meta-context-badge"
+                      @click.stop
+                    >
+                      {{ formatContextLimit(provider) }}
+                    </span>
+                  </template>
+                  <span>{{
+                    tm("models.metadata.context", {
+                      tokens: formatContextLimit(provider),
+                    })
+                  }}</span>
+                </v-tooltip>
               </span>
             </v-list-item-subtitle>
             <template #append>
-              <v-icon
-                v-if="selectedProviderId === provider.id"
-                class="provider-selected-icon"
-                size="18"
-              >
-                mdi-check
-              </v-icon>
+              <div class="provider-menu-actions" @click.stop>
+                <v-tooltip location="top">
+                  <template #activator="{ props: testTooltipProps }">
+                    <v-btn
+                      v-bind="testTooltipProps"
+                      icon="mdi-connection"
+                      size="x-small"
+                      variant="text"
+                      :loading="testingProviderIds.includes(provider.id)"
+                      :disabled="testingProviderIds.includes(provider.id)"
+                      @click.stop="testProvider(provider)"
+                    />
+                  </template>
+                  <span>{{ tm("models.testButton") }}</span>
+                </v-tooltip>
+                <v-icon
+                  v-if="selectedProviderId === provider.id"
+                  class="provider-selected-icon"
+                  size="18"
+                >
+                  mdi-check
+                </v-icon>
+              </div>
             </template>
           </v-list-item>
         </v-list>
@@ -94,18 +136,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { providerApi } from "@/api/v1";
+import { useModuleI18n } from "@/i18n/composables";
+import { useToast } from "@/utils/toast";
+import {
+  formatContextLimit,
+  providerCapabilityBadges,
+  type ProviderMetadataSource,
+} from "@/utils/providerMetadata";
 
-interface ModelMetadata {
-    modalities?: { input?: string[] };
-    tool_call?: boolean;
-    reasoning?: boolean;
-}
-
-interface ProviderConfig {
+interface ProviderConfig extends ProviderMetadataSource {
   id: string;
   model: string;
   api_base?: string;
-  model_metadata?: ModelMetadata;
   enable?: boolean;
 }
 
@@ -127,6 +169,9 @@ const searchQuery = ref("");
 const menuOpen = ref(false);
 const loadingProviders = ref(false);
 const providersLoaded = ref(false);
+const testingProviderIds = ref<string[]>([]);
+const { tm } = useModuleI18n("features/provider");
+const { success: toastSuccess, error: toastError } = useToast();
 
 const variant = computed(() => props.variant);
 const menuLocation = computed(() =>
@@ -134,7 +179,9 @@ const menuLocation = computed(() =>
 );
 
 const selectedProvider = computed(() =>
-  providerConfigs.value.find((provider) => provider.id === selectedProviderId.value),
+  providerConfigs.value.find(
+    (provider) => provider.id === selectedProviderId.value,
+  ),
 );
 
 const triggerTitle = computed(() => {
@@ -183,9 +230,9 @@ async function loadProviderConfigs(force = false) {
   try {
     const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      providerConfigs.value = ((response.data.data || []) as unknown as ProviderConfig[]).filter(
-        (provider: ProviderConfig) => provider.enable !== false,
-      );
+      providerConfigs.value = (
+        (response.data.data || []) as unknown as ProviderConfig[]
+      ).filter((provider: ProviderConfig) => provider.enable !== false);
       providersLoaded.value = true;
       const selected = selectedProvider.value;
       if (selected) {
@@ -207,22 +254,36 @@ function selectProvider(provider: ProviderConfig) {
   menuOpen.value = false;
 }
 
-function supportsImageInput(provider: ProviderConfig): boolean {
-  const inputs = provider.model_metadata?.modalities?.input || [];
-  return inputs.includes("image");
+function capabilityBadges(provider: ProviderConfig) {
+  return providerCapabilityBadges(provider, tm);
 }
 
-function supportsAudioInput(provider: ProviderConfig): boolean {
-  const inputs = provider.model_metadata?.modalities?.input || [];
-  return inputs.includes("audio");
-}
-
-function supportsToolCall(provider: ProviderConfig): boolean {
-  return Boolean(provider.model_metadata?.tool_call);
-}
-
-function supportsReasoning(provider: ProviderConfig): boolean {
-  return Boolean(provider.model_metadata?.reasoning);
+async function testProvider(provider: ProviderConfig) {
+  if (testingProviderIds.value.includes(provider.id)) return;
+  testingProviderIds.value.push(provider.id);
+  try {
+    const startTime = performance.now();
+    const response = await providerApi.test(provider.id);
+    if (response.data.status === "ok" && response.data.data.error === null) {
+      const latency = Math.max(0, Math.round(performance.now() - startTime));
+      toastSuccess(
+        tm("models.testSuccessWithLatency", {
+          id: provider.id,
+          latency,
+        }),
+      );
+    } else {
+      throw new Error(response.data.data.error || tm("models.testError"));
+    }
+  } catch (error: any) {
+    toastError(
+      error.response?.data?.message || error.message || tm("models.testError"),
+    );
+  } finally {
+    testingProviderIds.value = testingProviderIds.value.filter(
+      (id) => id !== provider.id,
+    );
+  }
 }
 
 function getCurrentSelection() {
@@ -402,6 +463,35 @@ defineExpose({
   align-items: center;
   gap: 4px;
   color: rgba(var(--v-theme-on-surface), 0.5);
+}
+
+.meta-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.meta-icon-badge--disabled {
+  color: rgba(var(--v-theme-on-surface), 0.34);
+}
+
+.meta-context-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 16px;
+}
+
+.provider-menu-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .provider-selected-icon {

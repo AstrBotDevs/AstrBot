@@ -147,6 +147,17 @@
     "manualModelRequired": "请输入模型 ID",
     "manualModelExists": "该模型已存在",
     "configure": "配置",
+    "testButton": "测试模型",
+    "metadata": {
+      "image": "图像输入",
+      "audio": "音频输入",
+      "toolUse": "工具使用",
+      "reasoning": "推理",
+      "context": "{tokens} 上下文窗口",
+      "available": "模型 metadata 支持{capability}",
+      "enabled": "已启用{capability}",
+      "supportedDisabled": "模型 metadata 支持{capability}，但当前提供商的模型能力未启用。"
+    },
     "tooltips": {
       "providerId": "提供商 ID",
       "modelId": "模型 ID"
