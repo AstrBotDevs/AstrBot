@@ -24,6 +24,7 @@ from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
+from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.totp import (
     is_totp_enabled,
     revoke_user_trusted_devices,
@@ -1297,9 +1298,14 @@ class ProviderConfigService:
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
+        providers = copy.deepcopy(self.config.get("provider", []))
+        for provider in providers:
+            model_id = provider.get("model")
+            if isinstance(model_id, str) and model_id in LLM_METADATAS:
+                provider["model_metadata"] = LLM_METADATAS[model_id]
         return {
             "config_schema": config_schema,
-            "providers": self.config.get("provider", []),
+            "providers": providers,
             "provider_sources": self.config.get("provider_sources", []),
         }
 
@@ -1562,11 +1568,15 @@ class ProviderConfigService:
             if provider_type and effective_type != provider_type:
                 continue
             if provider.get("provider_source_id"):
-                providers.append(
-                    self.provider_manager.get_merged_provider_config(provider)
+                provider_response = self.provider_manager.get_merged_provider_config(
+                    provider
                 )
             else:
-                providers.append(copy.deepcopy(provider))
+                provider_response = copy.deepcopy(provider)
+            model_id = provider_response.get("model")
+            if isinstance(model_id, str) and model_id in LLM_METADATAS:
+                provider_response["model_metadata"] = LLM_METADATAS[model_id]
+            providers.append(provider_response)
         return {"providers": providers}
 
     def list_providers_for_dashboard_types(
@@ -1597,6 +1607,9 @@ class ProviderConfigService:
         )
         if provider is None:
             raise ValueError(f"Provider {provider_id} not found")
+        model_id = provider.get("model")
+        if isinstance(model_id, str) and model_id in LLM_METADATAS:
+            provider["model_metadata"] = LLM_METADATAS[model_id]
         return {"provider": provider}
 
     async def create_provider(self, config: dict, source_id: str | None = None) -> None:
