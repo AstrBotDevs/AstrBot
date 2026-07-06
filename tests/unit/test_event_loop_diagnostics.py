@@ -97,3 +97,38 @@ async def test_faulthandler_watchdog_writes_rotating_log(tmp_path, monkeypatch):
         encoding="utf-8"
     ) == "x" * 8
     assert any(isinstance(call, tuple) and call[0] == "dump" for call in calls)
+
+
+@pytest.mark.asyncio
+async def test_faulthandler_watchdog_survives_dump_failure(tmp_path, monkeypatch):
+    """The watchdog should keep running after faulthandler arm failures."""
+    log_path = tmp_path / "event_loop_watchdog.log"
+    armed_again = asyncio.Event()
+    calls = []
+
+    class FakeFaultHandler:
+        def cancel_dump_traceback_later(self):
+            calls.append("cancel")
+
+        def dump_traceback_later(self, timeout, repeat, file):
+            calls.append(("dump", timeout, repeat, file.name))
+            if len([call for call in calls if isinstance(call, tuple)]) == 1:
+                raise RuntimeError("boom")
+            armed_again.set()
+
+    fake_faulthandler = FakeFaultHandler()
+    monkeypatch.setattr(diagnostics, "faulthandler", fake_faulthandler)
+
+    task = asyncio.create_task(
+        diagnostics.faulthandler_event_loop_watchdog(
+            timeout=10,
+            interval=0.01,
+            dump_path=log_path,
+        )
+    )
+    await asyncio.wait_for(armed_again.wait(), timeout=1)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+    dump_calls = [call for call in calls if isinstance(call, tuple)]
+    assert len(dump_calls) >= 2

@@ -149,18 +149,23 @@ async def faulthandler_event_loop_watchdog(
     try:
         while True:
             faulthandler.cancel_dump_traceback_later()
-            output = dump_file or _open_watchdog_log_file(log_path, max_bytes)
-            should_close = dump_file is None
+            output: TextIO | None = None
+            should_close = False
             try:
+                output = dump_file or _open_watchdog_log_file(log_path, max_bytes)
+                should_close = dump_file is None
                 faulthandler.dump_traceback_later(
                     timeout,
                     repeat=False,
                     file=output,
                 )
                 await asyncio.sleep(interval)
+            except Exception as e:
+                logger.warning("Event loop faulthandler watchdog failed: %s", e)
+                await asyncio.sleep(interval)
             finally:
                 faulthandler.cancel_dump_traceback_later()
-                if should_close:
+                if should_close and output is not None:
                     output.close()
     finally:
         faulthandler.cancel_dump_traceback_later()
