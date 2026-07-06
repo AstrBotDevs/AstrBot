@@ -45,6 +45,23 @@ pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes cod
   color: var(--astrbot-code-color);
 }
 
+:root {
+  --astrbot-menu-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.v-overlay.v-menu {
+  .v-overlay__content > .v-card,
+  .v-overlay__content > .v-list {
+    border: 0 !important;
+    box-shadow: var(--astrbot-menu-shadow) !important;
+  }
+
+  .v-overlay__content .v-card,
+  .v-overlay__content .v-list {
+    border: 0 !important;
+  }
+}
+
 // Dark mode global overrides
 .v-theme--PurpleThemeDark {
   // Override code text color for dark mode

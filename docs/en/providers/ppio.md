@@ -38,4 +38,4 @@ Send the `/provider` command to the bot to switch to the PPIO Cloud provider you
 Error code: 400 - {'code': 400, 'message': '"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set', 'type': 'BadRequestError'}
 ```
 
-Temporarily disable all function calling tools with `/tool off_all`, or switch to a different model.
+Disable all calling tools in the WebUI, or switch to a different model.

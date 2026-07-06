@@ -322,8 +322,18 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         # "all tools", including runtime computer-use tools.
         if tools is None:
             toolset = ToolSet()
-            for registered_tool in llm_tools.func_list:
-                if isinstance(registered_tool, HandoffTool):
+            handoff_names = {
+                tool.name
+                for tool in getattr(tool_mgr, "func_list", llm_tools.func_list)
+                if isinstance(tool, HandoffTool)
+            }
+            full_tool_set = (
+                tool_mgr.get_full_tool_set()
+                if hasattr(tool_mgr, "get_full_tool_set")
+                else llm_tools.get_full_tool_set()
+            )
+            for registered_tool in full_tool_set:
+                if registered_tool.name in handoff_names:
                     continue
                 if registered_tool.active and tool_available_in_runtime(
                     registered_tool, runtime
@@ -596,8 +606,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             message_type=session.message_type,
         )
         cron_event.role = event.role
-        session_config = ctx.get_config(umo=event.unified_msg_origin)
-        provider_settings = session_config.get("provider_settings", {})
+        cfg = ctx.get_config(umo=event.unified_msg_origin) or {}
+        provider_settings = cfg.get("provider_settings") or {}
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
             streaming_response=provider_settings.get("stream", False),

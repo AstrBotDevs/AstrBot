@@ -4,14 +4,18 @@
     :content="threadedContent"
     :is-dark="isDark"
     :custom-html-tags="threadedCustomHtmlTags"
+    :final="!isStreaming"
+    :smooth-streaming="isStreaming ? 'auto' : false"
+    :fade="false"
     :typewriter="false"
-    :max-live-nodes="0"
+    :max-live-nodes="MARKDOWN_RENDER_MAX_LIVE_NODES"
   />
 </template>
 
 <script setup lang="ts">
 import { computed, provide } from "vue";
 import { MarkdownRender } from "markstream-vue";
+import { MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
 import type { ChatThread } from "@/composables/useMessages";
 
 const props = defineProps<{
@@ -20,6 +24,7 @@ const props = defineProps<{
   refs: { used?: Array<Record<string, unknown>> } | null;
   isDark: boolean;
   customHtmlTags: string[];
+  isStreaming?: boolean;
 }>();
 
 const emit = defineEmits<{

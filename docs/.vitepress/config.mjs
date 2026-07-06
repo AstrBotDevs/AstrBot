@@ -159,6 +159,7 @@ export default defineConfig({
             base: "/use",
             items: [
               { text: "WebUI", link: "/webui" },
+              { text: "CLI 指令", link: "/cli" },
               { text: "插件", link: "/plugin" },
               { text: "内置指令", link: "/command" },
               { text: "工具使用 Tools", link: "/function-calling" },
@@ -201,6 +202,15 @@ export default defineConfig({
                   { text: "杂项", link: "/guides/other" },
                   { text: "发布插件", link: "/plugin-publish" },
                   { text: "插件指南（旧）", link: "/plugin" },
+                ],
+              },
+              {
+                text: "插件市场规范",
+                base: "/dev/plugin-market",
+                collapsed: true,
+                items: [
+                  { text: "版本列表", link: "/" },
+                  { text: "2026-06-27", link: "/2026-06-27" },
                 ],
               },
               {
@@ -288,6 +298,7 @@ export default defineConfig({
             collapsed: false,
             items: [
               { text: "Package Manager", link: "/astrbot/package" },
+              { text: "Desktop Client", link: "/astrbot/desktop" },
               { text: "One-click Launcher", link: "/astrbot/launcher" },
               { text: "Docker", link: "/astrbot/docker" },
               { text: "Kubernetes", link: "/astrbot/kubernetes" },
@@ -404,6 +415,7 @@ export default defineConfig({
             collapsed: true,
             items: [
               { text: "WebUI", link: "/webui" },
+              { text: "CLI Commands", link: "/cli" },
               { text: "Plugins", link: "/plugin" },
               { text: "Built-in Commands", link: "/command" },
               { text: "Tool Use", link: "/function-calling" },
@@ -444,6 +456,15 @@ export default defineConfig({
                   { text: "HTML to Image", link: "/guides/html-to-pic" },
                   { text: "Session Control", link: "/guides/session-control" },
                   { text: "Publish Plugin", link: "/plugin-publish" },
+                ],
+              },
+              {
+                text: "Plugin Market Specification",
+                base: "/en/dev/plugin-market",
+                collapsed: true,
+                items: [
+                  { text: "Versions", link: "/" },
+                  { text: "2026-06-27", link: "/2026-06-27" },
                 ],
               },
               {

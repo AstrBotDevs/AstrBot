@@ -2,7 +2,7 @@
  * 指令操作方法 Composable
  */
 import { reactive } from 'vue';
-import axios from 'axios';
+import { commandApi } from '@/api/v1';
 import type { CommandItem, RenameDialogState, DetailsDialogState, TypeInfo, StatusInfo } from '../types';
 
 export function useCommandActions(
@@ -33,8 +33,7 @@ export function useCommandActions(
     errorMessage: string
   ) => {
     try {
-      const res = await axios.post('/api/commands/toggle', {
-        handler_full_name: cmd.handler_full_name,
+      const res = await commandApi.update(cmd.handler_full_name, {
         enabled: !cmd.enabled
       });
       if (res.data.status === 'ok') {
@@ -66,9 +65,8 @@ export function useCommandActions(
 
     renameDialog.loading = true;
     try {
-      const res = await axios.post('/api/commands/rename', {
-        handler_full_name: renameDialog.command.handler_full_name,
-        new_name: renameDialog.newName.trim(),
+      const res = await commandApi.update(renameDialog.command.handler_full_name, {
+        alias: renameDialog.newName.trim(),
         aliases: renameDialog.aliases.filter(a => a.trim())
       });
       if (res.data.status === 'ok') {
@@ -170,9 +168,8 @@ export function useCommandActions(
     errorMessage: string
   ) => {
     try {
-      const res = await axios.post('/api/commands/permission', {
-        handler_full_name: cmd.handler_full_name,
-        permission: permission
+      const res = await commandApi.update(cmd.handler_full_name, {
+        permission_group: permission
       });
       if (res.data.status === 'ok') {
         toast(successMessage, 'success');
@@ -203,4 +200,3 @@ export function useCommandActions(
     getRowProps
   };
 }
-

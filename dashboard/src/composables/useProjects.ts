@@ -1,6 +1,17 @@
 import { ref } from 'vue';
-import axios from 'axios';
+import { chatApi } from '@/api/v1';
 import type { Project } from '@/components/chat/ProjectList.vue';
+
+type WorkspaceType = 'session' | 'project' | 'custom';
+
+function projectErrorMessage(error: unknown, fallback: string) {
+    const responseMessage = (error as any)?.response?.data?.message;
+    if (typeof responseMessage === 'string' && responseMessage.trim()) {
+        return responseMessage;
+    }
+    const message = (error as Error)?.message;
+    return message || fallback;
+}
 
 export function useProjects() {
     const projects = ref<Project[]>([]);
@@ -8,7 +19,7 @@ export function useProjects() {
 
     async function getProjects() {
         try {
-            const res = await axios.get('/api/chatui_project/list');
+            const res = await chatApi.listProjects();
             if (res.data.status === 'ok') {
                 projects.value = res.data.data || [];
                 
@@ -18,43 +29,62 @@ export function useProjects() {
         }
     }
 
-    async function createProject(title: string, emoji?: string, description?: string) {
+    async function createProject(
+        title: string,
+        emoji?: string,
+        description?: string,
+        workspaceType: WorkspaceType = 'project',
+        workspacePath?: string
+    ) {
         try {
-            const res = await axios.post('/api/chatui_project/create', {
+            const res = await chatApi.createProject({
                 title,
                 emoji: emoji || '📁',
-                description
+                description,
+                workspace_type: workspaceType,
+                workspace_path: workspacePath
             });
             if (res.data.status === 'ok') {
                 await getProjects();
                 return res.data.data;
             }
+            throw new Error(res.data.message || 'Failed to create project');
         } catch (error) {
             console.error('Failed to create project:', error);
+            throw new Error(projectErrorMessage(error, 'Failed to create project'));
         }
     }
 
-    async function updateProject(projectId: string, title?: string, emoji?: string, description?: string) {
+    async function updateProject(
+        projectId: string,
+        title?: string,
+        emoji?: string,
+        description?: string,
+        workspaceType?: WorkspaceType,
+        workspacePath?: string
+    ) {
         try {
-            const res = await axios.post('/api/chatui_project/update', {
-                project_id: projectId,
+            const res = await chatApi.updateProject(projectId, {
                 title,
                 emoji,
-                description
+                description,
+                workspace_type: workspaceType,
+                workspace_path: workspacePath
             });
             if (res.data.status === 'ok') {
                 await getProjects();
+                return;
             }
+            throw new Error(res.data.message || 'Failed to update project');
         } catch (error) {
             console.error('Failed to update project:', error);
+            throw new Error(projectErrorMessage(error, 'Failed to update project'));
         }
     }
 
     async function deleteProject(projectId: string) {
         try {
-            const res = await axios.get('/api/chatui_project/delete', { 
-                params: { project_id: projectId }
-            });
+            const res = await chatApi.deleteProject(projectId);
             if (res.data.status === 'ok') {
                 await getProjects();
                 if (selectedProjectId.value === projectId) {
@@ -68,10 +98,7 @@ export function useProjects() {
 
     async function addSessionToProject(sessionId: string, projectId: string) {
         try {
-            const res = await axios.post('/api/chatui_project/add_session', {
-                session_id: sessionId,
-                project_id: projectId
-            });
+            const res = await chatApi.addProjectSession(projectId, sessionId);
             return res.data.status === 'ok';
         } catch (error) {
             console.error('Failed to add session to project:', error);
@@ -81,9 +108,7 @@ export function useProjects() {
 
     async function removeSessionFromProject(sessionId: string) {
         try {
-            const res = await axios.post('/api/chatui_project/remove_session', {
-                session_id: sessionId
-            });
+            const res = await chatApi.removeProjectSession(sessionId);
             return res.data.status === 'ok';
         } catch (error) {
             console.error('Failed to remove session from project:', error);
@@ -93,9 +118,7 @@ export function useProjects() {
 
     async function getProjectSessions(projectId: string) {
         try {
-            const res = await axios.get('/api/chatui_project/get_sessions', { 
-                params: { project_id: projectId }
-            });
+            const res = await chatApi.listProjectSessions(projectId);
             if (res.data.status === 'ok') {
                 return res.data.data || [];
             }

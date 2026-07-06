@@ -55,7 +55,9 @@ If you find this tedious, you can directly use administrator permissions, but it
 ![Generated URL location](https://files.astrbot.app/docs/source/images/discord/image-5.png)
 
 6. Enter your Discord server, your bot should now show as online
+
 ![Bot online](https://files.astrbot.app/docs/source/images/discord/image-7.png)
+
 @ mention the bot you just created (or don't mention it), type `/help`. If it responds successfully, the test is successful.
 
 ## Pre-acknowledgment Emoji

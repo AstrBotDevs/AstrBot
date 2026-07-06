@@ -10,7 +10,10 @@
     "packageLabel": "*Package name, e.g. llmtuner",
     "mirrorLabel": "Force PyPI repository URL (optional)",
     "mirrorHint": "Force PyPI repository URL > Config item `PyPI Repository Address`",
-    "installButton": "Install"
+    "installButton": "Install",
+    "installSuccess": "Installation successful.",
+    "installFailed": "Installation failed.",
+    "requestFailed": "Request failed."
   },
   "debugHint": {
     "text": "Debug logs can be enabled in \"Configuration File → System → Console Log Level\""
