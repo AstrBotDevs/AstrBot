@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import mcp
 import pytest
@@ -19,6 +20,7 @@ class _DummyEvent:
     def __init__(self, message_components: list[object] | None = None) -> None:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
         self.message_obj = SimpleNamespace(message=message_components or [])
+        self.role = "member"
 
     def get_extra(self, _key: str):
         return None
@@ -34,6 +36,15 @@ def _build_run_context(message_components: list[object] | None = None):
     event = _DummyEvent(message_components=message_components)
     ctx = SimpleNamespace(event=event, context=SimpleNamespace())
     return ContextWrapper(context=ctx)
+
+
+class _DoneRunner:
+    async def step_until_done(self, _max_step):
+        for item in ():
+            yield item
+
+    def get_final_llm_resp(self):
+        return SimpleNamespace(role="assistant", completion_text="done")
 
 
 def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():
@@ -352,6 +363,71 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
     assert len(results) == 1
     assert captured["tool_call_timeout"] == 120
+
+
+@pytest.mark.asyncio
+async def test_background_wakeup_passes_provider_settings_to_main_agent(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    provider_settings = {
+        "fallback_chat_models": ["fallback-provider"],
+        "request_max_retries": 3,
+        "stream": True,
+    }
+    captured: dict = {}
+
+    async def _fake_get_session_conv(**_kwargs):
+        return SimpleNamespace(history="[]")
+
+    async def _fake_build_main_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(agent_runner=_DoneRunner())
+
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent._get_session_conv",
+        _fake_get_session_conv,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_main_agent.build_main_agent",
+        _fake_build_main_agent,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.persist_agent_history",
+        AsyncMock(),
+    )
+
+    send_tool = FunctionTool(
+        name="send_message_to_user",
+        description="send",
+        parameters={"type": "object", "properties": {}},
+    )
+    context = SimpleNamespace(
+        get_config=lambda **_kwargs: {"provider_settings": provider_settings},
+        get_llm_tool_manager=lambda: SimpleNamespace(
+            get_builtin_tool=lambda _tool_cls: send_tool
+        ),
+        conversation_manager=SimpleNamespace(),
+    )
+    run_context = ContextWrapper(
+        context=SimpleNamespace(event=_DummyEvent([]), context=context),
+        tool_call_timeout=456,
+    )
+
+    await FunctionToolExecutor._wake_main_agent_for_background_result(
+        run_context,
+        task_id="task-id",
+        tool_name="long_tool",
+        result_text="ok",
+        tool_args={},
+        note="task finished",
+        summary_name="BackgroundTask",
+    )
+
+    config = captured["config"]
+    assert config.tool_call_timeout == 456
+    assert config.streaming_response == provider_settings["stream"]
+    assert config.provider_settings == provider_settings
+    assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
 
 
 @pytest.mark.asyncio

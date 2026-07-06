@@ -80,14 +80,18 @@
     </div>
     <div
       class="input-container"
+      :class="{
+        'is-multiline': inputIsMultiline,
+        'has-attachments': hasStagedAttachments,
+      }"
       :style="{
-        width: '85%',
-        maxWidth: '900px',
+        width: 'var(--chat-content-width, 76%)',
+        maxWidth: 'var(--chat-content-max-width, 760px)',
         margin: '0 auto',
         border: isDark ? 'none' : '1px solid #e0e0e0',
         borderRadius: '24px',
         boxShadow: isDark ? 'none' : '0px 2px 2px rgba(0, 0, 0, 0.1)',
-        backgroundColor: isDark ? '#2d2d2d' : 'transparent',
+        backgroundColor: isDark ? '#2d2d2d' : '#fff',
         position: 'relative',
         transition: 'min-height 0.2s ease, padding 0.2s ease',
       }"
@@ -160,7 +164,7 @@
           >
             <div
               class="attachment-icon"
-              :style="{ color: filePresentation(file).color }"
+              :style="{ '--attachment-color': filePresentation(file).color }"
             >
               <v-icon :icon="filePresentation(file).icon" size="24"></v-icon>
               <span class="attachment-ext">{{
@@ -188,58 +192,9 @@
         @select="handleCommandSelect"
         @update-selected-index="selectedCommandIndex = $event"
       />
-      <textarea
-        ref="inputField"
-        v-model="localPrompt"
-        @keydown="handleKeyDown"
-        @input="handleInput"
-        @compositionstart="handleCompositionStart"
-        @compositionend="handleCompositionEnd"
-        @compositioncancel="handleCompositionEnd"
-        @blur="handleBlur"
-        :disabled="disabled"
-        placeholder="Ask AstrBot..."
-        class="chat-textarea"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="sentences"
-        spellcheck="false"
-        style="
-          width: 100%;
-          resize: none;
-          outline: none;
-          border: 1px solid var(--v-theme-border);
-          border-radius: 12px;
-          padding: 12px 18px;
-          min-height: 34px;
-          max-height: 200px;
-          overflow-y: auto;
-          font-family: inherit;
-          font-size: 16px;
-          background-color: var(--v-theme-surface);
-          transition: height 0.16s ease;
-        "
-      ></textarea>
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 6px 14px;
-        "
-      >
-        <div
-          style="
-            display: flex;
-            justify-content: flex-start;
-            margin-top: 4px;
-            align-items: center;
-            gap: 8px;
-            min-width: 0;
-            flex: 1;
-            overflow: hidden;
-          "
-        >
+
+      <div class="composer-row">
+        <div class="input-left-actions">
           <!-- Settings Menu -->
           <StyledMenu
             offset="8"
@@ -309,27 +264,60 @@
             </v-list-item>
           </StyledMenu>
 
-          <!-- Provider/Model Selector Menu -->
-          <ProviderModelMenu
-            v-if="showProviderSelector"
-            ref="providerModelMenuRef"
-          />
         </div>
-        <div
-          style="
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 8px;
-            align-items: center;
-            flex-shrink: 0;
-          "
-        >
+        <div class="input-field-shell">
+          <input
+            v-if="!inputIsMultiline"
+            ref="inputField"
+            v-model="localPrompt"
+            @keydown="handleKeyDown"
+            @input="handleInput"
+            @compositionstart="handleCompositionStart"
+            @compositionend="handleCompositionEnd"
+            @compositioncancel="handleCompositionEnd"
+            @blur="handleBlur"
+            @paste="handlePaste"
+            :disabled="disabled"
+            :placeholder="tm('input.placeholder')"
+            class="chat-text-input"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="sentences"
+            spellcheck="false"
+            type="text"
+          />
+          <textarea
+            v-else
+            ref="inputField"
+            v-model="localPrompt"
+            @keydown="handleKeyDown"
+            @input="handleInput"
+            @compositionstart="handleCompositionStart"
+            @compositionend="handleCompositionEnd"
+            @compositioncancel="handleCompositionEnd"
+            @blur="handleBlur"
+            @paste="handlePaste"
+            :disabled="disabled"
+            :placeholder="tm('input.placeholder')"
+            class="chat-textarea"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="sentences"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <div class="input-right-actions">
           <input
             type="file"
             ref="imageInputRef"
             @change="handleFileSelect"
             style="display: none"
             multiple
+          />
+          <!-- Provider/Model Selector Menu -->
+          <ProviderModelMenu
+            v-if="props.showProviderSelector && providerSelectorAvailable"
+            ref="providerModelMenuRef"
           />
           <v-progress-circular
             v-if="disabled && !mobile"
@@ -341,7 +329,7 @@
           <!-- <v-btn @click="$emit('openLiveMode')"
                         icon
                         variant="text"
-                        color="purple" 
+                        color="purple"
                         size="small"
                     >
                         <v-icon icon="mdi-phone-in-talk" variant="text" plain></v-icon>
@@ -454,6 +442,7 @@ import { useConfirmDialog } from "@/utils/confirmDialog";
 import { useSpcodeProjectLoad } from "@/composables/useSpcodeProjectLoad";
 import { useSpcodePlanMode } from "@/composables/useSpcodePlanMode";
 import { useSpcodePlanModeLoad } from "@/composables/useSpcodePlanModeLoad";
+import { attachmentPresentation } from "./attachmentPresentation";
 import type { Session } from "@/composables/useSessions";
 import type { SuggestionCommand } from "./CommandSuggestion.vue";
 
@@ -484,6 +473,7 @@ interface Props {
   configId?: string | null;
   replyTo?: ReplyInfo | null;
   sendShortcut?: "enter" | "shift_enter";
+  showProviderSelector?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -493,6 +483,7 @@ const props = withDefaults(defineProps<Props>(), {
   stagedFiles: () => [],
   replyTo: null,
   sendShortcut: "shift_enter",
+  showProviderSelector: true,
 });
 
 const emit = defineEmits<{
@@ -518,15 +509,16 @@ const isDark = computed(
   () => useCustomizerStore().uiTheme === "PurpleThemeDark",
 );
 
-const inputField = ref<HTMLTextAreaElement | null>(null);
+const inputField = ref<HTMLInputElement | HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(
   null,
 );
-const showProviderSelector = ref(true);
+const providerSelectorAvailable = ref(true);
 const isReplyClosing = ref(false);
 const isDragging = ref(false);
 const isComposing = ref(false);
+const inputIsMultiline = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
 let dragLeaveTimeout: number | null = null;
 
@@ -778,62 +770,8 @@ const hasStagedAttachments = computed(() => {
   );
 });
 
-const fileTypeStyles: Record<
-  string,
-  { color: string; icon: string; label: string }
-> = {
-  pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
-  txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
-  md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
-  markdown: {
-    color: "#1976d2",
-    icon: "mdi-language-markdown-outline",
-    label: "MD",
-  },
-  doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
-  docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
-  xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
-  xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
-  csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
-  ppt: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPT" },
-  pptx: { color: "#d24726", icon: "mdi-file-powerpoint-box", label: "PPTX" },
-  zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
-  rar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "RAR" },
-  "7z": { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "7Z" },
-  tar: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "TAR" },
-  gz: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "GZ" },
-  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
-  yaml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YAML" },
-  yml: { color: "#6a1b9a", icon: "mdi-code-braces", label: "YML" },
-  js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
-  ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
-  html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
-  css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
-  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
-  java: { color: "#b07219", icon: "mdi-language-java", label: "JAVA" },
-  mp3: { color: "#00897b", icon: "mdi-file-music-outline", label: "MP3" },
-  wav: { color: "#00897b", icon: "mdi-file-music-outline", label: "WAV" },
-  flac: { color: "#00897b", icon: "mdi-file-music-outline", label: "FLAC" },
-  mp4: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MP4" },
-  mov: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "MOV" },
-  webm: { color: "#5e35b1", icon: "mdi-file-video-outline", label: "WEBM" },
-};
-
-function fileExtension(file: StagedFileInfo) {
-  const name = file.original_name || file.filename || "";
-  const extension = name.split(".").pop()?.toLowerCase() || "";
-  return extension === name.toLowerCase() ? "" : extension;
-}
-
 function filePresentation(file: StagedFileInfo) {
-  const extension = fileExtension(file);
-  return (
-    fileTypeStyles[extension] || {
-      color: "#607d8b",
-      icon: "mdi-file-document-outline",
-      label: extension ? extension.slice(0, 4).toUpperCase() : "FILE",
-    }
-  );
+  return attachmentPresentation(file);
 }
 
 // Ctrl+B 长按录音相关
@@ -858,11 +796,65 @@ const { mobile } = useDisplay();
 function autoResize() {
   const el = inputField.value;
   if (!el) return;
+  if (!(el instanceof HTMLTextAreaElement)) {
+    const shouldExpand =
+      localPrompt.value.includes("\n") ||
+      (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 4);
+    if (shouldExpand) {
+      const cursor = el.selectionStart ?? localPrompt.value.length;
+      inputIsMultiline.value = true;
+      nextTick(() => {
+        inputField.value?.focus();
+        inputField.value?.setSelectionRange(cursor, cursor);
+        autoResize();
+      });
+    }
+    return;
+  }
+  const isMobileViewport =
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 768px)").matches;
+  const viewportHeight =
+    typeof window !== "undefined" ? window.innerHeight : 900;
+  const minHeight = isMobileViewport ? 56 : 52;
+  const maxHeight = isMobileViewport
+    ? Math.min(220, Math.round(viewportHeight * 0.42))
+    : Math.min(420, Math.round(viewportHeight * 0.48));
+  if (!localPrompt.value) {
+    inputIsMultiline.value = false;
+    el.style.height = minHeight + "px";
+    return;
+  }
   el.style.height = "auto";
-  el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  const measuredHeight = el.scrollHeight;
+  const shouldUseMultiline =
+    localPrompt.value.includes("\n") || measuredHeight > minHeight + 8;
+  if (inputIsMultiline.value !== shouldUseMultiline) {
+    const cursor = el.selectionStart ?? localPrompt.value.length;
+    inputIsMultiline.value = shouldUseMultiline;
+    nextTick(() => {
+      inputField.value?.focus();
+      inputField.value?.setSelectionRange(cursor, cursor);
+      autoResize();
+    });
+    return;
+  }
+  el.style.height = shouldUseMultiline
+    ? Math.min(Math.max(measuredHeight, minHeight), maxHeight) + "px"
+    : minHeight + "px";
 }
 
-watch(localPrompt, () => {
+watch(
+  () => props.prompt,
+  (value) => {
+    if (!value) {
+      inputIsMultiline.value = false;
+    }
+    nextTick(autoResize);
+  },
+);
+
+watch(inputIsMultiline, () => {
   nextTick(autoResize);
 });
 
@@ -935,6 +927,21 @@ function handleKeyDown(e: KeyboardEvent) {
       emit("send");
     }
     return;
+  }
+
+  if (!inputIsMultiline.value) {
+    e.preventDefault();
+    const target = e.target as HTMLInputElement;
+    const start = target.selectionStart ?? localPrompt.value.length;
+    const end = target.selectionEnd ?? start;
+    localPrompt.value =
+      localPrompt.value.slice(0, start) + "\n" + localPrompt.value.slice(end);
+    inputIsMultiline.value = true;
+    nextTick(() => {
+      inputField.value?.focus();
+      inputField.value?.setSelectionRange(start + 1, start + 1);
+      autoResize();
+    });
   }
 }
 
@@ -1225,6 +1232,24 @@ function handleKeyUp(e: KeyboardEvent) {
 }
 
 function handlePaste(e: ClipboardEvent) {
+  const pastedText = e.clipboardData?.getData("text/plain") || "";
+  if (!inputIsMultiline.value && pastedText.includes("\n")) {
+    e.preventDefault();
+    const target = e.target as HTMLInputElement;
+    const start = target.selectionStart ?? localPrompt.value.length;
+    const end = target.selectionEnd ?? start;
+    localPrompt.value =
+      localPrompt.value.slice(0, start) +
+      pastedText +
+      localPrompt.value.slice(end);
+    inputIsMultiline.value = true;
+    nextTick(() => {
+      inputField.value?.focus();
+      const cursor = start + pastedText.length;
+      inputField.value?.setSelectionRange(cursor, cursor);
+      autoResize();
+    });
+  }
   emit("pasteImage", e);
 }
 
@@ -1284,7 +1309,7 @@ function handleConfigChange(payload: {
 }) {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
   const isInternal = runnerType === "internal" || runnerType === "local";
-  showProviderSelector.value = isInternal;
+  providerSelectorAvailable.value = isInternal;
   // 配置切换后重新获取指令列表和唤醒词
   if (payload.configId && payload.configId !== currentConfigId.value) {
     currentConfigId.value = payload.configId;
@@ -1293,7 +1318,7 @@ function handleConfigChange(payload: {
 }
 
 function getCurrentSelection() {
-  if (!showProviderSelector.value) {
+  if (!props.showProviderSelector || !providerSelectorAvailable.value) {
     return null;
   }
   return providerModelMenuRef.value?.getCurrentSelection();
@@ -1420,13 +1445,11 @@ watch(showPlanModeChip, async (visible) => {
 }, { immediate: false });
 
 onMounted(() => {
-  if (inputField.value) {
-    inputField.value.addEventListener("paste", handlePaste);
-  }
   document.addEventListener("keyup", handleKeyUp);
   document.addEventListener("visibilitychange", onVisibilityChange);
   // 预加载指令列表
   fetchCommands();
+  nextTick(autoResize);
   // 预加载 spcode 插件启用状态。`useSpcodeProjectLoad` 是单例,
   // 这里先 fetch 一次以便 onMounted 后 chip / 菜单的可见性判断
   // 不会因为插件状态尚未拉取而误判为"未启用"。后续 onMounted
@@ -1436,9 +1459,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  if (inputField.value) {
-    inputField.value.removeEventListener("paste", handlePaste);
-  }
   clearCompositionState();
   document.removeEventListener("keyup", handleKeyUp);
   document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -1538,12 +1558,15 @@ defineExpose({
   width: 36px !important;
   height: 36px !important;
   min-width: 36px !important;
-  border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
+  border: 0 !important;
+  border-color: transparent !important;
   background: transparent !important;
+  box-shadow: none !important;
 }
 
-.input-outline-control:hover {
-  border-color: rgba(var(--v-theme-on-surface), 0.34) !important;
+.input-outline-control:hover,
+.input-outline-control:focus-visible {
+  border-color: transparent !important;
   background: rgba(var(--v-theme-on-surface), 0.04) !important;
 }
 
@@ -1557,12 +1580,13 @@ defineExpose({
 }
 
 .input-area.is-dark .input-outline-control {
-  border-color: rgba(255, 255, 255, 0.22) !important;
+  border-color: transparent !important;
   background: transparent !important;
 }
 
-.input-area.is-dark .input-outline-control:hover {
-  border-color: rgba(255, 255, 255, 0.42) !important;
+.input-area.is-dark .input-outline-control:hover,
+.input-area.is-dark .input-outline-control:focus-visible {
+  border-color: transparent !important;
   background: rgba(255, 255, 255, 0.06) !important;
 }
 
@@ -1578,6 +1602,178 @@ defineExpose({
 .input-area.is-dark .input-action-btn:disabled {
   background: rgba(var(--v-theme-on-surface), 0.14) !important;
   color: rgba(var(--v-theme-on-surface), 0.4) !important;
+}
+
+.input-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 64px;
+  padding: 6px 12px 6px 14px !important;
+  border-color: #f0f0f0 !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.08) !important;
+}
+
+.input-container.is-multiline {
+  justify-content: flex-start;
+  padding: 16px 20px 14px !important;
+  border-radius: 34px !important;
+}
+
+.input-container.has-attachments {
+  justify-content: flex-start;
+  min-height: 130px;
+  padding: 14px 18px 10px !important;
+  border-radius: 30px !important;
+}
+
+.input-area.is-dark .input-container {
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: #2d2d2d !important;
+  box-shadow: none !important;
+}
+
+.reply-preview,
+.attachments-preview {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.composer-row {
+  width: 100%;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "left field right";
+  align-items: center;
+  column-gap: 10px;
+}
+
+.input-container.is-multiline .composer-row {
+  grid-template-areas:
+    "field field field"
+    "left . right";
+  row-gap: 10px;
+  align-items: end;
+}
+
+.input-field-shell {
+  grid-area: field;
+  min-width: 0;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+}
+
+.input-container.is-multiline .input-field-shell {
+  min-height: auto;
+  align-items: flex-start;
+}
+
+.chat-text-input,
+.chat-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 52px !important;
+  max-height: 72px !important;
+  margin: 0;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 18px !important;
+}
+
+.chat-text-input {
+  height: 52px !important;
+  padding: 0 !important;
+  line-height: normal !important;
+  overflow: hidden;
+}
+
+.chat-textarea {
+  max-height: min(48vh, 420px) !important;
+  padding: 12px 0 !important;
+  overflow-y: auto;
+  overflow-wrap: break-word;
+  line-height: 28px !important;
+  transition: height 0.16s ease;
+}
+
+.chat-text-input::placeholder,
+.chat-textarea::placeholder {
+  color: rgba(var(--v-theme-on-surface), 0.56);
+  opacity: 1;
+}
+
+.input-left-actions {
+  grid-area: left;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  min-width: auto !important;
+  margin-top: 0 !important;
+  overflow: visible !important;
+}
+
+.input-right-actions {
+  grid-area: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  gap: 10px;
+  margin-top: 0 !important;
+}
+
+.input-outline-control {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  border: 0 !important;
+  border-color: transparent !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+}
+
+.input-icon-btn {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  margin-right: 0;
+}
+
+.input-right-actions :deep(.provider-chip) {
+  height: 40px !important;
+  min-height: 40px !important;
+  border-radius: 999px !important;
+}
+
+.input-area:not(.is-dark) .input-action-btn {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  background: #8fcfb4 !important;
+  color: #fff !important;
+}
+
+.input-area:not(.is-dark) .input-action-btn:hover {
+  background: #7fc4a8 !important;
+}
+
+.input-area:not(.is-dark) .input-action-btn:disabled {
+  background: #f2f5f3 !important;
+  color: rgba(0, 0, 0, 0.18) !important;
 }
 
 /* 拖拽上传遮罩 */
@@ -1721,27 +1917,42 @@ defineExpose({
   max-height: 72px;
 }
 
+.input-container.has-attachments .attachments-preview {
+  margin: 0 0 8px;
+  padding: 0;
+}
+
 .attachment-card {
+  --attachment-color: #607d8b;
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  width: 220px;
-  height: 64px;
+  width: 210px;
+  height: 54px;
   flex: 0 0 auto;
   min-width: 0;
-  padding: 8px 34px 8px 10px;
+  padding: 7px 32px 7px 10px;
   overflow: hidden;
   color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-on-surface), 0.04);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  border: 0;
+  border-radius: 8px;
+}
+
+.file-preview {
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 14%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 62%
+  );
 }
 
 .image-preview {
-  width: 64px;
-  flex-basis: 64px;
+  width: 54px;
+  flex-basis: 54px;
   padding: 0;
   background: rgba(var(--v-theme-on-surface), 0.06);
 }
@@ -1750,7 +1961,7 @@ defineExpose({
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 11px;
+  border-radius: 8px;
 }
 
 .attachment-icon {
@@ -1761,6 +1972,7 @@ defineExpose({
   gap: 1px;
   flex-shrink: 0;
   min-width: 34px;
+  color: var(--attachment-color);
 }
 
 .attachment-icon--audio {
@@ -1775,6 +1987,7 @@ defineExpose({
   font-size: 10px;
   font-weight: 700;
   line-height: 12px;
+  color: var(--attachment-color);
 }
 
 .attachment-name {
@@ -1783,7 +1996,7 @@ defineExpose({
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
-  line-height: 18px;
+  line-height: 17px;
 }
 
 .remove-attachment-btn {
@@ -1840,44 +2053,176 @@ defineExpose({
 
 @media (max-width: 768px) {
   .input-area {
-    padding: 0 !important;
+    padding: 8px 0 0 !important;
+    border-top: 0;
   }
 
   .input-container {
-    width: 100% !important;
+    display: flex !important;
+    flex-direction: column;
+    justify-content: center;
+    width: calc(100% - 20px) !important;
     max-width: 100% !important;
-    border-bottom-left-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
+    min-height: 64px;
+    margin: 0 10px calc(8px + env(safe-area-inset-bottom)) !important;
+    padding: 6px 8px 6px 10px !important;
+    overflow: hidden;
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.14) !important;
+    border-radius: 999px !important;
+    background: #fff !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+  }
+
+  .input-container.is-multiline {
+    justify-content: flex-start;
+    min-height: 128px;
+    padding: 10px !important;
+    border-radius: 26px !important;
+  }
+
+  .input-container.has-attachments {
+    justify-content: flex-start;
+    min-height: 124px;
+    padding: 10px !important;
+    border-radius: 26px !important;
+  }
+
+  .input-area.is-dark .input-container {
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    background: #2d2d2d !important;
+    box-shadow: none !important;
+  }
+
+  .composer-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "left field right";
+    min-height: 52px;
+    row-gap: 0;
+    column-gap: 8px;
+    align-items: center;
+  }
+
+  .input-container.is-multiline .composer-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "field field"
+      "left right";
+    min-height: auto;
+    row-gap: 4px;
+  }
+
+  .input-field-shell {
+    min-height: 52px;
+    align-items: center;
+  }
+
+  .input-container.is-multiline .input-field-shell {
+    min-height: 56px;
+    align-items: flex-start;
+  }
+
+  .input-left-actions,
+  .input-right-actions {
+    margin-top: 0 !important;
+    align-items: center !important;
+  }
+
+  .input-right-actions {
+    gap: 6px;
   }
 
   .input-outline-control {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    border: 0 !important;
+    border-color: transparent !important;
+    border-radius: 50% !important;
   }
 
-  .input-area textarea,
+  .chat-text-input,
   .chat-textarea {
-    min-height: 28px !important;
-    max-height: 140px !important;
-    font-size: 16px !important;
-    line-height: 20px !important;
-    padding: 8px 14px 7px !important;
+    min-height: 52px !important;
+    max-height: 132px !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 18px !important;
+  }
+
+  .chat-text-input {
+    height: 52px !important;
+    padding: 0 2px !important;
+    line-height: normal !important;
+    overflow: hidden;
+  }
+
+  .chat-textarea {
+    max-height: min(42vh, 220px) !important;
+    padding: 4px 10px 2px !important;
+    line-height: 24px !important;
+    overflow-y: auto;
+  }
+
+  .chat-text-input::placeholder,
+  .chat-textarea::placeholder {
+    color: rgba(var(--v-theme-on-surface), 0.56);
+    opacity: 1;
+  }
+
+  .input-icon-btn {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    margin-right: 0;
+  }
+
+  .input-action-btn {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    border-radius: 50% !important;
+  }
+
+  .input-action-btn:not(:disabled) {
+    background: rgb(var(--v-theme-on-surface)) !important;
+    color: rgb(var(--v-theme-surface)) !important;
+  }
+
+  .input-action-btn:disabled {
+    background: rgba(var(--v-theme-on-surface), 0.04) !important;
+    color: rgba(var(--v-theme-on-surface), 0.18) !important;
+  }
+
+  :deep(.provider-chip) {
+    height: 38px !important;
+    min-height: 38px !important;
+    border-radius: 999px !important;
+    padding: 0 12px !important;
+    font-size: 14px !important;
+    border-color: rgba(var(--v-theme-on-surface), 0.18) !important;
+    background: transparent !important;
   }
 
   .attachments-preview {
-    margin: 8px 10px 0;
+    margin: 8px 16px 0;
     gap: 8px;
+  }
+
+  .input-container.has-attachments .attachments-preview {
+    margin: 0 0 8px;
   }
 
   .attachment-card {
     width: min(220px, calc(100vw - 28px));
-    height: 58px;
+    height: 54px;
   }
 
   .image-preview {
-    width: 58px;
-    flex-basis: 58px;
+    width: 54px;
+    flex-basis: 54px;
   }
 }
 

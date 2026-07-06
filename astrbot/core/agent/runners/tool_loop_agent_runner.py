@@ -538,6 +538,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     )
                                     break
 
+                                self._sanitize_malformed_tool_calls(resp)
                                 yield resp
                                 return
 
@@ -711,6 +712,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             tool_name=tool_name,
             streak=streak,
         )
+
+    def _sanitize_malformed_tool_calls(
+        self,
+        llm_resp: LLMResponse,
+    ) -> None:
+        """Normalize malformed tool call names.
+
+        Args:
+            llm_resp: The LLM response whose tool call lists should be sanitized.
+        """
+        llm_resp.tools_call_name = [
+            self.MALFORMED_TOOL_NAME_PLACEHOLDER
+            if tool_name is None or tool_name.strip() == ""
+            else tool_name
+            for tool_name in llm_resp.tools_call_name
+        ]
 
     @override
     async def step(self):
@@ -1364,6 +1381,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
                 if requery_resp:
                     llm_resp = requery_resp
+                    self._sanitize_malformed_tool_calls(llm_resp)
 
                 # If the re-query still returns no tool calls, and also does not have a meaningful assistant reply,
                 # we consider it as a failure of the LLM to follow the tool-use instruction,
@@ -1391,6 +1409,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     if repair_resp:
                         llm_resp = repair_resp
+                        self._sanitize_malformed_tool_calls(llm_resp)
 
         return llm_resp, subset
 

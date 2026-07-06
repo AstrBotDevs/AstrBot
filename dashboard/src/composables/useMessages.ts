@@ -40,6 +40,7 @@ export interface MessagePart {
   embedded_file?: { url?: string; filename?: string; attachment_id?: string };
   attachment_id?: string;
   filename?: string;
+  stored_filename?: string;
   tool_calls?: ToolCall[];
   [key: string]: unknown;
 }
@@ -269,20 +270,23 @@ export function useMessages(options: UseMessagesOptions) {
     if (part.embedded_url) return;
     let url: string;
     let cacheKey: string;
+    const storedFilename =
+      typeof part.stored_filename === "string" ? part.stored_filename : "";
+    const lookupFilename = storedFilename || part.filename || "";
     if (part.attachment_id) {
       cacheKey = `att:${part.attachment_id}`;
       url = fileApi.contentUrl(part.attachment_id);
-    } else if (part.filename) {
-      cacheKey = `file:${part.filename}`;
+    } else if (lookupFilename) {
+      cacheKey = `file:${lookupFilename}`;
       url = "";
     } else {
       return;
     }
     let promise = attachmentBlobCache.get(cacheKey);
     if (!promise) {
-      if (part.filename) {
+      if (!part.attachment_id && lookupFilename) {
         promise = fileApi
-          .getByName(part.filename)
+          .getByName(lookupFilename)
           .then((resp) => URL.createObjectURL(resp.data));
       } else {
         promise = fetchWithAuth(url).then(async (resp) => {
@@ -308,7 +312,7 @@ export function useMessages(options: UseMessagesOptions) {
         if (
           mediaTypes.includes(part.type) &&
           !part.embedded_url &&
-          (part.attachment_id || part.filename)
+          (part.attachment_id || part.stored_filename || part.filename)
         ) {
           tasks.push(resolvePartMedia(part));
         }
@@ -1184,13 +1188,21 @@ export function useMessages(options: UseMessagesOptions) {
 
     if (["image", "record", "file", "video"].includes(msgType)) {
       markMessageStarted(botRecord);
-      const filename = String(data)
+      const rawFilename = String(data)
         .replace("[IMAGE]", "")
         .replace("[RECORD]", "")
         .replace("[FILE]", "")
-        .replace("[VIDEO]", "")
-        .split("|", 1)[0];
+        .replace("[VIDEO]", "");
+      const separatorIndex = rawFilename.indexOf("|");
+      const storedFilename =
+        separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
+      const displayFilename =
+        separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
+      const filename = displayFilename || storedFilename;
       const mediaPart: MessagePart = { type: msgType, filename };
+      if (storedFilename && storedFilename !== filename) {
+        mediaPart.stored_filename = storedFilename;
+      }
       if (msgType !== "file") {
         resolvePartMedia(mediaPart).then(() => {
           messageContent(botRecord).message.push(mediaPart);

@@ -14,7 +14,7 @@ Behavior when `provider_settings.computer_use_require_admin=True`:
   implement them and the main agent does not expose them in local mode.
 - Member + local: read/grep are restricted to `data/skills`,
   plugin-provided `data/plugins/*/skills`,
-  `data/workspaces/{normalized_umo}`, and `/tmp/.astrbot`; write/edit are
+  the current session or project workspace, and `/tmp/.astrbot`; write/edit are
   restricted to the same local roots except plugin-provided Skills, which are
   read-only. Upload/download are denied by `check_admin_permission` if invoked.
 - Admin + sandbox: read/write/edit/grep are not path-restricted by this
@@ -28,8 +28,7 @@ When `computer_use_require_admin=False`, member behavior in this module matches
 admin behavior.
 
 Local path resolution rule:
-- In local runtime, relative paths are resolved under
-  `data/workspaces/{normalized_umo}`.
+- In local runtime, relative paths are resolved under the primary workspace.
 - In sandbox runtime, relative paths are passed through unchanged.
 """
 
@@ -71,6 +70,7 @@ from .util import (
     check_admin_permission,
     is_local_runtime,
     normalize_umo_for_workspace,
+    workspace_root_for_context,
 )
 
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
@@ -88,9 +88,13 @@ def _remote_basename(path: str) -> str:
     return path.replace("\\", "/").rstrip("/").split("/")[-1]
 
 
-def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> list[str]:
+def _restricted_env_path_labels(
+    umo: str,
+    *,
+    include_plugin_skills: bool,
+    current_workspace_root: Path | None = None,
+) -> list[str]:
     """Labels for the allowed directories in a local(not sandbox) and restricted(not admin) environment"""
-    normalized_umo = normalize_umo_for_workspace(umo)
     labels = [
         "data/skills",
     ]
@@ -98,7 +102,7 @@ def _restricted_env_path_labels(umo: str, *, include_plugin_skills: bool) -> lis
         labels.append("data/plugins/*/skills")
     labels.extend(
         [
-            f"data/workspaces/{normalized_umo}",
+            str(current_workspace_root or _workspace_root(umo)),
             get_astrbot_system_tmp_path(),
             get_astrbot_temp_path(),
         ]
@@ -128,22 +132,28 @@ def _plugin_skill_roots() -> tuple[Path, ...]:
     )
 
 
-def _read_allowed_roots(umo: str) -> tuple[Path, ...]:
+def _read_allowed_roots(
+    umo: str,
+    current_workspace_root: Path | None = None,
+) -> tuple[Path, ...]:
     """Non-admin users can only read files within these directories (and their subdirectories)"""
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
         *_plugin_skill_roots(),
-        _workspace_root(umo),
+        current_workspace_root or _workspace_root(umo),
         Path(get_astrbot_system_tmp_path()).resolve(strict=False),
         Path(get_astrbot_temp_path()).resolve(strict=False),
     )
 
 
-def _write_allowed_roots(umo: str) -> tuple[Path, ...]:
+def _write_allowed_roots(
+    umo: str,
+    current_workspace_root: Path | None = None,
+) -> tuple[Path, ...]:
     """Non-admin users cannot modify plugin-provided Skills."""
     return (
         Path(get_astrbot_skills_path()).resolve(strict=False),
-        _workspace_root(umo),
+        current_workspace_root or _workspace_root(umo),
         Path(get_astrbot_system_tmp_path()).resolve(strict=False),
         Path(get_astrbot_temp_path()).resolve(strict=False),
     )
@@ -160,7 +170,13 @@ def _is_restricted_env(context: ContextWrapper[AstrAgentContext]) -> bool:
     return require_admin and context.context.event.role != "admin"
 
 
-def _resolve_tool_path(path: str, *, local_env: bool, umo: str) -> str:
+def _resolve_tool_path(
+    path: str,
+    *,
+    local_env: bool,
+    umo: str,
+    current_workspace_root: Path | None = None,
+) -> str:
     normalized_path = path.strip()
     if not normalized_path:
         return normalized_path
@@ -168,16 +184,28 @@ def _resolve_tool_path(path: str, *, local_env: bool, umo: str) -> str:
     if candidate.is_absolute():
         return str(candidate.resolve(strict=False))
     if local_env:
-        return str((_workspace_root(umo) / candidate).resolve(strict=False))
+        return str(
+            ((current_workspace_root or _workspace_root(umo)) / candidate).resolve(
+                strict=False
+            )
+        )
     return normalized_path
 
 
-def _resolve_user_path(path: str, *, local_env: bool, umo: str) -> Path:
+def _resolve_user_path(
+    path: str,
+    *,
+    local_env: bool,
+    umo: str,
+    current_workspace_root: Path | None = None,
+) -> Path:
     candidate = Path(path).expanduser()
     if candidate.is_absolute():
         return candidate.resolve(strict=False)
     if local_env:
-        return (_workspace_root(umo) / candidate).resolve(strict=False)
+        return ((current_workspace_root or _workspace_root(umo)) / candidate).resolve(
+            strict=False
+        )
     return (Path.cwd() / candidate).resolve(strict=False)
 
 
@@ -186,8 +214,14 @@ def _is_path_within_allowed_roots(
     *,
     umo: str,
     allowed_roots: tuple[Path, ...],
+    current_workspace_root: Path | None = None,
 ) -> bool:
-    resolved = _resolve_user_path(path, local_env=True, umo=umo)
+    resolved = _resolve_user_path(
+        path,
+        local_env=True,
+        umo=umo,
+        current_workspace_root=current_workspace_root,
+    )
     return any(
         resolved == allowed_root or resolved.is_relative_to(allowed_root)
         for allowed_root in allowed_roots
@@ -220,19 +254,34 @@ def _normalize_rw_path(
     local_env: bool,
     umo: str,
     write: bool = False,
+    current_workspace_root: Path | None = None,
 ) -> str:
-    normalized_path = _resolve_tool_path(path, local_env=local_env, umo=umo)
+    normalized_path = _resolve_tool_path(
+        path,
+        local_env=local_env,
+        umo=umo,
+        current_workspace_root=current_workspace_root,
+    )
     if not normalized_path:
         raise ValueError("`path` must be a non-empty string.")
     if restricted:
-        allowed_roots = _write_allowed_roots(umo) if write else _read_allowed_roots(umo)
+        allowed_roots = (
+            _write_allowed_roots(umo, current_workspace_root)
+            if write
+            else _read_allowed_roots(umo, current_workspace_root)
+        )
     if restricted and not _is_path_within_allowed_roots(
         normalized_path,
         umo=umo,
         allowed_roots=allowed_roots,
+        current_workspace_root=current_workspace_root,
     ):
         allowed = ", ".join(
-            _restricted_env_path_labels(umo, include_plugin_skills=not write)
+            _restricted_env_path_labels(
+                umo,
+                include_plugin_skills=not write,
+                current_workspace_root=current_workspace_root,
+            )
         )
         access = "Write" if write else "Read"
         raise PermissionError(
@@ -302,6 +351,9 @@ class FileReadTool(FunctionTool):
     ) -> ToolExecResult:
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
+        current_workspace_root = (
+            await workspace_root_for_context(context) if local_env else None
+        )
         try:
             normalized_path = (
                 _normalize_rw_path(
@@ -309,6 +361,7 @@ class FileReadTool(FunctionTool):
                     restricted=restricted,
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
+                    current_workspace_root=current_workspace_root,
                 )
                 if local_env
                 else path.strip()
@@ -332,7 +385,10 @@ class FileReadTool(FunctionTool):
                 offset=offset,
                 limit=limit,
                 workspace_dir=(
-                    str(_workspace_root(context.context.event.unified_msg_origin))
+                    str(
+                        current_workspace_root
+                        or _workspace_root(context.context.event.unified_msg_origin)
+                    )
                     if local_env
                     else None
                 ),
@@ -374,6 +430,9 @@ class FileWriteTool(FunctionTool):
     ) -> ToolExecResult:
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
+        current_workspace_root = (
+            await workspace_root_for_context(context) if local_env else None
+        )
         try:
             normalized_path = (
                 _normalize_rw_path(
@@ -382,6 +441,7 @@ class FileWriteTool(FunctionTool):
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
                     write=True,
+                    current_workspace_root=current_workspace_root,
                 )
                 if local_env
                 else path.strip()
@@ -637,6 +697,9 @@ class FileEditTool(FunctionTool):
         restricted = _is_restricted_env(context)
         history_mgr = get_history_manager()
 
+        current_workspace_root = (
+            await workspace_root_for_context(context) if local_env else None
+        )
         try:
             if local_env:
                 normalized_path = _normalize_rw_path(
@@ -645,6 +708,7 @@ class FileEditTool(FunctionTool):
                     local_env=local_env,
                     umo=umo,
                     write=True,
+                    current_workspace_root=current_workspace_root,
                 )
             else:
                 normalized_path = path.strip()
@@ -1002,15 +1066,28 @@ class GrepTool(FunctionTool):
         restricted: bool,
         local_env: bool,
         umo: str,
+        current_workspace_root: Path | None = None,
     ) -> list[str]:
         normalized = (
-            [_resolve_tool_path(path, local_env=local_env, umo=umo)] if path else []
+            [
+                _resolve_tool_path(
+                    path,
+                    local_env=local_env,
+                    umo=umo,
+                    current_workspace_root=current_workspace_root,
+                )
+            ]
+            if path
+            else []
         )
         if not normalized:
             if restricted:
-                return [str(root) for root in _read_allowed_roots(umo)]
+                return [
+                    str(root)
+                    for root in _read_allowed_roots(umo, current_workspace_root)
+                ]
             if local_env:
-                return [str(_workspace_root(umo))]
+                return [str(current_workspace_root or _workspace_root(umo))]
             return ["."]
 
         if restricted:
@@ -1020,12 +1097,17 @@ class GrepTool(FunctionTool):
                 if not _is_path_within_allowed_roots(
                     path,
                     umo=umo,
-                    allowed_roots=_read_allowed_roots(umo),
+                    allowed_roots=_read_allowed_roots(umo, current_workspace_root),
+                    current_workspace_root=current_workspace_root,
                 )
             ]
             if disallowed:
                 allowed = ", ".join(
-                    _restricted_env_path_labels(umo, include_plugin_skills=True)
+                    _restricted_env_path_labels(
+                        umo,
+                        include_plugin_skills=True,
+                        current_workspace_root=current_workspace_root,
+                    )
                 )
                 blocked = ", ".join(disallowed)
                 raise PermissionError(
@@ -1052,6 +1134,9 @@ class GrepTool(FunctionTool):
 
         local_env = is_local_runtime(context)
         restricted = _is_restricted_env(context)
+        current_workspace_root = (
+            await workspace_root_for_context(context) if local_env else None
+        )
         try:
             search_paths = (
                 self._normalize_search_paths(
@@ -1059,6 +1144,7 @@ class GrepTool(FunctionTool):
                     restricted=restricted,
                     local_env=local_env,
                     umo=context.context.event.unified_msg_origin,
+                    current_workspace_root=current_workspace_root,
                 )
                 if local_env
                 else ([path.strip()] if path and path.strip() else ["."])
