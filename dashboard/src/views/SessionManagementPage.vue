@@ -1035,6 +1035,10 @@ export default {
   },
 
   mounted() {
+    const routeSearch = this.$route?.query?.search
+    if (typeof routeSearch === 'string' && routeSearch.trim()) {
+      this.searchQuery = routeSearch.trim()
+    }
     this.loadData()
     this.loadGroups()
     this.loadBatchProviders()

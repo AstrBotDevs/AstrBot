@@ -110,6 +110,7 @@ class SessionManagementService:
         page: int = 1,
         page_size: int = 10,
         search: str = "",
+        umo: str = "",
     ) -> tuple[dict, int]:
         umo_rules = {}
         config_mgr = self.core_lifecycle.astrbot_config_mgr
@@ -214,6 +215,11 @@ class SessionManagementService:
                     filtered_rules[umo_id] = rules
             umo_rules = filtered_rules
 
+        if umo:
+            umo_rules = {
+                umo_id: rules for umo_id, rules in umo_rules.items() if umo_id == umo
+            }
+
         total = len(umo_rules)
         all_umo_ids = list(umo_rules.keys())
         start_idx = (page - 1) * page_size
@@ -229,12 +235,14 @@ class SessionManagementService:
         page_size: int,
         search: str,
         include_available_options: bool = True,
+        umo: str = "",
     ) -> dict:
         page, page_size = self._normalize_page(page, page_size, default_page_size=10)
         umo_rules, total = await self.get_umo_rules(
             page=page,
             page_size=page_size,
             search=search,
+            umo=umo,
         )
 
         alias_map = await self.get_umo_alias_map(list(umo_rules.keys()))
@@ -333,6 +341,7 @@ class SessionManagementService:
         page: int,
         page_size: int,
         search: str,
+        umo: str = "",
     ) -> dict:
         """List UMO config overrides without editor option payloads.
 
@@ -348,6 +357,7 @@ class SessionManagementService:
             page=page,
             page_size=page_size,
             search=search,
+            umo=umo,
             include_available_options=False,
         )
 

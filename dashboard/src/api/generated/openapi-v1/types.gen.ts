@@ -2978,6 +2978,7 @@ export type ListSessionRulesData = {
         page?: number;
         page_size?: number;
         search?: string;
+        umo?: string;
     };
 };
 
@@ -3006,6 +3007,7 @@ export type ListSessionConfigOverridesData = {
         page?: number;
         page_size?: number;
         search?: string;
+        umo?: string;
     };
 };
 
@@ -3185,6 +3187,17 @@ export type ExportConversationsData = {
 export type ExportConversationsResponse = (unknown);
 
 export type ExportConversationsError = unknown;
+
+export type ListUmoWorkspaceFilesData = {
+    query: {
+        path?: string;
+        umo: string;
+    };
+};
+
+export type ListUmoWorkspaceFilesResponse = (SuccessEnvelope);
+
+export type ListUmoWorkspaceFilesError = unknown;
 
 export type GetStatsData = {
     query?: {

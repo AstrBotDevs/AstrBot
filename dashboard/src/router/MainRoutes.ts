@@ -80,6 +80,11 @@ const MainRoutes = {
       component: () => import('@/views/SessionManagementPage.vue')
     },
     {
+      name: 'Observer',
+      path: '/observer',
+      component: () => import('@/views/ObserverPage.vue')
+    },
+    {
       name: 'Persona',
       path: '/persona',
       component: () => import('@/views/PersonaPage.vue')

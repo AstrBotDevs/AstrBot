@@ -37,6 +37,7 @@ import zhCNPersona from './locales/zh-CN/features/persona.json';
 import zhCNCommand from './locales/zh-CN/features/command.json';
 import zhCNSubagent from './locales/zh-CN/features/subagent.json';
 import zhCNWelcome from './locales/zh-CN/features/welcome.json';
+import zhCNObserver from './locales/zh-CN/features/observer.json';
 
 import zhCNErrors from './locales/zh-CN/messages/errors.json';
 import zhCNSuccess from './locales/zh-CN/messages/success.json';
@@ -78,6 +79,7 @@ import enUSPersona from './locales/en-US/features/persona.json';
 import enUSCommand from './locales/en-US/features/command.json';
 import enUSSubagent from './locales/en-US/features/subagent.json';
 import enUSWelcome from './locales/en-US/features/welcome.json';
+import enUSObserver from './locales/en-US/features/observer.json';
 
 import enUSErrors from './locales/en-US/messages/errors.json';
 import enUSSuccess from './locales/en-US/messages/success.json';
@@ -119,6 +121,7 @@ import ruRUPersona from './locales/ru-RU/features/persona.json';
 import ruRUCommand from './locales/ru-RU/features/command.json';
 import ruRUSubagent from './locales/ru-RU/features/subagent.json';
 import ruRUWelcome from './locales/ru-RU/features/welcome.json';
+import ruRUObserver from './locales/ru-RU/features/observer.json';
 
 import ruRUErrors from './locales/ru-RU/messages/errors.json';
 import ruRUSuccess from './locales/ru-RU/messages/success.json';
@@ -167,7 +170,8 @@ export const translations = {
       persona: zhCNPersona,
       command: zhCNCommand,
       subagent: zhCNSubagent,
-      welcome: zhCNWelcome
+      welcome: zhCNWelcome,
+      observer: zhCNObserver
     },
     messages: {
       errors: zhCNErrors,
@@ -216,7 +220,8 @@ export const translations = {
       persona: enUSPersona,
       command: enUSCommand,
       subagent: enUSSubagent,
-      welcome: enUSWelcome
+      welcome: enUSWelcome,
+      observer: enUSObserver
     },
     messages: {
       errors: enUSErrors,
@@ -265,7 +270,8 @@ export const translations = {
       persona: ruRUPersona,
       command: ruRUCommand,
       subagent: ruRUSubagent,
-      welcome: ruRUWelcome
+      welcome: ruRUWelcome,
+      observer: ruRUObserver
     },
     messages: {
       errors: ruRUErrors,

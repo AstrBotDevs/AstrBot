@@ -88,6 +88,11 @@ const sidebarItem: menu[] = [
     icon: 'mdi-dots-horizontal',
     children: [
       {
+        title: 'core.navigation.observer',
+        icon: 'mdi-eye-outline',
+        to: '/observer'
+      },
+      {
         title: 'core.navigation.conversation',
         icon: 'mdi-database',
         to: '/conversation'

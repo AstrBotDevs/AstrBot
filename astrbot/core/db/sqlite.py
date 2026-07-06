@@ -312,6 +312,10 @@ class SQLiteDatabase(BaseDatabase):
                 base_query = base_query.where(
                     col(ConversationV2.platform_id).in_(platform_ids),
                 )
+            if kwargs.get("user_id"):
+                base_query = base_query.where(
+                    col(ConversationV2.user_id) == str(kwargs["user_id"]),
+                )
             if search_query:
                 search_query = search_query.encode("unicode_escape").decode("utf-8")
                 base_query = base_query.where(

@@ -1,0 +1,76 @@
+{
+  "title": "Observer",
+  "searchPlaceholder": "Search UMO, alias, or session ID",
+  "emptyTitle": "What do you want to inspect?",
+  "emptySubtitle": "Search a UMO to inspect its conversations, custom rules, workspace, and trace.",
+  "knownSources": "Message Sources",
+  "home": {
+    "recent": "Recent Sources",
+    "resources": "More Resources",
+    "noSources": "No message sources yet",
+    "noMatches": "No matching UMO",
+    "resourceCards": {
+      "rules": "Custom Rules",
+      "rulesHint": "Manage config overrides",
+      "conversation": "Conversation Viewer",
+      "conversationHint": "Browse conversation data",
+      "trace": "Trace",
+      "traceHint": "Inspect execution trace",
+      "stats": "Data Dashboard",
+      "statsHint": "View runtime metrics"
+    }
+  },
+  "detail": {
+    "title": "UMO Detail",
+    "config": "Config Profile",
+    "route": "Route",
+    "defaultConfig": "Default Config",
+    "noRoute": "No dedicated route",
+    "copy": "Copy UMO",
+    "openChat": "Open ChatUI",
+    "openConfig": "View config profile",
+    "configDrawerTitle": "Config Profile",
+    "configDrawerIdLabel": "Config ID"
+  },
+  "resources": {
+    "conversation": "Conversation",
+    "overrides": "Custom Rules",
+    "workspace": "Workspace",
+    "trace": "Trace"
+  },
+  "conversation": {
+    "title": "Conversation Preview",
+    "count": "{count} items",
+    "empty": "No conversation data",
+    "select": "Select a conversation to preview",
+    "latest": "Latest Conversation"
+  },
+  "tokens": {
+    "title": "Token Usage",
+    "window": "24H",
+    "unit": "Last 24 hours"
+  },
+  "overrides": {
+    "title": "Config Overrides",
+    "count": "{count} overrides",
+    "empty": "No config overrides for this UMO",
+    "open": "Manage Custom Rules"
+  },
+  "workspace": {
+    "title": "Workspace",
+    "empty": "Workspace is empty",
+    "missing": "Workspace is unavailable",
+    "copyPath": "Copy workspace path",
+    "parent": "Parent folder",
+    "root": "Root"
+  },
+  "trace": {
+    "title": "Trace",
+    "hint": "For now this shows the full trace stream. UMO filtering can be added later."
+  },
+  "actions": {
+    "refresh": "Refresh",
+    "open": "Open",
+    "back": "Back"
+  }
+}

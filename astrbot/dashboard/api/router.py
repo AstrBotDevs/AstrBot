@@ -28,6 +28,7 @@ from .subagents import router as subagents_router
 from .t2i import router as t2i_router
 from .tools import router as tools_router
 from .updates import router as updates_router
+from .workspaces import router as workspaces_router
 
 API_V1_PREFIX = "/api/v1"
 
@@ -58,6 +59,7 @@ def build_api_router() -> APIRouter:
     router.include_router(t2i_router)
     router.include_router(personas_router)
     router.include_router(updates_router)
+    router.include_router(workspaces_router)
     router.include_router(open_api_router)
     router.include_router(live_chat_router)
     return router

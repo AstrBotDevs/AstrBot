@@ -1,0 +1,76 @@
+{
+  "title": "Observer",
+  "searchPlaceholder": "搜索 UMO、备注或会话 ID",
+  "emptyTitle": "想查什么？",
+  "emptySubtitle": "搜索一个 UMO，查看它关联的对话、自定义规则、工作区与追踪。",
+  "knownSources": "消息来源",
+  "home": {
+    "recent": "最近来源",
+    "resources": "更多资源",
+    "noSources": "暂无可用消息来源",
+    "noMatches": "没有匹配的 UMO",
+    "resourceCards": {
+      "rules": "自定义规则",
+      "rulesHint": "管理配置覆盖",
+      "conversation": "对话数据查看器",
+      "conversationHint": "查看历史对话",
+      "trace": "追踪",
+      "traceHint": "查看执行链路",
+      "stats": "数据大盘",
+      "statsHint": "查看运行指标"
+    }
+  },
+  "detail": {
+    "title": "UMO Detail",
+    "config": "配置文件",
+    "route": "路由",
+    "defaultConfig": "默认配置",
+    "noRoute": "未设置专属路由",
+    "copy": "复制 UMO",
+    "openChat": "打开 ChatUI",
+    "openConfig": "查看配置文件",
+    "configDrawerTitle": "配置文件",
+    "configDrawerIdLabel": "配置 ID"
+  },
+  "resources": {
+    "conversation": "对话",
+    "overrides": "自定义规则",
+    "workspace": "工作区",
+    "trace": "追踪"
+  },
+  "conversation": {
+    "title": "对话预览",
+    "count": "{count} 条",
+    "empty": "暂无对话数据",
+    "select": "选择对话以预览",
+    "latest": "最近对话"
+  },
+  "tokens": {
+    "title": "消耗 Token",
+    "window": "24H",
+    "unit": "近 24 小时"
+  },
+  "overrides": {
+    "title": "配置覆盖",
+    "count": "{count} 项覆盖项",
+    "empty": "该 UMO 暂无配置覆盖项",
+    "open": "管理自定义规则"
+  },
+  "workspace": {
+    "title": "工作区",
+    "empty": "工作区为空",
+    "missing": "工作区暂不可用",
+    "copyPath": "复制工作区路径",
+    "parent": "上级目录",
+    "root": "根目录"
+  },
+  "trace": {
+    "title": "追踪",
+    "hint": "当前先展示全量追踪流，UMO 过滤后续再接入。"
+  },
+  "actions": {
+    "refresh": "刷新",
+    "open": "打开",
+    "back": "返回"
+  }
+}

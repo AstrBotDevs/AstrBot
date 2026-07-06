@@ -587,6 +587,23 @@ const weekdayOptions = computed(() => [
   { label: tm("form.weekdays.saturday"), value: 6 },
 ]);
 
+const CRON_WEEKDAY_ALIASES: Record<string, number> = {
+  sun: 0,
+  sunday: 0,
+  mon: 1,
+  monday: 1,
+  tue: 2,
+  tuesday: 2,
+  wed: 3,
+  wednesday: 3,
+  thu: 4,
+  thursday: 4,
+  fri: 5,
+  friday: 5,
+  sat: 6,
+  saturday: 6,
+};
+
 function toast(
   message: string,
   color: "success" | "error" | "warning" = "success",
@@ -692,23 +709,17 @@ function scheduleProductLabel(item: any): string {
   const minuteNumber = Number(minute);
   const hourNumber = Number(hour);
   const dayOfMonthNumber = Number(dayOfMonth);
-  const dayOfWeekNumber = Number(dayOfWeek);
   if (!isCronTime(minuteNumber, hourNumber)) {
     return tm("card.customCron", { cron });
   }
-  const time = `${padTimePart(hourNumber)}:${padTimePart(minuteNumber)}`;
+  const time = formatScheduleTime(hourNumber, minuteNumber);
   if (dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
     return tm("card.dailyAt", { time });
   }
-  if (
-    dayOfMonth === "*" &&
-    month === "*" &&
-    Number.isInteger(dayOfWeekNumber) &&
-    dayOfWeekNumber >= 0 &&
-    dayOfWeekNumber <= 6
-  ) {
+  const weekDays = parseCronWeekdayField(dayOfWeek);
+  if (dayOfMonth === "*" && month === "*" && weekDays?.length) {
     return tm("card.weeklyAt", {
-      day: weekdayText(dayOfWeekNumber),
+      day: weekdayListText(weekDays),
       time,
     });
   }
@@ -1005,6 +1016,83 @@ function isCronTime(minute: number, hour: number): boolean {
   );
 }
 
+function formatScheduleTime(hour: number, minute: number): string {
+  return `${hour}:${padTimePart(minute)}`;
+}
+
+function parseCronWeekdayValue(value: string): number | null {
+  const normalized = value.trim().toLowerCase();
+  if (normalized in CRON_WEEKDAY_ALIASES) {
+    return CRON_WEEKDAY_ALIASES[normalized];
+  }
+  if (!/^\d+$/.test(normalized)) {
+    return null;
+  }
+  const day = Number(normalized);
+  if (!Number.isInteger(day) || day < 0 || day > 7) {
+    return null;
+  }
+  return day === 7 ? 0 : day;
+}
+
+function parseCronWeekdayField(field: string): number[] | null {
+  const normalized = field.trim().toLowerCase();
+  if (!normalized || normalized === "*" || normalized === "?") {
+    return null;
+  }
+
+  const days: number[] = [];
+  for (const token of normalized.split(",")) {
+    const item = token.trim();
+    if (!item || item.includes("/")) {
+      return null;
+    }
+
+    const rangeParts = item.split("-");
+    if (rangeParts.length > 2) {
+      return null;
+    }
+    if (rangeParts.length === 2) {
+      const start = parseCronWeekdayValue(rangeParts[0]);
+      const end = parseCronWeekdayValue(rangeParts[1]);
+      if (start === null || end === null) {
+        return null;
+      }
+      if (start <= end) {
+        for (let day = start; day <= end; day += 1) {
+          days.push(day);
+        }
+      } else {
+        for (let day = start; day <= 6; day += 1) {
+          days.push(day);
+        }
+        for (let day = 0; day <= end; day += 1) {
+          days.push(day);
+        }
+      }
+      continue;
+    }
+
+    const day = parseCronWeekdayValue(item);
+    if (day === null) {
+      return null;
+    }
+    days.push(day);
+  }
+
+  const uniqueDays: number[] = [];
+  for (const day of days) {
+    if (!uniqueDays.includes(day)) {
+      uniqueDays.push(day);
+    }
+  }
+  return uniqueDays.length ? uniqueDays : null;
+}
+
+function weekdayListText(days: number[]): string {
+  return days.map((day) => weekdayText(day)).join(tm("card.weekdaySeparator"));
+}
+
 function buildCronExpression(): string {
   const mode = newJob.value.schedule_mode;
   if (mode === "interval") {
@@ -1066,7 +1154,6 @@ function readScheduleFromJob(job: any) {
   const minuteNumber = Number(minute);
   const hourNumber = Number(hour);
   const dayOfMonthNumber = Number(dayOfMonth);
-  const dayOfWeekNumber = Number(dayOfWeek);
   const hasCronTime = isCronTime(minuteNumber, hourNumber);
   const time = hasCronTime
     ? `${padTimePart(hourNumber)}:${padTimePart(minuteNumber)}`
@@ -1128,18 +1215,17 @@ function readScheduleFromJob(job: any) {
     };
   }
 
+  const weekDays = parseCronWeekdayField(dayOfWeek);
   if (
     hasCronTime &&
     dayOfMonth === "*" &&
     month === "*" &&
-    Number.isInteger(dayOfWeekNumber) &&
-    dayOfWeekNumber >= 0 &&
-    dayOfWeekNumber <= 6
+    weekDays?.length === 1
   ) {
     return {
       ...fallback,
       schedule_mode: "weekly" as ScheduleMode,
-      weekly_day: dayOfWeekNumber,
+      weekly_day: weekDays[0],
       weekly_time: time,
     };
   }

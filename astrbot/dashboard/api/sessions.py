@@ -173,6 +173,7 @@ async def list_session_config_overrides(
     page: int = Query(1),
     page_size: int = Query(10),
     search: str = Query(""),
+    umo: str = Query(""),
     _auth: AuthContext = Depends(require_data_scope),
     service: SessionManagementService = Depends(get_service),
 ):
@@ -182,6 +183,7 @@ async def list_session_config_overrides(
                 page=page,
                 page_size=page_size,
                 search=search.strip(),
+                umo=umo.strip(),
             )
         )
     except SessionManagementServiceError as exc:

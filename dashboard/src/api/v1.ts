@@ -34,6 +34,7 @@ import {
   type GhproxyTestRequest,
   type KnowledgeBaseCreateRequest,
   type KnowledgeBaseRequest,
+  type ListUmoWorkspaceFilesData,
   type LoginRequest,
   type ListConversationsData,
   type McpServerConfig,
@@ -166,6 +167,7 @@ export interface SessionRuleListParams {
   page?: number;
   page_size?: number;
   search?: string;
+  umo?: string;
 }
 
 export interface ChatSessionListParams {
@@ -1701,6 +1703,16 @@ export const conversationApi = {
       body: payload,
       responseType: 'blob',
     }) as Promise<AxiosResponse<Blob>>;
+  },
+};
+
+export const workspaceApi = {
+  byUmo(params: ListUmoWorkspaceFilesData['query']) {
+    return typed<any>(
+      openApiV1.listUmoWorkspaceFiles({
+        query: params,
+      }),
+    );
   },
 };
 

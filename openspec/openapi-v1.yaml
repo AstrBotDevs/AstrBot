@@ -3862,6 +3862,10 @@ paths:
           in: query
           schema:
             type: string
+        - name: umo
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -3906,6 +3910,10 @@ paths:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
         - name: search
+          in: query
+          schema:
+            type: string
+        - name: umo
           in: query
           schema:
             type: string
@@ -4195,6 +4203,27 @@ paths:
       responses:
         "200":
           description: Exported conversation data
+
+  /api/v1/workspaces/by-umo:
+    get:
+      tags: [Workspaces]
+      summary: List workspace files for one UMO
+      operationId: listUmoWorkspaceFiles
+      x-astrbot-scope: data
+      parameters:
+        - name: umo
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: path
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
 
   /api/v1/stats:
     get:
