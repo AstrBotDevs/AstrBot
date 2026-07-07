@@ -1066,7 +1066,7 @@ onMounted(async () => {
       icon
       rounded="sm"
       variant="flat"
-      @click.stop="customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar)"
+      @click.stop="customizer.SET_SIDEBAR_DRAWER"
     >
       <v-icon>mdi-menu</v-icon>
     </v-btn>

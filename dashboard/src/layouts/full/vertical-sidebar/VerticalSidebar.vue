@@ -123,8 +123,11 @@ const dragHeaderBackground = computed(() => isDark.value ? themeColors.value.mcp
 const frameBorder = computed(() => `1px solid ${isDark.value ? (themeColors.value.borderLight || '#ccc') : '#ccc'}`);
 
 const isMobile = window.innerWidth < 768;
+const isRailSidebar = !isMobile;
 if (isMobile) {
   customizer.Sidebar_drawer = false;
+} else {
+  customizer.SET_MINI_SIDEBAR(true);
 }
 
 const dragPos = ref({ left: '', top: '' });
@@ -326,46 +329,64 @@ function openChangelogDialog() {
     app
     class="leftSidebar"
     :width="sidebarWidth"
-    :rail="customizer.mini_sidebar"
+    :rail="isRailSidebar"
   >
     <div class="sidebar-container">
-      <v-list :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': customizer.mini_sidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
+      <v-list :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': isRailSidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
         <template v-for="(item, i) in sidebarMenu" :key="item.title || item.to || `sidebar-item-${i}`">
-          <NavItem :item="item" class="leftPadding" />
+          <NavItem :item="item" class="leftPadding" :rail="isRailSidebar" />
         </template>
       </v-list>
-      <div class="sidebar-footer" v-if="!customizer.mini_sidebar">
-        <v-btn class="sidebar-footer-btn" size="small" variant="tonal" color="primary" to="/settings" prepend-icon="mdi-cog">
-          {{ t('core.navigation.settings') }}
+      <div class="sidebar-footer">
+        <v-btn class="sidebar-footer-btn" :class="{ 'sidebar-footer-icon-btn': isRailSidebar }" :size="isRailSidebar ? 'default' : 'small'"
+          :variant="isRailSidebar ? 'text' : 'tonal'" :color="isRailSidebar ? undefined : 'primary'" to="/settings"
+          :prepend-icon="isRailSidebar ? undefined : 'mdi-cog'" :aria-label="t('core.navigation.settings')">
+          <v-icon v-if="isRailSidebar" icon="mdi-cog" />
+          <template v-else>{{ t('core.navigation.settings') }}</template>
+          <v-tooltip v-if="isRailSidebar" activator="parent" location="right" :text="t('core.navigation.settings')" open-delay="180" />
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-note-text-outline"
-          @click="openChangelogDialog">
-          {{ t('core.navigation.changelog') }}
+        <v-btn class="sidebar-footer-btn" :class="{ 'sidebar-footer-icon-btn': isRailSidebar }" :size="isRailSidebar ? 'default' : 'small'"
+          variant="text" :prepend-icon="isRailSidebar ? undefined : 'mdi-note-text-outline'"
+          :aria-label="t('core.navigation.changelog')" @click="openChangelogDialog">
+          <v-icon v-if="isRailSidebar" icon="mdi-note-text-outline" />
+          <template v-else>{{ t('core.navigation.changelog') }}</template>
+          <v-tooltip v-if="isRailSidebar" activator="parent" location="right" :text="t('core.navigation.changelog')" open-delay="180" />
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-book-open-variant"
-          @click="toggleIframe">
-          {{ t('core.navigation.documentation') }}
+        <v-btn class="sidebar-footer-btn" :class="{ 'sidebar-footer-icon-btn': isRailSidebar }" :size="isRailSidebar ? 'default' : 'small'"
+          variant="text" :prepend-icon="isRailSidebar ? undefined : 'mdi-book-open-variant'"
+          :aria-label="t('core.navigation.documentation')" @click="toggleIframe">
+          <v-icon v-if="isRailSidebar" icon="mdi-book-open-variant" />
+          <template v-else>{{ t('core.navigation.documentation') }}</template>
+          <v-tooltip v-if="isRailSidebar" activator="parent" location="right" :text="t('core.navigation.documentation')" open-delay="180" />
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-frequently-asked-questions"
-          @click="openFaqLink">
-          {{ t('core.navigation.faq') }}
+        <v-btn class="sidebar-footer-btn" :class="{ 'sidebar-footer-icon-btn': isRailSidebar }" :size="isRailSidebar ? 'default' : 'small'"
+          variant="text" :prepend-icon="isRailSidebar ? undefined : 'mdi-frequently-asked-questions'"
+          :aria-label="t('core.navigation.faq')" @click="openFaqLink">
+          <v-icon v-if="isRailSidebar" icon="mdi-frequently-asked-questions" />
+          <template v-else>{{ t('core.navigation.faq') }}</template>
+          <v-tooltip v-if="isRailSidebar" activator="parent" location="right" :text="t('core.navigation.faq')" open-delay="180" />
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-github"
+        <v-btn class="sidebar-footer-btn" :class="{ 'sidebar-footer-icon-btn': isRailSidebar }" :size="isRailSidebar ? 'default' : 'small'"
+          variant="text" :prepend-icon="isRailSidebar ? undefined : 'mdi-github'" :aria-label="t('core.navigation.github')"
           @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
-          {{ t('core.navigation.github') }}
-           <v-chip
-            v-if="starCount"
-            size="x-small"
-            variant="outlined"
-            class="ml-2"
-            style="font-weight: normal;"
-          >{{ formatNumber(starCount) }}</v-chip>
+          <v-icon v-if="isRailSidebar" icon="mdi-github" />
+          <template v-else>
+            {{ t('core.navigation.github') }}
+             <v-chip
+              v-if="starCount"
+              size="x-small"
+              variant="outlined"
+              class="ml-2"
+              style="font-weight: normal;"
+            >{{ formatNumber(starCount) }}</v-chip>
+          </template>
+          <v-tooltip v-if="isRailSidebar" activator="parent" location="right" :text="t('core.navigation.github')" open-delay="180" />
         </v-btn>
       </div>
     </div>
     
     <div 
-      v-if="!customizer.mini_sidebar && customizer.Sidebar_drawer"
+      v-if="!isRailSidebar && !isMobile && customizer.Sidebar_drawer"
       class="sidebar-resize-handle"
       @mousedown="startSidebarResize"
       :class="{ 'resizing': isResizing }"
