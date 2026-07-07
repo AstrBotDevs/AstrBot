@@ -11,12 +11,12 @@
       when the spcode plugin is enabled. Polls every 30 s for live
       updates (see the setInterval in the script section).
     -->
-    <div
-          v-if="showSpcodeIndicator"
-          class="input-area__status-row"
-        >
-          <SpcodeProjectIndicator @open-load-dialog="openLoadDialog" />
-          <!--
+    <div v-if="showSpcodeIndicator" class="input-area__status-row">
+      <div class="input-area__status-row__left">
+        <SpcodeProjectIndicator @open-load-dialog="openLoadDialog" />
+        <SpcodeCodegraphChip @open-codegraph-dialog="openCodegraphLoadDialog" />
+      </div>
+      <!--
             Right-side group: keeps the plan-mode chip visually adjacent to
             the git-diff chip regardless of which of the two is shown.
             Without this wrapper, .input-area__status-row's
@@ -25,58 +25,65 @@
             enabling the git-diff chip pushes the plan chip into the
             middle of the row.
           -->
-          <div class="input-area__status-row__right">
-            <SpcodePlanModeChip
-              v-if="showPlanModeChip"
-              @toggle="handlePlanModeToggle"
-            />
-            <GitDiffChip
-              v-if="spcodeStatus.status.value.loaded"
-              @open-diff-sidebar="emit('open-diff-sidebar')"
-            />
-            <!--
+      <div class="input-area__status-row__right">
+        <div class="input-area__status-row__chips-stack">
+          <SpcodePlanModeChip
+            v-if="showPlanModeChip"
+            @toggle="handlePlanModeToggle"
+          />
+          <GitDiffChip
+            v-if="spcodeStatus.status.value.loaded"
+            @open-diff-sidebar="emit('open-diff-sidebar')"
+          />
+        </div>
+        <!--
               Pending inline file-comments chip. Hidden on mobile
               (< md breakpoint) to keep the input row uncluttered.
               The main button opens the preview dialog; the inline
               ✕ button (visible only on chip hover) clears all
               comments via the confirmDialog plugin.
             -->
-            <div
-              v-if="fileComments.totalCount.value > 0"
-              class="comment-count-chip d-none d-md-flex"
-              :class="{ 'comment-count-chip--hovered': chipHovered }"
-              @mouseenter="chipHovered = true"
-              @mouseleave="chipHovered = false"
-            >
-              <button
-                type="button"
-                class="comment-count-chip__main"
-                :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.previewDialog.openWithCount', { count: fileComments.totalCount.value })"
-                @click="openPreview"
-              >
-                <v-icon size="14" start>mdi-comment-text-outline</v-icon>
-                {{ tm("spcodeProjectLoad.fileBrowser.comment.countLabel", { count: fileComments.totalCount.value }) }}
-                <v-tooltip activator="parent" location="top">
-                  {{ tm("spcodeProjectLoad.fileBrowser.comment.countTooltip") }}
-                </v-tooltip>
-              </button>
-              <button
-                v-if="chipHovered"
-                type="button"
-                class="comment-count-chip__clear"
-                :aria-label="tm('spcodeProjectLoad.fileBrowser.comment.chip.clearAll')"
-                @click.stop="onRequestClearAll"
-              >
-                <v-icon size="14">mdi-close</v-icon>
-              </button>
-            </div>
-          </div>
+        <div
+          v-if="fileComments.totalCount.value > 0"
+          class="comment-count-chip d-none d-md-flex"
+          :class="{ 'comment-count-chip--hovered': chipHovered }"
+          @mouseenter="chipHovered = true"
+          @mouseleave="chipHovered = false"
+        >
+          <button
+            type="button"
+            class="comment-count-chip__main"
+            :aria-label="
+              tm(
+                'spcodeProjectLoad.fileBrowser.comment.previewDialog.openWithCount',
+                { count: fileComments.totalCount.value },
+              )
+            "
+            @click="openPreview"
+          >
+            <v-icon size="14" start>mdi-comment-text-outline</v-icon>
+            {{
+              tm("spcodeProjectLoad.fileBrowser.comment.countLabel", {
+                count: fileComments.totalCount.value,
+              })
+            }}
+            <v-tooltip activator="parent" location="top">
+              {{ tm("spcodeProjectLoad.fileBrowser.comment.countTooltip") }}
+            </v-tooltip>
+          </button>
+          <button
+            v-if="chipHovered"
+            type="button"
+            class="comment-count-chip__clear"
+            :aria-label="
+              tm('spcodeProjectLoad.fileBrowser.comment.chip.clearAll')
+            "
+            @click.stop="onRequestClearAll"
+          >
+            <v-icon size="14">mdi-close</v-icon>
+          </button>
         </div>
-    <div
-      v-if="showSpcodeIndicator"
-      class="input-area__codegraph-row"
-    >
-      <SpcodeCodegraphChip @open-codegraph-dialog="openCodegraphLoadDialog" />
+      </div>
     </div>
     <div
       class="input-container"
@@ -263,7 +270,6 @@
               </v-list-item-title>
             </v-list-item>
           </StyledMenu>
-
         </div>
         <div class="input-field-shell">
           <input
@@ -529,6 +535,9 @@ const fileComments = useFileComments();
 const previewDialogOpen = ref(false);
 const chipHovered = ref(false);
 
+/** 30 s polling timer for codegraph MCP status. */
+let codegraphPollTimer: number | null = null;
+
 /** Auto-close preview dialog when the last comment is cleared, e.g.
  *  after clearAll() or a session reset. Avoids a stale empty state
  *  inside an open dialog. */
@@ -559,13 +568,10 @@ async function onRequestClearAll(): Promise<void> {
     return;
   }
   const ok = await confirmDialog({
-    title: tm(
-      "spcodeProjectLoad.fileBrowser.comment.confirmClear.title",
-    ),
-    message: tm(
-      "spcodeProjectLoad.fileBrowser.comment.confirmClear.message",
-      { count },
-    ),
+    title: tm("spcodeProjectLoad.fileBrowser.comment.confirmClear.title"),
+    message: tm("spcodeProjectLoad.fileBrowser.comment.confirmClear.message", {
+      count,
+    }),
   });
   if (ok) {
     fileComments.clearAll();
@@ -601,9 +607,8 @@ const codegraphLoadDialogRef = ref<{
 //   1. the spcode plugin is currently enabled (`activated === true`),
 //   2. at least one `/project*` command is registered.
 // See :func:`useSpcodeProjectLoad` for the full rationale.
-const { isProjectLoadAvailable, refreshPluginState } = useSpcodeProjectLoad(
-  allCommands,
-);
+const { isProjectLoadAvailable, refreshPluginState } =
+  useSpcodeProjectLoad(allCommands);
 const showSpcodeIndicator = isProjectLoadAvailable;
 
 // Visibility gate for the plan/build chip (next to the project
@@ -717,7 +722,9 @@ const filteredCommands = computed(() => {
 
   for (const cmd of enabledCommands.value) {
     const commandText = normalizeCommandSearchText(cmd.effective_command);
-    const pluginText = normalizeCommandSearchText(cmd.plugin_display_name || "");
+    const pluginText = normalizeCommandSearchText(
+      cmd.plugin_display_name || "",
+    );
     const descriptionText = normalizeCommandSearchText(cmd.description || "");
     const matchesCommand = commandText.includes(query);
     const matchesMetadata =
@@ -981,7 +988,9 @@ async function fetchCommands() {
   commandSuggestionLoading.value = true;
   try {
     const cid = currentConfigId.value;
-    const res = await commandApi.list(cid && cid !== "default" ? cid : undefined);
+    const res = await commandApi.list(
+      cid && cid !== "default" ? cid : undefined,
+    );
     if (res.data.status === "ok") {
       allCommands.value = res.data.data.items || [];
       // 读取当前配置的唤醒词列表，用于指令候选的触发前缀
@@ -1020,16 +1029,10 @@ async function fetchCommands() {
 function applyOptimisticProjectStatus(text: string): void {
   const trimmed = text.trim();
   // load: <prefix>project load <path...>
-  const loadMatch = trimmed.match(
-    /^\S+\s+project\s+load\s+(\S[\s\S]*)$/,
-  );
+  const loadMatch = trimmed.match(/^\S+\s+project\s+load\s+(\S[\s\S]*)$/);
   if (loadMatch) {
     let path = loadMatch[1].trim();
-    if (
-      path.length >= 2 &&
-      path.startsWith('"') &&
-      path.endsWith('"')
-    ) {
+    if (path.length >= 2 && path.startsWith('"') && path.endsWith('"')) {
       path = path.slice(1, -1);
     }
     if (path) {
@@ -1068,35 +1071,33 @@ function handleSendClick(): void {
  *   - `<prefix>project unload`        → clear active project path
  */
 function applyOptimisticCodegraphStatus(text: string): void {
-  const trimmed = text.trim()
+  const trimmed = text.trim();
   // start
   if (/^\S+\s+codegraph\s+start(?:\s|$)/.test(trimmed)) {
-    codegraphStatus.setRunning(true)
-    return
+    codegraphStatus.setRunning(true);
+    return;
   }
   // stop
   if (/^\S+\s+codegraph\s+stop(?:\s|$)/.test(trimmed)) {
-    codegraphStatus.setRunning(false)
-    return
+    codegraphStatus.setRunning(false);
+    return;
   }
   // set <path>
-  const setMatch = trimmed.match(
-    /^\S+\s+codegraph\s+set\s+(\S[\s\S]*)$/,
-  )
+  const setMatch = trimmed.match(/^\S+\s+codegraph\s+set\s+(\S[\s\S]*)$/);
   if (setMatch) {
-    let path = setMatch[1].trim()
+    let path = setMatch[1].trim();
     if (path.length >= 2 && path.startsWith('"') && path.endsWith('"')) {
-      path = path.slice(1, -1)
+      path = path.slice(1, -1);
     }
     if (path) {
-      codegraphStatus.setProject(path)
+      codegraphStatus.setProject(path);
     }
-    return
+    return;
   }
   // project unload → the backend may reset codegraph to the configured
   // default project. Clear our local copy; polling catches up.
   if (/^\S+\s+project\s+unload(?:\s|$)/.test(trimmed)) {
-    codegraphStatus.setProject("")
+    codegraphStatus.setProject("");
   }
 }
 
@@ -1375,21 +1376,25 @@ function openCodegraphLoadDialog(): void {
 // /project* command present) flips to true. Same shape as before, just
 // reading from the unified composable.
 const spcodeStatus = useSpcodeProjectStatus();
-watch(showSpcodeIndicator, async (visible) => {
-  if (visible) {
-    // Bug fix (2026-06-23, elecvoid243): pass the resolved umo so the
-    // backend queries THIS session's loaded project (not the global
-    // "most-recently-loaded" fallback). Mirrors the Chat.vue watchers
-    // and the plan-mode refresh pattern below.
-    const umo = props.currentSession
-      ? buildWebchatUmoDetails(
-          props.currentSession.session_id,
-          Boolean(props.currentSession.is_group),
-        ).umo
-      : null;
-    await spcodeStatus.refresh(umo);
-  }
-}, { immediate: false });
+watch(
+  showSpcodeIndicator,
+  async (visible) => {
+    if (visible) {
+      // Bug fix (2026-06-23, elecvoid243): pass the resolved umo so the
+      // backend queries THIS session's loaded project (not the global
+      // "most-recently-loaded" fallback). Mirrors the Chat.vue watchers
+      // and the plan-mode refresh pattern below.
+      const umo = props.currentSession
+        ? buildWebchatUmoDetails(
+            props.currentSession.session_id,
+            Boolean(props.currentSession.is_group),
+          ).umo
+        : null;
+      await spcodeStatus.refresh(umo);
+    }
+  },
+  { immediate: false },
+);
 
 // Singleton codegraph MCP status. Authoritative refresh is driven by
 // ``Chat.vue:onStreamEnd`` (same hook that refreshes project status and
@@ -1409,11 +1414,15 @@ const onVisibilityChange = () => {
     void codegraphStatus.refresh();
   }
 };
-watch(showSpcodeIndicator, async (visible) => {
-  if (visible) {
-    await codegraphStatus.refresh();
-  }
-}, { immediate: false });
+watch(
+  showSpcodeIndicator,
+  async (visible) => {
+    if (visible) {
+      await codegraphStatus.refresh();
+    }
+  },
+  { immediate: false },
+);
 
 // Pull initial plan/build state when the chip becomes visible.
 // The Chat.vue watcher covers the session-switch refresh, but on
@@ -1431,18 +1440,22 @@ watch(showSpcodeIndicator, async (visible) => {
 // look up a key that does not exist and return active=False,
 // which would clobber the chip's optimistic state right after
 // every /plan toggle.
-watch(showPlanModeChip, async (visible) => {
-  if (!visible) return;
-  if (!props.currentSession) {
-    await spcodePlanMode.refresh();
-    return;
-  }
-  const umo = buildWebchatUmoDetails(
-    props.currentSession.session_id,
-    Boolean(props.currentSession.is_group),
-  ).umo;
-  await spcodePlanMode.refresh(umo);
-}, { immediate: false });
+watch(
+  showPlanModeChip,
+  async (visible) => {
+    if (!visible) return;
+    if (!props.currentSession) {
+      await spcodePlanMode.refresh();
+      return;
+    }
+    const umo = buildWebchatUmoDetails(
+      props.currentSession.session_id,
+      Boolean(props.currentSession.is_group),
+    ).umo;
+    await spcodePlanMode.refresh(umo);
+  },
+  { immediate: false },
+);
 
 onMounted(() => {
   document.addEventListener("keyup", handleKeyUp);
@@ -1456,12 +1469,31 @@ onMounted(() => {
   // 触发的 fetchCommands() 拿到 commands 列表后,两个判断
   // (activated + hasProjectTreeCommand) 都已经 ready。
   void refreshPluginState();
+  // Initial codegraph status fetch: the watcher above (immediate: false)
+  // only fires on transition, so on first mount — when showSpcodeIndicator
+  // may already be true — we need an explicit call to guarantee the chip
+  // has data to render on first paint.
+  void codegraphStatus.refresh();
+  // Live polling every 30 s so the chip stays in sync when codegraph
+  // state changes externally (e.g. the user toggles it via another
+  // client or the bot restarts its MCP server). The interval is gated
+  // by showSpcodeIndicator inside the callback so it is a no-op when
+  // the spcode plugin is not active.
+  codegraphPollTimer = window.setInterval(() => {
+    if (showSpcodeIndicator.value) {
+      void codegraphStatus.refresh();
+    }
+  }, 30_000);
 });
 
 onBeforeUnmount(() => {
   clearCompositionState();
   document.removeEventListener("keyup", handleKeyUp);
   document.removeEventListener("visibilitychange", onVisibilityChange);
+  if (codegraphPollTimer !== null) {
+    clearInterval(codegraphPollTimer);
+    codegraphPollTimer = null;
+  }
 });
 
 defineExpose({
@@ -1478,39 +1510,39 @@ defineExpose({
   border-top: 1px solid var(--v-theme-border);
   flex-shrink: 0;
 }
-.input-area__codegraph-row {
-  align-items: center;
-  display: flex;
-  margin: 0 auto 4px;
-  max-width: 900px;
-  min-height: 20px;
-  width: 85%;
-}
-
 .input-area__status-row {
   align-items: center;
   display: flex;
   justify-content: space-between;
-  margin: 0 auto 6px;
-  max-width: 900px;
-  min-height: 28px;
-  width: 85%;
+  margin: 4px auto 0;
+  max-width: var(--chat-content-max-width, 760px);
+  pointer-events: auto;
+  width: var(--chat-content-width, 76%);
+}
+.input-area__status-row__left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 /*
  * Right-side cluster for the plan-mode and git-diff chips. The parent
  * row uses ``space-between`` to push the project indicator to the far
- * left, so this sub-row sits on the far right. Wrapping the two
- * secondary chips together guarantees they always render adjacent to
- * each other regardless of which one is currently visible — without
- * the wrapper, toggling the git-diff chip on/off would re-distribute
- * the row's leftover space and slide the plan chip between the
- * project indicator and the right edge.
+ * left, so this sub-row sits on the far right.
+ *
+ * The chips-stack child stacks the plan-mode chip and the git-diff
+ * (查看工作区) chip vertically so they occupy less horizontal space
+ * and remain adjacent regardless of which one is visible.
  */
 .input-area__status-row__right {
   align-items: center;
   display: flex;
   gap: 8px;
+}
+.input-area__status-row__chips-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .input-neutral-btn {
@@ -2271,7 +2303,9 @@ defineExpose({
   margin-left: 2px;
   cursor: pointer;
   opacity: 0.85;
-  transition: opacity 0.12s, transform 0.12s;
+  transition:
+    opacity 0.12s,
+    transform 0.12s;
 }
 .comment-count-chip__clear:hover {
   opacity: 1;

@@ -2002,13 +2002,13 @@ function startResize(e: MouseEvent): void {
 
 function onMouseMove(e: MouseEvent): void {
   if (!isResizing || !sidebarRef.value) return;
-  // Sidebar sits on the right side of the flex parent (.chat-ui).
-  // Distance from the parent's right edge to the cursor equals the
-  // new width. Dragging the cursor left therefore grows the sidebar
-  // and squeezes the chat panel — same model as ReasoningSidebar.
-  const parent = sidebarRef.value.parentElement;
-  if (!parent) return;
-  const newWidth = parent.getBoundingClientRect().right - e.clientX;
+  // Use the sidebar's own right edge (not the parent's) as the
+  // reference point. The flex layout places any siblings shown to
+  // the right beyond `selfRect.right`, so the computed width is
+  // automatically reduced by their combined width — same model
+  // as ReasoningSidebar.
+  const selfRect = sidebarRef.value.getBoundingClientRect();
+  const newWidth = selfRect.right - e.clientX;
   sidebarWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
 }
 
@@ -2807,7 +2807,8 @@ const currentRoot = computed<string | null>(() => {
 <style scoped>
 .git-diff-sidebar {
   width: 420px;
-  height: 100%;
+  height: calc(100% - var(--chat-panel-top-offset, 0px));
+  margin-top: var(--chat-panel-top-offset, 0px);
   border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-on-surface));
@@ -3225,6 +3226,7 @@ const currentRoot = computed<string | null>(() => {
     z-index: 1300;
     width: 100vw !important;
     height: 100dvh;
+    margin-top: 0;
     border-left: 0;
   }
   .git-diff-sidebar-resizer {

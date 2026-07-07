@@ -88,12 +88,13 @@ function startResize(e: MouseEvent) {
 
 function onMouseMove(e: MouseEvent) {
   if (!isResizing || !sidebarRef.value) return;
-  // The sidebar is on the right side of the viewport.
-  // `sidebarRef` is positioned inside the parent's flex layout.
-  // Calculate width from the right edge of the viewport:
-  const rect = sidebarRef.value.parentElement?.getBoundingClientRect();
-  if (!rect) return;
-  const newWidth = rect.right - e.clientX;
+  // Use the sidebar's own right edge (not the parent's) as the
+  // reference point. The flex layout places any siblings shown to
+  // the right (e.g. TodoSidebar) beyond `selfRect.right`, so the
+  // computed width is automatically reduced by their combined
+  // width — no need to enumerate sibling sidebars.
+  const selfRect = sidebarRef.value.getBoundingClientRect();
+  const newWidth = selfRect.right - e.clientX;
   sidebarWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
 }
 

@@ -457,6 +457,7 @@
             class="center-state"
           >
             <v-progress-circular indeterminate size="32" width="3" />
+          </div>
           <div v-else-if="!activeMessages.length" class="welcome-state">
             <div class="welcome-title">{{ tm("welcome.title") }}</div>
           </div>

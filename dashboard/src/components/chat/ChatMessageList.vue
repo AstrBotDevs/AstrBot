@@ -229,7 +229,8 @@
                       v-else-if="part.type === 'file'"
                       class="file-part"
                       :style="{
-                        '--attachment-color': attachmentPresentation(part).color,
+                        '--attachment-color':
+                          attachmentPresentation(part).color,
                       }"
                     >
                       <v-icon
@@ -642,11 +643,7 @@ function migrateOldInteractiveChoiceText(records: ChatRecord[]): number {
     if (!Array.isArray(parts)) continue;
     for (let i = 0; i < parts.length; i += 1) {
       const part = parts[i] as { type?: string; text?: unknown };
-      if (
-        part &&
-        part.type === "plain" &&
-        typeof part.text === "string"
-      ) {
+      if (part && part.type === "plain" && typeof part.text === "string") {
         const recovered = tryRecoverInteractiveChoiceFromPlainText(
           part.text as string,
         );
@@ -1267,12 +1264,12 @@ function formatDuration(seconds: number) {
 .message-stack {
   display: flex;
   flex-direction: column;
-  max-width: min(760px, 82%);
+  max-width: min(1000px, 95%);
 }
 
 .from-user .message-stack {
   align-items: flex-end;
-  max-width: 60%;
+  max-width: 72%;
 }
 
 .sent-attachments {
@@ -1695,11 +1692,11 @@ function formatDuration(seconds: number) {
 }
 
 .variant-thread .message-stack {
-  max-width: min(300px, 86%);
+  max-width: min(360px, 90%);
 }
 
 .variant-thread .from-user .message-stack {
-  max-width: 78%;
+  max-width: 92%;
 }
 
 .variant-thread .bot-avatar-symbol {
@@ -1751,11 +1748,11 @@ function formatDuration(seconds: number) {
   }
 
   .message-stack {
-    max-width: 88%;
+    max-width: 96%;
   }
 
   .from-user .message-stack {
-    max-width: 82%;
+    max-width: 96%;
   }
 
   .sent-file-card {
@@ -1804,7 +1801,7 @@ function formatDuration(seconds: number) {
   }
 
   .variant-thread .from-user .message-stack {
-    max-width: 82%;
+    max-width: 96%;
   }
 
   .variant-thread .message-bubble.bot {
