@@ -709,6 +709,11 @@ interface DiffLine {
 interface DiffHunk {
   header: string;
   lines: DiffLine[];
+  /** Index in the full parse (maxLines=Infinity). Stable across maxLines variants
+   *  (truncation only drops the trailing hunk's tail, never reshuffles). Used to
+   *  cross-reference the hunk in the full parse when buildHunkPatchText()
+   *  needs the complete body. */
+  hunkIndex: number;
 }
 
 // A single visual row in split mode: holds the old-side line (or null
@@ -1293,6 +1298,7 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
       currentHunk = {
         header: rawLine,
         lines: [],
+        hunkIndex: hunks.length,   // pre-push index; same as final `i` in the v-for
       };
       continue;
     }
