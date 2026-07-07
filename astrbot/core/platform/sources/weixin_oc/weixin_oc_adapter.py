@@ -107,6 +107,7 @@ class WeixinOCAdapter(Platform):
     FILE_ITEM_TYPE = 4
     VIDEO_ITEM_TYPE = 5
     IMAGE_UPLOAD_TYPE = 1
+    VOICE_UPLOAD_TYPE = 4
     VIDEO_UPLOAD_TYPE = 2
     FILE_UPLOAD_TYPE = 3
     RECENT_MESSAGE_CACHE_SIZE = 100
@@ -716,6 +717,14 @@ class WeixinOCAdapter(Platform):
                     "mid_size": ciphertext_size,
                 },
             }
+        if item_type == self.VOICE_ITEM_TYPE:
+            return {
+                "type": self.VOICE_ITEM_TYPE,
+                "voice_item": {
+                    "media": media_payload,
+                    "voice_size": ciphertext_size,
+                },
+            }
         if item_type == self.VIDEO_ITEM_TYPE:
             return {
                 "type": self.VIDEO_ITEM_TYPE,
@@ -843,12 +852,12 @@ class WeixinOCAdapter(Platform):
         return None
 
     async def _resolve_media_file_path(
-        self, segment: Image | Video | File
+        self, segment: Image | Video | File | Record
     ) -> Path | None:
         try:
             if isinstance(segment, File):
                 path = await segment.get_file()
-            elif isinstance(segment, (Image, Video)):
+            elif isinstance(segment, (Image, Video, Record)):
                 path = await segment.convert_to_file_path()
             else:
                 path = ""
@@ -987,7 +996,7 @@ class WeixinOCAdapter(Platform):
     async def _send_media_segment(
         self,
         user_id: str,
-        segment: Image | Video | File,
+        segment: Image | Video | File | Record,
         text: str | None = None,
     ) -> bool:
         if not self.token:
@@ -1011,6 +1020,9 @@ class WeixinOCAdapter(Platform):
         elif isinstance(segment, File):
             item_type = self.FILE_ITEM_TYPE
             upload_media_type = self.FILE_UPLOAD_TYPE
+        elif isinstance(segment, Record):
+            item_type = self.VOICE_ITEM_TYPE
+            upload_media_type = self.VOICE_UPLOAD_TYPE
 
         file_name = (
             segment.name
@@ -1648,7 +1660,7 @@ class WeixinOCAdapter(Platform):
                 pending_text += segment.text
                 continue
 
-            if isinstance(segment, (Image, Video, File)):
+            if isinstance(segment, (Image, Video, File, Record)):
                 has_supported_segment = True
                 sent = await self._send_media_segment(
                     target_user,
