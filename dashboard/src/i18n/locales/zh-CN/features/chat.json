@@ -310,6 +310,13 @@
         "clearSelection": "清空选择",
         "selectAllInGroup": "选中 {label} 下的全部文件",
         "selectFile": "选中 {path}"
+      },
+      "hunkDiscard": {
+        "buttonAria": "丢弃 {file} 的 hunk {hunk}",
+        "buttonTitle": "丢弃此 hunk。3 秒内再次点击以确认。",
+        "confirmLabel": "确认?",
+        "confirmingAria": "再次点击以确认丢弃 hunk {hunk}",
+        "loadingAria": "正在丢弃 hunk {hunk}"
       }
     },
     "fileBrowser": {
@@ -517,6 +524,27 @@
             "not_modified": "文件无未暂存改动",
             "untracked_file": "未跟踪的文件无法恢复（请用 git rm --cached 或 git add）",
             "git_error": "Git 执行失败（{stderr}）"
+          }
+        }
+      },
+      "discardHunk": {
+        "success": "已从 {file} 丢弃 {hunksReverted} 个 hunk",
+        "successMultiple": "已从 {file} 丢弃 {hunksReverted} 个 hunk",
+        "error": {
+          "reason": {
+            "patch_check_failed": "patch 与当前文件状态不匹配,请刷新 diff 后重试。({stderr})",
+            "patch_apply_failed": "文件被并发修改,请刷新后重试。({stderr})",
+            "patch_too_large": "patch 超过 256 KB。请改用整文件恢复。",
+            "patch_malformed": "patch 格式错误。请刷新 diff 后重试。({stderr})",
+            "not_modified": "该文件无未提交改动。",
+            "untracked_file": "未跟踪文件不能按 hunk 丢弃,请先暂存。",
+            "multi_file_patch": "内部错误:patch 含多个文件。请上报此 bug。",
+            "patch_binary": "二进制文件不能按 hunk 丢弃。请改用整文件恢复。",
+            "no_project_loaded": "未加载项目。请先在 bot 会话中加载项目。",
+            "worktree_invalid": "worktree 路径无效。",
+            "not_a_git_repo": "目标目录不是 git 仓库。",
+            "git_unavailable": "服务端未安装 git。",
+            "unknown": "丢弃失败:{reason}"
           }
         }
       },

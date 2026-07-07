@@ -310,6 +310,13 @@
         "clearSelection": "Clear selection",
         "selectAllInGroup": "Select all in {label}",
         "selectFile": "Select {path}"
+      },
+      "hunkDiscard": {
+        "buttonAria": "Discard hunk {hunk} in {file}",
+        "buttonTitle": "Discard this hunk. Click again within 3 seconds to confirm.",
+        "confirmLabel": "Confirm?",
+        "confirmingAria": "Click again to confirm discarding hunk {hunk}",
+        "loadingAria": "Discarding hunk {hunk}"
       }
     },
     "fileBrowser": {
@@ -517,6 +524,27 @@
             "not_modified": "File has no uncommitted changes",
             "untracked_file": "Cannot restore an untracked file (use git rm --cached or git add)",
             "git_error": "Git execution failed ({stderr})"
+          }
+        }
+      },
+      "discardHunk": {
+        "success": "Discarded {hunksReverted} hunk from {file}",
+        "successMultiple": "Discarded {hunksReverted} hunks from {file}",
+        "error": {
+          "reason": {
+            "patch_check_failed": "Patch doesn't match current file state. Refresh the diff and retry. ({stderr})",
+            "patch_apply_failed": "File was concurrently modified. Refresh and retry. ({stderr})",
+            "patch_too_large": "Patch exceeds 256 KB. Try restoring the whole file instead.",
+            "patch_malformed": "Patch is malformed. Refresh the diff and retry. ({stderr})",
+            "not_modified": "File has no uncommitted changes.",
+            "untracked_file": "Untracked files can't be discarded by hunk. Stage the file first.",
+            "multi_file_patch": "Internal error: patch contains multiple files. Please report this bug.",
+            "patch_binary": "Binary files can't be discarded by hunk. Restore the whole file instead.",
+            "no_project_loaded": "No project loaded. Load a project in the bot session first.",
+            "worktree_invalid": "Worktree path is invalid.",
+            "not_a_git_repo": "Target directory is not a git repository.",
+            "git_unavailable": "git is not installed on the server.",
+            "unknown": "Discard failed: {reason}"
           }
         }
       },

@@ -299,6 +299,13 @@
         "clearSelection": "Очистить выбор",
         "selectAllInGroup": "Выбрать всё в {label}",
         "selectFile": "Выбрать {path}"
+      },
+      "hunkDiscard": {
+        "buttonAria": "Отменить hunk {hunk} в {file}",
+        "buttonTitle": "Отменить этот hunk. Нажмите повторно в течение 3 секунд для подтверждения.",
+        "confirmLabel": "Подтвердить?",
+        "confirmingAria": "Нажмите ещё раз для подтверждения отмены hunk {hunk}",
+        "loadingAria": "Отмена hunk {hunk}"
       }
     },
     "fileBrowser": {
@@ -450,6 +457,27 @@
             "not_modified": "Файл не имеет незафиксированных изменений",
             "untracked_file": "Невозможно восстановить неотслеживаемый файл (используйте git rm --cached или git add)",
             "git_error": "Ошибка выполнения Git ({stderr})"
+          }
+        }
+      },
+      "discardHunk": {
+        "success": "Отменён {hunksReverted} hunk из {file}",
+        "successMultiple": "Отменено {hunksReverted} hunk'ов из {file}",
+        "error": {
+          "reason": {
+            "patch_check_failed": "Patch не соответствует текущему состоянию файла. Обновите diff и повторите. ({stderr})",
+            "patch_apply_failed": "Файл был одновременно изменён. Обновите и повторите. ({stderr})",
+            "patch_too_large": "Patch превышает 256 КБ. Попробуйте восстановить весь файл.",
+            "patch_malformed": "Patch повреждён. Обновите diff и повторите. ({stderr})",
+            "not_modified": "Файл не имеет незафиксированных изменений.",
+            "untracked_file": "Неотслеживаемые файлы нельзя отменить по hunk. Сначала добавьте файл в индекс.",
+            "multi_file_patch": "Внутренняя ошибка: patch содержит несколько файлов. Пожалуйста, сообщите об этом.",
+            "patch_binary": "Двоичные файлы нельзя отменить по hunk. Восстановите весь файл.",
+            "no_project_loaded": "Проект не загружен. Сначала загрузите проект в сессии бота.",
+            "worktree_invalid": "Путь worktree недопустим.",
+            "not_a_git_repo": "Целевой каталог не является git-репозиторием.",
+            "git_unavailable": "git не установлен на сервере.",
+            "unknown": "Не удалось отменить: {reason}"
           }
         }
       },
