@@ -465,7 +465,7 @@ git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "refactor
 
 - [ ] **Step 3: 同样替换 split 模式的两个 hunk header（行 ~473 与 ~567）**
 
-按 Step 2 的模式在两处都做替换。找到含有 `class="hunk-header"` 的 `<button>` 元素，统一改为 `<div role="button" tabindex="0">` + `onHunkHeaderKeydown` keydown handler。
+按 Step 2 的模式在**所有 4 处** hunk header 都做替换。**实际文件中有 4 个 `<button class="hunk-header">`**（unified normal、split normal、unified fullscreen、split fullscreen），全部统一改为 `<div role="button" tabindex="0">` + `onHunkHeaderKeydown` keydown handler。
 
 > 本任务**只**做 DOM 重构（button → div role=button + keydown handler）。按钮的插入统一在 Task 6 完成。
 
@@ -740,12 +740,12 @@ git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "feat(das
 - Modify: `dashboard/src/components/chat/message_list_comps/DiffPreview.vue`
 
 **Interfaces:**
-- 模板：在 3 处 hunk header 内部（unified 模式 1 处 + split 模式 2 处）插入相同的 `<button class="hunk-discard">`
+- 模板：在 4 处 hunk header 内部（unified normal、split normal、unified fullscreen、split fullscreen）插入相同的 `<button class="hunk-discard">`
 - CSS：追加 `.hunk-discard` 样式块
 
-> **范围:** 修改 3 处 hunk header 模板（unified 模式 1 处 + split 模式 2 处），都插入相同的 `<button class="hunk-discard">`。3 处插入用同一个 snippet，复用 Step 1-2 的最终代码。
+> **范围:** 修改 4 处 hunk header 模板（unified normal、split normal、unified fullscreen、split fullscreen），都插入相同的 `<button class="hunk-discard">`。4 处插入用同一个 snippet，复用 Step 1-2 的最终代码。
 
-- [ ] **Step 1: 定位 unified 模式 hunk header 模板（Task 4 改写后）**
+- [ ] **Step 1: 定位 4 处 hunk header 模板（Task 4 改写后）**
 
 找到这段代码（行 ~118-137 附近）：
 ```vue
@@ -765,7 +765,7 @@ git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "feat(das
 </div>
 ```
 
-- [ ] **Step 2: 在 unified 模式 hunk header `hunk-header-count` 之后、`</div>` 之前插入按钮**
+- [ ] **Step 2: 在 unified normal hunk header `hunk-header-count` 之后、`</div>` 之前插入按钮**
 
 ```vue
 <div
@@ -822,15 +822,15 @@ git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "feat(das
 </div>
 ```
 
-- [ ] **Step 3: 在 split 模式第 1 个 hunk header（行 ~473）插入相同按钮**
+- [ ] **Step 3: 在 split normal hunk header 插入相同按钮**
 
-定位 split 模式第一个 `class="hunk-header"` 元素（行 ~473 附近，SplitHunk 的 header），按 Step 2 的完全相同 snippet 在 `hunk-header-count` 之后插入 `<button class="hunk-discard">`。3 处插入的代码**字节级相同**（unified / split 模式共享 hunkIndex 索引、共享 isCurrentHunkDiscarding 判定、共享 tm 翻译）。
+定位 split 模式 normal view 的 `class="hunk-header"` 元素（行 ~226 附近），按 Step 2 的完全相同 snippet 在 `hunk-header-count` 之后插入 `<button class="hunk-discard">`。4 处插入的代码**字节级相同**（共享 hunkIndex 索引、共享 isCurrentHunkDiscarding 判定、共享 tm 翻译）。
 
-- [ ] **Step 4: 在 split 模式第 2 个 hunk header（行 ~567）插入相同按钮**
+- [ ] **Step 4: 在 unified fullscreen 与 split fullscreen 两处 hunk header 插入相同按钮**
 
-定位 split 模式第二个 `class="hunk-header"` 元素（行 ~567 附近），按 Step 2 的完全相同 snippet 插入。
+定位 unified fullscreen (行 ~471) 与 split fullscreen (行 ~567) 两处 hunk header，按 Step 2 的完全相同 snippet 插入。
 
-> 验证 3 处插入一致性：在 IDE 中选中 Step 2 的按钮代码块 → 复制 → 粘贴到 Step 3 与 Step 4。三处 snippet 字节级相同（仅是 hunk 变量 `hi` 范围不同，但表达式无差异）。
+> 验证 4 处插入一致性：在 IDE 中选中 Step 2 的按钮代码块 → 复制 → 粘贴到 Step 3 与 Step 4。4 处 snippet 字节级相同（仅是 hunk 变量 `hi` 范围不同，但表达式无差异）。
 
 - [ ] **Step 5: 在 `<style scoped>` 内追加 `.hunk-discard` 样式**
 
