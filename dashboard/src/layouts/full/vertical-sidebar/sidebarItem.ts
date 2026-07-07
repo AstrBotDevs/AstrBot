@@ -49,17 +49,12 @@ const sidebarItem: menu[] = [
   {
     title: 'core.navigation.extension',
     icon: 'mdi-puzzle',
-    to: '/extension#installed',
+    to: '/extension',
     children: [
       {
         title: 'core.navigation.extensionTabs.installed',
         icon: 'mdi-puzzle',
-        to: '/extension#installed'
-      },
-      {
-        title: 'core.navigation.extensionTabs.market',
-        icon: 'mdi-store',
-        to: '/extension#market'
+        to: '/extension'
       },
       {
         title: 'core.navigation.extensionTabs.mcp',

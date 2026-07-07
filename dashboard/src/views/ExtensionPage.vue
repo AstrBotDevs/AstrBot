@@ -390,7 +390,11 @@ const updateDialogPluginLogo = computed(() => {
       </v-card>
     </v-col>
 
-    <v-col v-if="activeTab === 'market'" cols="12" md="12">
+    <v-col
+      v-if="activeTab === 'installed' || activeTab === 'market'"
+      cols="12"
+      md="12"
+    >
       <div class="d-flex align-center justify-center mt-4 mb-4 gap-4">
         <v-btn
           variant="text"
