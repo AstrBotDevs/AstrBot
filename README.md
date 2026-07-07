@@ -75,6 +75,10 @@ AstrBot is an open-source all-in-one Agent chatbot platform that integrates with
 
 ### One-Click Deployment
 
+> [!NOTE]
+> Requires [uv](https://docs.astral.sh/uv/) to be installed.
+> For macOS users: due to macOS security checks, the first run of the `astrbot` command may take longer (about 10-20s).
+
 For users who want to quickly experience AstrBot, are familiar with command-line usage, and can install a `uv` environment on their own, we recommend the `uv` one-click deployment method ⚡️:
 
 ```bash
@@ -83,32 +87,23 @@ astrbot init # Only execute this command for the first time to initialize the en
 astrbot run
 ```
 
-> Requires [uv](https://docs.astral.sh/uv/) to be installed.
-> AstrBot requires Python 3.12 or later. The `--python 3.12` option ensures that `uv` creates the tool environment with Python 3.12.
-
-> [!NOTE]
-> For macOS users: due to macOS security checks, the first run of the `astrbot` command may take longer (about 10-20s).
-
 Update `astrbot`:
 
 ```bash
 uv tool upgrade astrbot --python 3.12
 ```
 
-> [!WARNING]
-> AstrBot deployed via `uv` **does not support upgrading through the WebUI**. To update, please run the command above from the command line.
+### One-Click Cloud Deployment (RainYun)
+
+For users who want one-click deployment and do not want to manage servers themselves, we recommend RainYun's one-click cloud deployment service ☁️:
+
+[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
 ### Docker Deployment
 
 For users familiar with containers and looking for a more stable, production-ready deployment method, we recommend deploying AstrBot with Docker / Docker Compose.
 
 Please refer to the official documentation: [Deploy AstrBot with Docker](https://docs.astrbot.app/deploy/astrbot/docker.html#%E4%BD%BF%E7%94%A8-docker-%E9%83%A8%E7%BD%B2-astrbot).
-
-### Deploy on RainYun
-
-For users who want one-click deployment and do not want to manage servers themselves, we recommend RainYun's one-click cloud deployment service ☁️:
-
-[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/5994?ref=NjU1ODg0)
 
 ### Desktop Application Deployment
 
@@ -141,6 +136,16 @@ yay -S astrbot-git
 **More deployment methods**
 
 If you need panel-based management or deeper customization, see [BT-Panel Deployment](https://docs.astrbot.app/deploy/astrbot/btpanel.html) for BT Panel app-store setup, [1Panel Deployment](https://docs.astrbot.app/deploy/astrbot/1panel.html) for 1Panel app-market deployment, [CasaOS Deployment](https://docs.astrbot.app/deploy/astrbot/casaos.html) for NAS/home-server visual deployment, and [Manual Deployment](https://docs.astrbot.app/deploy/astrbot/cli.html) for fully custom source-based installation with `uv`.
+
+
+## ❤️ Sponsors
+
+[Want to be here?](mailto://community@astrbot.app)
+
+<p align="center">
+  <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+</p>
+
 
 ## Supported Messaging Platforms
 
@@ -205,13 +210,6 @@ Connect AstrBot to your favorite chat platform.
 | Xiaomi MiMo TTS | Text-to-Speech Services |
 | Volcano Engine TTS | Text-to-Speech Services |
 
-## ❤️ Sponsors
-
-<p align="center">
-  <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
-</p>
-
-
 ## ❤️ Contributing
 
 Issues and Pull Requests are always welcome! Feel free to submit your changes to this project :)
@@ -235,22 +233,7 @@ pre-commit install
 
 ### QQ Groups
 
-- Group 1: 322154837 (Full)
-- Group 3: 630166526 (Full)
-- Group 4: 1077826412 (Full)
-- Group 5: 822130018 (Full)
-- Group 6: 753075035 (Full)
-- Group 7: 743746109 (Full)
-- Group 8: 1030353265 (Full)
-- Group 9: 1076659624 (Full)
-- Group 10: 1078079676 (Full)
-- Group 11: 704659519 (Full)
-- Group 12: 916228568 (Full)
-- Group 13: 1092185289
-- Group 14: 1103419483
-
-- Developer Group(Chit-chat): 975206796
-- Developer Group(Formal): 1039761811
+We have 15+ chat groups, please see: [Community](https://docs.astrbot.app/community.html) for details.
 
 ### Discord Server
 
@@ -264,9 +247,10 @@ Special thanks to all Contributors and plugin developers for their contributions
   <img src="https://contrib.rocks/image?repo=AstrBotDevs/AstrBot&max=300&columns=15" />
 </a>
 
-Additionally, the birth of this project would not have been possible without the help of the following open-source projects:
+Open Source Friends ❤️
 
 - [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - The amazing cat framework
+- [Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot) - The powerful "digital life" in your QQ! 
 
 ## ⭐ Star History
 
