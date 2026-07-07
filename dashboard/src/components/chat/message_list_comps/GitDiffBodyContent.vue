@@ -70,6 +70,17 @@ const props = defineProps<{
   newFilePaths?: ReadonlySet<string>;
   /** Passed through to GitDiffFileItem for the "view file" button. */
   onOpenFile?: (path: string) => void;
+  // ── Spec 2026-07-07 hunk discard: pass-through props ──
+  // Matches GitDiffFileItem's prop signature exactly so the prop can be
+  // threaded through verbatim (callback-prop passthrough, not emit —
+  // see task-7-report and Spec 2026-07-07-… §6.1.2).
+  onDiscardHunk?: (params: {
+    file: string;
+    hunkIndex: number;
+    patchText: string;
+  }) => void;
+  /** Set of `${file.path}#${hunkIndex}` keys currently in flight. */
+  discardingHunks?: ReadonlySet<string>;
 }>();
 const emit = defineEmits<{
   (e: "toggle", path: string): void;
@@ -113,6 +124,21 @@ function isStagingForPath(path: string): boolean {
 }
 function isUnstagingForPath(path: string): boolean {
   return props.isUnstaging?.value?.has(path) ?? false;
+}
+
+// ── Spec 2026-07-07 hunk discard ──
+// Per-hunk discard is wired only when the parent supplied a callback
+// AND the file is a discard candidate: not a brand-new file (untracked
+// / intent-to-add have no prior content to revert to), not binary
+// (no textual hunk to discard), and the spcode project must be
+// loaded with a UMO (no project → no git operations).
+function discardableFor(file: SpcodeGitDiffFile): boolean {
+  if (!props.onDiscardHunk) return false;
+  if (props.newFilePaths?.has(file.path)) return false;
+  if (file.isBinary) return false;
+  if (!spcodeStatus.status.value.loaded) return false;
+  if (!spcodeStatus.status.value.umo) return false;
+  return true;
 }
 
 const REASON_I18N_KEYS: Record<string, string> = {
@@ -564,6 +590,9 @@ function isSectionPartiallySelected(section: DiffSection): boolean {
           :selectable-aria-label="
             tm('spcodeProjectLoad.diffPreview.toolbar.selectFile', { path: f.path })
           "
+          :on-discard-hunk="onDiscardHunk"
+          :discarding-hunks="discardingHunks"
+          :discardable="discardableFor(f)"
           @toggle="emit('toggle', f.path)"
           @restore="emit('restore', $event)"
           @stage="emit('stage', $event)"
