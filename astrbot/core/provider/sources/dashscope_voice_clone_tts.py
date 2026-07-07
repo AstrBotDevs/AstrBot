@@ -78,10 +78,7 @@ class ProviderDashscopeVoiceCloneTTSAPI(TTSProvider):
         )
         self.timeout_ms = float(provider_config.get("timeout", 20)) * 1000
 
-        dashscope.api_key = self.chosen_api_key
-        resolved_base_url = self._resolve_base_url()
-        if resolved_base_url:
-            dashscope.base_http_api_url = resolved_base_url
+        # API Key 和 Base URL 将在每次调用时通过 kwargs 动态传入，避免修改全局配置
 
     # public API#
     async def get_audio(self, text: str) -> str:
@@ -99,10 +96,7 @@ class ProviderDashscopeVoiceCloneTTSAPI(TTSProvider):
 
         # 每次调用前确保 dashscope 全局配置使用本提供商指定的值。
         # 避免多 TTS 共存时被其它提供商覆盖。
-        dashscope.api_key = self.chosen_api_key
-        resolved_base_url = self._resolve_base_url()
-        if resolved_base_url:
-            dashscope.base_http_api_url = resolved_base_url
+        # 每次调用时通过 kwargs 动态传入 API Key 和 Base URL，无需修改全局配置
 
         audio_bytes = await self._synthesize(model, text)
         if not audio_bytes:
@@ -144,6 +138,9 @@ class ProviderDashscopeVoiceCloneTTSAPI(TTSProvider):
             "voice": self.voice_id,
             "text": text,
         }
+        resolved_base_url = self._resolve_base_url()
+        if resolved_base_url:
+            kwargs["base_http_api_url"] = resolved_base_url
         if self.language_type:
             kwargs["language_type"] = self.language_type
         return MultiModalConversation.call(**kwargs)
@@ -156,10 +153,16 @@ class ProviderDashscopeVoiceCloneTTSAPI(TTSProvider):
             model,
             text,
         )
+        if hasattr(response, "status_code") and response.status_code != 200:
+            raise RuntimeError(
+                f"DashScope API 调用失败，状态码: {response.status_code}，" 
+                f"错误码: {getattr(response, 'code', 'Unknown')}，" 
+                f"错误信息: {getattr(response, 'message', 'Unknown')}"
+            )
         audio_bytes = await self._extract_audio_from_response(response)
         if not audio_bytes:
             raise RuntimeError(
-                f"模型 '{model}' 音色复刻语音合成失败。原始返回: {response}",
+                f"模型 '{model}' 音色复刻语音合成失败。返回内容为空。",
             )
         return audio_bytes
 
@@ -194,6 +197,9 @@ class ProviderDashscopeVoiceCloneTTSAPI(TTSProvider):
                     timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as response,
             ):
+                if response.status != 200:
+                    logging.error(f"Failed to download audio from URL {url}, HTTP status: {response.status}")
+                    return None
                 return await response.read()
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
             logging.exception(f"Failed to download audio from URL {url}: {e}")
