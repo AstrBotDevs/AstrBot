@@ -60,6 +60,18 @@ const props = defineProps<{
   /** Localized label for the checkbox; supplied by the parent so the
    *  i18n key path stays centralized. */
   selectableAriaLabel?: string;
+  // ── Spec 2026-07-07 hunk discard: pass-through props ──
+  // Matches DiffPreview's prop signature exactly so the prop can be
+  // threaded through verbatim (DiffPreview invokes a callback-prop,
+  // not an emit — see task-5-report and Spec 2026-07-07-… §6.1.2).
+  onDiscardHunk?: (params: {
+    file: string;
+    hunkIndex: number;
+    patchText: string;
+  }) => void;
+  /** Set of `${file.path}#${hunkIndex}` keys currently in flight. */
+  discardingHunks?: ReadonlySet<string>;
+  discardable?: boolean;
 }>();
 const emit = defineEmits<{
   (e: "toggle"): void;
@@ -317,6 +329,10 @@ function rowKey(): string {
         :file-path="file.path"
         :collapsible="false"
         :is-dark="isDark"
+        :on-discard-hunk="onDiscardHunk"
+        :discarding-hunks="discardingHunks"
+        :discard-key-prefix="file.path"
+        :discardable="discardable"
       />
       <!-- Fallback: content not yet fetched (or file is too large /
            binary). Shows the same placeholder as a diff row whose
