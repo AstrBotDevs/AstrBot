@@ -770,6 +770,13 @@ const props = withDefaults(
      * comment list can pass it in without re-deriving.
      */
     comments?: FileComment[];
+    onDiscardHunk?: (params: { file: string; hunkIndex: number; patchText: string }) => void;
+    /** Set of `${discardKeyPrefix}#${hunkIndex}` keys currently in flight. */
+    discardingHunks?: ReadonlySet<string>;
+    /** Used as the key prefix when checking `discardingHunks`. Defaults to filePath. */
+    discardKeyPrefix?: string;
+    /** When true (and onDiscardHunk is set), render the per-hunk discard button. */
+    discardable?: boolean;
   }>(),
   {
     filePath: "",
@@ -780,8 +787,16 @@ const props = withDefaults(
     isDark: false,
     commentable: true,
     comments: () => [],
+    discardingHunks: () => new Set<string>(),
+    discardKeyPrefix: "",
+    discardable: false,
   },
 );
+
+const isCurrentHunkDiscarding = (hi: number): boolean => {
+  const prefix = props.discardKeyPrefix || props.filePath;
+  return props.discardingHunks.has(`${prefix}#${hi}`);
+};
 
 const { tm } = useModuleI18n("features/chat");
 
@@ -799,11 +814,65 @@ const effectiveMaxLines = computed(() =>
 // of hunk indices; small memory footprint even for 100+ hunks.
 const collapsedHunks = ref<Set<number>>(new Set());
 
+// Spec §2 decision #3 + §6.1.3: two-click inline confirmation. First click
+// sets `confirmingHunkIndex`; second click within 3s executes the discard.
+// The setTimeout handle is kept on a module-local variable so onBeforeUnmount
+// can clear it even if the component tears down mid-confirmation.
+const confirmingHunkIndex = ref<number | null>(null);
+let confirmTimer: ReturnType<typeof setTimeout> | null = null;
+
 function toggleHunk(idx: number): void {
+  // Spec §2 decision #12 + §6.1.4: confirmation state locks hunk folding.
+  // Clicking the header in "Confirm?" state is silently dropped so the
+  // user's confirm intent isn't accidentally flipped to "cancel".
+  if (confirmingHunkIndex.value !== null) return;
   const next = new Set(collapsedHunks.value);
   if (next.has(idx)) next.delete(idx);
   else next.add(idx);
   collapsedHunks.value = next;
+}
+
+function onDiscardHunkClick(hi: number, e: MouseEvent): void {
+  e.stopPropagation();   // prevent bubbling to header's toggleHunk
+  if (!props.onDiscardHunk || !props.discardable) return;
+  if (isCurrentHunkDiscarding(hi)) return;
+  if (confirmingHunkIndex.value === hi) {
+    // Second click: execute the discard.
+    if (confirmTimer) {
+      clearTimeout(confirmTimer);
+      confirmTimer = null;
+    }
+    confirmingHunkIndex.value = null;
+    const patchText = buildHunkPatchText(props.filePath, hi);
+    if (!patchText) return;   // defensive: empty patch, don't fire
+    props.onDiscardHunk({ file: props.filePath, hunkIndex: hi, patchText });
+  } else {
+    // First click: enter confirmation state.
+    confirmingHunkIndex.value = hi;
+    confirmTimer = setTimeout(() => {
+      confirmingHunkIndex.value = null;
+      confirmTimer = null;
+    }, 3000);
+  }
+}
+
+function discardHunkAriaLabel(hi: number, header: string): string {
+  return tm("spcodeProjectLoad.diffPreview.hunkDiscard.buttonAria", {
+    hunk: header,
+    file: props.filePath,
+  });
+}
+
+function discardHunkTitle(hi: number, header: string): string {
+  if (confirmingHunkIndex.value === hi) {
+    return tm(
+      "spcodeProjectLoad.diffPreview.hunkDiscard.confirmingAria",
+      { hunk: header },
+    );
+  }
+  return tm("spcodeProjectLoad.diffPreview.hunkDiscard.buttonTitle", {
+    hunk: header,
+  });
 }
 
 function onHunkHeaderKeydown(idx: number, e: KeyboardEvent): void {
@@ -883,7 +952,26 @@ onBeforeUnmount(() => {
   if (isFullscreen.value) {
     document.body.style.overflow = "";
   }
+  // Spec §2 decision #12 + §6.1.5: clear confirm timer so a pending
+  // timeout can't fire after teardown and touch a destroyed ref.
+  if (confirmTimer) {
+    clearTimeout(confirmTimer);
+    confirmTimer = null;
+  }
 });
+
+// Spec §2 decision #12 + §6.1.5: clear residual confirm state when filePath
+// or content changes (parsedHunks may re-parse, indices may shift).
+watch(
+  () => [props.filePath, props.content],
+  () => {
+    if (confirmTimer) {
+      clearTimeout(confirmTimer);
+      confirmTimer = null;
+    }
+    confirmingHunkIndex.value = null;
+  },
+);
 
 // ── Inline comments (spec 2026-06-30-diff-inline-comments) ─────────
 // Comments are anchored to the NEW file. A diff has up to 4 kinds of
@@ -1288,6 +1376,33 @@ function extractDiffContent(raw: string): string {
   if (diffIdx >= 0) return raw.slice(diffIdx);
 
   return raw;
+}
+
+function buildHunkPatchText(filePath: string, hunkIndex: number): string {
+  // Spec §2 decision #10 + §5.2: use full parse (maxLines=Infinity) to avoid
+  // truncation, then look up the hunk by hunkIndex (set in Task 3). Use
+  // ASCII '-'/'+'/' ' prefixes — the parser's display prefix is U+2212
+  // (visual minus) which git apply rejects.
+  if (!filePath) return "";
+  const fullText = extractDiffContent(props.content);
+  const fullHunks = parseUnifiedDiff(fullText, Infinity);
+  // Find the hunk whose hunkIndex matches (handles the case where the
+  // parsed-hunks list was truncated — hunkIndex is the full-parse index).
+  const target =
+    fullHunks.find((h) => h.hunkIndex === hunkIndex) ??
+    fullHunks[hunkIndex];
+  if (!target) return "";
+  const lines: string[] = [
+    `diff --git a/${filePath} b/${filePath}`,
+    `--- a/${filePath}`,
+    `+++ b/${filePath}`,
+    target.header,
+  ];
+  for (const line of target.lines) {
+    const prefix = line.type === "del" ? "-" : line.type === "add" ? "+" : " ";
+    lines.push(prefix + line.content);
+  }
+  return lines.join("\n");
 }
 
 function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
