@@ -140,10 +140,12 @@ If you need panel-based management or deeper customization, see [BT-Panel Deploy
 
 ## ❤️ Sponsors
 
-[Want to be here?](mailto://community@astrbot.app)
+Welcome to sponsor us via [Afdian](https://afdian.com/a/astrbot_team) or [contact us](mailto:community@astrbot.app).
 
 <p align="center">
-  <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+  <a target="_blank" href="https://astrbot.app/#/sponsors">
+    <img alt="sponsors" src="https://sponsors.astrbot.app/?v=1">
+  </a>
 </p>
 
 
