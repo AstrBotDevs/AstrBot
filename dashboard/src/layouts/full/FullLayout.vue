@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { RouterView, useRoute } from "vue-router";
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, onMounted, computed } from "vue";
 import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
 import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
-import Chat from "@/components/chat/Chat.vue";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
 import { useCommonStore } from "@/stores/common";
@@ -18,26 +17,12 @@ const commonStore = useCommonStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
-const isCurrentChatRoute = computed(
-  () => route.path === "/chat" || route.path.startsWith("/chat/"),
-);
 const isPluginPageRoute = computed(
   () => route.path.startsWith("/plugin-page/"),
 );
-const isFullScreenRoute = computed(
-  () => isCurrentChatRoute.value || isPluginPageRoute.value,
-);
-const shouldMountChat = ref(isCurrentChatRoute.value);
-
-const showSidebar = computed(() => !isCurrentChatRoute.value);
+const isFullScreenRoute = computed(() => isPluginPageRoute.value);
 
 const showFirstNoticeDialog = ref(false);
-
-watch(isCurrentChatRoute, (isChatRoute) => {
-  if (isChatRoute) {
-    shouldMountChat.value = true;
-  }
-});
 
 const maybeShowFirstNotice = async () => {
   if (localStorage.getItem(FIRST_NOTICE_SEEN_KEY) === "1") {
@@ -107,18 +92,11 @@ onMounted(() => {
         style="z-index: 9999; position: absolute; opacity: 0.3"
       />
       <VerticalHeaderVue />
-      <VerticalSidebarVue v-if="showSidebar" />
-      <v-main
-        :class="{ 'chat-main': isCurrentChatRoute }"
-        :style="{
-          height: isCurrentChatRoute ? '100vh' : undefined,
-          overflow: isCurrentChatRoute ? 'hidden' : undefined,
-        }"
-      >
+      <VerticalSidebarVue />
+      <v-main>
         <v-container
           fluid
           class="page-wrapper"
-          :class="{ 'chat-mode-container': isCurrentChatRoute }"
           :style="{
             height: isFullScreenRoute ? '100%' : 'calc(100% - 8px)',
             padding: isFullScreenRoute ? '0' : undefined,
@@ -129,18 +107,10 @@ onMounted(() => {
             :style="{
               height: '100%',
               width: '100%',
-              overflow: isCurrentChatRoute ? 'hidden' : undefined,
               position: isPluginPageRoute ? 'relative' : undefined,
             }"
           >
-            <div
-              v-if="shouldMountChat"
-              v-show="isCurrentChatRoute"
-              style="height: 100%; width: 100%; overflow: hidden"
-            >
-              <Chat :active="isCurrentChatRoute" />
-            </div>
-            <RouterView v-if="!isCurrentChatRoute" />
+            <RouterView />
           </div>
         </v-container>
       </v-main>
@@ -154,14 +124,3 @@ onMounted(() => {
   </v-locale-provider>
 </template>
 
-<style scoped>
-.chat-mode-container {
-  min-height: unset !important;
-  height: 100% !important;
-  overflow: hidden !important;
-}
-
-.chat-main {
-  padding-top: 0 !important;
-}
-</style>

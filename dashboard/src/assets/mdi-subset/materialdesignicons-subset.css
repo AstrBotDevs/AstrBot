@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 272 icons */
+/* Auto-generated MDI subset – 273 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -158,6 +158,10 @@
 
 .mdi-chat::before {
   content: "\F0B79";
+}
+
+.mdi-chat-outline::before {
+  content: "\F0EDE";
 }
 
 .mdi-chat-processing::before {

@@ -20,7 +20,11 @@ const isItemActive = computed(() => {
     const [path, hash] = props.item.to.split('#');
     return route.path === path && route.hash === `#${hash}`;
   }
-  return route.path === props.item.to;
+  const targetPath = props.item.to.replace(/\/$/, '') || '/';
+  if (targetPath === '/') {
+    return route.path === targetPath;
+  }
+  return route.path === targetPath || route.path.startsWith(`${targetPath}/`);
 });
 
 const itemTitle = computed(() => {

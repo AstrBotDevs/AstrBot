@@ -180,7 +180,7 @@ const { success: toastSuccess, error: toastError } = useToast();
 
 const variant = computed(() => props.variant);
 const menuLocation = computed(() =>
-  props.variant === "header" ? "bottom start" : "top",
+  props.variant === "header" ? "bottom end" : "top",
 );
 
 const selectedProvider = computed(() =>

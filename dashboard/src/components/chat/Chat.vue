@@ -2,7 +2,11 @@
   <div
     v-if="props.active"
     class="chat-ui"
-    :class="{ 'is-dark': isDark, 'sidebar-collapsed': isSidebarCollapsed }"
+    :class="{
+      'is-dark': isDark,
+      'sidebar-collapsed': isSidebarCollapsed,
+      'dashboard-layout': !props.chatboxMode,
+    }"
   >
     <v-navigation-drawer
       v-model="chatSidebarDrawer"
@@ -1701,6 +1705,10 @@ function toggleTheme() {
   --chat-section-label: rgba(255, 255, 255, 0.5);
 }
 
+.chat-ui.dashboard-layout .chat-main {
+  padding-top: 0;
+}
+
 .chat-sidebar {
   top: 0 !important;
   height: 100vh !important;
@@ -2306,5 +2314,10 @@ kbd {
   .project-composer-shell {
     padding: 0;
   }
+}
+
+.chat-ui.dashboard-layout .chat-sidebar {
+  top: 0 !important;
+  height: 100% !important;
 }
 </style>

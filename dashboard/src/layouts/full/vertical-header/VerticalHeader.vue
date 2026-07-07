@@ -13,7 +13,7 @@ import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
 import { router } from "@/router";
 import { useRoute } from "vue-router";
-import { useDisplay, useTheme } from "vuetify";
+import { useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
@@ -29,11 +29,8 @@ const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
 const chatHeader = useChatHeaderStore();
 const theme = useTheme();
-const { lgAndUp } = useDisplay();
 const { t } = useI18n();
 const route = useRoute();
-const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
-const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
 const SHOW_PRE_RELEASES_KEY = "astrbot:updateDialog:showPreReleases";
 let dialog = ref(false);
 let accountWarning = ref(false);
@@ -124,21 +121,6 @@ const desktopUpdateStatus = ref("");
 const isChatPath = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
-const isDarkTheme = computed(
-  () => theme.global.current.value.dark || customizer.uiTheme.includes("Dark"),
-);
-const chatHeaderStyle = computed(() => {
-  if (!isChatPath.value) return undefined;
-  const sidebarWidth = lgAndUp.value
-    ? customizer.chatSidebarCollapsed
-      ? 56
-      : 280
-    : 0;
-  return {
-    left: `${sidebarWidth}px`,
-    width: `calc(100% - ${sidebarWidth}px)`,
-  };
-});
 const chatHeaderSubtitleText = computed(() => {
   const title = chatHeader.title.trim();
   const subtitle = chatHeader.subtitle.trim();
@@ -891,11 +873,7 @@ function openReleaseNotesDialog(body: string, tag: string) {
 }
 
 function handleLogoClick() {
-  if (isChatPath.value) {
-    aboutDialog.value = true;
-  } else {
-    router.push("/about");
-  }
+  router.push("/about");
 }
 
 getVersion();
@@ -911,107 +889,12 @@ onUnmounted(() => {
   stopRestartReloadTimer();
 });
 
-// 视图模式切换
-onMounted(() => {
-  // 初次加載時保存當前路由
-  if (typeof window !== "undefined") {
-    if (isChatPath.value) {
-      // 保存 chat ID
-      const parts = route.fullPath.split("/");
-      const sessionId = parts[2];
-      if (sessionId) {
-        sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
-        console.log("Initial save chat ID:", sessionId);
-      }
-    } else {
-      // 保存 bot 路由（非 chat 頁面）
-      sessionStorage.setItem(LAST_BOT_ROUTE_KEY, route.fullPath);
-      console.log("Initial save bot route:", route.fullPath);
-    }
-  }
-});
-
-// 监听 viewMode 变化，切换到 bot 模式时跳转到首页
-// 保存 bot 模式的最後路由
-// 監聽 route 變化，保存最後一次 bot 路由
 watch(showPreReleases, (value) => {
   if (typeof window === "undefined") return;
   localStorage.setItem(SHOW_PRE_RELEASES_KEY, value ? "true" : "false");
 });
 
-watch(
-  () => route.fullPath,
-  (newPath) => {
-    if (typeof window === "undefined") return;
-    console.log("Route changed:", {
-      newPath,
-      isChat: isChatPath.value,
-      currentChatId: route.params.id,
-    });
-    try {
-      // 使用現有的 isChatPath 計算屬性來避免名稱衝突
-      const isChat = isChatPath.value; // 這裡使用已經計算好的 isChatPath
-
-      // ✅ bot：只存「非 chat 頁」
-      if (!isChat) {
-        sessionStorage.setItem(LAST_BOT_ROUTE_KEY, newPath);
-      }
-
-      // ✅ chat：只存 sessionId
-      if (isChat) {
-        const parts = newPath.split("/");
-        const sessionId = parts[2];
-
-        if (sessionId) {
-          sessionStorage.setItem(LAST_CHAT_ROUTE_KEY, sessionId);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to save route:", e);
-    }
-  },
-);
-
-const currentMode = computed({
-  get: () => (isChatPath.value ? "chat" : "bot"),
-  set: (val: "chat" | "bot") => {
-    try {
-      // 檢查 window 和 sessionStorage 是否存在
-      if (
-        typeof window === "undefined" ||
-        typeof sessionStorage === "undefined"
-      ) {
-        // 如果在非瀏覽器環境中，不做任何 sessionStorage 操作
-        console.warn("sessionStorage is not available in this environment");
-        return;
-      }
-
-      if (val === "chat") {
-        const lastSessionId = sessionStorage.getItem(LAST_CHAT_ROUTE_KEY);
-        router.push(lastSessionId ? `/chat/${lastSessionId}` : "/chat");
-      } else {
-        let lastBotRoute = sessionStorage.getItem(LAST_BOT_ROUTE_KEY) || "/";
-        if (lastBotRoute.startsWith("/chat")) {
-          lastBotRoute = "/";
-        }
-        router.push(lastBotRoute);
-      }
-    } catch (e) {
-      // 在受限隱私模式等環境中，sessionStorage 操作可能會拋出 SecurityError
-      console.warn("Failed to access sessionStorage in currentMode setter:", e);
-    }
-  },
-});
-
 const mainMenuOpen = ref(false);
-const nextMode = computed<"chat" | "bot">(() =>
-  isChatPath.value ? "bot" : "chat",
-);
-
-function switchMode() {
-  currentMode.value = nextMode.value;
-  mainMenuOpen.value = false;
-}
 
 // Merry Christmas! 🎄
 const isChristmas = computed(() => {
@@ -1051,16 +934,9 @@ onMounted(async () => {
     elevation="0"
     height="50"
     class="top-header"
-    :class="{
-      'chat-mode-header': isChatPath,
-      'chat-mode-header--dark': isChatPath && isDarkTheme,
-    }"
-    :absolute="isChatPath"
-    :style="chatHeaderStyle"
   >
-    <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
+    <!-- 桌面端 menu 按钮 -->
     <v-btn
-      v-if="!isChatPath"
       style="margin-left: 16px"
       class="hidden-md-and-down"
       icon
@@ -1073,7 +949,6 @@ onMounted(async () => {
 
     <!-- 移动端 menu 按钮 -->
     <v-btn
-      v-if="!isChatPath"
       class="hidden-lg-and-up ms-3"
       icon
       rounded="sm"
@@ -1084,7 +959,6 @@ onMounted(async () => {
     </v-btn>
 
     <div
-      v-if="!isChatPath"
       class="logo-container"
       :class="{
         'mobile-logo': $vuetify.display.xs,
@@ -1118,6 +992,9 @@ onMounted(async () => {
       </v-icon>
     </v-btn>
 
+    <v-spacer />
+
+    <!-- 版本提示信息 - 在手机上隐藏 -->
     <div
       v-if="isChatPath"
       class="chat-header-context"
@@ -1128,10 +1005,7 @@ onMounted(async () => {
       </div>
     </div>
 
-    <v-spacer />
-
-    <!-- 版本提示信息 - 在手机上隐藏 -->
-    <div v-if="!isChatPath" class="mr-4 hidden-xs">
+    <div v-else class="mr-4 hidden-xs">
       <small v-if="hasNewVersion">
         {{ t("core.header.version.hasNewVersion") }}
       </small>
@@ -1140,61 +1014,21 @@ onMounted(async () => {
       </small>
     </div>
 
-    <div class="header-actions" :class="{ 'chat-header-actions': isChatPath }">
-      <!-- Bot/Chat mode switch - single button, hidden in chat mobile menu -->
-      <v-btn
-        v-if="!isChatPath || !$vuetify.display.smAndDown"
-        class="mode-switch-btn"
-        :class="{ 'mr-4 hidden-xs': !isChatPath }"
-        variant="text"
-        size="small"
-        rounded="sm"
-        @click="switchMode"
-      >
-        <v-icon start>{{ nextMode === "bot" ? "mdi-robot" : "mdi-chat" }}</v-icon>
-        {{ nextMode === "bot" ? "Bot" : "Chat" }}
-      </v-btn>
-
+    <div class="header-actions">
       <!-- 功能菜单 -->
       <StyledMenu v-model="mainMenuOpen" offset="12" location="bottom end">
         <template v-slot:activator="{ props: activatorProps }">
           <v-btn
             v-bind="activatorProps"
             size="small"
-            :class="[
-              'action-btn',
-              isChatPath ? 'chat-action-btn' : 'mr-4',
-            ]"
-            :color="isChatPath ? undefined : 'var(--v-theme-surface)'"
-            :variant="isChatPath ? 'text' : 'flat'"
+            class="action-btn mr-4"
+            color="var(--v-theme-surface)"
+            variant="flat"
             rounded="sm"
             icon
           >
             <v-icon>mdi-dots-vertical</v-icon>
           </v-btn>
-        </template>
-
-        <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
-        <template
-          v-if="
-            (isChatPath && $vuetify.display.smAndDown) ||
-            (!isChatPath && $vuetify.display.xs)
-          "
-        >
-          <div class="mobile-mode-switch-wrapper">
-            <v-btn
-              class="mobile-mode-switch-btn"
-              variant="text"
-              block
-              @click="switchMode"
-            >
-              <v-icon start>{{
-                nextMode === "bot" ? "mdi-robot" : "mdi-chat"
-              }}</v-icon>
-              {{ nextMode === "bot" ? "Bot" : "Chat" }}
-            </v-btn>
-          </div>
-          <v-divider class="my-1" />
         </template>
 
         <!-- 语言切换分组 -->
@@ -2033,21 +1867,6 @@ onMounted(async () => {
   flex: 0 1 auto;
 }
 
-.top-header.chat-mode-header {
-  background: #fdfcfc !important;
-  border-bottom: 0;
-  box-shadow: none !important;
-}
-
-.top-header.chat-mode-header.chat-mode-header--dark {
-  background: rgb(var(--v-theme-background)) !important;
-}
-
-.top-header.chat-mode-header .v-toolbar__content {
-  padding: 0 16px 0 20px;
-  background: transparent !important;
-}
-
 .chat-mobile-sidebar-toggle {
   width: 32px !important;
   height: 32px !important;
@@ -2071,13 +1890,15 @@ onMounted(async () => {
 
 .chat-header-context {
   min-width: 0;
-  max-width: clamp(180px, calc(100vw - 600px), 460px);
+  max-width: min(360px, 38vw);
   align-self: stretch;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   justify-content: center;
-  padding: 5px 18px 5px 0;
+  padding: 5px 10px 5px 0;
   overflow: hidden;
+  text-align: right;
 }
 
 .chat-header-context .provider-trigger--header {
@@ -2090,7 +1911,7 @@ onMounted(async () => {
 
 .chat-header-context .provider-trigger-title {
   min-width: 0;
-  max-width: min(300px, 52vw);
+  max-width: min(240px, 30vw);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2115,41 +1936,6 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   align-items: center;
-}
-
-.chat-header-actions {
-  gap: 4px;
-  margin-right: 0;
-}
-
-.mode-switch-btn {
-  margin: 0;
-  border: 0;
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  box-shadow: none;
-}
-
-.mode-switch-btn {
-  min-width: 62px;
-  background: transparent !important;
-  padding: 0 6px;
-}
-
-.mode-switch-btn .v-btn__overlay {
-  opacity: 0 !important;
-}
-
-.mode-switch-btn .v-icon {
-  font-size: 19px;
-}
-
-.chat-action-btn {
-  margin-right: 0;
-  color: rgb(var(--v-theme-on-surface));
 }
 
 /* 响应式布局样式 */
@@ -2238,30 +2024,6 @@ onMounted(async () => {
 .theme-option-icon {
   margin-right: 8px;
   opacity: 0.85;
-}
-
-.mobile-mode-switch-wrapper {
-  display: flex;
-  justify-content: center;
-  padding: 8px 12px 4px;
-}
-
-.mobile-mode-switch-btn {
-  width: 100%;
-  justify-content: flex-start;
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.mobile-mode-switch-btn .v-icon {
-  font-size: 19px;
-}
-
-.mobile-mode-switch-btn .v-btn__overlay {
-  opacity: 0 !important;
 }
 
 /* 移动端对话框标题样式 */
@@ -2472,17 +2234,8 @@ onMounted(async () => {
     font-size: 16px;
   }
 
-  .chat-header-actions .chat-action-btn,
-  .chat-header-actions .mode-switch-btn {
-    margin-right: 0;
-  }
-
-  .top-header.chat-mode-header .v-toolbar__content {
-    padding: 0 12px 0 14px;
-  }
-
   .chat-header-context {
-    max-width: calc(100vw - 92px);
+    max-width: calc(100vw - 210px);
     padding-right: 8px;
   }
 

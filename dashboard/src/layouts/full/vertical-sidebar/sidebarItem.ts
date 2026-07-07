@@ -27,6 +27,11 @@ const sidebarItem: menu[] = [
     to: '/welcome',
   },
   {
+    title: 'core.navigation.chat',
+    icon: 'mdi-star-outline',
+    to: '/chat',
+  },
+  {
     title: 'core.navigation.platforms',
     icon: 'mdi-robot',
     to: '/platforms',

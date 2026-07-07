@@ -159,16 +159,9 @@ const MainRoutes = {
     // },
     {
       name: 'Chat',
-      path: '/chat',
+      path: '/chat/:conversationId?',
       component: () => import('@/views/ChatPage.vue'),
-      children: [
-        {
-          path: ':conversationId',
-          name: 'ChatDetail',
-          component: () => import('@/views/ChatPage.vue'),
-          props: true
-        }
-      ]
+      props: true
     },
     {
       name: 'Settings',

@@ -4,16 +4,14 @@ const ChatBoxRoutes = {
     children: [
         {
             name: 'ChatBox',
-            path: '/chatbox',
+            path: '',
+            component: () => import('@/views/ChatBoxPage.vue')
+        },
+        {
+            path: ':conversationId',
+            name: 'ChatBoxDetail',
             component: () => import('@/views/ChatBoxPage.vue'),
-            children: [
-                {
-                    path: ':conversationId',
-                    name: 'ChatBoxDetail',
-                    component: () => import('@/views/ChatBoxPage.vue'),
-                    props: true
-                }
-            ]
+            props: true
         }
     ]
 };
