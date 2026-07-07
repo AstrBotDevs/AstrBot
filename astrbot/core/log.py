@@ -163,7 +163,7 @@ class LogQueueHandler(logging.Handler):
                 "level": record.levelname,
                 "time": time.time(),
                 "data": log_entry,
-                "category": getattr(record, "category", "system"),
+                "category": getattr(record, "category", None) or "system",
             },
         )
 
