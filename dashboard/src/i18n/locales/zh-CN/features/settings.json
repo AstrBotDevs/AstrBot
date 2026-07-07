@@ -75,6 +75,12 @@
   },
   "network": {
     "title": "网络",
+    "transport": {
+      "title": "通信传输模式",
+      "subtitle": "选择聊天消息流式传输时使用的连接方式，设置保存在浏览器本地。",
+      "sse": "SSE",
+      "websocket": "WebSocket"
+    },
     "githubProxy": {
       "title": "GitHub 加速地址",
       "subtitle": "设置下载插件或者更新 AstrBot 时所用的 GitHub 加速地址。这在中国大陆的网络环境有效。可以自定义，输入结果实时生效。所有地址均不保证稳定性，如果在更新插件/项目时出现报错，请首先检查加速地址是否能正常使用。",

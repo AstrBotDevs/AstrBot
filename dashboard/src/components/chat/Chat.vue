@@ -173,160 +173,6 @@
         </section>
       </div>
 
-      <div class="sidebar-footer">
-        <StyledMenu
-          location="top start"
-          offset="10"
-          :close-on-content-click="false"
-        >
-          <template #activator="{ props: menuProps }">
-            <v-btn
-              v-bind="menuProps"
-              class="settings-btn"
-              :class="{ 'icon-only': isSidebarCollapsed }"
-              variant="text"
-              :icon="isSidebarCollapsed"
-            >
-              <Settings
-                :size="20"
-                :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
-              />
-              <span v-if="!isSidebarCollapsed">{{
-                t("core.common.settings")
-              }}</span>
-            </v-btn>
-          </template>
-
-          <div class="settings-menu-content">
-            <v-menu
-              location="end"
-              offset="8"
-              open-on-hover
-              :close-on-content-click="true"
-            >
-              <template #activator="{ props: transportMenuProps }">
-                <v-list-item
-                  v-bind="transportMenuProps"
-                  class="styled-menu-item settings-menu-item"
-                  rounded="md"
-                >
-                  <template #prepend>
-                    <Cable :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                  <v-list-item-title>{{
-                    tm("transport.title")
-                  }}</v-list-item-title>
-                  <template #append>
-                    <span class="settings-menu-value">{{
-                      currentTransportLabel
-                    }}</span>
-                    <ChevronRight :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                </v-list-item>
-              </template>
-
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
-                <v-list density="compact" class="styled-menu-list pa-1">
-                  <v-list-item
-                    v-for="item in transportOptions"
-                    :key="item.value"
-                    class="styled-menu-item"
-                    :class="{
-                      'styled-menu-item-active': transportMode === item.value,
-                    }"
-                    rounded="md"
-                    @click="transportMode = item.value"
-                  >
-                    <v-list-item-title>{{
-                      tm(item.labelKey)
-                    }}</v-list-item-title>
-                    <template #append>
-                      <Check
-                        v-if="transportMode === item.value"
-                        :size="18"
-                        class="styled-menu-lucide-icon"
-                      />
-                    </template>
-                  </v-list-item>
-                </v-list>
-              </v-card>
-            </v-menu>
-
-            <v-menu
-              location="end"
-              offset="8"
-              open-on-hover
-              :close-on-content-click="true"
-            >
-              <template #activator="{ props: languageMenuProps }">
-                <v-list-item
-                  v-bind="languageMenuProps"
-                  class="styled-menu-item settings-menu-item"
-                  rounded="md"
-                >
-                  <template #prepend>
-                    <Languages :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                  <v-list-item-title>{{
-                    t("core.common.language")
-                  }}</v-list-item-title>
-                  <template #append>
-                    <span class="settings-menu-value">{{
-                      currentLanguage?.label || locale
-                    }}</span>
-                    <ChevronRight :size="18" class="styled-menu-lucide-icon" />
-                  </template>
-                </v-list-item>
-              </template>
-
-              <v-card class="styled-menu-card" elevation="8" rounded="lg">
-                <v-list density="compact" class="styled-menu-list pa-1">
-                  <v-list-item
-                    v-for="lang in languageOptions"
-                    :key="lang.value"
-                    class="styled-menu-item"
-                    :class="{
-                      'styled-menu-item-active': locale === lang.value,
-                    }"
-                    rounded="md"
-                    @click="switchLanguage(lang.value as Locale)"
-                  >
-                    <template #prepend>
-                      <span class="language-flag">{{ lang.flag }}</span>
-                    </template>
-                    <v-list-item-title>{{ lang.label }}</v-list-item-title>
-                    <template #append>
-                      <Check
-                        v-if="locale === lang.value"
-                        :size="18"
-                        class="styled-menu-lucide-icon"
-                      />
-                    </template>
-                  </v-list-item>
-                </v-list>
-              </v-card>
-            </v-menu>
-
-            <v-list-item
-              class="styled-menu-item settings-menu-item"
-              rounded="md"
-              @click="toggleTheme"
-            >
-              <template #prepend>
-                <Sun
-                  v-if="isDark"
-                  :size="18"
-                  class="styled-menu-lucide-icon"
-                />
-                <Moon v-else :size="18" class="styled-menu-lucide-icon" />
-              </template>
-              <v-list-item-title>{{
-                isDark ? tm("modes.lightMode") : tm("modes.darkMode")
-              }}</v-list-item-title>
-            </v-list-item>
-          </div>
-        </StyledMenu>
-      </div>
     </v-navigation-drawer>
 
     <main
@@ -555,20 +401,12 @@ import { useDisplay } from "vuetify";
 import { isAxiosError } from "axios";
 import {
   Box,
-  Cable,
-  Check,
-  ChevronRight,
-  Languages,
-  Moon,
   PanelLeft,
   Pencil,
-  Settings,
   SquarePen,
-  Sun,
   Trash2,
 } from "@lucide/vue";
 import { chatApi, providerApi } from "@/api/v1";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ProjectDialog, {
   type ProjectFormData,
 } from "@/components/chat/ProjectDialog.vue";
@@ -596,12 +434,7 @@ import { useProjects } from "@/composables/useProjects";
 import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCustomizerStore } from "@/stores/customizer";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
-import {
-  useI18n,
-  useLanguageSwitcher,
-  useModuleI18n,
-} from "@/i18n/composables";
-import type { Locale } from "@/i18n/types";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import {
   contextLimit,
@@ -625,8 +458,6 @@ const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 const toast = useToast();
-const { languageOptions, currentLanguage, switchLanguage, locale } =
-  useLanguageSwitcher();
 const {
   sessions,
   currSessionId,
@@ -793,20 +624,6 @@ const transportMode = ref<TransportMode>(
     ? "websocket"
     : "sse",
 );
-const transportOptions: Array<{ value: TransportMode; labelKey: string }> = [
-  { value: "sse", labelKey: "transport.sse" },
-  { value: "websocket", labelKey: "transport.websocket" },
-];
-const currentTransportLabel = computed(() =>
-  tm(
-    transportOptions.find((item) => item.value === transportMode.value)
-      ?.labelKey || "transport.sse",
-  ),
-);
-
-watch(transportMode, (mode) => {
-  localStorage.setItem("chat.transportMode", mode);
-});
 
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
 const canSend = computed(
@@ -1661,9 +1478,6 @@ async function stopCurrentSession() {
   }
 }
 
-function toggleTheme() {
-  customizer.SET_UI_THEME(isDark.value ? "PurpleTheme" : "PurpleThemeDark");
-}
 </script>
 
 <style scoped>
@@ -1861,8 +1675,7 @@ function toggleTheme() {
   flex: 0 0 auto;
 }
 
-.new-chat-btn,
-.settings-btn {
+.new-chat-btn {
   color: rgb(var(--v-theme-on-surface));
   border-radius: 8px;
 }
@@ -1877,8 +1690,7 @@ function toggleTheme() {
   margin-right: 12px !important;
 }
 
-.new-chat-btn,
-.settings-btn {
+.new-chat-btn {
   width: 100%;
   min-height: 36px;
   height: 36px;
@@ -1894,13 +1706,11 @@ function toggleTheme() {
   margin-bottom: 2px;
 }
 
-.new-chat-btn:not(.icon-only),
-.settings-btn:not(.icon-only) {
+.new-chat-btn:not(.icon-only) {
   padding-inline: 10px;
 }
 
-.new-chat-btn.icon-only,
-.settings-btn.icon-only {
+.new-chat-btn.icon-only {
   width: 36px !important;
   height: 36px !important;
   min-width: 36px !important;
@@ -1909,27 +1719,19 @@ function toggleTheme() {
   justify-content: center;
 }
 
-.chat-sidebar.collapsed .new-chat-btn.icon-only :deep(.v-btn__content),
-.chat-sidebar.collapsed .settings-btn.icon-only :deep(.v-btn__content) {
+.chat-sidebar.collapsed .new-chat-btn.icon-only :deep(.v-btn__content) {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.new-chat-btn :deep(.v-btn__content),
-.settings-btn :deep(.v-btn__content) {
+.new-chat-btn :deep(.v-btn__content) {
   min-width: 0;
   font-size: 14px;
   line-height: 20px;
 }
 
-.chat-sidebar.collapsed .sidebar-footer {
-  display: flex;
-  justify-content: center;
-}
-
-.new-chat-btn:hover,
-.settings-btn:hover {
+.new-chat-btn:hover {
   background: var(--chat-session-active-bg);
 }
 
@@ -2044,72 +1846,6 @@ function toggleTheme() {
 
 .session-action-btn:hover {
   color: rgb(var(--v-theme-on-surface));
-}
-
-.sidebar-footer {
-  margin-top: auto;
-  padding: 10px 16px 14px;
-}
-
-.chat-sidebar.collapsed .sidebar-footer {
-  width: 56px;
-  box-sizing: border-box;
-  padding-inline: 10px;
-}
-
-.settings-menu-content {
-  min-width: 270px;
-  padding: 6px;
-}
-
-.settings-menu-item {
-  min-height: 42px;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item__prepend) {
-  width: 28px;
-  margin-inline-end: 12px;
-  align-self: center;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item__content) {
-  min-width: 0;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item-title) {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-menu-content :deep(.settings-menu-item .v-list-item__append) {
-  margin-inline-start: auto;
-  padding-inline-start: 18px;
-  gap: 8px;
-  align-self: center;
-}
-
-.styled-menu-lucide-icon {
-  flex: 0 0 auto;
-  color: currentcolor;
-  stroke-width: 2;
-}
-
-.settings-menu-value {
-  color: var(--chat-muted);
-  font-size: 12px;
-  margin-right: 4px;
-  max-width: 92px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.language-flag {
-  display: inline-block;
-  width: 20px;
-  margin-right: 8px;
 }
 
 .chat-main {

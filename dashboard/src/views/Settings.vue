@@ -150,6 +150,33 @@
                         <div class="settings-section__title">{{ tm('sections.network.title') }}</div>
                     </div>
                     <div class="settings-section__content">
+                        <div class="settings-list-card">
+                            <div class="settings-item">
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ tm('network.transport.title') }}</div>
+                                    <div class="settings-item__subtitle">{{ tm('network.transport.subtitle') }}</div>
+                                </div>
+                                <div class="settings-item__control settings-item__control--transport">
+                                    <v-btn-toggle
+                                        v-model="chatTransportMode"
+                                        mandatory
+                                        divided
+                                        density="compact"
+                                        color="primary"
+                                        class="transport-mode-toggle"
+                                    >
+                                        <v-btn
+                                            v-for="option in chatTransportOptions"
+                                            :key="option.value"
+                                            :value="option.value"
+                                        >
+                                            {{ option.title }}
+                                        </v-btn>
+                                    </v-btn-toggle>
+                                </div>
+                            </div>
+                        </div>
+
                         <template v-if="!systemConfigLoading">
                             <div
                                 v-for="group in networkSystemConfigGroups"
@@ -474,6 +501,11 @@ const getStoredColor = (key, fallback) => {
 
 const primaryColor = ref(getStoredColor('themePrimary', PurpleTheme.colors.primary));
 const secondaryColor = ref(getStoredColor('themeSecondary', PurpleTheme.colors.secondary));
+const chatTransportMode = ref(
+    typeof window !== 'undefined' && localStorage.getItem('chat.transportMode') === 'websocket'
+        ? 'websocket'
+        : 'sse'
+);
 
 const resolveThemes = () => {
     if (theme?.themes?.value) return theme.themes.value;
@@ -506,6 +538,11 @@ watch(secondaryColor, (value) => {
     if (!value) return;
     localStorage.setItem('themeSecondary', value);
     applyThemeColors(primaryColor.value, value);
+});
+
+watch(chatTransportMode, (value) => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('chat.transportMode', value === 'websocket' ? 'websocket' : 'sse');
 });
 
 const wfr = ref(null);
@@ -552,6 +589,11 @@ const availableScopes = [
     { value: 'mcp', label: 'mcp' },
     { value: 'skill', label: 'skill' }
 ];
+
+const chatTransportOptions = computed(() => [
+    { title: tm('network.transport.sse'), value: 'sse' },
+    { title: tm('network.transport.websocket'), value: 'websocket' }
+]);
 
 const settingsNavItems = computed(() => [
     { id: 'general', label: tm('sections.general.title'), icon: 'mdi mdi-tune-variant' },
@@ -1222,6 +1264,23 @@ onUnmounted(() => {
     justify-content: stretch;
     width: 100%;
     max-width: none;
+}
+
+.settings-item__control--transport {
+    max-width: 260px;
+}
+
+.transport-mode-toggle {
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--settings-border);
+    border-radius: 10px;
+}
+
+.transport-mode-toggle :deep(.v-btn) {
+    flex: 1 1 0;
+    min-width: 0;
+    text-transform: none;
 }
 
 .settings-item__control :deep(.v-btn) {

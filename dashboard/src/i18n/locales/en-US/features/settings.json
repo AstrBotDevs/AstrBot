@@ -75,6 +75,12 @@
   },
   "network": {
     "title": "Network",
+    "transport": {
+      "title": "Chat Transport Mode",
+      "subtitle": "Choose the connection method Chat uses for streaming messages. Stored locally in this browser.",
+      "sse": "SSE",
+      "websocket": "WebSocket"
+    },
     "githubProxy": {
       "title": "GitHub Proxy Address",
       "subtitle": "Set the GitHub proxy address used when downloading plugins or updating AstrBot. This is effective in mainland China's network environment. Can be customized, input takes effect in real time. All addresses do not guarantee stability. If errors occur when updating plugins/projects, please first check if the proxy address is working properly.",
