@@ -39,6 +39,10 @@ import {
   useSpcodeFileRestore,
   type RestoreResult,
 } from "@/composables/useSpcodeFileRestore";
+import {
+  useSpcodeFileDiscardHunk,
+  type DiscardHunkResult,
+} from "@/composables/useSpcodeFileDiscardHunk";
 import { useSpcodeGitStage } from "@/composables/useSpcodeGitStage";
 import { useSpcodeGitUnstage } from "@/composables/useSpcodeGitUnstage";
 import { useSpcodeGitCommit } from "@/composables/useSpcodeGitCommit";
@@ -491,6 +495,7 @@ const commitLastError = ref<{ reason: string; stderr: string } | null>(null);
 // Composable instance lives at sidebar level so it can call
 // composable.refresh() and reach the snackbar / dialog state.
 const fileRestore = useSpcodeFileRestore();
+const fileDiscardHunk = useSpcodeFileDiscardHunk();
 const restoringFile = ref<string | null>(null);
 
 // Confirm dialog state.
@@ -657,7 +662,7 @@ function onSearchKeydown(e: KeyboardEvent): void {
 interface SnackbarState {
   show: boolean;
   message: string;
-  color: "success" | "warning" | "error";
+  color: "success" | "info" | "warning" | "error";
   stderr?: string;
 }
 const snackbar = ref<SnackbarState>({
@@ -668,7 +673,7 @@ const snackbar = ref<SnackbarState>({
 
 function showSnackbar(
   message: string,
-  color: "success" | "warning" | "error",
+  color: "success" | "info" | "warning" | "error",
   stderr?: string,
 ): void {
   snackbar.value = { show: true, message, color, stderr };
@@ -1415,6 +1420,33 @@ function onFileOpen(payload: { path: string; line: number }): void {
   fileSearchScrollToLine.value = payload.line > 0 ? payload.line : null;
 }
 
+// Spec §5.3 + §6.4.1: 12 reason → i18n key. Reasons not in the map fall
+// through to `error.reason.unknown` (caller passes raw reason to tm()).
+const DISCARD_HUNK_REASON_I18N_KEYS: Record<string, string> = {
+  patch_check_failed: "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_check_failed",
+  patch_apply_failed: "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_apply_failed",
+  patch_too_large:    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_too_large",
+  patch_malformed:    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_malformed",
+  not_modified:       "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.not_modified",
+  untracked_file:     "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.untracked_file",
+  multi_file_patch:   "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.multi_file_patch",
+  patch_binary:       "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_binary",
+  no_project_loaded:  "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.no_project_loaded",
+  worktree_invalid:   "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.worktree_invalid",
+  not_a_git_repo:     "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.not_a_git_repo",
+  git_unavailable:    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.git_unavailable",
+};
+
+function classifySnackbarLevel(
+  reason: string,
+): "success" | "info" | "warning" | "error" {
+  const FATAL = new Set(["not_a_git_repo", "git_unavailable", "feature_disabled"]);
+  const RETRY = new Set(["patch_apply_failed", "patch_check_failed", "git_error"]);
+  if (FATAL.has(reason)) return "error";
+  if (RETRY.has(reason)) return "info";
+  return "warning";   // user + config + unknown
+}
+
 // Spec §3.2 data flow: GitDiffFileItem -> GitDiffBodyContent -> here.
 function onFileRestore(path: string): void {
   confirmTargetPath.value = path;
@@ -1498,6 +1530,51 @@ async function onConfirmRestore(): Promise<void> {
         ? tm(mapping.key, { stderr: result.stderr ?? "" })
         : tm(mapping.key);
     showSnackbar(message, mapping.color);
+  }
+}
+
+// Spec 2026-07-07 §3.3: hunk discard handler. Child (GitDiffFileItem)
+// invokes this through the `onDiscardHunk` callback prop with a single
+// object arg (matching the DiffPreview prop signature threaded through
+// GitDiffFileItem → GitDiffBodyContent). Result drives both the
+// snackbar toast and a refresh of the diff so the discarded hunk
+// visually disappears. Mirrors the onConfirmRestore success /
+// failure / aborted pattern.
+async function onDiscardHunk(params: {
+  file: string;
+  hunkIndex: number;
+  patchText: string;
+}): Promise<void> {
+  const { file, hunkIndex, patchText } = params;
+  const umo = spcodeStatus.status.value.umo;
+  if (!umo) return;
+  const worktree = selectedWorktree.value;
+  const result: DiscardHunkResult = await fileDiscardHunk.discard({
+    file,
+    hunkIndex,
+    patchText,
+    umo,
+    worktree,
+  });
+  if (!result.ok && result.reason === "aborted") return;
+  if (result.ok) {
+    const n = result.snapshot.hunksReverted;
+    const tmKey =
+      n === 1
+        ? "spcodeProjectLoad.diffSidebar.discardHunk.success"
+        : "spcodeProjectLoad.diffSidebar.discardHunk.successMultiple";
+    showSnackbar(tm(tmKey, { hunksReverted: n, file }), "success");
+    // Spec §2 decision #7: success → immediate refresh so the hunk disappears.
+    await composable.refresh();
+  } else {
+    const mapping = DISCARD_HUNK_REASON_I18N_KEYS[result.reason];
+    const msg = mapping
+      ? tm(mapping, { stderr: result.stderr ?? "" })
+      : tm(
+          "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.unknown",
+          { reason: result.reason },
+        );
+    showSnackbar(msg, classifySnackbarLevel(result.reason));
   }
 }
 
@@ -1955,6 +2032,7 @@ onBeforeUnmount(() => {
   composable.dispose();
   gitStatus.dispose();
   fileRestore.dispose();
+  fileDiscardHunk.dispose();
   worktreesComposable.dispose();
   gitStage.dispose();
   gitUnstage.dispose();
@@ -2482,6 +2560,8 @@ const currentRoot = computed<string | null>(() => {
           :is-unstaging="gitUnstage.isUnstaging"
           :new-file-paths="newFilePaths"
           :on-open-file="onOpenFile"
+          :on-discard-hunk="onDiscardHunk"
+          :discarding-hunks="fileDiscardHunk.isDiscardingHunk.value"
           @toggle="toggleFile"
           @retry="onManualRefresh"
           @restore="onFileRestore"
