@@ -467,7 +467,7 @@ git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "refactor
 
 按 Step 2 的模式在两处都做替换。找到含有 `class="hunk-header"` 的 `<button>` 元素，统一改为 `<div role="button" tabindex="0">` + `onHunkHeaderKeydown` keydown handler。
 
-> 注意：split 模式 hunk header 内部**不**插入 `.hunk-discard` 按钮——split 模式 hunk header 的视觉位置（行 ~473 / ~567）与我们关心的位置不同；本任务只做 DOM 重构，UI 增强留给 Task 6。
+> 本任务**只**做 DOM 重构（button → div role=button + keydown handler）。按钮的插入统一在 Task 6 完成。
 
 - [ ] **Step 4: 在 `<script setup>` 中添加 `onHunkHeaderKeydown` 函数**
 
@@ -740,10 +740,10 @@ git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "feat(das
 - Modify: `dashboard/src/components/chat/message_list_comps/DiffPreview.vue`
 
 **Interfaces:**
-- 模板：在 unified 模式 hunk header（Task 4 改写后的 div）内部追加 `<button class="hunk-discard">`
+- 模板：在 3 处 hunk header 内部（unified 模式 1 处 + split 模式 2 处）插入相同的 `<button class="hunk-discard">`
 - CSS：追加 `.hunk-discard` 样式块
 
-> **重要约束:** **只**修改 unified 模式 hunk header（Task 4 改写后的 div），**不**修改 split 模式 hunk header（理由见 Task 4 Step 3 注释）。split 模式行 ~473 / ~567 处的 header 保留原样。
+> **范围:** 修改 3 处 hunk header 模板（unified 模式 1 处 + split 模式 2 处），都插入相同的 `<button class="hunk-discard">`。3 处插入用同一个 snippet，复用 Step 1-2 的最终代码。
 
 - [ ] **Step 1: 定位 unified 模式 hunk header 模板（Task 4 改写后）**
 
@@ -765,7 +765,7 @@ git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "feat(das
 </div>
 ```
 
-- [ ] **Step 2: 在 `hunk-header-count` 之后、`</div>` 之前插入按钮**
+- [ ] **Step 2: 在 unified 模式 hunk header `hunk-header-count` 之后、`</div>` 之前插入按钮**
 
 ```vue
 <div
@@ -822,7 +822,17 @@ git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "feat(das
 </div>
 ```
 
-- [ ] **Step 3: 在 `<style scoped>` 内追加 `.hunk-discard` 样式**
+- [ ] **Step 3: 在 split 模式第 1 个 hunk header（行 ~473）插入相同按钮**
+
+定位 split 模式第一个 `class="hunk-header"` 元素（行 ~473 附近，SplitHunk 的 header），按 Step 2 的完全相同 snippet 在 `hunk-header-count` 之后插入 `<button class="hunk-discard">`。3 处插入的代码**字节级相同**（unified / split 模式共享 hunkIndex 索引、共享 isCurrentHunkDiscarding 判定、共享 tm 翻译）。
+
+- [ ] **Step 4: 在 split 模式第 2 个 hunk header（行 ~567）插入相同按钮**
+
+定位 split 模式第二个 `class="hunk-header"` 元素（行 ~567 附近），按 Step 2 的完全相同 snippet 插入。
+
+> 验证 3 处插入一致性：在 IDE 中选中 Step 2 的按钮代码块 → 复制 → 粘贴到 Step 3 与 Step 4。三处 snippet 字节级相同（仅是 hunk 变量 `hi` 范围不同，但表达式无差异）。
+
+- [ ] **Step 5: 在 `<style scoped>` 内追加 `.hunk-discard` 样式**
 
 定位 `</style>` 之前（最后一个 CSS 块后），追加：
 
@@ -888,7 +898,7 @@ git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "feat(das
 }
 ```
 
-- [ ] **Step 4: 验证 TypeScript 编译 + lint**
+- [ ] **Step 6: 验证 TypeScript 编译 + lint**
 
 Run:
 ```bash
@@ -899,19 +909,19 @@ pnpm lint
 
 Expected: 无错（`tm()` 调用在 i18n 缺失时不会编译失败，只会运行时报 key missing——这在 Task 10 加 i18n 键时解决）。
 
-- [ ] **Step 5: 验证按钮暂不渲染（因 `discardable=false` 默认值 + 父级未传 prop）**
+- [ ] **Step 7: 验证按钮暂不渲染（因 `discardable=false` 默认值 + 父级未传 prop）**
 
 启动 dev server 打开任意 diff（如 `ToolCallCard` 或 `FilePatchPanel`）：
 - hunk header **不**显示剪刀按钮（因 opt-in 默认 false）
 - hunk header 仍可点击折叠/展开
 - 没有 console 报错
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 cd F:\github\Astrbot
 git add dashboard/src/components/chat/message_list_comps/DiffPreview.vue
-git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "feat(dashboard): render hunk discard button in unified diff header"
+git -c user.name=elecvoid243 -c user.email=elecvoid243@local commit -m "feat(dashboard): render hunk discard button in hunk headers (unified + split)"
 ```
 
 ---
