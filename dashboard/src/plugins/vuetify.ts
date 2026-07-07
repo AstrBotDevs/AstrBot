@@ -21,6 +21,10 @@ export default createVuetify({
     VCard: {
       rounded: 'lg'
     },
+    VSnackbar: {
+      elevation: 6,
+      rounded: 'lg'
+    },
     VTextField: {
       rounded: 'lg'
     },

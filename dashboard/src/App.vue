@@ -7,9 +7,12 @@
   <v-snackbar v-if="toastStore.current" v-model="snackbarShow" :color="toastStore.current.color"
     :timeout="toastStore.current.timeout" :multi-line="toastStore.current.multiLine"
     :location="toastStore.current.location" close-on-back>
-    {{ toastStore.current.message }}
+    <div class="app-snackbar-message">
+      <v-icon v-if="toastIcon" :icon="toastIcon" size="24" />
+      <span>{{ toastStore.current.message }}</span>
+    </div>
     <template #actions v-if="toastStore.current.closable">
-      <v-btn variant="text" @click="snackbarShow = false">关闭</v-btn>
+      <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close notification" @click="snackbarShow = false" />
     </template>
   </v-snackbar>
 </template>
@@ -31,6 +34,14 @@ const snackbarShow = computed({
     if (!val) toastStore.shift()
   }
 })
+
+const toastIcon = computed(() => ({
+  success: 'mdi-check-circle-outline',
+  error: 'mdi-alert-circle-outline',
+  warning: 'mdi-alert-outline',
+  info: 'mdi-information-outline',
+  primary: 'mdi-information-outline'
+})[toastStore.current?.color] || '')
 
 onMounted(() => {
   const desktopBridge = window.astrbotDesktop
