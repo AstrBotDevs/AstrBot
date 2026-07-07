@@ -112,11 +112,13 @@
           class="diff-hunk"
           :class="{ 'is-hunk-folded': collapsedHunks.has(hi) }"
         >
-          <button
-            type="button"
+          <div
             class="hunk-header"
+            role="button"
+            tabindex="0"
             :aria-expanded="!collapsedHunks.has(hi)"
             @click="toggleHunk(hi)"
+            @keydown="(e) => onHunkHeaderKeydown(hi, e)"
           >
             <v-icon
               size="12"
@@ -129,7 +131,7 @@
             <span class="hunk-header-count">
               {{ hunk.lines.length }}
             </span>
-          </button>
+          </div>
           <div
             v-show="!collapsedHunks.has(hi)"
             class="diff-hunk-body"
@@ -221,11 +223,13 @@
           class="diff-hunk diff-hunk-split"
           :class="{ 'is-hunk-folded': collapsedHunks.has(hi) }"
         >
-          <button
-            type="button"
+          <div
             class="hunk-header"
+            role="button"
+            tabindex="0"
             :aria-expanded="!collapsedHunks.has(hi)"
             @click="toggleHunk(hi)"
+            @keydown="(e) => onHunkHeaderKeydown(hi, e)"
           >
             <v-icon
               size="12"
@@ -236,7 +240,7 @@
             </v-icon>
             <span class="hunk-header-text">{{ hunk.header }}</span>
             <span class="hunk-header-count">{{ hunk.rows.length }}</span>
-          </button>
+          </div>
           <div
             v-show="!collapsedHunks.has(hi)"
             class="diff-hunk-body"
@@ -466,11 +470,13 @@
                 class="diff-hunk"
                 :class="{ 'is-hunk-folded': collapsedHunks.has(hi) }"
               >
-                <button
-                  type="button"
+                <div
                   class="hunk-header"
+                  role="button"
+                  tabindex="0"
                   :aria-expanded="!collapsedHunks.has(hi)"
                   @click="toggleHunk(hi)"
+                  @keydown="(e) => onHunkHeaderKeydown(hi, e)"
                 >
                   <v-icon
                     size="12"
@@ -483,7 +489,7 @@
                   <span class="hunk-header-count">{{
                     hunk.lines.length
                   }}</span>
-                </button>
+                </div>
                 <div
                   v-show="!collapsedHunks.has(hi)"
                   class="diff-hunk-body"
@@ -560,11 +566,13 @@
                 class="diff-hunk diff-hunk-split"
                 :class="{ 'is-hunk-folded': collapsedHunks.has(hi) }"
               >
-                <button
-                  type="button"
+                <div
                   class="hunk-header"
+                  role="button"
+                  tabindex="0"
                   :aria-expanded="!collapsedHunks.has(hi)"
                   @click="toggleHunk(hi)"
+                  @keydown="(e) => onHunkHeaderKeydown(hi, e)"
                 >
                   <v-icon
                     size="12"
@@ -575,7 +583,7 @@
                   </v-icon>
                   <span class="hunk-header-text">{{ hunk.header }}</span>
                   <span class="hunk-header-count">{{ hunk.rows.length }}</span>
-                </button>
+                </div>
                 <div
                   v-show="!collapsedHunks.has(hi)"
                   class="diff-hunk-body"
@@ -796,6 +804,15 @@ function toggleHunk(idx: number): void {
   if (next.has(idx)) next.delete(idx);
   else next.add(idx);
   collapsedHunks.value = next;
+}
+
+function onHunkHeaderKeydown(idx: number, e: KeyboardEvent): void {
+  // Spec §6.1.3: Enter / Space toggles the hunk; mirrors the file row pattern
+  // in GitDiffFileItem (outer row was refactored from <button> to <div>).
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    toggleHunk(idx);
+  }
 }
 
 const VIEW_MODE_STORAGE_KEY = "astrbot.diff.viewMode";
