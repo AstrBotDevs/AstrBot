@@ -1,6 +1,7 @@
 import inspect
 import traceback
 import typing as T
+import functools
 
 from astrbot import logger
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
@@ -91,11 +92,14 @@ async def call_event_hook(
     )
     for handler in handlers:
         try:
-            assert inspect.iscoroutinefunction(handler.handler)
+            _handler_fn = handler.handler
+            while isinstance(_handler_fn, functools.partial):
+                _handler_fn = _handler_fn.func
+            assert inspect.iscoroutinefunction(_handler_fn)
             logger.debug(
                 f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
             )
-            await handler.handler(event, *args, **kwargs)
+            await _handler_fn(event, *args, **kwargs)
         except BaseException:
             logger.error(traceback.format_exc())
 
