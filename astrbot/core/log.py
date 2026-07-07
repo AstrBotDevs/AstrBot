@@ -32,7 +32,7 @@ class _RecordEnricherFilter(logging.Filter):
         record.source_file = _build_source_file(record.pathname)
         record.source_line = record.lineno
         record.is_trace = record.name == "astrbot.trace"
-        record.category = getattr(record, "category", "system")
+        record.category = getattr(record, "category", None) or "system"
         return True
 
 
