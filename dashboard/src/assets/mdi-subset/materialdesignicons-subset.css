@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 320 icons */
+/* Auto-generated MDI subset – 321 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -334,6 +334,10 @@
 
 .mdi-content-copy::before {
   content: "\F018F";
+}
+
+.mdi-content-cut::before {
+  content: "\F0190";
 }
 
 .mdi-content-save::before {

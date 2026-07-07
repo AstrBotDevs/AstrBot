@@ -830,27 +830,14 @@ import {
   type FileComment,
   type LineContext,
 } from "@/composables/useFileComments";
+import {
+  buildHunkPatchText,
+  parseUnifiedDiff,
+  extractDiffContent,
+  type DiffHunk,
+  type DiffLine,
+} from "@/utils/diffHunkPatch";
 import FileCommentEditor from "./FileCommentEditor.vue";
-
-// ── Types ──────────────────────────────────────────────────────────
-
-interface DiffLine {
-  type: "add" | "del" | "ctx" | "header-file";
-  prefix: string;
-  content: string;
-  oldNo: string;
-  newNo: string;
-}
-
-interface DiffHunk {
-  header: string;
-  lines: DiffLine[];
-  /** Index in the full parse (maxLines=Infinity). Stable across maxLines variants
-   *  (truncation only drops the trailing hunk's tail, never reshuffles). Used to
-   *  cross-reference the hunk in the full parse when buildHunkPatchText()
-   *  needs the complete body. */
-  hunkIndex: number;
-}
 
 // A single visual row in split mode: holds the old-side line (or null
 // when the row is a pure addition) and the new-side line (or null
@@ -971,7 +958,7 @@ function onDiscardHunkClick(hi: number, e: MouseEvent): void {
       confirmTimer = null;
     }
     confirmingHunkIndex.value = null;
-    const patchText = buildHunkPatchText(props.filePath, hi);
+    const patchText = buildHunkPatchText(props.content, props.filePath, hi);
     if (!patchText) return;   // defensive: empty patch, don't fire
     props.onDiscardHunk({ file: props.filePath, hunkIndex: hi, patchText });
   } else {
@@ -1492,126 +1479,6 @@ const statsDels = computed(() => {
   return dels || null;
 });
 
-// ── Helpers ────────────────────────────────────────────────────────
-
-function extractDiffContent(raw: string): string {
-  // If the text contains a ```diff ... ``` block, extract its content
-  const blockMatch = raw.match(/```diff\s*\n?([\s\S]*?)```/);
-  if (blockMatch) return blockMatch[1];
-
-  // Otherwise, try to strip leading "Diff:" / "Edited ..." lines
-  const diffIdx = raw.indexOf("@@");
-  if (diffIdx >= 0) return raw.slice(diffIdx);
-
-  return raw;
-}
-
-function buildHunkPatchText(filePath: string, hunkIndex: number): string {
-  // Spec §2 decision #10 + §5.2: use full parse (maxLines=Infinity) to avoid
-  // truncation, then look up the hunk by hunkIndex (set in Task 3). Use
-  // ASCII '-'/'+'/' ' prefixes — the parser's display prefix is U+2212
-  // (visual minus) which git apply rejects.
-  if (!filePath) return "";
-  const fullText = extractDiffContent(props.content);
-  const fullHunks = parseUnifiedDiff(fullText, Infinity);
-  // Find the hunk whose hunkIndex matches (handles the case where the
-  // parsed-hunks list was truncated — hunkIndex is the full-parse index).
-  const target =
-    fullHunks.find((h) => h.hunkIndex === hunkIndex) ??
-    fullHunks[hunkIndex];
-  if (!target) return "";
-  const lines: string[] = [
-    `diff --git a/${filePath} b/${filePath}`,
-    `--- a/${filePath}`,
-    `+++ b/${filePath}`,
-    target.header,
-  ];
-  for (const line of target.lines) {
-    const prefix = line.type === "del" ? "-" : line.type === "add" ? "+" : " ";
-    lines.push(prefix + line.content);
-  }
-  return lines.join("\n");
-}
-
-function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
-  const lines = text.split("\n");
-  const hunks: DiffHunk[] = [];
-  let currentHunk: DiffHunk | null = null;
-  let totalLines = 0;
-  let oldNo = 0;
-  let newNo = 0;
-
-  // Try to parse --- / +++ file headers to get old/new line numbers
-  for (const rawLine of lines) {
-    if (totalLines >= maxLines) break;
-
-    const hunkMatch = rawLine.match(
-      /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@(.*)$/,
-    );
-    if (hunkMatch) {
-      // Flush previous hunk
-      if (currentHunk) hunks.push(currentHunk);
-
-      oldNo = parseInt(hunkMatch[1], 10);
-      newNo = parseInt(hunkMatch[3], 10);
-
-      currentHunk = {
-        header: rawLine,
-        lines: [],
-        hunkIndex: hunks.length,   // pre-push index; same as final `i` in the v-for
-      };
-      continue;
-    }
-
-    if (!currentHunk) continue;
-
-    const ch = rawLine[0];
-    let type: DiffLine["type"];
-    let prefix: string;
-    let content: string;
-
-    if (ch === "+") {
-      type = "add";
-      prefix = "+";
-      content = rawLine.slice(1);
-    } else if (ch === "-") {
-      type = "del";
-      prefix = "−";
-      content = rawLine.slice(1);
-    } else if (ch === " ") {
-      type = "ctx";
-      prefix = " ";
-      content = rawLine.slice(1);
-    } else if (rawLine === "\\ No newline at end of file") {
-      type = "ctx";
-      prefix = " ";
-      content = rawLine;
-    } else {
-      // Could be --- or +++ header lines; skip or treat as ctx
-      if (rawLine.startsWith("---") || rawLine.startsWith("+++")) continue;
-      type = "ctx";
-      prefix = " ";
-      content = rawLine;
-    }
-
-    const line: DiffLine = {
-      type,
-      prefix,
-      content,
-      oldNo: type === "add" ? "" : String(oldNo),
-      newNo: type === "del" ? "" : String(newNo),
-    };
-
-    if (type !== "add") oldNo++;
-    if (type !== "del") newNo++;
-
-    currentHunk.lines.push(line);
-    totalLines++;
-  }
-
-  if (currentHunk) hunks.push(currentHunk);
-  return hunks;
-}
 </script>
 
 <style scoped>
