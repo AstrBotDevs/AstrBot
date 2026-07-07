@@ -131,6 +131,38 @@
             <span class="hunk-header-count">
               {{ hunk.lines.length }}
             </span>
+            <!-- Spec §6.1.2: per-hunk discard button. opt-in via `discardable` prop;
+                 the other 4 DiffPreview callsite don't pass this prop, so the button
+                 is not rendered there. -->
+            <button
+              v-if="discardable && onDiscardHunk"
+              type="button"
+              class="hunk-discard"
+              :class="{
+                'is-loading': isCurrentHunkDiscarding(hi),
+                'is-confirming': confirmingHunkIndex === hi,
+              }"
+              :disabled="isCurrentHunkDiscarding(hi)"
+              :aria-label="discardHunkAriaLabel(hi, hunk.header)"
+              :aria-busy="isCurrentHunkDiscarding(hi) ? 'true' : 'false'"
+              :title="discardHunkTitle(hi, hunk.header)"
+              @click.stop="onDiscardHunkClick(hi, $event)"
+            >
+              <v-progress-circular
+                v-if="isCurrentHunkDiscarding(hi)"
+                indeterminate
+                :size="12"
+                :width="2"
+              />
+              <template v-else>
+                <v-icon :size="14">
+                  {{ confirmingHunkIndex === hi ? 'mdi-alert-circle' : 'mdi-content-cut' }}
+                </v-icon>
+                <span v-if="confirmingHunkIndex === hi" class="hunk-discard-confirm-label">
+                  {{ tm('spcodeProjectLoad.diffPreview.hunkDiscard.confirmLabel') }}
+                </span>
+              </template>
+            </button>
           </div>
           <div
             v-show="!collapsedHunks.has(hi)"
@@ -240,6 +272,38 @@
             </v-icon>
             <span class="hunk-header-text">{{ hunk.header }}</span>
             <span class="hunk-header-count">{{ hunk.rows.length }}</span>
+            <!-- Spec §6.1.2: per-hunk discard button. opt-in via `discardable` prop;
+                 the other 4 DiffPreview callsite don't pass this prop, so the button
+                 is not rendered there. -->
+            <button
+              v-if="discardable && onDiscardHunk"
+              type="button"
+              class="hunk-discard"
+              :class="{
+                'is-loading': isCurrentHunkDiscarding(hi),
+                'is-confirming': confirmingHunkIndex === hi,
+              }"
+              :disabled="isCurrentHunkDiscarding(hi)"
+              :aria-label="discardHunkAriaLabel(hi, hunk.header)"
+              :aria-busy="isCurrentHunkDiscarding(hi) ? 'true' : 'false'"
+              :title="discardHunkTitle(hi, hunk.header)"
+              @click.stop="onDiscardHunkClick(hi, $event)"
+            >
+              <v-progress-circular
+                v-if="isCurrentHunkDiscarding(hi)"
+                indeterminate
+                :size="12"
+                :width="2"
+              />
+              <template v-else>
+                <v-icon :size="14">
+                  {{ confirmingHunkIndex === hi ? 'mdi-alert-circle' : 'mdi-content-cut' }}
+                </v-icon>
+                <span v-if="confirmingHunkIndex === hi" class="hunk-discard-confirm-label">
+                  {{ tm('spcodeProjectLoad.diffPreview.hunkDiscard.confirmLabel') }}
+                </span>
+              </template>
+            </button>
           </div>
           <div
             v-show="!collapsedHunks.has(hi)"
@@ -489,6 +553,38 @@
                   <span class="hunk-header-count">{{
                     hunk.lines.length
                   }}</span>
+                  <!-- Spec §6.1.2: per-hunk discard button. opt-in via `discardable` prop;
+                       the other 4 DiffPreview callsite don't pass this prop, so the button
+                       is not rendered there. -->
+                  <button
+                    v-if="discardable && onDiscardHunk"
+                    type="button"
+                    class="hunk-discard"
+                    :class="{
+                      'is-loading': isCurrentHunkDiscarding(hi),
+                      'is-confirming': confirmingHunkIndex === hi,
+                    }"
+                    :disabled="isCurrentHunkDiscarding(hi)"
+                    :aria-label="discardHunkAriaLabel(hi, hunk.header)"
+                    :aria-busy="isCurrentHunkDiscarding(hi) ? 'true' : 'false'"
+                    :title="discardHunkTitle(hi, hunk.header)"
+                    @click.stop="onDiscardHunkClick(hi, $event)"
+                  >
+                    <v-progress-circular
+                      v-if="isCurrentHunkDiscarding(hi)"
+                      indeterminate
+                      :size="12"
+                      :width="2"
+                    />
+                    <template v-else>
+                      <v-icon :size="14">
+                        {{ confirmingHunkIndex === hi ? 'mdi-alert-circle' : 'mdi-content-cut' }}
+                      </v-icon>
+                      <span v-if="confirmingHunkIndex === hi" class="hunk-discard-confirm-label">
+                        {{ tm('spcodeProjectLoad.diffPreview.hunkDiscard.confirmLabel') }}
+                      </span>
+                    </template>
+                  </button>
                 </div>
                 <div
                   v-show="!collapsedHunks.has(hi)"
@@ -583,6 +679,38 @@
                   </v-icon>
                   <span class="hunk-header-text">{{ hunk.header }}</span>
                   <span class="hunk-header-count">{{ hunk.rows.length }}</span>
+                  <!-- Spec §6.1.2: per-hunk discard button. opt-in via `discardable` prop;
+                       the other 4 DiffPreview callsite don't pass this prop, so the button
+                       is not rendered there. -->
+                  <button
+                    v-if="discardable && onDiscardHunk"
+                    type="button"
+                    class="hunk-discard"
+                    :class="{
+                      'is-loading': isCurrentHunkDiscarding(hi),
+                      'is-confirming': confirmingHunkIndex === hi,
+                    }"
+                    :disabled="isCurrentHunkDiscarding(hi)"
+                    :aria-label="discardHunkAriaLabel(hi, hunk.header)"
+                    :aria-busy="isCurrentHunkDiscarding(hi) ? 'true' : 'false'"
+                    :title="discardHunkTitle(hi, hunk.header)"
+                    @click.stop="onDiscardHunkClick(hi, $event)"
+                  >
+                    <v-progress-circular
+                      v-if="isCurrentHunkDiscarding(hi)"
+                      indeterminate
+                      :size="12"
+                      :width="2"
+                    />
+                    <template v-else>
+                      <v-icon :size="14">
+                        {{ confirmingHunkIndex === hi ? 'mdi-alert-circle' : 'mdi-content-cut' }}
+                      </v-icon>
+                      <span v-if="confirmingHunkIndex === hi" class="hunk-discard-confirm-label">
+                        {{ tm('spcodeProjectLoad.diffPreview.hunkDiscard.confirmLabel') }}
+                      </span>
+                    </template>
+                  </button>
                 </div>
                 <div
                   v-show="!collapsedHunks.has(hi)"
@@ -2185,5 +2313,78 @@ function parseUnifiedDiff(text: string, maxLines: number): DiffHunk[] {
 .diff-row-split.has-comment .diff-line-gutter {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Per-hunk discard button (spec hunk-level-discard-design.md §6.1.2)
+   ══════════════════════════════════════════════════════════════════
+
+   Opt-in rendering — the button is inside <div class="hunk-header">
+   (which is role=button) and only shows when the parent passes
+   `discardable=true` AND `onDiscardHunk`. The other 4 DiffPreview
+   callsites don't pass `discardable`, so the button is invisible there.
+
+   The button itself is hidden by default (opacity: 0) and revealed on
+   hunk-header hover / focus-visible / confirmation state, so the
+   header remains a clean clickable row until the user signals intent. */
+
+.hunk-discard {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 5px 0 3px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: #ff9800;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease,
+    border-color 0.12s ease;
+  flex-shrink: 0;
+}
+.hunk-header:hover .hunk-discard,
+.hunk-discard:focus-visible,
+.hunk-discard.is-confirming {
+  opacity: 1;
+}
+.hunk-discard:hover {
+  background: rgba(255, 152, 0, 0.1);
+}
+.hunk-discard:focus-visible {
+  outline: 2px solid #ff9800;
+  outline-offset: 1px;
+  opacity: 1;
+}
+.hunk-discard:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+.hunk-discard.is-loading {
+  opacity: 1;
+}
+.hunk-discard.is-confirming {
+  background: rgba(255, 152, 0, 0.15);
+  border-color: rgba(255, 152, 0, 0.4);
+  animation: hunk-discard-pulse 1s ease-in-out infinite;
+}
+@keyframes hunk-discard-pulse {
+  0%, 100% { background: rgba(255, 152, 0, 0.15); }
+  50%      { background: rgba(255, 152, 0, 0.28); }
+}
+.hunk-discard-confirm-label {
+  font-weight: 500;
+}
+@media (max-width: 760px) {
+  .hunk-discard {
+    width: 20px;
+    padding: 0 2px;
+  }
+  .hunk-discard-confirm-label { display: none; }
 }
 </style>
