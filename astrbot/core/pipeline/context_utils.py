@@ -99,7 +99,7 @@ async def call_event_hook(
             logger.debug(
                 f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
             )
-            await _handler_fn(event, *args, **kwargs)
+            await handler.handler(event, *args, **kwargs)
         except BaseException:
             logger.error(traceback.format_exc())
 
