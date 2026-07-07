@@ -5,8 +5,11 @@
       :content="content"
       :custom-html-tags="customHtmlTags"
       :is-dark="isDark"
+      :final="!isStreaming"
+      :smooth-streaming="isStreaming ? 'auto' : false"
+      :fade="false"
       :typewriter="false"
-      :max-live-nodes="0"
+      :max-live-nodes="MARKDOWN_RENDER_MAX_LIVE_NODES"
     />
   </div>
 </template>
@@ -14,12 +17,14 @@
 <script setup lang="ts">
 import { computed, provide } from "vue";
 import { MarkdownRender } from "markstream-vue";
+import { MARKDOWN_RENDER_MAX_LIVE_NODES } from "@/components/chat/markdownRenderConfig";
 
 const props = defineProps<{
   content: string;
   refs: { used?: Array<Record<string, unknown>> } | null;
   isDark: boolean;
   customHtmlTags: string[];
+  isStreaming?: boolean;
 }>();
 
 const isDarkRef = computed(() => props.isDark);

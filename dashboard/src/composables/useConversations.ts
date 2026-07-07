@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
-import axios from 'axios';
 import { useRouter } from 'vue-router';
+import { chatApi } from '@/api/v1';
 
 export interface Conversation {
     cid: string;
@@ -27,8 +27,12 @@ export function useConversations(chatboxMode: boolean = false) {
 
     async function getConversations() {
         try {
-            const response = await axios.get('/api/chat/conversations');
-            conversations.value = response.data.data;
+            const response = await chatApi.listSessions();
+            conversations.value = (response.data.data || []).map((session: any) => ({
+                cid: session.session_id,
+                title: session.display_name || session.session_id,
+                updated_at: Date.parse(session.updated_at || '') || 0,
+            }));
 
             // 处理待加载的会话
             if (pendingCid.value) {
@@ -52,8 +56,8 @@ export function useConversations(chatboxMode: boolean = false) {
 
     async function newConversation() {
         try {
-            const response = await axios.get('/api/chat/new_conversation');
-            const cid = response.data.data.conversation_id;
+            const response = await chatApi.createSession();
+            const cid = response.data.data.session_id;
             currCid.value = cid;
 
             // 更新 URL
@@ -70,7 +74,7 @@ export function useConversations(chatboxMode: boolean = false) {
 
     async function deleteConversation(cid: string) {
         try {
-            await axios.get('/api/chat/delete_conversation?conversation_id=' + cid);
+            await chatApi.deleteSession(cid);
             await getConversations();
             currCid.value = '';
             selectedConversations.value = [];
@@ -90,9 +94,8 @@ export function useConversations(chatboxMode: boolean = false) {
 
         const trimmedTitle = editingTitle.value.trim();
         try {
-            await axios.post('/api/chat/rename_conversation', {
-                conversation_id: editingCid.value,
-                title: trimmedTitle
+            await chatApi.updateSession(editingCid.value, {
+                display_name: trimmedTitle,
             });
 
             // 更新本地会话标题

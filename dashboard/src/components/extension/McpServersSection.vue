@@ -48,7 +48,7 @@
                 </template>
                 <template v-slot:default="{ isActive }">
                   <v-card style="padding: 16px;">
-                    <v-card-title class="d-flex align-center">
+                    <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
                       <span>{{ tm('mcpServers.status.availableTools') }}</span>
                     </v-card-title>
                     <v-card-text>
@@ -164,7 +164,7 @@
     <!-- 添加/编辑 MCP 服务器对话框 -->
     <v-dialog v-model="showMcpServerDialog" max-width="750px">
       <v-card>
-        <v-card-title class="pa-4 pl-6">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           <v-icon class="me-2">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus' }}</v-icon>
           <span>{{ isEditMode ? tm('dialogs.addServer.editTitle') : tm('dialogs.addServer.title') }}</span>
         </v-card-title>
@@ -228,7 +228,7 @@
           <v-btn variant="text" @click="testServerConnection" :disabled="loading">
             {{ tm('dialogs.addServer.buttons.testConnection') }}
           </v-btn>
-          <v-btn color="primary" @click="saveServer" :loading="loading" :disabled="!isServerFormValid">
+          <v-btn color="primary" variant="tonal" @click="saveServer" :loading="loading" :disabled="!isServerFormValid">
             {{ tm('dialogs.addServer.buttons.save') }}
           </v-btn>
         </v-card-actions>
@@ -238,7 +238,7 @@
     <!-- 同步 MCP 服务器对话框 -->
     <v-dialog v-model="showSyncMcpServerDialog" max-width="500px" persistent>
       <v-card>
-        <v-card-title class="bg-primary text-white py-3">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           <span>同步外部平台 MCP 服务器</span>
         </v-card-title>
 
@@ -284,7 +284,7 @@
           <v-btn variant="text" @click="showSyncMcpServerDialog = false" :disabled="loading">
             {{ tm('dialogs.addServer.buttons.cancel') }}
           </v-btn>
-          <v-btn color="primary" @click="syncMcpServers" :loading="loading" :disabled="loading">
+          <v-btn color="primary" variant="tonal" @click="syncMcpServers" :loading="loading" :disabled="loading">
             {{ tm('dialogs.addServer.buttons.sync') }}
           </v-btn>
         </v-card-actions>
@@ -292,15 +292,15 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack" location="top">
+    <v-snackbar :timeout="3000" elevation="6" :color="save_message_success" v-model="save_message_snack" location="top">
       {{ save_message }}
     </v-snackbar>
   </div>
 </template>
 
 <script>
-import axios from 'axios';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+import { mcpApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
 import {
@@ -402,7 +402,7 @@ export default {
     },
     getServers() {
       this.loadingGettingServers = true;
-      axios.get('/api/tools/mcp/servers')
+      mcpApi.list()
         .then(response => {
           if (response.data.status === 'error') {
             this.showError(response.data.message || this.tm('messages.getServersError', { error: 'Unknown error' }));
@@ -476,8 +476,10 @@ export default {
         if (this.isEditMode && this.originalServerName) {
           serverData.oldName = this.originalServerName;
         }
-        const endpoint = this.isEditMode ? '/api/tools/mcp/update' : '/api/tools/mcp/add';
-        axios.post(endpoint, serverData)
+        const request = this.isEditMode
+          ? mcpApi.update(this.originalServerName || serverData.name, serverData)
+          : mcpApi.create(serverData);
+        request
           .then(response => {
             this.loading = false;
             if (response.data.status === 'error') {
@@ -506,7 +508,7 @@ export default {
         return;
       }
 
-      axios.post('/api/tools/mcp/delete', { name: serverName })
+      mcpApi.delete(serverName)
         .then(response => {
           this.getServers();
           this.showSuccess(response.data.message || this.tm('messages.deleteSuccess'));
@@ -534,7 +536,7 @@ export default {
     updateServerStatus(server) {
       this.mcpServerUpdateLoaders[server.name] = true;
       server.active = !server.active;
-      axios.post('/api/tools/mcp/update', server)
+      mcpApi.setEnabled(server.name, server.active)
         .then(response => {
           this.getServers();
           this.showSuccess(response.data.message || this.tm('messages.updateSuccess'));
@@ -565,9 +567,7 @@ export default {
         this.showError(this.tm('dialogs.addServer.errors.jsonParse', { error: e.message }));
         return;
       }
-      axios.post('/api/tools/mcp/test', {
-        mcp_server_config: configObj
-      })
+      mcpApi.test(this.currentServer.name || 'draft', configObj)
         .then(response => {
           this.loading = false;
           this.addServerDialogMessage = `${response.data.message} (tools: ${response.data.data})`;
@@ -616,7 +616,9 @@ export default {
           }
           requestData.access_token = this.mcpProviderToken.trim();
         }
-        const response = await axios.post('/api/tools/mcp/sync-provider', requestData);
+        const response = await mcpApi.syncModelScope({
+          access_token: requestData.access_token || ''
+        });
         if (response.data.status === 'ok') {
           this.showSuccess(response.data.message || this.tm('syncProvider.messages.syncSuccess'));
           this.showSyncMcpServerDialog = false;

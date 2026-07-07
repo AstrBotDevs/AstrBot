@@ -13,6 +13,8 @@
         :class="{ active: index === selectedIndex }"
         @click="handleSelect(index)"
         @mouseenter="handleMouseEnter(index)"
+        @mousemove="handleMouseMove"
+        @mouseleave="handleMouseLeave"
       >
         <div class="command-suggestion-main">
           <span class="command-name">{{ cmd.effective_command }}</span>
@@ -31,10 +33,21 @@
       <span>Esc {{ tm("commandSuggestion.close") }}</span>
     </div>
   </div>
+  <!-- Tooltip: 鼠标悬停时显示完整用途 -->
+  <Teleport to="body">
+    <div
+      v-if="tooltip.visible"
+      class="command-tooltip"
+      :class="{ 'is-dark': isDark }"
+      :style="tooltipStyle"
+    >
+      {{ tooltip.text }}
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, reactive } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 export interface SuggestionCommand {
@@ -67,6 +80,21 @@ const { tm } = useModuleI18n("features/chat");
 
 const filteredCommands = computed(() => props.commands);
 
+// Tooltip 状态：鼠标悬停在指令上时显示完整用途
+const tooltip = reactive({
+  visible: false,
+  text: "",
+  x: 0,
+  y: 0,
+});
+
+const tooltipStyle = computed(() => ({
+  position: "fixed" as const,
+  left: `${tooltip.x + 12}px`,
+  top: `${tooltip.y + 12}px`,
+  zIndex: 10000,
+}));
+
 const panelStyle = computed(() => {
   if (props.caretPosition) {
     return {
@@ -94,6 +122,21 @@ function handleSelect(index: number) {
 
 function handleMouseEnter(index: number) {
   emit("updateSelectedIndex", index);
+  // 显示 tooltip
+  const cmd = props.commands[index];
+  if (cmd?.description) {
+    tooltip.text = cmd.description;
+    tooltip.visible = true;
+  }
+}
+
+function handleMouseMove(e: MouseEvent) {
+  tooltip.x = e.clientX;
+  tooltip.y = e.clientY;
+}
+
+function handleMouseLeave() {
+  tooltip.visible = false;
 }
 </script>
 
@@ -201,5 +244,30 @@ function handleMouseEnter(index: number) {
 
 .command-suggestion-hint span {
   white-space: nowrap;
+}
+</style>
+
+<!-- 非 scoped 样式：tooltip 通过 Teleport 渲染到 body，scoped 无法生效 -->
+<style>
+.command-tooltip {
+  max-width: 360px;
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+  color: #333;
+  line-height: 1.5;
+  word-break: break-word;
+  pointer-events: none;
+  white-space: normal;
+}
+
+.command-tooltip.is-dark {
+  background: #2d2d2d;
+  border-color: #404040;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  color: #e0e0e0;
 }
 </style>

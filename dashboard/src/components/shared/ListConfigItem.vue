@@ -30,7 +30,7 @@
   <!-- List Management Dialog -->
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal;">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ dialogTitle || t('core.common.list.editTitle') }}
       </v-card-title>
       
@@ -92,18 +92,18 @@
             
             <template v-slot:append>
               <div class="d-flex">
-                <v-btn 
+                <v-btn
                   v-if="editIndex === index"
                   @click.stop="saveEdit" 
-                  variant="plain" 
+                  variant="text"
                   color="success" 
                   icon 
                   size="small">
                   <v-icon>mdi-check</v-icon>
                 </v-btn>
-                <v-btn 
+                <v-btn
                   @click.stop="editIndex === index ? cancelEdit() : removeItem(index)" 
-                  variant="plain" 
+                  variant="text"
                   :color="editIndex === index ? 'error' : 'default'"
                   icon 
                   size="small">
@@ -123,7 +123,7 @@
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelDialog">{{ t('core.common.cancel') }}</v-btn>
-        <v-btn color="primary" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
+        <v-btn color="primary" variant="tonal" @click="confirmDialog">{{ t('core.common.confirm') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -131,7 +131,7 @@
   <!-- Batch Import Dialog -->
   <v-dialog v-model="showBatchImport" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal;">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ t('core.common.list.batchImportTitle') }}
       </v-card-title>
       
@@ -150,7 +150,7 @@
       <v-card-actions class="pa-4">
         <v-spacer></v-spacer>
         <v-btn variant="text" @click="cancelBatchImport">{{ t('core.common.cancel') }}</v-btn>
-        <v-btn color="primary" @click="confirmBatchImport">
+        <v-btn color="primary" variant="tonal" @click="confirmBatchImport">
           {{ t('core.common.list.batchImportButton', { count: batchImportPreviewCount }) }}
         </v-btn>
       </v-card-actions>
@@ -205,8 +205,9 @@ const isSingleItemMode = computed(() => (props.modelValue?.length ?? 0) <= 1 && 
 const singleItemValue = computed({
   get: () => props.modelValue?.[0] ?? '',
   set: (value) => {
-    // 如果值为空或只有空白字符，emit 空数组
-    if (value.trim() === '') {
+    // 仅当值为完全空字符串（未输入任何字符）时清空数组，
+    // 允许包含空格（如 "hello world"）以及纯空格（如 " "）通过
+    if (value === '') {
       emit('update:modelValue', [])
       return
     }
@@ -241,7 +242,7 @@ const batchImportPreviewCount = computed(() => {
 watch(() => props.modelValue, (newValue) => {
   localItems.value = [...(newValue || [])]
   
-  // 自动清理只包含空字符串的数组
+  // 自动清理只包含空字符串或纯空格的条目（纯空格在配置中无意义，此过滤为预期兜底行为）
   if (newValue && newValue.length > 0) {
     const filtered = newValue.filter(item => typeof item === 'string' ? item.trim() !== '' : true)
     if (filtered.length !== newValue.length) {

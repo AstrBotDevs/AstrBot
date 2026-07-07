@@ -1,25 +1,19 @@
 import asyncio
-import base64
 import copy
 import inspect
 import json
 import random
 import re
-import uuid
 from collections.abc import AsyncGenerator
-from io import BytesIO
-from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import unquote, urlparse
 
 import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
 from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion_usage import CompletionUsage
-from PIL import Image as PILImage
-from PIL import UnidentifiedImageError
 
 import astrbot.core.message.components as Comp
 from astrbot import logger
@@ -35,9 +29,10 @@ from astrbot.core.agent.tool import ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.provider.entities import LLMResponse, TokenUsage, ToolCallsResult
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file, download_image_by_url
-from astrbot.core.utils.media_utils import ensure_wav
+from astrbot.core.utils.media_utils import (
+    describe_media_ref,
+    resolve_media_ref_to_base64_data,
+)
 from astrbot.core.utils.network_utils import (
     create_proxy_client,
     is_connection_error,
@@ -46,6 +41,7 @@ from astrbot.core.utils.network_utils import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
+from .request_retry import retry_provider_request
 
 
 @register_provider_adapter(
@@ -180,80 +176,18 @@ class ProviderOpenAIOfficial(Provider):
             return True
         return False
 
-    @classmethod
-    def _encode_image_file_to_data_url(
-        cls,
-        image_path: str,
-        *,
-        mode: Literal["safe", "strict"],
-    ) -> str | None:
-        try:
-            image_bytes = Path(image_path).read_bytes()
-        except OSError:
-            if mode == "strict":
-                raise
-            return None
-
-        try:
-            with PILImage.open(BytesIO(image_bytes)) as image:
-                image.verify()
-                image_format = str(image.format or "").upper()
-        except (OSError, UnidentifiedImageError):
-            if mode == "strict":
-                raise ValueError(f"Invalid image file: {image_path}")
-            return None
-
-        mime_type = {
-            "JPEG": "image/jpeg",
-            "PNG": "image/png",
-            "GIF": "image/gif",
-            "WEBP": "image/webp",
-            "BMP": "image/bmp",
-        }.get(image_format, "image/jpeg")
-        image_bs64 = base64.b64encode(image_bytes).decode("utf-8")
-        return f"data:{mime_type};base64,{image_bs64}"
-
-    @staticmethod
-    def _file_uri_to_path(file_uri: str) -> str:
-        """Normalize file URIs to paths.
-
-        `file://localhost/...` and drive-letter forms are treated as local paths.
-        Other non-empty hosts are preserved as UNC-style paths.
-        """
-        parsed = urlparse(file_uri)
-        if parsed.scheme != "file":
-            return file_uri
-
-        netloc = unquote(parsed.netloc or "")
-        path = unquote(parsed.path or "")
-        if re.fullmatch(r"[A-Za-z]:", netloc):
-            return str(Path(f"{netloc}{path}"))
-        if re.match(r"^/[A-Za-z]:/", path):
-            path = path[1:]
-        if netloc and netloc != "localhost":
-            path = f"//{netloc}{path}"
-        return str(Path(path))
-
     async def _image_ref_to_data_url(
         self,
         image_ref: str,
         *,
         mode: Literal["safe", "strict"] = "safe",
     ) -> str | None:
-        if image_ref.startswith("base64://"):
-            return image_ref.replace("base64://", "data:image/jpeg;base64,")
-
-        if image_ref.startswith("http"):
-            image_path = await download_image_by_url(image_ref)
-        elif image_ref.startswith("file://"):
-            image_path = self._file_uri_to_path(image_ref)
-        else:
-            image_path = image_ref
-
-        return self._encode_image_file_to_data_url(
-            image_path,
-            mode=mode,
+        image_data = await resolve_media_ref_to_base64_data(
+            image_ref,
+            media_type="image",
+            strict=mode == "strict",
         )
+        return image_data.to_data_url() if image_data else None
 
     async def _resolve_image_part(
         self,
@@ -261,14 +195,11 @@ class ProviderOpenAIOfficial(Provider):
         *,
         image_detail: str | None = None,
     ) -> dict | None:
-        if image_url.startswith("data:"):
-            image_payload = {"url": image_url}
-        else:
-            image_data = await self._image_ref_to_data_url(image_url, mode="safe")
-            if not image_data:
-                logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
-                return None
-            image_payload = {"url": image_data}
+        image_data = await self._image_ref_to_data_url(image_url, mode="safe")
+        if not image_data:
+            logger.warning("图片预处理结果为空，将忽略。")
+            return None
+        image_payload = {"url": image_data}
 
         if image_detail:
             image_payload["detail"] = image_detail
@@ -312,53 +243,26 @@ class ProviderOpenAIOfficial(Provider):
 
         return url
 
-    async def _audio_ref_to_local_path(self, audio_ref: str) -> tuple[str, list[Path]]:
-        cleanup_paths: list[Path] = []
-        if audio_ref.startswith("http"):
-            suffix = Path(urlparse(audio_ref).path).suffix or ".wav"
-            temp_dir = Path(get_astrbot_temp_path())
-            temp_dir.mkdir(parents=True, exist_ok=True)
-            target_path = temp_dir / f"provider_audio_{uuid.uuid4().hex}{suffix}"
-            await download_file(audio_ref, str(target_path))
-            cleanup_paths.append(target_path)
-            return str(target_path), cleanup_paths
-        if audio_ref.startswith("file://"):
-            return self._file_uri_to_path(audio_ref), cleanup_paths
-        return audio_ref, cleanup_paths
-
     async def _resolve_audio_part(self, audio_ref: str) -> dict | None:
-        cleanup_paths: list[Path] = []
         try:
-            audio_path, cleanup_paths = await self._audio_ref_to_local_path(audio_ref)
-            suffix = Path(audio_path).suffix.lower()
-            if suffix == ".mp3":
-                audio_format = "mp3"
-            else:
-                converted_audio_path = await ensure_wav(audio_path)
-                if converted_audio_path != audio_path:
-                    cleanup_paths.append(Path(converted_audio_path))
-                audio_path = converted_audio_path
-                audio_format = "wav"
-            audio_bytes = Path(audio_path).read_bytes()
+            audio_data = await resolve_media_ref_to_base64_data(
+                audio_ref,
+                media_type="audio",
+                strict=True,
+            )
         except Exception as exc:
-            logger.warning("音频 %s 预处理失败，将忽略。错误: %s", audio_ref, exc)
+            logger.warning("音频预处理失败，将忽略。错误: %s", exc)
             return None
-        finally:
-            for cleanup_path in cleanup_paths:
-                try:
-                    cleanup_path.unlink(missing_ok=True)
-                except Exception as cleanup_exc:
-                    logger.warning(
-                        "Failed to cleanup %s: %s",
-                        cleanup_path,
-                        cleanup_exc,
-                    )
+
+        if not audio_data or not audio_data.format:
+            logger.warning("音频预处理结果为空，将忽略。")
+            return None
 
         return {
             "type": "input_audio",
             "input_audio": {
-                "data": base64.b64encode(audio_bytes).decode("utf-8"),
-                "format": audio_format,
+                "data": audio_data.base64_data,
+                "format": audio_data.format,
             },
         }
 
@@ -494,8 +398,6 @@ class ProviderOpenAIOfficial(Provider):
 
         self.reasoning_key = "reasoning_content"
 
-<<<<<<< HEAD
-=======
     def _ollama_disable_thinking_enabled(self) -> bool:
         value = self.provider_config.get("ollama_disable_thinking", False)
         if isinstance(value, str):
@@ -519,7 +421,10 @@ class ProviderOpenAIOfficial(Provider):
     async def get_models(self):
         try:
             models_str = []
-            models = await self.client.models.list()
+            models = await retry_provider_request(
+                "OpenAI",
+                lambda: self.client.models.list(),
+            )
             models = sorted(models.data, key=lambda x: x.id)
             for model in models:
                 models_str.append(model.id)
@@ -551,20 +456,69 @@ class ProviderOpenAIOfficial(Provider):
 
             content = msg.get("content")
             tool_calls = msg.get("tool_calls")
+            reasoning_content = msg.get("reasoning_content")
 
             if _is_empty(content) and not tool_calls:
-                logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                continue
+                if not reasoning_content:
+                    # 三者全空，真正的垃圾消息，丢弃
+                    logger.debug(
+                        f"过滤第 {idx} 条空 assistant 消息 (无 content | tool_calls | reasoning_content)"
+                    )
+                    continue
+                else:
+                    # ⭐ 有 reasoning_content 但没有 content 和 tool_calls
+                    # 不能丢（推理模型需要 reasoning 历史）
+                    # 但 API 要求 content 或 tool_calls 至少有一个
+                    # → 设空字符串占位，满足校验
+                    msg["content"] = ""
 
-            if _is_empty(content) and tool_calls:
-                msg["content"] = None
+            elif _is_empty(content) and tool_calls:
+                msg["content"] = None  # 有 tool_calls，按 OpenAI 规范
 
             cleaned.append(msg)
 
-        payloads["messages"] = cleaned
+        # Drop orphaned or duplicate tool messages whose assistant(tool_calls)
+        # was removed by context truncation / compression.
+        pending_tool_call_ids: set[str] = set()
+        final: list = []
+        removed_tool_messages = 0
+        for msg in cleaned:
+            if not isinstance(msg, dict):
+                final.append(msg)
+                pending_tool_call_ids = set()
+                continue
+            role = msg.get("role")
+            if role == "assistant" and msg.get("tool_calls"):
+                pending_tool_call_ids = {
+                    tc["id"]
+                    for tc in msg["tool_calls"]
+                    if isinstance(tc, dict) and "id" in tc
+                }
+                final.append(msg)
+            elif role == "tool":
+                tool_call_id = msg.get("tool_call_id")
+                if tool_call_id in pending_tool_call_ids:
+                    final.append(msg)
+                    pending_tool_call_ids.remove(tool_call_id)
+                else:
+                    removed_tool_messages += 1
+            else:
+                pending_tool_call_ids = set()
+                final.append(msg)
+        if removed_tool_messages:
+            logger.debug(
+                "Filtered %d orphaned or duplicate tool message(s)",
+                removed_tool_messages,
+            )
+        payloads["messages"] = final
 
->>>>>>> master
-    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+    ) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -595,10 +549,14 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
-        completion = await self.client.chat.completions.create(
-            **payloads,
-            stream=False,
-            extra_body=extra_body,
+        completion = await retry_provider_request(
+            "OpenAI",
+            lambda: self.client.chat.completions.create(
+                **payloads,
+                stream=False,
+                extra_body=extra_body,
+            ),
+            max_attempts=request_max_retries,
         )
 
         if not isinstance(completion, ChatCompletion):
@@ -616,6 +574,8 @@ class ProviderOpenAIOfficial(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
         if tools:
@@ -647,11 +607,15 @@ class ProviderOpenAIOfficial(Provider):
 
         self._sanitize_assistant_messages(payloads)
 
-        stream = await self.client.chat.completions.create(
-            **payloads,
-            stream=True,
-            extra_body=extra_body,
-            stream_options={"include_usage": True},
+        stream = await retry_provider_request(
+            "OpenAI",
+            lambda: self.client.chat.completions.create(
+                **payloads,
+                stream=True,
+                extra_body=extra_body,
+                stream_options={"include_usage": True},
+            ),
+            max_attempts=request_max_retries,
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -760,7 +724,8 @@ class ProviderOpenAIOfficial(Provider):
             output=completion_tokens,
         )
 
-    def _normalize_content(self, raw_content: Any, strip: bool = True) -> str:
+    @staticmethod
+    def _normalize_content(raw_content: Any, strip: bool = True) -> str:
         """Normalize content from various formats to plain string.
 
         Some LLM providers return content as list[dict] format
@@ -849,31 +814,6 @@ class ProviderOpenAIOfficial(Provider):
         # Fallback for other types (int, float, etc.)
         return str(raw_content) if raw_content is not None else ""
 
-    def _parse_image_url_part(self, image_field) -> str | None:
-        """解析 OpenAI image_url 部分并提取 URL
-
-        Args:
-            image_field: 可以是字典或字符串格式的 image_url 字段
-
-        Returns:
-            提取的 URL 或 base64 数据，如果无效则返回 None
-        """
-        if isinstance(image_field, dict):
-            url = image_field.get("url")
-        else:
-            url = image_field
-
-        if not url:
-            return None
-
-        # 统一处理 base64 格式，提取纯 base64 数据
-        if isinstance(url, str) and "base64," in url:
-            return url.split("base64,", 1)[1]
-        elif isinstance(url, str) and url.startswith("base64://"):
-            return url.replace("base64://", "")
-        else:
-            return url
-
     async def _parse_openai_completion(
         self, completion: ChatCompletion, tools: ToolSet | None
     ) -> LLMResponse:
@@ -888,58 +828,6 @@ class ProviderOpenAIOfficial(Provider):
 
         # parse the text completion
         if choice.message.content is not None:
-<<<<<<< HEAD
-            # content can be either a plain string or a multimodal list
-            content = choice.message.content
-            # handle multimodal content returned as a list of parts
-            if isinstance(content, list):
-                reasoning_parts = []
-                mc = MessageChain()
-                for part in content:
-                    if not isinstance(part, dict):
-                        # fallback: append as plain text
-                        mc.message(str(part))
-                        continue
-                    ptype = part.get("type")
-                    if ptype == "text":
-                        mc.message(part.get("text", ""))
-                    elif ptype == "image_url":
-                        image_field = part.get("image_url")
-                        url = self._parse_image_url_part(image_field)
-                        if url:
-                            # 判断是 base64 数据还是 URL
-                            if url.startswith("http"):
-                                mc.url_image(url)
-                            else:
-                                mc.base64_image(url)
-                    elif ptype == "think":
-                        # collect reasoning parts for later extraction
-                        think_val = part.get("think")
-                        if think_val:
-                            reasoning_parts.append(str(think_val))
-                    else:
-                        # unknown part type, append its textual representation
-                        mc.message(json.dumps(part, ensure_ascii=False))
-
-                if reasoning_parts:
-                    llm_response.reasoning_content = "\n".join(
-                        [rp.strip() for rp in reasoning_parts]
-                    )
-                llm_response.result_chain = mc
-            else:
-                # text completion (string)
-                completion_text = str(content).strip()
-                # specially, some providers may set <think> tags around reasoning content in the completion text,
-                # we use regex to remove them, and store then in reasoning_content field
-                reasoning_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
-                matches = reasoning_pattern.findall(completion_text)
-                if matches:
-                    llm_response.reasoning_content = "\n".join(
-                        [match.strip() for match in matches],
-                    )
-                    completion_text = reasoning_pattern.sub("", completion_text).strip()
-                llm_response.result_chain = MessageChain().message(completion_text)
-=======
             completion_text = self._normalize_content(choice.message.content)
             # specially, some providers may set <think> tags around reasoning content in the completion text,
             # we use regex to remove them, and store then in reasoning_content field
@@ -957,7 +845,6 @@ class ProviderOpenAIOfficial(Provider):
             refusal_text = self._normalize_content(refusal)
             if refusal_text:
                 llm_response.result_chain = MessageChain().message(refusal_text)
->>>>>>> master
 
         # parse the reasoning content if any
         # the priority is higher than the <think> tag extraction
@@ -1028,8 +915,9 @@ class ProviderOpenAIOfficial(Provider):
         llm_response.raw_completion = completion
         llm_response.id = completion.id
 
-        if completion.usage:
-            llm_response.usage = self._extract_usage(completion.usage)
+        llm_response.usage = (
+            self._extract_usage(completion.usage) if completion.usage else TokenUsage()
+        )
 
         return llm_response
 
@@ -1089,11 +977,23 @@ class ProviderOpenAIOfficial(Provider):
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
         is_gemini = "gemini" in model
-        deepseek_reasoning_models = {"deepseek-v4-pro", "deepseek-v4-flash"}
+        _deepseek_v4_markers = ("deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4")
         is_deepseek_v4_reasoning = (
-            model in deepseek_reasoning_models
+            any(marker in model for marker in _deepseek_v4_markers)
             or "api.deepseek.com" in self.client.base_url.host
         )
+        # deepseek-chat and deepseek-reasoner now point to V4 models (per official website)
+
+        # MiMo 推理模型（MiMo-V2.5-Pro / MiMo-V2.5 / MiMo-V2-Pro / MiMo-V2-Omni / MiMo-V2-Flash）
+        # 要求 assistant 历史消息必须回传 reasoning_content，否则返回 400
+        mimo_reasoning_models = {
+            "mimo-v2.5-pro",
+            "mimo-v2.5",
+            "mimo-v2-pro",
+            "mimo-v2-omni",
+            "mimo-v2-flash",
+        }
+        is_mimo_reasoning = model in mimo_reasoning_models
         for message in payloads.get("messages", []):
             if message.get("role") == "assistant" and isinstance(
                 message.get("content"), list
@@ -1120,6 +1020,15 @@ class ProviderOpenAIOfficial(Provider):
             ):
                 # DeepSeek v4 reasoning models require the field on assistant
                 # history messages, even when the reasoning content is empty.
+                message["reasoning_content"] = ""
+
+            if (
+                message.get("role") == "assistant"
+                and is_mimo_reasoning
+                and "reasoning_content" not in message
+            ):
+                # MiMo 推理模型要求 assistant 历史消息回传 reasoning_content，
+                # 缺失时 API 返回 400。参见 MiMo 官方文档。
                 message["reasoning_content"] = ""
 
             # Gemini 的 function_response 要求 google.protobuf.Struct（即 JSON 对象），
@@ -1261,6 +1170,7 @@ class ProviderOpenAIOfficial(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         payloads, context_query = await self._prepare_chat_payload(
@@ -1288,7 +1198,11 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
-                llm_response = await self._query(payloads, func_tool)
+                llm_response = await self._query(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                )
                 break
             except Exception as e:
                 last_exception = e
@@ -1333,6 +1247,7 @@ class ProviderOpenAIOfficial(Provider):
         tool_calls_result=None,
         model=None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""
@@ -1359,7 +1274,11 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
-                async for response in self._query_stream(payloads, func_tool):
+                async for response in self._query_stream(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                ):
                     yield response
                 break
             except Exception as e:
@@ -1493,7 +1412,9 @@ class ProviderOpenAIOfficial(Provider):
         """将图片转换为 base64"""
         image_data = await self._image_ref_to_data_url(image_url, mode="strict")
         if image_data is None:
-            raise RuntimeError(f"Failed to encode image data: {image_url}")
+            raise RuntimeError(
+                f"Failed to encode image data: {describe_media_ref(image_url)}"
+            )
         return image_data
 
     async def terminate(self):

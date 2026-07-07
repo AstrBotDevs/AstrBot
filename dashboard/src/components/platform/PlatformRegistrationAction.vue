@@ -44,7 +44,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { botApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import QrCodeViewer from '@/components/shared/QrCodeViewer.vue';
 
@@ -52,14 +52,12 @@ const FEISHU_DOMAIN = 'https://open.feishu.cn';
 
 const REGISTRATION_ACTIONS = {
   lark: {
-    endpoint: '/api/platform/registration/lark',
     icon: 'mdi-qrcode',
     titleKey: 'registrationAction.lark.title',
     scanTitleKey: 'registrationAction.lark.scanTitle',
     successKey: 'registrationAction.created',
   },
   weixin_oc: {
-    endpoint: '/api/platform/registration/weixin_oc',
     icon: 'mdi-qrcode',
     titleKey: 'registrationAction.weixinOc.title',
     scanTitleKey: 'registrationAction.weixinOc.scanTitle',
@@ -67,11 +65,24 @@ const REGISTRATION_ACTIONS = {
     statusKeyPrefix: 'registrationAction.weixinOc.status',
   },
   dingtalk: {
-    endpoint: '/api/platform/registration/dingtalk',
     icon: 'mdi-qrcode',
     titleKey: 'registrationAction.dingtalk.title',
     scanTitleKey: 'registrationAction.dingtalk.scanTitle',
     successKey: 'registrationAction.dingtalk.created',
+  },
+  qq_official: {
+    icon: 'mdi-qrcode',
+    titleKey: 'registrationAction.qqOfficial.title',
+    scanTitleKey: 'registrationAction.qqOfficial.scanTitle',
+    successKey: 'registrationAction.qqOfficial.created',
+    statusKeyPrefix: 'registrationAction.qqOfficial.status',
+  },
+  qq_official_webhook: {
+    icon: 'mdi-qrcode',
+    titleKey: 'registrationAction.qqOfficial.title',
+    scanTitleKey: 'registrationAction.qqOfficial.scanTitle',
+    successKey: 'registrationAction.qqOfficial.created',
+    statusKeyPrefix: 'registrationAction.qqOfficial.status',
   },
 };
 
@@ -164,7 +175,10 @@ export default {
       this.loading = true;
       this.flow = { status: 'starting' };
       try {
-        const res = await axios.post(this.action.endpoint, this.buildPayload('start'));
+        const res = await botApi.registration(
+          this.platformConfig.type,
+          this.buildPayload('start'),
+        );
         if (res.data.status !== 'ok') {
           throw new Error(res.data.message || this.tm('registrationAction.startFailed'));
         }
@@ -202,10 +216,20 @@ export default {
       if (!this.action || !this.flow.registration_code) {
         return;
       }
+      const pollPayload = {
+        registration_code: this.flow.registration_code,
+      };
+      if (this.flow.task_id) {
+        pollPayload.task_id = this.flow.task_id;
+      }
+      if (this.flow.bind_key) {
+        pollPayload.bind_key = this.flow.bind_key;
+      }
       try {
-        const res = await axios.post(this.action.endpoint, this.buildPayload('poll', {
-          registration_code: this.flow.registration_code,
-        }));
+        const res = await botApi.registration(
+          this.platformConfig.type,
+          this.buildPayload('poll', pollPayload),
+        );
         if (res.data.status !== 'ok') {
           throw new Error(res.data.message || this.tm('registrationAction.pollFailed'));
         }
@@ -250,6 +274,12 @@ export default {
       }
       if (data.app_secret) {
         this.platformConfig.app_secret = data.app_secret;
+      }
+      if (data.appid) {
+        this.platformConfig.appid = data.appid;
+      }
+      if (data.secret) {
+        this.platformConfig.secret = data.secret;
       }
       if (data.domain) {
         this.platformConfig.domain = data.domain;

@@ -1,7 +1,7 @@
 <template>
     <v-dialog v-model="visible" persistent max-width="400">
         <v-card>
-            <v-card-title>{{ t('core.common.restart.waiting') }}</v-card-title>
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ t('core.common.restart.waiting') }}</v-card-title>
             <v-card-text>
                 <v-progress-linear indeterminate color="primary"></v-progress-linear>
             </v-card-text>
@@ -10,7 +10,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import { statsApi } from '@/api/v1'
 import { useCommonStore } from '@/stores/common';
 import { useI18n } from '@/i18n/composables';
 
@@ -31,6 +31,11 @@ export default {
         }
     },
     methods: {
+        reloadWithCacheBuster() {
+            const url = new URL(window.location.href)
+            url.searchParams.set('_r', Date.now().toString())
+            window.location.replace(url.toString())
+        },
         async check(initialStartTime = null) {
             this.newStartTime = -1
             this.cnt = 0
@@ -76,15 +81,14 @@ export default {
         },
         async checkStartTime() {
             try {
-                let res = await axios.get('/api/stat/start-time', { timeout: 3000 })
+                let res = await statsApi.startTime()
                 let newStartTime = res.data.data.start_time
                 console.log('wfr: checkStartTime', newStartTime, this.startTime)
                 if (this.startTime !== -1 && newStartTime !== this.startTime) {
                     this.newStartTime = newStartTime
                     console.log('wfr: restarted')
                     this.visible = false
-                    // reload
-                    window.location.reload()
+                    this.reloadWithCacheBuster()
                 }
             } catch (_error) {
                 // backend may be unavailable during restart window
