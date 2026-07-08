@@ -355,6 +355,15 @@ async def test_member_takeover_sandbox_requires_explicit_permission(monkeypatch)
     calls = []
 
     class FakeManager:
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "owner_session_id": "session-a",
+                "controller_session_id": None,
+            },
+            get_current_sandbox_id=lambda session_id: None,
+        )
+
         async def takeover_sandbox(self, session_id, sandbox_id, **kwargs):
             calls.append((session_id, sandbox_id, kwargs))
             return {"sandbox_id": sandbox_id}
@@ -371,6 +380,45 @@ async def test_member_takeover_sandbox_requires_explicit_permission(monkeypatch)
 
     assert "sandbox-1" in str(result)
     assert calls
+
+
+@pytest.mark.asyncio
+async def test_member_takeover_or_destroy_rejects_other_idle_sandbox(monkeypatch):
+    class FakeManager:
+        registry = SimpleNamespace(
+            get_sandbox=lambda sandbox_id: {
+                "sandbox_id": sandbox_id,
+                "owner_session_id": "session-b",
+                "created_by_session_id": "session-b",
+                "controller_session_id": None,
+            },
+            get_current_sandbox_id=lambda session_id: None,
+        )
+
+        async def takeover_sandbox(self, *args, **kwargs):
+            raise AssertionError("takeover must be denied before manager call")
+
+        async def destroy_sandbox(self, *args, **kwargs):
+            raise AssertionError("destroy must be denied before manager call")
+
+    monkeypatch.setattr(
+        "astrbot.core.computer.computer_client.sandbox_manager", FakeManager()
+    )
+    context = _member_context_with_sandbox_permissions(takeover=True, destroy=True)
+
+    takeover_result = await SandboxLifecycleTool().call(
+        context,
+        "takeover",
+        sandbox_id="other-idle",
+    )
+    destroy_result = await SandboxLifecycleTool().call(
+        context,
+        "destroy",
+        sandbox_id="other-idle",
+    )
+
+    assert "Permission denied" in str(takeover_result)
+    assert "Permission denied" in str(destroy_result)
 
 
 @pytest.mark.asyncio

@@ -744,6 +744,11 @@ async def test_sandbox_dashboard_blocks_mutations_in_demo_mode(
         registry=SandboxRegistry(), providers={provider.provider_id: provider}
     )
     shell = SimpleNamespace(exec=AsyncMock(return_value={"stdout": "ran"}))
+    gui = SimpleNamespace(
+        screenshot=AsyncMock(
+            return_value={"base64": "aW1hZ2U=", "mime_type": "image/png"}
+        )
+    )
     manager.registry.upsert_sandbox(
         sandbox_id="sandbox-1",
         sandbox_name="Sandbox 1",
@@ -757,6 +762,7 @@ async def test_sandbox_dashboard_blocks_mutations_in_demo_mode(
     )
     manager.session_booter["sandbox-1"] = SimpleNamespace(
         shell=shell,
+        gui=gui,
         available=lambda: True,
     )
     monkeypatch.setattr(computer_client, "sandbox_manager", manager)
@@ -775,6 +781,14 @@ async def test_sandbox_dashboard_blocks_mutations_in_demo_mode(
         json={"command": "echo blocked"},
         headers=authenticated_header,
     )
+    screenshot_response = await test_client.post(
+        "/api/sandbox/sandbox-1/screenshot?session_id=dashboard",
+        headers=authenticated_header,
+    )
+    admin_screenshot_response = await test_client.post(
+        "/api/sandbox/sandbox-1/admin-screenshot",
+        headers=authenticated_header,
+    )
 
     for task in list(manager.pending_boot_tasks.values()):
         task.cancel()
@@ -785,17 +799,105 @@ async def test_sandbox_dashboard_blocks_mutations_in_demo_mode(
 
     create_data = await create_response.get_json()
     shell_data = await shell_response.get_json()
+    screenshot_data = await screenshot_response.get_json()
+    admin_screenshot_data = await admin_screenshot_response.get_json()
 
     assert create_response.status_code == 200
     assert shell_response.status_code == 200
+    assert screenshot_response.status_code == 200
+    assert admin_screenshot_response.status_code == 200
     assert create_data["status"] == "error"
     assert shell_data["status"] == "error"
+    assert screenshot_data["status"] == "error"
+    assert admin_screenshot_data["status"] == "error"
     assert "demo mode" in create_data["message"]
     assert "demo mode" in shell_data["message"]
+    assert "demo mode" in screenshot_data["message"]
+    assert "demo mode" in admin_screenshot_data["message"]
     assert [sandbox["sandbox_id"] for sandbox in manager.list_sandboxes()] == [
         "sandbox-1"
     ]
     shell.exec.assert_not_awaited()
+    gui.screenshot.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sandbox_api_key_cannot_claim_dashboard_session_bypass():
+    from astrbot.dashboard.api.auth import AuthContext
+    from astrbot.dashboard.api.sandbox import (
+        capture_screenshot,
+        release_current_sandbox,
+        run_shell,
+    )
+
+    class FakeRequest:
+        async def json(self):
+            return {"command": "pwd"}
+
+    class FakeSandboxService:
+        def release_current_sandbox(
+            self, session_id, sandbox_id=None, *, is_dashboard_user=False
+        ):
+            return {
+                "session_id": session_id,
+                "sandbox_id": sandbox_id,
+                "is_dashboard_user": is_dashboard_user,
+            }
+
+        async def run_shell(
+            self, session_id, sandbox_id, data, *, is_dashboard_user=False
+        ):
+            return {
+                "session_id": session_id,
+                "sandbox_id": sandbox_id,
+                "data": data,
+                "is_dashboard_user": is_dashboard_user,
+            }
+
+        async def capture_screenshot(
+            self, session_id, sandbox_id, data, *, is_dashboard_user=False
+        ):
+            return {
+                "session_id": session_id,
+                "sandbox_id": sandbox_id,
+                "is_dashboard_user": is_dashboard_user,
+            }
+
+    auth = AuthContext(
+        username="api_key:key-1",
+        scopes=["sandbox"],
+        api_key_id="key-1",
+        via="api_key",
+    )
+    service = FakeSandboxService()
+
+    release_response = await release_current_sandbox(
+        session_id="dashboard",
+        sandbox_id="sandbox-1",
+        auth=auth,
+        service=service,
+    )
+    shell_response = await run_shell(
+        sandbox_id="sandbox-1",
+        request=FakeRequest(),
+        session_id="dashboard",
+        auth=auth,
+        service=service,
+    )
+    screenshot_response = await capture_screenshot(
+        sandbox_id="sandbox-1",
+        request=FakeRequest(),
+        session_id="dashboard",
+        auth=auth,
+        service=service,
+    )
+
+    assert release_response["data"]["session_id"] == "dashboard"
+    assert shell_response["data"]["session_id"] == "dashboard"
+    assert screenshot_response["data"]["session_id"] == "dashboard"
+    assert release_response["data"]["is_dashboard_user"] is False
+    assert shell_response["data"]["is_dashboard_user"] is False
+    assert screenshot_response["data"]["is_dashboard_user"] is False
 
 
 @pytest.mark.asyncio
@@ -1002,7 +1104,9 @@ async def test_sandbox_dashboard_admin_screenshot_allows_occupied_sandbox(
         registry=SandboxRegistry(), providers={provider.provider_id: provider}
     )
     gui = SimpleNamespace(
-        screenshot=AsyncMock(return_value={"base64": "aW1hZ2U=", "mime_type": "image/png"})
+        screenshot=AsyncMock(
+            return_value={"base64": "aW1hZ2U=", "mime_type": "image/png"}
+        )
     )
     manager.registry.upsert_sandbox(
         sandbox_id="sandbox-1",
@@ -1582,7 +1686,7 @@ async def test_sandbox_dashboard_shell_bypasses_lease_for_admin_access(
 
     test_client = app.test_client()
     response = await test_client.post(
-        "/api/sandbox/sandbox-1/shell?session_id=dashboard",
+        "/api/sandbox/sandbox-1/admin-shell",
         json={"command": "pwd"},
         headers=authenticated_header,
     )
@@ -1591,6 +1695,111 @@ async def test_sandbox_dashboard_shell_bypasses_lease_for_admin_access(
     assert response.status_code == 200
     assert data["status"] == "ok"
     assert data["data"]["result"]["stdout"] == "ok\n"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_admin_shell_stream_falls_back_to_exec(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Dashboard shell stream returns SSE events even without provider streaming."""
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeShell:
+        async def exec(self, command, cwd=None, env=None, timeout=300, shell=True):
+            return {"stdout": "ok\n", "stderr": "", "exit_code": 0, "success": True}
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, shell=FakeShell()
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/admin-shell/stream",
+        json={"command": "pwd"},
+        headers=authenticated_header,
+    )
+    body = (await response.get_data()).decode("utf-8")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert '"type":"stdout"' in body
+    assert '"data":"ok\\n"' in body
+    assert '"type":"exit"' in body
+    assert '"exit_code":0' in body
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_admin_shell_stream_ignores_protocol_stub(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Dashboard shell stream falls back when ShellComponent subclass lacks stream."""
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.olayer import ShellComponent
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeShell(ShellComponent):
+        async def exec(self, command, cwd=None, env=None, timeout=300, shell=True):
+            return {"stdout": "stub-ok\n", "stderr": "", "exit_code": 0}
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, shell=FakeShell()
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/admin-shell/stream",
+        json={"command": "pwd"},
+        headers=authenticated_header,
+    )
+    body = (await response.get_data()).decode("utf-8")
+
+    assert response.status_code == 200
+    assert '"type":"stdout"' in body
+    assert '"data":"stub-ok\\n"' in body
+    assert '"type":"exit"' in body
 
 
 @pytest.mark.asyncio

@@ -216,6 +216,21 @@ def _sandbox_access_denied(
     return "error: Permission denied. This sandbox belongs to another session."
 
 
+def _sandbox_destructive_access_denied(
+    context: ContextWrapper[AstrAgentContext], record: dict | None
+) -> str | None:
+    if record is None or _is_admin(context):
+        return None
+    session_id = context.context.event.unified_msg_origin
+    if record.get("controller_session_id") == session_id:
+        return None
+    if record.get("owner_session_id") == session_id:
+        return None
+    if record.get("created_by_session_id") == session_id:
+        return None
+    return "error: Permission denied. This sandbox belongs to another session."
+
+
 async def _query_list_sandboxes(
     context: ContextWrapper[AstrAgentContext],
 ) -> ToolExecResult:
@@ -381,7 +396,7 @@ async def _lifecycle_set_retention(
     if not target_sandbox_id:
         return "Error changing sandbox retention policy: No current sandbox"
     record = manager.registry.get_sandbox(target_sandbox_id)
-    if permission_error := _sandbox_access_denied(context, record):
+    if permission_error := _sandbox_destructive_access_denied(context, record):
         return permission_error
     try:
         sandbox = manager.set_sandbox_retention_policy(
@@ -432,8 +447,12 @@ async def _lifecycle_takeover(
     if not sandbox_id:
         return "Error taking over sandbox: sandbox_id is required."
     session_id = context.context.event.unified_msg_origin
+    manager = _sandbox_manager()
+    record = manager.registry.get_sandbox(sandbox_id)
+    if permission_error := _sandbox_destructive_access_denied(context, record):
+        return permission_error
     try:
-        sandbox = await _sandbox_manager().takeover_sandbox(
+        sandbox = await manager.takeover_sandbox(
             session_id, sandbox_id, context=context.context.context
         )
     except Exception as e:
@@ -452,8 +471,12 @@ async def _lifecycle_destroy(
     if not sandbox_id:
         return "Error destroying sandbox: sandbox_id is required."
     session_id = context.context.event.unified_msg_origin
+    manager = _sandbox_manager()
+    record = manager.registry.get_sandbox(sandbox_id)
+    if permission_error := _sandbox_destructive_access_denied(context, record):
+        return permission_error
     try:
-        sandbox = await _sandbox_manager().destroy_sandbox(session_id, sandbox_id)
+        sandbox = await manager.destroy_sandbox(session_id, sandbox_id)
     except Exception as e:
         detail = str(e) or type(e).__name__
         return f"Error destroying sandbox: {detail}"

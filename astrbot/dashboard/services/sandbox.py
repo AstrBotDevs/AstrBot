@@ -1,7 +1,10 @@
+import json
 import traceback
+from collections.abc import AsyncIterator
 
 from astrbot.core import logger
 from astrbot.core.computer import computer_client
+from astrbot.core.computer.olayer import ShellComponent
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 
 from .sandbox_helpers import (
@@ -121,7 +124,11 @@ class SandboxService:
             ) from exc
 
     def release_current_sandbox(
-        self, session_id: str, sandbox_id: str | None = None
+        self,
+        session_id: str,
+        sandbox_id: str | None = None,
+        *,
+        is_dashboard_user: bool = False,
     ) -> dict:
         try:
             sandbox = (
@@ -132,7 +139,7 @@ class SandboxService:
             controller_session_id = str(
                 sandbox.get("controller_session_id") if sandbox else ""
             )
-            can_dashboard_bypass_lease = session_id == "dashboard" and (
+            can_dashboard_bypass_lease = is_dashboard_user and (
                 not controller_session_id
                 or controller_session_id.startswith("webchat:")
             )
@@ -188,7 +195,14 @@ class SandboxService:
                 public_message="Failed to set default sandbox.",
             ) from exc
 
-    async def run_shell(self, session_id: str, sandbox_id: str, data: dict) -> dict:
+    async def run_shell(
+        self,
+        session_id: str,
+        sandbox_id: str,
+        data: dict,
+        *,
+        is_dashboard_user: bool = False,
+    ) -> dict:
         try:
             command = str(data.get("command") or "").strip()
             if not command:
@@ -198,7 +212,7 @@ class SandboxService:
                 sandbox.get("controller_session_id") if sandbox else ""
             )
             require_lease = not (
-                session_id == "dashboard"
+                is_dashboard_user
                 and (
                     not controller_session_id
                     or controller_session_id.startswith("webchat:")
@@ -265,8 +279,110 @@ class SandboxService:
                 public_message="Failed to run admin sandbox shell.",
             ) from exc
 
+    async def admin_run_shell_stream(
+        self, sandbox_id: str, data: dict
+    ) -> AsyncIterator[str]:
+        """Run an admin shell command and yield SSE-formatted stream events.
+
+        Args:
+            sandbox_id: Sandbox identifier.
+            data: Shell execution request payload.
+
+        Yields:
+            Server-sent event chunks containing shell stream events.
+        """
+        try:
+            command = str(data.get("command") or "").strip()
+            if not command:
+                raise SandboxServiceError("command is required", log_traceback=False)
+            booter = await computer_client.sandbox_manager.get_observer_booter_by_id(
+                sandbox_id,
+                "dashboard",
+                require_lease=False,
+                context=self.core_lifecycle.star_context,
+            )
+            shell = getattr(booter, "shell", None)
+            if shell is None:
+                raise SandboxServiceError(
+                    "Sandbox does not support shell.", log_traceback=False
+                )
+
+            exec_stream = None
+            for cls in type(shell).mro():
+                if cls is ShellComponent:
+                    break
+                if "exec_stream" in cls.__dict__:
+                    exec_stream = getattr(shell, "exec_stream", None)
+                    break
+            if callable(exec_stream):
+                stream = exec_stream(
+                    command,
+                    cwd=data.get("cwd"),
+                    env=data.get("env"),
+                    timeout=sanitize_shell_timeout(data.get("timeout", 300)),
+                    shell=data.get("shell", True),
+                )
+                if hasattr(stream, "__aiter__"):
+                    async for event in stream:
+                        yield self._shell_stream_sse(event)
+                    return
+
+            result = await shell.exec(
+                command,
+                cwd=data.get("cwd"),
+                env=data.get("env"),
+                timeout=sanitize_shell_timeout(data.get("timeout", 300)),
+                shell=data.get("shell", True),
+            )
+            stdout = str(result.get("stdout") or "")
+            stderr = str(result.get("stderr") or "")
+            if stdout:
+                yield self._shell_stream_sse({"type": "stdout", "data": stdout})
+            if stderr:
+                yield self._shell_stream_sse({"type": "stderr", "data": stderr})
+            yield self._shell_stream_sse(
+                {
+                    "type": "exit",
+                    "exit_code": result.get("exit_code", result.get("returncode")),
+                    "success": result.get("success"),
+                }
+            )
+        except SandboxServiceError as exc:
+            if exc.log_traceback:
+                logger.error(traceback.format_exc())
+            yield self._shell_stream_sse(
+                {"type": "error", "message": exc.public_message}
+            )
+        except Exception as exc:
+            logger.error(traceback.format_exc())
+            yield self._shell_stream_sse(
+                {
+                    "type": "error",
+                    "message": f"Failed to run admin sandbox shell: {exc!s}",
+                }
+            )
+
+    @staticmethod
+    def _shell_stream_sse(event: dict) -> str:
+        """Encode a shell stream event as a server-sent event chunk.
+
+        Args:
+            event: Shell stream event payload.
+
+        Returns:
+            SSE chunk string.
+        """
+        return (
+            f"data: {json.dumps(event, ensure_ascii=False, separators=(',', ':'))}\n\n"
+        )
+
     async def capture_screenshot(
-        self, session_id: str, sandbox_id: str, data: dict
+        self,
+        session_id: str,
+        sandbox_id: str,
+        data: dict,
+        *,
+        is_dashboard_user: bool = False,
     ) -> dict:
         try:
             sandbox = computer_client.sandbox_manager.registry.get_sandbox(sandbox_id)
@@ -274,7 +390,7 @@ class SandboxService:
                 sandbox.get("controller_session_id") if sandbox else ""
             )
             require_lease = not (
-                session_id == "dashboard"
+                is_dashboard_user
                 and (
                     not controller_session_id
                     or controller_session_id.startswith("webchat:")

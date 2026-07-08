@@ -21,7 +21,6 @@ from .personas import router as personas_router
 from .platform import router as platform_router
 from .plugins import router as plugins_router
 from .providers import router as providers_router
-from .sandbox import router as sandbox_router
 from .sessions import router as sessions_router
 from .skills import router as skills_router
 from .stats import router as stats_router
@@ -55,7 +54,6 @@ def build_api_router() -> APIRouter:
         files_router,
         knowledge_bases_router,
         extensions_router,
-        sandbox_router,
         skills_router,
         sessions_router,
         subagents_router,

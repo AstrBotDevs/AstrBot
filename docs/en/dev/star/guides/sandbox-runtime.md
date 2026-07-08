@@ -36,6 +36,7 @@ from astrbot.core.computer.computer_client import (
 )
 
 from .provider import MySandboxProvider
+from .tools import DemoMouseClickTool
 
 
 @register("astrbot_sandbox_demo", "AstrBot Team", "Demo sandbox provider", "0.1.0")
@@ -44,7 +45,11 @@ class DemoSandboxPlugin(Star):
         super().__init__(context)
         self.provider = MySandboxProvider()
         self.provider.plugin_config = config or {}
-        register_sandbox_provider(self.provider, replace=True)
+        register_sandbox_provider(
+            self.provider,
+            replace=True,
+            tools=[DemoMouseClickTool()],
+        )
 
     async def terminate(self) -> None:
         unregister_sandbox_provider(self.provider.provider_id, force=True)
@@ -165,6 +170,37 @@ Common examples:
 - runtime-specific lifecycle helpers
 
 AstrBot uses `tool_names` when mounting tools in sandbox mode. Make sure the names match the tools you register in `main.py`.
+
+Register runtime-specific tools through the sandbox provider registration path, not as generic global tools. This lets Core apply provider-scoped filtering and unregister the tools when the provider is removed.
+
+```python
+from dataclasses import dataclass, field
+
+from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.computer.sandbox_tool_binding import sandbox_provider_tool
+
+
+@sandbox_provider_tool("demo")
+@dataclass
+class DemoMouseClickTool(FunctionTool):
+    name: str = "demo_mouse_click"
+    description: str = "Click inside the demo sandbox."
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "x": {"type": "integer"},
+                "y": {"type": "integer"},
+            },
+            "required": ["x", "y"],
+        }
+    )
+
+    async def call(self, context, x: int, y: int):
+        return await self.client.click(x=x, y=y)
+```
+
+Then keep `provider.tool_names = {"demo_mouse_click"}` and pass `tools=[DemoMouseClickTool()]` to `register_sandbox_provider(...)` in `main.py`.
 
 Use `system_prompt` as provider metadata for stable runtime-specific instructions. Core exposes it through provider info so dashboards or higher-level integrations can show the provider rules, but it is not automatically appended to every model request.
 

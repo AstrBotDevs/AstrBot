@@ -1535,44 +1535,60 @@ export const skillApi = {
     );
   },
   neoCandidates(params?: { skill_key?: string; status?: string }) {
-    return typed<any>(openApiV1.listNeoSkillCandidates({ query: params }));
+    return typed<any>(
+      apiV1Client.get('/plugins/extensions/astrbot_sandbox_shipyard_neo/neo/candidates', {
+        params,
+      }),
+    );
   },
   neoReleases(params?: { skill_key?: string; stage?: string }) {
-    return typed<any>(openApiV1.listNeoSkillReleases({ query: params }));
+    return typed<any>(
+      apiV1Client.get('/plugins/extensions/astrbot_sandbox_shipyard_neo/neo/releases', {
+        params,
+      }),
+    );
   },
   neoPayload(payloadRef: string) {
     return typed<any>(
-      openApiV1.getNeoSkillPayload({ query: { payload_ref: payloadRef } }),
+      apiV1Client.get('/plugins/extensions/astrbot_sandbox_shipyard_neo/neo/payload', {
+        params: { payload_ref: payloadRef },
+      }),
     );
   },
   evaluateNeoCandidate(body: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.evaluateNeoSkillCandidate({ body: body as any }),
+      apiV1Client.post('/plugins/extensions/astrbot_sandbox_shipyard_neo/neo/evaluate', body),
     );
   },
   promoteNeoCandidate(body: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.promoteNeoSkillCandidate({ body: body as any }),
+      apiV1Client.post('/plugins/extensions/astrbot_sandbox_shipyard_neo/neo/promote', body),
     );
   },
   rollbackNeoRelease(body: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.rollbackNeoSkillRelease({ body: body as any }),
+      apiV1Client.post('/plugins/extensions/astrbot_sandbox_shipyard_neo/neo/rollback', body),
     );
   },
   syncNeoRelease(body: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.syncNeoSkillRelease({ body: body as any }),
+      apiV1Client.post('/plugins/extensions/astrbot_sandbox_shipyard_neo/neo/sync', body),
     );
   },
   deleteNeoCandidate(body: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.deleteNeoSkillCandidate({ body: body as any }),
+      apiV1Client.post(
+        '/plugins/extensions/astrbot_sandbox_shipyard_neo/neo/candidates/delete',
+        body,
+      ),
     );
   },
   deleteNeoRelease(body: OpenConfig) {
     return typed<OpenConfig>(
-      openApiV1.deleteNeoSkillRelease({ body: body as any }),
+      apiV1Client.post(
+        '/plugins/extensions/astrbot_sandbox_shipyard_neo/neo/releases/delete',
+        body,
+      ),
     );
   },
 };

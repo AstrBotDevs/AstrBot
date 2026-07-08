@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import error, ok
@@ -48,8 +49,14 @@ async def _run(operation):
         return error(exc.public_message)
 
 
-def _session_id(session_id: str | None) -> str:
-    return session_id or "dashboard"
+def _session_id(session_id: str | None, auth: AuthContext | None = None) -> str:
+    if session_id:
+        return session_id
+    return "dashboard" if auth is not None and auth.via == "jwt" else "api-key"
+
+
+def _is_dashboard_user(auth: AuthContext) -> bool:
+    return auth.via == "jwt"
 
 
 def _demo_mode_error():
@@ -61,10 +68,10 @@ def _demo_mode_error():
 @legacy_router.get("/providers")
 async def list_providers(
     session_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
-    return await _run(lambda: service.list_providers(_session_id(session_id)))
+    return await _run(lambda: service.list_providers(_session_id(session_id, auth)))
 
 
 @legacy_router.get("")
@@ -78,23 +85,29 @@ async def list_sandboxes(
 @legacy_router.get("/current")
 async def get_current_sandbox(
     session_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
-    return await _run(lambda: service.get_current_sandbox(_session_id(session_id)))
+    return await _run(
+        lambda: service.get_current_sandbox(_session_id(session_id, auth))
+    )
 
 
 @legacy_router.delete("/current")
 async def release_current_sandbox(
     session_id: str | None = Query(default=None),
     sandbox_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
     if demo_response := _demo_mode_error():
         return demo_response
     return await _run(
-        lambda: service.release_current_sandbox(_session_id(session_id), sandbox_id)
+        lambda: service.release_current_sandbox(
+            _session_id(session_id, auth),
+            sandbox_id,
+            is_dashboard_user=_is_dashboard_user(auth),
+        )
     )
 
 
@@ -102,26 +115,28 @@ async def release_current_sandbox(
 async def create_sandbox(
     request: Request,
     session_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
     if demo_response := _demo_mode_error():
         return demo_response
     data = await _json_or_empty(request)
-    return await _run(lambda: service.create_sandbox(_session_id(session_id), data))
+    return await _run(
+        lambda: service.create_sandbox(_session_id(session_id, auth), data)
+    )
 
 
 @legacy_router.post("/{sandbox_id}/switch")
 async def switch_sandbox(
     sandbox_id: str,
     session_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
     if demo_response := _demo_mode_error():
         return demo_response
     return await _run(
-        lambda: service.switch_sandbox(_session_id(session_id), sandbox_id)
+        lambda: service.switch_sandbox(_session_id(session_id, auth), sandbox_id)
     )
 
 
@@ -129,13 +144,13 @@ async def switch_sandbox(
 async def takeover_sandbox(
     sandbox_id: str,
     session_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
     if demo_response := _demo_mode_error():
         return demo_response
     return await _run(
-        lambda: service.takeover_sandbox(_session_id(session_id), sandbox_id)
+        lambda: service.takeover_sandbox(_session_id(session_id, auth), sandbox_id)
     )
 
 
@@ -166,14 +181,19 @@ async def run_shell(
     sandbox_id: str,
     request: Request,
     session_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
     if demo_response := _demo_mode_error():
         return demo_response
     data = await _json_or_empty(request)
     return await _run(
-        lambda: service.run_shell(_session_id(session_id), sandbox_id, data)
+        lambda: service.run_shell(
+            _session_id(session_id, auth),
+            sandbox_id,
+            data,
+            is_dashboard_user=_is_dashboard_user(auth),
+        )
     )
 
 
@@ -190,17 +210,41 @@ async def admin_run_shell(
     return await _run(lambda: service.admin_run_shell(sandbox_id, data))
 
 
+@legacy_router.post("/{sandbox_id}/admin-shell/stream")
+async def admin_run_shell_stream(
+    sandbox_id: str,
+    request: Request,
+    _username: str = Depends(require_dashboard_user),
+    service: SandboxService = Depends(get_service),
+):
+    if demo_response := _demo_mode_error():
+        return demo_response
+    data = await _json_or_empty(request)
+    return StreamingResponse(
+        service.admin_run_shell_stream(sandbox_id, data),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 @legacy_router.post("/{sandbox_id}/screenshot")
 async def capture_screenshot(
     sandbox_id: str,
     request: Request,
     session_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
+    if demo_response := _demo_mode_error():
+        return demo_response
     data = await _json_or_empty(request)
     return await _run(
-        lambda: service.capture_screenshot(_session_id(session_id), sandbox_id, data)
+        lambda: service.capture_screenshot(
+            _session_id(session_id, auth),
+            sandbox_id,
+            data,
+            is_dashboard_user=_is_dashboard_user(auth),
+        )
     )
 
 
@@ -211,6 +255,8 @@ async def admin_capture_screenshot(
     _username: str = Depends(require_dashboard_user),
     service: SandboxService = Depends(get_service),
 ):
+    if demo_response := _demo_mode_error():
+        return demo_response
     data = await _json_or_empty(request)
     return await _run(lambda: service.admin_capture_screenshot(sandbox_id, data))
 
@@ -232,13 +278,13 @@ async def update_sandbox(
 async def destroy_sandbox(
     sandbox_id: str,
     session_id: str | None = Query(default=None),
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
     if demo_response := _demo_mode_error():
         return demo_response
     return await _run(
-        lambda: service.destroy_sandbox(_session_id(session_id), sandbox_id)
+        lambda: service.destroy_sandbox(_session_id(session_id, auth), sandbox_id)
     )
 
 

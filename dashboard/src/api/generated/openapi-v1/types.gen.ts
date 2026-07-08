@@ -344,16 +344,6 @@ export type NameRequest = {
     name: string;
 };
 
-export type NeoCandidateActionRequest = {
-    candidate_id: string;
-    [key: string]: unknown | string;
-};
-
-export type NeoReleaseActionRequest = {
-    release_id: string;
-    [key: string]: unknown | string;
-};
-
 export type ParameterAttachmentId = string;
 
 export type ParameterAttachmentIdQuery = string;
@@ -2525,86 +2515,6 @@ export type UpdateSkillFileData = {
 export type UpdateSkillFileResponse = (SuccessEnvelope);
 
 export type UpdateSkillFileError = unknown;
-
-export type ListNeoSkillCandidatesData = {
-    query?: {
-        skill_key?: string;
-        status?: string;
-    };
-};
-
-export type ListNeoSkillCandidatesResponse = (SuccessEnvelope);
-
-export type ListNeoSkillCandidatesError = unknown;
-
-export type ListNeoSkillReleasesData = {
-    query?: {
-        skill_key?: string;
-        stage?: string;
-    };
-};
-
-export type ListNeoSkillReleasesResponse = (SuccessEnvelope);
-
-export type ListNeoSkillReleasesError = unknown;
-
-export type GetNeoSkillPayloadData = {
-    query: {
-        payload_ref: string;
-    };
-};
-
-export type GetNeoSkillPayloadResponse = (SuccessEnvelope);
-
-export type GetNeoSkillPayloadError = unknown;
-
-export type EvaluateNeoSkillCandidateData = {
-    body: NeoCandidateActionRequest;
-};
-
-export type EvaluateNeoSkillCandidateResponse = (SuccessEnvelope);
-
-export type EvaluateNeoSkillCandidateError = unknown;
-
-export type PromoteNeoSkillCandidateData = {
-    body: NeoCandidateActionRequest;
-};
-
-export type PromoteNeoSkillCandidateResponse = (SuccessEnvelope);
-
-export type PromoteNeoSkillCandidateError = unknown;
-
-export type RollbackNeoSkillReleaseData = {
-    body: NeoReleaseActionRequest;
-};
-
-export type RollbackNeoSkillReleaseResponse = (SuccessEnvelope);
-
-export type RollbackNeoSkillReleaseError = unknown;
-
-export type SyncNeoSkillReleaseData = {
-    body: NeoReleaseActionRequest;
-};
-
-export type SyncNeoSkillReleaseResponse = (SuccessEnvelope);
-
-export type SyncNeoSkillReleaseError = unknown;
-
-export type DeleteNeoSkillCandidateData = {
-    body: NeoCandidateActionRequest;
-};
-
-export type DeleteNeoSkillCandidateResponse = (SuccessEnvelope);
-
-export type DeleteNeoSkillCandidateError = unknown;
-
-export type DeleteNeoSkillReleaseData = {
-    body: NeoReleaseActionRequest;
-};
-
-export type DeleteNeoSkillReleaseResponse = (SuccessEnvelope);
-
-export type DeleteNeoSkillReleaseError = unknown;
 
 export type ListKnowledgeBasesData = {
     query?: {

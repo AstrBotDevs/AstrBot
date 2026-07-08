@@ -44,6 +44,30 @@ def _read_plugin_file(plugin_name: str, filename: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+class FakePersistentProvider:
+    provider_id = "contract-fixture"
+    capabilities = {"shell", "filesystem"}
+    tool_names = {"contract_fixture_tool"}
+    supports_persistent_reconnect = True
+
+    def build_create_config(self, context, session_id):
+        return {"session_id": session_id}
+
+    def build_connect_info(self, sandbox_name, config):
+        return {"name": sandbox_name, "external_id": config["external_id"]}
+
+    async def create_booter(
+        self, context, session_id, sandbox_id, config, resume=False
+    ):
+        return {"sandbox_id": sandbox_id, "resume": resume}
+
+    async def check_persistent_sandbox_exists(self, record):
+        return bool(record.get("connect_info", {}).get("external_id"))
+
+    async def destroy_booter(self, booter, record):
+        return None
+
+
 @pytest.mark.parametrize(
     ("plugin_name", "description"),
     [
@@ -61,6 +85,20 @@ def test_sandbox_plugin_metadata_is_localized(plugin_name: str, description: str
     assert f'"{description}"' in main_py
     assert "sandbox runtime provider for AstrBot" not in metadata
     assert "sandbox runtime provider for AstrBot" not in main_py
+
+
+@pytest.mark.asyncio
+async def test_core_provider_contract_requires_persistent_existence_probe():
+    provider = FakePersistentProvider()
+
+    assert provider.provider_id == "contract-fixture"
+    assert provider.capabilities == {"shell", "filesystem"}
+    assert provider.tool_names == {"contract_fixture_tool"}
+    assert provider.supports_persistent_reconnect is True
+    assert await provider.check_persistent_sandbox_exists(
+        {"connect_info": {"external_id": "external-1"}}
+    )
+    assert not await provider.check_persistent_sandbox_exists({"connect_info": {}})
 
 
 def test_core_sandbox_timeout_defaults_live_in_bot_config():

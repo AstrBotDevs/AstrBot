@@ -47,6 +47,7 @@ from astrbot.core.computer.computer_client import (
 )
 
 from .provider import MySandboxProvider
+from .tools import DemoMouseClickTool
 
 
 @register("astrbot_sandbox_demo", "AstrBot Team", "Demo 沙盒驱动", "0.1.0")
@@ -55,7 +56,11 @@ class DemoSandboxPlugin(Star):
         super().__init__(context)
         self.provider = MySandboxProvider()
         self.provider.plugin_config = config or {}
-        register_sandbox_provider(self.provider, replace=True)
+        register_sandbox_provider(
+            self.provider,
+            replace=True,
+            tools=[DemoMouseClickTool()],
+        )
 
     async def terminate(self) -> None:
         unregister_sandbox_provider(self.provider.provider_id, force=True)
@@ -174,6 +179,37 @@ AstrBot 会把用户保存的值写到 `data/config/<plugin_name>_config.json`�
 - 运行时专属生命周期工具
 
 AstrBot 在沙盒模式下挂载工具时会读取 `tool_names`。这里的名字要和 `main.py` 中注册的工具名一致。
+
+运行时专属工具应该通过沙盒 provider 注册路径注册，不要当作普通全局工具注册。这样 Core 才能做 provider 级别的工具过滤，并在 provider 卸载时一起清理这些工具。
+
+```python
+from dataclasses import dataclass, field
+
+from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.computer.sandbox_tool_binding import sandbox_provider_tool
+
+
+@sandbox_provider_tool("demo")
+@dataclass
+class DemoMouseClickTool(FunctionTool):
+    name: str = "demo_mouse_click"
+    description: str = "Click inside the demo sandbox."
+    parameters: dict = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "x": {"type": "integer"},
+                "y": {"type": "integer"},
+            },
+            "required": ["x", "y"],
+        }
+    )
+
+    async def call(self, context, x: int, y: int):
+        return await self.client.click(x=x, y=y)
+```
+
+然后保持 `provider.tool_names = {"demo_mouse_click"}`，并在 `main.py` 里把 `tools=[DemoMouseClickTool()]` 传给 `register_sandbox_provider(...)`。
 
 `system_prompt` 可以作为 provider 元数据保存稳定的运行时提示词。Core 会在 provider info 中暴露它，方便 WebUI 或上层集成展示驱动规则，但不会自动把它追加到每次模型请求里。
 
