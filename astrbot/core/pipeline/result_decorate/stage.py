@@ -18,6 +18,26 @@ from ..context import PipelineContext
 from ..stage import Stage, register_stage, registered_stages
 
 
+async def _word_cnt(text: str) -> int:
+    """
+    将不同语言分开计算
+    - 中文/日语: 按字数计算
+    - 其他语言: 按空格分割计算
+    """
+    # \u4e00-\u9fff : CJK Unified Ideographs (Chinese Hanzi & Japanese Kanji)
+    # \u3040-\u309f : Japanese Hiragana
+    # \u30a0-\u30ff : Japanese Katakana
+    no_space_pattern = r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]"
+
+    char_count = len(re.findall(no_space_pattern, text))
+
+    text_remaining = re.sub(no_space_pattern, " ", text)
+
+    spaced_words = len(text_remaining.split())
+
+    return char_count + spaced_words
+
+
 @register_stage
 class ResultDecorateStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
@@ -213,7 +233,8 @@ class ResultDecorateStage(Stage):
                     new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
-                            if len(comp.text) > self.words_count_threshold:
+                            word_count = await _word_cnt(comp.text)
+                            if word_count > self.words_count_threshold:
                                 # 不分段回复
                                 new_chain.append(comp)
                                 continue
@@ -296,7 +317,8 @@ class ResultDecorateStage(Stage):
             if should_tts and tts_provider:
                 new_chain = []
                 for comp in result.chain:
-                    if isinstance(comp, Plain) and len(comp.text) > 1:
+                    word_count = await _word_cnt(comp.text)
+                    if isinstance(comp, Plain) and word_count > 1:
                         try:
                             logger.info(f"TTS 请求: {comp.text}")
                             audio_path = await tts_provider.get_audio(comp.text)
@@ -356,7 +378,8 @@ class ResultDecorateStage(Stage):
                     else:
                         break
                 plain_str = "".join(parts)
-                if plain_str and len(plain_str) > self.t2i_word_threshold:
+                word_count = await _word_cnt(plain_str)
+                if plain_str and word_count > self.t2i_word_threshold:
                     render_start = time.time()
                     try:
                         url = await html_renderer.render_t2i(
@@ -391,7 +414,7 @@ class ResultDecorateStage(Stage):
                 word_cnt = 0
                 for comp in result.chain:
                     if isinstance(comp, Plain):
-                        word_cnt += len(comp.text)
+                        word_cnt += await _word_cnt(comp.text)
                 if word_cnt > self.forward_threshold:
                     node = Node(
                         uin=event.get_self_id(),
