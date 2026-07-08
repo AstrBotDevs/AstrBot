@@ -18,6 +18,7 @@ def _envelope(
     options: list[dict] | None = None,
     title: str | None = None,
     input_placeholder: str | None = None,
+    extra_content: str | None = None,
     expires_at: int | float | None = None,
 ) -> str:
     """Build a JSON string that mirrors the plugin's wire payload."""
@@ -35,6 +36,8 @@ def _envelope(
         spec["title"] = title
     if input_placeholder is not None:
         spec["input_placeholder"] = input_placeholder
+    if extra_content is not None:
+        spec["extra_content"] = extra_content
     payload: dict = {"request_id": request_id, "spec": spec}
     if expires_at is not None:
         payload["expires_at"] = expires_at
@@ -43,10 +46,12 @@ def _envelope(
 
 def test_store_interactive_choice_appends_valid_part() -> None:
     accumulator = BotMessageAccumulator()
+    extra_prose = "**Recommend B**.\n\nReasons:\n- Lower cost\n- LB ready"
     result_text = _envelope(
         request_id="req-1",
         title="Color",
         input_placeholder="Type freely",
+        extra_content=extra_prose,
         expires_at=1700000000,
     )
 
@@ -64,6 +69,7 @@ def test_store_interactive_choice_appends_valid_part() -> None:
     ]
     assert part["title"] == "Color"
     assert part["input_placeholder"] == "Type freely"
+    assert part["extra_content"] == extra_prose
     assert part["expires_at"] == 1700000000
 
 
@@ -87,13 +93,72 @@ def test_store_interactive_choice_omits_optional_fields() -> None:
 
 def test_store_interactive_choice_drops_blank_optional_strings() -> None:
     accumulator = BotMessageAccumulator()
-    result_text = _envelope(title="   ", input_placeholder="")
+    result_text = _envelope(
+        title="   ",
+        input_placeholder="",
+        extra_content="   \n\t  ",
+    )
 
     accumulator._store_interactive_choice(result_text)
 
     [part] = accumulator.build_message_parts()
     assert "title" not in part
     assert "input_placeholder" not in part
+    assert "extra_content" not in part
+
+
+def test_store_interactive_choice_persists_extra_content_v11() -> None:
+    """v1.1 contract: the LLM-authored Markdown prose must round-trip
+    through chat history so a hard refresh still renders the box with
+    its explanation.
+
+    Two behaviours exercised in one accumulator:
+      1. An oversized extra_content (>5000 chars) is stored verbatim
+         — the dashboard does NOT re-validate the cap; the frontend
+         `truncateInteractiveChoice` is the defensive backstop.
+      2. A non-string extra_content (e.g. bool) is silently dropped
+         — same type-guard contract as `title` / `input_placeholder`.
+    """
+    accumulator = BotMessageAccumulator()
+    long_prose = "x" * 7500
+    payload = {
+        "request_id": "req-1",
+        "spec": {
+            "type": "interactive_choice",
+            "prompt": "Pick one",
+            "options": [
+                {"id": "A", "label": "alpha"},
+                {"id": "B", "label": "beta"},
+            ],
+            "extra_content": long_prose,
+        },
+    }
+    accumulator._store_interactive_choice(json.dumps(payload, ensure_ascii=False))
+    # Non-string extra_content is dropped by the same type guard used
+    # for `title` / `input_placeholder`.
+    bogus_payload = {
+        "request_id": "req-2",
+        "spec": {
+            "type": "interactive_choice",
+            "prompt": "Pick one",
+            "options": [
+                {"id": "A", "label": "alpha"},
+                {"id": "B", "label": "beta"},
+            ],
+            "extra_content": True,
+        },
+    }
+    accumulator._store_interactive_choice(
+        json.dumps(bogus_payload, ensure_ascii=False),
+    )
+
+    parts = accumulator.build_message_parts()
+    assert len(parts) == 2
+    # First part: long prose preserved verbatim (no truncation here).
+    assert parts[0]["extra_content"] == long_prose
+    assert len(parts[0]["extra_content"]) == 7500
+    # Second part: non-string extra_content dropped, key absent.
+    assert "extra_content" not in parts[1]
 
 
 def test_store_interactive_choice_rejects_invalid_json() -> None:
@@ -267,7 +332,9 @@ def test_tool_call_for_other_tool_still_persists() -> None:
     assert part["tool_calls"][0]["result"] == "file contents"
 
 
-def test_interactive_choice_and_ask_user_choice_tool_call_yield_only_interactive_part() -> None:
+def test_interactive_choice_and_ask_user_choice_tool_call_yield_only_interactive_part() -> (
+    None
+):
     """End-to-end: emitting both the tool_call + tool_call_result for
     ask_user_choice AND the interactive_choice chain_type should yield
     a single `interactive_choice` part — the InteractiveChoiceBox is the

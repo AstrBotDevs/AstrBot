@@ -514,6 +514,9 @@ class BotMessageAccumulator:
                             "options": [{"id": "...", "label": "..."}],
                             "title": "...",            # optional
                             "input_placeholder": "..." # optional
+                            "extra_content": "..."     # optional, v1.1,
+                                                        # <= 5000 chars
+                                                        # Markdown
                         },
                         "expires_at": <unix ts>       # optional
                     }
@@ -541,6 +544,15 @@ class BotMessageAccumulator:
         placeholder = spec.get("input_placeholder")
         if isinstance(placeholder, str) and placeholder.strip():
             part["input_placeholder"] = placeholder
+        # v1.1: persist the LLM-authored Markdown prose so the box
+        # round-trips through a hard refresh. Length cap is enforced
+        # by `_push_to_webchat_back_queue` in
+        # `astrbot_plugin_ask_user_choice` (and re-checked on the
+        # frontend by `truncateInteractiveChoice`); the dashboard
+        # only mirrors the field, never re-validates the cap.
+        extra_content = spec.get("extra_content")
+        if isinstance(extra_content, str) and extra_content.strip():
+            part["extra_content"] = extra_content
         expires_at = payload.get("expires_at")
         if isinstance(expires_at, (int, float)):
             part["expires_at"] = expires_at
