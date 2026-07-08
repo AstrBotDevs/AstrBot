@@ -83,6 +83,14 @@ class PipelineScheduler:
 
         """
         active_event_registry.register(event)
+        effective_config = await self.ctx.astrbot_config_mgr.build_effective_conf(
+            event.unified_msg_origin,
+            self.ctx.base_astrbot_config,
+        )
+        config_token = self.ctx.astrbot_config_mgr.activate_effective_conf(
+            event.unified_msg_origin,
+            effective_config,
+        )
         try:
             await self._process_stages(event)
 
@@ -92,5 +100,6 @@ class PipelineScheduler:
 
             logger.debug("pipeline execution completed.")
         finally:
+            self.ctx.astrbot_config_mgr.reset_effective_conf(config_token)
             event.cleanup_temporary_local_files()
             active_event_registry.unregister(event)

@@ -613,6 +613,29 @@ class SessionRuleRequest(OpenModel):
     rule_value: Any = None
 
 
+class SessionConfigOverrideRequest(OpenModel):
+    umo: str | None = None
+    path: str | None = None
+    value: Any = None
+
+
+class SessionConfigOverrideDeleteRequest(OpenModel):
+    umo: str | None = None
+    umos: list[str] | None = None
+    scope: Literal["all", "group", "private", "custom_group"] | None = None
+    group_id: str | None = None
+    path: str | None = None
+    paths: list[str] | None = None
+
+
+class SessionAliasRequest(OpenModel):
+    umo: str | None = None
+    umos: list[str] | None = None
+    scope: Literal["all", "group", "private", "custom_group"] | None = None
+    group_id: str | None = None
+    custom_name: str | None = None
+
+
 class UmoListRequest(OpenModel):
     umo: str | None = None
     umos: list[str] | None = None

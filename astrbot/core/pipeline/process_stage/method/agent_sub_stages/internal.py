@@ -53,106 +53,7 @@ from ...follow_up import (
 class InternalAgentSubStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
-        conf = ctx.astrbot_config
-        settings = conf["provider_settings"]
-        self.streaming_response: bool = settings["streaming_response"]
-        self.unsupported_streaming_strategy: str = settings[
-            "unsupported_streaming_strategy"
-        ]
-        self.max_step: int = settings.get("max_agent_step", 30)
-        self.tool_call_timeout: int = settings.get("tool_call_timeout", 60)
-        self.tool_schema_mode: str = settings.get("tool_schema_mode", "full")
-        if self.tool_schema_mode not in ("skills_like", "full"):
-            logger.warning(
-                "Unsupported tool_schema_mode: %s, fallback to skills_like",
-                self.tool_schema_mode,
-            )
-            self.tool_schema_mode = "full"
-        if isinstance(self.max_step, bool):  # workaround: #2622
-            self.max_step = 30
-        self.show_tool_use: bool = settings.get("show_tool_use_status", True)
-        self.show_tool_call_result: bool = settings.get("show_tool_call_result", False)
-        self.buffer_intermediate_messages: bool = settings.get(
-            "buffer_intermediate_messages",
-            False,
-        )
-        self.show_reasoning = settings.get("display_reasoning_text", False)
-        self.sanitize_context_by_modalities: bool = settings.get(
-            "sanitize_context_by_modalities",
-            False,
-        )
-        self.kb_agentic_mode: bool = conf.get("kb_agentic_mode", False)
-
-        file_extract_conf: dict = settings.get("file_extract", {})
-        self.file_extract_enabled: bool = file_extract_conf.get("enable", False)
-        self.file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
-        self.file_extract_msh_api_key: str = file_extract_conf.get(
-            "moonshotai_api_key", ""
-        )
-
-        # 上下文管理相关
-        self.context_limit_reached_strategy: str = settings.get(
-            "context_limit_reached_strategy", "truncate_by_turns"
-        )
-        self.llm_compress_instruction: str = settings.get(
-            "llm_compress_instruction", ""
-        )
-        self.llm_compress_keep_recent_ratio: float = settings.get(
-            "llm_compress_keep_recent_ratio", 0.15
-        )
-        self.llm_compress_provider_id: str = settings.get(
-            "llm_compress_provider_id", ""
-        )
-        self.max_context_length = settings["max_context_length"]  # int
-        self.dequeue_context_length: int = min(
-            max(1, settings["dequeue_context_length"]),
-            self.max_context_length - 1,
-        )
-        if self.dequeue_context_length <= 0:
-            self.dequeue_context_length = 1
-        self.fallback_max_context_tokens: int = settings.get(
-            "fallback_max_context_tokens", 128000
-        )
-
-        self.llm_safety_mode = settings.get("llm_safety_mode", True)
-        self.safety_mode_strategy = settings.get(
-            "safety_mode_strategy", "system_prompt"
-        )
-
-        self.computer_use_runtime = settings.get("computer_use_runtime")
-        self.sandbox_cfg = settings.get("sandbox", {})
-
-        # Proactive capability configuration
-        proactive_cfg = settings.get("proactive_capability", {})
-        self.add_cron_tools = proactive_cfg.get("add_cron_tools", True)
-
         self.conv_manager = ctx.plugin_manager.context.conversation_manager
-
-        self.main_agent_cfg = MainAgentBuildConfig(
-            tool_call_timeout=self.tool_call_timeout,
-            tool_schema_mode=self.tool_schema_mode,
-            sanitize_context_by_modalities=self.sanitize_context_by_modalities,
-            kb_agentic_mode=self.kb_agentic_mode,
-            file_extract_enabled=self.file_extract_enabled,
-            file_extract_prov=self.file_extract_prov,
-            file_extract_msh_api_key=self.file_extract_msh_api_key,
-            context_limit_reached_strategy=self.context_limit_reached_strategy,
-            llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
-            llm_compress_provider_id=self.llm_compress_provider_id,
-            max_context_length=self.max_context_length,
-            dequeue_context_length=self.dequeue_context_length,
-            fallback_max_context_tokens=self.fallback_max_context_tokens,
-            llm_safety_mode=self.llm_safety_mode,
-            safety_mode_strategy=self.safety_mode_strategy,
-            computer_use_runtime=self.computer_use_runtime,
-            sandbox_cfg=self.sandbox_cfg,
-            add_cron_tools=self.add_cron_tools,
-            provider_settings=settings,
-            subagent_orchestrator=conf.get("subagent_orchestrator", {}),
-            timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
-            max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
-        )
 
     async def _send_llm_error_message(
         self, event: AstrMessageEvent, message: object
@@ -162,12 +63,96 @@ class InternalAgentSubStage(Stage):
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
     ) -> AsyncGenerator[None, None]:
+        conf = self.ctx.astrbot_config
+        settings = conf["provider_settings"]
+        streaming_response: bool = settings["streaming_response"]
+        unsupported_streaming_strategy: str = settings["unsupported_streaming_strategy"]
+        max_step: int = settings.get("max_agent_step", 30)
+        tool_call_timeout: int = settings.get("tool_call_timeout", 60)
+        tool_schema_mode: str = settings.get("tool_schema_mode", "full")
+        if tool_schema_mode not in ("skills_like", "full"):
+            logger.warning(
+                "Unsupported tool_schema_mode: %s, fallback to full",
+                tool_schema_mode,
+            )
+            tool_schema_mode = "full"
+        if isinstance(max_step, bool):  # workaround: #2622
+            max_step = 30
+        show_tool_use: bool = settings.get("show_tool_use_status", True)
+        show_tool_call_result: bool = settings.get("show_tool_call_result", False)
+        buffer_intermediate_messages: bool = settings.get(
+            "buffer_intermediate_messages",
+            False,
+        )
+        show_reasoning = settings.get("display_reasoning_text", False)
+        sanitize_context_by_modalities: bool = settings.get(
+            "sanitize_context_by_modalities",
+            False,
+        )
+        kb_agentic_mode: bool = conf.get("kb_agentic_mode", False)
+
+        file_extract_conf: dict = settings.get("file_extract", {})
+        file_extract_enabled: bool = file_extract_conf.get("enable", False)
+        file_extract_prov: str = file_extract_conf.get("provider", "moonshotai")
+        file_extract_msh_api_key: str = file_extract_conf.get("moonshotai_api_key", "")
+
+        context_limit_reached_strategy: str = settings.get(
+            "context_limit_reached_strategy", "truncate_by_turns"
+        )
+        llm_compress_instruction: str = settings.get("llm_compress_instruction", "")
+        llm_compress_keep_recent_ratio: float = settings.get(
+            "llm_compress_keep_recent_ratio", 0.15
+        )
+        llm_compress_provider_id: str = settings.get("llm_compress_provider_id", "")
+        max_context_length = settings["max_context_length"]
+        dequeue_context_length: int = min(
+            max(1, settings["dequeue_context_length"]),
+            max_context_length - 1,
+        )
+        if dequeue_context_length <= 0:
+            dequeue_context_length = 1
+        fallback_max_context_tokens: int = settings.get(
+            "fallback_max_context_tokens", 128000
+        )
+
+        llm_safety_mode = settings.get("llm_safety_mode", True)
+        safety_mode_strategy = settings.get("safety_mode_strategy", "system_prompt")
+        computer_use_runtime = settings.get("computer_use_runtime")
+        sandbox_cfg = settings.get("sandbox", {})
+        proactive_cfg = settings.get("proactive_capability", {})
+        add_cron_tools = proactive_cfg.get("add_cron_tools", True)
+
+        main_agent_cfg = MainAgentBuildConfig(
+            tool_call_timeout=tool_call_timeout,
+            tool_schema_mode=tool_schema_mode,
+            sanitize_context_by_modalities=sanitize_context_by_modalities,
+            kb_agentic_mode=kb_agentic_mode,
+            file_extract_enabled=file_extract_enabled,
+            file_extract_prov=file_extract_prov,
+            file_extract_msh_api_key=file_extract_msh_api_key,
+            context_limit_reached_strategy=context_limit_reached_strategy,
+            llm_compress_instruction=llm_compress_instruction,
+            llm_compress_keep_recent_ratio=llm_compress_keep_recent_ratio,
+            llm_compress_provider_id=llm_compress_provider_id,
+            max_context_length=max_context_length,
+            dequeue_context_length=dequeue_context_length,
+            fallback_max_context_tokens=fallback_max_context_tokens,
+            llm_safety_mode=llm_safety_mode,
+            safety_mode_strategy=safety_mode_strategy,
+            computer_use_runtime=computer_use_runtime,
+            sandbox_cfg=sandbox_cfg,
+            add_cron_tools=add_cron_tools,
+            provider_settings=settings,
+            subagent_orchestrator=conf.get("subagent_orchestrator", {}),
+            timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
+            max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
+        )
+
         follow_up_capture: FollowUpCapture | None = None
         follow_up_consumed_marked = False
         follow_up_activated = False
         typing_requested = False
         try:
-            streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
 
@@ -219,7 +204,7 @@ class InternalAgentSubStage(Stage):
                 runner_registered = False
                 try:
                     build_cfg = replace(
-                        self.main_agent_cfg,
+                        main_agent_cfg,
                         provider_wake_prefix=provider_wake_prefix,
                         streaming_response=streaming_response,
                     )
@@ -258,7 +243,7 @@ class InternalAgentSubStage(Stage):
                             return
 
                     stream_to_general = (
-                        self.unsupported_streaming_strategy == "turn_off"
+                        unsupported_streaming_strategy == "turn_off"
                         and not event.platform_meta.support_streaming_message
                     )
 
@@ -311,11 +296,11 @@ class InternalAgentSubStage(Stage):
                                 run_live_agent(
                                     agent_runner,
                                     tts_provider,
-                                    self.max_step,
-                                    self.show_tool_use,
-                                    self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
-                                    buffer_intermediate_messages=self.buffer_intermediate_messages,
+                                    max_step,
+                                    show_tool_use,
+                                    show_tool_call_result,
+                                    show_reasoning=show_reasoning,
+                                    buffer_intermediate_messages=buffer_intermediate_messages,
                                 ),
                             ),
                         )
@@ -342,11 +327,11 @@ class InternalAgentSubStage(Stage):
                             .set_async_stream(
                                 run_agent(
                                     agent_runner,
-                                    self.max_step,
-                                    self.show_tool_use,
-                                    self.show_tool_call_result,
-                                    show_reasoning=self.show_reasoning,
-                                    buffer_intermediate_messages=self.buffer_intermediate_messages,
+                                    max_step,
+                                    show_tool_use,
+                                    show_tool_call_result,
+                                    show_reasoning=show_reasoning,
+                                    buffer_intermediate_messages=buffer_intermediate_messages,
                                 ),
                             ),
                         )
@@ -372,12 +357,12 @@ class InternalAgentSubStage(Stage):
                     else:
                         async for _ in run_agent(
                             agent_runner,
-                            self.max_step,
-                            self.show_tool_use,
-                            self.show_tool_call_result,
+                            max_step,
+                            show_tool_use,
+                            show_tool_call_result,
                             stream_to_general,
-                            show_reasoning=self.show_reasoning,
-                            buffer_intermediate_messages=self.buffer_intermediate_messages,
+                            show_reasoning=show_reasoning,
+                            buffer_intermediate_messages=buffer_intermediate_messages,
                         ):
                             yield
 

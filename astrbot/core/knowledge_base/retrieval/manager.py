@@ -81,7 +81,6 @@ class RetrievalManager:
             query: 查询文本
             kb_ids: 知识库 ID 列表
             top_m_final: 最终返回数量
-            enable_rerank: 是否启用 Rerank
 
         Returns:
             List[RetrievalResult]: 检索结果列表

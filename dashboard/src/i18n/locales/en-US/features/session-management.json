@@ -56,9 +56,25 @@
   "ruleEditor": {
     "title": "Edit Custom Rules",
     "description": "Configure custom rules for this session. These rules take priority over global settings.",
+    "overrideCount": "{count} overrides",
+    "groups": {
+      "ai": "AI Settings",
+      "platform": "Platform Settings"
+    },
+    "note": {
+      "title": "General",
+      "source": "UMO note"
+    },
+    "addOverride": {
+      "select": "Select a setting to override",
+      "button": "Add Override",
+      "empty": "No configuration overrides added",
+      "remove": "Remove override"
+    },
     "serviceConfig": {
       "title": "Service Configuration",
-      "sessionEnabled": "Enable Session",
+      "sessionEnabled": "Allow Interaction",
+      "sessionEnabledHint": "When disabled, this source cannot communicate with the system.",
       "llmEnabled": "Enable LLM",
       "ttsEnabled": "Enable TTS",
       "customName": "Custom Name"
@@ -77,13 +93,14 @@
     "pluginConfig": {
       "title": "Plugin Configuration",
       "disabledPlugins": "Disabled Plugins",
+      "noneDisabled": "No disabled plugins",
+      "selectDisabled": "Select disabled plugins",
       "hint": "Select plugins to disable for this session. Unselected plugins will remain enabled."
     },
     "kbConfig": {
       "title": "Knowledge Base Configuration",
       "selectKbs": "Select Knowledge Bases",
-      "topK": "Top K Results",
-      "enableRerank": "Enable Reranking"
+      "topK": "Top K Results"
     }
   },
   "deleteConfirm": {

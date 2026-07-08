@@ -7,7 +7,6 @@ from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.filter.command_group import CommandGroupFilter
 from astrbot.core.star.filter.permission import PermissionTypeFilter
-from astrbot.core.star.session_plugin_manager import SessionPluginManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
@@ -51,56 +50,46 @@ class WakingCheckStage(Stage):
 
         """
         self.ctx = ctx
-        self.no_permission_reply = self.ctx.astrbot_config["platform_settings"].get(
-            "no_permission_reply",
-            True,
-        )
-        # 私聊是否需要 wake_prefix 才能唤醒机器人
-        self.friend_message_needs_wake_prefix = self.ctx.astrbot_config[
-            "platform_settings"
-        ].get("friend_message_needs_wake_prefix", False)
-        # 是否忽略机器人自己发送的消息
-        self.ignore_bot_self_message = self.ctx.astrbot_config["platform_settings"].get(
-            "ignore_bot_self_message",
-            False,
-        )
-        self.ignore_at_all = self.ctx.astrbot_config["platform_settings"].get(
-            "ignore_at_all",
-            False,
-        )
-        self.disable_builtin_commands = self.ctx.astrbot_config.get(
-            "disable_builtin_commands", False
-        )
-        platform_settings = self.ctx.astrbot_config.get("platform_settings", {})
-        self.unique_session = platform_settings.get("unique_session", False)
 
     async def process(
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
+        config = self.ctx.astrbot_config
+        platform_settings = config.get("platform_settings", {})
+        no_permission_reply = platform_settings.get("no_permission_reply", True)
+        friend_message_needs_wake_prefix = platform_settings.get(
+            "friend_message_needs_wake_prefix",
+            False,
+        )
+        ignore_bot_self_message = platform_settings.get(
+            "ignore_bot_self_message",
+            False,
+        )
+        ignore_at_all = platform_settings.get("ignore_at_all", False)
+        disable_builtin_commands = config.get("disable_builtin_commands", False)
+        unique_session = platform_settings.get("unique_session", False)
+
         # apply unique session
-        if self.unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
+        if unique_session and event.message_obj.type == MessageType.GROUP_MESSAGE:
             sid = build_unique_session_id(event)
             if sid:
                 event.session_id = sid
 
         # ignore bot self message
-        if (
-            self.ignore_bot_self_message
-            and event.get_self_id() == event.get_sender_id()
-        ):
+        if ignore_bot_self_message and event.get_self_id() == event.get_sender_id():
             event.stop_event()
             return
 
         # 设置 sender 身份
         event.message_str = event.message_str.strip()
-        for admin_id in self.ctx.astrbot_config["admins_id"]:
+        for admin_id in config["admins_id"]:
             if str(event.get_sender_id()) == admin_id:
                 event.role = "admin"
                 break
 
         # 检查 wake
-        wake_prefixes = self.ctx.astrbot_config["wake_prefix"]
+        wake_prefixes = config["wake_prefix"]
         messages = event.get_messages()
         is_wake = False
         for wake_prefix in wake_prefixes:
@@ -126,7 +115,7 @@ class WakingCheckStage(Stage):
                         isinstance(message, At)
                         and (str(message.qq) == str(event.get_self_id()))
                     )
-                    or (isinstance(message, AtAll) and not self.ignore_at_all)
+                    or (isinstance(message, AtAll) and not ignore_at_all)
                     or (
                         isinstance(message, Reply)
                         and str(message.sender_id) == str(event.get_self_id())
@@ -138,7 +127,7 @@ class WakingCheckStage(Stage):
                     event.is_at_or_wake_command = True
                     break
             # 检查是否是私聊
-            if event.is_private_chat() and not self.friend_message_needs_wake_prefix:
+            if event.is_private_chat() and not friend_message_needs_wake_prefix:
                 is_wake = True
                 event.is_wake = True
                 event.is_at_or_wake_command = True
@@ -149,7 +138,8 @@ class WakingCheckStage(Stage):
         handlers_parsed_params = {}  # 注册了指令的 handler
 
         # 将 plugins_name 设置到 event 中
-        enabled_plugins_name = self.ctx.astrbot_config.get("plugin_set", ["*"])
+        enabled_plugins_name = config.get("plugin_set", ["*"])
+        disabled_plugins_name = set(config.get("plugin_disabled_set", []))
         if enabled_plugins_name == ["*"]:
             # 如果是 *，则表示所有插件都启用
             event.plugins_name = None
@@ -162,10 +152,24 @@ class WakingCheckStage(Stage):
             plugins_name=event.plugins_name,
         ):
             if (
-                self.disable_builtin_commands
+                disable_builtin_commands
                 and handler.handler_module_path
                 == "astrbot.builtin_stars.builtin_commands.main"
             ):
+                continue
+            plugin = star_map.get(handler.handler_module_path)
+            if (
+                plugin
+                and not plugin.reserved
+                and plugin.name
+                and plugin.name in disabled_plugins_name
+            ):
+                logger.debug(
+                    "Plugin %s is disabled by config for session %s; skipping handler %s",
+                    plugin.name,
+                    event.unified_msg_origin,
+                    handler.handler_name,
+                )
                 continue
 
             # filter 需满足 AND 逻辑关系
@@ -178,10 +182,10 @@ class WakingCheckStage(Stage):
             for filter in handler.event_filters:
                 try:
                     if isinstance(filter, PermissionTypeFilter):
-                        if not filter.filter(event, self.ctx.astrbot_config):
+                        if not filter.filter(event, config):
                             permission_not_pass = True
                             permission_filter_raise_error = filter.raise_error
-                    elif not filter.filter(event, self.ctx.astrbot_config):
+                    elif not filter.filter(event, config):
                         passed = False
                         break
                 except Exception as e:
@@ -198,7 +202,7 @@ class WakingCheckStage(Stage):
                     if not permission_filter_raise_error:
                         # 跳过
                         continue
-                    if self.no_permission_reply:
+                    if no_permission_reply:
                         await event.send(
                             MessageChain().message(
                                 f"您(ID: {event.get_sender_id()})的权限不足以使用此指令。通过 /sid 获取 ID 并请管理员添加。",
@@ -224,12 +228,6 @@ class WakingCheckStage(Stage):
                         )
 
             event._extras.pop("parsed_params", None)
-
-        # 根据会话配置过滤插件处理器
-        activated_handlers = await SessionPluginManager.filter_handlers_by_session(
-            event,
-            activated_handlers,
-        )
 
         event.set_extra("activated_handlers", activated_handlers)
         event.set_extra("handlers_parsed_params", handlers_parsed_params)

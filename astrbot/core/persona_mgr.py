@@ -1,5 +1,4 @@
 from astrbot import logger
-from astrbot.api import sp
 from astrbot.core.astrbot_config_mgr import AstrBotConfigManager
 from astrbot.core.db import BaseDatabase
 from astrbot.core.db.po import Persona, PersonaFolder, Personality
@@ -86,28 +85,15 @@ class PersonaManager:
             tuple:
                 - selected persona_id
                 - selected persona object
-                - force applied persona_id from session rule
+                - force applied persona_id, retained for API compatibility
                 - whether use webchat special default persona
         """
-        session_service_config = (
-            await sp.get_async(
-                scope="umo",
-                scope_id=str(umo),
-                key="session_service_config",
-                default={},
-            )
-            or {}
-        )
-
-        force_applied_persona_id = session_service_config.get("persona_id")
-        persona_id = force_applied_persona_id
-
-        if not persona_id:
-            persona_id = conversation_persona_id
-            if persona_id == "[%None]":
-                pass
-            elif persona_id is None:
-                persona_id = (provider_settings or {}).get("default_personality")
+        force_applied_persona_id = None
+        persona_id = conversation_persona_id
+        if persona_id == "[%None]":
+            pass
+        elif persona_id is None:
+            persona_id = (provider_settings or {}).get("default_personality")
 
         persona = next(
             (item for item in self.personas_v3 if item["name"] == persona_id),

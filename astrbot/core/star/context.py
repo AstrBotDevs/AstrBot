@@ -498,9 +498,6 @@ class Context:
         Note:
             如果不提供 umo 参数，将返回默认配置。
         """
-        if not umo:
-            # 使用默认配置
-            return self._config
         return self.astrbot_config_mgr.get_conf(umo)
 
     async def send_message(

@@ -17,8 +17,7 @@ class ContentSafetyCheckStage(Stage):
     """
 
     async def initialize(self, ctx: PipelineContext) -> None:
-        config = ctx.astrbot_config["content_safety"]
-        self.strategy_selector = StrategySelector(config)
+        self.ctx = ctx
 
     async def process(
         self,
@@ -27,7 +26,8 @@ class ContentSafetyCheckStage(Stage):
     ) -> AsyncGenerator[None, None]:
         """检查内容安全"""
         text = check_text if check_text else event.get_message_str()
-        ok, info = self.strategy_selector.check(text)
+        strategy_selector = StrategySelector(self.ctx.astrbot_config["content_safety"])
+        ok, info = strategy_selector.check(text)
         if not ok:
             if event.is_at_or_wake_command:
                 event.set_result(

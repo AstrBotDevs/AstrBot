@@ -1,0 +1,76 @@
+{
+  "title": "Observer",
+  "searchPlaceholder": "Поиск UMO, заметки или session ID",
+  "emptyTitle": "Что проверить?",
+  "emptySubtitle": "Найдите UMO, чтобы посмотреть диалоги, правила, workspace и trace.",
+  "knownSources": "Источники",
+  "home": {
+    "recent": "Недавние источники",
+    "resources": "Еще ресурсы",
+    "noSources": "Источников пока нет",
+    "noMatches": "UMO не найден",
+    "resourceCards": {
+      "rules": "Правила",
+      "rulesHint": "Настроить overrides",
+      "conversation": "Диалоги",
+      "conversationHint": "Смотреть историю",
+      "trace": "Trace",
+      "traceHint": "Смотреть выполнение",
+      "stats": "Дашборд",
+      "statsHint": "Смотреть метрики"
+    }
+  },
+  "detail": {
+    "title": "UMO Detail",
+    "config": "Профиль конфигурации",
+    "route": "Маршрут",
+    "defaultConfig": "Конфигурация по умолчанию",
+    "noRoute": "Нет отдельного маршрута",
+    "copy": "Копировать UMO",
+    "openChat": "Открыть ChatUI",
+    "openConfig": "Открыть профиль",
+    "configDrawerTitle": "Профиль конфигурации",
+    "configDrawerIdLabel": "ID конфигурации"
+  },
+  "resources": {
+    "conversation": "Диалоги",
+    "overrides": "Правила",
+    "workspace": "Workspace",
+    "trace": "Trace"
+  },
+  "conversation": {
+    "title": "Предпросмотр диалога",
+    "count": "{count} шт.",
+    "empty": "Нет данных диалога",
+    "select": "Выберите диалог для просмотра",
+    "latest": "Последний диалог"
+  },
+  "tokens": {
+    "title": "Расход токенов",
+    "window": "24H",
+    "unit": "За последние 24 часа"
+  },
+  "overrides": {
+    "title": "Overrides конфигурации",
+    "count": "{count} overrides",
+    "empty": "Для этого UMO нет overrides",
+    "open": "Управлять правилами"
+  },
+  "workspace": {
+    "title": "Workspace",
+    "empty": "Workspace пуст",
+    "missing": "Workspace недоступен",
+    "copyPath": "Скопировать путь workspace",
+    "parent": "Вверх",
+    "root": "Корень"
+  },
+  "trace": {
+    "title": "Trace",
+    "hint": "Сейчас отображается полный trace stream. Фильтр UMO можно добавить позже."
+  },
+  "actions": {
+    "refresh": "Обновить",
+    "open": "Открыть",
+    "back": "Назад"
+  }
+}

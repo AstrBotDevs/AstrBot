@@ -24,11 +24,7 @@ from ..stage import Stage, register_stage
 class PreProcessStage(Stage):
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
-        self.config = ctx.astrbot_config
         self.plugin_manager = ctx.plugin_manager
-
-        self.stt_settings: dict = self.config.get("provider_stt_settings", {})
-        self.platform_settings: dict = self.config.get("platform_settings", {})
 
     @staticmethod
     def _track_temp_media(event: AstrMessageEvent, media_path: str) -> None:
@@ -52,11 +48,15 @@ class PreProcessStage(Stage):
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
         """在处理事件之前的预处理"""
+        config = self.ctx.astrbot_config
+        stt_settings: dict = config.get("provider_stt_settings", {})
+        platform_settings: dict = config.get("platform_settings", {})
+
         # 平台特异配置：platform_specific.<platform>.pre_ack_emoji
         supported = {"telegram", "lark", "discord"}
         platform = event.get_platform_name()
         cfg = (
-            self.config.get("platform_specific", {})
+            config.get("platform_specific", {})
             .get(platform, {})
             .get("pre_ack_emoji", {})
         ) or {}
@@ -73,7 +73,7 @@ class PreProcessStage(Stage):
                 logger.warning(f"{platform} 预回应表情发送失败: {e}")
 
         # 路径映射
-        if mappings := self.platform_settings.get("path_mapping", []):
+        if mappings := platform_settings.get("path_mapping", []):
             # 支持 Record，Image 消息段的路径映射。
             message_chain = event.get_messages()
 
@@ -164,7 +164,7 @@ class PreProcessStage(Stage):
                             )
 
         # STT
-        if self.stt_settings.get("enable", False):
+        if stt_settings.get("enable", False):
             # TODO: 独立
             ctx = self.plugin_manager.context
             stt_provider = ctx.get_using_stt_provider(event.unified_msg_origin)

@@ -40,6 +40,7 @@ class ConversationService:
         platforms: str,
         message_types: str,
         search_query: str,
+        user_id: str,
         exclude_ids: str,
         exclude_platforms: str,
     ) -> dict:
@@ -62,6 +63,7 @@ class ConversationService:
                 platforms=platform_list,
                 message_types=message_type_list,
                 search_query=search_query,
+                user_id=user_id,
                 exclude_ids=exclude_id_list,
                 exclude_platforms=exclude_platform_list,
             )

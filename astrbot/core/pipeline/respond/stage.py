@@ -51,41 +51,6 @@ class RespondStage(Stage):
 
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
-        self.config = ctx.astrbot_config
-        self.platform_settings: dict = self.config.get("platform_settings", {})
-
-        self.reply_with_mention = ctx.astrbot_config["platform_settings"][
-            "reply_with_mention"
-        ]
-        self.reply_with_quote = ctx.astrbot_config["platform_settings"][
-            "reply_with_quote"
-        ]
-
-        # 分段回复
-        self.enable_seg: bool = ctx.astrbot_config["platform_settings"][
-            "segmented_reply"
-        ]["enable"]
-        self.only_llm_result = ctx.astrbot_config["platform_settings"][
-            "segmented_reply"
-        ]["only_llm_result"]
-
-        self.interval_method = ctx.astrbot_config["platform_settings"][
-            "segmented_reply"
-        ]["interval_method"]
-        self.log_base = float(
-            ctx.astrbot_config["platform_settings"]["segmented_reply"]["log_base"],
-        )
-        self.interval = [1.5, 3.5]
-        if self.enable_seg:
-            interval_str: str = ctx.astrbot_config["platform_settings"][
-                "segmented_reply"
-            ]["interval"]
-            interval_str_ls = interval_str.replace(" ", "").split(",")
-            try:
-                self.interval = [float(t) for t in interval_str_ls]
-            except BaseException as e:
-                logger.error(f"解析分段回复的间隔时间失败。{e}")
-            logger.info(f"分段回复间隔时间：{self.interval}")
 
     async def _word_cnt(self, text: str) -> int:
         """分段回复 统计字数"""
@@ -95,16 +60,22 @@ class RespondStage(Stage):
             word_count = len([c for c in text if c.isalnum()])
         return word_count
 
-    async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
+    async def _calc_comp_interval(
+        self,
+        comp: BaseMessageComponent,
+        interval_method: str,
+        log_base: float,
+        interval: list[float],
+    ) -> float:
         """分段回复 计算间隔时间"""
-        if self.interval_method == "log":
+        if interval_method == "log":
             if isinstance(comp, Comp.Plain):
                 wc = await self._word_cnt(comp.text)
-                i = math.log(wc + 1, self.log_base)
+                i = math.log(wc + 1, log_base)
                 return random.uniform(i, i + 0.5)
             return random.uniform(1, 1.75)
         # random
-        return random.uniform(self.interval[0], self.interval[1])
+        return random.uniform(interval[0], interval[1])
 
     async def _is_empty_message_chain(self, chain: list[BaseMessageComponent]) -> bool:
         """检查消息链是否为空
@@ -127,14 +98,19 @@ class RespondStage(Stage):
         # 如果所有组件都为空
         return True
 
-    def is_seg_reply_required(self, event: AstrMessageEvent) -> bool:
+    def is_seg_reply_required(
+        self,
+        event: AstrMessageEvent,
+        enable_seg: bool,
+        only_llm_result: bool,
+    ) -> bool:
         """检查是否需要分段回复"""
-        if not self.enable_seg:
+        if not enable_seg:
             return False
 
         if (result := event.get_result()) is None:
             return False
-        if self.only_llm_result and not result.is_model_result():
+        if only_llm_result and not result.is_model_result():
             return False
 
         if event.get_platform_name() in [
@@ -170,6 +146,23 @@ class RespondStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
+        config = self.ctx.astrbot_config
+        platform_settings: dict = config.get("platform_settings", {})
+        segmented_reply = platform_settings.get("segmented_reply", {})
+        enable_seg: bool = segmented_reply.get("enable", False)
+        only_llm_result = segmented_reply.get("only_llm_result", True)
+        interval_method = segmented_reply.get("interval_method", "random")
+        log_base = float(segmented_reply.get("log_base", 2.6))
+        interval = [1.5, 3.5]
+        if enable_seg:
+            interval_str: str = segmented_reply.get("interval", "1.5,3.5")
+            interval_str_ls = interval_str.replace(" ", "").split(",")
+            try:
+                interval = [float(t) for t in interval_str_ls]
+            except BaseException as e:
+                logger.error(f"解析分段回复的间隔时间失败。{e}")
+            logger.debug(f"分段回复间隔时间：{interval}")
+
         result = event.get_result()
         if result is None:
             return
@@ -213,7 +206,7 @@ class RespondStage(Stage):
                 return
             # 流式结果直接交付平台适配器处理
             realtime_segmenting = (
-                self.config.get("provider_settings", {}).get(
+                config.get("provider_settings", {}).get(
                     "unsupported_streaming_strategy",
                     "realtime_segmenting",
                 )
@@ -224,7 +217,7 @@ class RespondStage(Stage):
             return
         if len(result.chain) > 0:
             # 检查路径映射
-            if mappings := self.platform_settings.get("path_mapping", []):
+            if mappings := platform_settings.get("path_mapping", []):
                 for idx, component in enumerate(result.chain):
                     if isinstance(component, Comp.File) and component.file:
                         # 支持 File 消息段的路径映射。
@@ -252,7 +245,7 @@ class RespondStage(Stage):
             # 发送消息链
             # Record 需要强制单独发送
             need_separately = {ComponentType.Record}
-            if self.is_seg_reply_required(event):
+            if self.is_seg_reply_required(event, enable_seg, only_llm_result):
                 header_comps = self._extract_comp(
                     result.chain,
                     {ComponentType.Reply, ComponentType.At},
@@ -265,7 +258,12 @@ class RespondStage(Stage):
                     )
                     return
                 for comp in result.chain:
-                    i = await self._calc_comp_interval(comp)
+                    i = await self._calc_comp_interval(
+                        comp,
+                        interval_method,
+                        log_base,
+                        interval,
+                    )
                     await asyncio.sleep(i)
                     try:
                         if comp.type in need_separately:

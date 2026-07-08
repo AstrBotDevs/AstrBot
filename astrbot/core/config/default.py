@@ -66,6 +66,7 @@ DEFAULT_CONFIG = {
         "forward_threshold": 1500,
         "enable_id_white_list": True,
         "id_whitelist": [],
+        "id_blacklist": [],
         "id_whitelist_log": True,
         "wl_ignore_admin_on_group": True,
         "wl_ignore_admin_on_friend": True,
@@ -306,6 +307,7 @@ DEFAULT_CONFIG = {
     "callback_api_base": "",
     "default_kb_collection": "",  # 默认知识库名称, 已经过时
     "plugin_set": ["*"],  # "*" 表示使用所有可用的插件, 空列表表示不使用任何插件
+    "plugin_disabled_set": [],
     "kb_names": [],  # 默认知识库名称列表
     "kb_fusion_top_k": 20,  # 知识库检索融合阶段返回结果数量
     "kb_final_top_k": 5,  # 知识库检索最终返回结果数量
@@ -1086,6 +1088,11 @@ CONFIG_METADATA_2 = {
                         "type": "list",
                         "items": {"type": "string"},
                         "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的平台设置中管理白名单",
+                    },
+                    "id_blacklist": {
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "拒绝处理填写的 ID 发来的消息事件。命中黑名单时会优先于白名单被拒绝。",
                     },
                     "id_whitelist_log": {
                         "type": "bool",
@@ -3924,6 +3931,12 @@ CONFIG_METADATA_3 = {
                         "items": {"type": "string"},
                         "hint": "使用 /sid 获取 ID。当白名单列表为空时，代表不启用白名单（即所有 ID 都在白名单内）。",
                     },
+                    "platform_settings.id_blacklist": {
+                        "description": "黑名单 ID 列表",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "使用 /sid 获取 ID。命中黑名单的会话会被拒绝，黑名单优先于白名单。",
+                    },
                     "platform_settings.id_whitelist_log": {
                         "description": "输出日志",
                         "type": "bool",
@@ -4088,6 +4101,12 @@ CONFIG_METADATA_3 = {
                         "description": "可用插件",
                         "type": "bool",
                         "hint": "默认启用全部未被禁用的插件。若插件在插件页面被禁用，则此处的选择不会生效。",
+                        "_special": "select_plugin_set",
+                    },
+                    "plugin_disabled_set": {
+                        "description": "禁用插件",
+                        "type": "bool",
+                        "hint": "明确禁用的插件列表。命中禁用列表的插件不会在会话中触发。",
                         "_special": "select_plugin_set",
                     },
                 },

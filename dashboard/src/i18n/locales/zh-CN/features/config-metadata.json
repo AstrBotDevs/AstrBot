@@ -809,6 +809,10 @@
           "description": "白名单 ID 列表",
           "hint": "使用 /sid 获取 ID。列表为空时表示该白名单不启用（即所有 ID 都在白名单内）。"
         },
+        "id_blacklist": {
+          "description": "黑名单 ID 列表",
+          "hint": "使用 /sid 获取 ID。命中黑名单的会话会被拒绝，黑名单优先于白名单。"
+        },
         "id_whitelist_log": {
           "description": "输出日志",
           "hint": "启用后,当一条消息没通过白名单时,会输出 INFO 级别的日志。"
@@ -935,6 +939,10 @@
       "plugin_set": {
         "description": "可用插件",
         "hint": "默认启用全部未被禁用的插件。若插件在插件页面被禁用,则此处的选择不会生效。"
+      },
+      "plugin_disabled_set": {
+        "description": "禁用插件",
+        "hint": "明确禁用的插件列表。命中禁用列表的插件不会在会话中触发。"
       }
     }
   },

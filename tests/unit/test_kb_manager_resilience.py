@@ -265,6 +265,37 @@ async def test_ensure_vec_db_clears_stale_init_error(
 
 
 @pytest.mark.asyncio
+async def test_retrieve_accepts_kb_id_in_kb_names(
+    stub_provider_manager_module,
+    mock_provider_manager,
+    mock_knowledge_base,
+):
+    """Test that retrieve accepts KB IDs through the legacy kb_names field."""
+    from astrbot.core.knowledge_base.kb_mgr import KnowledgeBaseManager
+
+    kb_helper = MagicMock()
+    kb_helper.kb = mock_knowledge_base
+    kb_helper.init_error = None
+
+    kb_mgr = KnowledgeBaseManager.__new__(KnowledgeBaseManager)
+    kb_mgr.provider_manager = mock_provider_manager
+    kb_mgr.kb_insts = {mock_knowledge_base.kb_id: kb_helper}
+    kb_mgr.retrieval_manager = MagicMock()
+    kb_mgr.retrieval_manager.retrieve = AsyncMock(return_value=[])
+
+    result = await kb_mgr.retrieve(
+        query="hello",
+        kb_names=[mock_knowledge_base.kb_id],
+    )
+
+    assert result is None
+    kb_mgr.retrieval_manager.retrieve.assert_awaited_once()
+    assert kb_mgr.retrieval_manager.retrieve.await_args.kwargs["kb_ids"] == [
+        mock_knowledge_base.kb_id
+    ]
+
+
+@pytest.mark.asyncio
 async def test_ensure_vec_db_sets_init_error_on_failure(
     stub_provider_manager_module,
     mock_provider_manager,

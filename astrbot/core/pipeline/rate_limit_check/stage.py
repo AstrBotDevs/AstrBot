@@ -24,21 +24,14 @@ class RateLimitStage(Stage):
         self.event_timestamps: defaultdict[str, deque[datetime]] = defaultdict(deque)
         # 为每个会话设置一个锁，避免并发冲突
         self.locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-        # 限流参数
-        self.rate_limit_count: int = 0
-        self.rate_limit_time: timedelta = timedelta(0)
 
     async def initialize(self, ctx: PipelineContext) -> None:
-        """初始化限流器，根据配置设置限流参数。"""
-        self.rate_limit_count = ctx.astrbot_config["platform_settings"]["rate_limit"][
-            "count"
-        ]
-        self.rate_limit_time = timedelta(
-            seconds=ctx.astrbot_config["platform_settings"]["rate_limit"]["time"],
-        )
-        self.rl_strategy = ctx.astrbot_config["platform_settings"]["rate_limit"][
-            "strategy"
-        ]  # stall or discard
+        """Initialize the rate limiter state.
+
+        Args:
+            ctx: Pipeline context used to read config during event processing.
+        """
+        self.ctx = ctx
 
     async def process(
         self,
@@ -56,22 +49,26 @@ class RateLimitStage(Stage):
         """
         session_id = event.session_id
         now = datetime.now()
+        rate_limit = self.ctx.astrbot_config["platform_settings"]["rate_limit"]
+        rate_limit_count = rate_limit["count"]
+        rate_limit_time = timedelta(seconds=rate_limit["time"])
+        rl_strategy = rate_limit["strategy"]
 
         async with self.locks[session_id]:  # 确保同一会话不会并发修改队列
             # 检查并处理限流，可能需要多次检查直到满足条件
             while True:
                 timestamps = self.event_timestamps[session_id]
-                self._remove_expired_timestamps(timestamps, now)
+                self._remove_expired_timestamps(timestamps, now, rate_limit_time)
 
-                if self.rate_limit_count <= 0:
+                if rate_limit_count <= 0:
                     break
-                if len(timestamps) < self.rate_limit_count:
+                if len(timestamps) < rate_limit_count:
                     timestamps.append(now)
                     break
-                next_window_time = timestamps[0] + self.rate_limit_time
+                next_window_time = timestamps[0] + rate_limit_time
                 stall_duration = (next_window_time - now).total_seconds() + 0.3
 
-                match self.rl_strategy:
+                match rl_strategy:
                     case RateLimitStrategy.STALL.value:
                         logger.info(
                             f"会话 {session_id} 被限流。根据限流策略，此会话处理将被暂停 {stall_duration:.2f} 秒。",
@@ -88,14 +85,16 @@ class RateLimitStage(Stage):
         self,
         timestamps: deque[datetime],
         now: datetime,
+        rate_limit_time: timedelta,
     ) -> None:
         """移除时间窗口外的时间戳。
 
         Args:
             timestamps (Deque[datetime]): 当前会话的时间戳队列。
             now (datetime): 当前时间，用于计算过期时间。
+            rate_limit_time: Current rate-limit window duration.
 
         """
-        expiry_threshold: datetime = now - self.rate_limit_time
+        expiry_threshold: datetime = now - rate_limit_time
         while timestamps and timestamps[0] < expiry_threshold:
             timestamps.popleft()

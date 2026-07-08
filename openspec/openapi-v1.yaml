@@ -3862,6 +3862,10 @@ paths:
           in: query
           schema:
             type: string
+        - name: umo
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -3892,6 +3896,73 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UmoListRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/config-overrides:
+    get:
+      tags: [Sessions]
+      summary: List UMO config overrides
+      operationId: listSessionConfigOverrides
+      x-astrbot-scope: data
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: umo
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+    post:
+      tags: [Sessions]
+      summary: Update or create a UMO config override
+      operationId: upsertSessionConfigOverride
+      x-astrbot-scope: data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionConfigOverrideRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/config-overrides/delete:
+    post:
+      tags: [Sessions]
+      summary: Delete one or more UMO config overrides
+      operationId: deleteSessionConfigOverride
+      x-astrbot-scope: data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionConfigOverrideDeleteRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/sessions/aliases:
+    post:
+      tags: [Sessions]
+      summary: Update UMO aliases used as session remarks
+      operationId: upsertSessionAlias
+      x-astrbot-scope: data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionAliasRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -4132,6 +4203,27 @@ paths:
       responses:
         "200":
           description: Exported conversation data
+
+  /api/v1/workspaces/by-umo:
+    get:
+      tags: [Workspaces]
+      summary: List workspace files for one UMO
+      operationId: listUmoWorkspaceFiles
+      x-astrbot-scope: data
+      parameters:
+        - name: umo
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: path
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
 
   /api/v1/stats:
     get:
@@ -5861,6 +5953,58 @@ components:
           type: string
         rule_value:
           $ref: "#/components/schemas/DynamicConfig"
+      additionalProperties: true
+
+    SessionConfigOverrideRequest:
+      type: object
+      required: [umo, path, value]
+      properties:
+        umo:
+          type: string
+        path:
+          type: string
+        value: {}
+      additionalProperties: true
+
+    SessionConfigOverrideDeleteRequest:
+      type: object
+      properties:
+        umo:
+          type: string
+        umos:
+          type: array
+          items:
+            type: string
+        scope:
+          type: string
+          enum: [all, group, private, custom_group]
+        group_id:
+          type: string
+        path:
+          type: string
+        paths:
+          type: array
+          items:
+            type: string
+      additionalProperties: true
+
+    SessionAliasRequest:
+      type: object
+      required: [custom_name]
+      properties:
+        umo:
+          type: string
+        umos:
+          type: array
+          items:
+            type: string
+        scope:
+          type: string
+          enum: [all, group, private, custom_group]
+        group_id:
+          type: string
+        custom_name:
+          type: string
       additionalProperties: true
 
     UmoListRequest:

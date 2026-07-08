@@ -93,6 +93,7 @@ async def _list_conversations(
     platforms: str,
     message_types: str,
     search: str,
+    user_id: str,
     exclude_ids: str,
     exclude_platforms: str,
 ):
@@ -103,6 +104,7 @@ async def _list_conversations(
             platforms=platforms,
             message_types=message_types,
             search_query=search,
+            user_id=user_id,
             exclude_ids=exclude_ids,
             exclude_platforms=exclude_platforms,
         )
@@ -116,6 +118,7 @@ async def list_conversations(
     platforms: str = Query(default=""),
     message_types: str = Query(default=""),
     search: str = Query(default=""),
+    user_id: str = Query(default=""),
     exclude_ids: str = Query(default=""),
     exclude_platforms: str = Query(default=""),
     _auth: AuthContext = Depends(require_data_scope),
@@ -128,6 +131,7 @@ async def list_conversations(
         platforms=platforms,
         message_types=message_types,
         search=search,
+        user_id=user_id,
         exclude_ids=exclude_ids,
         exclude_platforms=exclude_platforms,
     )
@@ -222,6 +226,7 @@ async def list_dashboard_conversations(
     platforms: str = Query(default=""),
     message_types: str = Query(default=""),
     search: str = Query(default=""),
+    user_id: str = Query(default=""),
     exclude_ids: str = Query(default=""),
     exclude_platforms: str = Query(default=""),
     _username: str = Depends(require_dashboard_user),
@@ -234,6 +239,7 @@ async def list_dashboard_conversations(
         platforms=platforms,
         message_types=message_types,
         search=search,
+        user_id=user_id,
         exclude_ids=exclude_ids,
         exclude_platforms=exclude_platforms,
     )

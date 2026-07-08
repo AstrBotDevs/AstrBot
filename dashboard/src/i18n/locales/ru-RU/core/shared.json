@@ -30,6 +30,9 @@
         "notActivated": "Не активирован",
         "note": "*Системные и уже выключенные в настройках плагины не отображаются.",
         "selectedPluginsLabel": "Выбранные плагины:",
+        "disabledPluginsLabel": "Отключенные плагины:",
+        "noDisabledPlugins": "Не отключать плагины",
+        "selectDisabledPlugins": "Выбрать отключенные плагины",
         "allPluginsLabel": "Все плагины"
     },
     "providerSelector": {

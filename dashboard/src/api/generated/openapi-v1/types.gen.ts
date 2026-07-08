@@ -550,6 +550,34 @@ export type ReorderRequest = {
     }>;
 };
 
+export type SessionAliasRequest = {
+    umo?: string;
+    umos?: Array<(string)>;
+    scope?: 'all' | 'group' | 'private' | 'custom_group';
+    group_id?: string;
+    custom_name: string;
+    [key: string]: unknown | string;
+};
+
+export type scope = 'all' | 'group' | 'private' | 'custom_group';
+
+export type SessionConfigOverrideDeleteRequest = {
+    umo?: string;
+    umos?: Array<(string)>;
+    scope?: 'all' | 'group' | 'private' | 'custom_group';
+    group_id?: string;
+    path?: string;
+    paths?: Array<(string)>;
+    [key: string]: unknown | string;
+};
+
+export type SessionConfigOverrideRequest = {
+    umo: string;
+    path: string;
+    value: unknown;
+    [key: string]: unknown | string;
+};
+
 export type SessionGroupRequest = {
     name?: string;
     umos?: Array<(string)>;
@@ -622,8 +650,6 @@ export type UmoListRequest = {
     group_id?: string;
     rule_key?: string;
 };
-
-export type scope = 'all' | 'group' | 'private' | 'custom_group';
 
 export type UpdateAccountRequest = {
     password: string;
@@ -2952,6 +2978,7 @@ export type ListSessionRulesData = {
         page?: number;
         page_size?: number;
         search?: string;
+        umo?: string;
     };
 };
 
@@ -2974,6 +3001,43 @@ export type DeleteSessionRulesData = {
 export type DeleteSessionRulesResponse = (SuccessEnvelope);
 
 export type DeleteSessionRulesError = unknown;
+
+export type ListSessionConfigOverridesData = {
+    query?: {
+        page?: number;
+        page_size?: number;
+        search?: string;
+        umo?: string;
+    };
+};
+
+export type ListSessionConfigOverridesResponse = (SuccessEnvelope);
+
+export type ListSessionConfigOverridesError = unknown;
+
+export type UpsertSessionConfigOverrideData = {
+    body: SessionConfigOverrideRequest;
+};
+
+export type UpsertSessionConfigOverrideResponse = (SuccessEnvelope);
+
+export type UpsertSessionConfigOverrideError = unknown;
+
+export type DeleteSessionConfigOverrideData = {
+    body: SessionConfigOverrideDeleteRequest;
+};
+
+export type DeleteSessionConfigOverrideResponse = (SuccessEnvelope);
+
+export type DeleteSessionConfigOverrideError = unknown;
+
+export type UpsertSessionAliasData = {
+    body: SessionAliasRequest;
+};
+
+export type UpsertSessionAliasResponse = (SuccessEnvelope);
+
+export type UpsertSessionAliasError = unknown;
 
 export type BatchUpdateSessionProviderData = {
     body: BatchSessionProviderRequest;
@@ -3123,6 +3187,17 @@ export type ExportConversationsData = {
 export type ExportConversationsResponse = (unknown);
 
 export type ExportConversationsError = unknown;
+
+export type ListUmoWorkspaceFilesData = {
+    query: {
+        path?: string;
+        umo: string;
+    };
+};
+
+export type ListUmoWorkspaceFilesResponse = (SuccessEnvelope);
+
+export type ListUmoWorkspaceFilesError = unknown;
 
 export type GetStatsData = {
     query?: {

@@ -40,7 +40,15 @@
       <KnowledgeBaseSelector :model-value="modelValue" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 'select_plugin_set'">
-      <PluginSetSelector :model-value="modelValue" @update:model-value="emitUpdate" />
+      <PluginSetSelector
+        :model-value="modelValue"
+        @update:model-value="emitUpdate"
+        :show-all-option="!isDisabledPluginSet"
+        :not-selected-label="isDisabledPluginSet ? t('core.shared.pluginSetSelector.noDisabledPlugins') : ''"
+        :none-label="isDisabledPluginSet ? t('core.shared.pluginSetSelector.noDisabledPlugins') : ''"
+        :custom-label="isDisabledPluginSet ? t('core.shared.pluginSetSelector.selectDisabledPlugins') : ''"
+        :button-text="isDisabledPluginSet ? t('core.shared.pluginSetSelector.selectDisabledPlugins') : ''"
+      />
     </template>
     <template v-else-if="itemMeta?._special === 't2i_template'">
       <T2ITemplateEditor />
@@ -306,6 +314,8 @@ const listSelectItems = computed(() =>
     ? getSelectItems(props.itemMeta)
     : []
 )
+
+const isDisabledPluginSet = computed(() => props.configKey?.split('.').pop() === 'plugin_disabled_set')
 
 function toNumber(val) {
   const n = parseFloat(val)

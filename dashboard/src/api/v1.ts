@@ -34,6 +34,7 @@ import {
   type GhproxyTestRequest,
   type KnowledgeBaseCreateRequest,
   type KnowledgeBaseRequest,
+  type ListUmoWorkspaceFilesData,
   type LoginRequest,
   type ListConversationsData,
   type McpServerConfig,
@@ -46,6 +47,9 @@ import {
   type BatchSessionProviderRequest,
   type BatchSessionServiceRequest,
   type SetupAuthRequest,
+  type SessionAliasRequest,
+  type SessionConfigOverrideDeleteRequest,
+  type SessionConfigOverrideRequest,
   type SessionGroupRequest,
   type SessionRuleRequest,
   type UmoListRequest,
@@ -178,6 +182,7 @@ export interface SessionRuleListParams {
   page?: number;
   page_size?: number;
   search?: string;
+  umo?: string;
 }
 
 export interface ChatSessionListParams {
@@ -970,11 +975,29 @@ export const sessionApi = {
       openApiV1.listSessionRules({ query: generatedQuery(params) }),
     );
   },
+  listConfigOverrides(params?: SessionRuleListParams) {
+    return typed<any>(
+      openApiV1.listSessionConfigOverrides({ query: generatedQuery(params) }),
+    );
+  },
   upsertRule(payload: SessionRuleRequest) {
     return typed<any>(openApiV1.upsertSessionRule({ body: payload }));
   },
   deleteRules(payload: UmoListRequest) {
     return typed<any>(openApiV1.deleteSessionRules({ body: payload }));
+  },
+  upsertConfigOverride(payload: SessionConfigOverrideRequest) {
+    return typed<any>(
+      openApiV1.upsertSessionConfigOverride({ body: payload }),
+    );
+  },
+  deleteConfigOverride(payload: SessionConfigOverrideDeleteRequest) {
+    return typed<any>(
+      openApiV1.deleteSessionConfigOverride({ body: payload }),
+    );
+  },
+  upsertAlias(payload: SessionAliasRequest) {
+    return typed<any>(openApiV1.upsertSessionAlias({ body: payload }));
   },
   batchUpdateProvider(payload: BatchSessionProviderRequest) {
     return typed<any>(
@@ -1708,6 +1731,16 @@ export const conversationApi = {
       body: payload,
       responseType: 'blob',
     }) as Promise<AxiosResponse<Blob>>;
+  },
+};
+
+export const workspaceApi = {
+  byUmo(params: ListUmoWorkspaceFilesData['query']) {
+    return typed<any>(
+      openApiV1.listUmoWorkspaceFiles({
+        query: params,
+      }),
+    );
   },
 };
 

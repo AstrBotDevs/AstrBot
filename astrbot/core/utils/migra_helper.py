@@ -1,6 +1,6 @@
 import traceback
 
-from astrbot.core import astrbot_config, logger
+from astrbot.core import astrbot_config, logger, sp
 from astrbot.core.agent.runners.deerflow.constants import (
     DEERFLOW_AGENT_RUNNER_PROVIDER_ID_KEY,
     DEERFLOW_PROVIDER_TYPE,
@@ -9,6 +9,9 @@ from astrbot.core.astrbot_config_mgr import AstrBotConfig, AstrBotConfigManager
 from astrbot.core.db.migration.migra_45_to_46 import migrate_45_to_46
 from astrbot.core.db.migration.migra_token_usage import migrate_token_usage
 from astrbot.core.db.migration.migra_webchat_session import migrate_webchat_session
+from astrbot.core.provider.entities import ProviderType
+
+CONFIG_OVERRIDE_MIGRATION_DONE_KEY = "migration_config_overrides_v1_done"
 
 
 def _migra_agent_runner_configs(conf: AstrBotConfig, ids_map: dict) -> None:
@@ -128,6 +131,98 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
         logger.info("Provider-source structure migration completed")
 
 
+async def _migrate_session_rules_to_config_overrides(
+    db,
+    acm: AstrBotConfigManager,
+) -> None:
+    """Migrate legacy UMO session rules into config override preferences.
+
+    Args:
+        db: Database helper used to migrate custom UMO names into aliases.
+        acm: Config manager used to write override paths.
+    """
+    migration_done = await sp.global_get(CONFIG_OVERRIDE_MIGRATION_DONE_KEY, False)
+    if migration_done:
+        return
+
+    provider_path_map = {
+        f"provider_perf_{ProviderType.CHAT_COMPLETION.value}": (
+            "provider_settings.default_provider_id"
+        ),
+        f"provider_perf_{ProviderType.SPEECH_TO_TEXT.value}": (
+            "provider_stt_settings.provider_id"
+        ),
+        f"provider_perf_{ProviderType.TEXT_TO_SPEECH.value}": (
+            "provider_tts_settings.provider_id"
+        ),
+    }
+    legacy_keys = {
+        "session_service_config",
+        "session_plugin_config",
+        "kb_config",
+        *provider_path_map.keys(),
+    }
+    prefs = await sp.session_get(None, None)
+    migrated_count = 0
+    for pref in prefs:
+        if pref.key not in legacy_keys:
+            continue
+        umo = pref.scope_id
+        value = pref.value.get("val") if isinstance(pref.value, dict) else None
+        override_paths = {}
+
+        if pref.key == "session_service_config" and isinstance(value, dict):
+            if "llm_enabled" in value:
+                override_paths["provider_settings.enable"] = bool(value["llm_enabled"])
+            if "tts_enabled" in value:
+                override_paths["provider_tts_settings.enable"] = bool(
+                    value["tts_enabled"]
+                )
+            if "persona_id" in value:
+                override_paths["provider_settings.default_personality"] = (
+                    value.get("persona_id") or ""
+                )
+            if value.get("session_enabled") is False:
+                override_paths["platform_settings.id_blacklist"] = [umo]
+            custom_name = str(value.get("custom_name") or "").strip()
+            if custom_name:
+                alias = await db.get_umo_alias(umo)
+                if not alias or not alias.user_alias:
+                    await db.upsert_umo_alias(
+                        umo,
+                        alias.creator_sender_id if alias else "",
+                        alias.auto_name if alias else None,
+                        custom_name,
+                    )
+        elif pref.key == "session_plugin_config" and isinstance(value, dict):
+            session_config = value.get(umo, value)
+            if isinstance(session_config, dict):
+                disabled_plugins = session_config.get("disabled_plugins")
+                if isinstance(disabled_plugins, list):
+                    override_paths["plugin_disabled_set"] = disabled_plugins
+        elif pref.key == "kb_config" and isinstance(value, dict):
+            if "top_k" in value:
+                override_paths["kb_final_top_k"] = value["top_k"]
+            kb_ids = value.get("kb_ids")
+            if isinstance(kb_ids, list):
+                override_paths["kb_names"] = [
+                    str(kb_id) for kb_id in kb_ids if str(kb_id).strip()
+                ]
+        elif pref.key in provider_path_map and value:
+            override_paths[provider_path_map[pref.key]] = value
+
+        if override_paths:
+            await acm.update_conf_overrides(umo, override_paths)
+            migrated_count += 1
+
+    await sp.global_put(CONFIG_OVERRIDE_MIGRATION_DONE_KEY, True)
+    if migrated_count:
+        logger.info(
+            "Migrated %s legacy session rule preferences to config overrides.",
+            migrated_count,
+        )
+
+
 async def migra(
     db, astrbot_config_mgr, umop_config_router, acm: AstrBotConfigManager
 ) -> None:
@@ -154,6 +249,12 @@ async def migra(
         await migrate_token_usage(db)
     except Exception as e:
         logger.error(f"Migration for token_usage column failed: {e!s}")
+        logger.error(traceback.format_exc())
+
+    try:
+        await _migrate_session_rules_to_config_overrides(db, acm)
+    except Exception as e:
+        logger.error(f"Migration for session rule config overrides failed: {e!s}")
         logger.error(traceback.format_exc())
 
     # migra third party agent runner configs
