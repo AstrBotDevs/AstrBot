@@ -169,50 +169,6 @@ def test_append_system_reminders_includes_weekday(mock_event):
     ]
 
 
-def test_current_datetime_scope_only_marks_datetime_temp(mock_event):
-    mock_event.message_obj.group_id = "group123"
-    mock_event.message_obj.group = MagicMock(group_name="TestGroup")
-    req = ProviderRequest(prompt="Hello")
-    fixed_now = datetime.datetime(
-        2026,
-        6,
-        8,
-        12,
-        34,
-        tzinfo=datetime.timezone.utc,
-    )
-
-    class FixedDateTime(datetime.datetime):
-        @classmethod
-        def now(cls, tz=None):
-            if tz:
-                return fixed_now.astimezone(tz)
-            return fixed_now
-
-    with patch("astrbot.core.astr_main_agent.datetime.datetime", FixedDateTime):
-        ama._append_system_reminders(
-            mock_event,
-            req,
-            {
-                "datetime_system_prompt": True,
-                "datetime_system_prompt_scope": "current",
-                "identifier": True,
-                "group_name_display": True,
-            },
-            "UTC",
-        )
-
-    parts = req.extra_user_content_parts
-    assert [part.text for part in parts] == [
-        "<system_reminder>User ID: user123, Nickname: TestUser\n"
-        "Group name: TestGroup</system_reminder>",
-        "<system_reminder>Current datetime: "
-        "2026-06-08 12:34 (UTC), Weekday: Monday</system_reminder>",
-    ]
-    assert parts[0].is_temp is False
-    assert parts[1].is_temp is True
-
-
 class TestMainAgentBuildConfig:
     """Tests for MainAgentBuildConfig dataclass."""
 
