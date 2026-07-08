@@ -66,6 +66,15 @@ AstrBot calls the provider whenever it needs to create, reuse, rename, or destro
 - `create_booter(context, session_id, sandbox_id, config)`
 - `destroy_booter(booter, record)`
 
+If your provider supports persistent sandbox reconnects, also set
+`supports_persistent_reconnect = True` and implement
+`check_persistent_sandbox_exists(record)`. AstrBot calls this method before
+resuming a persistent sandbox; providers that declare reconnect support but do
+not implement the existence probe are rejected to avoid ghost sandbox records.
+When `config.get("resume") is True` in `create_booter()`, reconnect to the
+existing sandbox identified by `record["connect_info"]` instead of creating a new
+external sandbox.
+
 ## 2.1 How config migration works
 
 If older versions already stored settings in `provider_settings.sandbox`, treat that as a compatibility input and move new editable values into the plugin config:
@@ -105,6 +114,10 @@ class MySandboxProvider:
         info = dict(record.get("connect_info") or {})
         info["name"] = sandbox_name
         return info
+
+    async def check_persistent_sandbox_exists(self, record):
+        # Only required when supports_persistent_reconnect=True.
+        return await self.client.sandbox_exists(record["connect_info"]["sandbox_id"])
 
     async def create_booter(self, context, session_id, sandbox_id, config):
         booter = MyBooter(**config)

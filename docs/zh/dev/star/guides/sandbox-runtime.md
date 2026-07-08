@@ -77,6 +77,13 @@ AstrBot 在创建、复用、重命名、销毁沙盒时会调用这个驱动。
 - `create_booter(context, session_id, sandbox_id, config)`
 - `destroy_booter(booter, record)`
 
+如果驱动支持持久化沙盒复连，还需要设置
+`supports_persistent_reconnect = True` 并实现
+`check_persistent_sandbox_exists(record)`。AstrBot 会在恢复持久化沙盒前调用
+这个方法；声明支持复连但没有实现存在性探针的 provider 会被拒绝，避免产生
+“幽灵沙盒”记录。`create_booter()` 收到 `config.get("resume") is True` 时，应
+连接 `record["connect_info"]` 指向的现有沙盒，而不是创建新的外部沙盒。
+
 ## 2.1 配置迁移怎么做
 
 如果旧版本已经把配置写在 `provider_settings.sandbox` 里，迁移时可以先把它当成兼容输入，再逐步迁到插件配置：
@@ -116,6 +123,10 @@ class MySandboxProvider:
         info = dict(record.get("connect_info") or {})
         info["name"] = sandbox_name
         return info
+
+    async def check_persistent_sandbox_exists(self, record):
+        # 只有 supports_persistent_reconnect=True 时才需要实现。
+        return await self.client.sandbox_exists(record["connect_info"]["sandbox_id"])
 
     async def create_booter(self, context, session_id, sandbox_id, config):
         booter = MyBooter(**config)

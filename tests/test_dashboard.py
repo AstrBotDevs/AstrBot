@@ -69,6 +69,9 @@ class FakeSandboxProvider:
     async def create_booter(self, context, session_id, sandbox_id, config):
         return SimpleNamespace(available=lambda: True, shutdown=lambda: None)
 
+    async def check_persistent_sandbox_exists(self, record):
+        return True
+
     async def destroy_booter(self, booter, record):
         return None
 
