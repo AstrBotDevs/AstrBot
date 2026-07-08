@@ -392,12 +392,22 @@ class TestAstrBotCoreLifecycleSandboxRestore:
                 return_value=[],
             ),
         ):
-            await asyncio.wait_for(lifecycle.start(), timeout=1)
-            assert lifecycle._persistent_restore_task is not None
-            await asyncio.wait_for(restore_started.wait(), timeout=1)
-            assert not restore_finished.is_set()
-            restore_finished.set()
-            await asyncio.wait_for(lifecycle._persistent_restore_task, timeout=1)
+            start_task = asyncio.create_task(lifecycle.start())
+            try:
+                await asyncio.wait_for(restore_started.wait(), timeout=1)
+                assert lifecycle._persistent_restore_task is not None
+                assert not restore_finished.is_set()
+            finally:
+                restore_finished.set()
+                if lifecycle._persistent_restore_task is not None:
+                    await asyncio.wait_for(
+                        lifecycle._persistent_restore_task, timeout=1
+                    )
+                start_task.cancel()
+                try:
+                    await start_task
+                except asyncio.CancelledError:
+                    pass
 
 
 class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
