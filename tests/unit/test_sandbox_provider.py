@@ -19,6 +19,10 @@ def test_sandbox_provider_protocol_exposes_generic_runtime_contract():
     assert hints["session_id"] is str
     assert hints["sandbox_id"] is str
 
+    exists_hints = get_type_hints(SandboxProvider.check_persistent_sandbox_exists)
+    assert exists_hints["record"] is dict
+    assert exists_hints["return"] is bool
 
-def test_sandbox_provider_protocol_has_no_default_existence_probe():
-    assert "check_persistent_sandbox_exists" not in SandboxProvider.__dict__
+
+def test_sandbox_provider_protocol_requires_persistent_existence_probe():
+    assert "check_persistent_sandbox_exists" in SandboxProvider.__dict__

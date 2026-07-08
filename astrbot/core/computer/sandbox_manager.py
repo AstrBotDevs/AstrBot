@@ -9,7 +9,11 @@ from dataclasses import dataclass
 
 from astrbot.api import logger
 from astrbot.core.computer.booters.base import ComputerBooter
-from astrbot.core.computer.sandbox_models import SandboxRecord, SandboxStatus
+from astrbot.core.computer.sandbox_models import (
+    SandboxRecord,
+    SandboxRetentionPolicy,
+    SandboxStatus,
+)
 from astrbot.core.computer.sandbox_provider import SandboxProvider
 from astrbot.core.computer.sandbox_registry import SandboxRegistry
 from astrbot.core.computer.sandbox_timeouts import (
@@ -395,23 +399,34 @@ class SandboxManager:
         if status == SandboxStatus.RUNNING:
             return True
         return bool(
-            record.get("retention_policy") == "persistent"
+            record.get("retention_policy") == SandboxRetentionPolicy.PERSISTENT
             and status == SandboxStatus.UNKNOWN
         )
 
-    async def get_or_create_booter(
+    async def _try_get_current_booter(
         self,
         context: Context,
         session_id: str,
         provider_id: str,
         *,
+        lease_timeout: float,
+        idle_timeout: float,
         exclude_sandbox_ids: set[str] | None = None,
-    ) -> ComputerBooter:
-        provider = self.get_provider(provider_id)
-        create_config = provider.build_create_config(context, session_id)
-        idle_timeout, expires_at = self._sandbox_policy_timeouts(context, session_id)
-        lease_timeout = self._lease_timeout(context, session_id)
+    ) -> tuple[ComputerBooter | None, set[str]]:
+        """Return a usable current booter, or stale current IDs to skip.
 
+        Args:
+            context: AstrBot runtime context for provider resume calls.
+            session_id: Session requesting sandbox control.
+            provider_id: Provider that must own the current sandbox.
+            lease_timeout: Lease TTL for the requested session.
+            idle_timeout: Idle cleanup timeout to schedule for a reused booter.
+            exclude_sandbox_ids: Sandbox IDs already known to be unsuitable.
+
+        Returns:
+            A tuple of optional usable booter and IDs that should not be selected
+            as fallback targets in this request.
+        """
         current_sandbox_id = self.registry.get_current_sandbox_id(session_id)
         current_record = self.registry.get_sandbox(current_sandbox_id)
         excluded_stale_current_ids = set(exclude_sandbox_ids or set())
@@ -443,7 +458,6 @@ class SandboxManager:
                 excluded_stale_current_ids.add(current_sandbox_id)
                 current_sandbox_id = None
                 current_record = None
-                status = None
         if current_sandbox_id and current_record:
             status = current_record.get("status")
             if status == SandboxStatus.CREATING:
@@ -465,7 +479,8 @@ class SandboxManager:
                 current_sandbox_id = None
                 current_record = None
             elif (
-                current_record.get("retention_policy") == "persistent"
+                current_record.get("retention_policy")
+                == SandboxRetentionPolicy.PERSISTENT
                 and status == SandboxStatus.UNKNOWN
                 and current_sandbox_id not in self.session_booter
             ):
@@ -493,24 +508,54 @@ class SandboxManager:
                         idle_timeout,
                         current_record.get("expires_at"),
                     )
-                    return booter
+                    return booter, excluded_stale_current_ids
                 self.clear_runtime_state(current_sandbox_id)
                 self.registry.release_lease(current_sandbox_id)
                 await self.save_registry_async()
+        return None, excluded_stale_current_ids
 
+    async def _select_boot_target(
+        self,
+        context: Context,
+        session_id: str,
+        provider: SandboxProvider,
+        provider_id: str,
+        create_config: dict,
+        *,
+        idle_timeout: float,
+        expires_at: float | None,
+        excluded_sandbox_ids: set[str],
+    ) -> tuple[str, bool]:
+        """Select an existing boot target or create a registry record.
+
+        Args:
+            context: AstrBot runtime context for provider resume calls.
+            session_id: Session requesting sandbox control.
+            provider: Runtime provider used to build connect info.
+            provider_id: Provider identifier for records.
+            create_config: Provider create config for a new sandbox record.
+            idle_timeout: Idle timeout to persist on newly-created records.
+            expires_at: Optional TTL timestamp to persist on new records.
+            excluded_sandbox_ids: Sandbox IDs unsuitable for this request.
+
+        Returns:
+            Tuple of selected sandbox ID and whether this request created the
+            registry record.
+        """
         created_target_record = False
         target_sandbox_id = self.get_default_sandbox_id(provider_id)
-        if target_sandbox_id in excluded_stale_current_ids:
+        if target_sandbox_id in excluded_sandbox_ids:
             target_sandbox_id = None
         target_record = self.registry.get_sandbox(target_sandbox_id)
         if (
             target_sandbox_id
             and target_record
             and target_record.get("provider") == provider_id
-            and target_record.get("retention_policy") == "persistent"
+            and target_record.get("retention_policy")
+            == SandboxRetentionPolicy.PERSISTENT
             and target_record.get("status") == SandboxStatus.UNKNOWN
         ):
-            target_record = await self._revive_persistent_booter_if_needed(
+            await self._revive_persistent_booter_if_needed(
                 target_record, target_sandbox_id, session_id, context
             )
         elif target_record and not self._sandbox_can_be_bootstrapped(target_record):
@@ -550,6 +595,42 @@ class SandboxManager:
                     context, session_id, provider_id, create_config
                 )
                 created_target_record = True
+        return target_sandbox_id, created_target_record
+
+    async def get_or_create_booter(
+        self,
+        context: Context,
+        session_id: str,
+        provider_id: str,
+        *,
+        exclude_sandbox_ids: set[str] | None = None,
+    ) -> ComputerBooter:
+        provider = self.get_provider(provider_id)
+        create_config = provider.build_create_config(context, session_id)
+        idle_timeout, expires_at = self._sandbox_policy_timeouts(context, session_id)
+        lease_timeout = self._lease_timeout(context, session_id)
+
+        current_booter, excluded_stale_current_ids = await self._try_get_current_booter(
+            context,
+            session_id,
+            provider_id,
+            lease_timeout=lease_timeout,
+            idle_timeout=idle_timeout,
+            exclude_sandbox_ids=exclude_sandbox_ids,
+        )
+        if current_booter is not None:
+            return current_booter
+
+        target_sandbox_id, created_target_record = await self._select_boot_target(
+            context,
+            session_id,
+            provider,
+            provider_id,
+            create_config,
+            idle_timeout=idle_timeout,
+            expires_at=expires_at,
+            excluded_sandbox_ids=excluded_stale_current_ids,
+        )
 
         for _attempt in range(MAX_SANDBOX_LEASE_ATTEMPTS):
             async with self._sandbox_boot_lock(target_sandbox_id):
@@ -987,7 +1068,7 @@ class SandboxManager:
             self.clear_runtime_state_and_drop_lock(sandbox_id)
             next_status = (
                 SandboxStatus.UNKNOWN
-                if record.get("retention_policy") == "persistent"
+                if record.get("retention_policy") == SandboxRetentionPolicy.PERSISTENT
                 else SandboxStatus.ERROR
             )
             self.registry.update_sandbox_status(sandbox_id, next_status)
@@ -1018,19 +1099,31 @@ class SandboxManager:
             raise RuntimeError(f"Sandbox {sandbox_id} not found")
         provider_id = record.get("provider", "")
         provider = self.providers.get(provider_id)
-        if retention_policy not in {"temporary", "persistent"}:
+        try:
+            retention_policy = SandboxRetentionPolicy(retention_policy).value
+        except ValueError:
             raise RuntimeError("retention_policy must be temporary or persistent")
-        if retention_policy == "persistent" and provider is None:
+        if retention_policy == SandboxRetentionPolicy.PERSISTENT and provider is None:
             raise RuntimeError(f"Provider {provider_id} is not available")
         if (
-            retention_policy == "persistent"
+            retention_policy == SandboxRetentionPolicy.PERSISTENT
             and provider is not None
             and not getattr(provider, "supports_persistent_reconnect", False)
         ):
             raise RuntimeError(
                 f"Provider {record.get('provider')} does not support persistent sandboxes"
             )
-        if retention_policy == "persistent":
+        if (
+            retention_policy == SandboxRetentionPolicy.PERSISTENT
+            and provider is not None
+        ):
+            check_exists = getattr(provider, "check_persistent_sandbox_exists", None)
+            if not callable(check_exists):
+                raise RuntimeError(
+                    f"Provider {record.get('provider')} must implement "
+                    "check_persistent_sandbox_exists to support persistent sandboxes"
+                )
+        if retention_policy == SandboxRetentionPolicy.PERSISTENT:
             idle_timeout = None
             expires_at = None
         elif idle_timeout and float(idle_timeout) > 0:
@@ -1054,7 +1147,7 @@ class SandboxManager:
                     sandbox_name=normalized_name,
                 )
         updated = self.registry.update_sandbox_config(sandbox_id, **updates)
-        if retention_policy == "persistent":
+        if retention_policy == SandboxRetentionPolicy.PERSISTENT:
             self.clear_idle_state(sandbox_id)
             self.clear_expiration_state(sandbox_id)
         else:
@@ -1075,7 +1168,7 @@ class SandboxManager:
     ) -> dict:
         idle_timeout: float | None
         expires_at: float | None
-        if retention_policy == "persistent":
+        if retention_policy == SandboxRetentionPolicy.PERSISTENT:
             idle_timeout = None
             expires_at = None
         else:
@@ -1099,7 +1192,7 @@ class SandboxManager:
     ) -> dict:
         if (
             context is None
-            or record.get("retention_policy") != "persistent"
+            or record.get("retention_policy") != SandboxRetentionPolicy.PERSISTENT
             or record.get("status")
             not in {SandboxStatus.RUNNING, SandboxStatus.UNKNOWN}
         ):
@@ -1108,6 +1201,18 @@ class SandboxManager:
         provider = self.get_provider(record.get("provider", ""))
         if not getattr(provider, "supports_persistent_reconnect", False):
             return record
+        check_exists = getattr(provider, "check_persistent_sandbox_exists", None)
+        if not callable(check_exists):
+            raise RuntimeError(
+                f"Provider {record.get('provider')} must implement "
+                "check_persistent_sandbox_exists to resume persistent sandboxes"
+            )
+        if not await check_exists(record):
+            self.registry.update_sandbox_status(sandbox_id, SandboxStatus.UNKNOWN)
+            await self.save_registry_async()
+            raise RuntimeError(
+                f"Persistent sandbox {sandbox_id} no longer exists externally"
+            )
 
         create_session_id = str(
             record.get("owner_session_id") or session_id or "dashboard"
@@ -1177,7 +1282,8 @@ class SandboxManager:
                     session_id=None,
                     idle_timeout=(
                         0
-                        if record.get("retention_policy") == "persistent"
+                        if record.get("retention_policy")
+                        == SandboxRetentionPolicy.PERSISTENT
                         else self._idle_timeout(context, create_session_id)
                     ),
                 )
@@ -1385,7 +1491,7 @@ class SandboxManager:
             self.clear_runtime_state(sandbox_id)
             next_status = (
                 SandboxStatus.UNKNOWN
-                if record.get("retention_policy") == "persistent"
+                if record.get("retention_policy") == SandboxRetentionPolicy.PERSISTENT
                 else SandboxStatus.ERROR
             )
             self.registry.update_sandbox_status(sandbox_id, next_status)
@@ -1477,7 +1583,7 @@ class SandboxManager:
         try:
             provider = self.get_provider(record.get("provider", ""))
         except RuntimeError:
-            if record.get("retention_policy") != "persistent":
+            if record.get("retention_policy") != SandboxRetentionPolicy.PERSISTENT:
                 raise
             self.clear_runtime_state_and_drop_lock(sandbox_id)
             self.registry.delete_sandbox(sandbox_id)
@@ -1505,7 +1611,7 @@ class SandboxManager:
         try:
             provider = self.get_provider(record.get("provider", ""))
         except RuntimeError:
-            if record.get("retention_policy") != "persistent":
+            if record.get("retention_policy") != SandboxRetentionPolicy.PERSISTENT:
                 raise
             self.clear_runtime_state_and_drop_lock(sandbox_id)
             self.registry.delete_sandbox(sandbox_id)
@@ -1567,7 +1673,7 @@ class SandboxManager:
             self.session_booter.pop(sandbox_id, None)
             next_status = (
                 SandboxStatus.UNKNOWN
-                if record.get("retention_policy") == "persistent"
+                if record.get("retention_policy") == SandboxRetentionPolicy.PERSISTENT
                 else SandboxStatus.ERROR
             )
             self.registry.update_sandbox_status(sandbox_id, next_status)
@@ -1606,7 +1712,7 @@ class SandboxManager:
         # externally, remove the stale registry record so the dashboard does
         # not show ghost entries.
         for record in list(self.registry.list_sandboxes()):
-            if record.get("retention_policy") != "persistent":
+            if record.get("retention_policy") != SandboxRetentionPolicy.PERSISTENT:
                 continue
             try:
                 provider = self.get_provider(record.get("provider", ""))
@@ -1622,7 +1728,15 @@ class SandboxManager:
             if not getattr(provider, "supports_persistent_reconnect", False):
                 continue
             check_exists = getattr(provider, "check_persistent_sandbox_exists", None)
-            if check_exists is None:
+            if not callable(check_exists):
+                sandbox_id = record["sandbox_id"]
+                logger.warning(
+                    "[Computer] Provider %s declares persistent reconnect but does not implement check_persistent_sandbox_exists; marking %s unknown",
+                    record.get("provider"),
+                    sandbox_id,
+                )
+                self.clear_runtime_state_and_drop_lock(sandbox_id)
+                self.registry.update_sandbox_status(sandbox_id, SandboxStatus.UNKNOWN)
                 continue
             try:
                 exists = await check_exists(record)
@@ -1666,7 +1780,7 @@ class SandboxManager:
             sandbox_id = record["sandbox_id"]
             if not record.get("managed"):
                 continue
-            if record.get("retention_policy") != "persistent":
+            if record.get("retention_policy") != SandboxRetentionPolicy.PERSISTENT:
                 continue
             if record.get("status") not in {
                 SandboxStatus.RUNNING,
@@ -1716,7 +1830,7 @@ class SandboxManager:
         ]
         for record in managed_records:
             sandbox_id = record["sandbox_id"]
-            if record.get("retention_policy") == "persistent":
+            if record.get("retention_policy") == SandboxRetentionPolicy.PERSISTENT:
                 booter = self.session_booter.get(sandbox_id)
                 if booter is not None:
                     try:
@@ -1868,7 +1982,7 @@ class SandboxManager:
                         await self.save_registry_async()
                         return
                 self.clear_runtime_state(sandbox_id)
-                if record.get("retention_policy") == "persistent":
+                if record.get("retention_policy") == SandboxRetentionPolicy.PERSISTENT:
                     self.registry.update_sandbox_status(
                         sandbox_id, SandboxStatus.STOPPED
                     )
@@ -1909,7 +2023,7 @@ class SandboxManager:
                         expires_at=current_expires_at, task=state.task
                     )
                     continue
-                if record.get("retention_policy") == "persistent":
+                if record.get("retention_policy") == SandboxRetentionPolicy.PERSISTENT:
                     return
                 booter = self.session_booter.get(sandbox_id)
                 if booter is not None:

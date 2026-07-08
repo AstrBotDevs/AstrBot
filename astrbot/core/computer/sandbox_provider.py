@@ -22,6 +22,9 @@ class SandboxProvider(Protocol):
             provider is fully initialized at construction time.
         auto_sync_skills: If ``False``, core will skip automatic skill sync after
             booting a sandbox for this provider. Defaults to ``True``.
+        supports_persistent_reconnect: If ``True``, the provider must implement
+            ``check_persistent_sandbox_exists`` and honor ``resume=True`` in the
+            create config passed to ``create_booter``.
         prune_missing_persistent_records: If ``True``, startup reconciliation may
             delete persistent registry records when the provider confirms the
             external sandbox is missing. Defaults to ``False`` to avoid data loss
@@ -55,6 +58,8 @@ class SandboxProvider(Protocol):
         sandbox_id: str,
         config: dict,
     ) -> ComputerBooter: ...
+
+    async def check_persistent_sandbox_exists(self, record: dict) -> bool: ...
 
     async def destroy_booter(self, booter: ComputerBooter, record: dict) -> None: ...
 

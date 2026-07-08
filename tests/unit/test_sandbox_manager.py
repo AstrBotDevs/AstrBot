@@ -67,6 +67,9 @@ class FakeProvider:
         self.created.append((session_id, sandbox_id, booter, config))
         return booter
 
+    async def check_persistent_sandbox_exists(self, record):
+        return True
+
     async def destroy_booter(self, booter, record):
         self.destroyed.append((booter, record["sandbox_id"]))
         await booter.shutdown()
@@ -249,6 +252,10 @@ class PruningMissingPersistentProvider(MissingPersistentProvider):
 class ExistingPersistentProvider(FakeProvider):
     async def check_persistent_sandbox_exists(self, record):
         return True
+
+
+class MissingExistenceProbeProvider(FakeProvider):
+    check_persistent_sandbox_exists = None
 
 
 class ContextCapturingProvider(FakeProvider):
@@ -1754,6 +1761,58 @@ async def test_manager_does_not_revive_persistent_sandbox_without_provider_suppo
         )
 
     assert provider.created == []
+
+
+@pytest.mark.asyncio
+async def test_manager_rejects_persistent_reconnect_without_existence_probe(tmp_path):
+    provider = MissingExistenceProbeProvider()
+    manager, provider = _manager(tmp_path, provider)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="unknown",
+        retention_policy="persistent",
+    )
+
+    with pytest.raises(RuntimeError, match="check_persistent_sandbox_exists"):
+        await manager.get_observer_booter_by_id(
+            "generic-1", "dashboard", require_lease=False, context=object()
+        )
+
+    assert provider.created == []
+    assert manager.registry.get_sandbox("generic-1")["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_manager_rejects_missing_external_persistent_sandbox(tmp_path):
+    provider = MissingPersistentProvider()
+    manager, provider = _manager(tmp_path, provider)
+    manager.registry.upsert_sandbox(
+        sandbox_id="generic-1",
+        sandbox_name="Persistent",
+        provider="generic",
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Persistent"},
+        status="running",
+        retention_policy="persistent",
+    )
+
+    with pytest.raises(RuntimeError, match="no longer exists externally"):
+        await manager.get_observer_booter_by_id(
+            "generic-1", "dashboard", require_lease=False, context=object()
+        )
+
+    assert provider.created == []
+    assert manager.registry.get_sandbox("generic-1")["status"] == "unknown"
 
 
 @pytest.mark.asyncio

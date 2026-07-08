@@ -17,7 +17,7 @@ from astrbot.core.utils.astrbot_path import (
 from .booters.base import ComputerBooter
 from .booters.local import LocalBooter
 from .sandbox_manager import SandboxManager
-from .sandbox_models import SandboxStatus
+from .sandbox_models import SandboxRetentionPolicy, SandboxStatus
 from .sandbox_provider import SandboxProvider
 from .sandbox_registry import SandboxRegistry
 from .sandbox_tool_binding import mark_tool_as_sandbox_provider_tool
@@ -142,7 +142,7 @@ def _cleanup_provider_sandboxes_sync(provider_id: str) -> None:
         if not record.get("managed") or record.get("provider") != provider_id:
             continue
         sandbox_id = record["sandbox_id"]
-        if record.get("retention_policy") == "persistent":
+        if record.get("retention_policy") == SandboxRetentionPolicy.PERSISTENT:
             booter = sandbox_manager.session_booter.pop(sandbox_id, None)
             sandbox_manager.clear_idle_state(sandbox_id)
             sandbox_manager.drop_boot_lock(sandbox_id)
@@ -200,7 +200,7 @@ async def cleanup_sandbox_provider(provider_id: str) -> None:
         sandbox_id = record["sandbox_id"]
         handled_sandbox_ids.add(sandbox_id)
         booter = _pop_live_booter(sandbox_id)
-        if record.get("retention_policy") == "persistent":
+        if record.get("retention_policy") == SandboxRetentionPolicy.PERSISTENT:
             if booter is not None:
                 await _safe_shutdown_booter(booter, record)
             preserved += 1
@@ -226,7 +226,7 @@ async def cleanup_sandbox_provider(provider_id: str) -> None:
             "sandbox_id": sandbox_id,
             "provider": provider_id,
             "managed": True,
-            "retention_policy": "temporary",
+            "retention_policy": SandboxRetentionPolicy.TEMPORARY.value,
         }
         sandbox_manager.session_booter.pop(sandbox_id, None)
         sandbox_manager.clear_idle_state(sandbox_id)

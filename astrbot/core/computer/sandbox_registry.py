@@ -8,7 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from astrbot.api import logger
-from astrbot.core.computer.sandbox_models import SandboxRecord, SandboxStatus
+from astrbot.core.computer.sandbox_models import (
+    SandboxRecord,
+    SandboxRetentionPolicy,
+    SandboxStatus,
+)
 from astrbot.core.computer.sandbox_timeouts import (
     lease_expires_at_from_timeout,
     lease_is_active,
@@ -146,7 +150,7 @@ class SandboxRegistry:
             "last_used_at": None,
             "idle_timeout": None,
             "expires_at": None,
-            "retention_policy": "temporary",
+            "retention_policy": SandboxRetentionPolicy.TEMPORARY.value,
             "status": "running",
             "is_default": False,
             "labels": {},
@@ -342,7 +346,7 @@ class SandboxRegistry:
     def reconcile_startup(self) -> None:
         self._payload["session_current"] = {}
         for sandbox_id, record in list(self._payload["sandboxes"].items()):
-            if record.get("retention_policy") != "persistent":
+            if record.get("retention_policy") != SandboxRetentionPolicy.PERSISTENT:
                 self._payload["sandboxes"].pop(sandbox_id, None)
                 continue
             record["controller_session_id"] = None
