@@ -18,7 +18,7 @@ from ..context import PipelineContext
 from ..stage import Stage, register_stage, registered_stages
 
 
-async def _word_cnt(text: str) -> int:
+def _word_cnt(text: str) -> int:
     """
     将不同语言分开计算
     - 中文/日语: 按字数计算
@@ -233,7 +233,7 @@ class ResultDecorateStage(Stage):
                     new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
-                            word_count = await _word_cnt(comp.text)
+                            word_count = _word_cnt(comp.text)
                             if word_count > self.words_count_threshold:
                                 # 不分段回复
                                 new_chain.append(comp)
@@ -317,8 +317,7 @@ class ResultDecorateStage(Stage):
             if should_tts and tts_provider:
                 new_chain = []
                 for comp in result.chain:
-                    word_count = await _word_cnt(comp.text)
-                    if isinstance(comp, Plain) and word_count > 1:
+                    if isinstance(comp, Plain) and _word_cnt(comp.text) > 1:
                         try:
                             logger.info(f"TTS 请求: {comp.text}")
                             audio_path = await tts_provider.get_audio(comp.text)
@@ -378,7 +377,7 @@ class ResultDecorateStage(Stage):
                     else:
                         break
                 plain_str = "".join(parts)
-                word_count = await _word_cnt(plain_str)
+                word_count = _word_cnt(plain_str)
                 if plain_str and word_count > self.t2i_word_threshold:
                     render_start = time.time()
                     try:
@@ -414,7 +413,7 @@ class ResultDecorateStage(Stage):
                 word_cnt = 0
                 for comp in result.chain:
                     if isinstance(comp, Plain):
-                        word_cnt += await _word_cnt(comp.text)
+                        word_cnt += _word_cnt(comp.text)
                 if word_cnt > self.forward_threshold:
                     node = Node(
                         uin=event.get_self_id(),
