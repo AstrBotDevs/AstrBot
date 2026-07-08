@@ -57,8 +57,12 @@ ALL_OPEN_API_SCOPES = (
     "data",
     "file",
     "plugin",
+    "kb",
     "mcp",
+    "sandbox",
     "skill",
+    "system",
+    "tool",
 )
 
 OPEN_API_SCOPE_INCLUDES = {

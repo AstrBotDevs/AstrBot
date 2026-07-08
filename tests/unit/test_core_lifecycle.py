@@ -382,9 +382,15 @@ class TestAstrBotCoreLifecycleSandboxRestore:
             await restore_finished.wait()
             return 1, 0
 
-        with patch(
-            "astrbot.core.core_lifecycle.computer_client.sandbox_manager.restore_persistent_sandboxes",
-            restore_persistent,
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.computer_client.sandbox_manager.restore_persistent_sandboxes",
+                restore_persistent,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.star_handlers_registry.get_handlers_by_event_type",
+                return_value=[],
+            ),
         ):
             await asyncio.wait_for(lifecycle.start(), timeout=1)
             assert lifecycle._persistent_restore_task is not None

@@ -1,10 +1,13 @@
 import asyncio
 import io
+import re
 import uuid
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+import yaml
 from werkzeug.datastructures import FileStorage
 
 from astrbot.core import LogBroker
@@ -18,6 +21,7 @@ from astrbot.dashboard.api import open_api as open_api_routes
 from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
 from astrbot.dashboard.responses import ok
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.services.auth_service import ALL_OPEN_API_SCOPES
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
@@ -792,6 +796,42 @@ async def test_open_api_key_scope_normalization(
     assert extra_scope_res.status_code == 200
     assert extra_scope_data["status"] == "ok"
     assert set(extra_scope_data["data"]["scopes"]) == {"mcp", "skill"}
+
+    management_scope_res = await test_client.post(
+        "/api/apikey/create",
+        json={"name": "management-scope-key", "scopes": ["system", "tool", "kb"]},
+        headers=authenticated_header,
+    )
+    management_scope_data = await management_scope_res.get_json()
+
+    assert management_scope_res.status_code == 200
+    assert management_scope_data["status"] == "ok"
+    assert set(management_scope_data["data"]["scopes"]) == {
+        "system",
+        "tool",
+        "kb",
+    }
+
+
+def test_open_api_scope_registry_matches_routes_and_spec():
+    root = Path(__file__).resolve().parents[1]
+    route_scopes = set()
+    for path in (root / "astrbot/dashboard/api").glob("*.py"):
+        route_scopes.update(
+            re.findall(r'require_scope\(request, "([^"]+)"\)', path.read_text())
+        )
+
+    spec = yaml.safe_load((root / "openspec/openapi-v1.yaml").read_text())
+    spec_scopes = {
+        operation["x-astrbot-scope"]
+        for operations in spec.get("paths", {}).values()
+        for operation in operations.values()
+        if isinstance(operation, dict) and operation.get("x-astrbot-scope")
+    }
+
+    supported_scopes = set(ALL_OPEN_API_SCOPES)
+    assert not route_scopes - supported_scopes
+    assert not spec_scopes - supported_scopes
 
 
 @pytest.mark.asyncio
