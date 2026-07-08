@@ -931,6 +931,7 @@ def _append_system_reminders(
     timezone: str | None,
 ) -> None:
     system_parts: list[str] = []
+    datetime_part: str | None = None
     if cfg.get("identifier"):
         user_id = event.message_obj.sender.user_id
         user_nickname = event.message_obj.sender.nickname
@@ -958,13 +959,26 @@ def _append_system_reminders(
             now = datetime.datetime.now().astimezone()
         current_time = now.strftime("%Y-%m-%d %H:%M (%Z)")
         weekday = WEEKDAY_NAMES[now.weekday()]
-        system_parts.append(f"Current datetime: {current_time}, Weekday: {weekday}")
+        datetime_part = f"Current datetime: {current_time}, Weekday: {weekday}"
+
+    if (
+        datetime_part
+        and cfg.get("datetime_system_prompt_scope", "history") == "history"
+    ):
+        system_parts.append(datetime_part)
+        datetime_part = None
 
     if system_parts:
         system_content = (
             "<system_reminder>" + "\n".join(system_parts) + "</system_reminder>"
         )
         req.extra_user_content_parts.append(TextPart(text=system_content))
+
+    if datetime_part:
+        datetime_content = f"<system_reminder>{datetime_part}</system_reminder>"
+        req.extra_user_content_parts.append(
+            TextPart(text=datetime_content).mark_as_temp()
+        )
 
 
 async def _decorate_llm_request(

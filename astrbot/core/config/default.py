@@ -121,6 +121,7 @@ DEFAULT_CONFIG = {
         "identifier": False,
         "group_name_display": False,
         "datetime_system_prompt": True,
+        "datetime_system_prompt_scope": "history",
         "default_personality": "default",
         "persona_pool": ["*"],
         "prompt_prefix": "{{prompt}}",
@@ -2824,6 +2825,9 @@ CONFIG_METADATA_2 = {
                     "datetime_system_prompt": {
                         "type": "bool",
                     },
+                    "datetime_system_prompt_scope": {
+                        "type": "string",
+                    },
                     "default_personality": {
                         "type": "string",
                     },
@@ -3700,6 +3704,17 @@ CONFIG_METADATA_3 = {
                         "hint": "启用后，会在系统提示词中附带当前时间信息。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.datetime_system_prompt_scope": {
+                        "description": "当前时间写入位置",
+                        "type": "string",
+                        "options": ["current", "history"],
+                        "labels": ["只加入本次请求", "写入对话历史"],
+                        "hint": "只加入本次请求：每次只把最新时间发给模型，不保存进历史，比较容易命中提示词缓存。写入对话历史：保持旧行为，会把时间留在历史里，可能让后续请求更难命中缓存。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                            "provider_settings.datetime_system_prompt": True,
                         },
                     },
                     "provider_settings.show_tool_use_status": {

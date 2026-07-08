@@ -313,6 +313,11 @@
           "description": "Real-world Time Awareness",
           "hint": "When enabled, current time information will be appended to the system prompt."
         },
+        "datetime_system_prompt_scope": {
+          "description": "Where to Put Current Time",
+          "labels": ["Current request only", "Write into chat history"],
+          "hint": "Current request only: sends the latest time to the model for this request without saving it to history, which is friendlier to prompt caching. Write into chat history: keeps the old behavior and leaves time messages in history, which may make later requests harder to cache."
+        },
         "show_tool_use_status": {
           "description": "Output Function Call Status"
         },
