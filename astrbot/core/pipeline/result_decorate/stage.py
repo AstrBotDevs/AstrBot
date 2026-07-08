@@ -249,6 +249,7 @@ class ResultDecorateStage(Stage):
                                         logger.error(
                                             f"分段回复过滤表达式失败，无法成功过滤：{traceback.format_exc()}"
                                         )
+                                        self.content_cleanup_rule = None
                                 seg = seg.strip()
                                 if seg:
                                     new_chain.append(Plain(seg))
