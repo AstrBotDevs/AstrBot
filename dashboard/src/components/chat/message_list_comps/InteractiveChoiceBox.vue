@@ -41,8 +41,14 @@
       }}</span>
     </div>
 
-    <!-- Pending: 选项按钮 + 自由输入 -->
+    <!-- Pending: prose 段(帮用户决策)+ 选项按钮 + 自由输入 -->
     <template v-if="state === 'pending'">
+      <InteractiveChoiceProse
+        v-if="part.extra_content"
+        :content="part.extra_content"
+        :is-dark="isDark"
+        :uid="part.request_id"
+      />
       <div class="choice-options">
         <button
           v-for="opt in part.options"
@@ -52,7 +58,10 @@
           :aria-label="ariaLabelForOption(opt)"
           @click="onOptionClick(opt)"
         >
-          <span class="choice-option-label">{{ opt.label }}</span>
+          <span class="choice-option-label">
+            <span v-if="opt.id" class="choice-option-id">{{ opt.id }}.</span>
+            {{ opt.label }}
+          </span>
           <span v-if="opt.description" class="choice-option-description">
             {{ opt.description }}
           </span>
@@ -98,6 +107,68 @@
         <span class="choice-result-value">{{ submittedLabel }}</span>
       </div>
     </template>
+
+    <!-- 非 pending:可折叠回看"prose + 原始选项",避免历史 prose 与选项信息丢失。
+         默认折叠;展开后依次渲染 prose(若存在)与全部 options,并高亮当时选中的那一项。
+         折叠触发条件:state 非 pending 且(prose 存在 或 options 非空)。 -->
+    <div
+      v-if="state !== 'pending' && (part.options.length || part.extra_content)"
+      class="choice-options-collapse"
+    >
+      <button
+        type="button"
+        class="choice-collapse-toggle"
+        :aria-expanded="optionsExpanded"
+        @click="optionsExpanded = !optionsExpanded"
+      >
+        <v-icon size="14" class="choice-collapse-icon">{{
+          optionsExpanded ? "mdi-chevron-down" : "mdi-chevron-right"
+        }}</v-icon>
+        <span>{{
+          optionsExpanded
+            ? tm("interactiveChoice.collapseDetails")
+            : tm("interactiveChoice.expandDetails")
+        }}</span>
+        <span class="choice-collapse-count"
+          >({{ collapseItemCount }})</span
+        >
+      </button>
+      <div v-if="optionsExpanded" class="choice-details">
+        <InteractiveChoiceProse
+          v-if="part.extra_content"
+          :content="part.extra_content"
+          :is-dark="isDark"
+          :uid="part.request_id"
+        />
+        <div
+          v-if="part.options.length"
+          class="choice-options choice-options--readonly"
+        >
+          <div
+            v-for="opt in part.options"
+            :key="opt.id"
+            class="choice-option-readonly"
+            :class="{ 'is-selected': opt.id === selectedOptionId }"
+          >
+            <div class="choice-option-readonly-head">
+              <v-icon
+                v-if="opt.id === selectedOptionId"
+                size="14"
+                class="choice-option-check"
+                >mdi-check</v-icon
+              >
+              <span class="choice-option-label">
+                <span v-if="opt.id" class="choice-option-id">{{ opt.id }}.</span>
+                {{ opt.label }}
+              </span>
+            </div>
+            <span v-if="opt.description" class="choice-option-description">
+              {{ opt.description }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -110,6 +181,7 @@ import {
   type InteractiveChoiceOption,
 } from "@/composables/parseInteractiveChoice";
 import { useInteractiveChoiceStore } from "@/stores/interactiveChoice";
+import InteractiveChoiceProse from "@/components/chat/message_list_comps/InteractiveChoiceProse.vue";
 
 const props = defineProps<{
   part: InteractiveChoicePart;
@@ -153,6 +225,10 @@ const submissionState = computed(() =>
 // 自由文本输入框的临时输入——这是 UI 局部状态,不需要全局共享,保留 ref。
 const freeText = ref("");
 
+// 非 pending 状态下"回看原始选项"折叠区的展开标志。历史信息默认折叠,
+// 保持聊天流干净;这是纯 UI 局部状态,无需持久化到 store。
+const optionsExpanded = ref(false);
+
 // ── 派生状态机 ───────────────────────────────────────────────
 type State =
   | "pending"
@@ -185,6 +261,25 @@ const inputPlaceholderResolved = computed(
   () =>
     props.part.input_placeholder || tm("interactiveChoice.defaultPlaceholder"),
 );
+
+// 折叠区展开时,用于高亮"当时选中项"的选项 id。仅当提交来源是 option
+// 时有值;自由文本提交或被忽略时为 null(无高亮)。
+const selectedOptionId = computed<string | null>(() => {
+  const sub = submissionState.value;
+  return sub && sub.kind === "option" ? sub.optionId ?? null : null;
+});
+
+// 折叠区计数 = prose 段(prose 若存在计 1)+ 原始选项数。
+// 当 prose 与 options 同时存在时,二者都进同一个折叠,共用同一个展开态,
+// 因此计数要相加。空 part(或两者皆无)由模板 v-if 兜底,这里只算正数。
+const collapseItemCount = computed<number>(() => {
+  let count = 0;
+  if (props.part.extra_content && props.part.extra_content.length > 0) {
+    count += 1;
+  }
+  count += props.part.options.length;
+  return count;
+});
 
 function onOptionClick(opt: InteractiveChoiceOption) {
   // eslint-disable-next-line no-console
@@ -398,5 +493,90 @@ function ariaLabelForOption(opt: InteractiveChoiceOption): string {
 .is-submitted .choice-option-button {
   pointer-events: none;
   opacity: 0.6;
+}
+
+/* ── 非 pending 状态:可折叠的原始选项回看区 ───────────────────── */
+.choice-options-collapse {
+  margin-top: 8px;
+}
+
+.choice-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  margin-left: -4px;
+  border: none;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  border-radius: 6px;
+  transition: color 0.12s ease;
+}
+
+.choice-collapse-toggle:hover {
+  color: rgb(var(--v-theme-primary));
+}
+
+.choice-collapse-icon {
+  flex-shrink: 0;
+}
+
+.choice-collapse-count {
+  opacity: 0.8;
+}
+
+.choice-options--readonly {
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
+/* 折叠展开区 .choice-details:同时容纳 prose 段与只读 options 时,
+   prose 自身的 margin (6/0/10) 容易把上下撑开过大。收紧 prose 在
+   折叠容器内的边距,让它紧贴在 toggle 按钮下、跟 options 挨得近一点。 */
+.choice-details {
+  margin-top: 6px;
+}
+.choice-details > .choice-prose {
+  margin-top: 0;
+}
+.choice-details > .choice-options {
+  /* prose → options 收尾,去掉 prose 底部 10px + options 顶部 6px 中的冗余 */
+  margin-top: 6px;
+}
+
+.choice-option-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.02);
+}
+
+.choice-option-readonly.is-selected {
+  border-color: rgba(var(--v-theme-primary), 0.5);
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.choice-option-readonly-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.choice-option-check {
+  color: rgb(var(--v-theme-primary));
+  flex-shrink: 0;
+}
+
+/* 选项 id 前缀(通常是 A / B / C)——加粗、主题色,置于 label 最前 */
+.choice-option-id {
+  font-weight: 700;
+  color: rgb(var(--v-theme-primary));
+  margin-right: 2px;
 }
 </style>

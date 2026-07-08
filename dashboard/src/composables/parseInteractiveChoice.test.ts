@@ -16,7 +16,10 @@ import {
 } from "./parseInteractiveChoice.ts";
 
 test("isInteractiveChoicePayload accepts valid type", () => {
-  assert.equal(isInteractiveChoicePayload({ type: "interactive_choice" }), true);
+  assert.equal(
+    isInteractiveChoicePayload({ type: "interactive_choice" }),
+    true,
+  );
 });
 
 test("isInteractiveChoicePayload rejects null", () => {
@@ -28,7 +31,10 @@ test("validateInteractiveChoice accepts request_id", () => {
     type: "interactive_choice",
     request_id: "r1",
     prompt: "test",
-    options: [{ id: "A", label: "a" }, { id: "B", label: "b" }],
+    options: [
+      { id: "A", label: "a" },
+      { id: "B", label: "b" },
+    ],
   };
   assert.equal(validateInteractiveChoice(valid), true);
 });
@@ -37,7 +43,10 @@ test("validateInteractiveChoice rejects missing request_id", () => {
   const invalid = {
     type: "interactive_choice",
     prompt: "test",
-    options: [{ id: "A", label: "a" }, { id: "B", label: "b" }],
+    options: [
+      { id: "A", label: "a" },
+      { id: "B", label: "b" },
+    ],
   };
   assert.equal(validateInteractiveChoice(invalid), false);
 });
@@ -47,7 +56,10 @@ test("validateInteractiveChoice rejects empty request_id", () => {
     type: "interactive_choice",
     request_id: "  ",
     prompt: "test",
-    options: [{ id: "A", label: "a" }, { id: "B", label: "b" }],
+    options: [
+      { id: "A", label: "a" },
+      { id: "B", label: "b" },
+    ],
   };
   assert.equal(validateInteractiveChoice(invalid), false);
 });
@@ -57,7 +69,10 @@ test("validateInteractiveChoice rejects duplicate option ids", () => {
     type: "interactive_choice",
     request_id: "r1",
     prompt: "test",
-    options: [{ id: "A", label: "a" }, { id: "A", label: "b" }],
+    options: [
+      { id: "A", label: "a" },
+      { id: "A", label: "b" },
+    ],
   };
   assert.equal(validateInteractiveChoice(invalid), false);
 });
@@ -142,8 +157,14 @@ test("tryRecoverInteractiveChoiceFromPlainText: returns null on narrative-only",
 
 test("tryRecoverInteractiveChoiceFromPlainText: returns null on non-string input", () => {
   assert.equal(tryRecoverInteractiveChoiceFromPlainText(""), null);
-  assert.equal(tryRecoverInteractiveChoiceFromPlainText(null as unknown as string), null);
-  assert.equal(tryRecoverInteractiveChoiceFromPlainText(undefined as unknown as string), null);
+  assert.equal(
+    tryRecoverInteractiveChoiceFromPlainText(null as unknown as string),
+    null,
+  );
+  assert.equal(
+    tryRecoverInteractiveChoiceFromPlainText(undefined as unknown as string),
+    null,
+  );
 });
 
 test("tryRecoverInteractiveChoiceFromPlainText: returns null when spec fails validation", () => {
@@ -196,4 +217,113 @@ test("tryRecoverInteractiveChoiceFromPlainText: drops expires_at when not a numb
   const recovered = tryRecoverInteractiveChoiceFromPlainText(noExpiry);
   assert.ok(recovered);
   assert.equal(recovered!.expires_at, undefined);
+});
+
+// ── v1.1: extra_content 字段契约 ────────────────────────────────────
+//
+// 后端 v1.1 在 spec 里多了一个可选 `extra_content` 字段(≤5000 字符 Markdown),
+// 用于在候选框里展示 LLM 推荐的"理由 / 注意事项"等。前端必须:
+//   1. 接受它(`validateInteractiveChoice` 不应拒绝含 extra_content 的 part)
+//   2. 截断超长内容(>5000 字符)作为防御性兜底
+//   3. 缺省时为 undefined(不是 null,不是 "")
+//   4. 未触顶时原样返回(同一对象引用,避免无谓重渲染)
+
+test("validateInteractiveChoice accepts extra_content (v1.1)", () => {
+  // LLM 写了完整 prose——validateInteractiveChoice 不应因此拒绝
+  const withExtra = {
+    type: "interactive_choice",
+    request_id: "r-extra",
+    prompt: "选一个部署方案?",
+    options: [
+      { id: "A", label: "蓝绿" },
+      { id: "B", label: "灰度" },
+    ],
+    extra_content: "**推荐 B**。\n\n理由:\n- 兼顾成本与风险\n- LB 已就绪",
+  };
+  assert.equal(validateInteractiveChoice(withExtra), true);
+});
+
+test("validateInteractiveChoice accepts extra_content='' (v1.1)", () => {
+  // 后端可能 strip 后传空串,前端不能因为空串就拒绝整个 part
+  const emptyExtra = {
+    type: "interactive_choice",
+    request_id: "r-empty",
+    prompt: "选一个部署方案?",
+    options: [
+      { id: "A", label: "蓝绿" },
+      { id: "B", label: "灰度" },
+    ],
+    extra_content: "",
+  };
+  assert.equal(validateInteractiveChoice(emptyExtra), true);
+});
+
+test("truncateInteractiveChoice: extra_content > 5000 chars is truncated (v1.1)", () => {
+  const longExtra = "x".repeat(6000);
+  const input = {
+    type: "interactive_choice" as const,
+    request_id: "r1",
+    prompt: "p",
+    options: [
+      { id: "A", label: "a" },
+      { id: "B", label: "b" },
+    ],
+    extra_content: longExtra,
+  };
+  const out = truncateInteractiveChoice(input);
+  assert.equal(out.extra_content?.length, 5000);
+  // 返回的是新对象(因为 mutated)
+  assert.notEqual(out, input);
+});
+
+test("truncateInteractiveChoice: extra_content within limit is untouched (v1.1)", () => {
+  // ≤ 5000 字符不应触发 mutated——返回**同一对象引用**,
+  // 让 Vue 的响应式系统能跳过不必要的下游重渲染。
+  const input = {
+    type: "interactive_choice" as const,
+    request_id: "r1",
+    prompt: "p",
+    options: [
+      { id: "A", label: "a" },
+      { id: "B", label: "b" },
+    ],
+    extra_content: "**推荐 A**",
+  };
+  const out = truncateInteractiveChoice(input);
+  assert.equal(out.extra_content, "**推荐 A**");
+  // mutate 字段未变 → 应当返回原 part 引用
+  assert.equal(out, input);
+});
+
+test("truncateInteractiveChoice: missing extra_content stays undefined (v1.1)", () => {
+  // v1.0 旧数据没有 extra_content 字段,truncate 后仍为 undefined,
+  // 不应被凭空补成 ""。
+  const input = {
+    type: "interactive_choice" as const,
+    request_id: "r1",
+    prompt: "p",
+    options: [
+      { id: "A", label: "a" },
+      { id: "B", label: "b" },
+    ],
+  };
+  const out = truncateInteractiveChoice(input);
+  assert.equal(out.extra_content, undefined);
+  assert.equal(out, input);
+});
+
+test("truncateInteractiveChoice: extra_content of wrong type is preserved as-is (v1.1)", () => {
+  // 后端如果误传了非 string(例如 boolean),不应让它崩,也不应误改。
+  const input = {
+    type: "interactive_choice" as const,
+    request_id: "r1",
+    prompt: "p",
+    options: [
+      { id: "A", label: "a" },
+      { id: "B", label: "b" },
+    ],
+    extra_content: true as unknown as string,
+  };
+  const out = truncateInteractiveChoice(input);
+  assert.equal(out.extra_content, true);
 });

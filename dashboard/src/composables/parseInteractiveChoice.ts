@@ -23,10 +23,26 @@ export interface InteractiveChoicePart {
   input_placeholder?: string;
   /** v1.0 可选:unix ts,前端可显示倒计时 */
   expires_at?: number;
+  /**
+   * v1.1 可选:LLM 写的 Markdown 补充说明,≤5000 字符。
+   *
+   * 语义:在候选框 prompt 与 options 之间渲染一段 prose,展示
+   * LLM 推荐的"理由 / 注意事项 / 优缺点对比"等,帮用户决策。
+   *
+   * 约束:
+   * - 长度上限 5000 字符,后端已截断,前端 truncateInteractiveChoice
+   *   二次截断作为防御性兜底。
+   * - **不**回传到 LLM tool result(纯展示字段)。
+   * - 前端必须剥离 `![alt](url)` 之类的图片语法再渲染,以防
+   *   LLM 注入跟踪像素 / 不可信 URL。
+   */
+  extra_content?: string;
   [key: string]: unknown;
 }
 
-export function isInteractiveChoicePayload(value: unknown): value is InteractiveChoicePart {
+export function isInteractiveChoicePayload(
+  value: unknown,
+): value is InteractiveChoicePart {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const obj = value as Record<string, unknown>;
   return obj.type === "interactive_choice";
@@ -35,7 +51,8 @@ export function isInteractiveChoicePayload(value: unknown): value is Interactive
 export function validateInteractiveChoice(obj: unknown): boolean {
   if (!isInteractiveChoicePayload(obj)) return false;
   const part = obj as Record<string, unknown>;
-  if (typeof part.request_id !== "string" || !part.request_id.trim()) return false;
+  if (typeof part.request_id !== "string" || !part.request_id.trim())
+    return false;
   if (typeof part.prompt !== "string" || !part.prompt.trim()) return false;
   if (!Array.isArray(part.options) || part.options.length < 2) return false;
   const seen = new Set<string>();
@@ -50,8 +67,18 @@ export function validateInteractiveChoice(obj: unknown): boolean {
   return true;
 }
 
-export function truncateInteractiveChoice(part: InteractiveChoicePart): InteractiveChoicePart {
-  const LIMITS = { PROMPT_MAX: 200, TITLE_MAX: 30, LABEL_MAX: 30, DESC_MAX: 200, PLACEHOLDER_MAX: 60 };
+export function truncateInteractiveChoice(
+  part: InteractiveChoicePart,
+): InteractiveChoicePart {
+  const LIMITS = {
+    PROMPT_MAX: 200,
+    TITLE_MAX: 30,
+    LABEL_MAX: 30,
+    DESC_MAX: 200,
+    PLACEHOLDER_MAX: 60,
+    /** v1.1 新增:LLM 补充说明的 Markdown 长度上限 */
+    EXTRA_CONTENT_MAX: 5000,
+  };
   let mutated = false;
   const out: InteractiveChoicePart = { ...part };
   if (out.prompt.length > LIMITS.PROMPT_MAX) {
@@ -62,8 +89,14 @@ export function truncateInteractiveChoice(part: InteractiveChoicePart): Interact
     out.title = out.title.slice(0, LIMITS.TITLE_MAX);
     mutated = true;
   }
-  if (typeof out.input_placeholder === "string" && out.input_placeholder.length > LIMITS.PLACEHOLDER_MAX) {
-    out.input_placeholder = out.input_placeholder.slice(0, LIMITS.PLACEHOLDER_MAX);
+  if (
+    typeof out.input_placeholder === "string" &&
+    out.input_placeholder.length > LIMITS.PLACEHOLDER_MAX
+  ) {
+    out.input_placeholder = out.input_placeholder.slice(
+      0,
+      LIMITS.PLACEHOLDER_MAX,
+    );
     mutated = true;
   }
   if (Array.isArray(out.options)) {
@@ -74,13 +107,24 @@ export function truncateInteractiveChoice(part: InteractiveChoicePart): Interact
         o.label = o.label.slice(0, LIMITS.LABEL_MAX);
         mutated = true;
       }
-      if (typeof o.description === "string" && o.description.length > LIMITS.DESC_MAX) {
+      if (
+        typeof o.description === "string" &&
+        o.description.length > LIMITS.DESC_MAX
+      ) {
         o.description = o.description.slice(0, LIMITS.DESC_MAX);
         mutated = true;
       }
       newOpts.push(o);
     }
     out.options = newOpts;
+  }
+  // v1.1 新增:extra_content 长度兜底截断。后端已截过,这里只在被恶意后端绕过时兜底。
+  if (
+    typeof out.extra_content === "string" &&
+    out.extra_content.length > LIMITS.EXTRA_CONTENT_MAX
+  ) {
+    out.extra_content = out.extra_content.slice(0, LIMITS.EXTRA_CONTENT_MAX);
+    mutated = true;
   }
   return mutated ? out : part;
 }

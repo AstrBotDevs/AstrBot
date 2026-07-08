@@ -721,6 +721,7 @@
     "submit": "Отправить",
     "defaultPlaceholder": "Или введите свой вариант...",
     "expandDetails": "Показать варианты",
-    "collapseDetails": "Скрыть варианты"
+    "collapseDetails": "Скрыть варианты",
+    "extraContentLabel": "Дополнительная информация (сгенерирована ИИ)"
   }
 }
