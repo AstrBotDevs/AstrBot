@@ -1766,7 +1766,7 @@ CONFIG_METADATA_2 = {
                         "api_key": "",
                         "api_base": "https://api.minimax.chat/v1/t2a_v2",
                         "minimax-group-id": "",
-                        "model": "speech-02-turbo",
+                        "model": "speech-2.8-hd",
                         "minimax-langboost": "auto",
                         "minimax-voice-speed": 1.0,
                         "minimax-voice-vol": 1.0,
