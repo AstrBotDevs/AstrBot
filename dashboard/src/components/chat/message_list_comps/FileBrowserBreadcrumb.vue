@@ -9,16 +9,29 @@ const props = defineProps<{
   /** Root path; null when project not loaded. */
   rootPath: string | null;
   /**
+   * 2026-07-09: passed through from the file-browser's `previewPath`
+   * so the leaf segment can pick the right icon. When `previewPath`
+   * is non-null, the leaf represents the file being previewed and
+   * renders a document icon; otherwise the leaf is the directory the
+   * user is browsing and renders a folder icon to match its parents.
+   */
+  previewPath?: string | null;
+  /**
    * 2026-07-02: pass through the dashboard's dark-mode flag so the
-   * path bar can lift its background alpha + border strength in
-   * dark theme. Without this, the primary-tint background
-   * introduced for the light mode would render as a near-invisible
-   * 8%-alpha wash against the dark sidebar.
+   * path bar's separator + hover tones map correctly to dark theme.
    */
   isDark?: boolean;
 }>();
 const emit = defineEmits<{ (e: "navigate", path: string): void }>();
 const { tm } = useModuleI18n("features/chat");
+
+// 2026-07-09: leaf is "the file currently being previewed" only when
+// the caller has a non-null previewPath. In all other cases the leaf
+// is just another folder the user is browsing through, so it shares
+// the parent folder icon and only changes its color (no border, no
+// background, no bold — those treatments all proved visually heavy
+// during the 2026-07-08 / 2026-07-09 iterations).
+const leafIsFile = computed<boolean>(() => !!props.previewPath);
 
 interface Segment {
   name: string;
@@ -110,104 +123,198 @@ const segments = computed<Segment[]>(() => {
     :class="{ dark: props.isDark }"
   >
     <template v-for="(seg, i) in segments" :key="seg.path">
+      <!--
+        2026-07-09 redesign — macOS Finder Path Bar style:
+        - parents are real <button>s (clickable, focusable, keyboard
+          accessible); their icon disambiguates "this is a folder you
+          can navigate into"
+        - the leaf is a plain <span> (no button affordance; it is
+          the user's "current location" and clicking it would be a
+          no-op, so we don't pretend it can be clicked)
+        - the chevron `›` separates segments; rotated 0deg (already
+          points right in the chosen glyph) and styled muted
+        - when there is only one segment and it IS the root, the
+          leaf still gets the file-vs-folder icon distinction via
+          previewPath; the breadcrumb simply renders the root alone
+      -->
       <button
+        v-if="i < segments.length - 1"
         type="button"
         class="breadcrumb-segment"
-        :class="{ 'is-current': i === segments.length - 1 }"
         :title="seg.path"
         @click="emit('navigate', seg.path)"
       >
-        {{ seg.name }}
+        <v-icon :size="13" class="breadcrumb-segment-icon">{{
+          seg.isRoot ? "mdi-folder" : "mdi-folder-outline"
+        }}</v-icon>
+        <span class="breadcrumb-segment-name">{{ seg.name }}</span>
       </button>
-      <span v-if="i < segments.length - 1" class="breadcrumb-sep">/</span>
+      <span v-else class="breadcrumb-leaf" :title="seg.path">
+        <v-icon :size="13" class="breadcrumb-leaf-icon">{{
+          leafIsFile
+            ? "mdi-file-document-outline"
+            : seg.isRoot
+            ? "mdi-folder"
+            : "mdi-folder-outline"
+        }}</v-icon>
+        <span class="breadcrumb-leaf-name">{{ seg.name }}</span>
+      </span>
+      <span
+        v-if="i < segments.length - 1"
+        class="breadcrumb-sep"
+        aria-hidden="true"
+        >›</span
+      >
     </template>
   </nav>
 </template>
 
 <style scoped>
-/* ── Light mode (default) ─────────────────────────────────────────
-   Primary-tint background + 2px matching bottom border. The
-   previous 0.08-alpha wash was indistinguishable from the
-   surrounding sidebar chrome on most displays (the user
-   reported "no effect" after the first iteration), so the
-   background is now lifted to 0.15 and the border to 0.4 with
-   2px stroke. A 1px subtle drop shadow under the bar gives it
-   a "raised card" feel so it reads as a distinct navigation
-   surface, not just inline text. Active segment keeps a
-   slightly stronger fill so the leaf (the file the user just
-   opened) is unambiguous. */
+/* ── 2026-07-09 redesign — macOS Finder Path Bar ──────────────────
+   Three prior iterations (background wash, primary bottom-border,
+   then 3px left-accent + 8% wash) all left the leaf feeling
+   visually heavy in this sidebar. This rewrite drops the chrome
+   entirely: the bar is just a hairline divider with system-font
+   text, folder/file icons, and a muted chevron. The leaf is
+   emphasized purely through color + medium weight — no background
+   fill, no border, no shadow. The result reads as a flat
+   navigation strip rather than a card or banner. */
 .file-browser-breadcrumb {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2px;
-  padding: 10px 14px;
-  font-size: 12px;
-  font-family: ui-monospace, monospace;
-  background: rgba(var(--v-theme-primary), 0.15);
-  border-bottom: 2px solid rgba(var(--v-theme-primary), 0.4);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  gap: 1px;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  font-family: inherit;
+  line-height: 1.4;
+  /* No background. A single 1px hairline below separates the
+     bar from the file tree beneath; using the same chat-border
+     token as the sidebar chrome keeps the visual rhythm aligned. */
+  border-bottom: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.08));
+  /* The bar can wrap on narrow widths (420px sidebar + deep path);
+     align the wrapped rows consistently. */
+  row-gap: 2px;
 }
+
+/* Clickable parent: a quiet button that becomes obvious on hover
+   through a primary-tinted 8% wash. The icon inherits the text
+   color so the entire row tints together on hover (not just the
+   text). max-width + ellipsis prevents a single deep folder name
+   from blowing out the layout. */
 .breadcrumb-segment {
-  background: none;
-  border: none;
-  padding: 2px 6px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 200px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
   cursor: pointer;
-  color: rgba(var(--v-theme-on-surface), 0.7);
   font-family: inherit;
   font-size: inherit;
-  max-width: 200px;
+  line-height: inherit;
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+  overflow: hidden;
+}
+.breadcrumb-segment:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
+  color: rgb(var(--v-theme-primary));
+}
+.breadcrumb-segment:focus-visible {
+  outline: 2px solid rgba(var(--v-theme-primary), 0.45);
+  outline-offset: 1px;
+}
+.breadcrumb-segment-icon {
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  flex-shrink: 0;
+  transition: color 0.12s ease;
+}
+.breadcrumb-segment:hover .breadcrumb-segment-icon {
+  color: rgb(var(--v-theme-primary));
+}
+.breadcrumb-segment-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition:
-    background 0.1s ease,
-    color 0.1s ease;
+  min-width: 0;
 }
-.breadcrumb-segment:hover {
-  background: rgba(var(--v-theme-primary), 0.22);
-  color: rgb(var(--v-theme-on-surface));
+
+/* Leaf ("you are here"): plain <span> so the cursor never lies
+   about it being clickable, and the text is selectable for
+   copy-to-clipboard. Visual emphasis is just primary color +
+   medium weight — no fill, no border, no shadow. */
+.breadcrumb-leaf {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 240px;
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: 500;
+  color: rgb(var(--v-theme-primary));
+  user-select: text;
+  overflow: hidden;
 }
-.breadcrumb-segment.is-current {
-  color: rgb(var(--v-theme-on-surface));
-  font-weight: 600;
-  background: rgba(var(--v-theme-primary), 0.22);
-  cursor: default;
+.breadcrumb-leaf-icon {
+  color: rgb(var(--v-theme-primary));
+  flex-shrink: 0;
+  /* Slight opacity dip on the icon (vs. the text) so the
+     filename is the most prominent thing in the leaf. */
+  opacity: 0.85;
 }
+.breadcrumb-leaf-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Chevron separator. `›` is a single glyph that already points
+   right, so no transform needed. Color stays low-contrast so
+   the user's eye flows past the separators to the segments. */
 .breadcrumb-sep {
-  color: rgba(var(--v-theme-primary), 0.55);
+  color: rgba(var(--v-theme-on-surface), 0.28);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
   user-select: none;
+  flex-shrink: 0;
+  /* Visual baseline alignment with the icon-cap of the segments.
+     13px icons sit slightly above the text baseline; nudge the
+     chevron down 1px to match. */
+  position: relative;
+  top: 1px;
 }
 
 /* ── Dark mode ────────────────────────────────────────────────────
-   Alpha lifted further (0.15 → 0.24) and border strength raised
-   (0.4 → 0.55) so the bar still reads as a distinct surface
-   against the dark sidebar — at 0.15 the wash disappeared
-   entirely into the dark chrome. The inset top + bottom shadow
-   pair gives a tactile "inset card" feel that reads well
-   against a dark surface. Active segment is bumped to 0.3 so
-   the leaf still pops above the other (already near-white)
-   segments. */
-.file-browser-breadcrumb.dark {
-  background: rgba(var(--v-theme-primary), 0.24);
-  border-bottom-color: rgba(var(--v-theme-primary), 0.55);
-  box-shadow:
-    inset 0 1px 0 rgba(0, 0, 0, 0.2),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
-}
+   The base colors (text and hairline) already inherit correctly
+   from the v-theme variables, so dark mode only needs to bump
+   the segment-icon alpha and the hover wash a touch lighter so
+   the affordance reads on the dark surface. */
 .file-browser-breadcrumb.dark .breadcrumb-segment {
-  color: rgba(var(--v-theme-on-surface), 0.82);
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 .file-browser-breadcrumb.dark .breadcrumb-segment:hover {
-  background: rgba(var(--v-theme-primary), 0.32);
-  color: rgb(var(--v-theme-on-surface));
+  background: rgba(var(--v-theme-primary), 0.16);
+  color: rgb(var(--v-theme-primary));
 }
-.file-browser-breadcrumb.dark .breadcrumb-segment.is-current {
-  color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-primary), 0.3);
+.file-browser-breadcrumb.dark .breadcrumb-segment-icon {
+  color: rgba(var(--v-theme-on-surface), 0.5);
+}
+.file-browser-breadcrumb.dark
+  .breadcrumb-segment:hover
+  .breadcrumb-segment-icon {
+  color: rgb(var(--v-theme-primary));
 }
 .file-browser-breadcrumb.dark .breadcrumb-sep {
-  color: rgba(var(--v-theme-primary), 0.65);
+  color: rgba(var(--v-theme-on-surface), 0.35);
 }
 </style>

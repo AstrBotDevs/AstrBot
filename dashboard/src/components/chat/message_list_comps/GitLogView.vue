@@ -302,7 +302,7 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
       {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.truncated") }}
     </div>
 
-        <!-- Filter bar (spec §6.5.1; search boxes → 12px, buttons → small) -->
+    <!-- Filter bar (spec §6.5.1; search boxes → 12px, buttons → small) -->
     <div class="git-log-filter">
       <v-text-field
         v-model="localFilter.ref"
@@ -785,6 +785,31 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
   font-size: 12px;
   color: rgba(var(--v-theme-on-surface), 0.7);
   flex-shrink: 0;
+  /* SHA selectable feedback: switch the cursor to "text" so the user
+     sees the I-beam and knows the hash is copyable, and let a single
+     click select the whole string. The parent <button> remains
+     clickable — only the cursor + selection affordance is overridden
+     on this child span. The muted background + left primary accent
+     only render on hover/selection; at rest the SHA stays quiet to
+     avoid distracting from the commit subject. */
+  cursor: text;
+  user-select: all;
+  -webkit-user-select: all;
+  padding: 0 4px;
+  margin-left: -4px;
+  border-radius: 3px;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.git-log-item-sha:hover,
+.git-log-item-sha:focus-visible {
+  background: rgba(var(--v-theme-primary), 0.1);
+  color: rgb(var(--v-theme-primary));
+  outline: none;
+}
+.git-log-item-header:hover .git-log-item-sha {
+  color: rgb(var(--v-theme-on-surface));
 }
 .git-log-item-subject {
   flex: 1;

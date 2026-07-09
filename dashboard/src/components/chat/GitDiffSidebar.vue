@@ -1423,28 +1423,48 @@ function onFileOpen(payload: { path: string; line: number }): void {
 // Spec §5.3 + §6.4.1: 12 reason → i18n key. Reasons not in the map fall
 // through to `error.reason.unknown` (caller passes raw reason to tm()).
 const DISCARD_HUNK_REASON_I18N_KEYS: Record<string, string> = {
-  patch_check_failed: "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_check_failed",
-  patch_apply_failed: "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_apply_failed",
-  patch_too_large:    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_too_large",
-  patch_malformed:    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_malformed",
-  not_modified:       "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.not_modified",
-  untracked_file:     "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.untracked_file",
-  multi_file_patch:   "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.multi_file_patch",
-  patch_binary:       "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_binary",
-  no_project_loaded:  "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.no_project_loaded",
-  worktree_invalid:   "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.worktree_invalid",
-  not_a_git_repo:     "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.not_a_git_repo",
-  git_unavailable:    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.git_unavailable",
+  patch_check_failed:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_check_failed",
+  patch_apply_failed:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_apply_failed",
+  patch_too_large:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_too_large",
+  patch_malformed:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_malformed",
+  not_modified:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.not_modified",
+  untracked_file:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.untracked_file",
+  multi_file_patch:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.multi_file_patch",
+  patch_binary:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.patch_binary",
+  no_project_loaded:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.no_project_loaded",
+  worktree_invalid:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.worktree_invalid",
+  not_a_git_repo:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.not_a_git_repo",
+  git_unavailable:
+    "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.git_unavailable",
 };
 
 function classifySnackbarLevel(
   reason: string,
 ): "success" | "info" | "warning" | "error" {
-  const FATAL = new Set(["not_a_git_repo", "git_unavailable", "feature_disabled"]);
-  const RETRY = new Set(["patch_apply_failed", "patch_check_failed", "git_error"]);
+  const FATAL = new Set([
+    "not_a_git_repo",
+    "git_unavailable",
+    "feature_disabled",
+  ]);
+  const RETRY = new Set([
+    "patch_apply_failed",
+    "patch_check_failed",
+    "git_error",
+  ]);
   if (FATAL.has(reason)) return "error";
   if (RETRY.has(reason)) return "info";
-  return "warning";   // user + config + unknown
+  return "warning"; // user + config + unknown
 }
 
 // Spec §3.2 data flow: GitDiffFileItem -> GitDiffBodyContent -> here.
@@ -1570,10 +1590,9 @@ async function onDiscardHunk(params: {
     const mapping = DISCARD_HUNK_REASON_I18N_KEYS[result.reason];
     const msg = mapping
       ? tm(mapping, { stderr: result.stderr ?? "" })
-      : tm(
-          "spcodeProjectLoad.diffSidebar.discardHunk.error.reason.unknown",
-          { reason: result.reason },
-        );
+      : tm("spcodeProjectLoad.diffSidebar.discardHunk.error.reason.unknown", {
+          reason: result.reason,
+        });
     showSnackbar(msg, classifySnackbarLevel(result.reason));
   }
 }
@@ -2889,8 +2908,11 @@ const currentRoot = computed<string | null>(() => {
   width: 420px;
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  background: rgb(var(--v-theme-surface));
+  /* Tokens (defined on .chat-ui in Chat.vue) keep borders & backgrounds in
+     sync with chat's session list / ReasoningSidebar across light & dark. */
+  border-left: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+  background: var(--chat-sidebar-bg, rgb(var(--v-theme-surface)));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
@@ -2905,15 +2927,19 @@ const currentRoot = computed<string | null>(() => {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 6px;
+  width: 1px;
+  background: var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
   cursor: ew-resize;
   z-index: 10;
-  transition: background 0.15s ease;
+  transition:
+    width 0.15s ease,
+    background 0.15s ease;
 }
 
 .git-diff-sidebar-resizer:hover,
 .git-diff-sidebar-resizer:active {
-  background: rgba(var(--v-theme-primary), 0.2);
+  width: 6px;
+  background: rgba(var(--v-theme-primary), 0.45);
 }
 
 /* ── Transition ───────────────────────────────────────────────── */
@@ -2935,7 +2961,8 @@ const currentRoot = computed<string | null>(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 8px;
+  padding: 12px 14px 10px;
+  gap: 8px;
 }
 
 .git-diff-sidebar-title-wrap {
@@ -2945,9 +2972,11 @@ const currentRoot = computed<string | null>(() => {
   min-width: 0;
 }
 .git-diff-sidebar-title {
-  font-size: 16px;
+  font-size: 15.5px;
   font-weight: 600;
   line-height: 1.4;
+  letter-spacing: 0.01em;
+  color: rgb(var(--v-theme-on-surface));
 }
 /* UI #5: removed the inline folder icon + tooltip (`.git-diff-sidebar-dir*`)
    selectors — the project path is now rendered as a dedicated strip
@@ -2955,15 +2984,15 @@ const currentRoot = computed<string | null>(() => {
    dir selectors as no-op so any external style override (e.g. user
    CSS, devtools experiments) doesn't break the layout. */
 .git-diff-sidebar-dir-icon {
-  color: rgba(var(--v-theme-on-surface), 0.54);
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.54));
 }
 .git-diff-sidebar-dir {
-  font-family: monospace;
   font-size: 12px;
+  color: var(--chat-muted, rgba(var(--v-theme-on-surface), 0.62));
 }
 .git-diff-sidebar-actions {
   display: flex;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
 }
 
@@ -2972,27 +3001,29 @@ const currentRoot = computed<string | null>(() => {
 .git-diff-sidebar-path-strip {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 0 16px 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  gap: 3px;
+  padding: 0 14px 10px;
+  /* Use chat's main font (no monospace) so the strip reads like
+     a breadcrumb / status row, not a code path. */
   user-select: text;
 }
 
 .git-diff-sidebar-path-line {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
 .git-diff-sidebar-path-icon {
-  color: rgba(var(--v-theme-on-surface), 0.45);
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
   flex-shrink: 0;
 }
 
 .git-diff-sidebar-path-text {
-  font-size: 11px;
-  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--chat-muted, rgba(var(--v-theme-on-surface), 0.62));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3001,45 +3032,59 @@ const currentRoot = computed<string | null>(() => {
 }
 
 .git-diff-sidebar-path-sub {
-  font-size: 10.5px;
-  color: rgba(var(--v-theme-on-surface), 0.45);
-  margin-left: 16px;
+  font-size: 11px;
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
+  margin-left: 18px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-feature-settings: "tnum";
 }
 
 /* ── View-mode tab (spec 2026-06-20 §5.2) ──────────────────── */
-
+/* Pill-style segmented control. Aligned with chat's session list buttons
+   (border-radius: 8px, smooth color transitions, no underlines). */
 .git-diff-sidebar-view-tabs {
-  display: flex;
-  gap: 0;
-  padding: 0 14px;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 12px 8px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(
+    --chat-session-active-bg,
+    rgba(var(--v-theme-on-surface), 0.06)
+  );
 }
 .git-diff-sidebar-view-tab {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 0;
   background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  font-size: 12.5px;
+  color: var(--chat-muted, rgba(var(--v-theme-on-surface), 0.62));
+  font-size: 13px;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  margin-bottom: -1px;
   transition:
-    color 0.12s ease,
-    border-color 0.12s ease;
+    background 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease;
 }
 .git-diff-sidebar-view-tab:hover {
-  color: rgba(var(--v-theme-on-surface), 0.85);
+  color: rgb(var(--v-theme-on-surface));
 }
 .git-diff-sidebar-view-tab.is-active {
+  background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-primary));
-  border-bottom-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.git-diff-sidebar-view-tab:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
 }
 
 /* ── Scope bar (spec 2026-06-20 §2.1) ──────────────────────── */
@@ -3103,17 +3148,20 @@ const currentRoot = computed<string | null>(() => {
   font-weight: 500;
 }
 
-/* Per-scope accent colors (visual gradient: blue → green → purple,
-   suggesting "coverage broadens left-to-right"). */
+/* Per-scope accent colors. Use theme tokens so the pills follow
+   AstrBot's primary palette instead of hardcoded greens. Material's
+   success token is intentionally absent in default Vuetify; we fall
+   back to a 4caf50 default that is overridden by any theme that
+   defines --v-theme-success. */
 .git-diff-sidebar-scope-pill.is-unstaged.is-active {
   color: rgb(var(--v-theme-secondary));
   background: rgba(var(--v-theme-secondary), 0.14);
   border-color: rgba(var(--v-theme-secondary), 0.4);
 }
 .git-diff-sidebar-scope-pill.is-staged.is-active {
-  color: rgb(76, 175, 80);
-  background: rgba(76, 175, 80, 0.14);
-  border-color: rgba(76, 175, 80, 0.4);
+  color: rgb(var(--v-theme-success, #4caf50));
+  background: rgba(var(--v-theme-success, #4caf50), 0.14);
+  border-color: rgba(var(--v-theme-success, #4caf50), 0.4);
 }
 .git-diff-sidebar-scope-pill.is-all.is-active {
   color: rgb(var(--v-theme-primary));
@@ -3142,9 +3190,10 @@ const currentRoot = computed<string | null>(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 4px;
-  padding: 8px 14px;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  gap: 6px;
+  padding: 6px 14px 8px;
+  border-bottom: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.08));
 }
 
 /* Section label: small muted text that anchors the tab row to a
@@ -3158,37 +3207,48 @@ const currentRoot = computed<string | null>(() => {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: rgba(var(--v-theme-on-surface), 0.55);
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
   user-select: none;
 }
 
+/* Pill shape, fully aligned with chat's chat-session-active-bg hover.
+   Inactive state always shows a 1px hairline so the tab reads as a
+   clickable button (a fully transparent outline looks like plain
+   text). The border uses the chat-border token — it darkens slightly
+   on hover and is replaced by a primary-tinted border on the active
+   state. Switching the alpha (rather than toggling border on/off) keeps
+   the layout perfectly stable across states. */
 .git-diff-sidebar-tab {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   padding: 4px 10px;
-  border-radius: 14px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.18);
+  border-radius: 999px;
+  border: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.16));
   background: transparent;
-  color: rgba(var(--v-theme-on-surface), 0.7);
+  color: var(--chat-muted, rgba(var(--v-theme-on-surface), 0.62));
   font-size: 12px;
   font-family: inherit;
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease;
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease;
   max-width: 180px;
 }
 
 .git-diff-sidebar-tab:hover {
-  background: rgba(var(--v-theme-on-surface), 0.04);
+  background: var(
+    --chat-session-active-bg,
+    rgba(var(--v-theme-on-surface), 0.06)
+  );
+  border-color: rgba(var(--v-theme-on-surface), 0.26);
   color: rgb(var(--v-theme-on-surface));
 }
 
 .git-diff-sidebar-tab--active {
   background: rgba(var(--v-theme-primary), 0.12);
-  border-color: rgba(var(--v-theme-primary), 0.4);
+  border-color: rgba(var(--v-theme-primary), 0.45);
   color: rgb(var(--v-theme-primary));
   font-weight: 500;
 }
@@ -3204,26 +3264,32 @@ const currentRoot = computed<string | null>(() => {
   white-space: nowrap;
 }
 
+/* Add button now matches the regular pill geometry (same 999px radius
+   and same height), removing the dashed-circle orphan style. */
 .git-diff-sidebar-tab-add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 11px;
-  border: 1px dashed rgba(var(--v-theme-on-surface), 0.3);
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.18));
   background: transparent;
-  color: rgba(var(--v-theme-on-surface), 0.6);
+  color: var(--chat-muted, rgba(var(--v-theme-on-surface), 0.62));
   cursor: pointer;
   flex-shrink: 0;
-  transition: all 0.12s ease;
-  margin-left: 2px;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease;
 }
 .git-diff-sidebar-tab-add:hover {
-  border-style: solid;
+  background: var(
+    --chat-session-active-bg,
+    rgba(var(--v-theme-on-surface), 0.06)
+  );
   border-color: rgb(var(--v-theme-primary));
   color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.08);
 }
 .git-diff-sidebar-tab-badge {
   font-size: 10px;
@@ -3257,7 +3323,7 @@ const currentRoot = computed<string | null>(() => {
 /* ── Truncation warning ──────────────────────────────────────── */
 
 .git-diff-sidebar-warning {
-  padding: 8px 16px;
+  padding: 8px 14px;
   background: rgba(255, 193, 7, 0.12);
   color: rgb(255, 152, 0);
   font-size: 12px;
@@ -3284,7 +3350,7 @@ const currentRoot = computed<string | null>(() => {
   margin-bottom: 0;
 }
 .spcode-snackbar-pre {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(var(--v-theme-on-surface), 0.06);
   color: inherit;
   padding: 6px 8px;
   border-radius: 4px;
@@ -3295,6 +3361,24 @@ const currentRoot = computed<string | null>(() => {
   word-break: break-all;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   margin: 0;
+}
+
+/* ── Dark mode refinements ──────────────────────────────────── */
+/* Match the `.chat-ui.is-dark` token overrides defined in Chat.vue so
+   the sidebar visually harmonizes with the rest of chat in dark mode:
+   - hairline resizer is half-opacity (less aggressive on dark bg)
+   - segmented control sits on the dark "active" surface
+   - warning banner drops the harsh yellow border */
+.chat-ui.is-dark .git-diff-sidebar-warning {
+  background: rgba(255, 152, 0, 0.08);
+  color: rgb(255, 167, 38);
+  border-bottom-color: rgba(255, 152, 0, 0.25);
+}
+.chat-ui.is-dark .spcode-snackbar-pre {
+  background: rgba(255, 255, 255, 0.06);
+}
+.chat-ui.is-dark .git-diff-sidebar-search-input:focus {
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.28);
 }
 
 /* ── Mobile ───────────────────────────────────────────────────── */
@@ -3326,14 +3410,19 @@ const currentRoot = computed<string | null>(() => {
    hidden visually; only the inner v-list renders. We give it a small
    minimum width so the menu items have room for icon + text. Scoped
    styles work through Teleport because Vue rewrites the data-v hash
-   selector on both sides of the portal. */
+   selector on both sides of the portal. Two-layer elevation (a tight
+   ambient blur + a wider drop) mirrors Vuetify elevation-12 and feels
+   consistent with chat's menus & snackbars. */
 .worktree-context-menu {
   min-width: 180px;
   max-width: 280px;
-  border-radius: 6px;
+  border-radius: 10px;
   background: rgb(var(--v-theme-surface));
   color: rgb(var(--v-theme-on-surface));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.08));
+  box-shadow:
+    0 1px 2px rgba(var(--v-theme-on-surface), 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.18);
   overflow: hidden;
 }
 
@@ -3351,25 +3440,32 @@ const currentRoot = computed<string | null>(() => {
 }
 /* 2026-07-02 toolbar input: inline search input. flex:1 makes it
    take the remaining horizontal space (the toggle button is the
-   only fixed-width sibling). The themed border + transparent
-   background blend with the toolbar; the focus state uses the
-   primary color for a subtle highlight. min-width:0 lets the
-   input shrink below its intrinsic content width inside the flex
-   row, otherwise the parent would grow and clip other toolbar
-   children. */
+   only fixed-width sibling). Border, radius, and focus ring align
+   with chat's input fields (border-radius: 8px, primary 16% ring).
+   min-width:0 lets the input shrink below its intrinsic content
+   width inside the flex row, otherwise the parent would grow and
+   clip other toolbar children. */
 .git-diff-sidebar-search-input {
   flex: 1;
   min-width: 0;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
-  border-radius: 4px;
+  border: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.2));
+  border-radius: 8px;
   outline: none;
-  background: transparent;
-  padding: 4px 8px;
+  background: rgb(var(--v-theme-surface));
+  padding: 5px 10px;
   font-size: 13px;
   color: rgb(var(--v-theme-on-surface));
   font-family: inherit;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    background 0.14s ease;
+}
+.git-diff-sidebar-search-input::placeholder {
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
 }
 .git-diff-sidebar-search-input:focus {
   border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.16);
 }
 </style>

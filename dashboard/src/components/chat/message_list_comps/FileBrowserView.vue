@@ -157,9 +157,18 @@ defineExpose({ refresh });
 // takes; the preview takes (100 - leftPanePercent). Mirrors the
 // resize pattern used by GitDiffSidebar.vue. Bounds [15, 70] keep
 // both panes readable; 6px hover/active band gives a generous target.
+//
+// 2026-07-09: DEFAULT_PERCENT lowered from 40 to 30 (3:7
+// left:right) so the right-hand file preview gets more room
+// by default — the file content (syntax-highlighted code) is
+// the primary payload here, the file list is the navigation
+// rail. Users can still drag the divider to override this on
+// a per-session basis; the chosen width sticks for the rest
+// of the session because leftPanePercent is component-local
+// state (no persistence).
 const MIN_PERCENT = 15;
 const MAX_PERCENT = 70;
-const DEFAULT_PERCENT = 40;
+const DEFAULT_PERCENT = 30;
 
 const bodyRef = ref<HTMLElement | null>(null);
 const leftPanePercent = ref<number>(DEFAULT_PERCENT);
@@ -235,6 +244,7 @@ onBeforeUnmount(() => {
       v-if="spcodeStatus.status.value.loaded"
       :current-path="breadcrumbPath"
       :root-path="rootPath"
+      :preview-path="props.previewPath"
       :is-dark="!!isDark"
       @navigate="onBreadcrumbNavigate"
     />
@@ -274,7 +284,20 @@ onBeforeUnmount(() => {
           :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
           @click="isLeftPaneCollapsed = false"
         >
-          <v-icon size="16">mdi-chevron-double-right</v-icon>
+          <!--
+            2026-07-09: vertical text label so the (otherwise
+            affordance-less) 24px-wide handle reads as a real
+            button. The chevron sits at the top (visual "point
+            right" hint), the i18n label runs vertically below it.
+            The label uses writing-mode: vertical-rl with
+            text-orientation: upright — see the styles for why.
+          -->
+          <v-icon size="14" class="file-browser-expand-handle-icon"
+            >mdi-chevron-double-right</v-icon
+          >
+          <span class="file-browser-expand-handle-label">{{
+            tm("spcodeProjectLoad.fileBrowser.pane.expand")
+          }}</span>
         </button>
 
         <!-- Left pane wrapper: holds the entry list AND the collapse
@@ -475,18 +498,27 @@ onBeforeUnmount(() => {
 /* Expand handle: thin vertical strip at the leftmost edge of the
    body when the left pane is collapsed. Mirrors the divider's
    hover treatment so the affordance is discoverable. 24px gives
-   a generous click target without being obtrusive. */
+   a generous click target without being obtrusive.
+
+   2026-07-09: switched the inner layout to flex-column so the
+   handle now stacks a chevron (top) and a vertical text label
+   (bottom). The vertical label — rendered via writing-mode +
+   text-orientation: upright — turns a previously bare 24px-wide
+   strip into a clearly labelled button. `padding: 12px 0` adds
+   vertical breathing room so the label doesn't kiss the edges. */
 .file-browser-expand-handle {
   flex: 0 0 24px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   background: transparent;
   border: none;
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   color: rgba(var(--v-theme-on-surface), 0.5);
   cursor: pointer;
-  padding: 0;
+  padding: 14px 0;
   transition:
     background 0.1s ease,
     color 0.1s ease,
@@ -498,6 +530,49 @@ onBeforeUnmount(() => {
   color: rgb(var(--v-theme-primary));
   border-right-color: rgba(var(--v-theme-primary), 0.4);
   outline: none;
+}
+/* Icon: stays horizontal (writing-mode default) so the chevron
+   points right as expected. A small opacity dip makes it
+   subordinate to the text label — the icon is a hint, the text
+   is the explanation. */
+.file-browser-expand-handle-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+  /* writing-mode: horizontal-tb explicitly so the icon doesn't
+     inherit the vertical writing-mode from a parent rule (Vuetify
+     buttons can carry writing-mode from a v-app ancestor in some
+     themes). */
+  writing-mode: horizontal-tb;
+}
+/* Vertical text label.
+   - writing-mode: vertical-rl makes text flow top-to-bottom
+     (each character stacked). The `rl` (right-to-left column
+     progression) is the conventional CJK vertical-writing mode
+     and reads the same for Latin text in our use-case.
+   - text-orientation: upright keeps each glyph standing upright
+     (no 90deg rotation of Latin letters), so the label reads as
+     readable text top-to-bottom in every locale. Without this,
+     Latin letters would be rotated 90deg clockwise, which looks
+     like typographic "noise" for a button label.
+   - letter-spacing: 4px adds horizontal gap between stacked
+     glyphs so the label doesn't read as a wall of text; each
+     character gets a brief visual pause.
+   - line-height: 1 + white-space: nowrap + writing-mode vertical
+     together guarantee the label stays a single stacked column
+     without unintended wrapping. */
+.file-browser-expand-handle-label {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  /* The label's vertical extent depends on character count
+     (6 for zh-CN, 15 for en-US, 17 for ru-RU); 11px font +
+     4px gap = ~15px per char ≈ 90–255px total. Fits comfortably
+     in the file-browser's typically 400px+ height. */
 }
 .file-browser-empty {
   display: flex;
