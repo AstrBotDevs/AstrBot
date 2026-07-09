@@ -1,53 +1,16 @@
-<template>
-  <div class="spcode-project-indicator">
-    <v-tooltip location="bottom" :open-delay="200">
-      <template #activator="{ props: tipProps }">
-        <v-chip
-          v-bind="tipProps"
-          :color="status.loaded ? 'success' : undefined"
-          :variant="status.loaded ? 'tonal' : 'outlined'"
-          :prepend-icon="status.loaded ? 'mdi-folder-check-outline' : 'mdi-folder-outline'"
-          size="small"
-          density="comfortable"
-          class="spcode-project-indicator__chip"
-          :class="{
-            'spcode-project-indicator__chip--loaded': status.loaded,
-            'spcode-project-indicator__chip--empty': !status.loaded,
-          }"
-          :title="status.loaded ? status.directory ?? '' : ''"
-          @click="openLoadDialog"
-        >
-          <span class="spcode-project-indicator__label">
-            {{
-              status.loaded
-                ? tm('spcodeProjectLoad.indicator.loadedLabel')
-                : tm('spcodeProjectLoad.indicator.noProject')
-            }}
-          </span>
-          <span
-            v-if="status.loaded && displayPath"
-            class="spcode-project-indicator__path"
-          >
-            {{ displayPath }}
-          </span>
-        </v-chip>
-      </template>
-      <!--
-        Tooltip deliberately only shows the load time. The directory is
-        already visible (truncated) on the chip itself and the click
-        opens the full project-load dialog, so neither needs to be
-        repeated in the hover hint.
-      -->
-      <span v-if="status.loaded && loadedAtDisplay">
-        {{ tm('spcodeProjectLoad.indicator.loadedAtPrefix') }}: {{ loadedAtDisplay }}
-      </span>
-      <span v-else>
-        {{ tm('spcodeProjectLoad.indicator.noProject') }}
-      </span>
-    </v-tooltip>
-  </div>
-</template>
+<!--
+  Author: elecvoid243, 2026-07-09
+  Spec: docs/superpowers/specs/2026-07-09-chat-input-chips-beautify-design.md §5.1, §5.2
 
+  SpcodeProjectIndicator — status badge for the loaded/unloaded spcode project.
+
+  Visual states (locked by spec §5.2):
+    - Not loaded → empty state (empty dot ring + mdi-folder-outline + "未加载项目")
+    - Loaded → success dot + mdi-folder-check-outline + "项目已加载" + truncated path
+
+  Event contract (unchanged from prior version):
+    - Emits `open-load-dialog` on click
+-->
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useModuleI18n } from '@/i18n/composables'
@@ -60,18 +23,19 @@ const emit = defineEmits<{
   (e: 'open-load-dialog'): void
 }>()
 
-/** Trim a long path to keep the chip compact. */
-const displayPath = computed(() => {
-  if (!status.value.directory) return ''
-  const path = status.value.directory
+/** Truncate a long path to 48 chars with leading ellipsis. */
+function truncatePath(path: string): string {
   if (path.length <= 48) return path
-  return `\u2026${path.slice(-47)}`
-})
+  return `…${path.slice(-47)}`
+}
+
+const displayPath = computed(() =>
+  status.value.loaded && status.value.directory ? truncatePath(status.value.directory) : '',
+)
 
 const loadedAtDisplay = computed(() => {
   if (!status.value.loadedAt) return ''
   const ts = status.value.loadedAt
-  // Backend stores seconds; if the value looks like ms, down-scale.
   const ms = ts > 1e12 ? ts : ts * 1000
   try {
     const d = new Date(ms)
@@ -82,51 +46,118 @@ const loadedAtDisplay = computed(() => {
   }
 })
 
-function openLoadDialog() {
-  // The "加载项目目录" dialog lives in <ProjectLoadDialog/>, mounted
-  // at the ChatInput level so it survives the + menu's lazy mount
-  // cycle. This chip is just one of two triggers (the + menu's
-  // <ProjectLoadMenuItem/> is the other); both bubble up through
-  // emit("open-load-dialog") and the parent calls the dialog's
-  // exposed opener.
+const icon = computed(() =>
+  status.value.loaded ? 'mdi-folder-check-outline' : 'mdi-folder-outline',
+)
+
+const label = computed(() =>
+  status.value.loaded
+    ? tm('spcodeProjectLoad.indicator.loadedLabel')
+    : tm('spcodeProjectLoad.indicator.noProject'),
+)
+
+const tooltipText = computed(() => {
+  if (status.value.loaded && loadedAtDisplay.value) {
+    return `${tm('spcodeProjectLoad.indicator.loadedAtPrefix')}: ${loadedAtDisplay.value}`
+  }
+  return tm('spcodeProjectLoad.indicator.noProject')
+})
+
+function openLoadDialog(): void {
   emit('open-load-dialog')
 }
 </script>
 
-<style scoped>
-.spcode-project-indicator {
-  align-items: center;
-  display: flex;
-  min-width: 0;
-}
+<template>
+  <v-tooltip location="bottom" :open-delay="200">
+    <template #activator="{ props: tipProps }">
+      <button
+        v-bind="tipProps"
+        type="button"
+        :class="[
+          'sp-status-badge',
+          { 'sp-status-badge--empty': !status.loaded },
+        ]"
+        :aria-label="tooltipText"
+        @click="openLoadDialog"
+      >
+        <span
+          class="sp-status-badge__dot"
+          :class="{
+            'sp-status-badge__dot--success': status.loaded,
+            'sp-status-badge__dot--neutral': !status.loaded,
+          }"
+          aria-hidden="true"
+        />
+        <v-icon size="14" class="sp-status-badge__icon">{{ icon }}</v-icon>
+        <span class="sp-status-badge__label">{{ label }}</span>
+        <span
+          v-if="displayPath"
+          class="sp-status-badge__path"
+          :title="status.directory ?? ''"
+        >{{ displayPath }}</span>
+      </button>
+    </template>
+    <span>{{ tooltipText }}</span>
+  </v-tooltip>
+</template>
 
-.spcode-project-indicator__chip {
+<style scoped>
+.sp-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--sp-chip-height);
+  padding: 0 10px;
+  border: 1px solid var(--sp-chip-border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--sp-text-primary);
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition: background-color 150ms ease;
   max-width: 100%;
   min-width: 0;
 }
 
-.spcode-project-indicator__chip--loaded {
-  font-weight: 500;
+.sp-status-badge:hover { background: var(--sp-chip-hover-bg); }
+.sp-status-badge:active { background: var(--sp-chip-active-bg); }
+.sp-status-badge:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 1px;
 }
 
-.spcode-project-indicator__label {
-  flex: 0 0 auto;
-  white-space: nowrap;
+.sp-status-badge__dot {
+  flex: 0 0 6px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--sp-status-dot-success);
+  transition: background-color 200ms ease;
 }
 
-.spcode-project-indicator__path {
-  display: inline-block;
-  flex: 0 1 auto;
+.sp-status-badge__dot--neutral { background: var(--sp-status-dot-neutral); }
+
+.sp-status-badge--empty .sp-status-badge__dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--sp-status-dot-neutral);
+}
+
+.sp-status-badge__icon {
+  flex: 0 0 14px;
+  color: rgb(var(--v-theme-primary));
+}
+
+.sp-status-badge__label { white-space: nowrap; }
+
+.sp-status-badge__path {
   font-family: var(--v-font-mono, monospace);
-  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--sp-text-path);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.spcode-project-indicator__chip--empty {
-  opacity: 0.7;
 }
 </style>
