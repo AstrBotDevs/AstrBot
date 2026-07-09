@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 273 icons */
+/* Auto-generated MDI subset – 270 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -158,10 +158,6 @@
 
 .mdi-chat::before {
   content: "\F0B79";
-}
-
-.mdi-chat-outline::before {
-  content: "\F0EDE";
 }
 
 .mdi-chat-processing::before {
@@ -326,10 +322,6 @@
 
 .mdi-cursor-default-click::before {
   content: "\F0CFD";
-}
-
-.mdi-cursor-move::before {
-  content: "\F01BE";
 }
 
 .mdi-database::before {
@@ -978,10 +970,6 @@
 
 .mdi-stop-circle::before {
   content: "\F0666";
-}
-
-.mdi-store::before {
-  content: "\F04DC";
 }
 
 .mdi-subdirectory-arrow-right::before {

@@ -132,6 +132,11 @@ function toggleChatSidebarFromHeader() {
   customizer.TOGGLE_CHAT_SIDEBAR();
 }
 
+function toggleDesktopSidebarFromHeader() {
+  customizer.Sidebar_drawer = true;
+  customizer.SET_MINI_SIDEBAR(!customizer.mini_sidebar);
+}
+
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === "undefined") {
     return null;
@@ -942,7 +947,8 @@ onMounted(async () => {
       icon
       rounded="sm"
       variant="flat"
-      @click.stop="customizer.SET_SIDEBAR_DRAWER"
+      aria-label="Toggle sidebar"
+      @click.stop="toggleDesktopSidebarFromHeader"
     >
       <v-icon>mdi-menu</v-icon>
     </v-btn>
@@ -953,6 +959,7 @@ onMounted(async () => {
       icon
       rounded="sm"
       variant="flat"
+      aria-label="Toggle sidebar"
       @click.stop="customizer.SET_SIDEBAR_DRAWER"
     >
       <v-icon>mdi-menu</v-icon>
