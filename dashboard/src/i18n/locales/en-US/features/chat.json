@@ -721,11 +721,13 @@
       }
     },
     "planModeChip": {
-      "activeLabel": "Current mode: Plan",
-      "inactiveLabel": "Current mode: Build",
-      "activeTooltip": "Plan mode is on for this session. Click to turn it off.",
-      "activeTooltipMulti": "Plan mode is on for this session ({count} build turns). Click to turn it off.",
-      "inactiveTooltip": "Build mode for this session. Click to turn Plan mode on."
+      "activeLabel": "Plan",
+      "inactiveLabel": "Build",
+      "activeTooltip": "Plan mode is on · Click to switch to Build",
+      "inactiveTooltip": "Currently in Build mode · Click to switch to Plan",
+      "activeTooltipMulti": "Plan mode is on · {count} build turns this session · Click to switch to Build",
+      "activeSegment": "Plan mode",
+      "inactiveSegment": "Build mode"
     }
   },
   "copy": {

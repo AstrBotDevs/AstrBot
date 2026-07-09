@@ -721,11 +721,13 @@
       }
     },
     "planModeChip": {
-      "activeLabel": "当前模式：Plan",
-      "inactiveLabel": "当前模式：Build",
-      "activeTooltip": "当前会话已开启 Plan 模式，点击关闭",
-      "activeTooltipMulti": "当前会话已开启 Plan 模式，共 {count} 次构建，点击关闭",
-      "inactiveTooltip": "当前会话为 Build 模式，点击开启 Plan"
+      "activeLabel": "Plan",
+      "inactiveLabel": "Build",
+      "activeTooltip": "Plan 模式已开启 · 点击切换到 Build",
+      "inactiveTooltip": "当前为 Build 模式 · 点击切换到 Plan",
+      "activeTooltipMulti": "Plan 模式已开启 · 本会话 {count} 次构建 · 点击切换到 Build",
+      "activeSegment": "Plan 模式",
+      "inactiveSegment": "Build 模式"
     }
   },
   "copy": {

@@ -707,11 +707,13 @@
       }
     },
     "planModeChip": {
-      "activeLabel": "Текущий режим: Plan",
-      "inactiveLabel": "Текущий режим: Build",
-      "activeTooltip": "Для этой беседы включён режим Plan. Нажмите, чтобы выключить.",
-      "activeTooltipMulti": "Для этой беседы включён режим Plan ({count} шагов сборки). Нажмите, чтобы выключить.",
-      "inactiveTooltip": "Для этой беседы режим Build. Нажмите, чтобы включить Plan."
+      "activeLabel": "Plan",
+      "inactiveLabel": "Build",
+      "activeTooltip": "Режим Plan включён · Нажмите, чтобы переключиться на Build",
+      "inactiveTooltip": "Текущий режим Build · Нажмите, чтобы переключиться на Plan",
+      "activeTooltipMulti": "Режим Plan включён · {count} шагов сборки в этой беседе · Нажмите, чтобы переключиться на Build",
+      "activeSegment": "Режим Plan",
+      "inactiveSegment": "Режим Build"
     }
   },
   "copy": {
