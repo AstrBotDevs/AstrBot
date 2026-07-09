@@ -586,6 +586,9 @@ class ProviderGoogleGenAI(Provider):
         request_max_retries: int | None = None,
     ) -> LLMResponse:
         """非流式请求 Gemini API"""
+        # Merge effective custom_extra_body into payloads
+        payloads = self._merge_custom_extra_body(payloads)
+
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
             None,
@@ -687,6 +690,9 @@ class ProviderGoogleGenAI(Provider):
         request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式请求 Gemini API"""
+        # Merge effective custom_extra_body into payloads
+        payloads = self._merge_custom_extra_body(payloads)
+
         system_instruction = next(
             (msg["content"] for msg in payloads["messages"] if msg["role"] == "system"),
             None,

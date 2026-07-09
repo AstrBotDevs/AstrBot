@@ -540,9 +540,8 @@ class ProviderOpenAIOfficial(Provider):
             del payloads[key]
 
         # 读取并合并 custom_extra_body 配置
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
+        custom_extra_body = self.get_effective_custom_extra_body()
+        extra_body.update(custom_extra_body)
         self._apply_provider_specific_extra_body_overrides(extra_body)
 
         model = payloads.get("model", "").lower()
@@ -592,9 +591,7 @@ class ProviderOpenAIOfficial(Provider):
         extra_body = {}
 
         # 读取并合并 custom_extra_body 配置
-        custom_extra_body = self.provider_config.get("custom_extra_body", {})
-        if isinstance(custom_extra_body, dict):
-            extra_body.update(custom_extra_body)
+        extra_body.update(self.get_effective_custom_extra_body())
 
         to_del = []
         for key in payloads:
