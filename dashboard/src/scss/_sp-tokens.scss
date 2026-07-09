@@ -6,6 +6,7 @@
 // Light theme (default)
 :root,
 .v-theme--light {
+  --sp-chip-bg: rgba(var(--v-theme-on-surface), 0.03);
   --sp-chip-border: rgba(var(--v-theme-on-surface), 0.12);
   --sp-chip-border-strong: rgba(var(--v-theme-on-surface), 0.16);
   --sp-chip-divider: rgba(var(--v-theme-on-surface), 0.08);
@@ -30,7 +31,7 @@
 // Dark theme override
 .v-theme--dark {
   --sp-chip-border: rgba(var(--v-theme-on-surface), 0.16);
-  --sp-chip-border-strong: rgba(var(--v-theme-on-surface), 0.20);
+  --sp-chip-border-strong: rgba(var(--v-theme-on-surface), 0.2);
   --sp-chip-divider: rgba(var(--v-theme-on-surface), 0.12);
   --sp-segmented-active-bg: rgba(var(--v-theme-primary), 0.18);
 }

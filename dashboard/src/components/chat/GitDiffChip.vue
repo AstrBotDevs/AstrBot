@@ -11,15 +11,15 @@
     - Emits `open-diff-sidebar` on click
 -->
 <script setup lang="ts">
-import { useModuleI18n } from '@/i18n/composables'
+import { useModuleI18n } from "@/i18n/composables";
 
-const { tm } = useModuleI18n('features/chat')
+const { tm } = useModuleI18n("features/chat");
 const emit = defineEmits<{
-  (e: 'open-diff-sidebar'): void
-}>()
+  (e: "open-diff-sidebar"): void;
+}>();
 
 function open(): void {
-  emit('open-diff-sidebar')
+  emit("open-diff-sidebar");
 }
 </script>
 
@@ -34,10 +34,10 @@ function open(): void {
         @click="open"
       >
         <v-icon size="14">mdi-folder-open-outline</v-icon>
-        <span>{{ tm('spcodeProjectLoad.diffSidebar.chip') }}</span>
+        <span>{{ tm("spcodeProjectLoad.diffSidebar.chip") }}</span>
       </button>
     </template>
-    <span>{{ tm('spcodeProjectLoad.diffSidebar.chipTooltip') }}</span>
+    <span>{{ tm("spcodeProjectLoad.diffSidebar.chipTooltip") }}</span>
   </v-tooltip>
 </template>
 
@@ -50,12 +50,14 @@ function open(): void {
   padding: 0 8px;
   border: 0;
   border-radius: 12px;
-  background: transparent;
+  background: var(--sp-chip-bg);
   color: var(--sp-text-muted);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
 }
 
 .sp-ghost-btn:hover {
