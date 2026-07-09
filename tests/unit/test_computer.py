@@ -186,6 +186,53 @@ class TestLocalShellComponent:
         assert result["exit_code"] == 0
         assert "test_value" in result["stdout"]
 
+    @pytest.mark.asyncio
+    async def test_exec_stream_yields_stdout_and_exit(self):
+        """Test streaming shell execution yields output before exit."""
+        shell = LocalShellComponent()
+        events = []
+
+        async for event in shell.exec_stream(
+            f'{shlex.quote(sys.executable)} -c "print(\\"stream-ok\\")"',
+            timeout=5,
+        ):
+            events.append(event)
+
+        assert {event["type"] for event in events} >= {"stdout", "exit"}
+        assert any(event.get("data") == "stream-ok\n" for event in events)
+        assert events[-1]["type"] == "exit"
+        assert events[-1]["exit_code"] == 0
+
+    @pytest.mark.asyncio
+    async def test_exec_stream_yields_partial_stdout_chunk(self):
+        """Test streaming shell execution yields output without waiting for newline."""
+        shell = LocalShellComponent()
+        events = []
+
+        async for event in shell.exec_stream(
+            f'{shlex.quote(sys.executable)} -c "import sys, time; sys.stdout.write(\\"partial\\"); sys.stdout.flush(); time.sleep(0.1)"',
+            timeout=5,
+        ):
+            events.append(event)
+
+        assert any(event.get("data") == "partial" for event in events)
+
+    @pytest.mark.asyncio
+    async def test_exec_stream_shell_false_preserves_quoted_arguments(self):
+        """Test shell=False streaming preserves quoted command arguments."""
+        shell = LocalShellComponent()
+        events = []
+
+        async for event in shell.exec_stream(
+            f'{shlex.quote(sys.executable)} -c "print(\\"quoted ok\\")"',
+            shell=False,
+            timeout=5,
+        ):
+            events.append(event)
+
+        assert any(event.get("data") == "quoted ok\n" for event in events)
+        assert events[-1]["exit_code"] == 0
+
 
 class TestLocalPythonComponent:
     """Tests for LocalPythonComponent."""

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import locale
 import os
+import shlex
 import shutil
 import subprocess
 import sys
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -176,6 +179,118 @@ class LocalShellComponent(ShellComponent):
             }
 
         return await asyncio.to_thread(_run)
+
+    async def exec_stream(
+        self,
+        command: str,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout: int | None = 300,
+        shell: bool = True,
+        background: bool = False,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Execute a local shell command and stream stdout/stderr events.
+
+        Args:
+            command: Shell command to execute.
+            cwd: Optional working directory.
+            env: Optional environment variables.
+            timeout: Optional timeout in seconds.
+            shell: Whether to execute through the platform shell.
+            background: Whether to detach execution.
+
+        Yields:
+            Event dictionaries with ``type`` set to ``stdout``, ``stderr``, or
+            ``exit``.
+
+        Raises:
+            PermissionError: If the command is blocked by local safety rules.
+        """
+        if not _is_safe_command(command):
+            raise PermissionError("Blocked unsafe shell command.")
+        if background:
+            result = await self.exec(command, cwd, env, timeout, shell, background=True)
+            yield {"type": "stdout", "data": result.get("stdout", "")}
+            yield {
+                "type": "exit",
+                "exit_code": result.get("exit_code"),
+                "success": result.get("exit_code") in (0, None),
+                "pid": result.get("pid"),
+            }
+            return
+
+        run_env = os.environ.copy()
+        if env:
+            run_env.update({str(k): str(v) for k, v in env.items()})
+        working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
+
+        if shell:
+            process = await asyncio.create_subprocess_shell(
+                command,
+                cwd=working_dir,
+                env=run_env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        else:
+            process = await asyncio.create_subprocess_exec(
+                *shlex.split(command, posix=os.name != "nt"),
+                cwd=working_dir,
+                env=run_env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        async def read_stream(
+            stream: asyncio.StreamReader | None, event_type: str
+        ) -> None:
+            if stream is None:
+                return
+            while chunk := await stream.read(4096):
+                await queue.put(
+                    {"type": event_type, "data": _decode_shell_output(chunk)}
+                )
+
+        stdout_task = asyncio.create_task(read_stream(process.stdout, "stdout"))
+        stderr_task = asyncio.create_task(read_stream(process.stderr, "stderr"))
+
+        async def wait_process() -> None:
+            try:
+                await asyncio.wait_for(process.wait(), timeout=timeout or 300)
+            except TimeoutError:
+                process.kill()
+                await process.wait()
+                await queue.put(
+                    {
+                        "type": "stderr",
+                        "data": f"Command timed out after {timeout or 300} seconds.\n",
+                    }
+                )
+            finally:
+                await stdout_task
+                await stderr_task
+                await queue.put(None)
+
+        waiter = asyncio.create_task(wait_process())
+        try:
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield event
+            exit_code = process.returncode
+            yield {"type": "exit", "exit_code": exit_code, "success": exit_code == 0}
+        finally:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            for task in (stdout_task, stderr_task, waiter):
+                if not task.done():
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await task
 
 
 @dataclass

@@ -1040,29 +1040,63 @@ async function runConsoleCommand() {
   consoleRunning.value = true
   try {
     const shellCommand = buildConsoleShellCommand(command, cwd)
-    const data = await sandboxAction('post', sandboxApiPath(sandboxId, '/admin-shell'), {
-      command: shellCommand,
-      timeout: 300
-    }, undefined, {}, true)
-    if (!data?.result) {
+    const token = localStorage.getItem('token') || ''
+    const response = await fetch(sandboxApiPath(sandboxId, '/admin-shell/stream'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        command: shellCommand,
+        timeout: 300
+      })
+    })
+    if (!response.ok || !response.body) {
       throw new Error(tm('messages.operationFailed'))
     }
-    if (data?.result) {
-      const { stdout, nextCwd } = parseConsoleShellResult(String(data.result.stdout ?? ''), cwd)
-      entry.stdout = normalizeTerminalOutput(stdout)
-      entry.stderr = normalizeTerminalOutput(String(data.result.stderr ?? ''))
-      entry.exitCode = data.result.exit_code ?? data.result.returncode ?? '-'
-      entry.running = false
-      consoleHistory.value = [...consoleHistory.value]
-      consoleHistoryBySandbox.value[sandboxId] = consoleHistory.value
-      consoleCwd.value = nextCwd
-      consoleCwdBySandbox.value[sandboxId] = nextCwd
-      await nextTick()
-      await scrollConsoleToBottom()
-      focusConsoleInput()
-    } else {
-      entry.running = false
-      consoleHistory.value = [...consoleHistory.value]
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let rawStdout = ''
+    let rawStderr = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+      const frames = buffer.split('\n\n')
+      buffer = frames.pop() || ''
+
+      for (const frame of frames) {
+        const dataLine = frame.split('\n').find((line) => line.startsWith('data:'))
+        if (!dataLine) continue
+        const event = JSON.parse(dataLine.slice(5).trim())
+        if (event.type === 'stdout') {
+          rawStdout += String(event.data ?? '')
+          const { stdout, nextCwd } = parseConsoleShellResult(rawStdout, cwd)
+          entry.stdout = normalizeTerminalOutput(stdout)
+          if (rawStdout.includes('__ASTRBOT_CWD__')) {
+            consoleCwd.value = nextCwd
+            consoleCwdBySandbox.value[sandboxId] = nextCwd
+          }
+        } else if (event.type === 'stderr') {
+          rawStderr += String(event.data ?? '')
+          entry.stderr = normalizeTerminalOutput(rawStderr)
+        } else if (event.type === 'exit') {
+          entry.exitCode = event.exit_code ?? '-'
+          entry.running = false
+        } else if (event.type === 'error') {
+          rawStderr += String(event.message || tm('messages.operationFailed'))
+          entry.stderr = normalizeTerminalOutput(rawStderr)
+          entry.running = false
+        }
+        consoleHistory.value = [...consoleHistory.value]
+        consoleHistoryBySandbox.value[sandboxId] = consoleHistory.value
+        await scrollConsoleToBottom()
+      }
+
+      if (done) break
     }
   } catch (e: any) {
     entry.stderr = normalizeTerminalOutput(e?.message || String(e))

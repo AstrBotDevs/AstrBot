@@ -74,7 +74,7 @@ def test_sandbox_management_page_console_and_screenshot_use_admin_endpoints():
     )
 
     assert "sandboxApiPath(item, '/admin-screenshot')" in content
-    assert "sandboxApiPath(sandboxId, '/admin-shell')" in content
+    assert "sandboxApiPath(sandboxId, '/admin-shell/stream')" in content
     assert "sandboxApiPath(targetId, '/force')" in content
 
 
@@ -165,7 +165,9 @@ def test_sandbox_management_page_destroy_closes_dialog_before_backend_cleanup():
     assert "const targetId = target.sandbox_id" in content
     assert "destroyDialog.value = false" in content
     assert "startDestroyPolling(targetId)" in content
-    assert "const res = await axios.delete(sandboxApiPath(targetId, '/force')" in content
+    assert (
+        "const res = await axios.delete(sandboxApiPath(targetId, '/force')" in content
+    )
     assert "status: 'stopping'" not in content
     assert "upsertSandboxRecord(stoppingRecord)" not in content
     assert "destroying" not in content
