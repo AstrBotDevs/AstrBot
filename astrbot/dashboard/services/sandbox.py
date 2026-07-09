@@ -173,10 +173,27 @@ class SandboxService:
 
     async def takeover_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         try:
+            current_sandbox = computer_client.sandbox_manager.registry.get_sandbox(
+                sandbox_id
+            )
+            if current_sandbox:
+                allowed_sessions = {
+                    str(current_sandbox.get("controller_session_id") or ""),
+                    str(current_sandbox.get("owner_session_id") or ""),
+                    str(current_sandbox.get("created_by_session_id") or ""),
+                }
+                allowed_sessions.discard("")
+                if allowed_sessions and session_id not in allowed_sessions:
+                    raise SandboxServiceError(
+                        "Sandbox is controlled by another session.",
+                        log_traceback=False,
+                    )
             sandbox = await computer_client.sandbox_manager.takeover_sandbox(
                 session_id, sandbox_id, context=self.core_lifecycle.star_context
             )
             return {"sandbox": sandbox}
+        except SandboxServiceError:
+            raise
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise SandboxServiceError(
@@ -481,10 +498,27 @@ class SandboxService:
 
     async def destroy_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         try:
+            current_sandbox = computer_client.sandbox_manager.registry.get_sandbox(
+                sandbox_id
+            )
+            if current_sandbox:
+                allowed_sessions = {
+                    str(current_sandbox.get("controller_session_id") or ""),
+                    str(current_sandbox.get("owner_session_id") or ""),
+                    str(current_sandbox.get("created_by_session_id") or ""),
+                }
+                allowed_sessions.discard("")
+                if allowed_sessions and session_id not in allowed_sessions:
+                    raise SandboxServiceError(
+                        "Sandbox is controlled by another session.",
+                        log_traceback=False,
+                    )
             sandbox = await computer_client.sandbox_manager.destroy_sandbox_deferred(
                 session_id, sandbox_id
             )
             return {"sandbox": sandbox}
+        except SandboxServiceError:
+            raise
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise SandboxServiceError(

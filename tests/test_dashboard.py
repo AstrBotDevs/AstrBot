@@ -901,6 +901,48 @@ async def test_sandbox_api_key_cannot_claim_dashboard_session_bypass():
 
 
 @pytest.mark.asyncio
+async def test_sandbox_service_rejects_other_session_takeover_or_destroy(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+    from astrbot.dashboard.services.sandbox import SandboxService, SandboxServiceError
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=0,
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    service = SandboxService(SimpleNamespace(star_context=object()))
+
+    with pytest.raises(SandboxServiceError, match="controlled by another session"):
+        await service.takeover_sandbox("api-key:key-1", "sandbox-1")
+
+    with pytest.raises(SandboxServiceError, match="controlled by another session"):
+        await service.destroy_sandbox("api-key:key-1", "sandbox-1")
+
+    sandbox = manager.registry.get_sandbox("sandbox-1")
+    assert sandbox is not None
+    assert sandbox["controller_session_id"] == "session-a"
+    assert sandbox["status"] == "running"
+
+
+@pytest.mark.asyncio
 async def test_sandbox_dashboard_shell_rejects_other_active_session(
     app: FastAPIAppAdapter,
     authenticated_header: dict,
