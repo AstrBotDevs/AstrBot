@@ -1,0 +1,36 @@
+// Author: elecvoid243, 2026-07-09
+// Spec: docs/superpowers/specs/2026-07-09-chat-input-chips-beautify-design.md §4.2
+// Design tokens for the ChatInput status chip beautify refactor.
+// Namespaced with --sp-* to avoid collision with Vuetify's --v-* tokens.
+
+// Light theme (default)
+:root,
+.v-theme--light {
+  --sp-chip-border: rgba(var(--v-theme-on-surface), 0.12);
+  --sp-chip-border-strong: rgba(var(--v-theme-on-surface), 0.16);
+  --sp-chip-divider: rgba(var(--v-theme-on-surface), 0.08);
+  --sp-chip-hover-bg: rgba(var(--v-theme-on-surface), 0.04);
+  --sp-chip-active-bg: rgba(var(--v-theme-on-surface), 0.08);
+
+  --sp-segmented-active-bg: rgba(var(--v-theme-primary), 0.12);
+
+  --sp-status-dot-success: rgb(var(--v-theme-success));
+  --sp-status-dot-warning: rgb(var(--v-theme-warning));
+  --sp-status-dot-neutral: rgba(var(--v-theme-on-surface), 0.45);
+  --sp-status-dot-error: rgb(var(--v-theme-error));
+
+  --sp-text-primary: rgb(var(--v-theme-on-surface));
+  --sp-text-muted: rgba(var(--v-theme-on-surface), 0.65);
+  --sp-text-path: rgba(var(--v-theme-on-surface), 0.55);
+
+  --sp-chip-height: 26px;
+  --sp-segmented-height: 28px;
+}
+
+// Dark theme override
+.v-theme--dark {
+  --sp-chip-border: rgba(var(--v-theme-on-surface), 0.16);
+  --sp-chip-border-strong: rgba(var(--v-theme-on-surface), 0.20);
+  --sp-chip-divider: rgba(var(--v-theme-on-surface), 0.12);
+  --sp-segmented-active-bg: rgba(var(--v-theme-primary), 0.18);
+}

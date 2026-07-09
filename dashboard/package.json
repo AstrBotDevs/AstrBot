@@ -13,7 +13,9 @@
     "generate:api": "rm -rf src/api/generated/openapi-v1 src/api/generated/openapi-v1.ts && openapi-ts -i ../openspec/openapi-v1.yaml -o src/api/generated/openapi-v1 -c @hey-api/client-axios",
     "generate:docs:openapi": "uv run python ../docs/scripts/update_openapi_json.py",
     "typecheck": "vue-tsc --noEmit",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@guolao/vue-monaco-editor": "^1.5.4",
@@ -61,9 +63,11 @@
     "@vitejs/plugin-vue": "5.2.4",
     "@vue/eslint-config-prettier": "8.0.0",
     "@vue/eslint-config-typescript": "11.0.3",
+    "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.4.0",
     "eslint": "8.48.0",
     "eslint-plugin-vue": "9.17.0",
+    "happy-dom": "^14.0.0",
     "prettier": "3.0.2",
     "sass": "1.66.1",
     "sass-loader": "13.3.2",
@@ -72,6 +76,7 @@
     "typescript": "5.1.6",
     "vite": "6.4.1",
     "vite-plugin-webfont-dl": "^3.12.0",
+    "vitest": "^1.6.0",
     "vue-cli-plugin-vuetify": "2.5.8",
     "vue-tsc": "1.8.8",
     "vuetify-loader": "^2.0.0-alpha.9"
