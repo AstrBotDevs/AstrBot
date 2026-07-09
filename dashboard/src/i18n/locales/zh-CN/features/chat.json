@@ -352,7 +352,8 @@
         "copySuccess": "已复制",
         "copyFail": "复制失败",
         "goToTarget": "前往目标",
-        "encodingLabel": "编码: {encoding}"
+        "encodingLabel": "编码: {encoding}",
+        "showHistory": "查看文件历史"
       },
       "comment": {
         "addButton": "添加评论",

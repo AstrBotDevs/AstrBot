@@ -1,7 +1,7 @@
 <!-- Author: elecvoid243, 2026-06-20
      Spec: docs/superpowers/specs/2026-06-20-git-diff-sidebar-file-browser-design.md §4.5 -->
 <script setup lang="ts">
-import { computed, ref, onBeforeUnmount, onMounted, watch } from "vue";
+import { computed, ref, inject, onBeforeUnmount, onMounted, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   ensureShikiLanguages,
@@ -35,6 +35,25 @@ const emit = defineEmits<{
   (e: "retry"): void;
 }>();
 const { tm } = useModuleI18n("features/chat");
+
+// 2026-07-09: file-level git history bridge.
+//
+// The History tab accepts a `path` filter (the GitDiffSidebar owns
+// useSpcodeGitLog and threads path into GET /spcode/git-log), but
+// the user previously had no way to set it from the file-preview
+// pane — they had to open History, retype the path, and click Apply.
+// We inject a setter from <GitDiffSidebar> so a single click on the
+// new "history" button switches the sidebar to the History tab and
+// pre-fills the path filter.
+//
+// Key string must match the one in GitDiffSidebar.vue's
+// `provide(SET_LOG_PATH_FILTER_KEY, ...)`. The noop default keeps
+// the component usable in isolation (e.g. storybook / unit tests)
+// where the sidebar is not an ancestor.
+const setLogPathFilter = inject<(path: string) => void>(
+  "spcode:setLogPathFilter",
+  () => {},
+);
 
 /**
  * Resolve a symlink target string (which may be relative) against the
@@ -432,11 +451,16 @@ function onDeleteComment(commentId: string): void {
              不显示(主流情况,避免视觉噪声);cp936/gbk/gb18030/
              latin-1/utf-8-sig 等显示完整编码名。 -->
         <span
-          v-if="state.snapshot.meta.encoding && state.snapshot.meta.encoding !== 'utf-8'"
+          v-if="
+            state.snapshot.meta.encoding &&
+            state.snapshot.meta.encoding !== 'utf-8'
+          "
           class="preview-file-encoding"
-          :title="tm('spcodeProjectLoad.fileBrowser.preview.encodingLabel', {
-            encoding: state.snapshot.meta.encoding,
-          })"
+          :title="
+            tm('spcodeProjectLoad.fileBrowser.preview.encodingLabel', {
+              encoding: state.snapshot.meta.encoding,
+            })
+          "
         >
           {{ state.snapshot.meta.encoding }}
         </span>
@@ -446,6 +470,25 @@ function onDeleteComment(commentId: string): void {
         <span class="preview-file-mtime">{{
           formatMtime(state.snapshot.meta.mtime)
         }}</span>
+        <!--
+          2026-07-09: file-level git history shortcut.
+          Sits next to the Copy button so both per-file actions are
+          visually grouped at the right edge of the meta header.
+          Unlike Copy, this button is NOT gated on
+          `state.snapshot.content` — binary / too-large files still
+          have a history (when they were added, last touched, etc.)
+          and the user often wants to see exactly that.
+        -->
+        <v-btn
+          size="x-small"
+          variant="text"
+          color="primary"
+          prepend-icon="mdi-history"
+          :title="tm('spcodeProjectLoad.fileBrowser.preview.showHistory')"
+          @click="setLogPathFilter(state.snapshot.meta.path)"
+        >
+          {{ tm("spcodeProjectLoad.fileBrowser.preview.showHistory") }}
+        </v-btn>
         <v-btn
           v-if="state.snapshot.content"
           size="x-small"

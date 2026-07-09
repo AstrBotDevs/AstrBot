@@ -352,7 +352,8 @@
         "copySuccess": "Copied",
         "copyFail": "Copy failed",
         "goToTarget": "Go to target",
-        "encodingLabel": "Encoding: {encoding}"
+        "encodingLabel": "Encoding: {encoding}",
+        "showHistory": "View file history"
       },
       "comment": {
         "addButton": "Add comment",

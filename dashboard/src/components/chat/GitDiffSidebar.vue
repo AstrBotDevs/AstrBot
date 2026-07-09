@@ -7,6 +7,7 @@
 import {
   ref,
   watch,
+  provide,
   onBeforeUnmount,
   computed,
   onMounted,
@@ -478,6 +479,40 @@ const gitShow = useSpcodeGitShow(selectedWorktree);
 
 // Spec §3.4 决策 #22/#23:切 worktree 保留,切 project / unload 清空。
 const stagedFiles = ref<Set<string>>(new Set<string>());
+
+// 2026-07-09: file-level git history bridge.
+//
+// The backend already supports `?path=<file>` on GET /spcode/git-log
+// (see plugins/astrbot_plugin_spcode_toolkit/tools/webapi/git_log.py
+// _qget("path") + `git log -- <path>`), and the frontend composable
+// `useSpcodeGitLog` already threads `path` through the request and
+// the ETag key. The only missing piece was a UI affordance: the
+// file-preview pane has no way to say "show me the history of THIS
+// file" without the user manually retyping the path in the History
+// tab's filter form. We provide this setter so descendants (today:
+// <FileBrowserFilePreview>'s "history" button; tomorrow: maybe a
+// right-click menu) can switch the sidebar to the History tab and
+// pre-fill the path filter in one call.
+//
+// We spread the current filter so the user's prior ref/author/since/
+// until/n selections are preserved — only the path changes. View
+// mode persistence (localStorage) happens automatically via the
+// existing `watch(viewMode, ...)` flush:"post" below.
+function setLogPathFilter(path: string): void {
+  if (!path) return;
+  viewMode.value = "history";
+  // Preserve the user's current filter shape (ref / author / since
+  // / until / n) and only override path. The composable's refresh()
+  // replaces (not merges) the filter, so we have to spread here.
+  void gitLog.refresh({ ...gitLog.filter.value, path });
+}
+// String inject key (the sidebar ↔ file-preview pair is the only
+// consumer). Using a string (not Symbol) keeps the import surface in
+// <FileBrowserFilePreview> trivial: `inject(SET_LOG_PATH_FILTER_KEY)`
+// with the same string literal. A Symbol would force an extra shared
+// module just to host the constant; not worth it for one consumer.
+const SET_LOG_PATH_FILTER_KEY = "spcode:setLogPathFilter";
+provide<(path: string) => void>(SET_LOG_PATH_FILTER_KEY, setLogPathFilter);
 
 // Spec §3.3.3:confirm dialog for "Stage all"。
 const confirmStageAllOpen = ref(false);
