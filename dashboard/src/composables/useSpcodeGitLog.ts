@@ -14,13 +14,7 @@
 //      orchestrator (GitDiffSidebar) when the user is in the
 //      History view AND the sidebar is open.
 
-import {
-  ref,
-  watch,
-  toValue,
-  type Ref,
-  type MaybeRef,
-} from "vue";
+import { ref, watch, toValue, type Ref, type MaybeRef } from "vue";
 import { pluginExtensionApi } from "@/api/v1";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import {
@@ -129,7 +123,11 @@ export function useSpcodeGitLog(
     const umo = spcodeStatus.status.value.umo;
     if (!umo) {
       const prev = prevSnapshot ?? undefined;
-      state.value = { kind: "error", reason: "no_project_loaded", previousSnapshot: prev };
+      state.value = {
+        kind: "error",
+        reason: "no_project_loaded",
+        previousSnapshot: prev,
+      };
       return;
     }
     abortController?.abort();
@@ -147,32 +145,33 @@ export function useSpcodeGitLog(
     const etag = etagMap.get(key);
 
     try {
-      const resp = await pluginExtensionApi.get<unknown>(
-        "spcode/git-log",
-        {
-          params: {
-            umo,
-            ...(worktree ? { worktree } : {}),
-            ...(filter.value.ref ? { ref: filter.value.ref } : {}),
-            ...(filter.value.path ? { path: filter.value.path } : {}),
-            ...(filter.value.author ? { author: filter.value.author } : {}),
-            ...(filter.value.since ? { since: filter.value.since } : {}),
-            ...(filter.value.until ? { until: filter.value.until } : {}),
-            n: filter.value.n ?? DEFAULT_N,
-          },
-          headers: etag ? { "If-None-Match": etag } : {},
-          // Allow axios to surface 304 as a valid response so we can
-          // branch on it (default behavior would throw an AxiosError).
-          validateStatus: (s) => (s >= 200 && s < 300) || s === 304,
-          signal: abortController.signal,
+      const resp = await pluginExtensionApi.get<unknown>("spcode/git-log", {
+        params: {
+          umo,
+          ...(worktree ? { worktree } : {}),
+          ...(filter.value.ref ? { ref: filter.value.ref } : {}),
+          ...(filter.value.path ? { path: filter.value.path } : {}),
+          ...(filter.value.author ? { author: filter.value.author } : {}),
+          ...(filter.value.since ? { since: filter.value.since } : {}),
+          ...(filter.value.until ? { until: filter.value.until } : {}),
+          n: filter.value.n ?? DEFAULT_N,
         },
-      );
+        headers: etag ? { "If-None-Match": etag } : {},
+        // Allow axios to surface 304 as a valid response so we can
+        // branch on it (default behavior would throw an AxiosError).
+        validateStatus: (s) => (s >= 200 && s < 300) || s === 304,
+        signal: abortController.signal,
+      });
       if (!isMounted) return;
 
       if (resp.status === 304) {
         // 命中 ETag,复用上次 snapshot(spec §3.3.5)
         if (prevSnapshot) {
-          state.value = { kind: "ok", snapshot: prevSnapshot, notModified: true };
+          state.value = {
+            kind: "ok",
+            snapshot: prevSnapshot,
+            notModified: true,
+          };
         }
         // No prevSnapshot yet (theoretical race: 304 before any 200
         // — shouldn't happen but defensively fall through to loading).
@@ -180,13 +179,14 @@ export function useSpcodeGitLog(
       }
 
       const parsed = parseSpcodeGitLog(resp.data);
+      // Note: `parseSpcodeGitLog` always returns `kind: "ok"` (it
+      // normalizes all envelopes, success or not, into a single ok
+      // shape). So the parsed.kind check below is dead code in this
+      // specific call — kept as defense-in-depth in case a future
+      // parser revision returns a true error variant. The real
+      // success/failure decision is on `snap.success` (mirrors
+      // useSpcodeGitShow.ts:215 and useSpcodeGitStage.ts:89).
       if (parsed.kind !== "ok") {
-        // Store the raw ReasonCode string. The template builds the
-        // i18n key as `…error.reason.${reason}` — if `reason` is
-        // already the i18nKey, the concatenation produces a non-
-        // existent 6-segment path and the user sees the raw key.
-        // The `no_project_loaded` branch above (line ~117) stores a
-        // raw code; this branch must match.
         state.value = {
           kind: "error",
           reason: "unknown",
@@ -195,6 +195,24 @@ export function useSpcodeGitLog(
         return;
       }
       const snap = parsed.snapshot;
+      // 2026-07-09 fix: the parser leaves `success: false` and the
+      // backend's `reason` (e.g. "path_unsafe", "git_error") on the
+      // snapshot. Previously the composable skipped this check and
+      // fell through to the success path, so a path_unsafe error
+      // (raised when the Windows file_browser's backslash paths
+      // hit the validator) silently rendered the misleading "no
+      // commits" branch in the History view. Now we route any
+      // snap.success === false to the error state with the raw
+      // ReasonCode, which the template renders as the
+      // `gitWorkflow.error.reason.${reason}` i18n key.
+      if (!snap.success) {
+        state.value = {
+          kind: "error",
+          reason: snap.reason ?? "unknown",
+          previousSnapshot: prevSnapshot ?? undefined,
+        };
+        return;
+      }
       // Spec §5.1 (P0-3 fix): empty_repository is not a real error but a
       // discriminated "empty" state. The backend returns HTTP 200 with
       // snapshot.reason = "empty_repository"; we MUST convert it to
@@ -221,8 +239,9 @@ export function useSpcodeGitLog(
       prevSnapshot = snap;
 
       // Update ETag from response header if present.
-      const newEtag = (resp.headers as Record<string, string> | undefined)?.["etag"]
-        ?? (resp.headers as Record<string, string> | undefined)?.["ETag"];
+      const newEtag =
+        (resp.headers as Record<string, string> | undefined)?.["etag"] ??
+        (resp.headers as Record<string, string> | undefined)?.["ETag"];
       if (newEtag) etagMap.set(key, newEtag);
 
       state.value = { kind: "ok", snapshot: snap, notModified: false };
