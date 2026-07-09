@@ -243,7 +243,13 @@ class ResultDecorateStage(Stage):
                                 continue
                             for seg in split_response:
                                 if self.content_cleanup_rule:
-                                    seg = re.sub(self.content_cleanup_rule, "", seg)
+                                    try:
+                                        seg = re.sub(self.content_cleanup_rule, "", seg)
+                                    except re.error:
+                                        logger.error(
+                                            f"分段回复过滤表达式失败，无法成功过滤：{traceback.format_exc()}"
+                                        )
+                                        self.content_cleanup_rule = None
                                 seg = seg.strip()
                                 if seg:
                                     new_chain.append(Plain(seg))
