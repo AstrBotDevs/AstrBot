@@ -892,9 +892,9 @@ async def test_sandbox_api_key_cannot_claim_dashboard_session_bypass():
         service=service,
     )
 
-    assert release_response["data"]["session_id"] == "dashboard"
-    assert shell_response["data"]["session_id"] == "dashboard"
-    assert screenshot_response["data"]["session_id"] == "dashboard"
+    assert release_response["data"]["session_id"] == "api-key:key-1"
+    assert shell_response["data"]["session_id"] == "api-key:key-1"
+    assert screenshot_response["data"]["session_id"] == "api-key:key-1"
     assert release_response["data"]["is_dashboard_user"] is False
     assert shell_response["data"]["is_dashboard_user"] is False
     assert screenshot_response["data"]["is_dashboard_user"] is False

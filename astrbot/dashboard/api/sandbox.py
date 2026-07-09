@@ -50,6 +50,9 @@ async def _run(operation):
 
 
 def _session_id(session_id: str | None, auth: AuthContext | None = None) -> str:
+    if auth is not None and auth.via == "api_key":
+        key_id = str(auth.api_key_id or auth.username.removeprefix("api_key:")).strip()
+        return f"api-key:{key_id}" if key_id else "api-key"
     if session_id:
         return session_id
     return "dashboard" if auth is not None and auth.via == "jwt" else "api-key"
