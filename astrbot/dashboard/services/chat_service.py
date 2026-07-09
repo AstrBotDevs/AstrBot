@@ -1567,13 +1567,22 @@ class ChatService:
         # Read-path defence: strip stale ask_user_choice `tool_call` parts
         # from bot records before sending to the dashboard (see
         # `_sanitize_ask_user_choice_tool_call_parts` for the rationale).
+        # Timestamps are normalized to UTC ISO via `to_utc_isoformat` so the
+        # payload matches what `serialize_history_entry` would have produced.
         history_payload = _sanitize_history_bot_records(
             [history.model_dump() for history in history_ls]
         )
+        history_payload = [
+            {
+                **entry,
+                "created_at": to_utc_isoformat(entry.get("created_at")),
+                "updated_at": to_utc_isoformat(entry.get("updated_at")),
+            }
+            for entry in history_payload
+        ]
 
         response_data = {
             "history": history_payload,
-            # upcoming: "history": [serialize_history_entry(history) for history in history_ls],
             "threads": [serialize_thread(thread) for thread in threads],
             "is_running": self.running_convs.get(session_id, False),
         }
@@ -1688,14 +1697,22 @@ class ChatService:
             page_size=1000,
         )
         # See `get_session` — same read-path defence for stale
-        # ask_user_choice `tool_call` parts.
+        # ask_user_choice `tool_call` parts. Timestamps are normalized
+        # to UTC ISO to match the rest of the read paths.
         history_payload = _sanitize_history_bot_records(
             [history.model_dump() for history in history_ls]
         )
+        history_payload = [
+            {
+                **entry,
+                "created_at": to_utc_isoformat(entry.get("created_at")),
+                "updated_at": to_utc_isoformat(entry.get("updated_at")),
+            }
+            for entry in history_payload
+        ]
         return {
             "thread": serialize_thread(thread),
             "history": history_payload,
-            # upcoming "history": [serialize_history_entry(history) for history in history_ls],
             "is_running": self.running_convs.get(thread_id, False),
         }
 
