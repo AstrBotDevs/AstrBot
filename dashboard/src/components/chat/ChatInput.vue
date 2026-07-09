@@ -1566,36 +1566,45 @@ defineExpose({
 .input-area__status-row {
   align-items: center;
   display: flex;
+  gap: 8px;
   justify-content: space-between;
   margin: 4px auto 0;
   max-width: var(--chat-content-max-width, 760px);
   pointer-events: auto;
   width: var(--chat-content-width, 76%);
 }
+
+/*
+ * Left cluster: project indicator + codegraph chip. Now horizontal
+ * (was column) because both chips are compact (26px) status badges
+ * with similar visual weight.
+ */
 .input-area__status-row__left {
+  align-items: center;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  gap: 6px;
+  min-width: 0;
 }
 
 /*
- * Right-side cluster for the plan-mode and git-diff chips. The parent
- * row uses ``space-between`` to push the project indicator to the far
- * left, so this sub-row sits on the far right.
- *
- * The chips-stack child stacks the plan-mode chip and the git-diff
- * (查看工作区) chip vertically so they occupy less horizontal space
- * and remain adjacent regardless of which one is visible.
+ * Right cluster: plan/build segmented control + git-diff ghost button.
+ * Horizontal (was column-stack) because the new segmented control is
+ * always-visible (no v-if) so the column fallback is no longer needed.
  */
 .input-area__status-row__right {
   align-items: center;
   display: flex;
-  gap: 8px;
+  flex-shrink: 0;
+  gap: 6px;
 }
+
+/*
+ * Legacy column-stack wrapper kept as display:none because the template
+ * still wraps the two right-side chips in `.input-area__status-row__chips-stack`
+ * for backwards compatibility with future v-if-on-children use cases.
+ */
 .input-area__status-row__chips-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: contents;
 }
 
 .input-neutral-btn {
