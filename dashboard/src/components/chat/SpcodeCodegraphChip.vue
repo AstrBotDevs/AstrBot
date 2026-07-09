@@ -1,27 +1,17 @@
 <!--
-  SpcodeCodegraphChip.vue
+  Author: elecvoid243, 2026-07-09
+  Spec: docs/superpowers/specs/2026-07-09-chat-input-chips-beautify-design.md §5.1, §5.2
 
-  Status chip that displays the codegraph MCP server state in the
-  ChatInput status row. Sits alongside SpcodeProjectIndicator and
-  SpcodePlanModeChip.
+  SpcodeCodegraphChip — status badge for codegraph MCP server state.
 
-  Visual states:
+  Visual states (locked by spec §5.2):
+    - mcpRunning + matched → success dot + mdi-database-check + "Codegraph 已连接"
+    - mcpRunning + mismatch → warning dot + mdi-alert-circle-outline + path
+    - mcp not running → empty neutral dot (NOT RED) + mdi-database-off-outline
+    - mcp running but no project → empty neutral dot + mdi-database-remove-outline
 
-  MCP running + project path matches loaded project
-    → success tonal chip, "Codegraph已连接", no path shown
-  MCP running + project path MISMATCHES loaded project
-    → warning outlined chip, "Codegraph不匹配", path shown
-  MCP running + no project path set
-    → error outlined chip, "Codegraph未加载"
-  MCP not running
-    → error outlined chip, "Codegraph不可用"
-
-  The chip's visibility is gated by the parent (ChatInput)'s
-  showSpcodeIndicator — i.e. the spcode plugin must be enabled
-  AND /project* commands must be registered.
-
-  Author: elecvoid243
-  Last-Modified: 2026-06-28
+  Event contract (unchanged):
+    - Emits `open-codegraph-dialog` on click
 -->
 <script setup lang="ts">
 import { computed } from 'vue'
@@ -35,82 +25,47 @@ const emit = defineEmits<{
 const { status } = useSpcodeCodegraphStatus()
 const projectStatus = useSpcodeProjectStatus()
 
-// ── Derived chip visuals ─────────────────────────────────────────────────
-
-/** Whether MCP is running. */
 const mcpOk = computed<boolean>(() => status.value.mcpRunning)
-
-/** Whether a codegraph project path is set. */
-const hasProject = computed<boolean>(
-  () => status.value.activeProject.length > 0,
-)
-
-/** The loaded project directory from the project indicator. */
+const hasProject = computed<boolean>(() => status.value.activeProject.length > 0)
 const loadedProjectDir = computed<string | null>(
   () => projectStatus.status.value.directory,
 )
-
-/** Whether codegraph's project path matches the loaded project path. */
 const projectMatch = computed<boolean>(() => {
   if (!loadedProjectDir.value || !hasProject.value) return false
   return status.value.activeProject === loadedProjectDir.value
 })
 
-/** Chip color: green on match, dark-yellow on mismatch, red on error. */
-const chipColor = computed<string>(() => {
-  if (!mcpOk.value) return 'error'
-  if (!hasProject.value) return 'error'
-  if (!projectMatch.value) return 'warning'
-  return 'success'
+function truncatePath(path: string): string {
+  if (path.length <= 48) return path
+  return `…${path.slice(-47)}`
+}
+
+const displayPath = computed<string>(() => {
+  if (!status.value.activeProject) return ''
+  return truncatePath(status.value.activeProject)
 })
 
-/** Tonal for the nominal state; outlined for any warning/error state. */
-const chipVariant = computed<'tonal' | 'outlined'>(() => {
-  if (!mcpOk.value) return 'outlined'
-  if (!hasProject.value) return 'outlined'
-  return projectMatch.value ? 'tonal' : 'outlined'
-})
-
-/** MDI icon reflecting the current state. */
-const chipIcon = computed<string>(() => {
+const icon = computed<string>(() => {
   if (!mcpOk.value) return 'mdi-database-off-outline'
   if (!hasProject.value) return 'mdi-database-remove-outline'
   if (!projectMatch.value) return 'mdi-alert-circle-outline'
   return 'mdi-database-check'
 })
 
-/** Short label on the chip. */
-const chipLabel = computed<string>(() => {
-  if (!mcpOk.value) return 'Codegraph不可用'
-  if (!hasProject.value) return 'Codegraph未加载'
-  if (!projectMatch.value) return 'Codegraph不匹配'
-  return 'Codegraph已连接'
+const label = computed<string>(() => {
+  if (!mcpOk.value) return 'Codegraph 未启动'
+  if (!hasProject.value) return 'Codegraph 未加载'
+  if (!projectMatch.value) return 'Codegraph 路径不匹配'
+  return 'Codegraph 已连接'
 })
 
-/** Whether to show the codegraph project path on the chip. */
 const showPath = computed<boolean>(
   () => mcpOk.value && hasProject.value && !projectMatch.value,
 )
 
-/**
- * Trim a long project path so the chip stays compact.
- * Follows the same 48-char threshold as SpcodeProjectIndicator.
- */
-const displayPath = computed<string>(() => {
-  const path = status.value.activeProject
-  if (!path) return ''
-  if (path.length <= 48) return path
-  return `\u2026${path.slice(-47)}`
-})
-
-/** Tooltip text: concise when matched, descriptive on issues. */
 const tooltipText = computed<string>(() => {
-  if (!mcpOk.value) {
-    return 'MCP 未运行, codegraph 不可用'
-  }
-  if (!hasProject.value) {
-    return 'Codegraph 未加载项目'
-  }
+  if (!mcpOk.value) return 'MCP 未运行, codegraph 不可用'
+  if (!hasProject.value) return 'Codegraph 未加载项目'
   if (!projectMatch.value) {
     const parts: string[] = [
       '警告: codegraph 项目与当前加载项目不一致',
@@ -119,80 +74,101 @@ const tooltipText = computed<string>(() => {
     if (loadedProjectDir.value) {
       parts.push(`加载项目: ${loadedProjectDir.value}`)
     }
-    return parts.join(' \u00b7 ')
+    return parts.join(' · ')
   }
-  return `Codegraph 已连接 \u00b7 ${status.value.activeProject}`
+  return `Codegraph 已连接 · ${status.value.activeProject}`
 })
+
+const isEmptyState = computed<boolean>(() => !mcpOk.value || !hasProject.value)
 </script>
 
 <template>
-  <div class="spcode-codegraph-chip">
-    <v-tooltip location="bottom" :open-delay="200">
-      <template #activator="{ props: tipProps }">
-        <v-chip
-          v-bind="tipProps"
-          :color="chipColor"
-          :variant="chipVariant"
-          :prepend-icon="chipIcon"
-          size="small"
-          density="comfortable"
-          class="spcode-codegraph-chip__el"
-          @click="emit('open-codegraph-dialog')"
+  <v-tooltip location="bottom" :open-delay="200">
+    <template #activator="{ props: tipProps }">
+      <button
+        v-bind="tipProps"
+        type="button"
+        :class="[
+          'sp-status-badge',
+          { 'sp-status-badge--empty': isEmptyState },
+        ]"
+        :aria-label="tooltipText"
+        @click="emit('open-codegraph-dialog')"
+      >
+        <span
+          class="sp-status-badge__dot"
           :class="{
-            'spcode-codegraph-chip--running': mcpOk && hasProject && projectMatch,
-            'spcode-codegraph-chip--degraded': !mcpOk || !hasProject,
-            'spcode-codegraph-chip--mismatch': mcpOk && hasProject && !projectMatch,
+            'sp-status-badge__dot--success': mcpOk && hasProject && projectMatch,
+            'sp-status-badge__dot--warning': mcpOk && hasProject && !projectMatch,
+            'sp-status-badge__dot--neutral': !mcpOk || !hasProject,
           }"
-        >
-          <span class="spcode-codegraph-chip__label">{{ chipLabel }}</span>
-          <span
-            v-if="showPath"
-            class="spcode-codegraph-chip__path"
-          >
-            {{ displayPath }}
-          </span>
-        </v-chip>
-      </template>
-      <span>{{ tooltipText }}</span>
-    </v-tooltip>
-  </div>
+          aria-hidden="true"
+        />
+        <v-icon size="14" class="sp-status-badge__icon">{{ icon }}</v-icon>
+        <span class="sp-status-badge__label">{{ label }}</span>
+        <span v-if="showPath" class="sp-status-badge__path" :title="status.activeProject">
+          {{ displayPath }}
+        </span>
+      </button>
+    </template>
+    <span>{{ tooltipText }}</span>
+  </v-tooltip>
 </template>
 
 <style scoped>
-.spcode-codegraph-chip {
+.sp-status-badge {
+  display: inline-flex;
   align-items: center;
-  display: flex;
-  min-width: 0;
-}
-
-.spcode-codegraph-chip__el {
+  gap: 6px;
+  height: var(--sp-chip-height);
+  padding: 0 10px;
+  border: 1px solid var(--sp-chip-border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--sp-text-primary);
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition: background-color 150ms ease;
   max-width: 100%;
   min-width: 0;
 }
 
-.spcode-codegraph-chip--running {
-  font-weight: 500;
+.sp-status-badge:hover { background: var(--sp-chip-hover-bg); }
+.sp-status-badge:active { background: var(--sp-chip-active-bg); }
+.sp-status-badge:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 1px;
 }
 
-.spcode-codegraph-chip--degraded {
-  opacity: 0.8;
+.sp-status-badge__dot {
+  flex: 0 0 6px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--sp-status-dot-success);
+  transition: background-color 200ms ease;
 }
 
-.spcode-codegraph-chip--mismatch {
-  font-weight: 500;
+.sp-status-badge__dot--warning { background: var(--sp-status-dot-warning); }
+.sp-status-badge__dot--neutral { background: var(--sp-status-dot-neutral); }
+
+.sp-status-badge--empty .sp-status-badge__dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--sp-status-dot-neutral);
 }
 
-.spcode-codegraph-chip__label {
-  flex: 0 0 auto;
-  white-space: nowrap;
+.sp-status-badge__icon {
+  flex: 0 0 14px;
+  color: rgb(var(--v-theme-primary));
 }
 
-.spcode-codegraph-chip__path {
-  display: inline-block;
-  flex: 0 1 auto;
+.sp-status-badge__label { white-space: nowrap; }
+
+.sp-status-badge__path {
   font-family: var(--v-font-mono, monospace);
-  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--sp-text-path);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
