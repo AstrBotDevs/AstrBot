@@ -212,6 +212,9 @@
     "duration": "Duration",
     "ttft": "Time to First Token"
   },
+  "tokenUsage": {
+    "tooltip": "{used} / {limit} tokens ({percent}%)"
+  },
   "refs": {
     "title": "References",
     "sources": "Sources"
