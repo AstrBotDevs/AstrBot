@@ -268,13 +268,21 @@ async def admin_capture_screenshot(
 async def update_sandbox(
     sandbox_id: str,
     request: Request,
-    _auth: AuthContext = Depends(require_sandbox_scope),
+    session_id: str | None = Query(default=None),
+    auth: AuthContext = Depends(require_sandbox_scope),
     service: SandboxService = Depends(get_service),
 ):
     if demo_response := _demo_mode_error():
         return demo_response
     data = await _json_or_empty(request)
-    return await _run(lambda: service.update_sandbox(sandbox_id, data))
+    return await _run(
+        lambda: service.update_sandbox(
+            _session_id(session_id, auth),
+            sandbox_id,
+            data,
+            is_dashboard_user=_is_dashboard_user(auth),
+        )
+    )
 
 
 @legacy_router.delete("/{sandbox_id}")

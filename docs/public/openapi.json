@@ -3,7 +3,7 @@
   "info": {
     "title": "AstrBot OpenAPI v1",
     "version": "0.1.0",
-    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill. The config scope also grants bot and provider access.\n"
+    "description": "Target REST contract for migrating AstrBot HTTP APIs to /api/v1. Dynamic AstrBot configuration payloads are intentionally modeled as open JSON objects because their schemas are provided at runtime by template endpoints. Developer API keys currently support these scopes only: bot, provider, persona, im, config, chat, data, file, plugin, kb, mcp, sandbox, skill, system, tool. The config scope also grants bot and provider access.\n"
   },
   "servers": [
     {
@@ -3393,6 +3393,31 @@
         }
       }
     },
+    "/api/v1/plugins/validate/repo": {
+      "post": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Validate a GitHub plugin repository before installation",
+        "operationId": "validatePluginRepo",
+        "x-astrbot-scope": "plugin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginValidateRepoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
     "/api/v1/plugins/failed": {
       "get": {
         "tags": [
@@ -5918,6 +5943,17 @@
           },
           "description": {
             "type": "string"
+          },
+          "workspace_type": {
+            "type": "string",
+            "enum": [
+              "session",
+              "project",
+              "custom"
+            ]
+          },
+          "workspace_path": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -5951,6 +5987,9 @@
             "type": "string"
           },
           "filename": {
+            "type": "string"
+          },
+          "stored_filename": {
             "type": "string"
           },
           "mime_type": {
@@ -6010,6 +6049,9 @@
       "PluginSourceBindRequest": {
         "type": "object",
         "properties": {
+          "install_method": {
+            "type": "string"
+          },
           "registry_url": {
             "type": "string",
             "nullable": true
@@ -6075,6 +6117,16 @@
           },
           "ignore_version_check": {
             "type": "boolean"
+          },
+          "install_method": {
+            "type": "string"
+          },
+          "registry_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "market_plugin_id": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -6099,6 +6151,31 @@
           },
           "ignore_version_check": {
             "type": "boolean"
+          },
+          "install_method": {
+            "type": "string"
+          },
+          "registry_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "market_plugin_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PluginValidateRepoRequest": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "proxy": {
+            "type": "string"
           }
         },
         "additionalProperties": false

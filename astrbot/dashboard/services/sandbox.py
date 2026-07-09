@@ -32,6 +32,34 @@ class SandboxService:
     def __init__(self, core_lifecycle: AstrBotCoreLifecycle) -> None:
         self.core_lifecycle = core_lifecycle
 
+    @staticmethod
+    def _assert_lifecycle_owner(session_id: str, sandbox_id: str) -> None:
+        """Require a session to own protected sandbox lifecycle/config operations.
+
+        Args:
+            session_id: Caller session identity resolved from the auth context.
+            sandbox_id: Sandbox identifier being modified.
+
+        Raises:
+            SandboxServiceError: If another session owns or controls the sandbox.
+        """
+        current_sandbox = computer_client.sandbox_manager.registry.get_sandbox(
+            sandbox_id
+        )
+        if not current_sandbox:
+            return
+        allowed_sessions = {
+            str(current_sandbox.get("controller_session_id") or ""),
+            str(current_sandbox.get("owner_session_id") or ""),
+            str(current_sandbox.get("created_by_session_id") or ""),
+        }
+        allowed_sessions.discard("")
+        if allowed_sessions and session_id not in allowed_sessions:
+            raise SandboxServiceError(
+                "Sandbox is controlled by another session.",
+                log_traceback=False,
+            )
+
     def list_providers(self, session_id: str) -> dict:
         try:
             config = self.core_lifecycle.star_context.get_config(umo=session_id)
@@ -173,21 +201,7 @@ class SandboxService:
 
     async def takeover_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         try:
-            current_sandbox = computer_client.sandbox_manager.registry.get_sandbox(
-                sandbox_id
-            )
-            if current_sandbox:
-                allowed_sessions = {
-                    str(current_sandbox.get("controller_session_id") or ""),
-                    str(current_sandbox.get("owner_session_id") or ""),
-                    str(current_sandbox.get("created_by_session_id") or ""),
-                }
-                allowed_sessions.discard("")
-                if allowed_sessions and session_id not in allowed_sessions:
-                    raise SandboxServiceError(
-                        "Sandbox is controlled by another session.",
-                        log_traceback=False,
-                    )
+            self._assert_lifecycle_owner(session_id, sandbox_id)
             sandbox = await computer_client.sandbox_manager.takeover_sandbox(
                 session_id, sandbox_id, context=self.core_lifecycle.star_context
             )
@@ -459,8 +473,17 @@ class SandboxService:
                 public_message="Failed to capture admin sandbox screenshot.",
             ) from exc
 
-    def update_sandbox(self, sandbox_id: str, data: dict) -> dict:
+    def update_sandbox(
+        self,
+        session_id: str,
+        sandbox_id: str,
+        data: dict,
+        *,
+        is_dashboard_user: bool = False,
+    ) -> dict:
         try:
+            if not is_dashboard_user:
+                self._assert_lifecycle_owner(session_id, sandbox_id)
             current_sandbox = computer_client.sandbox_manager.registry.get_sandbox(
                 sandbox_id
             )
@@ -498,21 +521,7 @@ class SandboxService:
 
     async def destroy_sandbox(self, session_id: str, sandbox_id: str) -> dict:
         try:
-            current_sandbox = computer_client.sandbox_manager.registry.get_sandbox(
-                sandbox_id
-            )
-            if current_sandbox:
-                allowed_sessions = {
-                    str(current_sandbox.get("controller_session_id") or ""),
-                    str(current_sandbox.get("owner_session_id") or ""),
-                    str(current_sandbox.get("created_by_session_id") or ""),
-                }
-                allowed_sessions.discard("")
-                if allowed_sessions and session_id not in allowed_sessions:
-                    raise SandboxServiceError(
-                        "Sandbox is controlled by another session.",
-                        log_traceback=False,
-                    )
+            self._assert_lifecycle_owner(session_id, sandbox_id)
             sandbox = await computer_client.sandbox_manager.destroy_sandbox_deferred(
                 session_id, sandbox_id
             )

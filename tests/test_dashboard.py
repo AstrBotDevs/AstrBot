@@ -828,11 +828,16 @@ async def test_sandbox_api_key_cannot_claim_dashboard_session_bypass():
         capture_screenshot,
         release_current_sandbox,
         run_shell,
+        update_sandbox,
     )
 
     class FakeRequest:
         async def json(self):
             return {"command": "pwd"}
+
+    class FakePatchRequest:
+        async def json(self):
+            return {"sandbox_name": "Renamed"}
 
     class FakeSandboxService:
         def release_current_sandbox(
@@ -860,6 +865,16 @@ async def test_sandbox_api_key_cannot_claim_dashboard_session_bypass():
             return {
                 "session_id": session_id,
                 "sandbox_id": sandbox_id,
+                "is_dashboard_user": is_dashboard_user,
+            }
+
+        def update_sandbox(
+            self, session_id, sandbox_id, data, *, is_dashboard_user=False
+        ):
+            return {
+                "session_id": session_id,
+                "sandbox_id": sandbox_id,
+                "data": data,
                 "is_dashboard_user": is_dashboard_user,
             }
 
@@ -891,13 +906,22 @@ async def test_sandbox_api_key_cannot_claim_dashboard_session_bypass():
         auth=auth,
         service=service,
     )
+    update_response = await update_sandbox(
+        sandbox_id="sandbox-1",
+        request=FakePatchRequest(),
+        session_id="dashboard",
+        auth=auth,
+        service=service,
+    )
 
     assert release_response["data"]["session_id"] == "api-key:key-1"
     assert shell_response["data"]["session_id"] == "api-key:key-1"
     assert screenshot_response["data"]["session_id"] == "api-key:key-1"
+    assert update_response["data"]["session_id"] == "api-key:key-1"
     assert release_response["data"]["is_dashboard_user"] is False
     assert shell_response["data"]["is_dashboard_user"] is False
     assert screenshot_response["data"]["is_dashboard_user"] is False
+    assert update_response["data"]["is_dashboard_user"] is False
 
 
 @pytest.mark.asyncio
@@ -936,9 +960,17 @@ async def test_sandbox_service_rejects_other_session_takeover_or_destroy(
     with pytest.raises(SandboxServiceError, match="controlled by another session"):
         await service.destroy_sandbox("api-key:key-1", "sandbox-1")
 
+    with pytest.raises(SandboxServiceError, match="controlled by another session"):
+        service.update_sandbox(
+            "api-key:key-1",
+            "sandbox-1",
+            {"sandbox_name": "Hijacked"},
+        )
+
     sandbox = manager.registry.get_sandbox("sandbox-1")
     assert sandbox is not None
     assert sandbox["controller_session_id"] == "session-a"
+    assert sandbox["sandbox_name"] == "Sandbox 1"
     assert sandbox["status"] == "running"
 
 
