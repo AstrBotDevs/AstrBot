@@ -1,7 +1,6 @@
 import asyncio
 import math
 import random
-import re
 from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
