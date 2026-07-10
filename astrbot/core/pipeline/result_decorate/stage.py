@@ -13,29 +13,10 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.utils.text_utils import calculate_word_count
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage, registered_stages
-
-
-def _word_cnt(text: str) -> int:
-    """
-    将不同语言分开计算
-    - 中文/日语: 按字数计算
-    - 其他语言: 按空格分割计算
-    """
-    # \u4e00-\u9fff : CJK Unified Ideographs (Chinese Hanzi & Japanese Kanji)
-    # \u3040-\u309f : Japanese Hiragana
-    # \u30a0-\u30ff : Japanese Katakana
-    no_space_pattern = r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]"
-
-    char_count = len(re.findall(no_space_pattern, text))
-
-    text_remaining = re.sub(no_space_pattern, " ", text)
-
-    spaced_words = len(text_remaining.split())
-
-    return char_count + spaced_words
 
 
 @register_stage
@@ -233,7 +214,7 @@ class ResultDecorateStage(Stage):
                     new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
-                            word_count = _word_cnt(comp.text)
+                            word_count = calculate_word_count(comp.text)
                             if word_count > self.words_count_threshold:
                                 # 不分段回复
                                 new_chain.append(comp)
@@ -317,7 +298,7 @@ class ResultDecorateStage(Stage):
             if should_tts and tts_provider:
                 new_chain = []
                 for comp in result.chain:
-                    if isinstance(comp, Plain) and _word_cnt(comp.text) > 1:
+                    if isinstance(comp, Plain) and calculate_word_count(comp.text) > 1:
                         try:
                             logger.info(f"TTS 请求: {comp.text}")
                             audio_path = await tts_provider.get_audio(comp.text)
@@ -377,7 +358,7 @@ class ResultDecorateStage(Stage):
                     else:
                         break
                 plain_str = "".join(parts)
-                word_count = _word_cnt(plain_str)
+                word_count = calculate_word_count(plain_str)
                 if plain_str and word_count > self.t2i_word_threshold:
                     render_start = time.time()
                     try:
@@ -413,7 +394,7 @@ class ResultDecorateStage(Stage):
                 word_cnt = 0
                 for comp in result.chain:
                     if isinstance(comp, Plain):
-                        word_cnt += _word_cnt(comp.text)
+                        word_cnt += calculate_word_count(comp.text)
                 if word_cnt > self.forward_threshold:
                     node = Node(
                         uin=event.get_self_id(),

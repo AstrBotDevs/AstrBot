@@ -11,6 +11,7 @@ from astrbot.core.message.message_event_result import MessageChain, ResultConten
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.star.star_handler import EventType
 from astrbot.core.utils.path_util import path_Mapping
+from astrbot.core.utils.text_utils import calculate_word_count
 
 from ..context import PipelineContext, call_event_hook
 from ..stage import Stage, register_stage
@@ -89,23 +90,7 @@ class RespondStage(Stage):
             logger.info(f"分段回复间隔时间：{self.interval}")
 
     async def _word_cnt(self, text: str) -> int:
-        """
-        将不同语言分开计算
-        - 中文/日语: 按字数计算
-        - 其他语言: 按空格分割计算
-        """
-        # \u4e00-\u9fff : CJK Unified Ideographs (Chinese Hanzi & Japanese Kanji)
-        # \u3040-\u309f : Japanese Hiragana
-        # \u30a0-\u30ff : Japanese Katakana
-        no_space_pattern = r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]"
-
-        char_count = len(re.findall(no_space_pattern, text))
-
-        text_remaining = re.sub(no_space_pattern, " ", text)
-
-        spaced_words = len(text_remaining.split())
-
-        return char_count + spaced_words
+        return calculate_word_count(text)
 
     async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
         """分段回复 计算间隔时间"""
