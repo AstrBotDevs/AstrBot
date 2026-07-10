@@ -656,18 +656,19 @@ function autoResize() {
     return;
   }
   el.style.height = "auto";
-  el.style.minHeight = "0";
+  el.style.setProperty("min-height", "0", "important");
   const measuredHeight = el.scrollHeight;
-  el.style.minHeight = "";
+  el.style.removeProperty("min-height");
   const computed = getComputedStyle(el);
-  const lineHeight = parseFloat(computed.lineHeight);
+  let lineHeight = parseFloat(computed.lineHeight);
+  if (!Number.isFinite(lineHeight)) {
+    lineHeight = parseFloat(computed.fontSize) * 1.2;
+  }
   const paddingVertical =
     parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom);
-  const canMeasure =
-    Number.isFinite(lineHeight) && Number.isFinite(paddingVertical);
   const shouldUseMultiline =
     localPrompt.value.includes("\n") ||
-    (canMeasure ? measuredHeight > lineHeight + paddingVertical + 0.5 : true);
+    measuredHeight > lineHeight + paddingVertical + 0.5;
   if (inputIsMultiline.value !== shouldUseMultiline) {
     const cursor = el.selectionStart ?? localPrompt.value.length;
     inputIsMultiline.value = shouldUseMultiline;
