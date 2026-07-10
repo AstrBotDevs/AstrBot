@@ -656,9 +656,18 @@ function autoResize() {
     return;
   }
   el.style.height = "auto";
+  el.style.minHeight = "0";
   const measuredHeight = el.scrollHeight;
+  el.style.minHeight = "";
+  const computed = getComputedStyle(el);
+  const lineHeight = parseFloat(computed.lineHeight);
+  const paddingVertical =
+    parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom);
+  const canMeasure =
+    Number.isFinite(lineHeight) && Number.isFinite(paddingVertical);
   const shouldUseMultiline =
-    localPrompt.value.includes("\n") || measuredHeight > minHeight + 8;
+    localPrompt.value.includes("\n") ||
+    (canMeasure ? measuredHeight > lineHeight + paddingVertical + 0.5 : true);
   if (inputIsMultiline.value !== shouldUseMultiline) {
     const cursor = el.selectionStart ?? localPrompt.value.length;
     inputIsMultiline.value = shouldUseMultiline;
