@@ -1,6 +1,7 @@
 import asyncio
 import math
 import random
+import re
 from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
@@ -88,12 +89,23 @@ class RespondStage(Stage):
             logger.info(f"分段回复间隔时间：{self.interval}")
 
     async def _word_cnt(self, text: str) -> int:
-        """分段回复 统计字数"""
-        if all(ord(c) < 128 for c in text):
-            word_count = len(text.split())
-        else:
-            word_count = len([c for c in text if c.isalnum()])
-        return word_count
+        """
+        将不同语言分开计算
+        - 中文/日语: 按字数计算
+        - 其他语言: 按空格分割计算
+        """
+        # \u4e00-\u9fff : CJK Unified Ideographs (Chinese Hanzi & Japanese Kanji)
+        # \u3040-\u309f : Japanese Hiragana
+        # \u30a0-\u30ff : Japanese Katakana
+        no_space_pattern = r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]"
+
+        char_count = len(re.findall(no_space_pattern, text))
+
+        text_remaining = re.sub(no_space_pattern, " ", text)
+
+        spaced_words = len(text_remaining.split())
+
+        return char_count + spaced_words
 
     async def _calc_comp_interval(self, comp: BaseMessageComponent) -> float:
         """分段回复 计算间隔时间"""
