@@ -537,6 +537,16 @@ const restoringFile = ref<string | null>(null);
 const confirmDialogOpen = ref(false);
 const confirmTargetPath = ref<string | null>(null);
 
+// Bulk-restore state. The handler iterates the captured path list
+// one file at a time and aggregates the result into a single
+// snackbar. We use a dedicated dialog (rather than reusing the
+// single-file `confirmDialogOpen`) so the message can include the
+// file count and so a single `false` button click cleanly aborts
+// the whole batch.
+const confirmRestorePathsOpen = ref(false);
+const pendingRestorePaths = ref<string[]>([]);
+const isBulkRestoring = ref(false);
+
 // ── Worktree management state (spec 2026-06-27 §2.4) ────────
 const createDialogOpen = ref(false);
 const removeDialogOpen = ref(false);
@@ -1588,6 +1598,103 @@ async function onConfirmRestore(): Promise<void> {
   }
 }
 
+// ── Bulk restore (multi-select from GitDiffBodyContent) ────────────
+//
+// GitDiffBodyContent emits `restore-paths` with the array of currently
+// selected paths. We open a dedicated confirmation dialog (showing the
+// file count) and, on confirm, iterate one file at a time because the
+// file-restore endpoint accepts a single `file` per request. The
+// snackbar aggregates the result so the user sees a single toast
+// (success / partial / all-failed) rather than N toasts.
+function onRestorePaths(paths: string[]): void {
+  if (paths.length === 0) return;
+  pendingRestorePaths.value = paths.slice();
+  confirmRestorePathsOpen.value = true;
+}
+
+function onCancelRestorePaths(): void {
+  if (isBulkRestoring.value) return;
+  confirmRestorePathsOpen.value = false;
+  pendingRestorePaths.value = [];
+}
+
+async function onConfirmRestorePaths(): Promise<void> {
+  const paths = pendingRestorePaths.value;
+  if (paths.length === 0) return;
+  confirmRestorePathsOpen.value = false;
+  // Snapshot the list before clearing state so concurrent scope/worktree
+  // switches (which would reset pendingRestorePaths via teardown) cannot
+  // shorten the iteration.
+  const toRestore = paths.slice();
+  pendingRestorePaths.value = [];
+  const umo = spcodeStatus.status.value.umo;
+  const worktree = selectedWorktree.value;
+  isBulkRestoring.value = true;
+  let successCount = 0;
+  let failedCount = 0;
+  let aborted = false;
+  try {
+    for (const path of toRestore) {
+      restoringFile.value = path;
+      const result: RestoreResult = await fileRestore.restore({
+        file: path,
+        worktree,
+        umo,
+      });
+      restoringFile.value = null;
+      if (!result.ok) {
+        if (result.reason === "aborted") {
+          aborted = true;
+          break;
+        }
+        failedCount++;
+        continue;
+      }
+      successCount++;
+    }
+  } finally {
+    restoringFile.value = null;
+    isBulkRestoring.value = false;
+  }
+  // Aborted usually means the component is unmounting or the user
+  // switched scope/worktree; skip the snackbar and leave the
+  // selection in whatever state it ended up in (the new view will
+  // rebuild it from scratch anyway).
+  if (aborted) {
+    return;
+  }
+  // Drop the toolbar's "已选 N 个" counter on a full success so the
+  // user starts fresh; on partial / all-failed, keep the selection
+  // so they can retry without re-ticking every box.
+  if (successCount > 0 && failedCount === 0) {
+    gitDiffBodyRef.value?.clearSelection();
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.restore.successMultiple", {
+        count: successCount,
+      }),
+      "success",
+    );
+    await composable.refresh();
+  } else if (successCount > 0 && failedCount > 0) {
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.restore.successPartial", {
+        success: successCount,
+        total: toRestore.length,
+        failed: failedCount,
+      }),
+      "warning",
+    );
+    await composable.refresh();
+  } else {
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.restore.error.allFailed", {
+        count: toRestore.length,
+      }),
+      "error",
+    );
+  }
+}
+
 // Spec 2026-07-07 §3.3: hunk discard handler. Child (GitDiffFileItem)
 // invokes this through the `onDiscardHunk` callback prop with a single
 // object arg (matching the DiffPreview prop signature threaded through
@@ -2624,6 +2731,7 @@ const currentRoot = computed<string | null>(() => {
           @open-file="onOpenFile"
           @stage-paths="onStagePaths"
           @unstage-paths="onUnstagePaths"
+          @restore-paths="onRestorePaths"
         />
         <!-- Spec 2026-06-24 §6.5:History view 渲染 GitLogView。
              Spec 2026-06-25 §3.1:GitLogView 也接收 gitShow 句柄用于
@@ -2679,6 +2787,53 @@ const currentRoot = computed<string | null>(() => {
               color="warning"
               :loading="restoringFile !== null"
               @click="onConfirmRestore"
+              >{{
+                tm("spcodeProjectLoad.diffSidebar.restore.confirmAction")
+              }}</v-btn
+            >
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Bulk-restore confirmation: separate dialog so the message
+           can include the file count and so a single Cancel cleanly
+           aborts the whole batch (the underlying endpoint only
+           accepts one file per request, so a partial-restore
+           mid-flight would be confusing UX). Tinted `warning` to
+           match the single-file dialog and signal irreversibility. -->
+      <v-dialog v-model="confirmRestorePathsOpen" persistent max-width="440">
+        <v-card>
+          <v-card-title class="text-h6">
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.restore.confirmTitleMultiple",
+                { count: pendingRestorePaths.length },
+              )
+            }}
+          </v-card-title>
+          <v-card-text>
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.restore.confirmMessageMultiple",
+                { count: pendingRestorePaths.length },
+              )
+            }}
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn
+              variant="text"
+              :disabled="isBulkRestoring"
+              @click="onCancelRestorePaths"
+              >{{
+                tm("spcodeProjectLoad.diffSidebar.restore.confirmCancel")
+              }}</v-btn
+            >
+            <v-btn
+              variant="flat"
+              color="warning"
+              :loading="isBulkRestoring"
+              @click="onConfirmRestorePaths"
               >{{
                 tm("spcodeProjectLoad.diffSidebar.restore.confirmAction")
               }}</v-btn

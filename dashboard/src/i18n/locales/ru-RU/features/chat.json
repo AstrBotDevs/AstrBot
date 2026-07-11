@@ -296,9 +296,12 @@
       "toolbar": {
         "expandAll": "Развернуть все",
         "collapseAll": "Свернуть все",
+        "selectAll": "Выбрать все",
+        "deselectAll": "Снять выбор",
         "selectedCount": "Выбрано: {count}",
         "stageSelected": "В индекс ({count})",
         "unstageSelected": "Из индекса ({count})",
+        "restoreSelected": "Отменить изменения ({count})",
         "clearSelection": "Очистить выбор",
         "selectAllInGroup": "Выбрать всё в {label}",
         "selectFile": "Выбрать {path}"
@@ -441,10 +444,15 @@
         "buttonAria": "Восстановить файл {path}",
         "confirmTitle": "Восстановить файл?",
         "confirmMessage": "Это отменит все незафиксированные изменения в \"{path}\". Действие необратимо.",
+        "confirmTitleMultiple": "Восстановить {count} файлов?",
+        "confirmMessageMultiple": "Это отменит все незафиксированные изменения в {count} выбранных файлах. Действие необратимо.",
         "confirmAction": "Восстановить",
         "confirmCancel": "Отмена",
         "success": "Восстановлено: {path}",
+        "successMultiple": "Восстановлено файлов: {count}",
+        "successPartial": "Восстановлено {success} из {total} файлов ({failed} с ошибкой)",
         "error": {
+          "allFailed": "Не удалось восстановить ни один из {count} выбранных файлов",
           "reason": {
             "network": "Ошибка сети",
             "unknown": "Не удалось восстановить ({reason})",
