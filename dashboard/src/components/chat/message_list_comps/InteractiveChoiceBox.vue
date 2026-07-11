@@ -39,6 +39,12 @@
         tm("interactiveChoice.ignored")
       }}</span>
       <span
+        v-if="part.title"
+        class="choice-title choice-title--ignored"
+        :title="part.title"
+        >{{ part.title }}</span
+      >
+      <span
         v-if="part.prompt"
         class="choice-prompt choice-prompt--muted"
         :title="part.prompt"
@@ -402,6 +408,18 @@ function ariaLabelForOption(opt: InteractiveChoiceOption): string {
 
 .choice-header--ignored {
   color: rgba(var(--v-theme-on-surface), 0.6);
+  /* 让长 title / prompt 能在 header 行内自然换行,不被压成单字符。
+     v1.2 之前 ignored header 只渲染 label + prompt,内容短;补上
+     title 渲染后(见模板),CJK 长 title 可能在 560px 容器里被
+     flex 默认 shrink 挤扁,加 wrap 让浏览器自动换行。 */
+  flex-wrap: wrap;
+}
+
+.choice-title--ignored {
+  /* 与 pending/submitted 的 .choice-title 共享字号字重,这里只
+     收敛 line-height 让行内 title 不与 label 基线打架。 */
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .choice-ignored-label {
