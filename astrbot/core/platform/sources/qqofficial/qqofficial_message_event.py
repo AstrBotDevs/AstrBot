@@ -610,6 +610,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
             if payload.get("msg_id"):
                 fallback_payload = payload.copy()
+                fallback_payload.pop("msg_id", None)
                 try:
                     if event_requests_agent_stop(self):
                         raise AgentOutputStopped
