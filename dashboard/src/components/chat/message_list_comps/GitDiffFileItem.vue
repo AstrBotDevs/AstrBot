@@ -51,10 +51,11 @@ const props = defineProps<{
   // UI #3: multi-select support. The parent (GitDiffBodyContent)
   // manages the global selected Set and re-derives `isSelected` for
   // each row. `selectable` gates the checkbox visibility: it's true
-  // exactly when stage/unstage is meaningful (i.e. scope is unstaged
-  // or staged OR the file's path appears in the staged set inside
-  // the `all` scope). The parent passes this gate in so the file
-  // item stays scope-agnostic.
+  // whenever ANY bulk affordance is available — stage, unstage, or
+  // restore. In the `all` (with HEAD) scope stage / unstage don't
+  // apply, but the bulk-restore flow still needs per-file checkboxes
+  // so the user can pick a subset to revert. The parent passes this
+  // gate in so the file item stays scope-agnostic.
   selectable?: boolean;
   isSelected?: boolean;
   /** Localized label for the checkbox; supplied by the parent so the
