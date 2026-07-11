@@ -9,70 +9,47 @@
   handles the optimistic state flip + /plan or /build command dispatch.
 -->
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useModuleI18n } from '@/i18n/composables'
-import { useSpcodePlanMode } from '@/composables/useSpcodePlanMode'
-import SpSegmentedControl, { type Segment } from './SpSegmentedControl.vue'
+import { computed } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { useSpcodePlanMode } from "@/composables/useSpcodePlanMode";
+import SpSegmentedControl, { type Segment } from "./SpSegmentedControl.vue";
 
-const { tm } = useModuleI18n('features/chat')
-const { status } = useSpcodePlanMode()
+const { tm } = useModuleI18n("features/chat");
+const { status } = useSpcodePlanMode();
 
 const emit = defineEmits<{
-  (e: 'toggle'): void
-}>()
+  (e: "toggle"): void;
+}>();
 
-const isPlanActive = computed<boolean>(() => status.value.active === true)
-const modeValue = computed<string>(() => (isPlanActive.value ? 'plan' : 'build'))
+const isPlanActive = computed<boolean>(() => status.value.active === true);
+const modeValue = computed<string>(() =>
+  isPlanActive.value ? "plan" : "build",
+);
 
 const segments = computed<Segment[]>(() => [
   {
-    value: 'plan',
-    label: tm('spcodeProjectLoad.planModeChip.activeLabel'),
-    icon: 'mdi-clipboard-list-outline',
+    value: "plan",
+    label: tm("spcodeProjectLoad.planModeChip.activeLabel"),
+    icon: "mdi-clipboard-list-outline",
   },
   {
-    value: 'build',
-    label: tm('spcodeProjectLoad.planModeChip.inactiveLabel'),
-    icon: 'mdi-hammer-wrench',
+    value: "build",
+    label: tm("spcodeProjectLoad.planModeChip.inactiveLabel"),
+    icon: "mdi-hammer-wrench",
   },
-])
-
-const tooltipText = computed<string>(() => {
-  if (isPlanActive.value) {
-    if (status.value.allActiveCount > 1) {
-      return tm('spcodeProjectLoad.planModeChip.activeTooltipMulti', {
-        count: status.value.allActiveCount,
-      })
-    }
-    return tm('spcodeProjectLoad.planModeChip.activeTooltip')
-  }
-  return tm('spcodeProjectLoad.planModeChip.inactiveTooltip')
-})
+]);
 
 function onChange(_next: string): void {
   // SpSegmentedControl already short-circuits active-segment clicks,
   // so any change event is a genuine toggle request.
-  emit('toggle')
+  emit("toggle");
 }
 </script>
 
 <template>
-  <v-tooltip location="bottom" :open-delay="200">
-    <template #activator="{ props: tipProps }">
-      <span v-bind="tipProps" class="sp-plan-mode-wrapper" :title="tooltipText">
-        <SpSegmentedControl
-          :segments="segments"
-          :model-value="modeValue"
-          @change="onChange"
-        />
-      </span>
-    </template>
-    <span>{{ tooltipText }}</span>
-  </v-tooltip>
+  <SpSegmentedControl
+    :segments="segments"
+    :model-value="modeValue"
+    @change="onChange"
+  />
 </template>
-
-<style scoped>
-.sp-plan-mode-wrapper {
-  display: inline-flex;
-}
-</style>

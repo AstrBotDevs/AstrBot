@@ -21,7 +21,10 @@
           class="chat-sidebar-brand"
           :class="{ collapsed: isSidebarCollapsed }"
         >
-          <div v-if="!isSidebarCollapsed" class="chat-sidebar-brand-title Outfit">
+          <div
+            v-if="!isSidebarCollapsed"
+            class="chat-sidebar-brand-title Outfit"
+          >
             <ChatUILogo class="chat-sidebar-brand-logo" />
             <span class="chat-sidebar-brand-copy">
               <span class="chat-sidebar-brand-name">AstrBot</span>
@@ -36,11 +39,10 @@
             @click.stop="toggleChatSidebar"
           >
             <span class="chat-sidebar-rail-icon-stack">
-              <ChatUILogo class="chat-sidebar-brand-logo chat-sidebar-brand-logo--collapsed" />
-              <PanelLeft
-                :size="20"
-                class="sidebar-panel-toggle-icon"
+              <ChatUILogo
+                class="chat-sidebar-brand-logo chat-sidebar-brand-logo--collapsed"
               />
+              <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
             </span>
           </button>
           <v-btn
@@ -51,10 +53,7 @@
             variant="text"
             @click.stop="toggleChatSidebar"
           >
-            <PanelLeft
-              :size="20"
-              class="sidebar-panel-toggle-icon"
-            />
+            <PanelLeft :size="20" class="sidebar-panel-toggle-icon" />
           </v-btn>
         </div>
 
@@ -88,16 +87,10 @@
         >
           <SquarePen :size="18" class="sidebar-action-icon" />
         </button>
-        <v-btn
-          v-else
-          class="new-chat-btn"
-          variant="text"
-          @click="startNewChat"
-        >
+        <v-btn v-else class="new-chat-btn" variant="text" @click="startNewChat">
           <SquarePen :size="18" class="sidebar-action-icon mr-2" />
           <span>{{ tm("actions.newChat") }}</span>
         </v-btn>
-
       </div>
 
       <div v-if="!isSidebarCollapsed" class="sidebar-content">
@@ -127,7 +120,8 @@
             :key="session.session_id"
             class="session-item"
             :class="{
-              active: !isProviderWorkspace && currSessionId === session.session_id,
+              active:
+                !isProviderWorkspace && currSessionId === session.session_id,
             }"
             role="button"
             tabindex="0"
@@ -185,7 +179,10 @@
             >
               <Settings
                 :size="20"
-                :class="['sidebar-action-icon', { 'mr-2': !isSidebarCollapsed }]"
+                :class="[
+                  'sidebar-action-icon',
+                  { 'mr-2': !isSidebarCollapsed },
+                ]"
               />
               <span v-if="!isSidebarCollapsed">{{
                 t("core.common.settings")
@@ -309,11 +306,7 @@
               @click="toggleTheme"
             >
               <template #prepend>
-                <Sun
-                  v-if="isDark"
-                  :size="18"
-                  class="styled-menu-lucide-icon"
-                />
+                <Sun v-if="isDark" :size="18" class="styled-menu-lucide-icon" />
                 <Moon v-else :size="18" class="styled-menu-lucide-icon" />
               </template>
               <v-list-item-title>{{
@@ -325,10 +318,7 @@
       </div>
     </v-navigation-drawer>
 
-    <main
-      class="chat-main"
-      :class="{ 'empty-chat': isEmptyChat }"
-    >
+    <main class="chat-main" :class="{ 'empty-chat': isEmptyChat }">
       <section v-if="isProviderWorkspace" class="provider-workspace-shell">
         <ProviderChatCompletionPanel
           class="provider-workspace-page"
@@ -415,16 +405,29 @@
               @click="onTodoBarClick"
               @keydown="onTodoBarKeydown"
             >
-              <v-icon size="16" class="todo-summary-icon">mdi-format-list-checks</v-icon>
-              <v-icon size="14" class="todo-summary-drag-handle">mdi-drag-horizontal-variant</v-icon>
+              <v-icon size="16" class="todo-summary-icon"
+                >mdi-format-list-checks</v-icon
+              >
+              <v-icon size="14" class="todo-summary-drag-handle"
+                >mdi-drag-horizontal-variant</v-icon
+              >
               <span class="todo-summary-text">
-                {{ currentTodoSnapshot.stats?.done || 0 }}/{{ currentTodoSnapshot.stats?.effective_total || 0 }}
+                {{ currentTodoSnapshot.stats?.done || 0 }}/{{
+                  currentTodoSnapshot.stats?.effective_total || 0
+                }}
                 <template v-if="currentTodoSnapshot.stats?.in_progress">
-                  · <span class="todo-summary-progress">{{ currentTodoSnapshot.stats.in_progress }} in progress</span>
+                  ·
+                  <span class="todo-summary-progress"
+                    >{{ currentTodoSnapshot.stats.in_progress }} in
+                    progress</span
+                  >
                 </template>
               </span>
               <v-progress-circular
-                v-if="currentTodoSnapshot.stats?.progress_pct > 0 && currentTodoSnapshot.stats?.progress_pct < 100"
+                v-if="
+                  currentTodoSnapshot.stats?.progress_pct > 0 &&
+                  currentTodoSnapshot.stats?.progress_pct < 100
+                "
                 :model-value="currentTodoSnapshot.stats.progress_pct"
                 :size="16"
                 :width="2"
@@ -437,36 +440,32 @@
                 size="10"
                 color="warning"
                 class="todo-summary-attention"
-                :title="tm('todo.attentionHint', { count: currentTodoSnapshot.attentionItems.length })"
-              >mdi-circle-medium</v-icon>
+                :title="
+                  tm('todo.attentionHint', {
+                    count: currentTodoSnapshot.attentionItems.length,
+                  })
+                "
+                >mdi-circle-medium</v-icon
+              >
             </button>
           </transition>
 
           <!-- 项目 breadcrumb (非 sticky,普通文档流定位在顶部) -->
-          <div
-            v-if="sessionProject"
-            class="session-project-breadcrumb"
-          >
+          <div v-if="sessionProject" class="session-project-breadcrumb">
             <span>{{ sessionProject.title }}</span>
             <v-icon size="16">mdi-chevron-right</v-icon>
             <span>{{ currentSessionTitle }}</span>
           </div>
 
           <!-- 加载中 / 消息流 / 欢迎区 主体内容 -->
-          <div
-            v-if="loadingMessages"
-            class="center-state"
-          >
+          <div v-if="loadingMessages" class="center-state">
             <v-progress-circular indeterminate size="32" width="3" />
           </div>
           <div v-else-if="!activeMessages.length" class="welcome-state">
             <div class="welcome-title">{{ tm("welcome.title") }}</div>
           </div>
 
-          <div
-            v-else-if="activeMessages.length"
-            class="messages-list-shell"
-          >
+          <div v-else-if="activeMessages.length" class="messages-list-shell">
             <ChatMessageList
               v-model:edit-draft="messageEditDraft"
               :messages="activeMessages"
@@ -496,10 +495,7 @@
           </div>
 
           <!-- 空消息时的欢迎区 (非 sticky,自然居中) -->
-          <div
-            v-else-if="!loadingMessages"
-            class="welcome-state"
-          >
+          <div v-else-if="!loadingMessages" class="welcome-state">
             <div class="welcome-title">{{ tm("welcome.title") }}</div>
           </div>
         </section>
@@ -609,17 +605,18 @@
       :parts="activeReasoningParts"
       :is-dark="isDark"
     />
-    <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" @update:model-value="onRefsToggle" />
+    <RefsSidebar
+      v-model="refsSidebarOpen"
+      :refs="selectedRefs"
+      @update:model-value="onRefsToggle"
+    />
     <TodoSidebar
       v-model="todoSidebarOpen"
       :list="currentTodoSnapshot?.list"
       :stats="currentTodoSnapshot?.stats"
       :attention-items="currentTodoSnapshot?.attentionItems || []"
     />
-    <GitDiffSidebar
-      v-model="gitDiffSidebarOpen"
-      :is-dark="isDark"
-    />
+    <GitDiffSidebar v-model="gitDiffSidebarOpen" :is-dark="isDark" />
   </div>
 </template>
 
@@ -702,10 +699,13 @@ import {
 } from "@/utils/providerMetadata";
 import { useToast } from "@/utils/toast";
 
-const props = withDefaults(defineProps<{ chatboxMode?: boolean; active?: boolean }>(), {
-  chatboxMode: false,
-  active: true,
-});
+const props = withDefaults(
+  defineProps<{ chatboxMode?: boolean; active?: boolean }>(),
+  {
+    chatboxMode: false,
+    active: true,
+  },
+);
 
 const route = useRoute();
 const router = useRouter();
@@ -863,12 +863,15 @@ function clampBarPos(
  */
 function initTodoBarPos() {
   nextTick(() => {
-    const bar = document.querySelector(".todo-summary-bar") as HTMLElement | null;
+    const bar = document.querySelector(
+      ".todo-summary-bar",
+    ) as HTMLElement | null;
     const main = document.querySelector(".chat-main") as HTMLElement | null;
     if (!bar || !main) return;
     const mainRect = main.getBoundingClientRect();
     const barRect = bar.getBoundingClientRect();
-    const desiredLeft = mainRect.left + Math.max(16, (mainRect.width - barRect.width) / 2);
+    const desiredLeft =
+      mainRect.left + Math.max(16, (mainRect.width - barRect.width) / 2);
     const desiredTop = mainRect.top + 16;
     todoBarPos.value = clampBarPos(desiredLeft, desiredTop, barRect, mainRect);
   });
@@ -940,10 +943,7 @@ function endDragTodoBar() {
   if (dragState?.didMove && todoBarPos.value) {
     // 持久化拖动后的位置
     try {
-      localStorage.setItem(
-        TODO_BAR_POS_KEY,
-        JSON.stringify(todoBarPos.value),
-      );
+      localStorage.setItem(TODO_BAR_POS_KEY, JSON.stringify(todoBarPos.value));
     } catch {
       /* 忽略 localStorage 写入失败 (隐私模式等) */
     }
@@ -1200,7 +1200,10 @@ const latestTokenUsageTotal = computed(() => {
 });
 const tokenUsageIndicator = computed(() => {
   const used = latestTokenUsageTotal.value;
-  const limit = contextLimit(currentTokenProvider.value, currentTokenMetadata.value);
+  const limit = contextLimit(
+    currentTokenProvider.value,
+    currentTokenMetadata.value,
+  );
   if (used <= 0 || limit <= 0) return null;
 
   const percent = (used / limit) * 100;
@@ -1321,17 +1324,17 @@ watch(
     // showSpcodeIndicator watcher.
     await spcodeStatus.refresh(resolveCurrentUmo(next));
     // Same lifecycle for plan/build: the chip is per-umo, so it
-        // MUST be re-fetched on every session switch. We do not
-        // optimistically carry over the previous session's flag because
-        // plan/build is intentionally NOT shared between sessions (a
-        // user might want plan mode in one project while building in
-        // another).
-        //
-        // CRITICAL: refresh() requires the full unified_msg_origin string
-        // the backend keys per-session state on, NOT the bare session id
-        // (webchat conversation id). See :func:`resolveCurrentUmo` for the
-        // exact format.
-        await spcodePlanMode.refresh(resolveCurrentUmo(next));
+    // MUST be re-fetched on every session switch. We do not
+    // optimistically carry over the previous session's flag because
+    // plan/build is intentionally NOT shared between sessions (a
+    // user might want plan mode in one project while building in
+    // another).
+    //
+    // CRITICAL: refresh() requires the full unified_msg_origin string
+    // the backend keys per-session state on, NOT the bare session id
+    // (webchat conversation id). See :func:`resolveCurrentUmo` for the
+    // exact format.
+    await spcodePlanMode.refresh(resolveCurrentUmo(next));
   },
   { immediate: true },
 );
@@ -1367,10 +1370,7 @@ function resolveCurrentUmo(sessionId: string): string | null {
   if (!session) return null;
   const platformId = session.platform_id || "webchat";
   if (platformId === "webchat") {
-    return buildWebchatUmoDetails(
-      sessionId,
-      Boolean(session.is_group),
-    ).umo;
+    return buildWebchatUmoDetails(sessionId, Boolean(session.is_group)).umo;
   }
   // Generic fallback for non-webchat platforms: trust the platform's
   // own session_id format. message_type falls back to FriendMessage
@@ -1438,7 +1438,8 @@ function sessionTitle(session: Session) {
 
 function syncSelectedTokenProvider() {
   if (typeof window === "undefined") return;
-  selectedTokenProviderId.value = localStorage.getItem("selectedProvider") || "";
+  selectedTokenProviderId.value =
+    localStorage.getItem("selectedProvider") || "";
 }
 
 async function loadTokenProviders() {
@@ -1446,9 +1447,8 @@ async function loadTokenProviders() {
   try {
     const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      tokenModelMetadata.value = (
-        (response.data as any).model_metadata || {}
-      ) as Record<string, ProviderModelMetadata>;
+      tokenModelMetadata.value = ((response.data as any).model_metadata ||
+        {}) as Record<string, ProviderModelMetadata>;
       tokenProviderConfigs.value = (
         (response.data.data || []) as unknown as TokenProviderConfig[]
       ).filter((provider) => provider.enable !== false);
@@ -1520,7 +1520,10 @@ async function loadProjectSessions(projectId = selectedProjectId.value) {
 async function handleProjectToggle(projectId: string, expanded: boolean) {
   if (!expanded || projectSessionsById.value[projectId]) return;
   if (loadingProjectSessionIds.value.includes(projectId)) return;
-  loadingProjectSessionIds.value = [...loadingProjectSessionIds.value, projectId];
+  loadingProjectSessionIds.value = [
+    ...loadingProjectSessionIds.value,
+    projectId,
+  ];
   try {
     await loadProjectSessions(projectId);
   } finally {
@@ -1786,12 +1789,9 @@ async function sendSystemCommand(command: string) {
       sessionId = await newSession();
     }
 
-    const messageId =
-      crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
-    const outgoingParts: MessagePart[] = [
-      { type: "plain", text: command },
-    ];
+    const outgoingParts: MessagePart[] = [{ type: "plain", text: command }];
 
     const selection = inputRef.value?.getCurrentSelection();
 
@@ -1998,7 +1998,8 @@ function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {
 
 async function createThreadFromSelection() {
   const message = threadSelection.message;
-  if (!currSessionId.value || !message?.id || !threadSelection.selectedText) return;
+  if (!currSessionId.value || !message?.id || !threadSelection.selectedText)
+    return;
   try {
     const response = await chatApi.createThread({
       session_id: currSessionId.value,
@@ -2099,33 +2100,39 @@ const currentTodoSnapshot = computed(() => {
  *  同时: 快照被清空(todo_clear / 全删光)时同步关闭抽屉,
  *  避免出现"bar 没了但抽屉还开着显示空状态"的尴尬。
  */
-watch(currentTodoSnapshot, (snap) => {
-  // 1) 快照为 null → 关抽屉 (清空/全删空场景)
-  if (snap === null && todoSidebarOpen.value) {
-    todoSidebarOpen.value = false;
-  }
-  // 2) 快照非空且 bar 位置已确定 → 位置越界时回弹
-  if (!snap || todoBarPos.value === null) return;
-  nextTick(() => {
-    const main = document.querySelector(".chat-main") as HTMLElement | null;
-    const bar = document.querySelector(".todo-summary-bar") as HTMLElement | null;
-    if (!main || !bar) return;
-    const mainRect = main.getBoundingClientRect();
-    const barRect = bar.getBoundingClientRect();
-    const clamped = clampBarPos(
-      todoBarPos.value!.left,
-      todoBarPos.value!.top,
-      barRect,
-      mainRect,
-    );
-    if (
-      clamped.left !== todoBarPos.value!.left ||
-      clamped.top !== todoBarPos.value!.top
-    ) {
-      todoBarPos.value = clamped;
+watch(
+  currentTodoSnapshot,
+  (snap) => {
+    // 1) 快照为 null → 关抽屉 (清空/全删空场景)
+    if (snap === null && todoSidebarOpen.value) {
+      todoSidebarOpen.value = false;
     }
-  });
-}, { immediate: true });
+    // 2) 快照非空且 bar 位置已确定 → 位置越界时回弹
+    if (!snap || todoBarPos.value === null) return;
+    nextTick(() => {
+      const main = document.querySelector(".chat-main") as HTMLElement | null;
+      const bar = document.querySelector(
+        ".todo-summary-bar",
+      ) as HTMLElement | null;
+      if (!main || !bar) return;
+      const mainRect = main.getBoundingClientRect();
+      const barRect = bar.getBoundingClientRect();
+      const clamped = clampBarPos(
+        todoBarPos.value!.left,
+        todoBarPos.value!.top,
+        barRect,
+        mainRect,
+      );
+      if (
+        clamped.left !== todoBarPos.value!.left ||
+        clamped.top !== todoBarPos.value!.top
+      ) {
+        todoBarPos.value = clamped;
+      }
+    });
+  },
+  { immediate: true },
+);
 
 // 与 RefsSidebar 互斥:打开 todo 时收起 refs
 watch(todoSidebarOpen, (open) => {
@@ -2145,7 +2152,8 @@ function toggleTodoSidebar() {
  * - Enter / Space  → 浏览器对 <button> 的默认行为 → 触发 @click → toggleTodoSidebar()
  * - Arrow 方向键  → onTodoBarKeydown → 移动位置 8px
  */
-const todoBarKeyShortcuts = "Enter Space ArrowLeft ArrowRight ArrowUp ArrowDown";
+const todoBarKeyShortcuts =
+  "Enter Space ArrowLeft ArrowRight ArrowUp ArrowDown";
 
 /** 键盘移动 bar 位置。Shift 加速为 32px/次;Home 复位到居中。 */
 const TODO_BAR_KEY_STEP = 8;
@@ -2163,7 +2171,11 @@ function onTodoBarKeydown(e: KeyboardEvent) {
   else if (e.key === "Home") {
     // 复位:清空位置让 CSS centered 样式接管
     todoBarPos.value = null;
-    try { localStorage.removeItem(TODO_BAR_POS_KEY); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(TODO_BAR_POS_KEY);
+    } catch {
+      /* ignore */
+    }
     e.preventDefault();
     return;
   } else {
@@ -2178,12 +2190,15 @@ function onTodoBarKeydown(e: KeyboardEvent) {
 
   // 第一次方向键按下:如果位置未初始化,先按当前 CSS centered 位置算一个起点
   if (todoBarPos.value === null) {
-    const bar = document.querySelector(".todo-summary-bar") as HTMLElement | null;
+    const bar = document.querySelector(
+      ".todo-summary-bar",
+    ) as HTMLElement | null;
     const main = document.querySelector(".chat-main") as HTMLElement | null;
     if (!bar || !main) return;
     const mainRect = main.getBoundingClientRect();
     const barRect = bar.getBoundingClientRect();
-    const startLeft = mainRect.left + Math.max(16, (mainRect.width - barRect.width) / 2);
+    const startLeft =
+      mainRect.left + Math.max(16, (mainRect.width - barRect.width) / 2);
     const startTop = mainRect.top + 16;
     todoBarPos.value = clampBarPos(startLeft, startTop, barRect, mainRect);
   }
@@ -2203,7 +2218,9 @@ function onTodoBarKeydown(e: KeyboardEvent) {
   // 持久化(与鼠标拖动 endDragTodoBar 共用同一 key,策略一致)
   try {
     localStorage.setItem(TODO_BAR_POS_KEY, JSON.stringify(todoBarPos.value));
-  } catch { /* ignore quota / private mode */ }
+  } catch {
+    /* ignore quota / private mode */
+  }
 }
 
 /** RefsSidebar 的 modelValue 变化回调:关闭时由用户主动操作,无需特别处理;
@@ -2216,7 +2233,8 @@ function onRefsToggle(open: boolean) {
 
 async function deleteThread(thread: ChatThread) {
   if (deletingThread.value) return;
-  if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog))) return;
+  if (!(await askForConfirmation(tm("thread.confirmDelete"), confirmDialog)))
+    return;
   deletingThread.value = true;
   try {
     await chatApi.deleteThread(thread.thread_id);
@@ -2720,8 +2738,11 @@ function toggleTheme() {
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
-  transition: background 0.18s ease, border-color 0.18s ease,
-    color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
@@ -2755,8 +2776,14 @@ function toggleTheme() {
   animation: todo-bar-fade-in 0.2s ease;
 }
 @keyframes todo-bar-fade-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 /* 整体淡入/淡出: 跟随 currentTodoSnapshot 的 v-if 切换。
@@ -2916,12 +2943,18 @@ function toggleTheme() {
   gap: 28px;
 }
 
+/*
+ * Bottom padding = 142px (was 116). Grows by 26px to clear the stacked
+ * spcode status chips (project + codegraph) above the input container
+ * so the last message's meta row (copy / token-usage / ref buttons) is
+ * never covered by the input area.
+ */
 .messages-panel {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 0 116px;
-  scroll-padding-bottom: 116px;
+  padding: 24px 0 142px;
+  scroll-padding-bottom: 142px;
 }
 
 .conversation-stack.is-empty .messages-panel {
@@ -3040,20 +3073,20 @@ kbd {
 }
 
 :deep(.hr-node) {
-    margin-top: 1.25rem;
-    margin-bottom: 1.25rem;
-    opacity: 0.5;
-    border-top-width: .3px;
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
+  opacity: 0.5;
+  border-top-width: 0.3px;
 }
 
 :deep(.paragraph-node) {
-    margin: .5rem 0;
-    line-height: 1.7;
+  margin: 0.5rem 0;
+  line-height: 1.7;
 }
 
 :deep(.list-node) {
-    margin-top: .5rem;
-    margin-bottom: .5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 @media (max-width: 760px) {
@@ -3062,9 +3095,10 @@ kbd {
     height: calc(100vh - 50px) !important;
   }
 
+  /* See desktop `.messages-panel` comment for the +26px chip-stack delta. */
   .messages-panel {
-    padding: 18px 0 92px;
-    scroll-padding-bottom: 92px;
+    padding: 18px 0 118px;
+    scroll-padding-bottom: 118px;
   }
 
   .conversation-stack.is-empty .messages-panel {

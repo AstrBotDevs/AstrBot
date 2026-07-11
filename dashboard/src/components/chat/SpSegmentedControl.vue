@@ -12,66 +12,66 @@
     - Home/End jump to first/last
 -->
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref } from "vue";
 
 export interface Segment {
-  value: string
-  label: string
-  icon?: string
+  value: string;
+  label: string;
+  icon?: string;
 }
 
 interface Props {
-  segments: Segment[]
-  modelValue: string
-  disabled?: boolean
+  segments: Segment[];
+  modelValue: string;
+  disabled?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   disabled: false,
-})
+});
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string]
-  change: [value: string]
-}>()
+  "update:modelValue": [value: string];
+  change: [value: string];
+}>();
 
-const buttonRefs = ref<HTMLButtonElement[]>([])
+const buttonRefs = ref<HTMLButtonElement[]>([]);
 
 function focusSegment(index: number): void {
-  const len = props.segments.length
-  const wrapped = ((index % len) + len) % len
-  const target = buttonRefs.value[wrapped]
-  if (target) target.focus()
+  const len = props.segments.length;
+  const wrapped = ((index % len) + len) % len;
+  const target = buttonRefs.value[wrapped];
+  if (target) target.focus();
 }
 
 function onClick(value: string): void {
-  if (props.disabled) return
-  if (value === props.modelValue) return // No-op on already-active segment
-  emit('update:modelValue', value)
-  emit('change', value)
+  if (props.disabled) return;
+  if (value === props.modelValue) return; // No-op on already-active segment
+  emit("update:modelValue", value);
+  emit("change", value);
 }
 
 function onKeydown(e: KeyboardEvent, currentIndex: number): void {
-  if (props.disabled) return
-  const len = props.segments.length
-  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-    e.preventDefault()
-    const next = (currentIndex + 1) % len
-    onClick(props.segments[next].value)
-    focusSegment(next)
-  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-    e.preventDefault()
-    const prev = (currentIndex - 1 + len) % len
-    onClick(props.segments[prev].value)
-    focusSegment(prev)
-  } else if (e.key === 'Home') {
-    e.preventDefault()
-    onClick(props.segments[0].value)
-    focusSegment(0)
-  } else if (e.key === 'End') {
-    e.preventDefault()
-    onClick(props.segments[len - 1].value)
-    focusSegment(len - 1)
+  if (props.disabled) return;
+  const len = props.segments.length;
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+    e.preventDefault();
+    const next = (currentIndex + 1) % len;
+    onClick(props.segments[next].value);
+    focusSegment(next);
+  } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const prev = (currentIndex - 1 + len) % len;
+    onClick(props.segments[prev].value);
+    focusSegment(prev);
+  } else if (e.key === "Home") {
+    e.preventDefault();
+    onClick(props.segments[0].value);
+    focusSegment(0);
+  } else if (e.key === "End") {
+    e.preventDefault();
+    onClick(props.segments[len - 1].value);
+    focusSegment(len - 1);
   }
 }
 </script>
@@ -84,7 +84,11 @@ function onKeydown(e: KeyboardEvent, currentIndex: number): void {
     <button
       v-for="(seg, i) in segments"
       :key="seg.value"
-      :ref="(el) => { if (el) buttonRefs[i] = el as HTMLButtonElement }"
+      :ref="
+        (el) => {
+          if (el) buttonRefs[i] = el as HTMLButtonElement;
+        }
+      "
       type="button"
       role="tab"
       :aria-selected="seg.value === modelValue"
@@ -108,7 +112,7 @@ function onKeydown(e: KeyboardEvent, currentIndex: number): void {
   display: inline-flex;
   border: 1px solid var(--sp-chip-border-strong);
   border-radius: 14px;
-  background: transparent;
+  background: var(--sp-chip-bg);
   overflow: hidden;
   height: var(--sp-segmented-height);
 }
@@ -125,7 +129,9 @@ function onKeydown(e: KeyboardEvent, currentIndex: number): void {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 200ms ease, color 200ms ease;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
 }
 
 .sp-segmented__seg + .sp-segmented__seg {
