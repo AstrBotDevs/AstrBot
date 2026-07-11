@@ -1,0 +1,86 @@
+{
+  "header": {
+    "eyebrow": "오케스트레이션"
+  },
+  "page": {
+    "title": "서브 에이전트 오케스트레이션",
+    "beta": "실험적 기능",
+    "subtitle": "메인 LLM은 자체 도구를 직접 사용하거나 핸드오프를 통해 서브 에이전트에 작업을 위임할 수 있습니다."
+  },
+  "actions": {
+    "refresh": "새로고침",
+    "save": "저장",
+    "add": "서브 에이전트 추가",
+    "expand": "펼치기",
+    "collapse": "접기",
+    "delete": "삭제",
+    "close": "닫기"
+  },
+  "overview": {
+    "totalAgents": "전체 서브 에이전트",
+    "totalAgentsNote": "구성된 위임 에이전트",
+    "enabledAgents": "사용 중인 에이전트",
+    "enabledAgentsNote": "핸드오프 가능한 에이전트",
+    "mainOrchestration": "메인 오케스트레이션",
+    "boundPersonas": "연결된 페르소나",
+    "boundPersonasNote": "페르소나가 연결된 에이전트"
+  },
+  "switches": {
+    "enable": "서브 에이전트 오케스트레이션 사용",
+    "enableHint": "서브 에이전트 기능을 사용합니다",
+    "dedupe": "메인 LLM 도구 중복 제거 (서브 에이전트와 중복되는 도구 숨기기)",
+    "dedupeHint": "메인 에이전트에서 중복 도구를 제거합니다"
+  },
+  "description": {
+    "disabled": "사용 안 함: 서브 에이전트가 비활성화되며, 메인 LLM은 페르소나 규칙에 따라 도구를 마운트하여(기본값은 전체) 직접 호출합니다.",
+    "enabled": "사용 중: 메인 LLM은 자체 도구를 유지하면서 transfer_to_* 위임 도구를 마운트합니다. 중복 제거를 사용하면 서브 에이전트와 겹치는 도구가 메인 도구 세트에서 제거됩니다."
+  },
+  "section": {
+    "title": "서브 에이전트",
+    "subtitle": "메인 LLM을 위한 위임 에이전트, 페르소나, 설명을 구성합니다",
+    "globalSettings": "전역 설정",
+    "agentSetup": "에이전트 설정"
+  },
+  "cards": {
+    "statusEnabled": "사용 중",
+    "statusDisabled": "사용 안 함",
+    "unnamed": "이름 없는 서브 에이전트",
+    "transferPrefix": "transfer_to_{name}",
+    "switchLabel": "사용",
+    "previewTitle": "미리보기: 메인 LLM에 표시되는 핸드오프 도구",
+    "personaChip": "페르소나: {id}",
+    "personaPreview": "페르소나 미리보기",
+    "noDescription": "아직 설명이 없습니다",
+    "previewHint": "현재 선택된 페르소나를 검토하여 핸드오프 대상을 확인하세요."
+  },
+  "form": {
+    "nameLabel": "에이전트 이름 (transfer_to_{name}에 사용됨)",
+    "nameHint": "소문자와 밑줄만 사용하며, 전역적으로 고유해야 합니다.",
+    "providerLabel": "채팅 공급자 (선택)",
+    "providerHint": "비워두면 전역 기본 공급자를 따릅니다.",
+    "personaLabel": "페르소나 선택",
+    "personaHint": "서브 에이전트는 선택한 페르소나의 시스템 설정과 도구를 상속받습니다.",
+    "descriptionLabel": "메인 LLM을 위한 설명 (핸드오프 결정에 사용됨)",
+    "descriptionHint": "메인 LLM에게 transfer_to_* 도구 설명으로 표시됩니다. 짧고 명확하게 작성하세요."
+  },
+  "messages": {
+    "loadConfigFailed": "설정을 불러오지 못했습니다",
+    "loadPersonaFailed": "페르소나 목록을 불러오지 못했습니다",
+    "unsavedChangesNotice": "이 페이지에 저장하지 않은 변경 사항이 있습니다. 나가기 전에 저장하세요.",
+    "unsavedChangesLeaveConfirm": "저장하지 않은 변경 사항이 있습니다. 나가면 삭제됩니다. 계속하시겠습니까?",
+    "unsavedChangesReloadConfirm": "저장하지 않은 변경 사항이 있습니다. 새로고침하면 삭제됩니다. 계속하시겠습니까?",
+    "nameMissing": "이름이 없는 서브 에이전트가 있습니다",
+    "nameInvalid": "잘못된 서브 에이전트 이름: 소문자, 숫자, 밑줄만 사용할 수 있으며 문자로 시작해야 합니다",
+    "nameDuplicate": "중복된 서브 에이전트 이름: {name}",
+    "personaMissing": "서브 에이전트 {name}에 선택된 페르소나가 없습니다",
+    "saveSuccess": "저장 성공",
+    "saveFailed": "저장 실패",
+    "nameRequired": "이름은 필수입니다",
+    "namePattern": "소문자, 숫자, 밑줄만 사용할 수 있습니다"
+  },
+  "empty": {
+    "title": "구성된 에이전트 없음",
+    "subtitle": "새 서브 에이전트를 추가하여 시작하세요",
+    "action": "첫 에이전트 생성"
+  }
+}

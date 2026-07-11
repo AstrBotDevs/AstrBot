@@ -1,0 +1,22 @@
+{
+  "loading": "로딩 중",
+  "success": "성공",
+  "error": "오류",
+  "warning": "경고",
+  "info": "정보",
+  "pending": "대기 중",
+  "processing": "처리 중",
+  "completed": "완료",
+  "failed": "실패",
+  "cancelled": "취소됨",
+  "timeout": "시간 초과",
+  "connecting": "연결 중",
+  "connected": "연결됨",
+  "disconnected": "연결 끊김",
+  "online": "온라인",
+  "offline": "오프라인",
+  "active": "활성",
+  "inactive": "비활성",
+  "ready": "준비됨",
+  "busy": "사용 중"
+}

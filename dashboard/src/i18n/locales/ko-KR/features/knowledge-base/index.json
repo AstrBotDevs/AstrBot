@@ -1,0 +1,68 @@
+{
+  "title": "지식 베이스 관리",
+  "subtitle": "지식 베이스 콘텐츠 관리 및 조회",
+  "list": {
+    "title": "지식 베이스",
+    "subtitle": "모든 지식 베이스 컬렉션을 관리하세요",
+    "create": "지식 베이스 생성",
+    "refresh": "목록 새로고침",
+    "empty": "지식 베이스 없음",
+    "loading": "불러오는 중...",
+    "documents": "문서",
+    "chunks": "청크",
+    "sessionConfig": "세션 구성",
+    "initError": "초기화 실패"
+  },
+  "card": {
+    "edit": "편집",
+    "delete": "삭제",
+    "open": "열기",
+    "docCount": "문서 {count}개",
+    "chunkCount": "청크 {count}개"
+  },
+  "create": {
+    "title": "지식 베이스 생성",
+    "nameLabel": "이름",
+    "namePlaceholder": "지식 베이스 이름을 입력하세요",
+    "descriptionLabel": "설명",
+    "descriptionPlaceholder": "이 지식 베이스의 용도를 설명하세요...",
+    "emojiLabel": "아이콘",
+    "embeddingModelLabel": "임베딩 모델",
+    "rerankModelLabel": "재순위 모델 (선택 사항)",
+    "providerInfo": "공급자: {id} | 차원: {dimensions}",
+    "rerankProviderInfo": "공급자: {id}",
+    "cancel": "취소",
+    "submit": "생성",
+    "nameRequired": "지식 베이스 이름을 입력해 주세요"
+  },
+  "edit": {
+    "title": "지식 베이스 편집",
+    "submit": "저장"
+  },
+  "delete": {
+    "title": "지식 베이스 삭제",
+    "confirmText": "'{name}' 지식 베이스를 삭제하시겠습니까?",
+    "warning": "이 작업은 되돌릴 수 없습니다. 모든 문서, 청크, 관련 구성이 영구적으로 삭제됩니다.",
+    "cancel": "취소",
+    "confirm": "삭제"
+  },
+  "emoji": {
+    "title": "아이콘 선택",
+    "close": "닫기",
+    "categories": {
+      "books": "책 및 문서",
+      "emotions": "감정 및 표정",
+      "objects": "사물 및 도구",
+      "symbols": "기호 및 표시"
+    }
+  },
+  "messages": {
+    "createSuccess": "지식 베이스가 생성되었습니다",
+    "createFailed": "생성 실패",
+    "updateSuccess": "지식 베이스가 업데이트되었습니다",
+    "updateFailed": "업데이트 실패",
+    "deleteSuccess": "지식 베이스가 삭제되었습니다",
+    "deleteFailed": "삭제 실패",
+    "loadError": "지식 베이스 목록 불러오기 실패"
+  }
+}

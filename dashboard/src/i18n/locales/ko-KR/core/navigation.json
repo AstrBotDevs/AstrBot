@@ -1,0 +1,50 @@
+{
+  "welcome": "환영",
+  "dashboard": "대시보드",
+  "platforms": "플랫폼",
+  "providers": "공급자",
+  "commands": "명령어",
+  "persona": "페르소나",
+  "subagent": "서브 에이전트",
+  "toolUse": "MCP 도구",
+  "config": "구성",
+  "chat": "채팅",
+  "cron": "예약 작업",
+  "extension": "플러그인",
+  "extensionTabs": {
+    "installed": "AstrBot 플러그인",
+    "market": "플러그인 마켓",
+    "mcp": "MCP 서버",
+    "skills": "스킬",
+    "components": "핸들러"
+  },
+  "conversation": "대화",
+  "sessionManagement": "커스텀 규칙",
+  "console": "콘솔",
+  "trace": "트레이스",
+  "alkaid": "Alkaid 연구소",
+  "knowledgeBase": "지식 베이스",
+  "about": "정보",
+  "settings": "설정",
+  "changelog": "변경 이력",
+  "documentation": "문서",
+  "faq": "자주 묻는 질문",
+  "github": "GitHub",
+  "drag": "드래그",
+  "groups": {
+    "more": "추가 기능"
+  },
+  "changelogDialog": {
+    "title": "변경 이력",
+    "loading": "로딩 중...",
+    "error": "불러오기 실패",
+    "notFound": "이 버전의 변경 이력을 찾을 수 없습니다",
+    "selectVersion": "버전 선택",
+    "current": "현재"
+  },
+  "configTabs": {
+    "normal": "일반 구성",
+    "system": "시스템 구성"
+  },
+  "pluginWebui": "플러그인 페이지"
+}
