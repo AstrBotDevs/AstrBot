@@ -89,6 +89,80 @@ test("truncateInteractiveChoice preserves request_id", () => {
   assert.equal(out.prompt.length, 200);
 });
 
+test("truncateInteractiveChoice: title within v1.2 80-char cap is untouched", () => {
+  // v1.2: TITLE_MAX 由 30 提到 80;80 字以内应当原样保留、且
+  // 返回**同一对象引用**(无 mutate 字段),以便 Vue 响应式跳过
+  // 不必要的下游重渲染。
+  const title80 = "测".repeat(80);
+  const input = {
+    type: "interactive_choice" as const,
+    request_id: "r1",
+    prompt: "p",
+    title: title80,
+    options: [
+      { id: "A", label: "a" },
+      { id: "B", label: "b" },
+    ],
+  };
+  const out = truncateInteractiveChoice(input);
+  assert.equal(out.title, title80);
+  assert.equal(out, input);
+});
+
+test("truncateInteractiveChoice: title above 80 is sliced to 80 (v1.2)", () => {
+  // v1.2: 超长 title 截到 80 字。模板侧已对 title 渲染节点加了
+  // :title=全量,hover 可见被砍掉的尾段。
+  const title100 = "测".repeat(100);
+  const input = {
+    type: "interactive_choice" as const,
+    request_id: "r1",
+    prompt: "p",
+    title: title100,
+    options: [
+      { id: "A", label: "a" },
+      { id: "B", label: "b" },
+    ],
+  };
+  const out = truncateInteractiveChoice(input);
+  assert.equal(out.title?.length, 80);
+  assert.equal(out.title, "测".repeat(80));
+  // mutate 字段变了 → 返回新对象
+  assert.notEqual(out, input);
+});
+
+test("truncateInteractiveChoice: option label within 80 is untouched (v1.2)", () => {
+  // v1.2: LABEL_MAX 30→80;同等长度行为参照 title。
+  const label80 = "选".repeat(80);
+  const input = {
+    type: "interactive_choice" as const,
+    request_id: "r1",
+    prompt: "p",
+    options: [
+      { id: "A", label: label80 },
+      { id: "B", label: "b" },
+    ],
+  };
+  const out = truncateInteractiveChoice(input);
+  assert.equal(out.options[0].label, label80);
+  assert.equal(out, input);
+});
+
+test("truncateInteractiveChoice: option label above 80 is sliced to 80 (v1.2)", () => {
+  const label100 = "选".repeat(100);
+  const input = {
+    type: "interactive_choice" as const,
+    request_id: "r1",
+    prompt: "p",
+    options: [
+      { id: "A", label: label100 },
+      { id: "B", label: "b" },
+    ],
+  };
+  const out = truncateInteractiveChoice(input);
+  assert.equal(out.options[0].label.length, 80);
+  assert.notEqual(out, input);
+});
+
 test("getOptionSubmitText returns id+label when no value", () => {
   const opt = { id: "A", label: "alpha" };
   assert.equal(getOptionSubmitText(opt), "A. alpha");

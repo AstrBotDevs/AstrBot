@@ -72,8 +72,12 @@ export function truncateInteractiveChoice(
 ): InteractiveChoicePart {
   const LIMITS = {
     PROMPT_MAX: 200,
-    TITLE_MAX: 30,
-    LABEL_MAX: 30,
+    // v1.2:由 30 提到 80。30 字(CJK)对很多真实场景偏紧,
+    // LLM 经常会写出超过 30 字的标题/选项 label,直接 slice 砍尾
+    // 没有任何视觉提示,用户会以为"系统漏渲染"。模板侧再给
+    // :title="<全量>" 兜底,hover 可见原文。
+    TITLE_MAX: 80,
+    LABEL_MAX: 80,
     DESC_MAX: 200,
     PLACEHOLDER_MAX: 60,
     /** v1.1 新增:LLM 补充说明的 Markdown 长度上限 */

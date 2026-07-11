@@ -27,8 +27,10 @@
         >mdi-check-circle</v-icon
       >
       <div class="choice-header-text">
-        <div v-if="part.title" class="choice-title">{{ part.title }}</div>
-        <div class="choice-prompt">{{ part.prompt }}</div>
+        <div v-if="part.title" class="choice-title" :title="part.title">
+          {{ part.title }}
+        </div>
+        <div class="choice-prompt" :title="part.prompt">{{ part.prompt }}</div>
       </div>
     </div>
     <div v-else class="choice-header choice-header--ignored">
@@ -36,9 +38,12 @@
       <span class="choice-ignored-label">{{
         tm("interactiveChoice.ignored")
       }}</span>
-      <span v-if="part.prompt" class="choice-prompt choice-prompt--muted">{{
-        part.prompt
-      }}</span>
+      <span
+        v-if="part.prompt"
+        class="choice-prompt choice-prompt--muted"
+        :title="part.prompt"
+        >{{ part.prompt }}</span
+      >
     </div>
 
     <!-- Pending: prose 段(帮用户决策)+ 选项按钮 + 自由输入 -->
@@ -58,11 +63,15 @@
           :aria-label="ariaLabelForOption(opt)"
           @click="onOptionClick(opt)"
         >
-          <span class="choice-option-label">
+          <span class="choice-option-label" :title="opt.label">
             <span v-if="opt.id" class="choice-option-id">{{ opt.id }}.</span>
             {{ opt.label }}
           </span>
-          <span v-if="opt.description" class="choice-option-description">
+          <span
+            v-if="opt.description"
+            class="choice-option-description"
+            :title="opt.description"
+          >
             {{ opt.description }}
           </span>
         </button>
@@ -129,9 +138,7 @@
             ? tm("interactiveChoice.collapseDetails")
             : tm("interactiveChoice.expandDetails")
         }}</span>
-        <span class="choice-collapse-count"
-          >({{ collapseItemCount }})</span
-        >
+        <span class="choice-collapse-count">({{ collapseItemCount }})</span>
       </button>
       <div v-if="optionsExpanded" class="choice-details">
         <InteractiveChoiceProse
@@ -157,12 +164,18 @@
                 class="choice-option-check"
                 >mdi-check</v-icon
               >
-              <span class="choice-option-label">
-                <span v-if="opt.id" class="choice-option-id">{{ opt.id }}.</span>
+              <span class="choice-option-label" :title="opt.label">
+                <span v-if="opt.id" class="choice-option-id"
+                  >{{ opt.id }}.</span
+                >
                 {{ opt.label }}
               </span>
             </div>
-            <span v-if="opt.description" class="choice-option-description">
+            <span
+              v-if="opt.description"
+              class="choice-option-description"
+              :title="opt.description"
+            >
               {{ opt.description }}
             </span>
           </div>
