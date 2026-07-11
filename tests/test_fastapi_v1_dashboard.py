@@ -389,10 +389,15 @@ class FakePlatform:
         return True
 
     async def webhook_callback(self, request_obj):
+        payload = await request_obj.get_json(silent=True)
+        if payload.get("response_mode") == "plain":
+            return "success"
+        if payload.get("response_mode") == "tuple":
+            return "accepted", 202, {"Content-Type": "text/plain"}
         return {
             "webhook_uuid": self.config["webhook_uuid"],
             "method": request_obj.method,
-            "payload": await request_obj.get_json(silent=True),
+            "payload": payload,
         }
 
     async def send_by_session(self, session, message_chain) -> None:
@@ -1185,6 +1190,34 @@ async def test_v1_openapi_uses_pydantic_request_bodies(
         "schema"
     ]["$ref"].endswith("/Body_uploadOpenApiFile")
     assert open_api_file_upload["x-astrbot-scope"] == "file"
+
+
+@pytest.mark.asyncio
+async def test_v1_knowledge_base_create_validation_uses_api_error_shape(
+    asgi_client: httpx.AsyncClient,
+):
+    headers = _jwt_headers()
+
+    missing_name_response = await asgi_client.post(
+        "/api/v1/knowledge-bases",
+        json={"embedding_provider_id": "embedding-1"},
+        headers=headers,
+    )
+    missing_provider_response = await asgi_client.post(
+        "/api/v1/knowledge-bases",
+        json={"name": "Docs"},
+        headers=headers,
+    )
+
+    assert missing_name_response.status_code == 200
+    assert missing_name_response.json()["status"] == "error"
+    assert missing_name_response.json()["message"] == "知识库名称不能为空"
+    assert missing_provider_response.status_code == 200
+    assert missing_provider_response.json()["status"] == "error"
+    assert (
+        missing_provider_response.json()["message"]
+        == "缺少参数 embedding_provider_id"
+    )
 
 
 @pytest.mark.asyncio
@@ -3294,10 +3327,35 @@ async def test_v1_platform_webhook_is_public_route(
     )
 
     assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["data"] == {
+    assert response.json() == {
         "webhook_uuid": "demo-hook",
         "method": "POST",
         "payload": {"challenge": "ping"},
     }
+
+
+@pytest.mark.asyncio
+async def test_v1_platform_webhook_preserves_plain_response(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.post(
+        "/api/v1/webhooks/platforms/demo-hook",
+        json={"response_mode": "plain"},
+    )
+
+    assert response.status_code == 200
+    assert response.text == "success"
+
+
+@pytest.mark.asyncio
+async def test_v1_platform_webhook_preserves_tuple_response(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.post(
+        "/api/v1/webhooks/platforms/demo-hook",
+        json={"response_mode": "tuple"},
+    )
+
+    assert response.status_code == 202
+    assert response.headers["content-type"] == "text/plain"
+    assert response.text == "accepted"

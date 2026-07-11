@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "axios";
 import Logo from "@/components/shared/Logo.vue";
@@ -12,20 +13,23 @@ import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
 import { router } from "@/router";
 import { useRoute } from "vue-router";
-import { useTheme } from "vuetify";
+import { useDisplay, useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
 import { authApi, isLegacyFallbackError, statsApi, updatesApi } from "@/api/v1";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
+import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
 
 enableKatex();
 enableMermaid();
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
+const chatHeader = useChatHeaderStore();
 const theme = useTheme();
+const { lgAndUp } = useDisplay();
 const { t } = useI18n();
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
@@ -120,6 +124,32 @@ const desktopUpdateStatus = ref("");
 const isChatPath = computed(
   () => route.path === "/chat" || route.path.startsWith("/chat/"),
 );
+const isDarkTheme = computed(
+  () => theme.global.current.value.dark || customizer.uiTheme.includes("Dark"),
+);
+const chatHeaderStyle = computed(() => {
+  if (!isChatPath.value) return undefined;
+  const sidebarWidth = lgAndUp.value
+    ? customizer.chatSidebarCollapsed
+      ? 56
+      : 280
+    : 0;
+  return {
+    left: `${sidebarWidth}px`,
+    width: `calc(100% - ${sidebarWidth}px)`,
+  };
+});
+const chatHeaderSubtitleText = computed(() => {
+  const title = chatHeader.title.trim();
+  const subtitle = chatHeader.subtitle.trim();
+  if (title && subtitle) return `${subtitle}/${title}`;
+  return title || subtitle;
+});
+
+function toggleChatSidebarFromHeader() {
+  customizer.TOGGLE_CHAT_SIDEBAR();
+}
+
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === "undefined") {
     return null;
@@ -973,6 +1003,16 @@ const currentMode = computed({
   },
 });
 
+const mainMenuOpen = ref(false);
+const nextMode = computed<"chat" | "bot">(() =>
+  isChatPath.value ? "bot" : "chat",
+);
+
+function switchMode() {
+  currentMode.value = nextMode.value;
+  mainMenuOpen.value = false;
+}
+
 // Merry Christmas! 🎄
 const isChristmas = computed(() => {
   const today = new Date();
@@ -982,7 +1022,6 @@ const isChristmas = computed(() => {
 });
 
 // 语言切换相关
-const mainMenuOpen = ref(false);
 const { languageOptions, currentLanguage, switchLanguage, locale } =
   useLanguageSwitcher();
 const languages = computed(() =>
@@ -1008,7 +1047,17 @@ onMounted(async () => {
 </script>
 
 <template>
-  <v-app-bar elevation="0" height="50" class="top-header">
+  <v-app-bar
+    elevation="0"
+    height="50"
+    class="top-header"
+    :class="{
+      'chat-mode-header': isChatPath,
+      'chat-mode-header--dark': isChatPath && isDarkTheme,
+    }"
+    :absolute="isChatPath"
+    :style="chatHeaderStyle"
+  >
     <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
     <v-btn
       v-if="!isChatPath"
@@ -1034,22 +1083,11 @@ onMounted(async () => {
       <v-icon>mdi-menu</v-icon>
     </v-btn>
 
-    <v-btn
-      v-if="isChatPath"
-      class="hidden-lg-and-up ms-1"
-      icon
-      rounded="sm"
-      variant="flat"
-      @click.stop="customizer.TOGGLE_CHAT_SIDEBAR()"
-    >
-      <v-icon>mdi-menu</v-icon>
-    </v-btn>
-
     <div
+      v-if="!isChatPath"
       class="logo-container"
       :class="{
         'mobile-logo': $vuetify.display.xs,
-        'chat-mode-logo': isChatPath,
       }"
       @click="handleLogoClick"
     >
@@ -1063,19 +1101,37 @@ onMounted(async () => {
             class="xmas-hat"
           /> </span
       ></span>
-      <span
-        class="logo-text logo-text-light Outfit"
-        style="color: grey"
-        v-if="isChatPath"
-        >ChatUI</span
-      >
       <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
+    </div>
+
+    <v-btn
+      v-if="isChatPath && $vuetify.display.smAndDown"
+      class="chat-mobile-sidebar-toggle"
+      icon
+      size="small"
+      rounded="lg"
+      variant="text"
+      @click.stop="toggleChatSidebarFromHeader"
+    >
+      <v-icon size="20">
+        {{ customizer.chatSidebarOpen ? "mdi-chevron-left" : "mdi-chevron-right" }}
+      </v-icon>
+    </v-btn>
+
+    <div
+      v-if="isChatPath"
+      class="chat-header-context"
+    >
+      <ProviderModelMenu variant="header" />
+      <div v-if="chatHeaderSubtitleText" class="chat-header-subtitle">
+        {{ chatHeaderSubtitleText }}
+      </div>
     </div>
 
     <v-spacer />
 
     <!-- 版本提示信息 - 在手机上隐藏 -->
-    <div class="mr-4 hidden-xs">
+    <div v-if="!isChatPath" class="mr-4 hidden-xs">
       <small v-if="hasNewVersion">
         {{ t("core.header.version.hasNewVersion") }}
       </small>
@@ -1084,124 +1140,122 @@ onMounted(async () => {
       </small>
     </div>
 
-    <!-- Bot/Chat 模式切换按钮 - 手机端隐藏，移入 ... 菜单 -->
-    <v-btn-toggle
-      v-model="currentMode"
-      mandatory
-      variant="outlined"
-      density="compact"
-      class="mr-4 hidden-xs"
-      color="primary"
-    >
-      <v-btn value="bot" size="small">
-        <v-icon start>mdi-robot</v-icon>
-        Bot
-      </v-btn>
-      <v-btn value="chat" size="small">
-        <v-icon start>mdi-chat</v-icon>
-        Chat
-      </v-btn>
-    </v-btn-toggle>
-
-    <!-- 功能菜单 -->
-    <StyledMenu v-model="mainMenuOpen" offset="12" location="bottom end">
-      <template v-slot:activator="{ props: activatorProps }">
-        <v-btn
-          v-bind="activatorProps"
-          size="small"
-          class="action-btn mr-4"
-          color="var(--v-theme-surface)"
-          variant="flat"
-          rounded="sm"
-          icon
-        >
-          <v-icon>mdi-dots-vertical</v-icon>
-        </v-btn>
-      </template>
-
-      <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
-      <template v-if="$vuetify.display.xs">
-        <div class="mobile-mode-toggle-wrapper">
-          <v-btn-toggle
-            v-model="currentMode"
-            mandatory
-            variant="outlined"
-            density="compact"
-            class="mobile-mode-toggle"
-            color="primary"
-          >
-            <v-btn value="bot" size="small">
-              <v-icon start>mdi-robot</v-icon>
-              Bot
-            </v-btn>
-            <v-btn value="chat" size="small">
-              <v-icon start>mdi-chat</v-icon>
-              Chat
-            </v-btn>
-          </v-btn-toggle>
-        </div>
-        <v-divider class="my-1" />
-      </template>
-
-      <!-- 语言切换分组 -->
-      <v-menu
-        open-on-click
-        :open-on-hover="!$vuetify.display.xs"
-        :open-delay="!$vuetify.display.xs ? 60 : 0"
-        :close-delay="!$vuetify.display.xs ? 120 : 0"
-        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
-        offset="8"
+    <div class="header-actions" :class="{ 'chat-header-actions': isChatPath }">
+      <!-- Bot/Chat mode switch - single button, hidden in chat mobile menu -->
+      <v-btn
+        v-if="!isChatPath || !$vuetify.display.smAndDown"
+        class="mode-switch-btn"
+        :class="{ 'mr-4 hidden-xs': !isChatPath }"
+        variant="text"
+        size="small"
+        rounded="sm"
+        @click="switchMode"
       >
-        <template v-slot:activator="{ props: languageMenuProps }">
-          <v-list-item
-            v-bind="languageMenuProps"
-            @click.stop
-            class="styled-menu-item language-group-trigger"
-            rounded="md"
+        <v-icon start>{{ nextMode === "bot" ? "mdi-robot" : "mdi-chat" }}</v-icon>
+        {{ nextMode === "bot" ? "Bot" : "Chat" }}
+      </v-btn>
+
+      <!-- 功能菜单 -->
+      <StyledMenu v-model="mainMenuOpen" offset="12" location="bottom end">
+        <template v-slot:activator="{ props: activatorProps }">
+          <v-btn
+            v-bind="activatorProps"
+            size="small"
+            :class="[
+              'action-btn',
+              isChatPath ? 'chat-action-btn' : 'mr-4',
+            ]"
+            :color="isChatPath ? undefined : 'var(--v-theme-surface)'"
+            :variant="isChatPath ? 'text' : 'flat'"
+            rounded="sm"
+            icon
           >
-            <template v-slot:prepend>
-              <v-icon>mdi-translate</v-icon>
-            </template>
-            <v-list-item-title>{{
-              t("core.common.language")
-            }}</v-list-item-title>
-            <template v-slot:append>
-              <span class="language-group-current">{{
-                currentLanguage?.flag
-              }}</span>
-              <v-icon size="18" class="language-group-arrow"
-                >mdi-chevron-right</v-icon
-              >
-            </template>
-          </v-list-item>
+            <v-icon>mdi-dots-vertical</v-icon>
+          </v-btn>
         </template>
 
-        <v-card
-          class="styled-menu-card"
-          style="min-width: 180px"
-          elevation="8"
-          rounded="lg"
+        <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
+        <template
+          v-if="
+            (isChatPath && $vuetify.display.smAndDown) ||
+            (!isChatPath && $vuetify.display.xs)
+          "
         >
-          <v-list density="compact" class="styled-menu-list pa-1">
+          <div class="mobile-mode-switch-wrapper">
+            <v-btn
+              class="mobile-mode-switch-btn"
+              variant="text"
+              block
+              @click="switchMode"
+            >
+              <v-icon start>{{
+                nextMode === "bot" ? "mdi-robot" : "mdi-chat"
+              }}</v-icon>
+              {{ nextMode === "bot" ? "Bot" : "Chat" }}
+            </v-btn>
+          </div>
+          <v-divider class="my-1" />
+        </template>
+
+        <!-- 语言切换分组 -->
+        <v-menu
+          open-on-click
+          :open-on-hover="!$vuetify.display.xs"
+          :open-delay="!$vuetify.display.xs ? 60 : 0"
+          :close-delay="!$vuetify.display.xs ? 120 : 0"
+          :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+          offset="8"
+        >
+          <template v-slot:activator="{ props: languageMenuProps }">
             <v-list-item
-              v-for="lang in languages"
-              :key="lang.code"
-              :value="lang.code"
-              @click="changeLanguage(lang.code)"
-              :class="{
-                'styled-menu-item-active': currentLocale === lang.code,
-              }"
-              class="styled-menu-item"
+              v-bind="languageMenuProps"
+              @click.stop
+              class="styled-menu-item language-group-trigger"
               rounded="md"
             >
               <template v-slot:prepend>
-                <span class="language-flag">{{ lang.flag }}</span>
+                <v-icon>mdi-translate</v-icon>
               </template>
-              <v-list-item-title>{{ lang.name }}</v-list-item-title>
+              <v-list-item-title>{{
+                t("core.common.language")
+              }}</v-list-item-title>
+              <template v-slot:append>
+                <span class="language-group-current">{{
+                  currentLanguage?.flag
+                }}</span>
+                <v-icon size="18" class="language-group-arrow"
+                  >mdi-chevron-right</v-icon
+                >
+              </template>
             </v-list-item>
-          </v-list>
-        </v-card>
-      </v-menu>
+          </template>
+
+          <v-card
+            class="styled-menu-card"
+            style="min-width: 180px"
+            elevation="8"
+            rounded="lg"
+          >
+            <v-list density="compact" class="styled-menu-list pa-1">
+              <v-list-item
+                v-for="lang in languages"
+                :key="lang.code"
+                :value="lang.code"
+                @click="changeLanguage(lang.code)"
+                :class="{
+                  'styled-menu-item-active': currentLocale === lang.code,
+                }"
+                class="styled-menu-item"
+                rounded="md"
+              >
+                <template v-slot:prepend>
+                  <span class="language-flag">{{ lang.flag }}</span>
+                </template>
+                <v-list-item-title>{{ lang.name }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-card>
+        </v-menu>
 
       <!-- 主题切换分组 -->
       <v-menu
@@ -1299,7 +1353,8 @@ onMounted(async () => {
           t("core.header.accountDialog.title")
         }}</v-list-item-title>
       </v-list-item>
-    </StyledMenu>
+      </StyledMenu>
+    </div>
 
     <!-- 更新对话框 -->
     <v-dialog
@@ -1978,6 +2033,125 @@ onMounted(async () => {
   flex: 0 1 auto;
 }
 
+.top-header.chat-mode-header {
+  background: #fdfcfc !important;
+  border-bottom: 0;
+  box-shadow: none !important;
+}
+
+.top-header.chat-mode-header.chat-mode-header--dark {
+  background: rgb(var(--v-theme-background)) !important;
+}
+
+.top-header.chat-mode-header .v-toolbar__content {
+  padding: 0 16px 0 20px;
+  background: transparent !important;
+}
+
+.chat-mobile-sidebar-toggle {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  flex: 0 0 32px;
+  margin-right: 10px;
+  padding: 0 !important;
+  color: rgb(var(--v-theme-on-surface));
+  border-radius: 8px !important;
+  background: transparent !important;
+}
+
+.chat-mobile-sidebar-toggle .v-btn__content {
+  height: 32px;
+  align-items: center;
+}
+
+.chat-mobile-sidebar-toggle .v-btn__overlay {
+  opacity: 0;
+}
+
+.chat-header-context {
+  min-width: 0;
+  max-width: clamp(180px, calc(100vw - 600px), 460px);
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 5px 18px 5px 0;
+  overflow: hidden;
+}
+
+.chat-header-context .provider-trigger--header {
+  max-width: 100%;
+}
+
+.chat-header-context .provider-trigger-copy {
+  max-width: 100%;
+}
+
+.chat-header-context .provider-trigger-title {
+  min-width: 0;
+  max-width: min(300px, 52vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-header-context .provider-trigger-meta {
+  max-width: 150px;
+}
+
+.chat-header-subtitle {
+  min-width: 0;
+  margin-top: 2px;
+  overflow: hidden;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.chat-header-actions {
+  gap: 4px;
+  margin-right: 0;
+}
+
+.mode-switch-btn {
+  margin: 0;
+  border: 0;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: none;
+}
+
+.mode-switch-btn {
+  min-width: 62px;
+  background: transparent !important;
+  padding: 0 6px;
+}
+
+.mode-switch-btn .v-btn__overlay {
+  opacity: 0 !important;
+}
+
+.mode-switch-btn .v-icon {
+  font-size: 19px;
+}
+
+.chat-action-btn {
+  margin-right: 0;
+  color: rgb(var(--v-theme-on-surface));
+}
+
 /* 响应式布局样式 */
 .logo-container {
   margin-left: 10px;
@@ -1990,14 +2164,6 @@ onMounted(async () => {
 .mobile-logo {
   margin-left: 8px;
   gap: 4px;
-}
-
-.chat-mode-logo {
-  margin-left: 22px;
-}
-
-.mobile-logo.chat-mode-logo {
-  margin-left: 4px;
 }
 
 .logo-text {
@@ -2074,18 +2240,28 @@ onMounted(async () => {
   opacity: 0.85;
 }
 
-.mobile-mode-toggle-wrapper {
+.mobile-mode-switch-wrapper {
   display: flex;
   justify-content: center;
   padding: 8px 12px 4px;
 }
 
-.mobile-mode-toggle {
+.mobile-mode-switch-btn {
   width: 100%;
+  justify-content: flex-start;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.mobile-mode-toggle .v-btn {
-  flex: 1;
+.mobile-mode-switch-btn .v-icon {
+  font-size: 19px;
+}
+
+.mobile-mode-switch-btn .v-btn__overlay {
+  opacity: 0 !important;
 }
 
 /* 移动端对话框标题样式 */
@@ -2294,6 +2470,20 @@ onMounted(async () => {
 
   .v-btn-toggle .v-icon {
     font-size: 16px;
+  }
+
+  .chat-header-actions .chat-action-btn,
+  .chat-header-actions .mode-switch-btn {
+    margin-right: 0;
+  }
+
+  .top-header.chat-mode-header .v-toolbar__content {
+    padding: 0 12px 0 14px;
+  }
+
+  .chat-header-context {
+    max-width: calc(100vw - 92px);
+    padding-right: 8px;
   }
 
   .update-summary,

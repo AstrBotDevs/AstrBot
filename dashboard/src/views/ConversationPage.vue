@@ -377,7 +377,7 @@
         </v-dialog>
 
         <!-- 消息提示 -->
-        <v-snackbar :timeout="3000" elevation="24" :color="messageType" v-model="showMessage" location="top">
+        <v-snackbar :timeout="3000" elevation="6" :color="messageType" v-model="showMessage" location="top">
             {{ message }}
         </v-snackbar>
     </div>

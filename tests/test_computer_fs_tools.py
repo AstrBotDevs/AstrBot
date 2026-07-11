@@ -620,3 +620,23 @@ async def test_grep_tool_applies_result_limit(
     assert "match-2" in result
     assert "match-3" not in result
     assert "[Truncated to first 2 result groups.]" in result
+
+
+@pytest.mark.asyncio
+async def test_file_read_tool_rejects_directory_with_clear_message(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """FileReadTool should return a helpful message when given a directory path."""
+    workspace = _setup_local_fs_tools(monkeypatch, tmp_path)
+    subdir = workspace / "my-directory"
+    subdir.mkdir()
+
+    result = await fs_tools.FileReadTool().call(
+        _make_context(),
+        path="my-directory",
+    )
+
+    assert "is a directory, not a file" in result
+    assert "my-directory" in result
+    assert "'astrbot_execute_shell'" in result

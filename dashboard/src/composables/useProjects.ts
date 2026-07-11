@@ -2,6 +2,17 @@ import { ref } from 'vue';
 import { chatApi } from '@/api/v1';
 import type { Project } from '@/components/chat/ProjectList.vue';
 
+type WorkspaceType = 'session' | 'project' | 'custom';
+
+function projectErrorMessage(error: unknown, fallback: string) {
+    const responseMessage = (error as any)?.response?.data?.message;
+    if (typeof responseMessage === 'string' && responseMessage.trim()) {
+        return responseMessage;
+    }
+    const message = (error as Error)?.message;
+    return message || fallback;
+}
+
 export function useProjects() {
     const projects = ref<Project[]>([]);
     const selectedProjectId = ref<string | null>(null);
@@ -18,34 +29,56 @@ export function useProjects() {
         }
     }
 
-    async function createProject(title: string, emoji?: string, description?: string) {
+    async function createProject(
+        title: string,
+        emoji?: string,
+        description?: string,
+        workspaceType: WorkspaceType = 'project',
+        workspacePath?: string
+    ) {
         try {
             const res = await chatApi.createProject({
                 title,
                 emoji: emoji || '📁',
-                description
+                description,
+                workspace_type: workspaceType,
+                workspace_path: workspacePath
             });
             if (res.data.status === 'ok') {
                 await getProjects();
                 return res.data.data;
             }
+            throw new Error(res.data.message || 'Failed to create project');
         } catch (error) {
             console.error('Failed to create project:', error);
+            throw new Error(projectErrorMessage(error, 'Failed to create project'));
         }
     }
 
-    async function updateProject(projectId: string, title?: string, emoji?: string, description?: string) {
+    async function updateProject(
+        projectId: string,
+        title?: string,
+        emoji?: string,
+        description?: string,
+        workspaceType?: WorkspaceType,
+        workspacePath?: string
+    ) {
         try {
             const res = await chatApi.updateProject(projectId, {
                 title,
                 emoji,
-                description
+                description,
+                workspace_type: workspaceType,
+                workspace_path: workspacePath
             });
             if (res.data.status === 'ok') {
                 await getProjects();
+                return;
             }
+            throw new Error(res.data.message || 'Failed to update project');
         } catch (error) {
             console.error('Failed to update project:', error);
+            throw new Error(projectErrorMessage(error, 'Failed to update project'));
         }
     }
 

@@ -150,11 +150,15 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   const mergedModelEntries = computed(() => {
-    const configuredEntries = (sourceProviders.value || []).map((provider: any) => ({
-      type: 'configured',
-      provider,
-      metadata: getModelMetadata(provider.model) || buildMetadataFromProvider(provider)
-    }))
+    const configuredEntries = (sourceProviders.value || []).map((provider: any) => {
+      const metadata = getModelMetadata(provider.model)
+      return {
+        type: 'configured',
+        provider,
+        metadata: metadata || buildMetadataFromProvider(provider),
+        hasModelMetadata: Boolean(metadata)
+      }
+    })
 
     const availableEntries = (sortedAvailableModels.value || [])
       .filter((item: any) => {
@@ -166,7 +170,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         return {
           type: 'available',
           model: name,
-          metadata: typeof item === 'object' ? item?.metadata : getModelMetadata(name)
+          metadata: typeof item === 'object' ? item?.metadata : getModelMetadata(name),
+          hasModelMetadata: Boolean(typeof item === 'object' ? item?.metadata : getModelMetadata(name))
         }
       })
 
@@ -686,6 +691,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           providerTemplates.value = configSchema.value.provider.config_template
         }
         providerSources.value = response.data.data.provider_sources || []
+        modelMetadata.value = (response.data.data.model_metadata || {}) as Record<string, any>
         providers.value = response.data.data.providers || []
       }
     } catch (error) {

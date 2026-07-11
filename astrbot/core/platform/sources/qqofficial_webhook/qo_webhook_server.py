@@ -176,15 +176,6 @@ class QQOfficialWebhook:
             响应数据
         """
         body = await request.get_data()
-        if not _verify_qq_webhook_signature(
-            self.secret,
-            request.headers.get(_SIGNATURE_TIMESTAMP_HEADER),
-            request.headers.get(_SIGNATURE_HEADER),
-            body,
-        ):
-            logger.warning("qq_official_webhook signature verification failed.")
-            return {"error": "Invalid signature"}, 401
-
         try:
             msg = json.loads(body.decode("utf-8"))
         except json.JSONDecodeError:
@@ -204,6 +195,15 @@ class QQOfficialWebhook:
             signed = await self.webhook_validation(cast(dict, data))
             logger.debug(f"webhook validation response: {signed}")
             return signed
+
+        if not _verify_qq_webhook_signature(
+            self.secret,
+            request.headers.get(_SIGNATURE_TIMESTAMP_HEADER),
+            request.headers.get(_SIGNATURE_HEADER),
+            body,
+        ):
+            logger.warning("qq_official_webhook signature verification failed.")
+            return {"error": "Invalid signature"}, 401
 
         event_id = msg.get("id")
         if event_id:

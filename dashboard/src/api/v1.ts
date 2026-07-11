@@ -32,6 +32,8 @@ import {
   type DynamicConfig,
   type EnabledPatch,
   type GhproxyTestRequest,
+  type KnowledgeBaseCreateRequest,
+  type KnowledgeBaseRequest,
   type LoginRequest,
   type ListConversationsData,
   type McpServerConfig,
@@ -76,6 +78,21 @@ export interface ProviderSchemaData {
   config_schema?: OpenConfig;
   providers?: OpenConfig[];
   provider_sources?: OpenConfig[];
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderListData {
+  providers?: OpenConfig[];
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderByTypeEnvelope extends ApiEnvelope<OpenConfig[]> {
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderByIdData {
+  provider?: OpenConfig;
+  model_metadata?: Record<string, unknown>;
 }
 
 export interface ProviderSourceModelsData {
@@ -494,11 +511,13 @@ export const providerApi = {
     );
   },
   list(params?: ProviderListParams) {
-    return typed<{ providers: OpenConfig[] }>(
+    return typed<ProviderListData>(
       openApiV1.listProviders({ query: generatedQuery(params) }),
     );
   },
-  async listByProviderType(providerType: string): Promise<AxiosResponse<ApiEnvelope<OpenConfig[]>>> {
+  async listByProviderType(
+    providerType: string,
+  ): Promise<AxiosResponse<ProviderByTypeEnvelope>> {
     const capabilities = providerTypeToCapabilities(providerType);
     if (capabilities.length === 0) {
       const response = await providerApi.list();
@@ -507,6 +526,7 @@ export const providerApi = {
         data: {
           ...response.data,
           data: response.data.data.providers || [],
+          model_metadata: response.data.data.model_metadata || {},
         },
       };
     }
@@ -515,11 +535,21 @@ export const providerApi = {
       capabilities.map((capability) => providerApi.list({ capability })),
     );
     const first = responses[0];
+    const modelMetadata = responses.reduce<Record<string, unknown>>(
+      (acc, response) => ({
+        ...acc,
+        ...(response.data.data.model_metadata || {}),
+      }),
+      {},
+    );
     return {
       ...first,
       data: {
         ...first.data,
-        data: responses.flatMap((response) => response.data.data.providers || []),
+        data: responses.flatMap(
+          (response) => response.data.data.providers || [],
+        ),
+        model_metadata: modelMetadata,
       },
     };
   },
@@ -543,7 +573,7 @@ export const providerApi = {
     );
   },
   get(providerId: string, merged = false) {
-    return typed<{ provider: OpenConfig }>(
+    return typed<ProviderByIdData>(
       openApiV1.getProviderById({
         query: { provider_id: providerId, merged },
       }),
@@ -1366,16 +1396,16 @@ export const knowledgeApi = {
       openApiV1.getKnowledgeBase({ path: { kb_id: kbId } }),
     );
   },
-  create(config: OpenConfig) {
+  create(config: KnowledgeBaseCreateRequest) {
     return typed<OpenConfig>(
-      openApiV1.createKnowledgeBase({ body: config as any }),
+      openApiV1.createKnowledgeBase({ body: config }),
     );
   },
-  update(kbId: string, config: OpenConfig) {
+  update(kbId: string, config: KnowledgeBaseRequest) {
     return typed<OpenConfig>(
       openApiV1.updateKnowledgeBase({
         path: { kb_id: kbId },
-        body: config as any,
+        body: config,
       }),
     );
   },

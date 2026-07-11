@@ -181,6 +181,9 @@
     "created": "创建成功",
     "startFailed": "发起扫码创建失败",
     "pollFailed": "获取扫码创建状态失败",
+    "platformIdLabel": "机器人 ID",
+    "platformIdRequired": "机器人 ID 不能为空",
+    "platformIdInvalid": "机器人 ID 不能包含空格、':' 或 '!'",
     "mode": {
       "title": "选择创建方式",
       "scan": "扫码一键创建",

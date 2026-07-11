@@ -76,18 +76,49 @@
             <v-list-item-subtitle class="regenerate-model-subtitle">
               <span class="regenerate-model-name">{{ provider.model }}</span>
               <span class="regenerate-model-icons">
-                <v-icon v-if="supportsImageInput(provider)" size="12">
-                  mdi-eye-outline
-                </v-icon>
-                <v-icon v-if="supportsAudioInput(provider)" size="12">
-                  mdi-music-note-outline
-                </v-icon>
-                <v-icon v-if="supportsToolCall(provider)" size="12">
-                  mdi-wrench
-                </v-icon>
-                <v-icon v-if="supportsReasoning(provider)" size="12">
-                  mdi-brain
-                </v-icon>
+                <v-tooltip
+                  v-for="item in capabilityBadges(provider)"
+                  :key="item.key"
+                  location="top"
+                  max-width="320"
+                >
+                  <template #activator="{ props: badgeTooltipProps }">
+                    <span
+                      v-bind="badgeTooltipProps"
+                      class="regenerate-model-icon-badge"
+                      :class="{
+                        'regenerate-model-icon-badge--disabled': !item.enabled,
+                      }"
+                      @click.stop
+                    >
+                      <v-icon size="12">{{ item.icon }}</v-icon>
+                    </span>
+                  </template>
+                  <span>{{ item.tooltip }}</span>
+                </v-tooltip>
+                <v-tooltip
+                  v-if="formatContextLimit(provider, metadataForProvider(provider))"
+                  location="top"
+                  max-width="320"
+                >
+                  <template #activator="{ props: contextTooltipProps }">
+                    <span
+                      v-bind="contextTooltipProps"
+                      class="regenerate-model-context-badge"
+                      @click.stop
+                    >
+                      {{ formatContextLimit(provider, metadataForProvider(provider)) }}
+                    </span>
+                  </template>
+                  <span>{{
+                    providerTm("models.metadata.context", {
+                      tokens: formatContextLimit(
+                        provider,
+                        metadataForProvider(provider),
+                      ),
+                    })
+                  }}</span>
+                </v-tooltip>
               </span>
             </v-list-item-subtitle>
           </v-list-item>
@@ -106,17 +137,16 @@ import { ref } from "vue";
 import { providerApi } from "@/api/v1";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useModuleI18n } from "@/i18n/composables";
+import {
+  formatContextLimit,
+  providerCapabilityBadges,
+  type ProviderModelMetadata,
+  type ProviderMetadataSource,
+} from "@/utils/providerMetadata";
 
-interface ModelMetadata {
-  modalities?: { input?: string[] };
-  tool_call?: boolean;
-  reasoning?: boolean;
-}
-
-interface ProviderConfig {
+interface ProviderConfig extends ProviderMetadataSource {
   id: string;
   model: string;
-  model_metadata?: ModelMetadata;
   enable?: boolean;
 }
 
@@ -131,9 +161,11 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
+const { tm: providerTm } = useModuleI18n("features/provider");
 const providerConfigs = ref<ProviderConfig[]>([]);
 const loadingProviders = ref(false);
 const providersLoaded = ref(false);
+const modelMetadata = ref<Record<string, ProviderModelMetadata>>({});
 
 async function loadProviderConfigs(force = false) {
   if (loadingProviders.value || (providersLoaded.value && !force)) return;
@@ -141,9 +173,12 @@ async function loadProviderConfigs(force = false) {
   try {
     const response = await providerApi.listByProviderType("chat_completion");
     if (response.data.status === "ok") {
-      providerConfigs.value = ((response.data.data || []) as unknown as ProviderConfig[]).filter(
-        (provider: ProviderConfig) => provider.enable !== false,
-      );
+      modelMetadata.value = (
+        response.data.model_metadata || {}
+      ) as Record<string, ProviderModelMetadata>;
+      providerConfigs.value = (
+        (response.data.data || []) as unknown as ProviderConfig[]
+      ).filter((provider: ProviderConfig) => provider.enable !== false);
       providersLoaded.value = true;
     }
   } catch (error) {
@@ -172,20 +207,16 @@ function retryWithModel(provider: ProviderConfig) {
   });
 }
 
-function supportsImageInput(provider: ProviderConfig): boolean {
-  return Boolean(provider.model_metadata?.modalities?.input?.includes("image"));
+function capabilityBadges(provider: ProviderConfig) {
+  return providerCapabilityBadges(
+    provider,
+    metadataForProvider(provider),
+    providerTm,
+  );
 }
 
-function supportsAudioInput(provider: ProviderConfig): boolean {
-  return Boolean(provider.model_metadata?.modalities?.input?.includes("audio"));
-}
-
-function supportsToolCall(provider: ProviderConfig): boolean {
-  return Boolean(provider.model_metadata?.tool_call);
-}
-
-function supportsReasoning(provider: ProviderConfig): boolean {
-  return Boolean(provider.model_metadata?.reasoning);
+function metadataForProvider(provider: ProviderConfig) {
+  return provider.model ? modelMetadata.value[provider.model] || null : null;
 }
 </script>
 
@@ -224,6 +255,29 @@ function supportsReasoning(provider: ProviderConfig): boolean {
   align-items: center;
   gap: 4px;
   color: var(--chat-muted, rgba(var(--v-theme-on-surface), 0.62));
+}
+
+.regenerate-model-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.regenerate-model-icon-badge--disabled {
+  color: rgba(var(--v-theme-on-surface), 0.34);
+}
+
+.regenerate-model-context-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 16px;
 }
 
 .regenerate-empty {

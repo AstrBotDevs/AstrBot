@@ -181,6 +181,9 @@
     "created": "Setup Complete",
     "startFailed": "Failed to start QR setup",
     "pollFailed": "Failed to poll QR setup status",
+    "platformIdLabel": "Bot ID",
+    "platformIdRequired": "Bot ID is required",
+    "platformIdInvalid": "Bot ID cannot contain spaces, ':' or '!'",
     "mode": {
       "title": "Choose setup method",
       "scan": "One-click QR setup",

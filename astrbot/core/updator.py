@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import time
 import zipfile
@@ -8,6 +9,10 @@ import psutil
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.desktop_runtime import (
+    DESKTOP_MANAGED_RESTART_MESSAGE,
+    is_desktop_managed_backend,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.io import ensure_dir
 
@@ -135,6 +140,11 @@ class AstrBotUpdator(RepoZipUpdator):
             quoted_args = [f'"{arg}"' if " " in arg else arg for arg in argv[1:]]
             os.execl(executable, quoted_executable, *quoted_args)
             return
+        elif os.name == "nt":
+            subprocess.Popen(
+                [executable] + argv[1:], creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+            os._exit(0)
         os.execv(executable, argv)
 
     def _reboot(self, delay: int = 3) -> None:
@@ -142,6 +152,10 @@ class AstrBotUpdator(RepoZipUpdator):
         在指定的延迟后，终止所有子进程并重新启动程序
         这里只能使用 os.exec* 来重启程序
         """
+        if is_desktop_managed_backend():
+            logger.error(DESKTOP_MANAGED_RESTART_MESSAGE)
+            raise RuntimeError(DESKTOP_MANAGED_RESTART_MESSAGE)
+
         time.sleep(delay)
         self.terminate_child_processes()
         executable = sys.executable
