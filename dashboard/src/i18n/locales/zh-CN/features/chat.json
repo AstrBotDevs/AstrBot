@@ -307,9 +307,12 @@
       "toolbar": {
         "expandAll": "全部展开",
         "collapseAll": "全部折叠",
+        "selectAll": "全选",
+        "deselectAll": "取消全选",
         "selectedCount": "已选 {count} 个",
         "stageSelected": "暂存 ({count})",
         "unstageSelected": "取消暂存 ({count})",
+        "restoreSelected": "恢复改动 ({count})",
         "clearSelection": "清空选择",
         "selectAllInGroup": "选中 {label} 下的全部文件",
         "selectFile": "选中 {path}"
@@ -508,10 +511,15 @@
         "buttonAria": "恢复文件 {path}",
         "confirmTitle": "恢复文件？",
         "confirmMessage": "将丢弃 \"{path}\" 相对于 index 的所有改动，该操作不可撤销。",
+        "confirmTitleMultiple": "恢复 {count} 个文件？",
+        "confirmMessageMultiple": "将丢弃已选 {count} 个文件的未提交改动，该操作不可撤销。",
         "confirmAction": "恢复",
         "confirmCancel": "取消",
         "success": "已恢复 {path}",
+        "successMultiple": "已恢复 {count} 个文件",
+        "successPartial": "已恢复 {success}/{total} 个文件（{failed} 个失败）",
         "error": {
+          "allFailed": "未能恢复所选的 {count} 个文件",
           "reason": {
             "network": "网络连接失败",
             "unknown": "恢复失败（{reason}）",

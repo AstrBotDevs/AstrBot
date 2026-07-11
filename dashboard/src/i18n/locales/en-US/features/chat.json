@@ -307,9 +307,12 @@
       "toolbar": {
         "expandAll": "Expand all",
         "collapseAll": "Collapse all",
+        "selectAll": "Select all",
+        "deselectAll": "Deselect all",
         "selectedCount": "{count} selected",
         "stageSelected": "Stage ({count})",
         "unstageSelected": "Unstage ({count})",
+        "restoreSelected": "Restore changes ({count})",
         "clearSelection": "Clear selection",
         "selectAllInGroup": "Select all in {label}",
         "selectFile": "Select {path}"
@@ -508,10 +511,15 @@
         "buttonAria": "Restore file {path}",
         "confirmTitle": "Restore file?",
         "confirmMessage": "This will discard all uncommitted changes to \"{path}\". This cannot be undone.",
+        "confirmTitleMultiple": "Restore {count} files?",
+        "confirmMessageMultiple": "This will discard all uncommitted changes in {count} selected files. This cannot be undone.",
         "confirmAction": "Restore",
         "confirmCancel": "Cancel",
         "success": "Restored {path}",
+        "successMultiple": "Restored {count} files",
+        "successPartial": "Restored {success} of {total} files ({failed} failed)",
         "error": {
+          "allFailed": "Failed to restore any of the {count} selected files",
           "reason": {
             "network": "Network error",
             "unknown": "Restore failed ({reason})",
