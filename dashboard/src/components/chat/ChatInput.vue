@@ -656,9 +656,19 @@ function autoResize() {
     return;
   }
   el.style.height = "auto";
+  el.style.setProperty("min-height", "0", "important");
   const measuredHeight = el.scrollHeight;
+  el.style.removeProperty("min-height");
+  const computed = getComputedStyle(el);
+  let lineHeight = parseFloat(computed.lineHeight);
+  if (!Number.isFinite(lineHeight)) {
+    lineHeight = parseFloat(computed.fontSize) * 1.2;
+  }
+  const paddingVertical =
+    parseFloat(computed.paddingTop) + parseFloat(computed.paddingBottom);
   const shouldUseMultiline =
-    localPrompt.value.includes("\n") || measuredHeight > minHeight + 8;
+    localPrompt.value.includes("\n") ||
+    measuredHeight > lineHeight + paddingVertical + 0.5;
   if (inputIsMultiline.value !== shouldUseMultiline) {
     const cursor = el.selectionStart ?? localPrompt.value.length;
     inputIsMultiline.value = shouldUseMultiline;
@@ -1624,10 +1634,10 @@ defineExpose({
   }
 
   .input-container.is-multiline .composer-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-areas:
-      "field field"
-      "left right";
+      "field field field"
+      "left . right";
     min-height: auto;
     row-gap: 4px;
   }
