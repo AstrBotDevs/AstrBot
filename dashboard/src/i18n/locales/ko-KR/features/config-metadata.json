@@ -1740,12 +1740,12 @@
         "hint": "DeerFlow is_plan_mode에 매핑됩니다."
       },
       "deerflow_subagent_enabled": {
-        "description": "서브에이전트 활성화",
+        "description": "서브 에이전트 활성화",
         "hint": "DeerFlow subagent_enabled에 매핑됩니다."
       },
       "deerflow_max_concurrent_subagents": {
-        "description": "최대 동시 서브에이전트 수",
-        "hint": "DeerFlow max_concurrent_subagents에 매핑됩니다. 서브에이전트가 활성화된 경우에만 적용됩니다. 기본값: 3."
+        "description": "최대 동시 서브 에이전트 수",
+        "hint": "DeerFlow max_concurrent_subagents에 매핑됩니다. 서브 에이전트가 활성화된 경우에만 적용됩니다. 기본값: 3."
       },
       "deerflow_recursion_limit": {
         "description": "재귀 한도",
