@@ -407,7 +407,15 @@ class ProviderOpenAIOfficial(Provider):
     def _apply_provider_specific_extra_body_overrides(
         self, extra_body: dict[str, Any]
     ) -> None:
-        if self.provider_config.get("provider") != "ollama":
+        provider = self.provider_config.get("provider")
+
+        # Some NVIDIA NIM models (for example MiniMax M3) return an empty
+        # choices list when max_tokens is omitted. Keep an explicit user value
+        # when configured, otherwise provide the default exposed by the WebUI.
+        if provider == "nvidia":
+            extra_body.setdefault("max_tokens", 8192)
+
+        if provider != "ollama":
             return
         if not self._ollama_disable_thinking_enabled():
             return

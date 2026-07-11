@@ -1298,6 +1298,33 @@ async def test_apply_provider_specific_extra_body_overrides_disables_ollama_thin
 
 
 @pytest.mark.asyncio
+async def test_apply_provider_specific_extra_body_overrides_sets_nvidia_max_tokens():
+    provider = _make_provider({"provider": "nvidia"})
+    try:
+        extra_body = {"temperature": 0.2}
+
+        provider._apply_provider_specific_extra_body_overrides(extra_body)
+
+        assert extra_body["max_tokens"] == 8192
+        assert extra_body["temperature"] == 0.2
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_nvidia_max_tokens_override_preserves_custom_value():
+    provider = _make_provider({"provider": "nvidia"})
+    try:
+        extra_body = {"max_tokens": 4096}
+
+        provider._apply_provider_specific_extra_body_overrides(extra_body)
+
+        assert extra_body["max_tokens"] == 4096
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_injects_reasoning_effort_none_for_ollama(monkeypatch):
     provider = _make_provider(
         {
