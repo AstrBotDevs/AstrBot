@@ -28,6 +28,7 @@ from astrbot import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Json, Plain, Record, Video
 from astrbot.api.message_components import Image as AstrBotImage
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.utils.media_utils import (
     MediaResolver,
     convert_audio_to_opus,
@@ -188,24 +189,31 @@ class LarkMessageEvent(AstrMessageEvent):
             return None
 
     @staticmethod
-    async def _convert_to_lark(message: MessageChain, lark_client: lark.Client) -> list:
+    async def _convert_to_lark(
+        message: MessageChain,
+        lark_client: lark.Client,
+        stop_event: AstrMessageEvent | None = None,
+    ) -> list:
         ret = []
         _stage = []
         for comp in message.chain:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if isinstance(comp, Plain):
                 _stage.append({"tag": "md", "text": comp.text})
             elif isinstance(comp, At):
                 _stage.append({"tag": "at", "user_id": comp.qq, "style": []})
             elif isinstance(comp, AstrBotImage):
                 if not comp.file:
-                    logger.error("[Lark] 图片路径为空，无法上传")
-                    continue
+                    raise RuntimeError("Lark image path is empty.")
 
                 try:
                     async with MediaResolver(
                         comp.file,
                         media_type="image",
                     ).as_path() as image:
+                        if event_requests_agent_stop(stop_event):
+                            raise AgentOutputStopped
                         with image.open("rb") as image_file:
                             request = (
                                 CreateImageRequest.builder()
@@ -219,23 +227,27 @@ class LarkMessageEvent(AstrMessageEvent):
                             )
 
                             if lark_client.im is None:
-                                logger.error(
-                                    "[Lark] API Client im 模块未初始化，无法上传图片"
+                                raise RuntimeError(
+                                    "Lark IM client is unavailable for image upload."
                                 )
-                                continue
 
                             response = await lark_client.im.v1.image.acreate(request)
+                except AgentOutputStopped:
+                    raise
                 except Exception as e:
                     logger.error(f"[Lark] 无法打开或上传图片文件: {e}")
-                    continue
+                    raise RuntimeError("Lark image upload failed.") from e
+
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
 
                 if not response.success():
-                    logger.error(f"无法上传飞书图片({response.code}): {response.msg}")
-                    continue
+                    raise RuntimeError(
+                        f"Lark image upload failed ({response.code}): {response.msg}"
+                    )
 
                 if response.data is None:
-                    logger.error("[Lark] 上传图片成功但未返回数据(data is None)")
-                    continue
+                    raise RuntimeError("Lark image upload returned no data.")
 
                 image_key = response.data.image_key
                 logger.debug(image_key)
@@ -348,7 +360,10 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        stop_event: AstrMessageEvent | None = None,
     ) -> bool:
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if lark_client.cardkit is None:
             logger.error("[Lark] API Client cardkit 模块未初始化，无法发送卡片")
             return False
@@ -367,6 +382,9 @@ class LarkMessageEvent(AstrMessageEvent):
         except Exception as e:
             logger.error(f"[Lark] 创建卡片失败: {e}")
             return False
+
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
 
         if not response.success():
             logger.error(f"[Lark] 创建卡片失败({response.code}): {response.msg}")
@@ -396,6 +414,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        stop_event: AstrMessageEvent | None = None,
     ) -> bool:
         if not reasoning_content:
             return True
@@ -409,6 +428,7 @@ class LarkMessageEvent(AstrMessageEvent):
             reply_message_id=reply_message_id,
             receive_id=receive_id,
             receive_id_type=receive_id_type,
+            stop_event=stop_event,
         )
 
     @staticmethod
@@ -418,6 +438,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         """通用的消息链发送方法
 
@@ -429,8 +450,9 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id_type: 接收者ID类型，如 'open_id', 'chat_id'（用于主动发送）
         """
         if lark_client.im is None:
-            logger.error("[Lark] API Client im 模块未初始化")
-            return
+            raise RuntimeError("Lark IM client is unavailable.")
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
 
         # 分离文件、音频、视频组件和其他组件
         file_components: list[File] = []
@@ -467,8 +489,11 @@ class LarkMessageEvent(AstrMessageEvent):
                 reply_message_id=reply_message_id,
                 receive_id=receive_id,
                 receive_id_type=receive_id_type,
+                stop_event=stop_event,
             ):
                 return
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
 
         # 先发送非文件内容（如果有）
         if other_components:
@@ -486,7 +511,10 @@ class LarkMessageEvent(AstrMessageEvent):
                 res = await LarkMessageEvent._convert_to_lark(
                     pending_chain,
                     lark_client,
+                    stop_event,
                 )
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 if res:  # 只在有内容时发送
                     wrapped = {
                         "zh_cn": {
@@ -494,7 +522,7 @@ class LarkMessageEvent(AstrMessageEvent):
                             "content": res,
                         },
                     }
-                    await LarkMessageEvent._send_im_message(
+                    sent = await LarkMessageEvent._send_im_message(
                         lark_client,
                         content=json.dumps(wrapped),
                         msg_type="post",
@@ -502,9 +530,13 @@ class LarkMessageEvent(AstrMessageEvent):
                         receive_id=receive_id,
                         receive_id_type=receive_id_type,
                     )
+                    if not sent:
+                        raise RuntimeError("Lark message delivery failed.")
 
             # 维持组件顺序：遇到折叠面板标记先 flush 当前普通内容并发送卡片
             for comp in other_components:
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 if isinstance(comp, Json) and isinstance(comp.data, dict):
                     comp_type = comp.data.get("type")
                     if comp_type == "lark_collapsible_panel_reasoning":
@@ -520,6 +552,7 @@ class LarkMessageEvent(AstrMessageEvent):
                                 reply_message_id=reply_message_id,
                                 receive_id=receive_id,
                                 receive_id_type=receive_id_type,
+                                stop_event=stop_event,
                             )
                             if not success:
                                 buffered_components.append(
@@ -534,18 +567,39 @@ class LarkMessageEvent(AstrMessageEvent):
 
         # 发送附件
         for file_comp in file_components:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             await LarkMessageEvent._send_file_message(
-                file_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                file_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                stop_event,
             )
 
         for audio_comp in audio_components:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             await LarkMessageEvent._send_audio_message(
-                audio_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                audio_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                stop_event,
             )
 
         for media_comp in media_components:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             await LarkMessageEvent._send_media_message(
-                media_comp, lark_client, reply_message_id, receive_id, receive_id_type
+                media_comp,
+                lark_client,
+                reply_message_id,
+                receive_id,
+                receive_id_type,
+                stop_event,
             )
 
     async def send(self, message: MessageChain) -> None:
@@ -554,6 +608,7 @@ class LarkMessageEvent(AstrMessageEvent):
             message,
             self.bot,
             reply_message_id=self.message_obj.message_id,
+            stop_event=self,
         )
         await super().send(message)
 
@@ -564,6 +619,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         """发送文件消息
 
@@ -574,15 +630,19 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
         """
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         file_path = file_comp.file or ""
         file_key = await LarkMessageEvent._upload_lark_file(
             lark_client, path=file_path, file_type="stream"
         )
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if not file_key:
-            return
+            raise RuntimeError("Lark file upload failed.")
 
         content = json.dumps({"file_key": file_key})
-        await LarkMessageEvent._send_im_message(
+        sent = await LarkMessageEvent._send_im_message(
             lark_client,
             content=content,
             msg_type="file",
@@ -590,6 +650,8 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id=receive_id,
             receive_id_type=receive_id_type,
         )
+        if not sent:
+            raise RuntimeError("Lark file message delivery failed.")
 
     @staticmethod
     async def _send_audio_message(
@@ -598,6 +660,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         """发送音频消息
 
@@ -608,61 +671,70 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
         """
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         # 获取音频文件路径
         try:
             original_audio_path = await audio_comp.convert_to_file_path()
         except Exception as e:
             logger.error(f"[Lark] 无法获取音频文件路径: {e}")
-            return
+            raise RuntimeError("Lark audio path conversion failed.") from e
+
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
 
         if not original_audio_path or not os.path.exists(original_audio_path):
-            logger.error(f"[Lark] 音频文件不存在: {original_audio_path}")
-            return
+            raise RuntimeError(f"Lark audio file does not exist: {original_audio_path}")
 
         # 转换为opus格式
         converted_audio_path = None
         try:
-            audio_path = await convert_audio_to_opus(original_audio_path)
-            # 如果转换后路径与原路径不同，说明生成了新文件
-            if audio_path != original_audio_path:
-                converted_audio_path = audio_path
-            else:
-                audio_path = original_audio_path
-        except Exception as e:
-            logger.error(f"[Lark] 音频格式转换失败，将尝试直接上传: {e}")
-            # 如果转换失败，继续尝试直接上传原始文件
-            audio_path = original_audio_path
-
-        # 获取音频时长
-        duration = await get_media_duration(audio_path)
-
-        # 上传音频文件
-        file_key = await LarkMessageEvent._upload_lark_file(
-            lark_client,
-            path=audio_path,
-            file_type="opus",
-            duration=duration,
-        )
-
-        # 清理转换后的临时音频文件
-        if converted_audio_path and os.path.exists(converted_audio_path):
             try:
-                os.remove(converted_audio_path)
-                logger.debug(f"[Lark] 已删除转换后的音频文件: {converted_audio_path}")
+                audio_path = await convert_audio_to_opus(original_audio_path)
+                # 如果转换后路径与原路径不同，说明生成了新文件
+                if audio_path != original_audio_path:
+                    converted_audio_path = audio_path
+                else:
+                    audio_path = original_audio_path
             except Exception as e:
-                logger.warning(f"[Lark] 删除转换后的音频文件失败: {e}")
+                logger.error(f"[Lark] 音频格式转换失败，将尝试直接上传: {e}")
+                audio_path = original_audio_path
 
-        if not file_key:
-            return
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
+            duration = await get_media_duration(audio_path)
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
+            file_key = await LarkMessageEvent._upload_lark_file(
+                lark_client,
+                path=audio_path,
+                file_type="opus",
+                duration=duration,
+            )
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
+            if not file_key:
+                raise RuntimeError("Lark audio upload failed.")
 
-        await LarkMessageEvent._send_im_message(
-            lark_client,
-            content=json.dumps({"file_key": file_key}),
-            msg_type="audio",
-            reply_message_id=reply_message_id,
-            receive_id=receive_id,
-            receive_id_type=receive_id_type,
-        )
+            sent = await LarkMessageEvent._send_im_message(
+                lark_client,
+                content=json.dumps({"file_key": file_key}),
+                msg_type="audio",
+                reply_message_id=reply_message_id,
+                receive_id=receive_id,
+                receive_id_type=receive_id_type,
+            )
+            if not sent:
+                raise RuntimeError("Lark audio message delivery failed.")
+        finally:
+            if converted_audio_path and os.path.exists(converted_audio_path):
+                try:
+                    os.remove(converted_audio_path)
+                    logger.debug(
+                        f"[Lark] 已删除转换后的音频文件: {converted_audio_path}"
+                    )
+                except Exception as e:
+                    logger.warning(f"[Lark] 删除转换后的音频文件失败: {e}")
 
     @staticmethod
     async def _send_media_message(
@@ -671,6 +743,7 @@ class LarkMessageEvent(AstrMessageEvent):
         reply_message_id: str | None = None,
         receive_id: str | None = None,
         receive_id_type: str | None = None,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         """发送视频消息
 
@@ -681,61 +754,70 @@ class LarkMessageEvent(AstrMessageEvent):
             receive_id: 接收者ID（用于主动发送）
             receive_id_type: 接收者ID类型（用于主动发送）
         """
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         # 获取视频文件路径
         try:
             original_video_path = await media_comp.convert_to_file_path()
         except Exception as e:
             logger.error(f"[Lark] 无法获取视频文件路径: {e}")
-            return
+            raise RuntimeError("Lark video path conversion failed.") from e
+
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
 
         if not original_video_path or not os.path.exists(original_video_path):
-            logger.error(f"[Lark] 视频文件不存在: {original_video_path}")
-            return
+            raise RuntimeError(f"Lark video file does not exist: {original_video_path}")
 
         # 转换为mp4格式
         converted_video_path = None
         try:
-            video_path = await convert_video_format(original_video_path, "mp4")
-            # 如果转换后路径与原路径不同，说明生成了新文件
-            if video_path != original_video_path:
-                converted_video_path = video_path
-            else:
-                video_path = original_video_path
-        except Exception as e:
-            logger.error(f"[Lark] 视频格式转换失败，将尝试直接上传: {e}")
-            # 如果转换失败，继续尝试直接上传原始文件
-            video_path = original_video_path
-
-        # 获取视频时长
-        duration = await get_media_duration(video_path)
-
-        # 上传视频文件
-        file_key = await LarkMessageEvent._upload_lark_file(
-            lark_client,
-            path=video_path,
-            file_type="mp4",
-            duration=duration,
-        )
-
-        # 清理转换后的临时视频文件
-        if converted_video_path and os.path.exists(converted_video_path):
             try:
-                os.remove(converted_video_path)
-                logger.debug(f"[Lark] 已删除转换后的视频文件: {converted_video_path}")
+                video_path = await convert_video_format(original_video_path, "mp4")
+                # 如果转换后路径与原路径不同，说明生成了新文件
+                if video_path != original_video_path:
+                    converted_video_path = video_path
+                else:
+                    video_path = original_video_path
             except Exception as e:
-                logger.warning(f"[Lark] 删除转换后的视频文件失败: {e}")
+                logger.error(f"[Lark] 视频格式转换失败，将尝试直接上传: {e}")
+                video_path = original_video_path
 
-        if not file_key:
-            return
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
+            duration = await get_media_duration(video_path)
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
+            file_key = await LarkMessageEvent._upload_lark_file(
+                lark_client,
+                path=video_path,
+                file_type="mp4",
+                duration=duration,
+            )
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
+            if not file_key:
+                raise RuntimeError("Lark video upload failed.")
 
-        await LarkMessageEvent._send_im_message(
-            lark_client,
-            content=json.dumps({"file_key": file_key}),
-            msg_type="media",
-            reply_message_id=reply_message_id,
-            receive_id=receive_id,
-            receive_id_type=receive_id_type,
-        )
+            sent = await LarkMessageEvent._send_im_message(
+                lark_client,
+                content=json.dumps({"file_key": file_key}),
+                msg_type="media",
+                reply_message_id=reply_message_id,
+                receive_id=receive_id,
+                receive_id_type=receive_id_type,
+            )
+            if not sent:
+                raise RuntimeError("Lark video message delivery failed.")
+        finally:
+            if converted_video_path and os.path.exists(converted_video_path):
+                try:
+                    os.remove(converted_video_path)
+                    logger.debug(
+                        f"[Lark] 已删除转换后的视频文件: {converted_video_path}"
+                    )
+                except Exception as e:
+                    logger.warning(f"[Lark] 删除转换后的视频文件失败: {e}")
 
     async def react(self, emoji: str) -> None:
         if self.bot.im is None:
@@ -959,10 +1041,16 @@ class LarkMessageEvent(AstrMessageEvent):
             while not done:
                 await text_changed.wait()
                 text_changed.clear()
+                if done:
+                    return
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 snapshot = delta
                 if snapshot and snapshot != last_sent and card_id:
                     sequence += 1
                     ok = await self._update_streaming_text(card_id, snapshot, sequence)
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
                     if ok:
                         last_sent = snapshot
                     if delta != snapshot:
@@ -971,6 +1059,8 @@ class LarkMessageEvent(AstrMessageEvent):
         async def _consume_rest_and_fallback(gen, initial_text: str) -> None:
             """Card creation failed; consume remaining chunks and send non-streaming."""
             nonlocal fallback_used
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             fallback_used = True
             buffer = MessageChain().message(initial_text) if initial_text else None
             async for chain in gen:
@@ -981,6 +1071,8 @@ class LarkMessageEvent(AstrMessageEvent):
                 else:
                     buffer.chain.extend(chain.chain)
             if buffer:
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 buffer.squash_plain()
                 await self.send(buffer)
             asyncio.create_task(
@@ -992,10 +1084,16 @@ class LarkMessageEvent(AstrMessageEvent):
             """补发最终文本并关闭当前卡片的流式模式。"""
             if not card_id:
                 return
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             nonlocal sequence
             if delta and delta != last_sent:
                 sequence += 1
-                await self._update_streaming_text(card_id, delta, sequence)
+                updated = await self._update_streaming_text(card_id, delta, sequence)
+                if not updated:
+                    raise RuntimeError("Lark final streaming update failed.")
+                if event_requests_agent_stop(self):
+                    return
             sequence += 1
             await self._close_streaming_mode(card_id, sequence)
 
@@ -1029,6 +1127,8 @@ class LarkMessageEvent(AstrMessageEvent):
                         # Lazy card creation on first text token
                         if card_id is None:
                             card_id = await self._create_streaming_card()
+                            if event_requests_agent_stop(self):
+                                raise AgentOutputStopped
                             if not card_id:
                                 logger.warning(
                                     "[Lark] 无法创建流式卡片，回退到非流式发送"
@@ -1040,6 +1140,8 @@ class LarkMessageEvent(AstrMessageEvent):
                                 card_id,
                                 reply_message_id=self.message_obj.message_id,
                             )
+                            if event_requests_agent_stop(self):
+                                raise AgentOutputStopped
                             if not sent:
                                 logger.error(
                                     "[Lark] 发送流式卡片消息失败，回退到非流式发送"

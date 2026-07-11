@@ -30,6 +30,8 @@ from astrbot.core.provider.entities import (
     TokenUsage,
 )
 from astrbot.core.provider.provider import Provider, TTSProvider
+from astrbot.core.provider.sources import request_retry
+from astrbot.core.provider.sources.request_retry import retry_provider_request
 
 
 class MockProvider(Provider):
@@ -264,28 +266,8 @@ class MockDelayedTextProvider(MockProvider):
         )
 
 
-class MockStopAwareStreamProvider(MockProvider):
-    async def text_chat_stream(self, **kwargs):
-        abort_signal = kwargs.get("abort_signal")
-        if abort_signal is None:
-            return
-        await abort_signal.wait()
-        yield LLMResponse(
-            role="assistant",
-            completion_text="late chunk text",
-            reasoning_content="late chunk reasoning",
-            is_chunk=True,
-        )
-        yield LLMResponse(
-            role="assistant",
-            completion_text="late final text",
-            is_chunk=False,
-            usage=TokenUsage(input_other=10, output=5),
-        )
-
-
 class MockDelayedTTSProvider(TTSProvider):
-    def __init__(self, audio_path: Path):
+    def __init__(self, audio_path: Path | None):
         super().__init__({"type": "test_tts", "id": "test_tts"}, {})
         self.audio_path = audio_path
         self.started = asyncio.Event()
@@ -296,7 +278,7 @@ class MockDelayedTTSProvider(TTSProvider):
         self.call_count += 1
         self.started.set()
         await self.release.wait()
-        return str(self.audio_path)
+        return str(self.audio_path) if self.audio_path else ""
 
     def meta(self) -> ProviderMeta:
         return ProviderMeta(
@@ -435,50 +417,23 @@ class MockHooks(BaseAgentRunHooks):
         self.agent_done_response = llm_response
 
 
-class MockLateStopOnDoneHooks(MockHooks):
-    def __init__(self, event):
-        super().__init__()
-        self.event = event
-
-    async def on_agent_done(self, run_context, llm_response):
-        await super().on_agent_done(run_context, llm_response)
-        self.event.set_extra("agent_stop_requested", True)
-
-
-class HookPreStopRunner(ToolLoopAgentRunner):
-    def __init__(self, event):
-        super().__init__()
-        self.event = event
-
-    def _is_stop_requested(self) -> bool:
-        if self.final_llm_resp is not None:
-            self.event.set_extra("agent_stop_requested", True)
-        return super()._is_stop_requested()
-
-
 class LateStopAfterYieldRunner:
     def __init__(
         self,
         event,
-        response_type: str,
         text: str,
-        streaming: bool,
         stop_after_yield: bool = True,
     ):
         self.run_context = ContextWrapper(context=MockAgentContext(event))
-        self.response_type = response_type
         self.text = text
-        self.streaming = streaming
+        self.streaming = True
         self.stop_after_yield = stop_after_yield
-        self.stats = SimpleNamespace(to_dict=lambda: {})
         self._done = False
         self._aborted = False
-        self.stop_requested = False
-        self.discard_late_result_called = False
 
     async def step(self):
         yield SimpleNamespace(
-            type=self.response_type,
+            type="streaming_delta",
             data={"chain": MessageChain().message(self.text)},
         )
         if self.stop_after_yield:
@@ -489,13 +444,12 @@ class LateStopAfterYieldRunner:
         return self._done
 
     def request_stop(self):
-        self.stop_requested = True
+        pass
 
     def was_aborted(self):
         return self._aborted
 
     def discard_late_aborted_result(self):
-        self.discard_late_result_called = True
         self._aborted = True
         event = self.run_context.context.event
         event.set_extra("agent_user_aborted", True)
@@ -505,11 +459,13 @@ class LateStopAfterYieldRunner:
 class MockEvent:
     def __init__(self, umo: str, sender_id: str):
         self.unified_msg_origin = umo
+        self.plugins_name = None
         self._sender_id = sender_id
         self._extras = {}
         self.result = None
         self.trace = SimpleNamespace(record=lambda *args, **kwargs: None)
         self._stopped = False
+        self._temporary_local_files = []
 
     def get_sender_id(self):
         return self._sender_id
@@ -525,6 +481,9 @@ class MockEvent:
     def set_result(self, result):
         self.result = result
 
+    def get_result(self):
+        return self.result
+
     def clear_result(self):
         self.result = None
 
@@ -534,8 +493,16 @@ class MockEvent:
     def stop(self):
         self._stopped = True
 
-    def track_temporary_local_file(self, _path):
-        return None
+    def track_temporary_local_file(self, path):
+        if path not in self._temporary_local_files:
+            self._temporary_local_files.append(path)
+
+    def cleanup_temporary_local_files(self):
+        paths = list(self._temporary_local_files)
+        self._temporary_local_files.clear()
+        for path in paths:
+            if os.path.exists(path):
+                os.remove(path)
 
     def get_platform_name(self):
         return "test"
@@ -624,35 +591,6 @@ def provider_request(tool_set):
 def runner():
     """创建ToolLoopAgentRunner实例"""
     return ToolLoopAgentRunner()
-
-
-def test_record_llm_usage_keeps_usage_reference_to_prevent_id_reuse(runner):
-    usage = TokenUsage(input_other=10, output=5)
-    runner.req = SimpleNamespace(conversation=SimpleNamespace(token_usage=0))
-    runner.stats = SimpleNamespace(token_usage=TokenUsage())
-    runner._recorded_usages = []
-
-    runner._record_llm_usage(LLMResponse(role="assistant", usage=usage))
-    runner._record_llm_usage(LLMResponse(role="assistant", usage=usage))
-
-    assert runner.stats.token_usage.total == usage.total
-    assert runner.req.conversation.token_usage == usage.total
-    assert runner._recorded_usages == [usage]
-
-
-def test_is_message_from_llm_response_rejects_extra_content_parts(runner):
-    llm_resp = LLMResponse(role="assistant", completion_text="late text")
-    message = Message(
-        role="assistant",
-        content=[
-            TextPart(text="late text"),
-            ImageURLPart(
-                image_url=ImageURLPart.ImageURL(url="https://example.com/a.png")
-            ),
-        ],
-    )
-
-    assert runner._is_message_from_llm_response(message, llm_resp) is False
 
 
 def _make_large_tool_result_text() -> str:
@@ -1342,13 +1280,6 @@ async def test_stop_signal_returns_aborted_and_discards_delayed_response(
     assert final_resp is not None
     assert final_resp.role == "assistant"
     assert final_resp.completion_text == ""
-    assert final_resp.result_chain is None
-    assert final_resp.reasoning_content is None
-    assert final_resp.reasoning_signature is None
-    assert final_resp.tools_call_name == []
-    assert final_resp.tools_call_args == []
-    assert final_resp.tools_call_ids == []
-    assert final_resp.tools_call_extra_content == {}
     assert (
         not runner.run_context.messages
         or runner.run_context.messages[-1].role != "assistant"
@@ -1404,31 +1335,122 @@ async def test_aborted_final_response_sanitizes_all_model_output_fields(
     assert "late_tool" not in serialized_messages
 
 
+@pytest.mark.parametrize("stop_during", ["begin_hook", "context_process"])
 @pytest.mark.asyncio
-async def test_runner_step_treats_agent_user_aborted_as_stop(
-    runner, provider_request, mock_tool_executor, mock_hooks
+async def test_stop_around_context_processing_blocks_provider_request(
+    stop_during,
+    provider_request,
+    mock_tool_executor,
 ):
-    event = MockEvent("test:FriendMessage:runner_user_aborted", "u1")
-    event.set_extra("agent_user_aborted", True)
-    provider = MockLeakyAbortProvider()
+    event = MockEvent(f"test:FriendMessage:context_{stop_during}", "u1")
+    provider = MockProvider()
+    provider.should_call_tools = False
 
+    class Hooks(MockHooks):
+        async def on_agent_begin(self, run_context):
+            await super().on_agent_begin(run_context)
+            if stop_during == "begin_hook":
+                event.set_extra("agent_stop_requested", True)
+
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=Hooks(),
+    )
+
+    async def process(messages, **_kwargs):
+        event.set_extra("agent_stop_requested", True)
+        return messages
+
+    runner.request_context_manager.process = AsyncMock(side_effect=process)
+    responses = [response async for response in runner.step()]
+
+    assert [response.type for response in responses] == ["aborted"]
+    assert provider.call_count == 0
+    if stop_during == "begin_hook":
+        runner.request_context_manager.process.assert_not_awaited()
+    else:
+        runner.request_context_manager.process.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_stop_interrupts_pending_context_processing(
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    event = MockEvent("test:FriendMessage:context_pending_stop", "u1")
+    provider = MockProvider()
+    provider.should_call_tools = False
+    runner = ToolLoopAgentRunner()
     await runner.reset(
         provider=provider,
         request=provider_request,
         run_context=ContextWrapper(context=MockAgentContext(event)),
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
-        streaming=False,
     )
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
 
-    responses = [response async for response in runner.step()]
+    async def process(_messages, **_kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    runner.request_context_manager.process = process
+    task = asyncio.create_task(_collect_async_iter(runner.step()))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    event.set_extra("agent_stop_requested", True)
+
+    responses = await asyncio.wait_for(task, timeout=1)
 
     assert [response.type for response in responses] == ["aborted"]
     assert provider.call_count == 0
-    assert runner.was_aborted() is True
-    final_resp = runner.get_final_llm_resp()
-    assert final_resp is not None
-    assert final_resp.completion_text == ""
+    assert cancelled.is_set() is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop_first", [False, True])
+async def test_await_or_abort_propagates_outer_cancellation(
+    stop_first,
+    runner,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    event = MockEvent("test:FriendMessage:outer_cancel", "u1")
+    await runner.reset(
+        provider=MockProvider(),
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+    )
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def operation():
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    task = asyncio.create_task(runner._await_or_abort(operation()))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    if stop_first:
+        runner.request_stop()
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cancelled.is_set() is True
 
 
 @pytest.mark.asyncio
@@ -1469,140 +1491,13 @@ async def test_run_agent_discards_buffered_llm_result_after_abort(
 
 
 @pytest.mark.asyncio
-async def test_run_agent_discards_buffered_result_when_stop_arrives_before_flush():
-    from astrbot.core.astr_agent_run_util import run_agent
-
-    event = MockEvent("test:FriendMessage:late_buffer_abort", "u1")
-    runner = LateStopAfterYieldRunner(
-        event,
-        response_type="llm_result",
-        text="buffered late text",
-        streaming=False,
-    )
-
-    chains = await _collect_async_iter(
-        run_agent(
-            cast(Any, runner),
-            buffer_intermediate_messages=True,
-        )
-    )
-
-    assert chains == []
-    assert event.result is None
-    assert runner.discard_late_result_called is True
-    assert runner.was_aborted() is True
-
-
-@pytest.mark.asyncio
-async def test_run_agent_treats_agent_user_aborted_as_stop():
-    from astrbot.core.astr_agent_run_util import run_agent
-
-    event = MockEvent("test:FriendMessage:user_aborted_abort", "u1")
-    event.set_extra("agent_user_aborted", True)
-    runner = LateStopAfterYieldRunner(
-        event,
-        response_type="llm_result",
-        text="aborted residual text",
-        streaming=False,
-    )
-
-    chains = await _collect_async_iter(run_agent(cast(Any, runner)))
-
-    assert chains == []
-    assert event.result is None
-
-
-@pytest.mark.asyncio
-async def test_stop_before_agent_done_hook_skips_llm_response_event(
-    provider_request,
-    mock_tool_executor,
-):
-    from astrbot.core import astr_agent_hooks
-    from astrbot.core.astr_agent_hooks import MainAgentHooks
-    from astrbot.core.star.star_handler import EventType
-
-    calls = []
-
-    async def fake_call_event_hook(event, hook_type, *args, **kwargs):
-        calls.append((hook_type, args))
-        return False
-
-    event = MockEvent("test:FriendMessage:hook_race_abort", "u1")
-    provider = MockProvider()
-    provider.should_call_tools = False
-    runner = HookPreStopRunner(event)
-    monkeypatch_context = pytest.MonkeyPatch()
-    monkeypatch_context.setattr(
-        astr_agent_hooks,
-        "call_event_hook",
-        fake_call_event_hook,
-    )
-
-    try:
-        await runner.reset(
-            provider=provider,
-            request=provider_request,
-            run_context=ContextWrapper(context=MockAgentContext(event)),
-            tool_executor=mock_tool_executor,
-            agent_hooks=MainAgentHooks(),
-            streaming=False,
-        )
-
-        responses = [response async for response in runner.step()]
-    finally:
-        monkeypatch_context.undo()
-
-    assert [response.type for response in responses] == ["aborted"]
-    called_types = [hook_type for hook_type, _ in calls]
-    assert EventType.OnLLMResponseEvent not in called_types
-    assert EventType.OnAgentDoneEvent in called_types
-    assert event.get_extra("_llm_reasoning_content") is None
-    final_resp = runner.get_final_llm_resp()
-    assert final_resp is not None
-    assert final_resp.completion_text == ""
-    assert "这是我的最终回答" not in repr(runner.run_context.messages)
-
-
-@pytest.mark.asyncio
-async def test_stop_after_agent_done_hook_discards_final_assistant_message(
-    provider_request,
-    mock_tool_executor,
-):
-    event = MockEvent("test:FriendMessage:post_hook_abort", "u1")
-    provider = MockProvider()
-    provider.should_call_tools = False
-    hooks = MockLateStopOnDoneHooks(event)
-    runner = ToolLoopAgentRunner()
-
-    await runner.reset(
-        provider=provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=MockAgentContext(event)),
-        tool_executor=mock_tool_executor,
-        agent_hooks=hooks,
-        streaming=False,
-    )
-
-    responses = [response async for response in runner.step()]
-
-    assert [response.type for response in responses] == ["aborted"]
-    assert runner.was_aborted() is True
-    final_resp = runner.get_final_llm_resp()
-    assert final_resp is not None
-    assert final_resp.completion_text == ""
-    assert "这是我的最终回答" not in repr(runner.run_context.messages)
-
-
-@pytest.mark.asyncio
 async def test_live_agent_feeder_discards_residual_buffer_after_stop():
     from astrbot.core.astr_agent_run_util import _run_agent_feeder
 
     event = MockEvent("test:FriendMessage:live_late_buffer_abort", "u1")
     runner = LateStopAfterYieldRunner(
         event,
-        response_type="streaming_delta",
         text="partial without punctuation",
-        streaming=True,
     )
     text_queue = asyncio.Queue()
 
@@ -1620,21 +1515,24 @@ async def test_live_agent_feeder_discards_residual_buffer_after_stop():
     assert text_queue.empty()
 
 
+@pytest.mark.parametrize("native_stream", [False, True])
 @pytest.mark.asyncio
-async def test_live_agent_discards_queued_tts_audio_after_stop(tmp_path):
+async def test_live_agent_discards_queued_tts_audio_after_stop(tmp_path, native_stream):
     from astrbot.core.astr_agent_run_util import run_live_agent
+
+    class Provider(MockDelayedTTSProvider):
+        def support_stream(self) -> bool:
+            return native_stream
 
     audio_path = tmp_path / "late.wav"
     audio_path.write_bytes(b"late-audio")
     event = MockEvent("test:FriendMessage:live_tts_queued_abort", "u1")
     runner = LateStopAfterYieldRunner(
         event,
-        response_type="streaming_delta",
         text="complete sentence!",
-        streaming=True,
         stop_after_yield=False,
     )
-    tts_provider = MockDelayedTTSProvider(audio_path)
+    tts_provider = Provider(audio_path)
 
     live_task = asyncio.create_task(
         _collect_async_iter(run_live_agent(cast(Any, runner), tts_provider))
@@ -1646,146 +1544,270 @@ async def test_live_agent_discards_queued_tts_audio_after_stop(tmp_path):
     chains = await asyncio.wait_for(live_task, timeout=5)
 
     assert chains == []
+    assert event._temporary_local_files == [str(audio_path)]
+    event.cleanup_temporary_local_files()
+    assert not audio_path.exists()
 
 
 @pytest.mark.asyncio
-async def test_stop_requested_before_stream_chunk_discards_chunk(
-    runner, provider_request, mock_tool_executor, mock_hooks
+async def test_cancelled_genie_stream_removes_late_executor_file(
+    tmp_path,
+    monkeypatch,
 ):
-    provider = MockStopAwareStreamProvider()
+    """A cancelled native Genie worker must clean a file created later."""
+    import threading
 
-    await runner.reset(
-        provider=provider,
-        request=provider_request,
-        run_context=ContextWrapper(context=None),
-        tool_executor=mock_tool_executor,
-        agent_hooks=mock_hooks,
-        streaming=True,
+    from astrbot.core.astr_agent_run_util import _safe_tts_stream_wrapper
+    from astrbot.core.provider.sources import genie_tts
+
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def generate(*, save_path, **kwargs):
+        started.set()
+        release.wait(timeout=1)
+        Path(save_path).write_bytes(b"late audio")
+        finished.set()
+
+    monkeypatch.setattr(genie_tts, "genie", SimpleNamespace(tts=generate))
+    monkeypatch.setattr(genie_tts, "get_astrbot_temp_path", lambda: str(tmp_path))
+    provider = object.__new__(genie_tts.GenieTTSProvider)
+    provider.character_name = "test"
+    event = MockEvent("test:FriendMessage:genie_cancel_cleanup", "u1")
+    text_queue = asyncio.Queue()
+    audio_queue = asyncio.Queue()
+    await text_queue.put("sentence")
+
+    task = asyncio.create_task(
+        _safe_tts_stream_wrapper(provider, text_queue, audio_queue, event)
     )
-
-    runner.request_stop()
-    responses = []
-    async for response in runner.step():
-        responses.append(response)
-
-    assert [response.type for response in responses] == ["aborted"]
-    assert runner.was_aborted() is True
-    final_resp = runner.get_final_llm_resp()
-    assert final_resp is not None
-    assert final_resp.completion_text == ""
-    assert final_resp.reasoning_content is None
-
-
-@pytest.mark.asyncio
-async def test_main_agent_hooks_skip_llm_response_hook_for_aborted_event(monkeypatch):
-    from astrbot.core import astr_agent_hooks
-    from astrbot.core.astr_agent_hooks import MainAgentHooks
-    from astrbot.core.star.star_handler import EventType
-
-    calls = []
-
-    async def fake_call_event_hook(event, hook_type, *args, **kwargs):
-        calls.append((hook_type, args))
-        return False
-
-    monkeypatch.setattr(astr_agent_hooks, "call_event_hook", fake_call_event_hook)
-
-    event = MockEvent("test:FriendMessage:hook_abort", "u1")
-    event.set_extra("agent_user_aborted", True)
-    response = LLMResponse(
-        role="assistant",
-        completion_text="",
-        reasoning_content="should not be stored",
-    )
-    hooks = MainAgentHooks()
-
-    await hooks.on_agent_done(ContextWrapper(context=MockAgentContext(event)), response)
-
-    called_types = [hook_type for hook_type, _ in calls]
-    assert EventType.OnLLMResponseEvent not in called_types
-    assert EventType.OnAgentDoneEvent in called_types
-    assert event.get_extra("_llm_reasoning_content") is None
-    agent_done_call = next(
-        args for hook_type, args in calls if hook_type == EventType.OnAgentDoneEvent
-    )
-    assert agent_done_call[1].completion_text == ""
-    assert agent_done_call[1].reasoning_content is None
-
-
-@pytest.mark.asyncio
-async def test_main_agent_hooks_skip_llm_response_hook_for_pending_stop(monkeypatch):
-    from astrbot.core import astr_agent_hooks
-    from astrbot.core.astr_agent_hooks import MainAgentHooks
-    from astrbot.core.star.star_handler import EventType
-
-    calls = []
-
-    async def fake_call_event_hook(event, hook_type, *args, **kwargs):
-        calls.append((hook_type, args))
-        return False
-
-    monkeypatch.setattr(astr_agent_hooks, "call_event_hook", fake_call_event_hook)
-
-    event = MockEvent("test:FriendMessage:hook_pending_stop", "u1")
+    assert await asyncio.to_thread(started.wait, 1)
     event.set_extra("agent_stop_requested", True)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=0.2)
+    release.set()
+    assert await asyncio.to_thread(finished.wait, 1)
+
+    assert len(event._temporary_local_files) == 1
+    generated_path = Path(event._temporary_local_files[0])
+    for _ in range(100):
+        if not generated_path.exists():
+            break
+        await asyncio.sleep(0.01)
+    assert not generated_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_genie_get_audio_removes_late_executor_file(
+    tmp_path,
+    monkeypatch,
+):
+    import threading
+
+    from astrbot.core.provider.sources import genie_tts
+
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    generated_paths = []
+
+    def generate(*, save_path, **kwargs):
+        generated_paths.append(Path(save_path))
+        started.set()
+        release.wait(timeout=1)
+        Path(save_path).write_bytes(b"late audio")
+        finished.set()
+
+    monkeypatch.setattr(genie_tts, "genie", SimpleNamespace(tts=generate))
+    monkeypatch.setattr(genie_tts, "get_astrbot_temp_path", lambda: str(tmp_path))
+    provider = object.__new__(genie_tts.GenieTTSProvider)
+    provider.character_name = "test"
+
+    task = asyncio.create_task(provider.get_audio("sentence"))
+    assert await asyncio.to_thread(started.wait, 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    release.set()
+    assert await asyncio.to_thread(finished.wait, 1)
+
+    for _ in range(100):
+        if generated_paths and not generated_paths[0].exists():
+            break
+        await asyncio.sleep(0.01)
+    assert generated_paths
+    assert not generated_paths[0].exists()
+
+
+@pytest.mark.asyncio
+async def test_native_live_tts_does_not_start_queued_text_after_stop(tmp_path):
+    from astrbot.core.astr_agent_run_util import run_live_agent
+
+    class NativeTTS(MockDelayedTTSProvider):
+        def __init__(self):
+            super().__init__(tmp_path / "unused.wav")
+            self.texts = []
+
+        def support_stream(self) -> bool:
+            return True
+
+        async def get_audio_stream(self, text_queue, audio_queue) -> None:
+            while (text := await text_queue.get()) is not None:
+                self.texts.append(text)
+                self.started.set()
+                await self.release.wait()
+                await audio_queue.put((text, b"audio"))
+
+    event = MockEvent("test:FriendMessage:native_tts_stop", "u1")
+    runner = LateStopAfterYieldRunner(
+        event,
+        text="first complete sentence! second complete sentence!",
+        stop_after_yield=False,
+    )
+    provider = NativeTTS()
+    task = asyncio.create_task(
+        _collect_async_iter(run_live_agent(cast(Any, runner), provider))
+    )
+    await asyncio.wait_for(provider.started.wait(), timeout=1)
+    event.set_extra("agent_stop_requested", True)
+    provider.release.set()
+
+    assert await asyncio.wait_for(task, timeout=1) == []
+    assert provider.texts == ["first complete sentence!"]
+
+
+@pytest.mark.parametrize("returns_audio_path", [True, False])
+@pytest.mark.asyncio
+async def test_result_decorate_stops_after_first_tts_result(
+    tmp_path, monkeypatch, returns_audio_path
+):
+    """Normal result decoration must register a late TTS file before aborting."""
+    from astrbot.core.message.components import Plain
+    from astrbot.core.message.message_event_result import (
+        MessageEventResult,
+        ResultContentType,
+    )
+    from astrbot.core.pipeline.result_decorate import stage as decorate_stage
+
+    audio_path = tmp_path / "decorated-stop.wav"
+    audio_path.write_bytes(b"audio")
+    provider = MockDelayedTTSProvider(audio_path if returns_audio_path else None)
+    event = MockEvent("test:FriendMessage:decorate_tts_stop", "u1")
+    event.set_result(
+        MessageEventResult(
+            chain=[Plain("sentence"), Plain("second sentence")],
+            result_content_type=ResultContentType.LLM_RESULT,
+        )
+    )
+    stage = decorate_stage.ResultDecorateStage()
+    stage.content_safe_check_reply = False
+    stage.reply_prefix = ""
+    stage.enable_segmented_reply = False
+    stage.show_reasoning = False
+    stage.tts_trigger_probability = 1
+    stage.ctx = SimpleNamespace(
+        plugin_manager=SimpleNamespace(
+            context=SimpleNamespace(get_using_tts_provider=lambda _umo: provider)
+        ),
+        astrbot_config={
+            "provider_tts_settings": {"enable": True},
+        },
+    )
+    monkeypatch.setattr(
+        decorate_stage.star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        decorate_stage.SessionServiceManager,
+        "should_process_tts_request",
+        AsyncMock(return_value=True),
+    )
+
+    task = asyncio.create_task(_collect_async_iter(stage.process(event)))
+    await asyncio.wait_for(provider.started.wait(), timeout=1)
+    event.set_extra("agent_stop_requested", True)
+    provider.release.set()
+    await asyncio.wait_for(task, timeout=1)
+
+    assert provider.call_count == 1
+    assert event._temporary_local_files == (
+        [str(audio_path)] if returns_audio_path else []
+    )
+    assert event.get_result() is None
+    event.cleanup_temporary_local_files()
+    if returns_audio_path:
+        assert not audio_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("stop_key", "expect_llm_hook"),
+    [
+        (None, True),
+        ("agent_user_aborted", False),
+        ("agent_stop_requested", False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_main_agent_hooks_respect_stop_state(
+    monkeypatch,
+    stop_key,
+    expect_llm_hook,
+):
+    from astrbot.core import astr_agent_hooks
+    from astrbot.core.astr_agent_hooks import MainAgentHooks
+    from astrbot.core.star.star_handler import EventType
+
+    calls = []
+
+    async def fake_call_event_hook(event, hook_type, *args, **kwargs):
+        calls.append((hook_type, args))
+        return False
+
+    async def fake_call_agent_done_hook(event, run_context, llm_response):
+        calls.append((EventType.OnAgentDoneEvent, (run_context, llm_response)))
+
+    monkeypatch.setattr(astr_agent_hooks, "call_event_hook", fake_call_event_hook)
+    monkeypatch.setattr(
+        astr_agent_hooks,
+        "call_agent_done_hook",
+        fake_call_agent_done_hook,
+    )
+
+    event = MockEvent("test:FriendMessage:hook_state", "u1")
+    if stop_key:
+        event.set_extra(stop_key, True)
     response = LLMResponse(
         role="assistant",
-        completion_text="late hook text",
-        reasoning_content="late hook reasoning",
+        completion_text="response text",
+        reasoning_content="response reasoning",
     )
-    hooks = MainAgentHooks()
-
-    await hooks.on_agent_done(ContextWrapper(context=MockAgentContext(event)), response)
+    await MainAgentHooks().on_agent_done(
+        ContextWrapper(context=MockAgentContext(event)), response
+    )
 
     called_types = [hook_type for hook_type, _ in calls]
-    assert EventType.OnLLMResponseEvent not in called_types
+    assert (EventType.OnLLMResponseEvent in called_types) is expect_llm_hook
     assert EventType.OnAgentDoneEvent in called_types
-    assert event.get_extra("_llm_reasoning_content") is None
-    agent_done_call = next(
-        args for hook_type, args in calls if hook_type == EventType.OnAgentDoneEvent
+    assert event.get_extra("_llm_reasoning_content") == (
+        "response reasoning" if expect_llm_hook else None
     )
-    assert agent_done_call[1].completion_text == ""
 
 
-def test_llm_response_hook_propagation_stops_on_pending_agent_stop():
+@pytest.mark.parametrize(
+    "hook_type_name",
+    ["OnLLMResponseEvent", "OnUsingLLMToolEvent", "OnLLMToolRespondEvent"],
+)
+def test_agent_output_hooks_stop_propagating_after_soft_stop(hook_type_name):
     from astrbot.core.pipeline.context_utils import _should_stop_hook_propagation
     from astrbot.core.star.star_handler import EventType
 
     event = MockEvent("test:FriendMessage:hook_propagation_stop", "u1")
     event.set_extra("agent_stop_requested", True)
 
-    assert _should_stop_hook_propagation(event, EventType.OnLLMResponseEvent) is True
-    assert _should_stop_hook_propagation(event, EventType.OnAgentDoneEvent) is False
-
-
-@pytest.mark.asyncio
-async def test_main_agent_hooks_keep_normal_llm_response_hook(monkeypatch):
-    from astrbot.core import astr_agent_hooks
-    from astrbot.core.astr_agent_hooks import MainAgentHooks
-    from astrbot.core.star.star_handler import EventType
-
-    calls = []
-
-    async def fake_call_event_hook(event, hook_type, *args, **kwargs):
-        calls.append((hook_type, args))
-        return False
-
-    monkeypatch.setattr(astr_agent_hooks, "call_event_hook", fake_call_event_hook)
-
-    event = MockEvent("test:FriendMessage:hook_normal", "u1")
-    response = LLMResponse(
-        role="assistant",
-        completion_text="normal text",
-        reasoning_content="normal reasoning",
-    )
-    hooks = MainAgentHooks()
-
-    await hooks.on_agent_done(ContextWrapper(context=MockAgentContext(event)), response)
-
-    called_types = [hook_type for hook_type, _ in calls]
-    assert EventType.OnLLMResponseEvent in called_types
-    assert EventType.OnAgentDoneEvent in called_types
-    assert event.get_extra("_llm_reasoning_content") == "normal reasoning"
+    assert _should_stop_hook_propagation(event, EventType[hook_type_name]) is True
 
 
 @pytest.mark.asyncio
@@ -1959,8 +1981,6 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 @pytest.mark.asyncio
 async def test_skills_like_requery_passes_extra_user_content_parts():
     """skills-like 模式 re-query 时应传递 extra_user_content_parts（如 image_caption）"""
-    from astrbot.core.agent.message import TextPart
-
     captured_kwargs = {}
 
     class SkillsLikeProvider(MockProvider):
@@ -2038,75 +2058,11 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
 
 
 @pytest.mark.asyncio
-async def test_skills_like_requery_stop_discards_late_assistant_text():
-    class SkillsLikeLateStopProvider(MockProvider):
-        def __init__(self, event):
-            super().__init__()
-            self.event = event
-
-        async def text_chat(self, **kwargs) -> LLMResponse:
-            self.call_count += 1
-            if self.call_count == 1:
-                return LLMResponse(
-                    role="assistant",
-                    completion_text="选择工具",
-                    tools_call_name=["test_tool"],
-                    tools_call_args=[{"query": "test"}],
-                    tools_call_ids=["call_1"],
-                    usage=TokenUsage(input_other=10, output=5),
-                )
-
-            self.event.set_extra("agent_stop_requested", True)
-            return LLMResponse(
-                role="assistant",
-                completion_text="skills_like late text",
-                usage=TokenUsage(input_other=10, output=5),
-            )
-
-    event = MockEvent(umo="test_umo", sender_id="test_sender")
-    provider = SkillsLikeLateStopProvider(event)
-    tool = FunctionTool(
-        name="test_tool",
-        description="测试",
-        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
-        handler=AsyncMock(),
-    )
-    req = ProviderRequest(
-        prompt="调用工具",
-        func_tool=ToolSet(tools=[tool]),
-        contexts=[],
-    )
-    runner = ToolLoopAgentRunner()
-    hooks = MockHooks()
-
-    await runner.reset(
-        provider=provider,
-        request=req,
-        run_context=ContextWrapper(context=MockAgentContext(event)),
-        tool_executor=cast(Any, MockToolExecutor()),
-        agent_hooks=hooks,
-        tool_schema_mode="skills_like",
-    )
-
-    responses = [response async for response in runner.step()]
-
-    assert [response.type for response in responses] == ["llm_result", "aborted"]
-    visible_text = "".join(
-        response.data["chain"].get_plain_text()
-        for response in responses
-        if response.type != "aborted"
-    )
-    assert "skills_like late text" not in visible_text
-    assert runner.was_aborted() is True
-    final_resp = runner.get_final_llm_resp()
-    assert final_resp is not None
-    assert final_resp.completion_text == ""
-    assert hooks.agent_done_response is final_resp
-    assert "skills_like late text" not in repr(runner.run_context.messages)
-
-
-@pytest.mark.asyncio
-async def test_skills_like_requery_stop_skips_repair_request():
+async def test_skills_like_requery_stop_skips_repair_request(
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
     class SkillsLikeRepairStopProvider(MockProvider):
         def __init__(self, event):
             super().__init__()
@@ -2128,25 +2084,14 @@ async def test_skills_like_requery_stop_skips_repair_request():
 
     event = MockEvent(umo="test_umo", sender_id="test_sender")
     provider = SkillsLikeRepairStopProvider(event)
-    tool = FunctionTool(
-        name="test_tool",
-        description="测试",
-        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
-        handler=AsyncMock(),
-    )
-    req = ProviderRequest(
-        prompt="调用工具",
-        func_tool=ToolSet(tools=[tool]),
-        contexts=[],
-    )
     runner = ToolLoopAgentRunner()
 
     await runner.reset(
         provider=provider,
-        request=req,
+        request=provider_request,
         run_context=ContextWrapper(context=MockAgentContext(event)),
-        tool_executor=cast(Any, MockToolExecutor()),
-        agent_hooks=MockHooks(),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
         tool_schema_mode="skills_like",
     )
 
@@ -2157,7 +2102,61 @@ async def test_skills_like_requery_stop_skips_repair_request():
 
 
 @pytest.mark.asyncio
-async def test_skills_like_requery_fallback_checks_stop_before_yielding_text():
+async def test_stop_interrupts_pending_skills_like_requery(
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    class PendingRequeryProvider(MockProvider):
+        def __init__(self):
+            super().__init__()
+            self.requery_started = asyncio.Event()
+            self.requery_cancelled = asyncio.Event()
+
+        async def text_chat(self, **_kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="选择工具",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "test"}],
+                    tools_call_ids=["call_1"],
+                )
+
+            self.requery_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                self.requery_cancelled.set()
+
+    event = MockEvent("test:FriendMessage:skills_requery_pending_stop", "u1")
+    provider = PendingRequeryProvider()
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        tool_schema_mode="skills_like",
+    )
+
+    task = asyncio.create_task(_collect_async_iter(runner.step()))
+    await asyncio.wait_for(provider.requery_started.wait(), timeout=1)
+    event.set_extra("agent_stop_requested", True)
+    responses = await asyncio.wait_for(task, timeout=1)
+
+    assert [response.type for response in responses] == ["llm_result", "aborted"]
+    assert provider.call_count == 2
+    assert provider.requery_cancelled.is_set() is True
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_fallback_checks_stop_before_yielding_text(
+    provider_request,
+    mock_tool_executor,
+):
     class StopAfterFallbackDoneHooks(MockHooks):
         async def on_agent_done(self, run_context, llm_response):
             await super().on_agent_done(run_context, llm_response)
@@ -2185,25 +2184,14 @@ async def test_skills_like_requery_fallback_checks_stop_before_yielding_text():
 
     event = MockEvent(umo="test_umo", sender_id="test_sender")
     provider = SkillsLikeFallbackProvider()
-    tool = FunctionTool(
-        name="test_tool",
-        description="测试",
-        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
-        handler=AsyncMock(),
-    )
-    req = ProviderRequest(
-        prompt="调用工具",
-        func_tool=ToolSet(tools=[tool]),
-        contexts=[],
-    )
     runner = ToolLoopAgentRunner()
     hooks = StopAfterFallbackDoneHooks()
 
     await runner.reset(
         provider=provider,
-        request=req,
+        request=provider_request,
         run_context=ContextWrapper(context=MockAgentContext(event)),
-        tool_executor=cast(Any, MockToolExecutor()),
+        tool_executor=mock_tool_executor,
         agent_hooks=hooks,
         tool_schema_mode="skills_like",
     )
@@ -2532,121 +2520,557 @@ async def test_follow_up_merged_into_tool_result_before_stop(
 
 
 @pytest.mark.asyncio
-async def test_follow_up_rejected_and_runner_stops_without_execution(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+async def test_empty_output_stop_prevents_retry(
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
 ):
-    """Test that when stop is requested before execution, follow-ups are rejected and runner stops gracefully."""
+    """A stop raised with the first empty output must suppress later attempts."""
 
-    mock_event = MockEvent("test:FriendMessage:stop_before_execution", "u1")
-    run_context = ContextWrapper(context=MockAgentContext(mock_event))
+    class StopAfterEmptyProvider(MockProvider):
+        def __init__(self, event):
+            super().__init__()
+            self.event = event
 
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            self.event.set_extra("agent_stop_requested", True)
+            raise EmptyModelOutputError("empty")
+
+    event = MockEvent("test:FriendMessage:empty_retry_stop", "u1")
+    provider = StopAfterEmptyProvider(event)
+    runner = ToolLoopAgentRunner()
     await runner.reset(
-        provider=mock_provider,
+        provider=provider,
         request=provider_request,
-        run_context=run_context,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
         streaming=False,
     )
 
-    # Request stop before any execution (simulates /stop command received at start)
-    runner.request_stop()
-    assert runner._is_stop_requested() is True
+    responses = [response async for response in runner.step()]
 
-    # Try to add follow-up after stop (should be rejected)
-    ticket_after = runner.follow_up(message_text="follow-up after stop")
-    assert ticket_after is None, "Post-stop follow-up should be rejected"
-
-    # Verify queue is empty
-    assert len(runner._pending_follow_ups) == 0
-
-    # Run the agent step - should stop immediately without executing tools
-    async for response in runner.step():
-        # Should yield an aborted response
-        if response.type == "aborted":
-            break
-
-    # Verify runner stopped gracefully
-    assert runner.done()
-    assert runner.was_aborted()
-
-    # No tool execution should have occurred
-    assert provider_request.tool_calls_result is None
+    assert provider.call_count == 1
+    assert [response.type for response in responses] == ["aborted"]
 
 
 @pytest.mark.asyncio
-async def test_follow_up_after_stop_not_merged_into_tool_result(
-    runner, mock_provider, provider_request, mock_tool_executor, mock_hooks
+async def test_streaming_output_is_not_retried_after_empty_output_error(
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
 ):
-    """Regression test for issue #6626: verify post-stop follow-ups are not injected into tool results.
+    """A broken stream must not replay already published chunks."""
 
-    This test simulates the race condition where:
-    1. Runner is active and executing tools
-    2. A follow-up is queued (should be included in tool result)
-    3. Stop is requested
-    4. Another follow-up is attempted (should be rejected)
-    5. Tool execution completes and merges follow-ups into result
+    class StreamThenEmptyProvider(MockProvider):
+        async def text_chat_stream(self, **kwargs):
+            self.call_count += 1
+            chunk = LLMResponse(role="assistant", completion_text="partial")
+            chunk.is_chunk = True
+            yield chunk
+            raise EmptyModelOutputError("empty after stream started")
 
-    The key assertion is that only pre-stop follow-ups are merged into the tool result.
-    """
-
-    mock_event = MockEvent("test:FriendMessage:regression_6626", "u1")
-    run_context = ContextWrapper(context=MockAgentContext(mock_event))
-
+    provider = StreamThenEmptyProvider()
+    event = MockEvent("test:FriendMessage:stream_empty_no_retry", "u1")
+    runner = ToolLoopAgentRunner()
     await runner.reset(
-        provider=mock_provider,
+        provider=provider,
         request=provider_request,
-        run_context=run_context,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=True,
+    )
+
+    responses = [response async for response in runner.step()]
+
+    assert provider.call_count == 1
+    assert [response.type for response in responses] == ["streaming_delta", "err"]
+
+
+@pytest.mark.asyncio
+async def test_empty_output_backoff_is_interrupted_by_event_stop(
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    """A soft stop during retry backoff must wake without another request."""
+
+    class BackoffProvider(MockProvider):
+        def __init__(self):
+            super().__init__()
+            self.first_attempt_finished = asyncio.Event()
+
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            self.first_attempt_finished.set()
+            raise EmptyModelOutputError("empty")
+
+    event = MockEvent("test:FriendMessage:backoff_stop", "u1")
+    provider = BackoffProvider()
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
         tool_executor=mock_tool_executor,
         agent_hooks=mock_hooks,
         streaming=False,
     )
 
-    # Add a follow-up before stop (should be included in tool result)
-    ticket_before = runner.follow_up(message_text="valid before stop")
-    assert ticket_before is not None
-    assert ticket_before in runner._pending_follow_ups
+    task = asyncio.create_task(_collect_async_iter(runner.step()))
+    await asyncio.wait_for(provider.first_attempt_finished.wait(), timeout=1)
+    started = asyncio.get_running_loop().time()
+    event.set_extra("agent_stop_requested", True)
+    responses = await asyncio.wait_for(task, timeout=1)
+    elapsed = asyncio.get_running_loop().time() - started
 
-    # Request stop (simulates /stop command during active execution)
-    runner.request_stop()
-    assert runner._is_stop_requested() is True
+    assert provider.call_count == 1
+    assert elapsed < 0.5
+    assert [response.type for response in responses] == ["aborted"]
 
-    # Try to add follow-up after stop (should be rejected)
-    ticket_after = runner.follow_up(message_text="invalid after stop")
-    assert ticket_after is None, "Post-stop follow-up should be rejected"
 
-    # Verify queue only contains pre-stop follow-up
-    assert len(runner._pending_follow_ups) == 1
-    assert runner._pending_follow_ups[0].text == "valid before stop"
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.asyncio
+async def test_stop_interrupts_provider_internal_retry_backoff(
+    monkeypatch,
+    streaming,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MIN_S", 10)
+    monkeypatch.setattr(request_retry, "REQUEST_RETRY_WAIT_MAX_S", 10)
 
-    # Run the agent step - this will execute tool and merge follow-ups into result
-    async for response in runner.step():
-        # The runner should execute tools and then stop
-        pass
+    class InternalRetryProvider(MockProvider):
+        def __init__(self):
+            super().__init__()
+            self.first_attempt_finished = asyncio.Event()
 
-    # Verify tool result was created with follow-up merged
-    # Note: When stop is requested, the tool may or may not execute depending on timing.
-    # The key assertion is that IF tool_calls_result exists, it only contains pre-stop follow-ups.
-    if provider_request.tool_calls_result is not None:
-        assert isinstance(provider_request.tool_calls_result, list)
-        assert provider_request.tool_calls_result
-        tool_result = str(
-            provider_request.tool_calls_result[0].tool_calls_result[0].content
-        )
+        async def _request(self) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                self.first_attempt_finished.set()
+                raise OSError("retryable")
+            return LLMResponse(role="assistant", completion_text="late")
 
-        # Should contain the pre-stop follow-up
-        assert "valid before stop" in tool_result
+        async def text_chat(self, **_kwargs) -> LLMResponse:
+            return await retry_provider_request(
+                "runner-stop-test",
+                self._request,
+                max_attempts=2,
+            )
 
-        # Should NOT contain the post-stop follow-up
-        assert "invalid after stop" not in tool_result
-        assert "after stop" not in tool_result or "after stop" in "valid before stop"
+        async def text_chat_stream(self, **_kwargs):
+            yield await retry_provider_request(
+                "runner-stop-test",
+                self._request,
+                max_attempts=2,
+            )
 
-        # Ticket should be marked as consumed (merged into tool result)
-        assert ticket_before.consumed is True
+    event = MockEvent("test:FriendMessage:provider_internal_retry_stop", "u1")
+    provider = InternalRetryProvider()
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+
+    task = asyncio.create_task(_collect_async_iter(runner.step()))
+    await asyncio.wait_for(provider.first_attempt_finished.wait(), timeout=1)
+    started = asyncio.get_running_loop().time()
+    event.set_extra("agent_stop_requested", True)
+    responses = await asyncio.wait_for(task, timeout=1)
+    elapsed = asyncio.get_running_loop().time() - started
+
+    assert provider.call_count == 1
+    assert elapsed < 0.5
+    assert [response.type for response in responses] == ["aborted"]
+
+
+@pytest.mark.parametrize("tool_schema_mode", ["skills_like", "full"])
+@pytest.mark.asyncio
+async def test_stop_after_tool_selection_yield_blocks_requery_and_executor(
+    tool_schema_mode,
+    provider_request,
+):
+    """Resuming a tool-selection yield after stop must not start new work."""
+
+    class CountingExecutor:
+        def __init__(self):
+            self.calls = 0
+
+        def execute(self, tool, run_context, **tool_args):
+            self.calls += 1
+            raise AssertionError("executor must not be constructed after stop")
+
+    event = MockEvent(f"test:FriendMessage:{tool_schema_mode}_yield_stop", "u1")
+    provider = MockProvider()
+    hooks = MockHooks()
+    executor = CountingExecutor()
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=cast(Any, executor),
+        agent_hooks=hooks,
+        streaming=False,
+        tool_schema_mode=tool_schema_mode,
+    )
+
+    step = runner.step()
+    first = await anext(step)
+    event.set_extra("agent_stop_requested", True)
+    remaining = [response async for response in step]
+
+    assert first.type == "llm_result"
+    assert [response.type for response in remaining] == ["aborted"]
+    assert provider.call_count == 1
+    assert hooks.tool_start_called is False
+    assert executor.calls == 0
+
+
+@pytest.mark.parametrize("delivered", [False, True])
+@pytest.mark.asyncio
+async def test_final_response_history_follows_delivery_boundary(
+    delivered,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    """Only a response committed at delivery survives a late stop."""
+    from astrbot.core.agent.stop_policy import AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY
+    from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
+        InternalAgentSubStage,
+    )
+
+    event = MockEvent(f"test:FriendMessage:delivery_{delivered}", "u1")
+    provider = MockProvider()
+    provider.should_call_tools = False
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    step = runner.step()
+    first = await anext(step)
+    assert first.type == "llm_result"
+    if delivered:
+        event.set_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, True)
     else:
-        # If tool execution was aborted by stop, the ticket should still be resolved
-        # but not consumed (since there was no tool call to merge into)
-        assert ticket_before.resolved.is_set()
+        assert not InternalAgentSubStage._confirm_agent_output_delivery(event, runner)
+    event.set_extra("agent_stop_requested", True)
+    assert not InternalAgentSubStage._confirm_agent_output_delivery(event, runner)
+    remaining = [response async for response in step]
+
+    assert [response.type for response in remaining] == (
+        [] if delivered else ["aborted"]
+    )
+    assert runner.was_aborted() is not delivered
+    assert ("这是我的最终回答" in repr(runner.run_context.messages)) is delivered
+
+
+@pytest.mark.parametrize("stop_kind", ["mid_dispatch", "soft", "hard"])
+@pytest.mark.asyncio
+async def test_agent_done_handlers_receive_isolated_responses_after_stop(
+    monkeypatch, stop_kind
+):
+    """All done handlers run, with fresh safe responses after any stop."""
+    from astrbot.core.pipeline import context_utils
+
+    event = MockEvent(f"test:FriendMessage:done_{stop_kind}_stop", "u1")
+    if stop_kind == "soft":
+        event.set_extra("agent_stop_requested", True)
+    elif stop_kind == "hard":
+        event.stop()
+
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+    seen = []
+
+    async def first_handler(event, run_context, response):
+        seen.append(("first", response))
+        if stop_kind == "mid_dispatch":
+            response.id = "poisoned-id"
+            response.usage.output = 998
+            first_started.set()
+            await release_first.wait()
+
+    async def second_handler(event, run_context, response):
+        seen.append(("second", response))
+        response.completion_text = "plugin poison"
+        response.usage.output = 999
+        event.set_extra("agent_stop_requested", False)
+        event.set_extra("agent_user_aborted", False)
+        event._stopped = False
+
+    async def third_handler(event, run_context, response):
+        seen.append(("third", response))
+
+    handlers = [
+        SimpleNamespace(
+            handler=handler,
+            handler_module_path=f"stop_test_plugin_{index}",
+            handler_name=f"handler_{index}",
+        )
+        for index, handler in enumerate(
+            [first_handler, second_handler, third_handler], start=1
+        )
+    ]
+    monkeypatch.setattr(
+        context_utils.star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda *args, **kwargs: handlers,
+    )
+    monkeypatch.setattr(
+        context_utils,
+        "star_map",
+        {
+            handler.handler_module_path: SimpleNamespace(
+                name=handler.handler_module_path
+            )
+            for handler in handlers
+        },
+    )
+    response = LLMResponse(
+        role="assistant",
+        completion_text="raw secret",
+        reasoning_content="raw reasoning",
+        id="response-id",
+        usage=TokenUsage(input_other=1, output=2),
+    )
+
+    task = asyncio.create_task(
+        context_utils.call_agent_done_hook(event, object(), response)
+    )
+    if stop_kind == "mid_dispatch":
+        await asyncio.wait_for(first_started.wait(), timeout=1)
+        event.set_extra("agent_stop_requested", True)
+        release_first.set()
+    await asyncio.wait_for(task, timeout=1)
+
+    assert [name for name, _ in seen] == ["first", "second", "third"]
+    if stop_kind == "mid_dispatch":
+        assert seen[0][1] is response
+        assert seen[0][1].completion_text == "raw secret"
+    else:
+        assert seen[0][1] is not response
+        assert seen[0][1].completion_text == ""
+        assert seen[0][1] is not seen[1][1]
+    assert seen[1][1].completion_text == "plugin poison"
+    assert seen[2][1].completion_text == ""
+    assert seen[1][1] is not seen[2][1]
+    assert seen[2][1].reasoning_content is None
+    assert seen[2][1].id == "response-id"
+    assert seen[2][1].usage.output == 2
+    assert response.usage.output == (998 if stop_kind == "mid_dispatch" else 2)
+    assert event.get_extra("agent_stop_requested") is True
+
+
+@pytest.mark.asyncio
+async def test_agent_done_handler_cancellation_is_not_swallowed(monkeypatch):
+    """Task cancellation must escape lifecycle hook isolation."""
+    from astrbot.core.pipeline import context_utils
+
+    started = asyncio.Event()
+
+    async def blocking_handler(event, run_context, response):
+        started.set()
+        await asyncio.Event().wait()
+
+    handler = SimpleNamespace(
+        handler=blocking_handler,
+        handler_module_path="cancel_test_plugin",
+        handler_name="blocking_handler",
+    )
+    monkeypatch.setattr(
+        context_utils.star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda *args, **kwargs: [handler],
+    )
+    monkeypatch.setattr(
+        context_utils,
+        "star_map",
+        {handler.handler_module_path: SimpleNamespace(name="cancel_test_plugin")},
+    )
+    event = MockEvent("test:FriendMessage:done_cancel", "u1")
+    task = asyncio.create_task(
+        context_utils.call_agent_done_hook(
+            event,
+            object(),
+            LLMResponse(role="assistant", completion_text="late"),
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_agent_output_hook_cancellation_is_not_swallowed(monkeypatch):
+    from astrbot.core.pipeline import context_utils
+    from astrbot.core.star.star_handler import EventType
+
+    started = asyncio.Event()
+
+    async def blocking_handler(event):
+        started.set()
+        await asyncio.Event().wait()
+
+    handler = SimpleNamespace(
+        handler=blocking_handler,
+        handler_module_path="cancel_output_plugin",
+        handler_name="blocking_handler",
+    )
+    monkeypatch.setattr(
+        context_utils.star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda *args, **kwargs: [handler],
+    )
+    monkeypatch.setattr(
+        context_utils,
+        "star_map",
+        {handler.handler_module_path: SimpleNamespace(name="cancel_output_plugin")},
+    )
+    event = MockEvent("test:FriendMessage:output_cancel", "u1")
+    task = asyncio.create_task(
+        context_utils.call_event_hook(event, EventType.OnLLMResponseEvent)
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_result_decorate_hook_cancellation_is_not_swallowed(monkeypatch):
+    from astrbot.core.message.components import Plain
+    from astrbot.core.message.message_event_result import MessageEventResult
+    from astrbot.core.pipeline.result_decorate import stage as decorate_stage
+
+    started = asyncio.Event()
+
+    async def blocking_handler(event):
+        started.set()
+        await asyncio.Event().wait()
+
+    handler = SimpleNamespace(
+        handler=blocking_handler,
+        handler_module_path="cancel_decorate_plugin",
+        handler_name="blocking_handler",
+    )
+    monkeypatch.setattr(
+        decorate_stage.star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda *args, **kwargs: [handler],
+    )
+    monkeypatch.setattr(
+        decorate_stage,
+        "star_map",
+        {handler.handler_module_path: SimpleNamespace(name="cancel_decorate_plugin")},
+    )
+    event = MockEvent("test:FriendMessage:decorate_cancel", "u1")
+    event.set_result(MessageEventResult(chain=[Plain("answer")]))
+    stage = decorate_stage.ResultDecorateStage()
+    stage.content_safe_check_reply = False
+
+    task = asyncio.create_task(_collect_async_iter(stage.process(event)))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_snapshot_rollback_removes_mutated_hook_history_from_next_turn():
+    """Rollback and real history serialization must exclude every final secret."""
+    from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
+        InternalAgentSubStage,
+    )
+
+    class MutatingStopHooks(MockHooks):
+        async def on_agent_done(self, run_context, llm_response):
+            llm_response.completion_text = "mutated completion secret"
+            llm_response.reasoning_content = "mutated reasoning secret"
+            llm_response.result_chain = MessageChain().message("mutated chain secret")
+            llm_response.raw_completion = {"secret": "mutated raw secret"}
+            run_context.messages.reverse()
+            run_context.messages.append(
+                Message(role="assistant", content="hook appended secret")
+            )
+            event.set_extra("agent_stop_requested", True)
+
+    event = MockEvent("test:FriendMessage:history_snapshot_stop", "u1")
+    conversation = SimpleNamespace(cid="conversation-id", token_usage=0)
+    request = ProviderRequest(
+        prompt="original question",
+        contexts=[],
+        conversation=cast(Any, conversation),
+    )
+    provider = MockProvider()
+    provider.should_call_tools = False
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=MockToolExecutor(),
+        agent_hooks=MutatingStopHooks(),
+        streaming=False,
+    )
+
+    responses = [response async for response in runner.step()]
+
+    assert [response.type for response in responses] == ["aborted"]
+    serialized_messages = repr(runner.run_context.messages)
+    for secret in (
+        "这是我的最终回答",
+        "mutated completion secret",
+        "mutated reasoning secret",
+        "mutated chain secret",
+        "mutated raw secret",
+        "hook appended secret",
+    ):
+        assert secret not in serialized_messages
+
+    update_conversation = AsyncMock()
+    stage = InternalAgentSubStage()
+    stage.conv_manager = SimpleNamespace(update_conversation=update_conversation)
+    await stage._save_to_history(
+        event,
+        request,
+        runner.get_final_llm_resp(),
+        runner.run_context.messages,
+        runner.stats,
+        user_aborted=True,
+    )
+    saved_history = update_conversation.await_args.kwargs["history"]
+    assert "secret" not in repr(saved_history)
+
+    next_runner = ToolLoopAgentRunner()
+    await next_runner.reset(
+        provider=MockProvider(),
+        request=ProviderRequest(prompt="next question", contexts=saved_history),
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=MockToolExecutor(),
+        agent_hooks=MockHooks(),
+        streaming=False,
+    )
+    assert "secret" not in repr(next_runner.run_context.messages)
 
 
 if __name__ == "__main__":

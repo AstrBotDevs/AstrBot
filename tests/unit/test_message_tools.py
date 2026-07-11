@@ -1,11 +1,18 @@
 """Tests for send_message_to_user session handling."""
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.agent.stop_policy import AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY
+from astrbot.core.message.components import Plain
+from astrbot.core.message.message_event_result import (
+    MessageChain,
+    MessageEventResult,
+    ResultContentType,
+)
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 
@@ -51,6 +58,8 @@ class _DummyRespondEvent:
         self._result = MessageEventResult().message(result_text)
         self.send = AsyncMock()
         self.plugins_name = []
+        self.platform_meta = SimpleNamespace(name="test")
+        self._has_send_oper = False
 
     def get_result(self):
         """Return the current message result."""
@@ -188,13 +197,21 @@ async def test_respond_stage_skips_same_text_after_send_message_to_user():
     event.send.assert_not_awaited()
 
 
+@pytest.mark.parametrize("send_fails", [False, True])
 @pytest.mark.asyncio
-async def test_respond_stage_sends_different_text_after_send_message_to_user():
-    """RespondStage still sends a distinct completion after the tool call."""
+async def test_respond_stage_commits_only_successful_send(send_fails):
+    """Commit immediately after success, but never after a failed write."""
     stage = _make_respond_stage()
     event = _DummyRespondEvent(
         result_text="I have sent the message with the tool.",
         sent_plain_texts=["duplicate reply"],
+    )
+
+    async def send_then_stop(_chain):
+        event.set_extra("agent_stop_requested", True)
+
+    event.send.side_effect = (
+        RuntimeError("network failed before write") if send_fails else send_then_stop
     )
 
     result = await stage.process(event)
@@ -202,6 +219,142 @@ async def test_respond_stage_sends_different_text_after_send_message_to_user():
     assert result is None
     event.send.assert_awaited_once()
     assert event.get_result() is None
+    assert bool(event.get_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, False)) is (
+        not send_fails
+    )
+
+
+@pytest.mark.asyncio
+async def test_respond_stage_stops_during_segment_delay(monkeypatch):
+    """A stop during segmented delay must suppress every pending component."""
+    stage = _make_respond_stage()
+    stage.enable_seg = True
+    stage.only_llm_result = False
+    stage._calc_comp_interval = AsyncMock(return_value=1)
+    event = _DummyRespondEvent("unused", [])
+    event._result.chain = [Plain("first"), Plain("second")]
+    sleep_started = asyncio.Event()
+    release_sleep = asyncio.Event()
+
+    async def blocked_sleep(_delay):
+        sleep_started.set()
+        await release_sleep.wait()
+
+    monkeypatch.setattr(
+        "astrbot.core.pipeline.respond.stage.asyncio.sleep", blocked_sleep
+    )
+    task = asyncio.create_task(stage.process(event))
+    await asyncio.wait_for(sleep_started.wait(), timeout=1)
+    event.set_extra("agent_stop_requested", True)
+    release_sleep.set()
+    await asyncio.wait_for(task, timeout=1)
+
+    event.send.assert_not_awaited()
+    assert event.get_result() is None
+    assert not event.get_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, False)
+
+
+@pytest.mark.parametrize("exit_mode", ["stop", "adapter_return"])
+@pytest.mark.asyncio
+async def test_respond_stage_closes_undelivered_stream(exit_mode):
+    """Stopped and prematurely abandoned streams must close without a flush."""
+    stage = _make_respond_stage()
+    event = _DummyRespondEvent("unused", [])
+    source_waiting = asyncio.Event()
+    release_source = asyncio.Event()
+    source_closed = asyncio.Event()
+    flushed = []
+
+    async def source_stream():
+        try:
+            yield MessageChain().message("buffered secret")
+            source_waiting.set()
+            await release_source.wait()
+        finally:
+            source_closed.set()
+
+    async def buffering_adapter(generator, _use_fallback):
+        buffered = []
+        async for chain in generator:
+            buffered.append(chain.get_plain_text())
+            if exit_mode == "adapter_return":
+                return
+        flushed.extend(buffered)
+
+    event.send_streaming = buffering_adapter
+    event._result = (
+        MessageEventResult()
+        .set_result_content_type(ResultContentType.STREAMING_RESULT)
+        .set_async_stream(source_stream())
+    )
+    task = asyncio.create_task(stage.process(event))
+    if exit_mode == "stop":
+        await asyncio.wait_for(source_waiting.wait(), timeout=1)
+        event.set_extra("agent_stop_requested", True)
+        release_source.set()
+    await asyncio.wait_for(task, timeout=1)
+
+    assert flushed == []
+    assert source_closed.is_set()
+    assert event.get_result() is None
+    assert not event.get_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, False)
+
+
+@pytest.mark.parametrize("empty_stream_kind", ["none", "break", "whitespace"])
+@pytest.mark.asyncio
+async def test_respond_stage_does_not_commit_empty_stream(empty_stream_kind):
+    """An exhausted stream without payload must not confirm delivery."""
+    stage = _make_respond_stage()
+    event = _DummyRespondEvent("unused", [])
+
+    async def source_stream():
+        if empty_stream_kind == "break":
+            yield MessageChain(chain=[], type="break")
+        elif empty_stream_kind == "whitespace":
+            yield MessageChain([Plain("   ")])
+
+    async def buffering_adapter(generator, _use_fallback):
+        async for _ in generator:
+            pass
+
+    event.send_streaming = buffering_adapter
+    event._result = (
+        MessageEventResult()
+        .set_result_content_type(ResultContentType.STREAMING_RESULT)
+        .set_async_stream(source_stream())
+    )
+
+    await stage.process(event)
+
+    assert event.get_result() is None
+    assert not event.get_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, False)
+
+
+@pytest.mark.asyncio
+async def test_respond_stage_clears_stream_after_adapter_failure():
+    """A failed final flush must not leave an exhausted streaming result."""
+    stage = _make_respond_stage()
+    event = _DummyRespondEvent("unused", [])
+
+    async def source_stream():
+        yield MessageChain([Plain("undelivered")])
+
+    async def failing_adapter(generator, _use_fallback):
+        async for _ in generator:
+            pass
+        raise RuntimeError("final flush failed")
+
+    event.send_streaming = failing_adapter
+    event._result = (
+        MessageEventResult()
+        .set_result_content_type(ResultContentType.STREAMING_RESULT)
+        .set_async_stream(source_stream())
+    )
+
+    await stage.process(event)
+
+    assert event.get_result() is None
+    assert not event.get_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, False)
 
 
 @pytest.mark.asyncio

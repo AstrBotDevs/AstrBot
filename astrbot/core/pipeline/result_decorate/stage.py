@@ -1,3 +1,4 @@
+import asyncio
 import random
 import re
 import time
@@ -5,6 +6,7 @@ import traceback
 from collections.abc import AsyncGenerator
 
 from astrbot.core import file_token_service, html_renderer, logger
+from astrbot.core.agent.stop_policy import event_requests_agent_stop
 from astrbot.core.message.components import At, Image, Json, Node, Plain, Record, Reply
 from astrbot.core.message.message_event_result import ResultContentType
 from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckStage
@@ -16,6 +18,13 @@ from astrbot.core.star.star_handler import EventType, star_handlers_registry
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage, registered_stages
+
+
+def _discard_result_if_stopped(event: AstrMessageEvent) -> bool:
+    if not event_requests_agent_stop(event):
+        return False
+    event.clear_result()
+    return True
 
 
 @register_stage
@@ -127,6 +136,8 @@ class ResultDecorateStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
+        if _discard_result_if_stopped(event):
+            return
         result = event.get_result()
         if result is None or not result.chain:
             return
@@ -154,6 +165,10 @@ class ResultDecorateStage(Stage):
                     check_text=text,
                 ):
                     yield
+                    if _discard_result_if_stopped(event):
+                        return
+                if _discard_result_if_stopped(event):
+                    return
 
         # 发送消息前事件钩子
         handlers = star_handlers_registry.get_handlers_by_event_type(
@@ -175,10 +190,12 @@ class ResultDecorateStage(Stage):
                     logger.debug(
                         f"hook(on_decorating_result) -> {star_map[handler.handler_module_path].name} - {handler.handler_name} 将消息结果清空。",
                     )
+            except asyncio.CancelledError:
+                raise
             except BaseException:
                 logger.error(traceback.format_exc())
 
-            if event.is_stopped():
+            if _discard_result_if_stopped(event):
                 logger.info(
                     f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
                 )
@@ -264,10 +281,8 @@ class ResultDecorateStage(Stage):
                 and random.random() <= self.tts_trigger_probability
                 and tts_provider
             )
-            if should_tts and not tts_provider:
-                logger.warning(
-                    f"会话 {event.unified_msg_origin} 未配置文本转语音模型。",
-                )
+            if _discard_result_if_stopped(event):
+                return
 
             if (
                 not should_tts
@@ -297,18 +312,22 @@ class ResultDecorateStage(Stage):
                 new_chain = []
                 for comp in result.chain:
                     if isinstance(comp, Plain) and len(comp.text) > 1:
+                        if _discard_result_if_stopped(event):
+                            return
                         try:
                             logger.info(f"TTS 请求: {comp.text}")
                             audio_path = await tts_provider.get_audio(comp.text)
                             logger.info(f"TTS 结果: {audio_path}")
+                            if audio_path:
+                                event.track_temporary_local_file(audio_path)
+                            if _discard_result_if_stopped(event):
+                                return
                             if not audio_path:
                                 logger.error(
                                     f"由于 TTS 音频文件未找到，消息段转语音失败: {comp.text}",
                                 )
                                 new_chain.append(comp)
                                 continue
-
-                            event.track_temporary_local_file(audio_path)
 
                             use_file_service = self.ctx.astrbot_config[
                                 "provider_tts_settings"
@@ -325,6 +344,8 @@ class ResultDecorateStage(Stage):
                                 token = await file_token_service.register_file(
                                     audio_path,
                                 )
+                                if _discard_result_if_stopped(event):
+                                    return
                                 url = f"{callback_api_base}/api/file/{token}"
                                 logger.debug(f"已注册：{url}")
 
@@ -338,6 +359,8 @@ class ResultDecorateStage(Stage):
                             if dual_output:
                                 new_chain.append(comp)
                         except Exception:
+                            if _discard_result_if_stopped(event):
+                                return
                             logger.error(traceback.format_exc())
                             logger.error("TTS 失败，使用文本发送。")
                             new_chain.append(comp)
@@ -365,6 +388,10 @@ class ResultDecorateStage(Stage):
                             use_network=self.t2i_use_network,
                             template_name=self.t2i_active_template,
                         )
+                        if _discard_result_if_stopped(event):
+                            return
+                    except asyncio.CancelledError:
+                        raise
                     except BaseException:
                         logger.error("文本转图片失败，使用文本发送。")
                         return
@@ -380,6 +407,8 @@ class ResultDecorateStage(Stage):
                             and self.ctx.astrbot_config["callback_api_base"]
                         ):
                             token = await file_token_service.register_file(url)
+                            if _discard_result_if_stopped(event):
+                                return
                             url = f"{self.ctx.astrbot_config['callback_api_base']}/api/file/{token}"
                             logger.debug(f"已注册：{url}")
                             result.chain = [Image.fromURL(url)]

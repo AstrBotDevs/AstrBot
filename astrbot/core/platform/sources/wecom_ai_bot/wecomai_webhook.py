@@ -12,8 +12,9 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import aiohttp
 
 from astrbot.api import logger
-from astrbot.api.event import MessageChain
+from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Video
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.utils.media_utils import convert_audio_format
 
 
@@ -78,8 +79,14 @@ class WecomAIBotWebhookClient:
                     )
         logger.debug("企业微信消息推送成功: %s", payload.get("msgtype", "unknown"))
 
-    async def send_markdown_v2(self, content: str) -> None:
+    async def send_markdown_v2(
+        self,
+        content: str,
+        stop_event: AstrMessageEvent | None = None,
+    ) -> None:
         for chunk in self._split_markdown_v2_content(content):
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             await self.send_payload(
                 {
                     "msgtype": "markdown_v2",
@@ -87,9 +94,15 @@ class WecomAIBotWebhookClient:
                 }
             )
 
-    async def send_image_base64(self, image_base64: str) -> None:
+    async def send_image_base64(
+        self,
+        image_base64: str,
+        stop_event: AstrMessageEvent | None = None,
+    ) -> None:
         image_bytes = base64.b64decode(image_base64)
         md5 = hashlib.md5(image_bytes).hexdigest()
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         await self.send_payload(
             {
                 "msgtype": "image",
@@ -101,8 +114,13 @@ class WecomAIBotWebhookClient:
         )
 
     async def upload_media(
-        self, file_path: Path, media_type: Literal["file", "voice"]
+        self,
+        file_path: Path,
+        media_type: Literal["file", "voice"],
+        stop_event: AstrMessageEvent | None = None,
     ) -> str:
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if not file_path.exists() or not file_path.is_file():
             raise WecomAIBotWebhookError(f"文件不存在: {file_path}")
 
@@ -138,8 +156,14 @@ class WecomAIBotWebhookClient:
                     raise WecomAIBotWebhookError("上传媒体失败: 返回缺少 media_id")
                 return str(media_id)
 
-    async def send_file(self, file_path: Path) -> None:
-        media_id = await self.upload_media(file_path, "file")
+    async def send_file(
+        self,
+        file_path: Path,
+        stop_event: AstrMessageEvent | None = None,
+    ) -> None:
+        media_id = await self.upload_media(file_path, "file", stop_event)
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         await self.send_payload(
             {
                 "msgtype": "file",
@@ -147,8 +171,14 @@ class WecomAIBotWebhookClient:
             }
         )
 
-    async def send_voice(self, file_path: Path) -> None:
-        media_id = await self.upload_media(file_path, "voice")
+    async def send_voice(
+        self,
+        file_path: Path,
+        stop_event: AstrMessageEvent | None = None,
+    ) -> None:
+        media_id = await self.upload_media(file_path, "voice", stop_event)
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         await self.send_payload(
             {
                 "msgtype": "voice",
@@ -164,16 +194,19 @@ class WecomAIBotWebhookClient:
         self,
         message_chain: MessageChain,
         unsupported_only: bool = False,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         async def flush_markdown_buffer(parts: list[str]) -> None:
             content = "".join(parts).strip()
             parts.clear()
             if content:
-                await self.send_markdown_v2(content)
+                await self.send_markdown_v2(content, stop_event)
 
         markdown_buffer: list[str] = []
 
         for component in message_chain.chain:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if unsupported_only and self.is_stream_supported_component(component):
                 continue
             if isinstance(component, Plain):
@@ -184,21 +217,29 @@ class WecomAIBotWebhookClient:
             elif isinstance(component, Image):
                 await flush_markdown_buffer(markdown_buffer)
                 image_base64 = await component.convert_to_base64()
-                await self.send_image_base64(image_base64)
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                await self.send_image_base64(image_base64, stop_event)
             elif isinstance(component, File):
                 await flush_markdown_buffer(markdown_buffer)
                 file_path = await component.get_file()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 if not file_path:
                     logger.warning("文件消息缺少有效文件路径，已跳过: %s", component)
                     continue
-                await self.send_file(Path(file_path))
+                await self.send_file(Path(file_path), stop_event)
             elif isinstance(component, Video):
                 await flush_markdown_buffer(markdown_buffer)
                 video_path = await component.convert_to_file_path()
-                await self.send_file(Path(video_path))
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                await self.send_file(Path(video_path), stop_event)
             elif isinstance(component, Record):
                 await flush_markdown_buffer(markdown_buffer)
                 source_voice_path = Path(await component.convert_to_file_path())
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 target_voice_path = source_voice_path
                 converted = False
                 if source_voice_path.suffix.lower() != ".amr":
@@ -207,7 +248,9 @@ class WecomAIBotWebhookClient:
                     )
                     converted = target_voice_path != source_voice_path
                 try:
-                    await self.send_voice(target_voice_path)
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
+                    await self.send_voice(target_voice_path, stop_event)
                 finally:
                     if converted and target_voice_path.exists():
                         try:

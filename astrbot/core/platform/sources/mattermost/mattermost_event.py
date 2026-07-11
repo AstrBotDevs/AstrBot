@@ -1,10 +1,10 @@
-import asyncio
 import re
 from collections.abc import AsyncGenerator
 
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Plain
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 
 from .client import MattermostClient
 
@@ -26,7 +26,13 @@ class MattermostMessageEvent(AstrMessageEvent):
             self.track_temporary_local_file(path)
 
     async def send(self, message: MessageChain) -> None:
-        await self.client.send_message_chain(self.get_session_id(), message)
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
+        await self.client.send_message_chain(
+            self.get_session_id(),
+            message,
+            stop_event=self,
+        )
         await super().send(message)
 
     async def send_streaming(
@@ -39,6 +45,8 @@ class MattermostMessageEvent(AstrMessageEvent):
         if not use_fallback:
             message_buffer: MessageChain | None = None
             async for chain in generator:
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 if not message_buffer:
                     message_buffer = chain
                 else:
@@ -52,8 +60,12 @@ class MattermostMessageEvent(AstrMessageEvent):
         text_buffer = ""
 
         async for chain in generator:
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
                     if isinstance(comp, Plain):
                         text_buffer += comp.text
                         if any(p in text_buffer for p in "。？！~…"):
@@ -62,8 +74,7 @@ class MattermostMessageEvent(AstrMessageEvent):
                                 self._FALLBACK_SENTENCE_PATTERN,
                             )
                     else:
-                        await self.send(MessageChain(chain=[comp]))
-                        await asyncio.sleep(1.5)
+                        await self.send_streaming_fallback_component(comp)
 
         if text_buffer.strip():
             await self.send(MessageChain([Plain(text_buffer)]))

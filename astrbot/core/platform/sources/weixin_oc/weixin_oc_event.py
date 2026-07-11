@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import uuid
 from typing import TYPE_CHECKING
 
@@ -14,6 +13,7 @@ from astrbot.api.message_components import (
     Record,
     Video,
 )
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 
 if TYPE_CHECKING:  # pragma: no cover - typing helper
     from .weixin_oc_adapter import WeixinOCAdapter
@@ -60,9 +60,11 @@ class WeixinOCMessageEvent(AstrMessageEvent):
         )
 
     async def send(self, message: MessageChain) -> None:
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         if not message.chain:
             return
-        await self.platform.send_by_session(self.session, message)
+        await self.platform.send_by_session(self.session, message, stop_event=self)
         await super().send(message)
 
     async def send_typing(self) -> None:
@@ -81,6 +83,8 @@ class WeixinOCMessageEvent(AstrMessageEvent):
         if not use_fallback:
             buffer = None
             async for chain in generator:
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 if not buffer:
                     buffer = chain
                 else:
@@ -92,12 +96,15 @@ class WeixinOCMessageEvent(AstrMessageEvent):
 
         buffer = ""
         async for chain in generator:
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             if not isinstance(chain, MessageChain):
                 continue
             for component in chain.chain:
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 if not isinstance(component, Plain):
-                    await self.send(MessageChain(chain=[component]))
-                    await asyncio.sleep(1.2)
+                    await self.send_streaming_fallback_component(component, delay=1.2)
                     continue
                 buffer += component.text
         if buffer.strip():

@@ -5,6 +5,11 @@ from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger
+from astrbot.core.agent.stop_policy import (
+    AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY,
+    AgentOutputStopped,
+    event_requests_agent_stop,
+)
 from astrbot.core.message.components import BaseMessageComponent, ComponentType
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -13,6 +18,13 @@ from astrbot.core.utils.path_util import path_Mapping
 
 from ..context import PipelineContext, call_event_hook
 from ..stage import Stage, register_stage
+
+
+def _discard_result_if_stopped(event: AstrMessageEvent) -> bool:
+    if not event_requests_agent_stop(event):
+        return False
+    event.clear_result()
+    return True
 
 
 @register_stage
@@ -170,6 +182,8 @@ class RespondStage(Stage):
         self,
         event: AstrMessageEvent,
     ) -> None | AsyncGenerator[None, None]:
+        if _discard_result_if_stopped(event):
+            return
         result = event.get_result()
         if result is None:
             return
@@ -201,6 +215,7 @@ class RespondStage(Stage):
             logger.info(
                 "send_message_to_user already delivered the same text in this session, skip respond stage to avoid duplicate reply.",
             )
+            event.set_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, True)
             return
 
         logger.info(
@@ -220,8 +235,52 @@ class RespondStage(Stage):
                 == "realtime_segmenting"
             )
             logger.info(f"应用流式输出({event.get_platform_id()})")
-            await event.send_streaming(result.async_stream, realtime_segmenting)
+            source_stream = result.async_stream
+            source_exhausted = False
+            source_has_payload = False
+            stream_delivery_succeeded = False
+
+            async def _guarded_stream():
+                nonlocal source_exhausted, source_has_payload
+                async for chain in source_stream:
+                    if event_requests_agent_stop(event):
+                        raise AgentOutputStopped
+                    if any(
+                        not isinstance(component, Comp.Plain)
+                        or bool(component.text.strip())
+                        for component in chain.chain
+                    ):
+                        source_has_payload = True
+                    yield chain
+                    if event_requests_agent_stop(event):
+                        raise AgentOutputStopped
+                if event_requests_agent_stop(event):
+                    raise AgentOutputStopped
+                source_exhausted = True
+
+            guarded_stream = _guarded_stream()
+            try:
+                await event.send_streaming(guarded_stream, realtime_segmenting)
+            except AgentOutputStopped:
+                pass
+            except Exception as e:
+                logger.error("发送流式消息失败: %s", e, exc_info=True)
+            else:
+                if source_exhausted and source_has_payload:
+                    stream_delivery_succeeded = True
+                    event.set_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, True)
+            finally:
+                await guarded_stream.aclose()
+                close_source = getattr(source_stream, "aclose", None)
+                if close_source is not None:
+                    await close_source()
+            if not stream_delivery_succeeded:
+                event.clear_result()
+            _discard_result_if_stopped(event)
             return
+
+        sent_any = False
+        send_failed = False
         if len(result.chain) > 0:
             # 检查路径映射
             if mappings := self.platform_settings.get("path_mapping", []):
@@ -266,18 +325,28 @@ class RespondStage(Stage):
                     return
                 for comp in result.chain:
                     i = await self._calc_comp_interval(comp)
+                    if _discard_result_if_stopped(event):
+                        return
                     await asyncio.sleep(i)
+                    if _discard_result_if_stopped(event):
+                        return
                     try:
                         if comp.type in need_separately:
                             await event.send(result.derive([comp]))
                         else:
                             await event.send(result.derive([*header_comps, comp]))
                             header_comps.clear()
+                    except AgentOutputStopped:
+                        event.clear_result()
+                        return
                     except Exception as e:
+                        send_failed = True
                         logger.error(
                             f"发送消息链失败: chain = {MessageChain([comp])}, error = {e}",
                             exc_info=True,
                         )
+                    else:
+                        sent_any = True
             else:
                 if all(
                     comp.type in {ComponentType.Reply, ComponentType.At}
@@ -294,24 +363,46 @@ class RespondStage(Stage):
                     modify_raw_chain=True,
                 )
                 for comp in sep_comps:
+                    if _discard_result_if_stopped(event):
+                        return
                     chain = result.derive([comp])
                     try:
                         await event.send(chain)
+                    except AgentOutputStopped:
+                        event.clear_result()
+                        return
                     except Exception as e:
+                        send_failed = True
                         logger.error(
                             f"发送消息链失败: chain = {chain}, error = {e}",
                             exc_info=True,
                         )
+                    else:
+                        sent_any = True
                 chain = result.derive(result.chain)
                 if result.chain and len(result.chain) > 0:
+                    if _discard_result_if_stopped(event):
+                        return
                     try:
                         await event.send(chain)
+                    except AgentOutputStopped:
+                        event.clear_result()
+                        return
                     except Exception as e:
+                        send_failed = True
                         logger.error(
                             f"发送消息链失败: chain = {chain}, error = {e}",
                             exc_info=True,
                         )
+                    else:
+                        sent_any = True
 
+        if not sent_any or send_failed:
+            event.clear_result()
+            return
+        event.set_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, True)
+        if _discard_result_if_stopped(event):
+            return
         if await call_event_hook(event, EventType.OnAfterMessageSentEvent):
             return
 

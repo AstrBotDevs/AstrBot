@@ -22,6 +22,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, MessageType, PlatformMetadata
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.utils.metrics import Metric
 
 
@@ -111,9 +112,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
         text: str,
         payload: dict[str, Any],
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         """按 Telegram 限制切分文本后逐段发送。"""
         for chunk in cls._split_message(text):
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             try:
                 markdown_text = telegramify_markdown.markdownify(
                     chunk,
@@ -127,6 +131,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 logger.warning(
                     f"Failed to convert message to Markdown，using normal text: {e!s}"
                 )
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 await client.send_message(text=chunk, **cast(Any, payload))
 
     @classmethod
@@ -163,6 +169,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         *,
         user_name: str,
         message_thread_id: str | None = None,
+        stop_event: AstrMessageEvent | None = None,
         **payload: Any,
     ) -> None:
         """发送媒体时显示 upload action，发送完成后恢复 typing"""
@@ -172,10 +179,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
         await cls._send_chat_action(
             client, user_name, upload_action, effective_thread_id
         )
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         send_payload = dict(payload)
         if effective_thread_id and "message_thread_id" not in send_payload:
             send_payload["message_thread_id"] = effective_thread_id
         await send_coro(**send_payload)
+        if event_requests_agent_stop(stop_event):
+            return
         await cls._send_chat_action(
             client, user_name, ChatAction.TYPING, effective_thread_id
         )
@@ -191,6 +202,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         user_name: str = "",
         message_thread_id: str | None = None,
         use_media_action: bool = False,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         """Send a voice message, falling back to a document if the user's
         privacy settings forbid voice messages (``BadRequest`` with
@@ -199,6 +211,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
         When *use_media_action* is ``True`` the helper wraps the send calls
         with ``_send_media_with_action`` (used by the streaming path).
         """
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         try:
             if use_media_action:
                 media_payload = dict(payload)
@@ -209,6 +223,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     ChatAction.UPLOAD_VOICE,
                     client.send_voice,
                     user_name=user_name,
+                    stop_event=stop_event,
                     voice=path,
                     **cast(Any, media_payload),
                 )
@@ -219,6 +234,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
             # distinguish the voice-privacy case via the API error message.
             if "Voice_messages_forbidden" not in e.message:
                 raise
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             logger.warning(
                 "User privacy settings prevent receiving voice messages, falling back to sending an audio file. "
                 "To enable voice messages, go to Telegram Settings → Privacy and Security → Voice Messages → set to 'Everyone'."
@@ -232,6 +249,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     ChatAction.UPLOAD_DOCUMENT,
                     client.send_document,
                     user_name=user_name,
+                    stop_event=stop_event,
                     document=path,
                     caption=caption,
                     **cast(Any, media_payload),
@@ -271,6 +289,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
         message: MessageChain,
         user_name: str,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         image_path = None
 
@@ -293,8 +312,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
         # 根据消息链确定合适的 chat action 并发送
         action = cls._get_chat_action_for_chain(message.chain)
         await cls._send_chat_action(client, user_name, action, message_thread_id)
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
 
         for i in message.chain:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             payload = {
                 "chat_id": user_name,
             }
@@ -307,9 +330,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 if at_user_id and not at_flag:
                     i.text = f"@{at_user_id} {i.text}"
                     at_flag = True
-                await cls._send_text_chunks(client, i.text, payload)
+                await cls._send_text_chunks(client, i.text, payload, stop_event)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 if _is_gif(image_path):
                     send_coro = client.send_animation
                     media_kwarg = {"animation": image_path}
@@ -319,21 +344,28 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 await send_coro(**media_kwarg, **cast(Any, payload))
             elif isinstance(i, File):
                 path = await i.get_file()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 name = i.name or os.path.basename(path)
                 await client.send_document(
                     document=path, filename=name, **cast(Any, payload)
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 await cls._send_voice_with_fallback(
                     client,
                     path,
                     payload,
                     caption=i.text or None,
                     use_media_action=False,
+                    stop_event=stop_event,
                 )
             elif isinstance(i, Video):
                 path = await i.convert_to_file_path()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 await client.send_video(
                     video=path,
                     caption=getattr(i, "text", None) or None,
@@ -342,9 +374,19 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain) -> None:
         if self.get_message_type() == MessageType.GROUP_MESSAGE:
-            await self.send_with_client(self.client, message, self.message_obj.group_id)
+            await self.send_with_client(
+                self.client,
+                message,
+                self.message_obj.group_id,
+                self,
+            )
         else:
-            await self.send_with_client(self.client, message, self.get_sender_id())
+            await self.send_with_client(
+                self.client,
+                message,
+                self.get_sender_id(),
+                self,
+            )
         await super().send(message)
 
     async def react(self, emoji: str | None, big: bool = False) -> None:
@@ -398,7 +440,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
             message_thread_id: 可选，目标消息线程 ID
             parse_mode: 可选，消息文本的解析模式
         """
-        if not text or not text.strip():
+        if not text or not text.strip() or event_requests_agent_stop(self):
             return
 
         kwargs: dict[str, Any] = {}
@@ -430,10 +472,14 @@ class TelegramPlatformEvent(AstrMessageEvent):
     ) -> None:
         """处理 MessageChain 中的各类组件，文本通过 on_text 回调追加，媒体直接发送。"""
         for i in chain.chain:
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             if isinstance(i, Plain):
                 on_text(i.text)
             elif isinstance(i, Image):
                 image_path = await i.convert_to_file_path()
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 if _is_gif(image_path):
                     action = ChatAction.UPLOAD_VIDEO
                     send_coro = self.client.send_animation
@@ -447,23 +493,29 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     action,
                     send_coro,
                     user_name=user_name,
+                    stop_event=self,
                     **media_kwarg,
                     **cast(Any, payload),
                 )
             elif isinstance(i, File):
                 path = await i.get_file()
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 name = i.name or os.path.basename(path)
                 await self._send_media_with_action(
                     self.client,
                     ChatAction.UPLOAD_DOCUMENT,
                     self.client.send_document,
                     user_name=user_name,
+                    stop_event=self,
                     document=path,
                     filename=name,
                     **cast(Any, payload),
                 )
             elif isinstance(i, Record):
                 path = await i.convert_to_file_path()
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 await self._send_voice_with_fallback(
                     self.client,
                     path,
@@ -472,14 +524,18 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     user_name=user_name,
                     message_thread_id=message_thread_id,
                     use_media_action=True,
+                    stop_event=self,
                 )
             elif isinstance(i, Video):
                 path = await i.convert_to_file_path()
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 await self._send_media_with_action(
                     self.client,
                     ChatAction.UPLOAD_VIDEO,
                     self.client.send_video,
                     user_name=user_name,
+                    stop_event=self,
                     video=path,
                     **cast(Any, payload),
                 )
@@ -488,7 +544,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
     async def _send_final_segment(self, delta: str, payload: dict[str, Any]) -> None:
         """将累积文本作为 MarkdownV2 真实消息发送，失败时回退到纯文本。"""
-        await self._send_text_chunks(self.client, delta, payload)
+        await self._send_text_chunks(self.client, delta, payload, self)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
         message_thread_id = None
@@ -553,6 +609,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
             while not done:
                 await text_changed.wait()
                 text_changed.clear()
+                if done or event_requests_agent_stop(self):
+                    return
                 # 发送最新的缓冲区内容（MarkdownV2 渲染，与真实消息一致）
                 if delta and delta != last_sent_text:
                     draft_text = delta[: self.MAX_MESSAGE_LENGTH]
@@ -593,6 +651,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
         try:
             async for chain in generator:
+                if event_requests_agent_stop(self):
+                    continue
                 if not isinstance(chain, MessageChain):
                     continue
 
@@ -606,6 +666,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                             "\u23f3",
                             message_thread_id,
                         )
+                        if event_requests_agent_stop(self):
+                            raise AgentOutputStopped
                         await self._send_final_segment(delta, payload)
                     delta = ""
                     last_sent_text = ""
@@ -622,12 +684,16 @@ class TelegramPlatformEvent(AstrMessageEvent):
 
         # 流式结束：用 emoji 清空 draft，然后发真实消息持久化
         if delta:
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             await self._send_message_draft(
                 user_name,
                 draft_id,
                 "\u23f3",
                 message_thread_id,
             )
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             await self._send_final_segment(delta, payload)
 
     async def _send_streaming_edit(
@@ -647,7 +713,10 @@ class TelegramPlatformEvent(AstrMessageEvent):
         chat_action_interval = 0.5  # chat action 的节流间隔 (秒)
 
         # 发送初始 typing 状态
-        await self._ensure_typing(user_name, message_thread_id)
+        if not event_requests_agent_stop(self):
+            await self._ensure_typing(user_name, message_thread_id)
+        if event_requests_agent_stop(self):
+            return
         last_chat_action_time = asyncio.get_running_loop().time()
 
         def _append_text(t: str) -> None:
@@ -655,6 +724,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
             delta += t
 
         async for chain in generator:
+            if event_requests_agent_stop(self):
+                continue
             if not isinstance(chain, MessageChain):
                 continue
 
@@ -669,6 +740,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
                         )
                     except Exception as e:
                         logger.warning(f"编辑消息失败(streaming-break): {e!s}")
+                        raise
                 message_id = None
                 delta = ""
                 continue
@@ -676,6 +748,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
             await self._process_chain_items(
                 chain, payload, user_name, message_thread_id, _append_text
             )
+            if event_requests_agent_stop(self):
+                continue
 
             # 编辑或发送消息
             if message_id and len(delta) <= self.MAX_MESSAGE_LENGTH:
@@ -686,6 +760,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     current_time = asyncio.get_running_loop().time()
                     if current_time - last_chat_action_time >= chat_action_interval:
                         await self._ensure_typing(user_name, message_thread_id)
+                        if event_requests_agent_stop(self):
+                            continue
                         last_chat_action_time = current_time
                     try:
                         await self.client.edit_message_text(
@@ -701,6 +777,8 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 current_time = asyncio.get_running_loop().time()
                 if current_time - last_chat_action_time >= chat_action_interval:
                     await self._ensure_typing(user_name, message_thread_id)
+                    if event_requests_agent_stop(self):
+                        continue
                     last_chat_action_time = current_time
                 try:
                     msg = await self.client.send_message(
@@ -709,11 +787,16 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     current_content = delta
                 except Exception as e:
                     logger.warning(f"发送消息失败(streaming): {e!s}")
+                    raise
                 message_id = msg.message_id
                 last_edit_time = asyncio.get_running_loop().time()
 
         try:
-            if delta and current_content != delta:
+            if (
+                delta
+                and current_content != delta
+                and not event_requests_agent_stop(self)
+            ):
                 try:
                     markdown_text = telegramify_markdown.markdownify(
                         delta,
@@ -726,10 +809,15 @@ class TelegramPlatformEvent(AstrMessageEvent):
                     )
                 except Exception as e:
                     logger.warning(f"Markdown转换失败，使用普通文本: {e!s}")
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped from e
                     await self.client.edit_message_text(
                         text=delta,
                         chat_id=payload["chat_id"],
                         message_id=message_id,
                     )
+        except AgentOutputStopped:
+            raise
         except Exception as e:
             logger.warning(f"编辑消息失败(streaming): {e!s}")
+            raise

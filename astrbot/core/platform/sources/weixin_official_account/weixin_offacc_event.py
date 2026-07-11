@@ -9,6 +9,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Image, Plain, Record
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 
@@ -81,25 +82,37 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
         return result
 
     async def send(self, message: MessageChain) -> None:
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         message_obj = self.message_obj
         active_send_mode = cast(dict, message_obj.raw_message).get(
             "active_send_mode", False
         )
         for comp in message.chain:
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             if isinstance(comp, Plain):
                 # Split long text messages if needed
                 plain_chunks = await self.split_plain(comp.text)
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 if active_send_mode:
                     for chunk in plain_chunks:
+                        if event_requests_agent_stop(self):
+                            raise AgentOutputStopped
                         self.client.message.send_text(message_obj.sender.user_id, chunk)
                 else:
                     # disable passive sending, just store the chunks in
                     logger.debug(
                         f"split plain into {len(plain_chunks)} chunks for passive reply. Message not sent."
                     )
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
                     self.message_out["cached_xml"] = plain_chunks
             elif isinstance(comp, Image):
                 img_path = await comp.convert_to_file_path()
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
 
                 with open(img_path, "rb") as f:
                     try:
@@ -111,6 +124,8 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                         )
                         return
                     logger.debug(f"微信公众平台上传图片返回: {response}")
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
 
                     if active_send_mode:
                         self.client.message.send_image(
@@ -129,9 +144,13 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
 
             elif isinstance(comp, Record):
                 record_path = await comp.convert_to_file_path()
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 record_path_amr = await convert_audio_to_amr(record_path)
 
                 try:
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
                     with open(record_path_amr, "rb") as f:
                         try:
                             response = self.client.media.upload("voice", f)
@@ -144,6 +163,8 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
                             )
                             return
                         logger.info(f"微信公众平台上传语音返回: {response}")
+                        if event_requests_agent_stop(self):
+                            raise AgentOutputStopped
 
                         if active_send_mode:
                             self.client.message.send_voice(
@@ -178,6 +199,8 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
     async def send_streaming(self, generator, use_fallback: bool = False):
         buffer = None
         async for chain in generator:
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             if not buffer:
                 buffer = chain
             else:
@@ -185,5 +208,7 @@ class WeixinOfficialAccountPlatformEvent(AstrMessageEvent):
         if not buffer:
             return None
         buffer.squash_plain()
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)

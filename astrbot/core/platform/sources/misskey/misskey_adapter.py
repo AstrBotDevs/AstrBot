@@ -5,13 +5,14 @@ from typing import Any
 
 import astrbot.api.message_components as Comp
 from astrbot.api import logger
-from astrbot.api.event import MessageChain
+from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.platform import (
     AstrBotMessage,
     Platform,
     PlatformMetadata,
     register_platform_adapter,
 )
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.platform.astr_message_event import MessageSession
 
 from .misskey_api import MisskeyAPI
@@ -372,7 +373,10 @@ class MisskeyPlatformAdapter(Platform):
         self,
         session: MessageSession,
         message_chain: MessageChain,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if not self.api:
             logger.error("[Misskey] API 客户端未初始化")
             return await super().send_by_session(session, message_chain)
@@ -422,6 +426,8 @@ class MisskeyPlatformAdapter(Platform):
             fallback_urls: list[str] = []
 
             if not self.enable_file_upload:
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 return await self._send_text_only_message(
                     session_id,
                     text,
@@ -449,6 +455,8 @@ class MisskeyPlatformAdapter(Platform):
                 local_path = None
                 try:
                     async with sem:
+                        if event_requests_agent_stop(stop_event):
+                            raise AgentOutputStopped
                         if not self.api:
                             return None
 
@@ -456,6 +464,8 @@ class MisskeyPlatformAdapter(Platform):
                         url_candidate, local_path = await resolve_component_url_or_path(
                             comp,
                         )
+                        if event_requests_agent_stop(stop_event):
+                            raise AgentOutputStopped
 
                         if not url_candidate and not local_path:
                             return None
@@ -473,26 +483,38 @@ class MisskeyPlatformAdapter(Platform):
                                 preferred_name,
                                 folder_id=self.upload_folder,
                             )
+                            if event_requests_agent_stop(stop_event):
+                                raise AgentOutputStopped
                             if isinstance(result, dict) and result.get("id"):
                                 return str(result["id"])
 
                         # 本地文件上传
                         if local_path:
+                            if event_requests_agent_stop(stop_event):
+                                raise AgentOutputStopped
                             file_id = await upload_local_with_retries(
                                 self.api,
                                 str(local_path),
                                 preferred_name,
                                 self.upload_folder,
                             )
+                            if event_requests_agent_stop(stop_event):
+                                raise AgentOutputStopped
                             if file_id:
                                 return file_id
 
                         # 所有上传都失败，尝试获取 URL 作为回退
                         if hasattr(comp, "register_to_file_service"):
                             try:
+                                if event_requests_agent_stop(stop_event):
+                                    raise AgentOutputStopped
                                 url = await comp.register_to_file_service()
+                                if event_requests_agent_stop(stop_event):
+                                    raise AgentOutputStopped
                                 if url:
                                     return {"fallback_url": url}
+                            except AgentOutputStopped:
+                                raise
                             except Exception:
                                 pass
 
@@ -540,6 +562,8 @@ class MisskeyPlatformAdapter(Platform):
 
             try:
                 results = await asyncio.gather(*upload_tasks) if upload_tasks else []
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 for r in results:
                     if not r:
                         continue
@@ -554,6 +578,8 @@ class MisskeyPlatformAdapter(Platform):
                                 file_ids.append(fid_str)
                         except Exception:
                             pass
+            except AgentOutputStopped:
+                raise
             except Exception:
                 logger.debug("[Misskey] 并发上传过程中出现异常，继续发送文本")
 
@@ -567,6 +593,8 @@ class MisskeyPlatformAdapter(Platform):
                 payload: dict[str, Any] = {"toRoomId": room_id, "text": text}
                 if file_ids:
                     payload["fileIds"] = file_ids
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 await self.api.send_room_message(payload)
             elif session_id:
                 from .misskey_utils import (
@@ -587,6 +615,8 @@ class MisskeyPlatformAdapter(Platform):
                             logger.warning(
                                 f"[Misskey] 聊天消息只支持单个文件，忽略其余 {len(file_ids) - 1} 个文件",
                             )
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     await self.api.send_message(payload)
                 else:
                     # 回退到发帖逻辑
@@ -616,6 +646,8 @@ class MisskeyPlatformAdapter(Platform):
                     # 从缓存中获取原消息ID作为reply_id
                     reply_id = user_info_for_reply.get("reply_to_note_id")
 
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     await self.api.create_note(
                         text=text,
                         visibility=visibility,
@@ -629,8 +661,11 @@ class MisskeyPlatformAdapter(Platform):
                         channel_id=fields["channel_id"],
                     )
 
+        except AgentOutputStopped:
+            raise
         except Exception as e:
             logger.error(f"[Misskey] 发送消息失败: {e}")
+            raise
 
         return await super().send_by_session(session, message_chain)
 

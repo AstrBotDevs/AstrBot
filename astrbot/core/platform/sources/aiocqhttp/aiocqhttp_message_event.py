@@ -17,6 +17,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 
 
 class AiocqhttpMessageEvent(AstrMessageEvent):
@@ -130,6 +131,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
         event: Event | None = None,
         is_group: bool = False,
         session_id: str | None = None,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         """发送消息至 QQ 协议端（aiocqhttp）。
 
@@ -139,19 +141,26 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             event (Event | None, optional): aiocqhttp 事件对象.
             is_group (bool, optional): 是否为群消息.
             session_id (str | None, optional): 会话 ID（群号或 QQ 号
+            stop_event: AstrBot event used to guard platform writes.
 
         """
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         # 转发消息、文件消息不能和普通消息混在一起发送
         send_one_by_one = any(
             isinstance(seg, Node | Nodes | File) for seg in message_chain.chain
         )
         if not send_one_by_one:
             ret = await cls._parse_onebot_json(message_chain)
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if not ret:
                 return
             await cls._dispatch_send(bot, event, is_group, session_id, ret)
             return
         for seg in message_chain.chain:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if isinstance(seg, Node | Nodes):
                 # 合并转发消息
                 if isinstance(seg, Node):
@@ -159,6 +168,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     seg = nodes
 
                 payload = await seg.to_dict()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
 
                 if is_group:
                     payload["group_id"] = session_id
@@ -172,9 +183,13 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                     await bot.call_action("send_private_forward_msg", **payload)
             elif isinstance(seg, File):
                 d = await cls._from_segment_to_dict(seg)
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 await cls._dispatch_send(bot, event, is_group, session_id, [d])
             else:
                 messages = await cls._parse_onebot_json(MessageChain([seg]))
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 if not messages:
                     continue
                 await cls._dispatch_send(bot, event, is_group, session_id, messages)
@@ -182,6 +197,8 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain) -> None:
         """发送消息"""
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         event = getattr(self.message_obj, "raw_message", None)
 
         is_group = bool(self.get_group_id())
@@ -193,6 +210,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
             event=event,  # 不强制要求一定是 Event
             is_group=is_group,
             session_id=session_id,
+            stop_event=self,
         )
         await super().send(message)
 
@@ -225,8 +243,7 @@ class AiocqhttpMessageEvent(AstrMessageEvent):
                         if any(p in buffer for p in "。？！~…"):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
-                        await self.send(MessageChain(chain=[comp]))
-                        await asyncio.sleep(1.5)  # 限速
+                        await self.send_streaming_fallback_component(comp)
 
         buffer = buffer.strip()
         if buffer:

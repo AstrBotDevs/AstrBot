@@ -16,7 +16,7 @@ from urllib.parse import quote
 import qrcode as qrcode_lib
 
 from astrbot import logger
-from astrbot.api.event import MessageChain
+from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Reply, Video
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -27,6 +27,7 @@ from astrbot.api.platform import (
     register_platform_adapter,
 )
 from astrbot.core import astrbot_config
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
@@ -642,7 +643,10 @@ class WeixinOCAdapter(Platform):
         upload_media_type: int,
         item_type: int,
         file_name: str,
+        stop_event: AstrMessageEvent | None = None,
     ) -> dict[str, Any]:
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         raw_bytes = media_path.read_bytes()
         raw_size = len(raw_bytes)
         raw_md5 = hashlib.md5(raw_bytes).hexdigest()
@@ -669,6 +673,8 @@ class WeixinOCAdapter(Platform):
             token_required=True,
             timeout_ms=self.api_timeout_ms,
         )
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         logger.debug(
             "weixin_oc(%s): getuploadurl response user=%s media_type=%s raw_size=%s raw_md5=%s filekey=%s file=%s upload_param_len=%s",
             self.meta().id,
@@ -690,6 +696,8 @@ class WeixinOCAdapter(Platform):
             aes_key_hex,
             media_path,
         )
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         logger.debug(
             "weixin_oc(%s): prepared media item type=%s file=%s user=%s mid_size=%s upload_param_len=%s query_len=%s",
             self.meta().id,
@@ -843,8 +851,12 @@ class WeixinOCAdapter(Platform):
         return None
 
     async def _resolve_media_file_path(
-        self, segment: Image | Video | File
+        self,
+        segment: Image | Video | File,
+        stop_event: AstrMessageEvent | None = None,
     ) -> Path | None:
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         try:
             if isinstance(segment, File):
                 path = await segment.get_file()
@@ -855,6 +867,9 @@ class WeixinOCAdapter(Platform):
         except Exception as e:
             logger.warning("weixin_oc(%s): media resolve failed: %s", self.meta().id, e)
             return None
+
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
 
         if not path:
             return None
@@ -870,7 +885,10 @@ class WeixinOCAdapter(Platform):
         *,
         cache_components: list[Any] | None = None,
         cache_message_str: str | None = None,
+        stop_event: AstrMessageEvent | None = None,
     ) -> bool:
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if not self.token:
             logger.warning("weixin_oc(%s): missing token, skip send", self.meta().id)
             return False
@@ -888,6 +906,8 @@ class WeixinOCAdapter(Platform):
                 user_id,
             )
             return False
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         payload = await self.client.request_json(
             "POST",
             "ilink/bot/sendmessage",
@@ -989,13 +1009,16 @@ class WeixinOCAdapter(Platform):
         user_id: str,
         segment: Image | Video | File,
         text: str | None = None,
+        stop_event: AstrMessageEvent | None = None,
     ) -> bool:
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if not self.token:
             logger.warning(
                 "weixin_oc(%s): missing token, skip media send", self.meta().id
             )
             return False
-        media_path = await self._resolve_media_file_path(segment)
+        media_path = await self._resolve_media_file_path(segment, stop_event)
         if media_path is None:
             logger.warning(
                 "weixin_oc(%s): skip media segment, media file not resolvable",
@@ -1024,7 +1047,10 @@ class WeixinOCAdapter(Platform):
                 upload_media_type,
                 item_type,
                 file_name,
+                stop_event,
             )
+        except AgentOutputStopped:
+            raise
         except Exception as e:
             logger.error(
                 "weixin_oc(%s): prepare media failed: %s",
@@ -1035,12 +1061,19 @@ class WeixinOCAdapter(Platform):
             return False
 
         if text:
-            await self._send_items_to_session(
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
+            text_sent = await self._send_items_to_session(
                 user_id,
                 [self._build_plain_text_item(text)],
                 cache_components=[Plain(text)],
                 cache_message_str=text,
+                stop_event=stop_event,
             )
+            if not text_sent:
+                return False
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         return await self._send_items_to_session(
             user_id,
             [media_item],
@@ -1049,6 +1082,7 @@ class WeixinOCAdapter(Platform):
                 [media_item],
                 include_ref_text=False,
             ),
+            stop_event=stop_event,
         )
 
     async def _start_login_session(self) -> OpenClawLoginSession:
@@ -1619,7 +1653,11 @@ class WeixinOCAdapter(Platform):
         return text.strip()
 
     async def _send_to_session(
-        self, user_id: str, text: str, _components: list[Any] | None = None
+        self,
+        user_id: str,
+        text: str,
+        _components: list[Any] | None = None,
+        stop_event: AstrMessageEvent | None = None,
     ) -> bool:
         if not text:
             text = self._message_chain_to_text(MessageChain(_components or []))
@@ -1632,18 +1670,24 @@ class WeixinOCAdapter(Platform):
         return await self._send_items_to_session(
             user_id,
             [self._build_plain_text_item(text)],
+            stop_event=stop_event,
         )
 
     async def send_by_session(
         self,
         session: MessageSesion,
         message_chain: MessageChain,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         target_user = session.session_id
         pending_text = ""
         has_supported_segment = False
         failed_segments = 0
         for segment in message_chain.chain:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if isinstance(segment, Plain):
                 pending_text += segment.text
                 continue
@@ -1654,6 +1698,7 @@ class WeixinOCAdapter(Platform):
                     target_user,
                     segment,
                     text=pending_text.strip() or None,
+                    stop_event=stop_event,
                 )
                 if not sent:
                     failed_segments += 1
@@ -1668,7 +1713,11 @@ class WeixinOCAdapter(Platform):
 
         if pending_text:
             has_supported_segment = True
-            sent = await self._send_to_session(target_user, pending_text.strip())
+            sent = await self._send_to_session(
+                target_user,
+                pending_text.strip(),
+                stop_event=stop_event,
+            )
             if not sent:
                 failed_segments += 1
 

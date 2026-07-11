@@ -1130,10 +1130,25 @@ async def convert_audio_format(
     if audio_path.lower().endswith(f".{output_format}"):
         return audio_path
 
+    replace_output_path = None
+    replace_target_path = None
     if output_path is None:
         temp_dir = Path(get_astrbot_temp_path())
         temp_dir.mkdir(parents=True, exist_ok=True)
         output_path = str(temp_dir / f"media_audio_{uuid.uuid4().hex}.{output_format}")
+    elif os.path.lexists(output_path):
+        replace_output_path = output_path
+        requested_path = Path(output_path)
+        replace_target_path = (
+            requested_path.resolve(strict=False)
+            if requested_path.is_symlink()
+            else requested_path
+        )
+        output_path = str(
+            replace_target_path.with_name(
+                f".{requested_path.stem}.{uuid.uuid4().hex}{requested_path.suffix}"
+            )
+        )
 
     args = ["ffmpeg", "-y", "-i", audio_path]
     if output_format == "amr":
@@ -1161,6 +1176,16 @@ async def convert_audio_format(
         args.extend(["-acodec", "libopus", "-ac", "1", "-ar", "16000"])
     args.append(output_path)
 
+    def _remove_incomplete_output() -> None:
+        """Remove the converter-owned output after an interrupted run."""
+        if not output_path or not os.path.exists(output_path):
+            return
+        try:
+            os.remove(output_path)
+        except OSError as exc:
+            logger.warning("Failed to remove incomplete audio output file: %s", exc)
+
+    process = None
     try:
         process = await asyncio.create_subprocess_exec(
             *args,
@@ -1169,24 +1194,46 @@ async def convert_audio_format(
         )
         _, stderr = await process.communicate()
         if process.returncode != 0:
-            if output_path and os.path.exists(output_path):
-                try:
-                    os.remove(output_path)
-                except OSError as e:
-                    logger.warning(
-                        "Failed to remove failed audio output file: %s",
-                        e,
-                    )
             error_msg = stderr.decode() if stderr else "unknown error"
             raise Exception(f"ffmpeg conversion failed: {error_msg}")
+        if replace_output_path is not None:
+            os.replace(output_path, replace_target_path)
+            output_path = replace_output_path
         logger.debug(
             "Audio converted successfully: %s -> %s",
             audio_path,
             output_path,
         )
         return output_path
-    except FileNotFoundError:
-        raise Exception("ffmpeg not found")
+    except asyncio.CancelledError as cancel_error:
+        if process is not None and getattr(process, "returncode", None) is None:
+            kill = getattr(process, "kill", None)
+            if callable(kill):
+                try:
+                    kill()
+                except ProcessLookupError:
+                    pass
+            wait = getattr(process, "wait", None)
+            if callable(wait):
+                wait_task = asyncio.create_task(wait())
+                while not wait_task.done():
+                    try:
+                        await asyncio.shield(wait_task)
+                    except asyncio.CancelledError:
+                        continue
+                if not wait_task.cancelled():
+                    try:
+                        wait_task.result()
+                    except Exception:
+                        pass
+        _remove_incomplete_output()
+        raise cancel_error
+    except FileNotFoundError as exc:
+        _remove_incomplete_output()
+        raise Exception("ffmpeg not found") from exc
+    except Exception:
+        _remove_incomplete_output()
+        raise
 
 
 async def convert_audio_to_amr(audio_path: str, output_path: str | None = None) -> str:

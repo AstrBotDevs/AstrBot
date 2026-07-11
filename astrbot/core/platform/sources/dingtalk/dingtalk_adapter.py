@@ -12,7 +12,7 @@ import dingtalk_stream
 from dingtalk_stream import AckMessage
 
 from astrbot import logger
-from astrbot.api.event import MessageChain
+from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import (
     AstrBotMessage,
@@ -22,6 +22,7 @@ from astrbot.api.platform import (
     PlatformMetadata,
 )
 from astrbot.core import sp
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
@@ -112,7 +113,10 @@ class DingtalkPlatformAdapter(Platform):
         self,
         session: MessageSesion,
         message_chain: MessageChain,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         robot_code = self.client_id
 
         if session.message_type == MessageType.GROUP_MESSAGE:
@@ -121,18 +125,21 @@ class DingtalkPlatformAdapter(Platform):
                 open_conversation_id=open_conversation_id,
                 robot_code=robot_code,
                 message_chain=message_chain,
+                stop_event=stop_event,
             )
         else:
             staff_id = await self._get_sender_staff_id(session)
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if not staff_id:
-                logger.warning(
-                    "钉钉私聊会话缺少 staff_id 映射，回退使用 session_id 作为 userId 发送",
+                raise RuntimeError(
+                    "DingTalk private session is missing a staff_id mapping."
                 )
-                staff_id = session.session_id
             await self.send_message_chain_to_user(
                 staff_id=staff_id,
                 robot_code=robot_code,
                 message_chain=message_chain,
+                stop_event=stop_event,
             )
 
         await super().send_by_session(session, message_chain)
@@ -386,30 +393,59 @@ class DingtalkPlatformAdapter(Platform):
             await download_file(download_url, str(f_path))
         return str(f_path)
 
-    async def get_access_token(self) -> str:
+    async def get_access_token(
+        self,
+        stop_event: AstrMessageEvent | None = None,
+    ) -> str:
         try:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             access_token = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.client_.get_access_token,
             )
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if access_token:
                 return access_token
+        except AgentOutputStopped:
+            raise
         except Exception as e:
             logger.warning(f"通过 dingtalk_stream 获取 access_token 失败: {e}")
 
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         payload = {"appKey": self.client_id, "appSecret": self.client_secret}
         async with aiohttp.ClientSession() as session:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             async with session.post(
                 "https://api.dingtalk.com/v1.0/oauth2/accessToken",
                 json=payload,
             ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"获取钉钉机器人 access_token 失败: {resp.status}, {await resp.text()}",
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                if not 200 <= resp.status < 300:
+                    response_text = await resp.text()
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
+                    raise RuntimeError(
+                        "DingTalk access token request failed: "
+                        f"{resp.status}, {response_text}"
                     )
-                    return ""
                 data = await resp.json()
-                return cast(str, data.get("data", {}).get("accessToken", ""))
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                access_token = cast(
+                    str,
+                    data.get("accessToken")
+                    or data.get("data", {}).get("accessToken", ""),
+                )
+                if not access_token:
+                    raise RuntimeError(
+                        "DingTalk access token response did not include a token."
+                    )
+                return access_token
 
     async def _get_sender_staff_id(self, session: MessageSesion) -> str:
         try:
@@ -430,11 +466,13 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         msg_key: str,
         msg_param: dict,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
-        access_token = await self.get_access_token()
+        access_token = await self.get_access_token(stop_event)
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if not access_token:
-            logger.error("钉钉群消息发送失败: access_token 为空")
-            return
+            raise RuntimeError("DingTalk group message access token is empty.")
 
         payload = {
             "msgKey": msg_key,
@@ -446,16 +484,36 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         async with aiohttp.ClientSession() as session:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             async with session.post(
                 "https://api.dingtalk.com/v1.0/robot/groupMessages/send",
                 headers=headers,
                 json=payload,
             ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"钉钉群消息发送失败: {resp.status}, {await resp.text()}",
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                response_text = await resp.text()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                if not 200 <= resp.status < 300:
+                    raise RuntimeError(
+                        "DingTalk group message delivery failed: "
+                        f"{resp.status}, {response_text}"
                     )
+                try:
+                    response_data = json.loads(response_text) if response_text else {}
+                except json.JSONDecodeError:
+                    response_data = {}
+                if isinstance(response_data, dict):
+                    error_code = response_data.get("errcode", response_data.get("code"))
+                    if error_code not in (None, "", 0, "0"):
+                        raise RuntimeError(
+                            f"DingTalk group message delivery failed: {response_text}"
+                        )
 
     async def _send_private_message(
         self,
@@ -463,11 +521,13 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         msg_key: str,
         msg_param: dict,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
-        access_token = await self.get_access_token()
+        access_token = await self.get_access_token(stop_event)
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if not access_token:
-            logger.error("钉钉私聊消息发送失败: access_token 为空")
-            return
+            raise RuntimeError("DingTalk private message access token is empty.")
 
         payload = {
             "robotCode": robot_code,
@@ -479,16 +539,36 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         async with aiohttp.ClientSession() as session:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             async with session.post(
                 "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend",
                 headers=headers,
                 json=payload,
             ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"钉钉私聊消息发送失败: {resp.status}, {await resp.text()}",
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                response_text = await resp.text()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                if not 200 <= resp.status < 300:
+                    raise RuntimeError(
+                        "DingTalk private message delivery failed: "
+                        f"{resp.status}, {response_text}"
                     )
+                try:
+                    response_data = json.loads(response_text) if response_text else {}
+                except json.JSONDecodeError:
+                    response_data = {}
+                if isinstance(response_data, dict):
+                    error_code = response_data.get("errcode", response_data.get("code"))
+                    if error_code not in (None, "", 0, "0"):
+                        raise RuntimeError(
+                            f"DingTalk private message delivery failed: {response_text}"
+                        )
 
     def _safe_remove_file(self, file_path: str | None) -> None:
         if not file_path:
@@ -514,12 +594,18 @@ class DingtalkPlatformAdapter(Platform):
             converted = await convert_audio_format(input_path, "amr")
             return converted, converted != input_path
 
-    async def upload_media(self, file_path: str, media_type: str) -> str:
+    async def upload_media(
+        self,
+        file_path: str,
+        media_type: str,
+        stop_event: AstrMessageEvent | None = None,
+    ) -> str:
         media_file_path = Path(file_path)
-        access_token = await self.get_access_token()
+        access_token = await self.get_access_token(stop_event)
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if not access_token:
-            logger.error("钉钉媒体上传失败: access_token 为空")
-            return ""
+            raise RuntimeError("DingTalk media upload access token is empty.")
 
         form = aiohttp.FormData()
         form.add_field(
@@ -528,25 +614,41 @@ class DingtalkPlatformAdapter(Platform):
             filename=media_file_path.name,
             content_type="application/octet-stream",
         )
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         async with aiohttp.ClientSession() as session:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             async with session.post(
                 f"https://oapi.dingtalk.com/media/upload?access_token={access_token}&type={media_type}",
                 data=form,
             ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"钉钉媒体上传失败: {resp.status}, {await resp.text()}"
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                if not 200 <= resp.status < 300:
+                    raise RuntimeError(
+                        "DingTalk media upload failed: "
+                        f"{resp.status}, {await resp.text()}"
                     )
-                    return ""
                 data = await resp.json()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 if data.get("errcode") != 0:
-                    logger.error(f"钉钉媒体上传失败: {data}")
-                    return ""
-                return cast(str, data.get("media_id", ""))
+                    raise RuntimeError(f"DingTalk media upload failed: {data}")
+                media_id = cast(str, data.get("media_id", ""))
+                if not media_id:
+                    raise RuntimeError("DingTalk media upload returned no media id.")
+                return media_id
 
-    async def upload_image(self, image: Image) -> str:
+    async def upload_image(
+        self,
+        image: Image,
+        stop_event: AstrMessageEvent | None = None,
+    ) -> str:
         image_file_path = await image.convert_to_file_path()
-        return await self.upload_media(image_file_path, "image")
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
+        return await self.upload_media(image_file_path, "image", stop_event)
 
     async def _send_message_chain(
         self,
@@ -555,14 +657,21 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         message_chain: MessageChain,
         at_str: str = "",
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
+        sent_any = False
+
         async def send_message(msg_key: str, msg_param: dict) -> None:
+            nonlocal sent_any
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if target_type == "group":
                 await self._send_group_message(
                     open_conversation_id=target_id,
                     robot_code=robot_code,
                     msg_key=msg_key,
                     msg_param=msg_param,
+                    stop_event=stop_event,
                 )
             else:
                 await self._send_private_message(
@@ -570,9 +679,13 @@ class DingtalkPlatformAdapter(Platform):
                     robot_code=robot_code,
                     msg_key=msg_key,
                     msg_param=msg_param,
+                    stop_event=stop_event,
                 )
+            sent_any = True
 
         for segment in message_chain.chain:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if isinstance(segment, Plain):
                 text = segment.text.strip()
                 if not text and not at_str:
@@ -589,9 +702,11 @@ class DingtalkPlatformAdapter(Platform):
                 if photo_url.startswith(("http://", "https://")):
                     pass
                 else:
-                    photo_url = await self.upload_image(segment)
+                    photo_url = await self.upload_image(segment, stop_event)
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                 if not photo_url:
-                    continue
+                    raise RuntimeError("DingTalk image has no deliverable URL.")
                 await send_message(
                     msg_key="sampleImageMsg",
                     msg_param={"photoURL": photo_url},
@@ -600,14 +715,28 @@ class DingtalkPlatformAdapter(Platform):
                 converted_audio = None
                 try:
                     audio_path = await segment.convert_to_file_path()
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     (
                         audio_path,
                         converted_audio,
                     ) = await self._prepare_voice_for_dingtalk(audio_path)
-                    media_id = await self.upload_media(audio_path, "voice")
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
+                    media_id = await self.upload_media(
+                        audio_path,
+                        "voice",
+                        stop_event,
+                    )
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     if not media_id:
-                        continue
+                        raise RuntimeError(
+                            "DingTalk voice upload returned no media id."
+                        )
                     duration_ms = await get_media_duration(audio_path)
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     await send_message(
                         msg_key="sampleAudio",
                         msg_param={
@@ -615,9 +744,11 @@ class DingtalkPlatformAdapter(Platform):
                             "duration": str(duration_ms or 1000),
                         },
                     )
+                except AgentOutputStopped:
+                    raise
                 except Exception as e:
                     logger.warning(f"钉钉语音发送失败: {e}")
-                    continue
+                    raise
                 finally:
                     if converted_audio:
                         self._safe_remove_file(audio_path)
@@ -626,16 +757,38 @@ class DingtalkPlatformAdapter(Platform):
                 cover_path = None
                 try:
                     source_video_path = await segment.convert_to_file_path()
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     video_path = source_video_path
                     if not video_path.lower().endswith(".mp4"):
                         video_path = await convert_video_format(video_path, "mp4")
+                        if event_requests_agent_stop(stop_event):
+                            raise AgentOutputStopped
                         converted_video = video_path != source_video_path
                     cover_path = await extract_video_cover(video_path)
-                    video_media_id = await self.upload_media(video_path, "file")
-                    pic_media_id = await self.upload_media(cover_path, "image")
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
+                    video_media_id = await self.upload_media(
+                        video_path,
+                        "file",
+                        stop_event,
+                    )
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
+                    pic_media_id = await self.upload_media(
+                        cover_path,
+                        "image",
+                        stop_event,
+                    )
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     if not video_media_id or not pic_media_id:
-                        continue
+                        raise RuntimeError(
+                            "DingTalk video upload returned incomplete media ids."
+                        )
                     duration_ms = await get_media_duration(video_path)
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     duration_sec = max(1, int((duration_ms or 1000) / 1000))
                     await send_message(
                         msg_key="sampleVideo",
@@ -646,9 +799,11 @@ class DingtalkPlatformAdapter(Platform):
                             "picMediaId": pic_media_id,
                         },
                     )
+                except AgentOutputStopped:
+                    raise
                 except Exception as e:
                     logger.warning(f"钉钉视频发送失败: {e}")
-                    continue
+                    raise
                 finally:
                     self._safe_remove_file(cover_path)
                     if converted_video:
@@ -656,12 +811,19 @@ class DingtalkPlatformAdapter(Platform):
             elif isinstance(segment, File):
                 try:
                     file_path = await segment.get_file()
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     if not file_path:
-                        logger.warning("钉钉文件发送失败: 无法解析文件路径")
-                        continue
-                    media_id = await self.upload_media(file_path, "file")
+                        raise RuntimeError("DingTalk file path could not be resolved.")
+                    media_id = await self.upload_media(
+                        file_path,
+                        "file",
+                        stop_event,
+                    )
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     if not media_id:
-                        continue
+                        raise RuntimeError("DingTalk file upload returned no media id.")
                     file_name = segment.name or Path(file_path).name
                     file_type = Path(file_name).suffix.lstrip(".")
                     await send_message(
@@ -672,9 +834,14 @@ class DingtalkPlatformAdapter(Platform):
                             "fileType": file_type,
                         },
                     )
+                except AgentOutputStopped:
+                    raise
                 except Exception as e:
                     logger.warning(f"钉钉文件发送失败: {e}")
-                    continue
+                    raise
+
+        if not sent_any:
+            raise RuntimeError("DingTalk message chain produced no platform delivery.")
 
     async def send_message_chain_to_group(
         self,
@@ -682,6 +849,7 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         message_chain: MessageChain,
         at_str: str = "",
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         await self._send_message_chain(
             target_type="group",
@@ -689,6 +857,7 @@ class DingtalkPlatformAdapter(Platform):
             robot_code=robot_code,
             message_chain=message_chain,
             at_str=at_str,
+            stop_event=stop_event,
         )
 
     async def send_message_chain_to_user(
@@ -697,6 +866,7 @@ class DingtalkPlatformAdapter(Platform):
         robot_code: str,
         message_chain: MessageChain,
         at_str: str = "",
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
         await self._send_message_chain(
             target_type="user",
@@ -704,13 +874,17 @@ class DingtalkPlatformAdapter(Platform):
             robot_code=robot_code,
             message_chain=message_chain,
             at_str=at_str,
+            stop_event=stop_event,
         )
 
     async def send_message_chain_with_incoming(
         self,
         incoming_message: dingtalk_stream.ChatbotMessage,
         message_chain: MessageChain,
+        stop_event: AstrMessageEvent | None = None,
     ) -> None:
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         robot_code = self.client_id
 
         # at_list: list[str] = []
@@ -734,6 +908,7 @@ class DingtalkPlatformAdapter(Platform):
                 open_conversation_id=cast(str, incoming_message.conversation_id),
                 robot_code=robot_code,
                 message_chain=message_chain,
+                stop_event=stop_event,
                 # at_str=at_str,
             )
         else:
@@ -743,13 +918,15 @@ class DingtalkPlatformAdapter(Platform):
                 session_id=normalized_sender_id,
             )
             staff_id = sender_staff_id or await self._get_sender_staff_id(session)
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if not staff_id:
-                logger.error("钉钉私聊回复失败: 缺少 sender_staff_id")
-                return
+                raise RuntimeError("DingTalk private reply is missing sender_staff_id.")
             await self.send_message_chain_to_user(
                 staff_id=staff_id,
                 robot_code=robot_code,
                 message_chain=message_chain,
+                stop_event=stop_event,
                 # at_str=at_str,
             )
 

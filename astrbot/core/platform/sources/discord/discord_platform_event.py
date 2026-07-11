@@ -18,6 +18,7 @@ from astrbot.api.message_components import (
     Reply,
 )
 from astrbot.api.platform import AstrBotMessage, At, PlatformMetadata
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
     MediaResolver,
@@ -52,6 +53,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain) -> None:
         """发送消息到Discord平台"""
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         # 解析消息链为 Discord 所需的对象
         try:
             (
@@ -60,10 +63,15 @@ class DiscordPlatformEvent(AstrMessageEvent):
                 view,
                 embeds,
                 reference_message_id,
-            ) = await self._parse_to_discord(message)
+            ) = await self._parse_to_discord(message, self)
+        except AgentOutputStopped:
+            raise
         except Exception as e:
             logger.error(f"[Discord] 解析消息链时失败: {e}", exc_info=True)
-            return
+            raise RuntimeError("Discord message conversion failed.") from e
+
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
 
         kwargs = {}
         if content:
@@ -77,27 +85,34 @@ class DiscordPlatformEvent(AstrMessageEvent):
         if reference_message_id and not self.interaction_followup_webhook:
             kwargs["reference"] = self.client.get_message(int(reference_message_id))
         if not kwargs:
-            logger.debug("[Discord] 尝试发送空消息，已忽略。")
-            return
+            raise RuntimeError("Discord message conversion produced no content.")
 
         # 根据上下文执行发送/回复操作
         try:
             # -- 斜杠指令/交互上下文 --
             if self.interaction_followup_webhook:
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 await self.interaction_followup_webhook.send(**kwargs)
 
             # -- 常规消息上下文 --
             else:
                 channel = await self._get_channel()
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 if not channel:
-                    return
+                    raise RuntimeError("Discord message channel is unavailable.")
                 if not isinstance(channel, discord.abc.Messageable):
-                    logger.error(f"[Discord] 频道 {channel.id} 不是可发送消息的类型")
-                    return
+                    raise RuntimeError(
+                        f"Discord channel {channel.id} is not messageable."
+                    )
                 await channel.send(**kwargs)
 
+        except AgentOutputStopped:
+            raise
         except Exception as e:
             logger.error(f"[Discord] 发送消息时发生未知错误: {e}", exc_info=True)
+            raise RuntimeError("Discord message delivery failed.") from e
 
         await super().send(message)
 
@@ -132,6 +147,7 @@ class DiscordPlatformEvent(AstrMessageEvent):
     async def _parse_to_discord(
         self,
         message: MessageChain,
+        stop_event: AstrMessageEvent | None = None,
     ) -> tuple[
         str,
         list[discord.File],
@@ -146,6 +162,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
         embeds = []
         reference_message_id = None
         for i in message.chain:  # 遍历消息链
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if isinstance(i, Plain):  # 如果是文字类型的
                 content_parts.append(i.text)
             elif isinstance(i, Reply):
@@ -175,6 +193,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         file_content,
                         media_type="image",
                     ).to_base64_data(strict=True)
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     if not image_data:
                         logger.warning(
                             "[Discord] 图片解析失败: %s",
@@ -190,6 +210,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         )
                     )
 
+                except AgentOutputStopped:
+                    raise
                 except Exception:
                     # 使用 getattr 来安全地访问 i.file，以防 i 本身就是问题
                     file_info = getattr(i, "file", "未知")
@@ -214,6 +236,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
                         strict=True,
                         target_format="wav",
                     )
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     if not audio_data:
                         logger.warning(
                             "[Discord] 语音解析失败: %s",
@@ -227,6 +251,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
                             filename="audio.wav",
                         )
                     )
+                except AgentOutputStopped:
+                    raise
                 except Exception:
                     audio_ref = getattr(i, "file", "未知")
                     logger.error(
@@ -237,10 +263,16 @@ class DiscordPlatformEvent(AstrMessageEvent):
             elif isinstance(i, File):
                 try:
                     file_path_str = await i.get_file()
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     if file_path_str:
                         path = Path(file_path_str)
                         if await asyncio.to_thread(path.exists):
+                            if event_requests_agent_stop(stop_event):
+                                raise AgentOutputStopped
                             file_bytes = await asyncio.to_thread(path.read_bytes)
+                            if event_requests_agent_stop(stop_event):
+                                raise AgentOutputStopped
                             files.append(
                                 discord.File(BytesIO(file_bytes), filename=i.name),
                             )
@@ -250,6 +282,8 @@ class DiscordPlatformEvent(AstrMessageEvent):
                             )
                     else:
                         logger.warning(f"[Discord] 获取文件失败: {i.name}")
+                except AgentOutputStopped:
+                    raise
                 except Exception as e:
                     logger.warning(f"[Discord] 处理文件失败: {i.name}, 错误: {e}")
             elif isinstance(i, DiscordEmbed):

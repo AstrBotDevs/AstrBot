@@ -8,6 +8,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.utils.media_utils import convert_audio_to_amr
 
 from .wecom_kf_message import WeChatKFMessage
@@ -80,6 +81,8 @@ class WecomPlatformEvent(AstrMessageEvent):
         return result
 
     async def send(self, message: MessageChain) -> None:
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         message_obj = self.message_obj
 
         is_wechat_kf = hasattr(self.client, "kf_message")
@@ -92,10 +95,18 @@ class WecomPlatformEvent(AstrMessageEvent):
 
             user_id = self.get_sender_id()
             for comp in message.chain:
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 if isinstance(comp, Plain):
                     # Split long text messages if needed
                     plain_chunks = await self.split_plain(comp.text)
-                    for chunk in plain_chunks:
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
+                    for index, chunk in enumerate(plain_chunks):
+                        if index:
+                            await asyncio.sleep(0.5)
+                            if event_requests_agent_stop(self):
+                                raise AgentOutputStopped
                         try:
                             kf_message_api.send_text(user_id, self.get_self_id(), chunk)
                         except WeChatClientException as e:
@@ -104,14 +115,17 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 logger.warning(
                                     f"kf API error 40096 for user {user_id}, falling back to regular message API"
                                 )
+                                if event_requests_agent_stop(self):
+                                    raise AgentOutputStopped
                                 self.client.message.send_text(
                                     self.get_self_id(), user_id, chunk
                                 )
                             else:
                                 raise
-                        await asyncio.sleep(0.5)  # Avoid sending too fast
                 elif isinstance(comp, Image):
                     img_path = await comp.convert_to_file_path()
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
 
                     with open(img_path, "rb") as f:
                         try:
@@ -130,9 +144,13 @@ class WecomPlatformEvent(AstrMessageEvent):
                         )
                 elif isinstance(comp, Record):
                     record_path = await comp.convert_to_file_path()
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
                     record_path_amr = await convert_audio_to_amr(record_path)
 
                     try:
+                        if event_requests_agent_stop(self):
+                            raise AgentOutputStopped
                         with open(record_path_amr, "rb") as f:
                             try:
                                 response = self.client.media.upload("voice", f)
@@ -160,6 +178,8 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 logger.warning(f"删除临时音频文件失败: {e}")
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
 
                     with open(file_path, "rb") as f:
                         try:
@@ -178,6 +198,8 @@ class WecomPlatformEvent(AstrMessageEvent):
                         )
                 elif isinstance(comp, Video):
                     video_path = await comp.convert_to_file_path()
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
 
                     with open(video_path, "rb") as f:
                         try:
@@ -199,18 +221,27 @@ class WecomPlatformEvent(AstrMessageEvent):
         else:
             # 企业微信应用
             for comp in message.chain:
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 if isinstance(comp, Plain):
                     # Split long text messages if needed
                     plain_chunks = await self.split_plain(comp.text)
-                    for chunk in plain_chunks:
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
+                    for index, chunk in enumerate(plain_chunks):
+                        if index:
+                            await asyncio.sleep(0.5)
+                            if event_requests_agent_stop(self):
+                                raise AgentOutputStopped
                         self.client.message.send_text(
                             message_obj.self_id,
                             message_obj.session_id,
                             chunk,
                         )
-                        await asyncio.sleep(0.5)  # Avoid sending too fast
                 elif isinstance(comp, Image):
                     img_path = await comp.convert_to_file_path()
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
 
                     with open(img_path, "rb") as f:
                         try:
@@ -229,9 +260,13 @@ class WecomPlatformEvent(AstrMessageEvent):
                         )
                 elif isinstance(comp, Record):
                     record_path = await comp.convert_to_file_path()
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
                     record_path_amr = await convert_audio_to_amr(record_path)
 
                     try:
+                        if event_requests_agent_stop(self):
+                            raise AgentOutputStopped
                         with open(record_path_amr, "rb") as f:
                             try:
                                 response = self.client.media.upload("voice", f)
@@ -259,6 +294,8 @@ class WecomPlatformEvent(AstrMessageEvent):
                                 logger.warning(f"删除临时音频文件失败: {e}")
                 elif isinstance(comp, File):
                     file_path = await comp.get_file()
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
 
                     with open(file_path, "rb") as f:
                         try:
@@ -277,6 +314,8 @@ class WecomPlatformEvent(AstrMessageEvent):
                         )
                 elif isinstance(comp, Video):
                     video_path = await comp.convert_to_file_path()
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
 
                     with open(video_path, "rb") as f:
                         try:
@@ -301,6 +340,8 @@ class WecomPlatformEvent(AstrMessageEvent):
     async def send_streaming(self, generator, use_fallback: bool = False):
         buffer = None
         async for chain in generator:
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             if not buffer:
                 buffer = chain
             else:
@@ -308,5 +349,7 @@ class WecomPlatformEvent(AstrMessageEvent):
         if not buffer:
             return None
         buffer.squash_plain()
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         await self.send(buffer)
         return await super().send_streaming(generator, use_fallback)
