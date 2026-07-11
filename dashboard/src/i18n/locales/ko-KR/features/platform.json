@@ -1,0 +1,214 @@
+{
+  "title": "플랫폼 어댑터 관리",
+  "subtitle": "다양한 채팅 플랫폼에 연결할 봇 플랫폼 어댑터를 관리합니다",
+  "adapters": "플랫폼 어댑터",
+  "addAdapter": "어댑터 추가",
+  "emptyText": "아직 플랫폼 어댑터가 없습니다. 어댑터 추가를 클릭해 생성하세요",
+  "viewWebhook": "Webhook URL 보기",
+  "webhookCopied": "Webhook URL이 클립보드에 복사되었습니다",
+  "webhookCopyFailed": "복사에 실패했습니다. 직접 복사해 주세요",
+  "webhookDialog": {
+    "title": "Webhook 콜백 URL",
+    "description": "콜백 주소는 다음과 같습니다. 네트워크 환경에서 접근 가능한지 확인하세요. 로그에서도 콜백 주소 정보를 확인할 수 있습니다.",
+    "close": "닫기"
+  },
+  "details": {
+    "adapterType": "어댑터 유형",
+    "token": "토큰",
+    "description": "설명"
+  },
+  "logs": {
+    "title": "플랫폼 로그",
+    "expand": "펼치기",
+    "collapse": "접기"
+  },
+  "dialog": {
+    "add": "추가",
+    "edit": "편집",
+    "adapter": "플랫폼 어댑터",
+    "refresh": "새로고침",
+    "cancel": "취소",
+    "save": "저장",
+    "addPlatform": "플랫폼 어댑터 추가",
+    "connectTitle": "{name} 연결",
+    "viewTutorial": "튜토리얼 보기",
+    "noTemplates": "사용 가능한 플랫폼 템플릿이 없습니다",
+    "idConflict": {
+      "title": "ID 충돌 경고",
+      "message": "중복된 ID \"{id}\"가 감지되었습니다. 새 ID를 사용하세요.",
+      "confirm": "확인"
+    },
+    "securityWarning": {
+      "title": "보안 경고",
+      "aiocqhttpTokenMissing": "연결 보안을 강화하려면 ws_reverse_token을 설정하는 것을 강력히 권장합니다. 토큰을 설정하지 않으면 보안 위험이 발생할 수 있습니다.",
+      "learnMore": "자세히 알아보기"
+    },
+    "invalidPlatformId": "플랫폼 ID에는 ':' 또는 '!'를 포함할 수 없습니다."
+  },
+  "createDialog": {
+    "step1Title": "플랫폼 카테고리 선택",
+    "step1Hint": "봇을 어디에 연결하시겠습니까? 예: QQ, WeCom, Feishu, Discord, Telegram.",
+    "platformTypeLabel": "플랫폼 카테고리",
+    "configFileTitle": "설정 파일",
+    "optional": "선택",
+    "configHint": "봇을 어떻게 설정하시겠습니까? 설정 파일에는 모델, 페르소나, 지식 베이스, 플러그인 등이 포함됩니다.",
+    "configDefaultHint": "기본적으로 \"default\" 설정 파일을 사용합니다. 나중에 설정할 수 있습니다.",
+    "useExistingConfig": "기존 설정 파일 사용",
+    "selectConfigLabel": "설정 파일 선택",
+    "createNewConfig": "새 설정 파일 생성",
+    "newConfigNameLabel": "새 설정 이름",
+    "newConfigTitle": "새 설정 파일 사용",
+    "newConfigLoadFailed": "기본 설정 템플릿을 불러오지 못했습니다",
+    "addRouteRule": "라우팅 규칙 추가",
+    "viewMode": "보기",
+    "editMode": "편집",
+    "noRouteRules": "이 플랫폼에는 라우팅 규칙이 없습니다. 기본 설정 파일이 사용됩니다.",
+    "sessionIdPlaceholder": "세션 ID 또는 *",
+    "routeSource": {
+      "selectPlaceholder": "세션 소스 선택",
+      "noData": "이 봇에 대한 통합 메시지 소스가 아직 없습니다. 해당 봇이 메시징 플랫폼으로부터 최소 한 건의 메시지를 수신하면 여기에 표시됩니다.",
+      "switchToKnown": "기존 소스 선택으로 전환",
+      "switchToManual": "수동 입력으로 전환"
+    },
+    "allSessions": "모든 세션",
+    "configMissing": "설정 파일을 찾을 수 없습니다",
+    "routeHint": "메시지를 전달할 때 세션 소스를 기준으로 위에서부터 처음 일치하는 설정 파일이 사용됩니다. *는 모두 일치시킵니다. /sid로 세션 ID를 확인할 수 있습니다. 일치하는 항목이 없으면 기본 설정 파일이 사용됩니다.",
+    "warningContinue": "경고 무시하고 계속",
+    "warningEditAgain": "다시 편집",
+    "configDrawerTitle": "설정 파일 관리",
+    "configDrawerIdLabel": "ID",
+    "configTableHeaders": {
+      "configId": "이 인스턴스에 연결된 설정 ID",
+      "scope": "이 인스턴스에서의 범위"
+    },
+    "routeTableHeaders": {
+      "source": "메시지 소스 (유형: 세션 ID)",
+      "config": "설정 파일",
+      "actions": "작업"
+    },
+    "messageTypeOptions": {
+      "all": "모든 메시지",
+      "group": "그룹 메시지 (GroupMessage)",
+      "friend": "다이렉트 메시지 (FriendMessage)"
+    },
+    "messageTypeLabels": {
+      "all": "모든 메시지",
+      "group": "그룹 메시지",
+      "friend": "다이렉트 메시지"
+    }
+  },
+  "messages": {
+    "updateSuccess": "업데이트에 성공했습니다!",
+    "addSuccess": "추가에 성공했습니다!",
+    "deleteSuccess": "삭제에 성공했습니다!",
+    "statusUpdateSuccess": "상태 업데이트에 성공했습니다!",
+    "deleteConfirm": "플랫폼 어댑터를 삭제하시겠습니까",
+    "configNotFoundOpenConfig": "대상 설정 파일을 찾을 수 없습니다. 확인을 위해 설정 페이지를 열었습니다.",
+    "updateMissingPlatformId": "업데이트 실패: 플랫폼 ID가 없습니다.",
+    "platformUpdateFailed": "플랫폼 업데이트에 실패했습니다.",
+    "addSuccessWithConfig": "플랫폼이 추가되었습니다. 설정 파일이 업데이트되었습니다.",
+    "configIdMissing": "설정 파일 ID를 가져올 수 없습니다.",
+    "routingUpdateFailed": "라우팅 테이블 업데이트에 실패했습니다: {message}",
+    "createConfigFailed": "설정 파일 생성에 실패했습니다: {message}",
+    "platformIdMissing": "플랫폼 ID를 가져올 수 없습니다.",
+    "routingSaveFailed": "라우팅 테이블 저장에 실패했습니다: {message}"
+  },
+  "status": {
+    "enabled": "사용 중",
+    "disabled": "사용 안 함",
+    "connecting": "연결 중",
+    "connected": "연결됨",
+    "disconnected": "연결 끊김",
+    "error": "오류"
+  },
+  "runtimeStatus": {
+    "running": "실행 중",
+    "error": "오류",
+    "pending": "대기 중",
+    "stopped": "중지됨",
+    "unknown": "알 수 없음",
+    "errors": "개 오류"
+  },
+  "platformQr": {
+    "title": "QR 로그인",
+    "show": "QR 보기",
+    "status": "QR 상태",
+    "waiting": "QR 대기 중",
+    "close": "닫기"
+  },
+  "registrationAction": {
+    "lark": {
+      "title": "원클릭 QR 설정",
+      "show": "원클릭 QR 설정",
+      "scanTitle": "휴대폰의 Feishu로 스캔하세요",
+      "feishu": "Feishu 중국",
+      "lark": "Lark 글로벌"
+    },
+    "weixinOc": {
+      "title": "개인 WeChat QR 로그인",
+      "scanTitle": "휴대폰의 WeChat으로 스캔하세요",
+      "created": "로그인 완료",
+      "status": {
+        "idle": "시작 전",
+        "starting": "QR 코드 가져오는 중",
+        "pending": "스캔 대기 중",
+        "created": "로그인 완료 - 저장 버튼을 클릭하는 것을 잊지 마세요!",
+        "denied": "취소됨",
+        "expired": "만료됨",
+        "error": "로그인 실패"
+      }
+    },
+    "dingtalk": {
+      "title": "DingTalk QR 설정",
+      "scanTitle": "휴대폰의 DingTalk으로 스캔하세요",
+      "created": "설정 완료"
+    },
+    "qqOfficial": {
+      "title": "QQ 공식 봇 QR 바인딩",
+      "scanTitle": "휴대폰의 QQ로 스캔하세요",
+      "created": "바인딩 완료",
+      "status": {
+        "idle": "시작 전",
+        "starting": "QR 코드 가져오는 중",
+        "pending": "스캔 대기 중",
+        "created": "바인딩 완료 - 저장 버튼을 클릭하는 것을 잊지 마세요!",
+        "denied": "취소됨",
+        "expired": "만료됨",
+        "error": "바인딩 실패"
+      }
+    },
+    "start": "설정 시작",
+    "created": "설정 완료",
+    "startFailed": "QR 설정 시작에 실패했습니다",
+    "pollFailed": "QR 설정 상태 폴링에 실패했습니다",
+    "platformIdLabel": "봇 ID",
+    "platformIdRequired": "봇 ID는 필수입니다",
+    "platformIdInvalid": "봇 ID에는 공백, ':' 또는 '!'를 포함할 수 없습니다",
+    "mode": {
+      "title": "설정 방법 선택",
+      "scan": "원클릭 QR 설정",
+      "manual": "수동 설정",
+      "larkManual": "수동 설정 (자체 호스팅 Feishu 지원)"
+    },
+    "scanTitle": "휴대폰의 Feishu로 스캔하세요",
+    "status": {
+      "idle": "시작 전",
+      "starting": "시작 중",
+      "pending": "스캔 대기 중",
+      "slow_down": "폴링 지연됨",
+      "created": "설정 완료 - 저장 버튼을 클릭하는 것을 잊지 마세요!",
+      "denied": "취소됨",
+      "expired": "만료됨",
+      "error": "설정 실패"
+    }
+  },
+  "errorDialog": {
+    "title": "오류 상세",
+    "platformId": "플랫폼 ID",
+    "errorCount": "오류 횟수",
+    "lastError": "마지막 오류",
+    "occurredAt": "발생 시각",
+    "traceback": "Traceback",
+    "close": "닫기"
+  }
+}

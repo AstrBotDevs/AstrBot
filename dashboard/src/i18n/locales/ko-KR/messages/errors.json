@@ -1,0 +1,39 @@
+{
+  "network": {
+    "timeout": "네트워크 요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요",
+    "connection": "네트워크 연결에 실패했습니다. 네트워크 상태를 확인해주세요",
+    "server": "서버 오류가 발생했습니다. 기술 지원팀에 문의해주세요",
+    "unavailable": "서비스를 일시적으로 사용할 수 없습니다",
+    "forbidden": "접근이 거부되었습니다"
+  },
+  "validation": {
+    "required": "필수 입력 항목입니다",
+    "invalid": "입력 형식이 올바르지 않습니다",
+    "tooLong": "입력값이 너무 깁니다",
+    "tooShort": "입력값이 너무 짧습니다",
+    "email": "올바른 이메일 주소를 입력해주세요",
+    "url": "올바른 URL을 입력해주세요",
+    "number": "올바른 숫자를 입력해주세요"
+  },
+  "auth": {
+    "unauthorized": "인증되지 않은 접근입니다. 다시 로그인해주세요",
+    "forbidden": "이 작업을 수행할 권한이 없습니다",
+    "tokenExpired": "로그인이 만료되었습니다. 다시 로그인해주세요",
+    "invalidCredentials": "사용자 이름 또는 비밀번호가 올바르지 않습니다"
+  },
+  "file": {
+    "uploadFailed": "파일 업로드에 실패했습니다",
+    "invalidFormat": "지원하지 않는 파일 형식입니다",
+    "tooLarge": "파일 크기가 제한을 초과했습니다",
+    "notFound": "파일을 찾을 수 없습니다"
+  },
+  "operation": {
+    "failed": "작업에 실패했습니다",
+    "cancelled": "작업이 취소되었습니다",
+    "notSupported": "지원하지 않는 작업입니다",
+    "conflict": "작업이 충돌했습니다. 잠시 후 다시 시도해주세요"
+  },
+  "browser": {
+    "audioNotSupported": "브라우저가 오디오 재생을 지원하지 않습니다."
+  }
+}

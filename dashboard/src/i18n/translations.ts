@@ -124,6 +124,47 @@ import ruRUErrors from './locales/ru-RU/messages/errors.json';
 import ruRUSuccess from './locales/ru-RU/messages/success.json';
 import ruRUValidation from './locales/ru-RU/messages/validation.json';
 
+// Korean translation
+import koKRCommon from './locales/ko-KR/core/common.json';
+import koKRActions from './locales/ko-KR/core/actions.json';
+import koKRStatus from './locales/ko-KR/core/status.json';
+import koKRNavigation from './locales/ko-KR/core/navigation.json';
+import koKRHeader from './locales/ko-KR/core/header.json';
+import koKRShared from './locales/ko-KR/core/shared.json';
+
+import koKRChat from './locales/ko-KR/features/chat.json';
+import koKRExtension from './locales/ko-KR/features/extension.json';
+import koKRConversation from './locales/ko-KR/features/conversation.json';
+import koKRSessionManagement from './locales/ko-KR/features/session-management.json';
+import koKRToolUse from './locales/ko-KR/features/tool-use.json';
+import koKRProvider from './locales/ko-KR/features/provider.json';
+import koKRPlatform from './locales/ko-KR/features/platform.json';
+import koKRConfig from './locales/ko-KR/features/config.json';
+import koKRConfigMetadata from './locales/ko-KR/features/config-metadata.json';
+import koKRConsole from './locales/ko-KR/features/console.json';
+import koKRTrace from './locales/ko-KR/features/trace.json';
+import koKRAbout from './locales/ko-KR/features/about.json';
+import koKRSettings from './locales/ko-KR/features/settings.json';
+import koKRAuth from './locales/ko-KR/features/auth.json';
+import koKRChart from './locales/ko-KR/features/chart.json';
+import koKRDashboard from './locales/ko-KR/features/dashboard.json';
+import koKRCron from './locales/ko-KR/features/cron.json';
+import koKRStats from './locales/ko-KR/features/stats.json';
+import koKRAlkaidIndex from './locales/ko-KR/features/alkaid/index.json';
+import koKRAlkaidKnowledgeBase from './locales/ko-KR/features/alkaid/knowledge-base.json';
+import koKRAlkaidMemory from './locales/ko-KR/features/alkaid/memory.json';
+import koKRKnowledgeBaseIndex from './locales/ko-KR/features/knowledge-base/index.json';
+import koKRKnowledgeBaseDetail from './locales/ko-KR/features/knowledge-base/detail.json';
+import koKRKnowledgeBaseDocument from './locales/ko-KR/features/knowledge-base/document.json';
+import koKRPersona from './locales/ko-KR/features/persona.json';
+import koKRCommand from './locales/ko-KR/features/command.json';
+import koKRSubagent from './locales/ko-KR/features/subagent.json';
+import koKRWelcome from './locales/ko-KR/features/welcome.json';
+
+import koKRErrors from './locales/ko-KR/messages/errors.json';
+import koKRSuccess from './locales/ko-KR/messages/success.json';
+import koKRValidation from './locales/ko-KR/messages/validation.json';
+
 // 组装翻译对象
 export const translations = {
   'zh-CN': {
@@ -272,7 +313,56 @@ export const translations = {
       success: ruRUSuccess,
       validation: ruRUValidation
     }
+  },
+  'ko-KR': {
+    core: {
+      common: koKRCommon,
+      actions: koKRActions,
+      status: koKRStatus,
+      navigation: koKRNavigation,
+      header: koKRHeader,
+      shared: koKRShared
+    },
+    features: {
+      chat: koKRChat,
+      extension: koKRExtension,
+      conversation: koKRConversation,
+      'session-management': koKRSessionManagement,
+      tooluse: koKRToolUse,
+      provider: koKRProvider,
+      platform: koKRPlatform,
+      config: koKRConfig,
+      'config-metadata': koKRConfigMetadata,
+      console: koKRConsole,
+      trace: koKRTrace,
+      about: koKRAbout,
+      settings: koKRSettings,
+      auth: koKRAuth,
+      chart: koKRChart,
+      dashboard: koKRDashboard,
+      cron: koKRCron,
+      stats: koKRStats,
+      alkaid: {
+        index: koKRAlkaidIndex,
+        'knowledge-base': koKRAlkaidKnowledgeBase,
+        memory: koKRAlkaidMemory
+      },
+      'knowledge-base': {
+        index: koKRKnowledgeBaseIndex,
+        detail: koKRKnowledgeBaseDetail,
+        document: koKRKnowledgeBaseDocument
+      },
+      persona: koKRPersona,
+      command: koKRCommand,
+      subagent: koKRSubagent,
+      welcome: koKRWelcome
+    },
+    messages: {
+      errors: koKRErrors,
+      success: koKRSuccess,
+      validation: koKRValidation
+    }
   }
 };
 
-export type TranslationData = typeof translations; 
+export type TranslationData = typeof translations;

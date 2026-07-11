@@ -1,0 +1,44 @@
+{
+  "title": "Alkaid 연구소",
+  "subtitle": "최첨단 AI 기능을 살펴보세요",
+  "comingSoon": "앞으로 펼쳐질 세계, 나중에 함께 탐험해봐요!",
+  "page": {
+    "title": "The Alkaid Project.",
+    "subtitle": "AstrBot Alpha 프로젝트",
+    "navigation": {
+      "knowledgeBase": "지식 베이스 (플러그인)",
+      "longTermMemory": "장기 기억",
+      "other": "..."
+    }
+  },
+  "features": {
+    "knowledgeBase": "지식 베이스",
+    "longTermMemory": "장기 기억",
+    "advancedChat": "고급 채팅",
+    "multiModal": "멀티모달 상호작용"
+  },
+  "status": {
+    "experimental": "실험적",
+    "beta": "베타",
+    "stable": "안정",
+    "deprecated": "지원 종료"
+  },
+  "sigma": {
+    "subtitle": "AstrBot 실험적 프로젝트",
+    "visualization": "시각화",
+    "filterUserId": "사용자 ID 필터",
+    "filter": "필터",
+    "resetFilter": "필터 초기화",
+    "refreshGraph": "그래프 새로고침",
+    "nodeDetails": "노드 상세 정보",
+    "id": "ID",
+    "type": "유형",
+    "name": "이름",
+    "userId": "사용자 ID",
+    "timestamp": "타임스탬프",
+    "graphStats": "그래프 통계",
+    "nodeCount": "노드 수",
+    "edgeCount": "엣지 수",
+    "inDevelopment": "개발 중"
+  }
+}

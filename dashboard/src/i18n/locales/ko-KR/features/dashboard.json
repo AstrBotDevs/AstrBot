@@ -1,0 +1,65 @@
+{
+  "title": "대시보드",
+  "subtitle": "실시간 모니터링 및 통계",
+  "lastUpdate": "마지막 업데이트",
+  "status": {
+    "loading": "로딩 중...",
+    "dataError": "데이터를 가져오지 못했습니다",
+    "noticeError": "공지사항을 가져오지 못했습니다",
+    "online": "온라인",
+    "uptime": "가동 시간",
+    "memoryUsage": "메모리 사용량"
+  },
+  "stats": {
+    "totalMessage": {
+      "title": "총 메시지 수",
+      "subtitle": "모든 플랫폼에서 전송된 총 메시지 수"
+    },
+    "onlinePlatform": {
+      "title": "플랫폼",
+      "subtitle": "연결된 플랫폼 수"
+    },
+    "runningTime": {
+      "title": "가동 시간",
+      "subtitle": "시스템 가동 시간",
+      "format": "{hours}시간 {minutes}분 {seconds}초"
+    },
+    "memoryUsage": {
+      "title": "메모리 사용량",
+      "subtitle": "시스템 메모리 사용 현황",
+      "cpuLoad": "CPU 부하",
+      "status": {
+        "good": "양호",
+        "normal": "보통",
+        "high": "높음"
+      }
+    }
+  },
+  "charts": {
+    "messageTrend": {
+      "title": "메시지 추이 분석",
+      "subtitle": "시간에 따른 메시지 수 변화를 추적합니다",
+      "totalMessages": "총 메시지 수",
+      "dailyAverage": "일평균",
+      "growthRate": "증가율",
+      "timeLabel": "시간",
+      "messageCount": "메시지 수",
+      "timeRanges": {
+        "1day": "최근 1일",
+        "3days": "최근 3일",
+        "1week": "최근 1주",
+        "1month": "최근 1개월"
+      }
+    },
+    "platformStat": {
+      "title": "플랫폼별 메시지 통계",
+      "subtitle": "플랫폼별 메시지 수 분포",
+      "total": "합계",
+      "noData": "사용 가능한 플랫폼 데이터가 없습니다",
+      "messageUnit": "건",
+      "platformCount": "플랫폼 수",
+      "mostActive": "가장 활발함",
+      "totalPercentage": "전체 비율"
+    }
+  }
+}
