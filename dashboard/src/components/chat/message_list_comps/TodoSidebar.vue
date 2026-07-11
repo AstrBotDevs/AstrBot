@@ -105,13 +105,18 @@ function formatUpdatedAt(value: string | undefined): string {
 <style scoped>
 .todo-sidebar {
   width: 380px;
-  height: 100%;
+  /* 让出顶部 v-app-bar 的 50px, 与 ReasoningSidebar / RefsSidebar /
+     ThreadPanel / GitDiffSidebar 保持一致;--chat-panel-top-offset
+     由父级 .chat-ui 定义。*/
+  height: calc(100% - var(--chat-panel-top-offset, 0px));
+  margin-top: var(--chat-panel-top-offset, 0px);
   background-color: rgb(var(--v-theme-surface));
   border-left: 1px solid rgba(var(--v-border-color), 0.16);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   color: rgb(var(--v-theme-on-surface));
+  position: relative;
   /* 阻止内部滚动穿透 */
   overscroll-behavior: contain;
 }
