@@ -69,7 +69,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     def _embedding_kwargs(self) -> dict:
         """返回启动时构建并缓存的 embedding 请求参数"""
-        return self._cached_kwargs
+        return self._cached_kwargs.copy()
 
     def _build_embedding_kwargs(self) -> dict:
         """构建嵌入请求的可选参数。仅在 __init__ 时调用一次，SiliconFlow 检测与 WARN 日志只触发一次。"""
