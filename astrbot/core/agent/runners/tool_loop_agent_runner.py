@@ -1331,6 +1331,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     abort_signal=self._abort_signal,
                     request_max_retries=self.request_max_retries,
                 )
+                if requery_resp and requery_resp.usage:
+                    self.stats.token_usage += requery_resp.usage
+                    if self.req.conversation:
+                        self.req.conversation.token_usage += requery_resp.usage.total
                 if requery_resp:
                     llm_resp = requery_resp
                     self._sanitize_malformed_tool_calls(llm_resp)
@@ -1359,6 +1363,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         abort_signal=self._abort_signal,
                         request_max_retries=self.request_max_retries,
                     )
+                    if repair_resp and repair_resp.usage:
+                        self.stats.token_usage += repair_resp.usage
+                        if self.req.conversation:
+                            self.req.conversation.token_usage += repair_resp.usage.total
                     if repair_resp:
                         llm_resp = repair_resp
                         self._sanitize_malformed_tool_calls(llm_resp)
