@@ -1,6 +1,16 @@
 <template>
   <transition name="slide-left">
-    <div v-if="isOpen" class="todo-sidebar">
+    <div
+      v-if="isOpen"
+      ref="sidebarRef"
+      class="todo-sidebar"
+      :style="{ width: sidebarWidth + 'px' }"
+    >
+      <!-- Left-edge 6px drag handle. Mirrors the ReasoningSidebar /
+           GitDiffSidebar pattern: bind mousedown here, listen for
+           mousemove/mouseup on document, and unbind on mouseup. -->
+      <div class="todo-sidebar-resizer" @mousedown="startResize" />
+
       <div class="sidebar-header">
         <h3 class="sidebar-title">
           <v-icon size="18" class="title-icon">mdi-format-list-checks</v-icon>
@@ -16,7 +26,7 @@
       </div>
 
       <div class="sidebar-body">
-        <!-- 有数据 -->
+        <!-- Non-empty state -->
         <TodoListPanel
           v-if="list && stats"
           :list="list"
@@ -24,7 +34,7 @@
           :attention-items="attentionItems"
         />
 
-        <!-- 空状态 -->
+        <!-- Empty state -->
         <div v-else class="empty-state">
           <v-icon size="36" class="empty-icon">mdi-clipboard-text-outline</v-icon>
           <div class="empty-text">{{ tm("todo.empty") }}</div>
@@ -39,17 +49,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import type { TodoList, TodoStats } from "@/composables/useMessages";
 import TodoListPanel from "./spcode_tools/TodoListPanel.vue";
 
 /**
- * TodoSidebar — 实时显示当前 todo_list 工具调用最新一份快照的右侧抽屉。
+ * TodoSidebar - right-side drawer that renders the latest snapshot of
+ * the current session's todo_list tool call in real time.
  *
- * 数据由父组件 (Chat.vue) 从 useMessages 的 latestTodoSnapshotBySession 中
- * 取出,经 currentTodoSnapshot computed 隔离当前 session 后传入。
- * 与 RefsSidebar 互斥显示:父组件控制 v-model 即可。
+ * Data is fed by the parent (Chat.vue) from useMessages'
+ * latestTodoSnapshotBySession via the currentTodoSnapshot computed
+ * that isolates the active session. Mutually exclusive with
+ * RefsSidebar: the parent controls the v-model.
  */
 const props = withDefaults(
   defineProps<{
@@ -72,7 +84,7 @@ const emit = defineEmits<{
 
 const { tm } = useModuleI18n("features/chat");
 
-/** v-model 受控的开关 getter/setter。 */
+/** v-model controlled open/close getter/setter. */
 const isOpen = computed<boolean>({
   get: () => props.modelValue,
   set: (value: boolean) => emit("update:modelValue", value),
@@ -82,9 +94,9 @@ function close() {
   isOpen.value = false;
 }
 
-/** 把 list.updated_at ISO 字符串渲染为紧凑时间显示。
+/** Render list.updated_at ISO string as a compact time label.
  *
- * 形如 "18:14" (当天) 或 "06-08 18:14" (其他日期)。
+ *  Format: "HH:MM" (same day) or "MM-DD HH:MM" (other days).
  */
 function formatUpdatedAt(value: string | undefined): string {
   if (!value) return "";
@@ -100,14 +112,60 @@ function formatUpdatedAt(value: string | undefined): string {
   if (sameDay) return hm;
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${hm}`;
 }
+
+// Drag resize ----------------------------------------------------
+
+const MIN_WIDTH = 280;
+const MAX_WIDTH = 1800;
+const DEFAULT_WIDTH = 380;
+
+const sidebarWidth = ref(DEFAULT_WIDTH);
+const sidebarRef = ref<HTMLElement | null>(null);
+let isResizing = false;
+
+function startResize(e: MouseEvent) {
+  e.preventDefault();
+  isResizing = true;
+  document.body.style.cursor = "ew-resize";
+  document.body.style.userSelect = "none";
+  document.addEventListener("mousemove", onMouseMove);
+  document.addEventListener("mouseup", onMouseUp);
+}
+
+function onMouseMove(e: MouseEvent) {
+  if (!isResizing || !sidebarRef.value) return;
+  // Use the sidebar's own right edge (not the parent's) as the
+  // reference point. The flex layout places any siblings shown to
+  // the right beyond selfRect.right, so the computed width is
+  // automatically reduced by their combined width - same model
+  // as ReasoningSidebar.
+  const selfRect = sidebarRef.value.getBoundingClientRect();
+  const newWidth = selfRect.right - e.clientX;
+  sidebarWidth.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth));
+}
+
+function onMouseUp() {
+  if (!isResizing) return;
+  isResizing = false;
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+  document.removeEventListener("mousemove", onMouseMove);
+  document.removeEventListener("mouseup", onMouseUp);
+}
+
+onBeforeUnmount(() => {
+  onMouseUp();
+});
 </script>
 
 <style scoped>
 .todo-sidebar {
-  width: 380px;
-  /* 让出顶部 v-app-bar 的 50px, 与 ReasoningSidebar / RefsSidebar /
-     ThreadPanel / GitDiffSidebar 保持一致;--chat-panel-top-offset
-     由父级 .chat-ui 定义。*/
+  /* Width is controlled by the inline :style binding (DEFAULT_WIDTH
+     = 380px). On desktop the user can drag between MIN_WIDTH and
+     MAX_WIDTH. */
+  /* Reserve top space for the absolute v-app-bar (50px), matching
+     ReasoningSidebar / RefsSidebar / ThreadPanel / GitDiffSidebar.
+     --chat-panel-top-offset is defined by the parent .chat-ui. */
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
   background-color: rgb(var(--v-theme-surface));
@@ -117,8 +175,26 @@ function formatUpdatedAt(value: string | undefined): string {
   flex-shrink: 0;
   color: rgb(var(--v-theme-on-surface));
   position: relative;
-  /* 阻止内部滚动穿透 */
+  /* Block scroll bleed-through from inside the panel. */
   overscroll-behavior: contain;
+}
+
+/* Drag handle */
+
+.todo-sidebar-resizer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 10;
+  transition: background 0.15s ease;
+}
+
+.todo-sidebar-resizer:hover,
+.todo-sidebar-resizer:active {
+  background: rgba(var(--v-theme-primary), 0.2);
 }
 
 .slide-left-enter-active,
@@ -199,11 +275,18 @@ function formatUpdatedAt(value: string | undefined): string {
 
 @media (max-width: 760px) {
   .todo-sidebar {
-    width: 100%;
+    /* !important overrides the inline :style width so the mobile
+       drawer always fills the screen. position:absolute + inset:0
+       makes margin-top / height irrelevant here. */
+    width: 100% !important;
     position: absolute;
     inset: 0;
     z-index: 10;
     border-left: 0;
+  }
+
+  .todo-sidebar-resizer {
+    display: none;
   }
 }
 </style>
