@@ -30,7 +30,7 @@ from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
-from .qqofficial_message_event import QQOfficialMessageEvent
+from .qqofficial_message_event import QQOfficialMessageEvent, init_url_upload_probe
 
 # remove logger handler
 for handler in logging.root.handlers[:]:
@@ -850,6 +850,10 @@ class QQOfficialPlatformAdapter(Platform):
         return abm
 
     def run(self):
+        # 启动时探测 URL 上传可用性（结果缓存，只执行一次）
+        from astrbot.core import astrbot_config
+        callback_base = astrbot_config.get("callback_api_base", "")
+        asyncio.get_event_loop().create_task(init_url_upload_probe(callback_base))
         return self.client.start(appid=self.appid, secret=self.secret)
 
     def get_client(self) -> botClient:
