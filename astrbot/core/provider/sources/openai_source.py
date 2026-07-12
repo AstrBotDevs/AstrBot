@@ -404,10 +404,26 @@ class ProviderOpenAIOfficial(Provider):
             return value.strip().lower() in {"1", "true", "yes", "on"}
         return bool(value)
 
-    def _apply_provider_specific_extra_body_overrides(
-        self, extra_body: dict[str, Any]
+    def _apply_provider_specific_request_overrides(
+        self,
+        payloads: dict[str, Any],
+        extra_body: dict[str, Any],
     ) -> None:
-        if self.provider_config.get("provider") != "ollama":
+        provider = self.provider_config.get("provider")
+        model = str(payloads.get("model", "")).lower()
+
+        # NVIDIA's hosted MiniMax M3 endpoint can return empty choices when
+        # max_tokens is omitted (#9206). Scope the compatibility default to
+        # that model; other NVIDIA models have different token limits.
+        if (
+            provider == "nvidia"
+            and model == "minimaxai/minimax-m3"
+            and "max_tokens" not in payloads
+            and "max_tokens" not in extra_body
+        ):
+            payloads["max_tokens"] = 8192
+
+        if provider != "ollama":
             return
         if not self._ollama_disable_thinking_enabled():
             return
@@ -543,7 +559,7 @@ class ProviderOpenAIOfficial(Provider):
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
-        self._apply_provider_specific_extra_body_overrides(extra_body)
+        self._apply_provider_specific_request_overrides(payloads, extra_body)
 
         model = payloads.get("model", "").lower()
 
@@ -603,7 +619,7 @@ class ProviderOpenAIOfficial(Provider):
                 to_del.append(key)
         for key in to_del:
             del payloads[key]
-        self._apply_provider_specific_extra_body_overrides(extra_body)
+        self._apply_provider_specific_request_overrides(payloads, extra_body)
 
         self._sanitize_assistant_messages(payloads)
 
