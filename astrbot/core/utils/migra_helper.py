@@ -128,6 +128,52 @@ def _migra_provider_to_source_structure(conf: AstrBotConfig) -> None:
         logger.info("Provider-source structure migration completed")
 
 
+def _prune_invalid_provider_source_models(conf: AstrBotConfig) -> None:
+    """Remove stale provider model entries that cannot resolve a source type.
+
+    New-style provider model entries intentionally keep only model-level fields and
+    inherit adapter fields such as `type` from provider_sources. Older configs can
+    contain entries that reference a removed source id; those can never be loaded
+    and would otherwise produce repeated startup errors.
+    """
+    providers = conf.get("provider", [])
+    if not isinstance(providers, list):
+        return
+
+    provider_sources = conf.get("provider_sources", [])
+    source_types = {
+        source.get("id"): source.get("type")
+        for source in provider_sources
+        if isinstance(source, dict)
+    }
+
+    kept = []
+    removed_ids = []
+    for provider in providers:
+        if not isinstance(provider, dict):
+            kept.append(provider)
+            continue
+        if provider.get("type"):
+            kept.append(provider)
+            continue
+        source_id = provider.get("provider_source_id")
+        if source_id and source_types.get(source_id):
+            kept.append(provider)
+            continue
+        removed_ids.append(str(provider.get("id") or source_id or "<unknown>"))
+
+    if not removed_ids:
+        return
+
+    conf["provider"] = kept
+    conf.save_config()
+    logger.info(
+        "Pruned %d invalid provider model config(s) with missing adapter type: %s",
+        len(removed_ids),
+        ", ".join(removed_ids),
+    )
+
+
 async def migra(
     db, astrbot_config_mgr, umop_config_router, acm: AstrBotConfigManager
 ) -> None:
@@ -180,4 +226,10 @@ async def migra(
         _migra_provider_to_source_structure(astrbot_config)
     except Exception as e:
         logger.error(f"Migration for provider-source structure failed: {e!s}")
+        logger.error(traceback.format_exc())
+
+    try:
+        _prune_invalid_provider_source_models(astrbot_config)
+    except Exception as e:
+        logger.error(f"Migration for invalid provider-source models failed: {e!s}")
         logger.error(traceback.format_exc())

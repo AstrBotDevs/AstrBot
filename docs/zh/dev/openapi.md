@@ -42,14 +42,18 @@ X-API-Key: abk_xxx
 | `chat` | 调用对话能力、查询对话会话 | `POST /api/v1/chat`、`GET /api/v1/chat/sessions` |
 | `file` | 上传和下载对话附件 | `POST /api/v1/file`、`GET /api/v1/file`、`POST /api/v1/files` |
 | `plugin` | 管理插件、插件配置、插件源和插件市场 | `GET /api/v1/plugins`、`GET/PUT /api/v1/plugins/config`、`POST /api/v1/plugins/install/url` |
+| `kb` | 管理知识库、文档和检索测试 | `GET/POST /api/v1/knowledge-bases`、`POST /api/v1/knowledge-bases/{kb_id}/documents` |
 | `mcp` | 管理 MCP 服务器配置和服务端同步 | `GET/POST /api/v1/mcp/servers`、`PATCH /api/v1/mcp/servers/{server_name}/enabled`、`POST /api/v1/mcp/providers/modelscope/sync` |
-| `skill` | 管理 Skills、Skill 压缩包、Skill 文件和 Shipyard Neo Skill 流程 | `GET/POST /api/v1/skills`、`PUT /api/v1/skills/{skill_name}/files/{file_path}`、`POST /api/v1/skills/neo/sync` |
+| `skill` | 管理 Skills、Skill 压缩包和 Skill 文件 | `GET/POST /api/v1/skills`、`PUT /api/v1/skills/{skill_name}/files/{file_path}` |
+| `system` | 管理 API Key、备份、日志、统计和更新等系统级操作 | `GET/POST /api/v1/api-keys`、`GET /api/v1/backups`、`GET /api/v1/logs` |
+| `tool` | 管理 LLM 工具和命令权限 | `GET /api/v1/tools`、`PATCH /api/v1/tools/{tool_id}/enabled`、`GET /api/v1/commands` |
+| `sandbox` | 通过沙盒 API 管理运行时沙盒 | `/api/sandbox/*` |
 
 如果 API Key 未包含目标接口所需 scope，请求会返回 `403 Insufficient API key scope`。
 
 `config` 是较大的管理 scope。创建 API Key 时如果包含 `config`，AstrBot 会同时授予该 Key `config`、`bot` 和 `provider` 访问权限。WebUI 的勾选逻辑也会体现这个依赖关系：选中 `config` 会同时选中 `bot` 和 `provider`；取消选中 `bot` 或 `provider` 时，会同步取消 `config`。
 
-当前开发者 API Key 仅开放以上 10 个 scope。`tool`、`skills`、`kb`、`data`、`system` 暂不支持作为开发者 API Key scope。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。公开 OpenAPI 文档只包含这些开发者 API Key scope 覆盖的接口。
+开发者 API Key 支持上表列出的 scopes。`/api/v1/skills/*` 接口使用单数 `skill` scope，不使用复数 `skills`。
 
 ## 常用接口
 

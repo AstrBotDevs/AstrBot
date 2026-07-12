@@ -259,6 +259,157 @@ class TestAstrBotCoreLifecycleErrorHandling:
         )
 
 
+class TestAstrBotCoreLifecycleSandboxRestore:
+    @pytest.mark.asyncio
+    async def test_initialize_does_not_restore_persistent_sandboxes(
+        self, mock_log_broker, mock_db, mock_astrbot_config
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+
+        mock_db.initialize = AsyncMock()
+        mock_html_renderer = MagicMock()
+        mock_html_renderer.initialize = AsyncMock()
+        mock_umop_config_router = MagicMock()
+        mock_umop_config_router.initialize = AsyncMock()
+        mock_astrbot_config_mgr = MagicMock()
+        mock_astrbot_config_mgr.default_conf = {}
+        mock_astrbot_config_mgr.confs = {}
+        mock_persona_mgr = MagicMock(initialize=AsyncMock())
+        mock_provider_manager = MagicMock(initialize=AsyncMock())
+        mock_platform_manager = MagicMock(initialize=AsyncMock())
+        mock_conversation_manager = MagicMock()
+        mock_platform_message_history_manager = MagicMock()
+        mock_kb_manager = MagicMock(initialize=AsyncMock())
+        mock_cron_manager = MagicMock()
+        mock_star_context = MagicMock(_register_tasks=[])
+        mock_plugin_manager = MagicMock(reload=AsyncMock())
+        mock_pipeline_scheduler = MagicMock(initialize=AsyncMock())
+        mock_astrbot_updator = MagicMock()
+        mock_event_bus = MagicMock()
+        with (
+            patch("astrbot.core.core_lifecycle.astrbot_config", mock_astrbot_config),
+            patch("astrbot.core.core_lifecycle.html_renderer", mock_html_renderer),
+            patch(
+                "astrbot.core.core_lifecycle.UmopConfigRouter",
+                return_value=mock_umop_config_router,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.AstrBotConfigManager",
+                return_value=mock_astrbot_config_mgr,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.PersonaManager",
+                return_value=mock_persona_mgr,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.ProviderManager",
+                return_value=mock_provider_manager,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.PlatformManager",
+                return_value=mock_platform_manager,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.ConversationManager",
+                return_value=mock_conversation_manager,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.PlatformMessageHistoryManager",
+                return_value=mock_platform_message_history_manager,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.KnowledgeBaseManager",
+                return_value=mock_kb_manager,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.CronJobManager",
+                return_value=mock_cron_manager,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.Context", return_value=mock_star_context
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.PluginManager",
+                return_value=mock_plugin_manager,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.PipelineScheduler",
+                return_value=mock_pipeline_scheduler,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.AstrBotUpdator",
+                return_value=mock_astrbot_updator,
+            ),
+            patch("astrbot.core.core_lifecycle.EventBus", return_value=mock_event_bus),
+            patch("astrbot.core.core_lifecycle.migra", new_callable=AsyncMock),
+            patch(
+                "astrbot.core.core_lifecycle.update_llm_metadata",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.computer_client.sandbox_manager.reconcile_on_startup",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.computer_client.sandbox_manager.restore_persistent_sandboxes",
+                new_callable=AsyncMock,
+            ) as restore_persistent,
+        ):
+            await asyncio.wait_for(lifecycle.initialize(), timeout=1)
+
+        restore_persistent.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_start_schedules_persistent_sandbox_restore_without_waiting(
+        self, mock_log_broker, mock_db
+    ):
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+        restore_started = asyncio.Event()
+        restore_finished = asyncio.Event()
+        lifecycle.star_context = MagicMock(_register_tasks=[])
+        lifecycle.curr_tasks = []
+        lifecycle.event_bus = MagicMock()
+
+        async def dispatch():
+            return None
+
+        lifecycle.event_bus.dispatch = dispatch
+        lifecycle.cron_manager = None
+        lifecycle.temp_dir_cleaner = None
+
+        async def restore_persistent(_context, **_kwargs):
+            restore_started.set()
+            await restore_finished.wait()
+            return 1, 0
+
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.computer_client.sandbox_manager.restore_persistent_sandboxes",
+                restore_persistent,
+            ),
+            patch(
+                "astrbot.core.core_lifecycle.star_handlers_registry.get_handlers_by_event_type",
+                return_value=[],
+            ),
+        ):
+            start_task = asyncio.create_task(lifecycle.start())
+            try:
+                await asyncio.wait_for(restore_started.wait(), timeout=1)
+                assert lifecycle._persistent_restore_task is not None
+                assert not restore_finished.is_set()
+            finally:
+                restore_finished.set()
+                if lifecycle._persistent_restore_task is not None:
+                    await asyncio.wait_for(
+                        lifecycle._persistent_restore_task, timeout=1
+                    )
+                start_task.cancel()
+                try:
+                    await start_task
+                except asyncio.CancelledError:
+                    pass
+
+
 class TestAstrBotCoreLifecycleDefaultChatProviderWarning:
     """Tests for startup warning when default chat provider is unset."""
 
@@ -886,15 +1037,55 @@ class TestAstrBotCoreLifecycleRestart:
 
         lifecycle.astrbot_updator = MagicMock()
 
-        with patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread:
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.computer_client.cleanup_managed_sandboxes",
+                new_callable=AsyncMock,
+            ) as mock_cleanup,
+            patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread,
+        ):
             await lifecycle.restart()
 
             # Verify managers were terminated
             lifecycle.provider_manager.terminate.assert_awaited_once()
             lifecycle.platform_manager.terminate.assert_awaited_once()
             lifecycle.kb_manager.terminate.assert_awaited_once()
+            mock_cleanup.assert_awaited_once()
 
             # Verify thread was started
+            mock_thread.assert_called_once()
+            mock_thread.return_value.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_restart_cleans_managed_sandboxes_before_reboot(
+        self, mock_log_broker, mock_db
+    ):
+        """Test that restart cleans managed sandboxes before rebooting."""
+        lifecycle = AstrBotCoreLifecycle(mock_log_broker, mock_db)
+
+        lifecycle.provider_manager = MagicMock()
+        lifecycle.provider_manager.terminate = AsyncMock()
+
+        lifecycle.platform_manager = MagicMock()
+        lifecycle.platform_manager.terminate = AsyncMock()
+
+        lifecycle.kb_manager = MagicMock()
+        lifecycle.kb_manager.terminate = AsyncMock()
+
+        lifecycle.dashboard_shutdown_event = asyncio.Event()
+
+        with (
+            patch(
+                "astrbot.core.core_lifecycle.computer_client.cleanup_managed_sandboxes",
+                new_callable=AsyncMock,
+            ) as mock_cleanup,
+            patch("astrbot.core.core_lifecycle.threading.Thread") as mock_thread,
+        ):
+            lifecycle.astrbot_updator = MagicMock()
+
+            await lifecycle.restart()
+
+            mock_cleanup.assert_awaited_once()
             mock_thread.assert_called_once()
             mock_thread.return_value.start.assert_called_once()
 

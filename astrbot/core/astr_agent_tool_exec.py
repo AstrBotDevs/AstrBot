@@ -20,6 +20,8 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
 )
+from astrbot.core.computer import computer_client
+from astrbot.core.computer.sandbox_tool_binding import tool_available_in_runtime
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import (
@@ -31,9 +33,6 @@ from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
-    CuaKeyboardTypeTool,
-    CuaMouseClickTool,
-    CuaScreenshotTool,
     ExecuteShellTool,
     FileDownloadTool,
     FileEditTool,
@@ -43,8 +42,12 @@ from astrbot.core.tools.computer_tools import (
     GrepTool,
     LocalPythonTool,
     PythonTool,
+    SandboxLifecycleTool,
+    SandboxOperationTool,
+    SandboxQueryTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.registry import get_builtin_tool_config_rule
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
@@ -52,6 +55,14 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 
 class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
+    _runtime_computer_tools_cache: dict[
+        tuple[int, str, str], dict[str, FunctionTool]
+    ] = {}
+
+    @classmethod
+    def clear_runtime_computer_tools_cache(cls, provider_id: str | None = None) -> None:
+        cls._runtime_computer_tools_cache.clear()
+
     @classmethod
     def _collect_image_urls_from_args(cls, image_urls_raw: T.Any) -> list[str]:
         if image_urls_raw is None:
@@ -192,8 +203,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         booter: str | None = None,
     ) -> dict[str, FunctionTool]:
         booter = "" if booter is None else str(booter).lower()
+        cache_key = (id(tool_mgr), runtime, booter)
+        if cache_key in cls._runtime_computer_tools_cache:
+            return cls._runtime_computer_tools_cache[cache_key]
         if runtime == "sandbox":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
+            sandbox_query_tool = tool_mgr.get_builtin_tool(SandboxQueryTool)
+            sandbox_lifecycle_tool = tool_mgr.get_builtin_tool(SandboxLifecycleTool)
+            sandbox_operation_tool = tool_mgr.get_builtin_tool(SandboxOperationTool)
             python_tool = tool_mgr.get_builtin_tool(PythonTool)
             upload_tool = tool_mgr.get_builtin_tool(FileUploadTool)
             download_tool = tool_mgr.get_builtin_tool(FileDownloadTool)
@@ -203,6 +220,9 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
             tools = {
                 shell_tool.name: shell_tool,
+                sandbox_query_tool.name: sandbox_query_tool,
+                sandbox_lifecycle_tool.name: sandbox_lifecycle_tool,
+                sandbox_operation_tool.name: sandbox_operation_tool,
                 python_tool.name: python_tool,
                 upload_tool.name: upload_tool,
                 download_tool.name: download_tool,
@@ -211,17 +231,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
-            if booter == "cua":
-                screenshot_tool = tool_mgr.get_builtin_tool(CuaScreenshotTool)
-                mouse_click_tool = tool_mgr.get_builtin_tool(CuaMouseClickTool)
-                keyboard_type_tool = tool_mgr.get_builtin_tool(CuaKeyboardTypeTool)
-                tools.update(
-                    {
-                        screenshot_tool.name: screenshot_tool,
-                        mouse_click_tool.name: mouse_click_tool,
-                        keyboard_type_tool.name: keyboard_type_tool,
-                    }
-                )
+            cls._runtime_computer_tools_cache[cache_key] = tools
             return tools
         if runtime == "local":
             shell_tool = tool_mgr.get_builtin_tool(ExecuteShellTool)
@@ -230,7 +240,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             write_tool = tool_mgr.get_builtin_tool(FileWriteTool)
             edit_tool = tool_mgr.get_builtin_tool(FileEditTool)
             grep_tool = tool_mgr.get_builtin_tool(GrepTool)
-            return {
+            tools = {
                 shell_tool.name: shell_tool,
                 python_tool.name: python_tool,
                 read_tool.name: read_tool,
@@ -238,7 +248,30 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 edit_tool.name: edit_tool,
                 grep_tool.name: grep_tool,
             }
+            cls._runtime_computer_tools_cache[cache_key] = tools
+            return tools
         return {}
+
+    @staticmethod
+    def _tool_available_for_runtime_config(
+        tool: FunctionTool, runtime: str, provider_id: str | None = None
+    ) -> bool:
+        if not tool_available_in_runtime(tool, runtime, provider_id):
+            return False
+        rule = get_builtin_tool_config_rule(tool.name)
+        if rule is None:
+            return True
+        conditions = rule.evaluate(
+            {"provider_settings": {"computer_use_runtime": runtime}}
+        )
+        runtime_conditions = [
+            condition
+            for condition in conditions
+            if str(condition.get("key")) == "provider_settings.computer_use_runtime"
+        ]
+        if not runtime_conditions:
+            return True
+        return all(bool(condition.get("matched")) for condition in runtime_conditions)
 
     @classmethod
     def _build_handoff_toolset(
@@ -251,6 +284,11 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cfg = ctx.get_config(umo=event.unified_msg_origin)
         provider_settings = cfg.get("provider_settings", {})
         runtime = str(provider_settings.get("computer_use_runtime", "local"))
+        provider_id = None
+        if runtime == "sandbox":
+            provider_id = computer_client.get_current_sandbox_provider_id(
+                event.unified_msg_origin
+            )
         tool_mgr = (
             ctx.get_llm_tool_manager()
             if hasattr(ctx, "get_llm_tool_manager")
@@ -259,22 +297,28 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         runtime_computer_tools = cls._get_runtime_computer_tools(
             runtime,
             tool_mgr,
-            provider_settings.get("sandbox", {}).get("booter"),
         )
 
         # Keep persona semantics aligned with the main agent: tools=None means
         # "all tools", including runtime computer-use tools.
         if tools is None:
             toolset = ToolSet()
+            registered_tools = (
+                tool_mgr.get_full_tool_set()
+                if hasattr(tool_mgr, "get_full_tool_set")
+                else getattr(tool_mgr, "func_list", llm_tools.func_list)
+            )
             handoff_names = {
                 tool.name
-                for tool in tool_mgr.func_list
+                for tool in getattr(tool_mgr, "func_list", llm_tools.func_list)
                 if isinstance(tool, HandoffTool)
             }
-            for registered_tool in tool_mgr.get_full_tool_set():
+            for registered_tool in registered_tools:
                 if registered_tool.name in handoff_names:
                     continue
-                if registered_tool.active:
+                if registered_tool.active and cls._tool_available_for_runtime_config(
+                    registered_tool, runtime, provider_id
+                ):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
@@ -286,14 +330,24 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         toolset = ToolSet()
         for tool_name_or_obj in tools:
             if isinstance(tool_name_or_obj, str):
-                registered_tool = llm_tools.get_func(tool_name_or_obj)
-                if registered_tool and registered_tool.active:
+                registered_tool = tool_mgr.get_func(tool_name_or_obj)
+                if (
+                    registered_tool
+                    and registered_tool.active
+                    and cls._tool_available_for_runtime_config(
+                        registered_tool, runtime, provider_id
+                    )
+                ):
                     toolset.add_tool(registered_tool)
                     continue
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
                     toolset.add_tool(runtime_tool)
-            elif isinstance(tool_name_or_obj, FunctionTool):
+            elif isinstance(
+                tool_name_or_obj, FunctionTool
+            ) and cls._tool_available_for_runtime_config(
+                tool_name_or_obj, runtime, provider_id
+            ):
                 toolset.add_tool(tool_name_or_obj)
         return None if toolset.empty() else toolset
 
@@ -548,6 +602,10 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         config = MainAgentBuildConfig(
             tool_call_timeout=run_context.tool_call_timeout,
             streaming_response=provider_settings.get("stream", False),
+            computer_use_runtime=str(
+                provider_settings.get("computer_use_runtime", "local")
+            ),
+            sandbox_cfg=provider_settings.get("sandbox", {}),
             provider_settings=provider_settings,
         )
 

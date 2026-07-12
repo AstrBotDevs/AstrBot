@@ -20,6 +20,7 @@
   "cron": "未来任务",
   "conversation": "对话数据",
   "sessionManagement": "自定义规则",
+  "sandboxes": "沙盒管理",
   "console": "平台日志",
   "trace": "追踪",
   "alkaid": "Alkaid",

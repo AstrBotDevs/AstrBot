@@ -8,8 +8,8 @@ info:
     JSON objects because their schemas are provided at runtime by template
     endpoints.
     Developer API keys currently support these scopes only: bot, provider,
-    persona, im, config, chat, data, file, plugin, mcp, skill. The config scope also
-    grants bot and provider access.
+    persona, im, config, chat, data, file, plugin, kb, mcp, sandbox, skill,
+    system, tool. The config scope also grants bot and provider access.
 servers:
   - url: http://localhost:6185
     description: Local AstrBot server
@@ -3205,156 +3205,6 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
-  /api/v1/skills/neo/candidates:
-    get:
-      tags: [Skills]
-      summary: List Shipyard Neo skill candidates
-      operationId: listNeoSkillCandidates
-      x-astrbot-scope: skill
-      parameters:
-        - name: skill_key
-          in: query
-          schema:
-            type: string
-        - name: status
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/skills/neo/releases:
-    get:
-      tags: [Skills]
-      summary: List Shipyard Neo skill releases
-      operationId: listNeoSkillReleases
-      x-astrbot-scope: skill
-      parameters:
-        - name: skill_key
-          in: query
-          schema:
-            type: string
-        - name: stage
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/skills/neo/payload:
-    get:
-      tags: [Skills]
-      summary: Get a Shipyard Neo skill payload
-      operationId: getNeoSkillPayload
-      x-astrbot-scope: skill
-      parameters:
-        - name: payload_ref
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/skills/neo/evaluate:
-    post:
-      tags: [Skills]
-      summary: Evaluate a Shipyard Neo skill candidate
-      operationId: evaluateNeoSkillCandidate
-      x-astrbot-scope: skill
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/NeoCandidateActionRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/skills/neo/promote:
-    post:
-      tags: [Skills]
-      summary: Promote a Shipyard Neo skill candidate
-      operationId: promoteNeoSkillCandidate
-      x-astrbot-scope: skill
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/NeoCandidateActionRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/skills/neo/rollback:
-    post:
-      tags: [Skills]
-      summary: Roll back a Shipyard Neo skill release
-      operationId: rollbackNeoSkillRelease
-      x-astrbot-scope: skill
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/NeoReleaseActionRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/skills/neo/sync:
-    post:
-      tags: [Skills]
-      summary: Sync a Shipyard Neo skill release
-      operationId: syncNeoSkillRelease
-      x-astrbot-scope: skill
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/NeoReleaseActionRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/skills/neo/candidates/delete:
-    post:
-      tags: [Skills]
-      summary: Delete a Shipyard Neo skill candidate
-      operationId: deleteNeoSkillCandidate
-      x-astrbot-scope: skill
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/NeoCandidateActionRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
-  /api/v1/skills/neo/releases/delete:
-    post:
-      tags: [Skills]
-      summary: Delete a Shipyard Neo skill release
-      operationId: deleteNeoSkillRelease
-      x-astrbot-scope: skill
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/NeoReleaseActionRequest"
-      responses:
-        "200":
-          $ref: "#/components/responses/Ok"
-
   /api/v1/knowledge-bases:
     get:
       tags: [Knowledge Base]
@@ -5177,8 +5027,8 @@ components:
           type: array
           items:
             type: string
-            enum: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
-          example: [bot, provider, persona, im, config, chat, data, file, plugin, mcp, skill]
+            enum: [bot, provider, persona, im, config, chat, data, file, plugin, kb, mcp, sandbox, skill, system, tool]
+          example: [bot, provider, persona, im, config, chat, data, file, plugin, kb, mcp, sandbox, skill, system, tool]
         expires_at:
           type: string
           format: date-time
@@ -5688,22 +5538,6 @@ components:
         description:
           type: string
       additionalProperties: false
-
-    NeoCandidateActionRequest:
-      type: object
-      required: [candidate_id]
-      properties:
-        candidate_id:
-          type: string
-      additionalProperties: true
-
-    NeoReleaseActionRequest:
-      type: object
-      required: [release_id]
-      properties:
-        release_id:
-          type: string
-      additionalProperties: true
 
     KnowledgeBaseRequest:
       type: object

@@ -55,6 +55,11 @@
       "permissionMember": "All Users",
       "permissionEveryone": "All Users",
       "permissionBuiltin": "System Builtin",
+      "originBuiltin": "Builtin",
+      "originMcp": "MCP",
+      "originPlugin": "Plugin",
+      "originSandbox": "Sandbox",
+      "originUnknown": "Unknown",
       "actions": "Actions"
     },
     "configTags": {

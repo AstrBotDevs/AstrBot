@@ -145,6 +145,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     REPEATED_TOOL_NOTICE_L1_THRESHOLD = 3
     REPEATED_TOOL_NOTICE_L2_THRESHOLD = 4
     REPEATED_TOOL_NOTICE_L3_THRESHOLD = 5
+    REPEATED_TOOL_NOTICE_EXEMPT_TOOL_NAMES = frozenset({"astrbot_execute_shell"})
     MALFORMED_TOOL_NAME_PLACEHOLDER = "__malformed_tool_name__"
     REPEATED_TOOL_NOTICE_L1_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] By the way, you have executed the same tool "
@@ -671,6 +672,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         return self._same_tool_streak
 
     def _build_repeated_tool_call_guidance(self, tool_name: str, streak: int) -> str:
+        if tool_name in self.REPEATED_TOOL_NOTICE_EXEMPT_TOOL_NAMES:
+            return ""
+
         if streak < self.REPEATED_TOOL_NOTICE_L1_THRESHOLD:
             return ""
 

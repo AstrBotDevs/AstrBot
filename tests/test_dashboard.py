@@ -4,12 +4,12 @@ import io
 import os
 import re
 import shutil
-import sys
 import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import pyotp
@@ -50,6 +50,31 @@ from tests.fixtures.helpers import (
     create_mock_updater_install,
     create_mock_updater_update,
 )
+
+
+class FakeSandboxProvider:
+    provider_id = "dashboard-generic"
+    capabilities = {"shell", "filesystem"}
+    tool_names = {"dashboard_generic_tool"}
+
+    def build_create_config(self, context, session_id):
+        return {}
+
+    def build_connect_info(self, sandbox_name, config):
+        return {"name": sandbox_name}
+
+    def update_connect_info(self, record, *, sandbox_name):
+        return {"name": sandbox_name}
+
+    async def create_booter(self, context, session_id, sandbox_id, config):
+        return SimpleNamespace(available=lambda: True, shutdown=lambda: None)
+
+    async def check_persistent_sandbox_exists(self, record):
+        return True
+
+    async def destroy_booter(self, booter, record):
+        return None
+
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 PLUGIN_PAGE_DEMO_NAME = "astrbot_plugin_page_demo"
@@ -430,6 +455,1579 @@ async def test_auth_login(
     assert "HttpOnly" in jwt_cookie_header
     _assert_cookie_samesite_strict(jwt_cookie_header)
     assert "Secure" not in jwt_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_lists_generic_providers(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(registry=SandboxRegistry(), providers={})
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
+    computer_client.register_sandbox_provider(provider)
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/sandbox/providers", headers=authenticated_header
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["providers"] == [
+        {
+            "provider_id": "dashboard-generic",
+            "capabilities": ["filesystem", "shell"],
+            "tool_names": ["dashboard_generic_tool"],
+            "system_prompt": "",
+        }
+    ]
+    assert data["data"]["default_provider_id"] == ""
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_provider_list_includes_configured_default(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(registry=SandboxRegistry(), providers={})
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
+    computer_client.register_sandbox_provider(provider)
+    monkeypatch.setattr(
+        core_lifecycle_td.star_context,
+        "get_config",
+        lambda umo=None: {
+            "provider_settings": {
+                "sandbox": {"booter": provider.provider_id},
+            }
+        },
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/sandbox/providers", headers=authenticated_header
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["default_provider_id"] == provider.provider_id
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_provider_list_omits_disabled_plugins(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(registry=SandboxRegistry(), providers={})
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/sandbox/providers", headers=authenticated_header
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["providers"] == []
+
+
+@pytest.mark.asyncio
+async def test_config_metadata_includes_registered_sandbox_providers(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(registry=SandboxRegistry(), providers={})
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(computer_client, "sandbox_registry", manager.registry)
+    computer_client.register_sandbox_provider(provider)
+
+    test_client = app.test_client()
+    response = await test_client.get(
+        "/api/config/abconf?id=default", headers=authenticated_header
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    metadata_text = str(data["data"]["metadata"])
+    assert "provider_settings.sandbox.booter" in metadata_text
+    assert "dashboard-generic" in metadata_text
+
+
+@pytest.mark.asyncio
+async def test_config_abconf_clears_unavailable_sandbox_booter_for_display(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(registry=SandboxRegistry(), providers={})
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    original_booter = core_lifecycle_td.astrbot_config["provider_settings"][
+        "sandbox"
+    ].get("booter")
+    core_lifecycle_td.astrbot_config["provider_settings"]["sandbox"]["booter"] = (
+        "shipyard"
+    )
+
+    try:
+        test_client = app.test_client()
+        response = await test_client.get(
+            "/api/config/abconf?id=default", headers=authenticated_header
+        )
+        data = await response.get_json()
+
+        assert response.status_code == 200
+        assert data["status"] == "ok"
+        assert data["data"]["config"]["provider_settings"]["sandbox"]["booter"] == ""
+    finally:
+        core_lifecycle_td.astrbot_config["provider_settings"]["sandbox"]["booter"] = (
+            original_booter
+        )
+
+
+@pytest.mark.asyncio
+async def test_config_save_preserves_unavailable_sandbox_booter(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    manager = SandboxManager(registry=SandboxRegistry(), providers={})
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    original_config = copy.deepcopy(dict(core_lifecycle_td.astrbot_config))
+    post_config = copy.deepcopy(original_config)
+    post_config["provider_settings"]["computer_use_runtime"] = "sandbox"
+    post_config["provider_settings"]["sandbox"]["booter"] = "shipyard"
+
+    try:
+        test_client = app.test_client()
+        response = await test_client.post(
+            "/api/config/astrbot/update",
+            headers=authenticated_header,
+            json={"conf_id": "default", "config": post_config},
+        )
+        data = await response.get_json()
+
+        assert response.status_code == 200
+        assert data["status"] == "ok"
+        assert (
+            core_lifecycle_td.astrbot_config["provider_settings"]["sandbox"]["booter"]
+            == "shipyard"
+        )
+    finally:
+        core_lifecycle_td.astrbot_config.save_config(original_config)
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_lists_managed_sandboxes(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+    )
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/sandbox", headers=authenticated_header)
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["sandboxes"][0]["sandbox_id"] == "sandbox-1"
+    assert data["data"]["sandboxes"][0]["capabilities"] == [
+        "filesystem",
+        "shell",
+    ]
+    assert data["data"]["sandboxes"][0]["tool_names"] == [
+        "dashboard_generic_tool",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_create_does_not_auto_occupy_sandbox(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Named"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["sandbox"]["sandbox_name"] == "Named"
+    assert data["data"]["sandbox"]["status"] == "creating"
+    assert data["data"]["sandbox"]["controller_session_id"] is None
+    assert manager.get_current_sandbox("dashboard")["current_sandbox_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_blocks_mutations_in_demo_mode(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    shell = SimpleNamespace(exec=AsyncMock(return_value={"stdout": "ran"}))
+    gui = SimpleNamespace(
+        screenshot=AsyncMock(
+            return_value={"base64": "aW1hZ2U=", "mime_type": "image/png"}
+        )
+    )
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="dashboard",
+        owner_session_id="dashboard",
+        connect_info={"name": "Sandbox 1"},
+        status="running",
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        shell=shell,
+        gui=gui,
+        available=lambda: True,
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.sandbox_helpers.DEMO_MODE", True, raising=False
+    )
+
+    test_client = app.test_client()
+    create_response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Blocked"},
+        headers=authenticated_header,
+    )
+    shell_response = await test_client.post(
+        "/api/sandbox/sandbox-1/shell?session_id=dashboard",
+        json={"command": "echo blocked"},
+        headers=authenticated_header,
+    )
+    screenshot_response = await test_client.post(
+        "/api/sandbox/sandbox-1/screenshot?session_id=dashboard",
+        headers=authenticated_header,
+    )
+    admin_screenshot_response = await test_client.post(
+        "/api/sandbox/sandbox-1/admin-screenshot",
+        headers=authenticated_header,
+    )
+
+    for task in list(manager.pending_boot_tasks.values()):
+        task.cancel()
+    if manager.pending_boot_tasks:
+        await asyncio.gather(
+            *manager.pending_boot_tasks.values(), return_exceptions=True
+        )
+
+    create_data = await create_response.get_json()
+    shell_data = await shell_response.get_json()
+    screenshot_data = await screenshot_response.get_json()
+    admin_screenshot_data = await admin_screenshot_response.get_json()
+
+    assert create_response.status_code == 200
+    assert shell_response.status_code == 200
+    assert screenshot_response.status_code == 200
+    assert admin_screenshot_response.status_code == 200
+    assert create_data["status"] == "error"
+    assert shell_data["status"] == "error"
+    assert screenshot_data["status"] == "error"
+    assert admin_screenshot_data["status"] == "error"
+    assert "demo mode" in create_data["message"]
+    assert "demo mode" in shell_data["message"]
+    assert "demo mode" in screenshot_data["message"]
+    assert "demo mode" in admin_screenshot_data["message"]
+    assert [sandbox["sandbox_id"] for sandbox in manager.list_sandboxes()] == [
+        "sandbox-1"
+    ]
+    shell.exec.assert_not_awaited()
+    gui.screenshot.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sandbox_api_key_cannot_claim_dashboard_session_bypass():
+    from astrbot.dashboard.api.auth import AuthContext
+    from astrbot.dashboard.api.sandbox import (
+        capture_screenshot,
+        release_current_sandbox,
+        run_shell,
+        update_sandbox,
+    )
+
+    class FakeRequest:
+        async def json(self):
+            return {"command": "pwd"}
+
+    class FakePatchRequest:
+        async def json(self):
+            return {"sandbox_name": "Renamed"}
+
+    class FakeSandboxService:
+        def release_current_sandbox(
+            self, session_id, sandbox_id=None, *, is_dashboard_user=False
+        ):
+            return {
+                "session_id": session_id,
+                "sandbox_id": sandbox_id,
+                "is_dashboard_user": is_dashboard_user,
+            }
+
+        async def run_shell(
+            self, session_id, sandbox_id, data, *, is_dashboard_user=False
+        ):
+            return {
+                "session_id": session_id,
+                "sandbox_id": sandbox_id,
+                "data": data,
+                "is_dashboard_user": is_dashboard_user,
+            }
+
+        async def capture_screenshot(
+            self, session_id, sandbox_id, data, *, is_dashboard_user=False
+        ):
+            return {
+                "session_id": session_id,
+                "sandbox_id": sandbox_id,
+                "is_dashboard_user": is_dashboard_user,
+            }
+
+        def update_sandbox(
+            self, session_id, sandbox_id, data, *, is_dashboard_user=False
+        ):
+            return {
+                "session_id": session_id,
+                "sandbox_id": sandbox_id,
+                "data": data,
+                "is_dashboard_user": is_dashboard_user,
+            }
+
+    auth = AuthContext(
+        username="api_key:key-1",
+        scopes=["sandbox"],
+        api_key_id="key-1",
+        via="api_key",
+    )
+    service = FakeSandboxService()
+
+    release_response = await release_current_sandbox(
+        session_id="dashboard",
+        sandbox_id="sandbox-1",
+        auth=auth,
+        service=service,
+    )
+    shell_response = await run_shell(
+        sandbox_id="sandbox-1",
+        request=FakeRequest(),
+        session_id="dashboard",
+        auth=auth,
+        service=service,
+    )
+    screenshot_response = await capture_screenshot(
+        sandbox_id="sandbox-1",
+        request=FakeRequest(),
+        session_id="dashboard",
+        auth=auth,
+        service=service,
+    )
+    update_response = await update_sandbox(
+        sandbox_id="sandbox-1",
+        request=FakePatchRequest(),
+        session_id="dashboard",
+        auth=auth,
+        service=service,
+    )
+
+    assert release_response["data"]["session_id"] == "api-key:key-1"
+    assert shell_response["data"]["session_id"] == "api-key:key-1"
+    assert screenshot_response["data"]["session_id"] == "api-key:key-1"
+    assert update_response["data"]["session_id"] == "api-key:key-1"
+    assert release_response["data"]["is_dashboard_user"] is False
+    assert shell_response["data"]["is_dashboard_user"] is False
+    assert screenshot_response["data"]["is_dashboard_user"] is False
+    assert update_response["data"]["is_dashboard_user"] is False
+
+
+@pytest.mark.asyncio
+async def test_sandbox_service_rejects_other_session_takeover_or_destroy(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+    from astrbot.dashboard.services.sandbox import SandboxService, SandboxServiceError
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=0,
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    service = SandboxService(SimpleNamespace(star_context=object()))
+
+    with pytest.raises(SandboxServiceError, match="controlled by another session"):
+        await service.takeover_sandbox("api-key:key-1", "sandbox-1")
+
+    with pytest.raises(SandboxServiceError, match="controlled by another session"):
+        await service.destroy_sandbox("api-key:key-1", "sandbox-1")
+
+    with pytest.raises(SandboxServiceError, match="controlled by another session"):
+        service.update_sandbox(
+            "api-key:key-1",
+            "sandbox-1",
+            {"sandbox_name": "Hijacked"},
+        )
+
+    sandbox = manager.registry.get_sandbox("sandbox-1")
+    assert sandbox is not None
+    assert sandbox["controller_session_id"] == "session-a"
+    assert sandbox["sandbox_name"] == "Sandbox 1"
+    assert sandbox["status"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_shell_rejects_other_active_session(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    shell = SimpleNamespace(exec=AsyncMock(return_value={"stdout": "ran"}))
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=9999999999,
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        shell=shell,
+        available=lambda: True,
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/shell?session_id=dashboard",
+        json={"command": "echo blocked"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert data["message"] == "Sandbox operation failed."
+    shell.exec.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_release_rejects_other_active_session(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=9999999999,
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.delete(
+        "/api/sandbox/current?session_id=dashboard&sandbox_id=sandbox-1",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert data["message"] == "Sandbox operation failed."
+    assert (
+        manager.registry.get_sandbox("sandbox-1")["controller_session_id"]
+        == "session-a"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_force_release_allows_admin_to_release_occupied(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=9999999999,
+    )
+    manager.registry.set_current_sandbox_id("session-a", "sandbox-1")
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/force-release",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    sandbox = manager.registry.get_sandbox("sandbox-1")
+    assert sandbox["controller_session_id"] is None
+    assert manager.registry.get_current_sandbox_id("session-a") is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_admin_shell_allows_occupied_sandbox(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    shell = SimpleNamespace(exec=AsyncMock(return_value={"stdout": "ran"}))
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=9999999999,
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        shell=shell,
+        available=lambda: True,
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/admin-shell",
+        json={"command": "echo allowed"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["result"] == {"stdout": "ran"}
+    shell.exec.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_admin_screenshot_allows_occupied_sandbox(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    gui = SimpleNamespace(
+        screenshot=AsyncMock(
+            return_value={"base64": "aW1hZ2U=", "mime_type": "image/png"}
+        )
+    )
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=9999999999,
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        gui=gui,
+        available=lambda: True,
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/admin-screenshot",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["screenshot"]["base64"] == "aW1hZ2U="
+    gui.screenshot.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_force_destroy_allows_admin_to_destroy_occupied(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    booter = SimpleNamespace(available=lambda: True)
+    provider.destroy_booter = AsyncMock(return_value=None)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        status="running",
+        controller_user_id="session-a",
+        controller_session_id="session-a",
+        lease_expires_at=9999999999,
+    )
+    manager.session_booter["sandbox-1"] = booter
+    manager.registry.set_current_sandbox_id("session-a", "sandbox-1")
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.delete(
+        "/api/sandbox/sandbox-1/force",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert manager.registry.get_current_sandbox_id("session-a") is None
+
+    task = manager.pending_destroy_tasks.get("sandbox-1")
+    if task is not None:
+        await task
+    assert manager.registry.get_sandbox("sandbox-1") is None
+    provider.destroy_booter.assert_awaited_once_with(
+        booter,
+        data["data"]["sandbox"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_create_rejects_cross_origin_cookie_auth(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    login_response = await test_client.post(
+        "/api/auth/login",
+        json={
+            "username": core_lifecycle_td.astrbot_config["dashboard"]["username"],
+            "password": _resolve_dashboard_password(core_lifecycle_td),
+        },
+    )
+    assert login_response.status_code == 200
+
+    response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Named"},
+        headers={"Origin": "http://evil.localhost:3000"},
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 403
+    assert data["status"] == "error"
+    assert "Origin" in data["message"]
+    assert manager.list_sandboxes() == []
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_create_allows_cross_origin_authorization_header(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Named"},
+        headers={
+            **authenticated_header,
+            "Origin": "http://api-client.example",
+        },
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["sandbox"]["sandbox_name"] == "Named"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_create_rejects_duplicate_name(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    logged_errors = []
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.sandbox.logger.error",
+        lambda *args, **kwargs: logged_errors.append((args, kwargs)),
+    )
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Named",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Named"},
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Named"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert data["message"] == "Sandbox name 'Named' already exists"
+    assert logged_errors == []
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_create_reports_max_sandbox_limit(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="dashboard",
+        owner_session_id="dashboard",
+        connect_info={"name": "Sandbox 1"},
+    )
+    monkeypatch.setattr(
+        core_lifecycle_td.star_context,
+        "get_config",
+        lambda umo=None: {
+            "provider_settings": {
+                "sandbox": {"max_sandboxes": 1},
+            }
+        },
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox?session_id=dashboard",
+        json={"provider_id": provider.provider_id, "sandbox_name": "Second"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert "Sandbox limit reached" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_sets_default_sandbox(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    for sandbox_id in ("sandbox-1", "sandbox-2"):
+        manager.registry.upsert_sandbox(
+            sandbox_id=sandbox_id,
+            sandbox_name=sandbox_id,
+            provider=provider.provider_id,
+            managed=True,
+            created_by_astrbot=True,
+            owner_user_id="session-a",
+            owner_session_id="session-a",
+            connect_info={"name": sandbox_id},
+        )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-2/default", headers=authenticated_header
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["sandbox"]["sandbox_id"] == "sandbox-2"
+    assert data["data"]["sandbox"]["is_default"] is True
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_patch_preserves_existing_retention_policy(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    provider.supports_persistent_reconnect = True
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        retention_policy="persistent",
+        status="running",
+    )
+
+    test_client = app.test_client()
+    response = await test_client.patch(
+        "/api/sandbox/sandbox-1",
+        json={"sandbox_name": "Renamed"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["sandbox"]["sandbox_name"] == "Renamed"
+    assert data["data"]["sandbox"]["retention_policy"] == "persistent"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_patch_name_preserves_temporary_lifecycle_fields(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+        retention_policy="temporary",
+        idle_timeout=0,
+        expires_at=1234567890.0,
+        status="running",
+    )
+
+    test_client = app.test_client()
+    response = await test_client.patch(
+        "/api/sandbox/sandbox-1",
+        json={"sandbox_name": "Renamed"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["sandbox"]["sandbox_name"] == "Renamed"
+    assert data["data"]["sandbox"]["retention_policy"] == "temporary"
+    assert data["data"]["sandbox"]["idle_timeout"] == 0
+    assert data["data"]["sandbox"]["expires_at"] == 1234567890.0
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_force_releases_busy_sandbox(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        controller_user_id="webchat",
+        controller_session_id="webchat:friend:user",
+        lease_expires_at=9999999999,
+        connect_info={"name": "Sandbox 1"},
+    )
+
+    test_client = app.test_client()
+    response = await test_client.delete(
+        "/api/sandbox/current?session_id=dashboard&sandbox_id=sandbox-1",
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["sandbox"]["controller_session_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_runs_shell_in_managed_sandbox(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeShell:
+        async def exec(self, command, cwd=None, env=None, timeout=300, shell=True):
+            return {
+                "command": command,
+                "cwd": cwd,
+                "env": env,
+                "timeout": timeout,
+                "shell": shell,
+                "stdout": "ok\n",
+                "stderr": "",
+                "exit_code": 0,
+            }
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, shell=FakeShell()
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/shell",
+        json={"command": "pwd", "cwd": "/workspace", "timeout": 5},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["result"]["command"] == "pwd"
+    assert data["data"]["result"]["cwd"] == "/workspace"
+    assert data["data"]["result"]["timeout"] == 5
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_shell_uses_default_timeout_for_invalid_value(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeShell:
+        async def exec(self, command, cwd=None, env=None, timeout=300, shell=True):
+            return {"timeout": timeout, "stdout": "ok\n", "stderr": "", "exit_code": 0}
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, shell=FakeShell()
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/shell",
+        json={"command": "pwd", "timeout": "not-a-number"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["result"]["timeout"] == 300
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_shell_bypasses_lease_for_admin_access(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Dashboard shell is an administrative operation and must bypass lease."""
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeShell:
+        async def exec(self, command, cwd=None, env=None, timeout=300, shell=True):
+            return {
+                "command": command,
+                "stdout": "ok\n",
+                "stderr": "",
+                "exit_code": 0,
+            }
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        controller_user_id="webchat",
+        controller_session_id="webchat:friend:user",
+        lease_expires_at=9999999999,
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, shell=FakeShell()
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/admin-shell",
+        json={"command": "pwd"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["result"]["stdout"] == "ok\n"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_admin_shell_stream_falls_back_to_exec(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Dashboard shell stream returns SSE events even without provider streaming."""
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeShell:
+        async def exec(self, command, cwd=None, env=None, timeout=300, shell=True):
+            return {"stdout": "ok\n", "stderr": "", "exit_code": 0, "success": True}
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, shell=FakeShell()
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/admin-shell/stream",
+        json={"command": "pwd"},
+        headers=authenticated_header,
+    )
+    body = (await response.get_data()).decode("utf-8")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert '"type":"stdout"' in body
+    assert '"data":"ok\\n"' in body
+    assert '"type":"exit"' in body
+    assert '"exit_code":0' in body
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_admin_shell_stream_ignores_protocol_stub(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Dashboard shell stream falls back when ShellComponent subclass lacks stream."""
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.olayer import ShellComponent
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeShell(ShellComponent):
+        async def exec(self, command, cwd=None, env=None, timeout=300, shell=True):
+            return {"stdout": "stub-ok\n", "stderr": "", "exit_code": 0}
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, shell=FakeShell()
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/admin-shell/stream",
+        json={"command": "pwd"},
+        headers=authenticated_header,
+    )
+    body = (await response.get_data()).decode("utf-8")
+
+    assert response.status_code == 200
+    assert '"type":"stdout"' in body
+    assert '"data":"stub-ok\\n"' in body
+    assert '"type":"exit"' in body
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_captures_managed_sandbox_screenshot(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeGui:
+        async def screenshot(self, path=None):
+            return {"mime_type": "image/png", "base64": "abc", "path": path}
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, gui=FakeGui()
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/screenshot",
+        json={"path": "/tmp/screen.png"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["screenshot"] == {
+        "mime_type": "image/png",
+        "base64": "abc",
+        "path": "/tmp/screen.png",
+    }
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_screenshot_bypasses_lease_for_monitoring(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Dashboard screenshot is read-only observer access and must not need a lease."""
+    from astrbot.core.computer import computer_client
+    from astrbot.core.computer.sandbox_manager import SandboxManager
+    from astrbot.core.computer.sandbox_registry import SandboxRegistry
+
+    class FakeGui:
+        async def screenshot(self, path=None):
+            return {"mime_type": "image/png", "base64": "abc", "path": path}
+
+    async def available():
+        return True
+
+    provider = FakeSandboxProvider()
+    manager = SandboxManager(
+        registry=SandboxRegistry(), providers={provider.provider_id: provider}
+    )
+    monkeypatch.setattr(computer_client, "sandbox_manager", manager)
+    manager.registry.upsert_sandbox(
+        sandbox_id="sandbox-1",
+        sandbox_name="Sandbox 1",
+        provider=provider.provider_id,
+        managed=True,
+        created_by_astrbot=True,
+        owner_user_id="session-a",
+        owner_session_id="session-a",
+        controller_user_id="webchat",
+        controller_session_id="webchat:friend:user",
+        lease_expires_at=9999999999,
+        connect_info={"name": "Sandbox 1"},
+    )
+    manager.session_booter["sandbox-1"] = SimpleNamespace(
+        available=available, gui=FakeGui()
+    )
+
+    test_client = app.test_client()
+    response = await test_client.post(
+        "/api/sandbox/sandbox-1/screenshot?session_id=dashboard",
+        json={"path": "/tmp/screen.png"},
+        headers=authenticated_header,
+    )
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "ok"
+    assert data["data"]["screenshot"]["base64"] == "abc"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_hides_internal_service_errors(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FailingSandboxService:
+        def list_sandboxes(self):
+            from astrbot.dashboard.services.sandbox import SandboxServiceError
+
+            raise SandboxServiceError(
+                "Failed to list sandboxes: Traceback secret /tmp/private.py"
+            )
+
+    monkeypatch.setattr(app._app.state.services, "sandbox", FailingSandboxService())
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/sandbox", headers=authenticated_header)
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert data["message"] == "Sandbox operation failed."
+
+
+@pytest.mark.asyncio
+async def test_sandbox_dashboard_keeps_user_error_messages(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class FailingSandboxService:
+        def list_sandboxes(self):
+            from astrbot.dashboard.services.sandbox import SandboxServiceError
+
+            raise SandboxServiceError("provider_id is required", log_traceback=False)
+
+    monkeypatch.setattr(app._app.state.services, "sandbox", FailingSandboxService())
+
+    test_client = app.test_client()
+    response = await test_client.get("/api/sandbox", headers=authenticated_header)
+    data = await response.get_json()
+
+    assert response.status_code == 200
+    assert data["status"] == "error"
+    assert data["message"] == "provider_id is required"
 
 
 @pytest.mark.asyncio
@@ -1011,6 +2609,26 @@ async def test_config_save_rejects_recovery_code_for_protected_totp_changes(
             core_lifecycle_td,
             original_dashboard_config,
         )
+
+
+@pytest.mark.asyncio
+async def test_validate_neo_connectivity_noops_for_plugin_managed_provider_config():
+    from astrbot.dashboard.services.config_service import _validate_neo_connectivity
+
+    warning = await _validate_neo_connectivity(
+        {
+            "provider_settings": {
+                "computer_use_runtime": "sandbox",
+                "sandbox": {
+                    "booter": "shipyard_neo",
+                    "shipyard_neo_endpoint": "http://127.0.0.1:65535",
+                    "shipyard_neo_access_token": "",
+                },
+            }
+        }
+    )
+
+    assert warning is None
 
 
 @pytest.mark.asyncio
@@ -3189,185 +4807,13 @@ async def test_install_pip_package_returns_generic_error_message(
     assert data["message"] == "An internal error has occurred."
 
 
-class _FakeNeoSkills:
-    async def list_candidates(self, **kwargs):
-        _ = kwargs
-        return [
-            {
-                "id": "cand-1",
-                "skill_key": "neo.demo",
-                "status": "evaluated_pass",
-                "payload_ref": "pref-1",
-            }
-        ]
-
-    async def list_releases(self, **kwargs):
-        _ = kwargs
-        return [
-            {
-                "id": "rel-1",
-                "skill_key": "neo.demo",
-                "candidate_id": "cand-1",
-                "stage": "stable",
-                "active": True,
-            }
-        ]
-
-    async def get_payload(self, payload_ref: str):
-        return {
-            "payload_ref": payload_ref,
-            "payload": {"skill_markdown": "# Demo"},
-        }
-
-    async def evaluate_candidate(self, candidate_id: str, **kwargs):
-        return {"candidate_id": candidate_id, **kwargs}
-
-    async def promote_candidate(self, candidate_id: str, stage: str = "canary"):
-        return {
-            "id": "rel-2",
-            "skill_key": "neo.demo",
-            "candidate_id": candidate_id,
-            "stage": stage,
-        }
-
-    async def rollback_release(self, release_id: str):
-        return {"id": "rb-1", "rolled_back_release_id": release_id}
-
-
-class _FakeNeoBayClient:
-    def __init__(self, endpoint_url: str, access_token: str):
-        self.endpoint_url = endpoint_url
-        self.access_token = access_token
-        self.skills = _FakeNeoSkills()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        _ = exc_type, exc, tb
-        return False
-
-
 @pytest.mark.asyncio
-async def test_neo_skills_routes(
+async def test_core_dashboard_does_not_ship_neo_skill_routes(
     app: FastAPIAppAdapter,
-    authenticated_header: dict,
-    core_lifecycle_td: AstrBotCoreLifecycle,
-    monkeypatch,
 ):
-    provider_settings = core_lifecycle_td.astrbot_config.setdefault(
-        "provider_settings", {}
-    )
-    sandbox = provider_settings.setdefault("sandbox", {})
-    sandbox["shipyard_neo_endpoint"] = "http://neo.test"
-    sandbox["shipyard_neo_access_token"] = "neo-token"
-
-    fake_shipyard_neo_module = SimpleNamespace(BayClient=_FakeNeoBayClient)
-    monkeypatch.setitem(sys.modules, "shipyard_neo", fake_shipyard_neo_module)
-
-    async def _fake_sync_release(self, client, **kwargs):
-        _ = self, client, kwargs
-        return SimpleNamespace(
-            skill_key="neo.demo",
-            local_skill_name="neo_demo",
-            release_id="rel-2",
-            candidate_id="cand-1",
-            payload_ref="pref-1",
-            map_path="data/skills/neo_skill_map.json",
-            synced_at="2026-01-01T00:00:00Z",
-        )
-
-    async def _fake_sync_skills_to_active_sandboxes():
-        return
-
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.skills_service.NeoSkillSyncManager.sync_release",
-        _fake_sync_release,
-    )
-    monkeypatch.setattr(
-        "astrbot.dashboard.services.skills_service.sync_skills_to_active_sandboxes",
-        _fake_sync_skills_to_active_sandboxes,
-    )
-
-    test_client = app.test_client()
-
-    response = await test_client.get(
-        "/api/skills/neo/candidates", headers=authenticated_header
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert isinstance(data["data"], list)
-    assert data["data"][0]["id"] == "cand-1"
-
-    response = await test_client.get(
-        "/api/skills/neo/releases", headers=authenticated_header
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert isinstance(data["data"], list)
-    assert data["data"][0]["id"] == "rel-1"
-
-    response = await test_client.get(
-        "/api/skills/neo/payload?payload_ref=pref-1", headers=authenticated_header
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["payload_ref"] == "pref-1"
-
-    response = await test_client.post(
-        "/api/skills/neo/evaluate",
-        json={"candidate_id": "cand-1", "passed": True, "score": 0.95},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["candidate_id"] == "cand-1"
-    assert data["data"]["passed"] is True
-
-    response = await test_client.post(
-        "/api/skills/neo/evaluate",
-        json={"candidate_id": "cand-1", "passed": "false", "score": 0.0},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["passed"] is False
-
-    response = await test_client.post(
-        "/api/skills/neo/promote",
-        json={"candidate_id": "cand-1", "stage": "stable"},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["release"]["id"] == "rel-2"
-    assert data["data"]["sync"]["local_skill_name"] == "neo_demo"
-
-    response = await test_client.post(
-        "/api/skills/neo/rollback",
-        json={"release_id": "rel-2"},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["rolled_back_release_id"] == "rel-2"
-
-    response = await test_client.post(
-        "/api/skills/neo/sync",
-        json={"release_id": "rel-2"},
-        headers=authenticated_header,
-    )
-    assert response.status_code == 200
-    data = await response.get_json()
-    assert data["status"] == "ok"
-    assert data["data"]["skill_key"] == "neo.demo"
+    paths = {getattr(route, "path", "") for route in app._app.router.routes}
+    assert "/api/skills/neo/candidates" not in paths
+    assert "/api/v1/skills/neo/candidates" not in paths
 
 
 @pytest.mark.asyncio

@@ -5,6 +5,7 @@ import socket
 import time
 from pathlib import Path
 from typing import Any, Protocol, cast
+from urllib.parse import urlsplit
 
 import jwt
 import psutil
@@ -265,13 +266,13 @@ class AstrBotDashboard:
             "/api/auth/logout",
             "/api/auth/setup-status",
             "/api/auth/setup",
-            "/api/stat/versions",
         }
         allowed_endpoint_prefixes = [
             "/api/file",
             "/api/v1/files/tokens",
             "/api/platform/webhook",
             "/api/stat/start-time",
+            "/api/stat/versions",
             "/api/backup/download",  # 备份下载使用 URL 参数传递 token
         ]
         if path in allowed_exact_endpoints or any(
@@ -279,74 +280,42 @@ class AstrBotDashboard:
         ):
             return None
         is_plugin_page_path = PluginPageAuth.is_protected_path(path)
-        dashboard_token = self._extract_dashboard_jwt(current_request)
-        asset_token = (
-            PluginPageAuth.extract_asset_token(current_request.query_params)
-            if is_plugin_page_path
-            else None
-        )
-        token_candidates = []
-        if dashboard_token:
-            token_candidates.append(dashboard_token)
-        if asset_token and asset_token != dashboard_token:
-            token_candidates.append(asset_token)
-        if not token_candidates:
+        token = None
+        if is_plugin_page_path:
+            token = PluginPageAuth.extract_asset_token(current_request.query_params)
+        if not token:
+            token = self._extract_dashboard_jwt(current_request)
+        if not token:
             r = JSONResponse(error("未授权"))
             r.status_code = 401
             return r
-
-        token_errors: list[str] = []
-        for token in token_candidates:
-            payload, token_error = self._validate_dashboard_token(token, path)
-            if payload is not None:
-                current_request.state.dashboard_g.username = cast(
-                    str, payload["username"]
-                )
-                return None
-            token_errors.append(token_error)
-
-        error_message = (
-            "Token 过期"
-            if token_errors and all(item == "Token 过期" for item in token_errors)
-            else "Token 无效"
-        )
-        r = JSONResponse(error(error_message))
-        r.status_code = 401
-        return r
-
-    def _validate_dashboard_token(
-        self,
-        token: str,
-        path: str,
-    ) -> tuple[dict[str, Any] | None, str]:
-        """Validate a dashboard JWT or scoped plugin page asset token.
-
-        Args:
-            token: JWT value from the Authorization header, cookie, or query string.
-            path: Current request path used for plugin page asset token scope checks.
-
-        Returns:
-            A tuple of the decoded payload and an error message. The payload is
-            present only when the token is valid for the current request path.
-        """
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
+            if PluginPageAuth.is_asset_token(
+                payload
+            ) and not PluginPageAuth.is_scope_valid(
+                payload,
+                path,
+            ):
+                r = JSONResponse(error("Token 无效"))
+                r.status_code = 401
+                return r
+
+            username = payload.get("username")
+            if not isinstance(username, str) or not username.strip():
+                raise jwt.InvalidTokenError("missing username in token payload")
+            current_request.state.dashboard_g.username = username
+            sandbox_origin_error = self._sandbox_cookie_origin_error(current_request)
+            if sandbox_origin_error is not None:
+                return sandbox_origin_error
         except jwt.ExpiredSignatureError:
-            return None, "Token 过期"
+            r = JSONResponse(error("Token 过期"))
+            r.status_code = 401
+            return r
         except jwt.InvalidTokenError:
-            return None, "Token 无效"
-
-        if PluginPageAuth.is_asset_token(payload) and not PluginPageAuth.is_scope_valid(
-            payload,
-            path,
-        ):
-            return None, "Token 无效"
-
-        username = payload.get("username")
-        if not isinstance(username, str) or not username.strip():
-            return None, "Token 无效"
-
-        return payload, ""
+            r = JSONResponse(error("Token 无效"))
+            r.status_code = 401
+            return r
 
     async def _apply_auth_rate_limit(
         self,
@@ -378,6 +347,40 @@ class AstrBotDashboard:
                     r.status_code = 429
                     return r
         return None
+
+    def _sandbox_cookie_origin_error(
+        self, current_request: Request
+    ) -> JSONResponse | None:
+        if current_request.method not in {"POST", "PATCH", "DELETE"}:
+            return None
+        if not current_request.url.path.startswith("/api/sandbox"):
+            return None
+        auth_header = current_request.headers.get("Authorization", "").strip()
+        if auth_header.startswith("Bearer "):
+            return None
+
+        origin = current_request.headers.get("Origin", "").strip()
+        referer = current_request.headers.get("Referer", "").strip()
+        candidate = origin or referer
+        if not candidate:
+            return None
+        if self._is_same_dashboard_origin(candidate, current_request):
+            return None
+
+        response = JSONResponse(error("Origin is not allowed"))
+        response.status_code = 403
+        return response
+
+    @staticmethod
+    def _is_same_dashboard_origin(candidate: str, current_request: Request) -> bool:
+        parsed_candidate = urlsplit(candidate)
+        if not parsed_candidate.scheme or not parsed_candidate.netloc:
+            return False
+        parsed_request = current_request.url
+        return (
+            parsed_candidate.scheme == parsed_request.scheme
+            and parsed_candidate.netloc == parsed_request.netloc
+        )
 
     def _get_request_client_ip(self, current_request) -> str:
         if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False)):

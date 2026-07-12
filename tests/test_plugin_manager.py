@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
@@ -8,8 +9,14 @@ from typing import Any, cast
 import pytest
 import yaml
 
+from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.star import star_manager as star_manager_module
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
+from astrbot.core.tools.registry import (
+    builtin_tool,
+    get_builtin_tool_class,
+    unregister_builtin_tools_by_module_prefix,
+)
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
 
@@ -220,6 +227,19 @@ def _clear_star_runtime_state():
     star_manager_module.star_map.clear()
     star_manager_module.star_registry.clear()
     star_manager_module.star_handlers_registry.clear()
+
+
+def _register_plugin_builtin_tool():
+    @dataclass
+    class PluginBuiltinTool(FunctionTool):
+        name: str = "astrbot_test_plugin_builtin_tool"
+        description: str = "Plugin builtin tool used to test reload cleanup."
+        parameters: dict = field(
+            default_factory=lambda: {"type": "object", "properties": {}}
+        )
+
+    PluginBuiltinTool.__module__ = "data.plugins.helloworld.tools.browser"
+    return builtin_tool(PluginBuiltinTool)
 
 
 def _build_load_mock(events):
@@ -585,6 +605,37 @@ async def test_reload_all_unbinds_every_registered_plugin(
 
     assert terminated == plugin_names
     assert unbound == plugin_names
+
+
+@pytest.mark.asyncio
+async def test_unbind_plugin_unregisters_plugin_builtin_tools(
+    plugin_manager_pm: PluginManager,
+):
+    _clear_star_runtime_state()
+    plugin_module_path = "data.plugins.helloworld.main"
+    metadata = star_manager_module.StarMetadata(
+        name=TEST_PLUGIN_NAME,
+        root_dir_name=TEST_PLUGIN_DIR,
+        module_path=plugin_module_path,
+    )
+    star_manager_module.star_map[plugin_module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+    tool_cls = _register_plugin_builtin_tool()
+    star_manager_module.llm_tools.get_builtin_tool(tool_cls)
+
+    try:
+        assert get_builtin_tool_class("astrbot_test_plugin_builtin_tool") is tool_cls
+
+        await plugin_manager_pm._unbind_plugin(TEST_PLUGIN_NAME, plugin_module_path)
+
+        assert get_builtin_tool_class("astrbot_test_plugin_builtin_tool") is None
+        assert tool_cls not in star_manager_module.llm_tools.builtin_func_list
+    finally:
+        unregister_builtin_tools_by_module_prefix("data.plugins.helloworld")
+        star_manager_module.llm_tools.clear_builtin_tool_cache_by_module_prefix(
+            "data.plugins.helloworld"
+        )
+        _clear_star_runtime_state()
 
 
 @pytest.mark.asyncio

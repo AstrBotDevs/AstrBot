@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from astrbot.core import file_token_service, logger
+from astrbot.core.computer import computer_client
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.config.default import (
     CONFIG_METADATA_2,
@@ -373,48 +374,24 @@ def _protected_2fa_config_changed(old_config: dict, new_config: dict) -> bool:
     )
 
 
+def _normalize_unavailable_sandbox_booter(config: dict) -> dict:
+    sandbox = config.get("provider_settings", {}).get("sandbox", {})
+    if not isinstance(sandbox, dict):
+        return config
+    booter = str(sandbox.get("booter") or "").strip()
+    if not booter:
+        return config
+    provider_ids = {
+        str(provider.get("provider_id") or "")
+        for provider in computer_client.list_sandbox_providers()
+    }
+    if booter not in provider_ids:
+        sandbox["booter"] = ""
+    return config
+
+
 async def _validate_neo_connectivity(post_config: dict) -> str | None:
-    ps = post_config.get("provider_settings", {})
-    runtime = ps.get("computer_use_runtime", "none")
-    sandbox = ps.get("sandbox", {})
-    booter = sandbox.get("booter", "")
-
-    if runtime != "sandbox" or booter != "shipyard_neo":
-        return None
-
-    endpoint = sandbox.get("shipyard_neo_endpoint", "").rstrip("/")
-    if not endpoint:
-        return "⚠️ Shipyard Neo endpoint 未设置"
-
-    access_token = sandbox.get("shipyard_neo_access_token", "")
-    if not access_token:
-        from astrbot.core.computer.computer_client import _discover_bay_credentials
-
-        access_token = _discover_bay_credentials(endpoint)
-
-    if not access_token:
-        return (
-            "⚠️ 未找到 Bay API Key。请填写访问令牌，"
-            "或确保 Bay 的 credentials.json 可被自动发现。"
-        )
-
-    import aiohttp
-
-    health_url = f"{endpoint}/health"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                health_url,
-                timeout=aiohttp.ClientTimeout(total=5),
-            ) as resp:
-                if resp.status != 200:
-                    return (
-                        f"⚠️ Bay 健康检查失败 (HTTP {resp.status})，"
-                        f"请确认 Bay 正在运行: {endpoint}"
-                    )
-    except Exception:
-        return f"⚠️ 无法连接 Bay ({endpoint})，请确认 Bay 已启动。"
-
+    _ = post_config
     return None
 
 
@@ -460,9 +437,14 @@ class ConfigProfileService:
         self.db = db
 
     def get_profile_schema(self) -> dict:
+        metadata = self._inject_sandbox_provider_options(
+            copy.deepcopy(CONFIG_METADATA_3)
+        )
         return {
-            "config": DEFAULT_CONFIG,
-            "metadata": ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3),
+            "config": _normalize_unavailable_sandbox_booter(
+                copy.deepcopy(DEFAULT_CONFIG)
+            ),
+            "metadata": ConfigMetadataI18n.convert_to_i18n_keys(metadata),
         }
 
     def get_system_schema(self) -> dict:
@@ -496,9 +478,14 @@ class ConfigProfileService:
     def get_profile(self, config_id: str) -> dict:
         if config_id not in self.acm.confs:
             raise ValueError(f"Config file {config_id} does not exist")
+        metadata = self._inject_sandbox_provider_options(
+            copy.deepcopy(CONFIG_METADATA_3)
+        )
         return {
-            "config": self.acm.confs[config_id],
-            "metadata": ConfigMetadataI18n.convert_to_i18n_keys(CONFIG_METADATA_3),
+            "config": _normalize_unavailable_sandbox_booter(
+                copy.deepcopy(dict(self.acm.confs[config_id]))
+            ),
+            "metadata": ConfigMetadataI18n.convert_to_i18n_keys(metadata),
         }
 
     def get_profile_from_dashboard_query(
@@ -599,6 +586,21 @@ class ConfigProfileService:
                 allow_recovery=False,
             )
         )
+
+    @staticmethod
+    def _inject_sandbox_provider_options(metadata: dict) -> dict:
+        try:
+            items = metadata["ai_group"]["metadata"]["agent_computer_use"]["items"]
+            booter = items.get("provider_settings.sandbox.booter")
+        except (KeyError, TypeError):
+            return metadata
+        if not isinstance(booter, dict):
+            return metadata
+        providers = computer_client.list_sandbox_providers()
+        options = [provider["provider_id"] for provider in providers]
+        booter["options"] = options
+        booter["labels"] = options.copy()
+        return metadata
 
     def rename_profile(self, config_id: str, name: str | None) -> None:
         if not self.acm.update_conf_info(config_id, name=name):
@@ -1297,19 +1299,10 @@ class ProviderConfigService:
         for provider in provider_registry:
             if provider.default_config_tmpl:
                 provider_default_tmpl[provider.type] = provider.default_config_tmpl
-        providers = copy.deepcopy(self.config.get("provider", []))
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
-
-        model_metadata = {}
-        for provider in providers:
-            model_id = provider.get("model")
-            if isinstance(model_id, str) and model_id in LLM_METADATAS:
-                model_metadata[model_id] = LLM_METADATAS[model_id]
         return {
             "config_schema": config_schema,
-            "providers": providers,
+            "providers": self.config.get("provider", []),
             "provider_sources": self.config.get("provider_sources", []),
-            "model_metadata": model_metadata,
         }
 
     def list_provider_sources(self) -> dict:
@@ -1552,11 +1545,8 @@ class ProviderConfigService:
         source_id: str | None = None,
         enabled: bool | None = None,
     ) -> dict:
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
-
         provider_type = self._resolve_provider_type(capability)
         providers = []
-        model_metadata = {}
         source_provider_type = {
             source["id"]: source.get("provider_type", "chat_completion")
             for source in self.provider_manager.provider_sources_config
@@ -1574,16 +1564,12 @@ class ProviderConfigService:
             if provider_type and effective_type != provider_type:
                 continue
             if provider.get("provider_source_id"):
-                provider_response = self.provider_manager.get_merged_provider_config(
-                    provider
+                providers.append(
+                    self.provider_manager.get_merged_provider_config(provider)
                 )
             else:
-                provider_response = copy.deepcopy(provider)
-            model_id = provider_response.get("model")
-            if isinstance(model_id, str) and model_id in LLM_METADATAS:
-                model_metadata[model_id] = LLM_METADATAS[model_id]
-            providers.append(provider_response)
-        return {"providers": providers, "model_metadata": model_metadata}
+                providers.append(copy.deepcopy(provider))
+        return {"providers": providers}
 
     def list_providers_for_dashboard_types(
         self, provider_type: str | None
@@ -1613,14 +1599,7 @@ class ProviderConfigService:
         )
         if provider is None:
             raise ValueError(f"Provider {provider_id} not found")
-        provider_response = copy.deepcopy(provider)
-        from astrbot.core.utils.llm_metadata import LLM_METADATAS
-
-        model_id = provider_response.get("model")
-        model_metadata = {}
-        if isinstance(model_id, str) and model_id in LLM_METADATAS:
-            model_metadata[model_id] = LLM_METADATAS[model_id]
-        return {"provider": provider_response, "model_metadata": model_metadata}
+        return {"provider": provider}
 
     async def create_provider(self, config: dict, source_id: str | None = None) -> None:
         config = copy.deepcopy(config)

@@ -1,6 +1,6 @@
 """Tests for astrbot/core/computer module.
 
-This module tests the ComputerClient, Booter implementations (local, shipyard, boxlite),
+This module tests the ComputerClient, local booter implementation,
 filesystem operations, Python execution, shell execution, and security restrictions.
 """
 
@@ -185,6 +185,53 @@ class TestLocalShellComponent:
         )
         assert result["exit_code"] == 0
         assert "test_value" in result["stdout"]
+
+    @pytest.mark.asyncio
+    async def test_exec_stream_yields_stdout_and_exit(self):
+        """Test streaming shell execution yields output before exit."""
+        shell = LocalShellComponent()
+        events = []
+
+        async for event in shell.exec_stream(
+            f'{shlex.quote(sys.executable)} -c "print(\\"stream-ok\\")"',
+            timeout=5,
+        ):
+            events.append(event)
+
+        assert {event["type"] for event in events} >= {"stdout", "exit"}
+        assert any(event.get("data") == "stream-ok\n" for event in events)
+        assert events[-1]["type"] == "exit"
+        assert events[-1]["exit_code"] == 0
+
+    @pytest.mark.asyncio
+    async def test_exec_stream_yields_partial_stdout_chunk(self):
+        """Test streaming shell execution yields output without waiting for newline."""
+        shell = LocalShellComponent()
+        events = []
+
+        async for event in shell.exec_stream(
+            f'{shlex.quote(sys.executable)} -c "import sys, time; sys.stdout.write(\\"partial\\"); sys.stdout.flush(); time.sleep(0.1)"',
+            timeout=5,
+        ):
+            events.append(event)
+
+        assert any(event.get("data") == "partial" for event in events)
+
+    @pytest.mark.asyncio
+    async def test_exec_stream_shell_false_preserves_quoted_arguments(self):
+        """Test shell=False streaming preserves quoted command arguments."""
+        shell = LocalShellComponent()
+        events = []
+
+        async for event in shell.exec_stream(
+            f'{shlex.quote(sys.executable)} -c "print(\\"quoted ok\\")"',
+            shell=False,
+            timeout=5,
+        ):
+            events.append(event)
+
+        assert any(event.get("data") == "quoted ok\n" for event in events)
+        assert events[-1]["exit_code"] == 0
 
 
 class TestLocalPythonComponent:
@@ -373,118 +420,6 @@ class TestComputerBooterBase:
         assert hasattr(booter, "available")
 
 
-class TestShipyardBooter:
-    """Tests for ShipyardBooter."""
-
-    @pytest.mark.asyncio
-    async def test_shipyard_booter_init(self):
-        """Test ShipyardBooter initialization."""
-        with patch("astrbot.core.computer.booters.shipyard.ShipyardClient"):
-            from astrbot.core.computer.booters.shipyard import ShipyardBooter
-
-            booter = ShipyardBooter(
-                endpoint_url="http://localhost:8080",
-                access_token="test_token",
-                ttl=3600,
-                session_num=10,
-            )
-            assert booter._ttl == 3600
-            assert booter._session_num == 10
-
-    @pytest.mark.asyncio
-    async def test_shipyard_booter_boot(self):
-        """Test ShipyardBooter boot method."""
-        mock_ship = MagicMock()
-        mock_ship.id = "test-ship-id"
-        mock_ship.fs = MagicMock()
-        mock_ship.python = MagicMock()
-        mock_ship.shell = MagicMock()
-
-        mock_client = MagicMock()
-        mock_client.create_ship = AsyncMock(return_value=mock_ship)
-
-        with patch(
-            "astrbot.core.computer.booters.shipyard.ShipyardClient",
-            return_value=mock_client,
-        ):
-            from astrbot.core.computer.booters.shipyard import ShipyardBooter
-
-            booter = ShipyardBooter(
-                endpoint_url="http://localhost:8080",
-                access_token="test_token",
-            )
-            await booter.boot("test-session")
-            assert booter._ship == mock_ship
-
-    @pytest.mark.asyncio
-    async def test_shipyard_available_healthy(self):
-        """Test ShipyardBooter available when healthy."""
-        mock_ship = MagicMock()
-        mock_ship.id = "test-ship-id"
-
-        mock_client = MagicMock()
-        mock_client.get_ship = AsyncMock(return_value={"status": 1})
-
-        with patch(
-            "astrbot.core.computer.booters.shipyard.ShipyardClient",
-            return_value=mock_client,
-        ):
-            from astrbot.core.computer.booters.shipyard import ShipyardBooter
-
-            booter = ShipyardBooter(
-                endpoint_url="http://localhost:8080",
-                access_token="test_token",
-            )
-            booter._ship = mock_ship
-            booter._sandbox_client = mock_client
-
-            result = await booter.available()
-            assert result is True
-
-    @pytest.mark.asyncio
-    async def test_shipyard_available_unhealthy(self):
-        """Test ShipyardBooter available when unhealthy."""
-        mock_ship = MagicMock()
-        mock_ship.id = "test-ship-id"
-
-        mock_client = MagicMock()
-        mock_client.get_ship = AsyncMock(return_value={"status": 0})
-
-        with patch(
-            "astrbot.core.computer.booters.shipyard.ShipyardClient",
-            return_value=mock_client,
-        ):
-            from astrbot.core.computer.booters.shipyard import ShipyardBooter
-
-            booter = ShipyardBooter(
-                endpoint_url="http://localhost:8080",
-                access_token="test_token",
-            )
-            booter._ship = mock_ship
-            booter._sandbox_client = mock_client
-
-            result = await booter.available()
-            assert result is False
-
-
-class TestBoxliteBooter:
-    """Tests for BoxliteBooter."""
-
-    @pytest.mark.asyncio
-    async def test_boxlite_booter_init(self):
-        """Test BoxliteBooter can be instantiated via __new__."""
-        # Need to mock boxlite module before importing
-        mock_boxlite = MagicMock()
-        mock_boxlite.SimpleBox = MagicMock()
-
-        with patch.dict(sys.modules, {"boxlite": mock_boxlite}):
-            from astrbot.core.computer.booters.boxlite import BoxliteBooter
-
-            # Just verify class exists and can be instantiated (boot is async)
-            booter = BoxliteBooter.__new__(BoxliteBooter)
-            assert booter is not None
-
-
 class TestComputerClient:
     """Tests for computer_client module functions."""
 
@@ -505,65 +440,9 @@ class TestComputerClient:
         computer_client.local_booter = None
 
     @pytest.mark.asyncio
-    async def test_get_booter_shipyard(self):
-        """Test get_booter with shipyard type."""
-        from astrbot.core.computer import computer_client
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
-
-        # Clear session booter
-        computer_client.session_booter.clear()
-
-        mock_context = MagicMock()
-        mock_config = MagicMock()
-        mock_config.get = lambda key, default=None: {
-            "provider_settings": {
-                "computer_use_runtime": "sandbox",
-                "sandbox": {
-                    "booter": "shipyard",
-                    "shipyard_endpoint": "http://localhost:8080",
-                    "shipyard_access_token": "test_token",
-                    "shipyard_ttl": 3600,
-                    "shipyard_max_sessions": 10,
-                },
-            }
-        }.get(key, default)
-        mock_context.get_config = MagicMock(return_value=mock_config)
-
-        # Mock the ShipyardBooter
-        mock_ship = MagicMock()
-        mock_ship.id = "test-ship-id"
-        mock_ship.fs = MagicMock()
-        mock_ship.python = MagicMock()
-        mock_ship.shell = MagicMock()
-
-        mock_booter = MagicMock()
-        mock_booter.boot = AsyncMock()
-        mock_booter.available = AsyncMock(return_value=True)
-        mock_booter.shell = MagicMock()
-        mock_booter.upload_file = AsyncMock(return_value={"success": True})
-
-        with (
-            patch.object(ShipyardBooter, "boot", new=AsyncMock()),
-            patch(
-                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
-                AsyncMock(),
-            ),
-        ):
-            # Directly set the booter in the session
-            computer_client.session_booter["test-session-id"] = mock_booter
-
-            booter = await computer_client.get_booter(mock_context, "test-session-id")
-            assert booter is mock_booter
-
-        # Cleanup
-        computer_client.session_booter.clear()
-
-    @pytest.mark.asyncio
     async def test_get_booter_unknown_type(self):
-        """Test get_booter with unknown booter type raises ValueError."""
+        """Test get_booter with unknown sandbox provider raises ValueError."""
         from astrbot.core.computer import computer_client
-
-        computer_client.session_booter.clear()
 
         mock_context = MagicMock()
         mock_config = MagicMock()
@@ -579,15 +458,13 @@ class TestComputerClient:
 
         with pytest.raises(ValueError) as exc_info:
             await computer_client.get_booter(mock_context, "test-session-id")
-        assert "Unknown booter type" in str(exc_info.value)
+        assert "Unknown sandbox provider" in str(exc_info.value)
+        assert "Install and enable a sandbox provider plugin" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_get_booter_reuses_existing(self):
-        """Test get_booter reuses existing booter for same session."""
+    async def test_get_booter_empty_sandbox_provider_hint(self):
+        """Test get_booter with empty sandbox booter gives actionable error."""
         from astrbot.core.computer import computer_client
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
-
-        computer_client.session_booter.clear()
 
         mock_context = MagicMock()
         mock_config = MagicMock()
@@ -595,99 +472,22 @@ class TestComputerClient:
             "provider_settings": {
                 "computer_use_runtime": "sandbox",
                 "sandbox": {
-                    "booter": "shipyard",
-                    "shipyard_endpoint": "http://localhost:8080",
-                    "shipyard_access_token": "test_token",
+                    "booter": "",
                 },
             }
         }.get(key, default)
         mock_context.get_config = MagicMock(return_value=mock_config)
 
-        mock_booter = MagicMock()
-        mock_booter.boot = AsyncMock()
-        mock_booter.available = AsyncMock(return_value=True)
-        mock_booter.shell = MagicMock()
-        mock_booter.upload_file = AsyncMock(return_value={"success": True})
-
-        with (
-            patch.object(ShipyardBooter, "boot", new=AsyncMock()),
-            patch(
-                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
-                AsyncMock(),
-            ),
-        ):
-            # Pre-set the booter
-            computer_client.session_booter["test-session"] = mock_booter
-
-            booter1 = await computer_client.get_booter(mock_context, "test-session")
-            booter2 = await computer_client.get_booter(mock_context, "test-session")
-            assert booter1 is booter2
-
-        # Cleanup
-        computer_client.session_booter.clear()
-
-    @pytest.mark.asyncio
-    async def test_get_booter_rebuild_unavailable(self):
-        """Test get_booter rebuilds when existing booter is unavailable."""
-        from astrbot.core.computer import computer_client
-        from astrbot.core.computer.booters.shipyard import ShipyardBooter
-
-        computer_client.session_booter.clear()
-
-        mock_context = MagicMock()
-        mock_config = MagicMock()
-        mock_config.get = lambda key, default=None: {
-            "provider_settings": {
-                "computer_use_runtime": "sandbox",
-                "sandbox": {
-                    "booter": "shipyard",
-                    "shipyard_endpoint": "http://localhost:8080",
-                    "shipyard_access_token": "test_token",
-                },
-            }
-        }.get(key, default)
-        mock_context.get_config = MagicMock(return_value=mock_config)
-
-        mock_unavailable_booter = MagicMock(spec=ShipyardBooter)
-        mock_unavailable_booter.available = AsyncMock(return_value=False)
-
-        mock_new_booter = MagicMock(spec=ShipyardBooter)
-        mock_new_booter.boot = AsyncMock()
-
-        with (
-            patch(
-                "astrbot.core.computer.booters.shipyard.ShipyardBooter",
-                return_value=mock_new_booter,
-            ) as mock_booter_cls,
-            patch(
-                "astrbot.core.computer.computer_client._sync_skills_to_sandbox",
-                AsyncMock(),
-            ),
-        ):
-            session_id = "test-session-rebuild"
-            # Pre-set the unavailable booter
-            computer_client.session_booter[session_id] = mock_unavailable_booter
-
-            # get_booter should detect the booter is unavailable and create a new one
-            new_booter_instance = await computer_client.get_booter(
-                mock_context, session_id
-            )
-
-            # Assert that a new booter was created and is now in the session
-            mock_booter_cls.assert_called_once()
-            mock_new_booter.boot.assert_awaited_once()
-            assert new_booter_instance is mock_new_booter
-            assert computer_client.session_booter[session_id] is mock_new_booter
-
-        # Cleanup
-        computer_client.session_booter.clear()
+        with pytest.raises(ValueError) as exc_info:
+            await computer_client.get_booter(mock_context, "test-session-id")
+        assert "Sandbox provider is not configured" in str(exc_info.value)
 
 
 class TestSyncSkillsToSandbox:
     """Tests for _sync_skills_to_sandbox function."""
 
     @pytest.mark.asyncio
-    async def test_sync_skills_no_skills_dir(self):
+    async def test_sync_skills_no_skills_dir(self, tmp_path):
         """Test sync does nothing when skills directory doesn't exist."""
         from astrbot.core.computer import computer_client
 
@@ -695,21 +495,15 @@ class TestSyncSkillsToSandbox:
         mock_booter.shell.exec = AsyncMock()
         mock_booter.upload_file = AsyncMock(return_value={"success": True})
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-                return_value="/nonexistent/path",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
-                return_value=False,
-            ),
+        with patch(
+            "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+            return_value=str(tmp_path / "missing"),
         ):
             await computer_client._sync_skills_to_sandbox(mock_booter)
             mock_booter.upload_file.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_skills_empty_dir(self):
+    async def test_sync_skills_empty_dir(self, tmp_path):
         """Test sync does nothing when skills directory is empty."""
         from astrbot.core.computer import computer_client
 
@@ -717,25 +511,18 @@ class TestSyncSkillsToSandbox:
         mock_booter.shell.exec = AsyncMock()
         mock_booter.upload_file = AsyncMock(return_value={"success": True})
 
-        with (
-            patch(
-                "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-                return_value="/tmp/empty",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.Path.iterdir",
-                return_value=iter([]),
-            ),
+        empty_skills = tmp_path / "empty"
+        empty_skills.mkdir()
+
+        with patch(
+            "astrbot.core.computer.computer_client.get_astrbot_skills_path",
+            return_value=str(empty_skills),
         ):
             await computer_client._sync_skills_to_sandbox(mock_booter)
             mock_booter.upload_file.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sync_skills_success(self):
+    async def test_sync_skills_success(self, tmp_path):
         """Test successful skills sync."""
         from astrbot.core.computer import computer_client
 
@@ -743,36 +530,21 @@ class TestSyncSkillsToSandbox:
         mock_booter.shell.exec = AsyncMock(return_value={"exit_code": 0})
         mock_booter.upload_file = AsyncMock(return_value={"success": True})
 
-        mock_skill_file = MagicMock()
-        mock_skill_file.name = "skill.py"
-        mock_skill_file.__str__ = lambda: "/tmp/skills/skill.py"
+        skills_dir = tmp_path / "skills"
+        demo_skill = skills_dir / "demo_skill"
+        demo_skill.mkdir(parents=True)
+        (demo_skill / "SKILL.md").write_text("# Demo", encoding="utf-8")
+        temp_dir = tmp_path / "temp"
+        temp_dir.mkdir()
 
         with (
             patch(
                 "astrbot.core.computer.computer_client.get_astrbot_skills_path",
-                return_value="/tmp/skills",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.isdir",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.Path.iterdir",
-                return_value=iter([mock_skill_file]),
+                return_value=str(skills_dir),
             ),
             patch(
                 "astrbot.core.computer.computer_client.get_astrbot_temp_path",
-                return_value="/tmp",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.shutil.make_archive",
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.path.exists",
-                return_value=True,
-            ),
-            patch(
-                "astrbot.core.computer.computer_client.os.remove",
+                return_value=str(temp_dir),
             ),
         ):
             # Should not raise
