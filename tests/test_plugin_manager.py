@@ -20,6 +20,32 @@ TEST_PLUGIN_REPO = "https://github.com/AstrBotDevs/astrbot_plugin_helloworld"
 TEST_PLUGIN_DIR = "helloworld"
 
 
+def test_load_plugin_config_schema_accepts_utf8_bom(tmp_path: Path):
+    schema_path = tmp_path / "_conf_schema.json"
+    schema_path.write_bytes(b'\xef\xbb\xbf{"type": "object"}')
+
+    assert PluginManager._load_plugin_config_schema(str(schema_path)) == {
+        "type": "object"
+    }
+
+
+def test_load_plugin_config_schema_accepts_utf8_without_bom(tmp_path: Path):
+    schema_path = tmp_path / "_conf_schema.json"
+    schema_path.write_text('{"type": "object"}', encoding="utf-8")
+
+    assert PluginManager._load_plugin_config_schema(str(schema_path)) == {
+        "type": "object"
+    }
+
+
+def test_load_plugin_config_schema_reports_invalid_json(tmp_path: Path):
+    schema_path = tmp_path / "_conf_schema.json"
+    schema_path.write_text("{invalid", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="不是有效的 JSON"):
+        PluginManager._load_plugin_config_schema(str(schema_path))
+
+
 class MockStar:
     def __init__(self):
         self.root_dir_name = TEST_PLUGIN_DIR
