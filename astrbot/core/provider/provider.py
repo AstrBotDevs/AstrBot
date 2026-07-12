@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from typing import Literal, TypeAlias, Union
 
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
+from astrbot.core.agent.stop_policy import event_requests_agent_stop
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
     LLMResponse,
@@ -279,14 +280,19 @@ class TTSProvider(AbstractProvider):
 
             if text_part is None:
                 # 输入结束，处理累积的文本
-                if accumulated_text:
+                astr_event = getattr(text_queue, "astr_event", None)
+                if accumulated_text and not event_requests_agent_stop(astr_event):
                     try:
                         # 调用原有的 get_audio 方法获取音频文件路径
                         audio_path = await self.get_audio(accumulated_text)
-                        # 读取音频文件内容
-                        with open(audio_path, "rb") as f:
-                            audio_data = f.read()
-                        await audio_queue.put((accumulated_text, audio_data))
+                        if audio_path and astr_event is not None:
+                            astr_event.track_temporary_local_file(audio_path)
+                        if audio_path and not event_requests_agent_stop(astr_event):
+                            # 读取音频文件内容
+                            with open(audio_path, "rb") as f:
+                                audio_data = f.read()
+                            if not event_requests_agent_stop(astr_event):
+                                await audio_queue.put((accumulated_text, audio_data))
                     except Exception:
                         # 出错时也要发送 None 结束标记
                         pass

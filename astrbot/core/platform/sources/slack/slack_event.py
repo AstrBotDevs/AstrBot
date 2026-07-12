@@ -1,4 +1,3 @@
-import asyncio
 import re
 from collections.abc import AsyncGenerator, Iterable
 from pathlib import Path
@@ -15,6 +14,7 @@ from astrbot.api.message_components import (
     Plain,
 )
 from astrbot.api.platform import Group, MessageMember
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 
 
 class SlackMessageEvent(AstrMessageEvent):
@@ -33,8 +33,11 @@ class SlackMessageEvent(AstrMessageEvent):
     async def _from_segment_to_slack_block(
         segment: BaseMessageComponent,
         web_client: AsyncWebClient,
+        stop_event: AstrMessageEvent | None = None,
     ) -> dict | None:
         """将消息段转换为 Slack 块格式"""
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if isinstance(segment, Plain):
             return {"type": "section", "text": {"type": "mrkdwn", "text": segment.text}}
         if isinstance(segment, Image):
@@ -47,6 +50,8 @@ class SlackMessageEvent(AstrMessageEvent):
                     "alt_text": "图片",
                 }
             path = await segment.convert_to_file_path()
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             response = await web_client.files_upload_v2(
                 file=path,
                 filename=Path(path).name,
@@ -92,12 +97,15 @@ class SlackMessageEvent(AstrMessageEvent):
     async def _parse_slack_blocks(
         message_chain: MessageChain,
         web_client: AsyncWebClient,
+        stop_event: AstrMessageEvent | None = None,
     ):
         """解析成 Slack 块格式"""
         blocks = []
         text_content = ""
 
         for segment in message_chain.chain:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if isinstance(segment, Plain):
                 text_content += segment.text
             else:
@@ -115,7 +123,10 @@ class SlackMessageEvent(AstrMessageEvent):
                 block = await SlackMessageEvent._from_segment_to_slack_block(
                     segment,
                     web_client,
+                    stop_event,
                 )
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 if block:
                     blocks.append(block)
 
@@ -128,27 +139,34 @@ class SlackMessageEvent(AstrMessageEvent):
         return blocks, "" if blocks else text_content
 
     async def send(self, message: MessageChain) -> None:
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         blocks, text = await SlackMessageEvent._parse_slack_blocks(
             message,
             self.web_client,
+            self,
         )
 
         try:
             if self.get_group_id():
                 # 发送到频道
-                await self.web_client.chat_postMessage(
+                response = await self.web_client.chat_postMessage(
                     channel=self.get_group_id(),
                     text=text,
                     blocks=blocks or None,
                 )
             else:
                 # 发送私信
-                await self.web_client.chat_postMessage(
+                response = await self.web_client.chat_postMessage(
                     channel=self.get_sender_id(),
                     text=text,
                     blocks=blocks or None,
                 )
+            if not response.get("ok"):
+                raise RuntimeError("Slack message delivery failed.")
         except Exception:
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped from None
             # 如果块发送失败，尝试只发送文本
             parts = []
             for segment in message.chain:
@@ -160,16 +178,20 @@ class SlackMessageEvent(AstrMessageEvent):
                     parts.append(" [图片] ")
             fallback_text = "".join(parts)
 
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             if self.get_group_id():
-                await self.web_client.chat_postMessage(
+                response = await self.web_client.chat_postMessage(
                     channel=self.get_group_id(),
                     text=fallback_text,
                 )
             else:
-                await self.web_client.chat_postMessage(
+                response = await self.web_client.chat_postMessage(
                     channel=self.get_sender_id(),
                     text=fallback_text,
                 )
+            if not response.get("ok"):
+                raise RuntimeError("Slack fallback message delivery failed.")
 
         await super().send(message)
 
@@ -181,6 +203,8 @@ class SlackMessageEvent(AstrMessageEvent):
         if not use_fallback:
             buffer = None
             async for chain in generator:
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 if not buffer:
                     buffer = chain
                 else:
@@ -195,15 +219,18 @@ class SlackMessageEvent(AstrMessageEvent):
         pattern = re.compile(r"[^。？！~…]+[。？！~…]+")
 
         async for chain in generator:
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             if isinstance(chain, MessageChain):
                 for comp in chain.chain:
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
                     if isinstance(comp, Plain):
                         buffer += comp.text
                         if any(p in buffer for p in "。？！~…"):
                             buffer = await self.process_buffer(buffer, pattern)
                     else:
-                        await self.send(MessageChain(chain=[comp]))
-                        await asyncio.sleep(1.5)  # 限速
+                        await self.send_streaming_fallback_component(comp)
 
         if buffer.strip():
             await self.send(MessageChain([Plain(buffer)]))

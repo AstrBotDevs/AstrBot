@@ -7,8 +7,9 @@ from typing import Any
 import aiohttp
 
 from astrbot.api import logger
-from astrbot.api.event import MessageChain
+from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import MediaResolver, detect_image_mime_type_async
 
@@ -149,12 +150,15 @@ class MattermostClient:
         self,
         channel_id: str,
         message_chain: MessageChain,
+        stop_event: AstrMessageEvent | None = None,
     ) -> dict[str, Any]:
         text_parts: list[str] = []
         file_ids: list[str] = []
         root_id: str | None = None
 
         for segment in message_chain.chain:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if isinstance(segment, Plain):
                 text_parts.append(segment.text)
             elif isinstance(segment, At):
@@ -166,8 +170,12 @@ class MattermostClient:
                     root_id = str(segment.id)
             elif isinstance(segment, Image):
                 path = await segment.convert_to_file_path()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 file_path = Path(path)
                 file_bytes = await asyncio.to_thread(file_path.read_bytes)
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 mime_type = (
                     await detect_image_mime_type_async(
                         file_bytes,
@@ -175,14 +183,17 @@ class MattermostClient:
                     )
                     or mimetypes.guess_type(file_path.name)[0]
                 )
-                file_ids.append(
-                    await self.upload_file(
-                        channel_id,
-                        file_bytes,
-                        file_path.name,
-                        mime_type or "image/jpeg",
-                    )
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                file_id = await self.upload_file(
+                    channel_id,
+                    file_bytes,
+                    file_path.name,
+                    mime_type or "image/jpeg",
                 )
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                file_ids.append(file_id)
             elif isinstance(segment, (File, Record, Video)):
                 if isinstance(segment, File):
                     path = await segment.get_file()
@@ -190,22 +201,29 @@ class MattermostClient:
                 else:
                     path = await segment.convert_to_file_path()
                     filename = Path(path).name
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 file_path = Path(path)
                 file_bytes = await asyncio.to_thread(file_path.read_bytes)
-                file_ids.append(
-                    await self.upload_file(
-                        channel_id,
-                        file_bytes,
-                        filename,
-                        mimetypes.guess_type(filename)[0] or "application/octet-stream",
-                    )
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                file_id = await self.upload_file(
+                    channel_id,
+                    file_bytes,
+                    filename,
+                    mimetypes.guess_type(filename)[0] or "application/octet-stream",
                 )
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
+                file_ids.append(file_id)
             else:
                 logger.debug(
                     "Mattermost send_message_chain skipped unsupported segment: %s",
                     segment.type,
                 )
 
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         return await self.create_post(
             channel_id,
             "".join(text_parts).strip(),

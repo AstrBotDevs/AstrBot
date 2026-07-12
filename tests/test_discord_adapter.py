@@ -1,10 +1,13 @@
+import asyncio
 import base64
 from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from astrbot.api.message_components import Image, Record
+from astrbot.core.agent.stop_policy import AgentOutputStopped
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.discord import (
     discord_platform_adapter,
@@ -130,3 +133,45 @@ async def test_discord_send_record_resolves_audio_with_media_resolver(monkeypatc
     assert view is None
     assert embeds == []
     assert reference_message_id is None
+
+
+@pytest.mark.asyncio
+async def test_discord_stop_after_conversion_blocks_webhook_write():
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    parse_started = asyncio.Event()
+    release_parse = asyncio.Event()
+
+    async def parse(_message, _stop_event=None):
+        parse_started.set()
+        await release_parse.wait()
+        return "answer", [], None, [], None
+
+    event._parse_to_discord = parse
+    event.interaction_followup_webhook = SimpleNamespace(send=AsyncMock())
+
+    task = asyncio.create_task(event.send(MessageChain().message("answer")))
+    await asyncio.wait_for(parse_started.wait(), timeout=1)
+    event.set_extra("agent_stop_requested", True)
+    release_parse.set()
+
+    with pytest.raises(AgentOutputStopped):
+        await task
+    event.interaction_followup_webhook.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_discord_platform_failure_is_reported_to_respond_stage():
+    event = DiscordPlatformEvent.__new__(DiscordPlatformEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    event._parse_to_discord = AsyncMock(return_value=("answer", [], None, [], None))
+    event.interaction_followup_webhook = SimpleNamespace(
+        send=AsyncMock(side_effect=RuntimeError("network failed"))
+    )
+
+    with pytest.raises(RuntimeError, match="delivery failed"):
+        await event.send(MessageChain().message("answer"))

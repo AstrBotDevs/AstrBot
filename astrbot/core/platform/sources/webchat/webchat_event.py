@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Json, Plain, Record
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
@@ -41,6 +42,7 @@ class WebChatMessageEvent(AstrMessageEvent):
         session_id: str,
         streaming: bool = False,
         emit_complete: bool = False,
+        stop_event: AstrMessageEvent | None = None,
     ) -> str | None:
         request_id = str(message_id)
         conversation_id = _extract_conversation_id(session_id)
@@ -58,9 +60,13 @@ class WebChatMessageEvent(AstrMessageEvent):
                 },  # end means this request is finished
             )
             return
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
 
         data = ""
         for comp in message.chain:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if isinstance(comp, Plain):
                 data = comp.text
                 await web_chat_back_queue.put(
@@ -85,43 +91,113 @@ class WebChatMessageEvent(AstrMessageEvent):
             elif isinstance(comp, Image):
                 # save image to local
                 image_base64 = await comp.convert_to_base64()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 image_bytes = base64.b64decode(image_base64)
                 mime_type = await detect_image_mime_type_async(
                     image_bytes,
                     default_mime_type=None,
                 )
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
                 filename = f"{str(uuid.uuid4())}{suffix}"
-                path = os.path.join(attachments_dir, filename)
-                await asyncio.to_thread(Path(path).write_bytes, image_bytes)
-                data = f"[IMAGE]{filename}"
-                await web_chat_back_queue.put(
-                    {
-                        "type": "image",
-                        "data": data,
-                        "streaming": streaming,
-                        "message_id": message_id,
-                    },
-                )
+                path = Path(attachments_dir) / filename
+                published = False
+                try:
+                    write_task = asyncio.create_task(
+                        asyncio.to_thread(path.write_bytes, image_bytes)
+                    )
+                    try:
+                        await asyncio.shield(write_task)
+                    except asyncio.CancelledError as exc:
+                        while not write_task.done():
+                            try:
+                                await asyncio.shield(write_task)
+                            except asyncio.CancelledError:
+                                continue
+                        if not write_task.cancelled():
+                            try:
+                                write_task.result()
+                            except Exception:
+                                pass
+                        raise exc
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
+                    data = f"[IMAGE]{filename}"
+                    await web_chat_back_queue.put(
+                        {
+                            "type": "image",
+                            "data": data,
+                            "streaming": streaming,
+                            "message_id": message_id,
+                        },
+                    )
+                    published = True
+                finally:
+                    if not published:
+                        try:
+                            path.unlink(missing_ok=True)
+                        except OSError as exc:
+                            logger.warning(
+                                "Failed to clean unpublished WebChat image %s: %s",
+                                path,
+                                exc,
+                            )
             elif isinstance(comp, Record):
                 # save record to local
                 filename = f"{str(uuid.uuid4())}.wav"
-                path = os.path.join(attachments_dir, filename)
+                path = Path(attachments_dir) / filename
                 record_base64 = await comp.convert_to_base64()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 record_bytes = base64.b64decode(record_base64)
-                await asyncio.to_thread(Path(path).write_bytes, record_bytes)
-                data = f"[RECORD]{filename}"
-                await web_chat_back_queue.put(
-                    {
-                        "type": "record",
-                        "data": data,
-                        "streaming": streaming,
-                        "message_id": message_id,
-                    },
-                )
+                published = False
+                try:
+                    write_task = asyncio.create_task(
+                        asyncio.to_thread(path.write_bytes, record_bytes)
+                    )
+                    try:
+                        await asyncio.shield(write_task)
+                    except asyncio.CancelledError as exc:
+                        while not write_task.done():
+                            try:
+                                await asyncio.shield(write_task)
+                            except asyncio.CancelledError:
+                                continue
+                        if not write_task.cancelled():
+                            try:
+                                write_task.result()
+                            except Exception:
+                                pass
+                        raise exc
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
+                    data = f"[RECORD]{filename}"
+                    await web_chat_back_queue.put(
+                        {
+                            "type": "record",
+                            "data": data,
+                            "streaming": streaming,
+                            "message_id": message_id,
+                        },
+                    )
+                    published = True
+                finally:
+                    if not published:
+                        try:
+                            path.unlink(missing_ok=True)
+                        except OSError as exc:
+                            logger.warning(
+                                "Failed to clean unpublished WebChat record %s: %s",
+                                path,
+                                exc,
+                            )
             elif isinstance(comp, File):
                 # save file to local
                 file_path = await comp.get_file()
+                if event_requests_agent_stop(stop_event):
+                    raise AgentOutputStopped
                 raw_original_name = comp.name or os.path.basename(file_path)
                 original_name = (
                     PurePosixPath(str(raw_original_name).replace("\\", "/"))
@@ -132,21 +208,38 @@ class WebChatMessageEvent(AstrMessageEvent):
                     original_name = os.path.basename(file_path) or "file"
                 ext = os.path.splitext(original_name)[1] or ""
                 filename = f"{uuid.uuid4()!s}{ext}"
-                dest_path = os.path.join(attachments_dir, filename)
-                shutil.copy2(file_path, dest_path)
-                data = f"[FILE]{filename}|{original_name}"
-                await web_chat_back_queue.put(
-                    {
-                        "type": "file",
-                        "data": data,
-                        "streaming": streaming,
-                        "message_id": message_id,
-                    },
-                )
+                dest_path = Path(attachments_dir) / filename
+                published = False
+                try:
+                    shutil.copy2(file_path, dest_path)
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
+                    data = f"[FILE]{filename}|{original_name}"
+                    await web_chat_back_queue.put(
+                        {
+                            "type": "file",
+                            "data": data,
+                            "streaming": streaming,
+                            "message_id": message_id,
+                        },
+                    )
+                    published = True
+                finally:
+                    if not published:
+                        try:
+                            dest_path.unlink(missing_ok=True)
+                        except OSError as exc:
+                            logger.warning(
+                                "Failed to clean unpublished WebChat file %s: %s",
+                                dest_path,
+                                exc,
+                            )
             else:
                 logger.debug(f"webchat 忽略: {comp.type}")
 
         if emit_complete:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             await web_chat_back_queue.put(
                 {
                     "type": "complete",
@@ -161,7 +254,12 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain | None) -> None:
         message_id = self.message_obj.message_id
-        await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
+        await WebChatMessageEvent._send(
+            message_id,
+            message,
+            session_id=self.session_id,
+            stop_event=self,
+        )
         await super().send(MessageChain([]))
 
     async def send_streaming(self, generator, use_fallback: bool = False) -> None:
@@ -196,6 +294,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                 if text:
                     payload["text"] = text
 
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 await web_chat_back_queue.put(payload)
                 continue
 
@@ -216,6 +316,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 message=chain,
                 session_id=self.session_id,
                 streaming=True,
+                stop_event=self,
             )
             if not r:
                 continue
@@ -224,6 +325,8 @@ class WebChatMessageEvent(AstrMessageEvent):
             else:
                 final_data += r
 
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         await web_chat_back_queue.put(
             {
                 "type": "complete",  # complete means we return the final result

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from astrbot import logger
 from astrbot.core.agent.runners.tool_loop_agent_runner import FollowUpTicket
+from astrbot.core.agent.stop_policy import event_requests_agent_stop
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
 
@@ -41,6 +42,22 @@ def register_active_runner(umo: str, runner: AgentRunner) -> None:
 def unregister_active_runner(umo: str, runner: AgentRunner) -> None:
     if _ACTIVE_AGENT_RUNNERS.get(umo) is runner:
         _ACTIVE_AGENT_RUNNERS.pop(umo, None)
+
+
+def request_active_runner_stop(umo: str) -> bool:
+    """Wake the active runner for a session immediately.
+
+    Args:
+        umo: Unified message origin of the active session.
+
+    Returns:
+        Whether an active runner was found and signalled.
+    """
+    runner = _ACTIVE_AGENT_RUNNERS.get(umo)
+    if runner is None:
+        return False
+    runner.request_stop()
+    return True
 
 
 def _get_follow_up_order_state(umo: str) -> dict[str, object]:
@@ -172,7 +189,7 @@ def try_capture_follow_up(event: AstrMessageEvent) -> FollowUpCapture | None:
     if not active_sender_id or active_sender_id != sender_id:
         return None
 
-    if runner_event.get_extra("agent_stop_requested"):
+    if event_requests_agent_stop(runner_event):
         return None
 
     ticket = runner.follow_up(message_text=_event_follow_up_text(event))

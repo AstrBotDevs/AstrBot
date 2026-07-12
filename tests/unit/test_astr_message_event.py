@@ -1,10 +1,12 @@
 """Tests for AstrMessageEvent class."""
 
+import asyncio
 import re
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from astrbot.core.agent.stop_policy import AgentOutputStopped
 from astrbot.core.message.components import (
     At,
     AtAll,
@@ -521,6 +523,39 @@ class TestProcessBuffer:
         result = await astr_message_event.process_buffer(buffer, pattern)
 
         assert result == "No newlines here"
+
+    @pytest.mark.asyncio
+    async def test_process_buffer_stops_during_segment_delay(
+        self,
+        astr_message_event,
+        monkeypatch,
+    ):
+        """A stop during fallback rate limiting must suppress later segments."""
+        sleep_started = asyncio.Event()
+        release_sleep = asyncio.Event()
+
+        async def blocked_sleep(_delay):
+            sleep_started.set()
+            await release_sleep.wait()
+
+        monkeypatch.setattr(
+            "astrbot.core.platform.astr_message_event.asyncio.sleep",
+            blocked_sleep,
+        )
+        pattern = re.compile(r".*\n")
+        with patch.object(
+            astr_message_event, "send", new_callable=AsyncMock
+        ) as mock_send:
+            task = asyncio.create_task(
+                astr_message_event.process_buffer("one\ntwo\nthree", pattern)
+            )
+            await asyncio.wait_for(sleep_started.wait(), timeout=1)
+            astr_message_event.set_extra("agent_stop_requested", True)
+            release_sleep.set()
+            with pytest.raises(AgentOutputStopped):
+                await asyncio.wait_for(task, timeout=1)
+
+        assert mock_send.await_count == 1
 
 
 class TestResultHelpers:

@@ -1,11 +1,14 @@
 import asyncio
 import importlib
 import sys
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 import astrbot.api.message_components as Comp
+from astrbot.api.event import MessageChain
+from astrbot.core.agent.stop_policy import AgentOutputStopped
 from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from tests.fixtures.helpers import (
     NoopAwaitable,
@@ -200,6 +203,104 @@ async def test_telegram_final_segment_splits_long_markdown_messages():
     assert len(second_call["text"]) == 32
     assert first_call["parse_mode"] == "MarkdownV2"
     assert second_call["parse_mode"] == "MarkdownV2"
+
+
+@pytest.mark.asyncio
+async def test_telegram_draft_stop_blocks_final_write():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    event = object.__new__(TelegramPlatformEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    draft_clear_started = asyncio.Event()
+    release_draft_clear = asyncio.Event()
+    final_send = AsyncMock()
+
+    async def draft_send(_chat_id, _draft_id, text, *_args, **_kwargs):
+        if text == "\u23f3":
+            draft_clear_started.set()
+            await release_draft_clear.wait()
+
+    event._send_message_draft = draft_send
+    event._send_final_segment = final_send
+
+    async def source():
+        yield MessageChain().message("secret")
+        yield MessageChain(chain=[], type="break")
+
+    task = asyncio.create_task(
+        event._send_streaming_draft(
+            "1",
+            None,
+            {"chat_id": "1"},
+            source(),
+        )
+    )
+    await asyncio.wait_for(draft_clear_started.wait(), timeout=1)
+    event.set_extra("agent_stop_requested", True)
+    release_draft_clear.set()
+
+    with pytest.raises(AgentOutputStopped):
+        await task
+    final_send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_telegram_final_edit_failure_is_reported_as_delivery_failure():
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    event = object.__new__(TelegramPlatformEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    event._ensure_typing = AsyncMock()
+    event.client = SimpleNamespace(
+        send_message=AsyncMock(return_value=SimpleNamespace(message_id=1)),
+        edit_message_text=AsyncMock(side_effect=RuntimeError("edit failed")),
+    )
+
+    async def source():
+        yield MessageChain().message("first")
+        yield MessageChain().message(" second")
+
+    with pytest.raises(RuntimeError, match="edit failed"):
+        await event._send_streaming_edit(
+            "group",
+            None,
+            {"chat_id": "group"},
+            source(),
+        )
+
+    event.client.send_message.assert_awaited_once()
+    assert event.client.edit_message_text.await_count == 2
+
+
+@pytest.mark.parametrize("stop_at", ["chat_action", "first_chunk"])
+@pytest.mark.asyncio
+async def test_telegram_ordinary_send_stops_before_new_writes(stop_at):
+    TelegramPlatformEvent = _load_telegram_platform_event()
+    client = MagicMock()
+    event = TelegramPlatformEvent("msg", MagicMock(), MagicMock(), "session", client)
+
+    async def request_stop(**_kwargs):
+        event.set_extra("agent_stop_requested", True)
+
+    client.send_chat_action = AsyncMock(
+        side_effect=request_stop if stop_at == "chat_action" else None
+    )
+    client.send_message = AsyncMock(
+        side_effect=request_stop if stop_at == "first_chunk" else None
+    )
+    delta = "A" * (TelegramPlatformEvent.MAX_MESSAGE_LENGTH + 32)
+
+    with pytest.raises(AgentOutputStopped):
+        await event.send_with_client(
+            client,
+            MessageChain([Comp.Plain(delta)]),
+            "123456",
+            event,
+        )
+
+    assert client.send_message.await_count == (0 if stop_at == "chat_action" else 1)
 
 
 @pytest.mark.asyncio

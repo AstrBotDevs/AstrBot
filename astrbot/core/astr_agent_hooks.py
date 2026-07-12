@@ -4,9 +4,10 @@ from mcp.types import CallToolResult
 
 from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.run_context import ContextWrapper
+from astrbot.core.agent.stop_policy import event_requests_agent_stop
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_context import AstrAgentContext
-from astrbot.core.pipeline.context_utils import call_event_hook
+from astrbot.core.pipeline.context_utils import call_agent_done_hook, call_event_hook
 from astrbot.core.star.star_handler import EventType
 
 
@@ -22,20 +23,29 @@ class MainAgentHooks(BaseAgentRunHooks[AstrAgentContext]):
 
     async def on_agent_done(self, run_context, llm_response) -> None:
         # 执行事件钩子
-        if llm_response and llm_response.reasoning_content:
+        event = run_context.context.event
+        suppress_llm_response = event_requests_agent_stop(event)
+
+        if (
+            not suppress_llm_response
+            and llm_response
+            and llm_response.reasoning_content
+        ):
             # we will use this in result_decorate stage to inject reasoning content to chain
-            run_context.context.event.set_extra(
-                "_llm_reasoning_content", llm_response.reasoning_content
+            event.set_extra("_llm_reasoning_content", llm_response.reasoning_content)
+
+        if not suppress_llm_response:
+            await call_event_hook(
+                event,
+                EventType.OnLLMResponseEvent,
+                llm_response,
             )
 
-        await call_event_hook(
-            run_context.context.event,
-            EventType.OnLLMResponseEvent,
-            llm_response,
-        )
-        await call_event_hook(
-            run_context.context.event,
-            EventType.OnAgentDoneEvent,
+        if event_requests_agent_stop(event):
+            event.set_extra("_llm_reasoning_content", None)
+
+        await call_agent_done_hook(
+            event,
             run_context,
             llm_response,
         )

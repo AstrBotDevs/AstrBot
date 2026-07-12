@@ -15,6 +15,7 @@ from astrbot.api.message_components import (
     Video,
 )
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.utils.media_utils import resolve_media_ref_to_base64_data
 
 if TYPE_CHECKING:
@@ -147,7 +148,11 @@ class SatoriPlatformEvent(AstrMessageEvent):
             content_parts = []
 
             for component in message.chain:
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 component_content = await self._convert_component_to_satori(component)
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 if component_content:
                     content_parts.append(component_content)
 
@@ -155,12 +160,16 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 if isinstance(component, Node):
                     # 单个转发节点
                     node_content = await self._convert_node_to_satori(component)
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
                     if node_content:
                         content_parts.append(node_content)
 
                 elif isinstance(component, Nodes):
                     # 合并转发消息
                     node_content = await self._convert_nodes_to_satori(component)
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
                     if node_content:
                         content_parts.append(node_content)
 
@@ -168,6 +177,8 @@ class SatoriPlatformEvent(AstrMessageEvent):
             channel_id = self.session_id
             data = {"channel_id": channel_id, "content": content}
 
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             result = await self.adapter.send_http_request(
                 "POST",
                 "/message.create",
@@ -176,9 +187,12 @@ class SatoriPlatformEvent(AstrMessageEvent):
                 user_id,
             )
             if not result:
-                logger.error("Satori 消息发送失败")
+                raise RuntimeError("Satori message delivery failed.")
+        except AgentOutputStopped:
+            raise
         except Exception as e:
             logger.error(f"Satori 消息发送异常: {e}")
+            raise
 
         await super().send(message)
 
@@ -197,18 +211,27 @@ class SatoriPlatformEvent(AstrMessageEvent):
                         continue
 
                     for component in chain.chain:
+                        if event_requests_agent_stop(self):
+                            raise AgentOutputStopped
                         if isinstance(component, Plain):
                             content_parts.append(component.text)
                         elif isinstance(component, Image):
                             if content_parts:
+                                if event_requests_agent_stop(self):
+                                    content_parts = []
+                                    continue
                                 content = "".join(content_parts)
                                 temp_chain = MessageChain([Plain(text=content)])
                                 await self.send(temp_chain)
                                 content_parts = []
+                            if event_requests_agent_stop(self):
+                                continue
                             try:
                                 image_data_url = await self._image_to_data_url(
                                     component
                                 )
+                                if event_requests_agent_stop(self):
+                                    raise AgentOutputStopped
                                 if image_data_url:
                                     img_chain = MessageChain(
                                         [
@@ -218,18 +241,26 @@ class SatoriPlatformEvent(AstrMessageEvent):
                                         ],
                                     )
                                     await self.send(img_chain)
+                            except AgentOutputStopped:
+                                raise
                             except Exception as e:
                                 logger.error(f"图片转换为base64失败: {e}")
+                                raise
                         else:
                             content_parts.append(str(component))
 
             if content_parts:
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 content = "".join(content_parts)
                 temp_chain = MessageChain([Plain(text=content)])
                 await self.send(temp_chain)
 
+        except AgentOutputStopped:
+            raise
         except Exception as e:
             logger.error(f"Satori 流式消息发送异常: {e}")
+            raise
 
         return await super().send_streaming(generator, use_fallback)
 

@@ -11,6 +11,7 @@ from astrbot.core.agent.runners.deerflow.constants import (
 )
 from astrbot.core.agent.runners.deerflow.deerflow_api_client import DeerFlowAPIClient
 from astrbot.core.db.po import ProviderStat
+from astrbot.core.pipeline.process_stage.follow_up import request_active_runner_stop
 from astrbot.core.utils.active_event_registry import active_event_registry
 
 from .utils.rst_scene import RstScene
@@ -206,6 +207,8 @@ class ConversationCommands:
                 umo,
                 exclude=message,
             )
+            if request_active_runner_stop(umo) and stopped_count == 0:
+                stopped_count = 1
 
         if stopped_count > 0:
             message.set_result(

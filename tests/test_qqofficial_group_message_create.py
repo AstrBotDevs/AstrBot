@@ -10,15 +10,20 @@ import pytest
 from botpy import ConnectionSession
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Image, Plain, Reply
+from astrbot.api.message_components import At, Image, Plain, Record, Reply
+from astrbot.core.agent.stop_policy import AgentOutputStopped
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
 )
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
+from astrbot.core.platform.astr_message_event import AstrMessageEvent
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
+    QQOfficialMessageEvent,
+)
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     QQOfficialPlatformAdapter,
     _ensure_group_message_create_parser,
@@ -74,6 +79,260 @@ def _dispatch_group_message(payload: dict) -> tuple[str, botpy.message.GroupMess
     )
     connection.parser["group_message_create"](payload)
     return dispatched[0]
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_stop_blocks_retry_and_markdown_fallback():
+    event = object.__new__(QQOfficialMessageEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+
+    async def request_then_stop(*_args, **_kwargs):
+        event.set_extra("agent_stop_requested", True)
+        raise botpy.errors.SequenceNumberError("first request failed")
+
+    request = AsyncMock(side_effect=request_then_stop)
+    event.bot = SimpleNamespace(
+        api=SimpleNamespace(_http=SimpleNamespace(request=request))
+    )
+
+    with pytest.raises(AgentOutputStopped):
+        await event._send_with_markdown_fallback(
+            lambda payload: event.post_c2c_message("openid", **payload),
+            {"content": "late", "msg_id": "reply-id"},
+            "late",
+        )
+
+    request.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_none_response_after_stop_is_not_swallowed():
+    event = object.__new__(QQOfficialMessageEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+
+    async def return_none_then_stop(*_args, **_kwargs):
+        event.set_extra("agent_stop_requested", True)
+        return None
+
+    request = AsyncMock(side_effect=return_none_then_stop)
+    event.bot = SimpleNamespace(
+        api=SimpleNamespace(_http=SimpleNamespace(request=request))
+    )
+
+    with pytest.raises(AgentOutputStopped):
+        await event.post_c2c_message(openid="user", content="late")
+    request.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_streaming_stop_is_not_swallowed():
+    event = object.__new__(QQOfficialMessageEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    event._has_send_oper = False
+    event.platform_meta = SimpleNamespace(name="qqofficial-test")
+    event.message_obj = SimpleNamespace(raw_message=object())
+    event.send_buffer = None
+    event._post_send = AsyncMock(side_effect=AgentOutputStopped)
+
+    async def source():
+        yield MessageChain().message("late")
+
+    with pytest.raises(AgentOutputStopped):
+        await event.send_streaming(source())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("final_succeeds", [True, False])
+async def test_qqofficial_c2c_streaming_requires_terminal_delivery(
+    monkeypatch,
+    final_succeeds,
+):
+    class FakeC2CMessage:
+        pass
+
+    async def noop_base_streaming(self, generator, use_fallback=False):
+        return None
+
+    monkeypatch.setattr(botpy.message, "C2CMessage", FakeC2CMessage)
+    monkeypatch.setattr(AstrMessageEvent, "send_streaming", noop_base_streaming)
+
+    event = object.__new__(QQOfficialMessageEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    event.message_obj = SimpleNamespace(raw_message=FakeC2CMessage())
+    event.send_buffer = None
+    states = []
+    payloads = []
+
+    async def post_send(stream=None):
+        states.append(stream["state"])
+        payloads.append(event.send_buffer.get_plain_text())
+        event.send_buffer = None
+        if stream["state"] == 10 and not final_succeeds:
+            return None
+        return SimpleNamespace(id="stream-id")
+
+    event._post_send = AsyncMock(side_effect=post_send)
+
+    async def source():
+        yield MessageChain().message("partial")
+
+    if final_succeeds:
+        await event.send_streaming(source())
+    else:
+        with pytest.raises(RuntimeError, match="streaming message delivery failed"):
+            await event.send_streaming(source())
+
+    assert states == [1, 10]
+    assert payloads == ["partial", "\n"]
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_c2c_empty_stream_is_delivery_failure(monkeypatch):
+    class FakeC2CMessage:
+        pass
+
+    async def noop_base_streaming(self, generator, use_fallback=False):
+        return None
+
+    monkeypatch.setattr(botpy.message, "C2CMessage", FakeC2CMessage)
+    monkeypatch.setattr(AstrMessageEvent, "send_streaming", noop_base_streaming)
+
+    event = object.__new__(QQOfficialMessageEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    event.message_obj = SimpleNamespace(raw_message=FakeC2CMessage())
+    event.send_buffer = None
+
+    async def empty_source():
+        if False:
+            yield MessageChain().message("never")
+
+    with pytest.raises(RuntimeError, match="produced no platform delivery"):
+        await event.send_streaming(empty_source())
+
+    assert event.send_buffer is None
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_ordinary_none_response_is_delivery_failure(monkeypatch):
+    class FakeGroupMessage:
+        group_openid = "group"
+
+    event = object.__new__(QQOfficialMessageEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    event._temporary_local_files = []
+    event.send_buffer = None
+    event.message_obj = SimpleNamespace(
+        raw_message=FakeGroupMessage(),
+        message_id="message",
+    )
+    post_group_message = AsyncMock(return_value=None)
+    event.bot = SimpleNamespace(
+        api=SimpleNamespace(post_group_message=post_group_message)
+    )
+
+    async def parsed(_message):
+        return "answer", None, None, None, None, None, None
+
+    base_send = AsyncMock()
+    monkeypatch.setattr(botpy.message, "GroupMessage", FakeGroupMessage)
+    monkeypatch.setattr(
+        QQOfficialMessageEvent,
+        "_parse_to_qqofficial",
+        staticmethod(parsed),
+    )
+    monkeypatch.setattr(AstrMessageEvent, "send", base_send)
+
+    with pytest.raises(RuntimeError, match="delivery returned no response"):
+        await event.send(MessageChain().message("answer"))
+
+    post_group_message.assert_awaited_once()
+    base_send.assert_not_awaited()
+    assert event.send_buffer is None
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_split_delivery_stops_at_first_none_response():
+    event = object.__new__(QQOfficialMessageEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    first = MessageChain().message("first")
+    second = MessageChain().message("second")
+    event.send_buffer = MessageChain().message("combined")
+    event._split_message_chain_by_media = lambda _message: [first, second]
+    event._post_send_one = AsyncMock(side_effect=[None, SimpleNamespace(id="second")])
+
+    with pytest.raises(RuntimeError, match="delivery returned no response"):
+        await event._post_send()
+
+    event._post_send_one.assert_awaited_once_with(first, None)
+    assert event.send_buffer is None
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_empty_buffer_is_delivery_failure_and_is_cleared():
+    event = object.__new__(QQOfficialMessageEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    event.send_buffer = MessageChain()
+
+    with pytest.raises(RuntimeError, match="buffer is empty"):
+        await event._post_send()
+
+    assert event.send_buffer is None
+
+
+@pytest.mark.asyncio
+async def test_qqofficial_record_is_tracked_before_stop_unwind(
+    monkeypatch,
+    tmp_path,
+):
+    class FakeC2CMessage:
+        pass
+
+    converted_path = tmp_path / "converted.silk"
+    converted_path.write_bytes(b"audio")
+    event = object.__new__(QQOfficialMessageEvent)
+    event._extras = {}
+    event._force_stopped = False
+    event._result = None
+    event._temporary_local_files = []
+    event.send_buffer = MessageChain([Record(file="source.wav")])
+    event.message_obj = SimpleNamespace(
+        raw_message=FakeC2CMessage(),
+        message_id="message",
+    )
+
+    async def parsed(_message):
+        event.set_extra("agent_stop_requested", True)
+        return "", None, None, str(converted_path), None, None, None
+
+    monkeypatch.setattr(botpy.message, "C2CMessage", FakeC2CMessage)
+    monkeypatch.setattr(
+        QQOfficialMessageEvent,
+        "_parse_to_qqofficial",
+        staticmethod(parsed),
+    )
+
+    with pytest.raises(AgentOutputStopped):
+        await event._post_send_one(event.send_buffer)
+
+    assert event._temporary_local_files == [str(converted_path)]
+    event.cleanup_temporary_local_files()
+    assert not converted_path.exists()
 
 
 @pytest.mark.asyncio

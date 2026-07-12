@@ -13,6 +13,10 @@ from astrbot.core.agent.message import (
     dump_messages_with_checkpoints,
 )
 from astrbot.core.agent.response import AgentStats
+from astrbot.core.agent.stop_policy import (
+    AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY,
+    event_requests_agent_stop,
+)
 from astrbot.core.astr_main_agent import (
     LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
@@ -51,6 +55,39 @@ from ...follow_up import (
 
 
 class InternalAgentSubStage(Stage):
+    @staticmethod
+    def _confirm_agent_output_delivery(
+        event: AstrMessageEvent,
+        agent_runner: AgentRunner,
+    ) -> bool:
+        """Commit delivered output or discard it when stop wins the boundary.
+
+        Args:
+            event: Current message event.
+            agent_runner: Runner that owns the pending final-response snapshot.
+
+        Returns:
+            Whether downstream delivery completed and processing may continue.
+        """
+        delivery_confirmed = bool(
+            event.get_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, False)
+        )
+        if event_requests_agent_stop(event):
+            agent_runner.request_stop()
+            event.clear_result()
+            if agent_runner.done():
+                if delivery_confirmed:
+                    agent_runner.commit_final_response_delivery(delivery_confirmed=True)
+                else:
+                    agent_runner.discard_late_aborted_result()
+            return False
+        if agent_runner.done():
+            if not delivery_confirmed:
+                return False
+            return agent_runner.commit_final_response_delivery(delivery_confirmed=True)
+        event.set_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, False)
+        return True
+
     async def initialize(self, ctx: PipelineContext) -> None:
         self.ctx = ctx
         conf = ctx.astrbot_config
@@ -157,7 +194,8 @@ class InternalAgentSubStage(Stage):
     async def _send_llm_error_message(
         self, event: AstrMessageEvent, message: object
     ) -> None:
-        await event.send(MessageChain().message(str(message)))
+        if not event_requests_agent_stop(event):
+            await event.send(MessageChain().message(str(message)))
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -167,6 +205,8 @@ class InternalAgentSubStage(Stage):
         follow_up_activated = False
         typing_requested = False
         try:
+            if event_requests_agent_stop(event):
+                return
             streaming_response = self.streaming_response
             if (enable_streaming := event.get_extra("enable_streaming")) is not None:
                 streaming_response = bool(enable_streaming)
@@ -205,12 +245,19 @@ class InternalAgentSubStage(Stage):
                     )
                     return
 
+            if event_requests_agent_stop(event):
+                return
+
             try:
                 typing_requested = True
                 await event.send_typing()
             except Exception:
                 logger.warning("send_typing failed", exc_info=True)
-            if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
+            if event_requests_agent_stop(event):
+                return
+            if await call_event_hook(
+                event, EventType.OnWaitingLLMRequestEvent
+            ) or event_requests_agent_stop(event):
                 return
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
@@ -218,6 +265,8 @@ class InternalAgentSubStage(Stage):
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
                 try:
+                    if event_requests_agent_stop(event):
+                        return
                     build_cfg = replace(
                         self.main_agent_cfg,
                         provider_wake_prefix=provider_wake_prefix,
@@ -246,6 +295,12 @@ class InternalAgentSubStage(Stage):
                     provider = build_result.provider
                     reset_coro = build_result.reset_coro
 
+                    if event_requests_agent_stop(event):
+                        if reset_coro:
+                            reset_coro.close()
+                        agent_runner.request_stop()
+                        return
+
                     api_base = provider.provider_config.get("api_base", "")
                     for host in decoded_blocked:
                         if host in api_base:
@@ -262,14 +317,21 @@ class InternalAgentSubStage(Stage):
                         and not event.platform_meta.support_streaming_message
                     )
 
-                    if await call_event_hook(event, EventType.OnLLMRequestEvent, req):
+                    if await call_event_hook(
+                        event, EventType.OnLLMRequestEvent, req
+                    ) or event_requests_agent_stop(event):
                         if reset_coro:
                             reset_coro.close()
+                        agent_runner.request_stop()
                         return
 
                     # apply reset
                     if reset_coro:
                         await reset_coro
+
+                    if event_requests_agent_stop(event):
+                        agent_runner.request_stop()
+                        return
 
                     register_active_runner(event.unified_msg_origin, agent_runner)
                     runner_registered = True
@@ -304,6 +366,7 @@ class InternalAgentSubStage(Stage):
                             )
 
                         # 使用 run_live_agent，总是使用流式响应
+                        event.set_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, False)
                         event.set_result(
                             MessageEventResult()
                             .set_result_content_type(ResultContentType.STREAMING_RESULT)
@@ -320,22 +383,14 @@ class InternalAgentSubStage(Stage):
                             ),
                         )
                         yield
-
-                        # 保存历史记录
-                        if agent_runner.done() and (
-                            not event.is_stopped() or agent_runner.was_aborted()
-                        ):
-                            await self._save_to_history(
-                                event,
-                                req,
-                                agent_runner.get_final_llm_resp(),
-                                agent_runner.run_context.messages,
-                                agent_runner.stats,
-                                user_aborted=agent_runner.was_aborted(),
-                            )
+                        self._confirm_agent_output_delivery(
+                            event,
+                            agent_runner,
+                        )
 
                     elif streaming_response and not stream_to_general:
                         # 流式响应
+                        event.set_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, False)
                         event.set_result(
                             MessageEventResult()
                             .set_result_content_type(ResultContentType.STREAMING_RESULT)
@@ -351,7 +406,11 @@ class InternalAgentSubStage(Stage):
                             ),
                         )
                         yield
-                        if agent_runner.done():
+                        delivery_confirmed = self._confirm_agent_output_delivery(
+                            event,
+                            agent_runner,
+                        )
+                        if delivery_confirmed and agent_runner.done():
                             if final_llm_resp := agent_runner.get_final_llm_resp():
                                 if final_llm_resp.completion_text:
                                     chain = (
@@ -379,8 +438,16 @@ class InternalAgentSubStage(Stage):
                             show_reasoning=self.show_reasoning,
                             buffer_intermediate_messages=self.buffer_intermediate_messages,
                         ):
+                            event.set_extra(
+                                AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY,
+                                False,
+                            )
                             yield
+                            self._confirm_agent_output_delivery(event, agent_runner)
 
+                    delivery_confirmed = bool(
+                        event.get_extra(AGENT_OUTPUT_DELIVERY_CONFIRMED_KEY, False)
+                    )
                     final_resp = agent_runner.get_final_llm_resp()
 
                     event.trace.record(
@@ -399,7 +466,7 @@ class InternalAgentSubStage(Stage):
                     )
 
                     # 检查事件是否被停止，如果被停止则不保存历史记录
-                    if not event.is_stopped() or agent_runner.was_aborted():
+                    if agent_runner.was_aborted() or delivery_confirmed:
                         await self._save_to_history(
                             event,
                             req,
@@ -422,6 +489,9 @@ class InternalAgentSubStage(Stage):
 
         except Exception as e:
             logger.error(f"Error occurred while processing agent: {e}")
+            if event_requests_agent_stop(event):
+                event.clear_result()
+                return
             custom_error_message = extract_persona_custom_error_message_from_event(
                 event
             )

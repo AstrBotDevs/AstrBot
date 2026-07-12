@@ -10,11 +10,14 @@ OneBot 协议的 message 数组中。OneBot V11 标准只期望
 协议端（napcat/Lagrange）查找消息时失败。
 """
 
+import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 import astrbot.core.message.components as Comp
+from astrbot.core.agent.stop_policy import AgentOutputStopped
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.pipeline.respond.stage import (
     RespondStage,  # noqa: F401 — 预加载避免循环导入
@@ -68,6 +71,49 @@ def test_reply_to_dict_outputs_only_id():
 # ============================================================
 # _parse_onebot_json 输出测试
 # ============================================================
+
+
+@pytest.mark.asyncio
+async def test_onebot_stop_after_conversion_blocks_dispatch(monkeypatch):
+    extras = {}
+    converted = asyncio.Event()
+    release_conversion = asyncio.Event()
+
+    async def convert(_chain):
+        converted.set()
+        await release_conversion.wait()
+        return [{"type": "text", "data": {"text": "late"}}]
+
+    dispatch = AsyncMock()
+    monkeypatch.setattr(
+        AiocqhttpMessageEvent,
+        "_parse_onebot_json",
+        staticmethod(convert),
+    )
+    monkeypatch.setattr(
+        AiocqhttpMessageEvent,
+        "_dispatch_send",
+        staticmethod(dispatch),
+    )
+    stop_event = SimpleNamespace(
+        is_stopped=lambda: False,
+        get_extra=lambda key, default=None: extras.get(key, default),
+    )
+    task = asyncio.create_task(
+        AiocqhttpMessageEvent.send_message(
+            object(),
+            MessageChain([Comp.Plain("late")]),
+            session_id="1",
+            stop_event=stop_event,
+        )
+    )
+    await asyncio.wait_for(converted.wait(), timeout=1)
+    extras["agent_stop_requested"] = True
+    release_conversion.set()
+
+    with pytest.raises(AgentOutputStopped):
+        await task
+    dispatch.assert_not_awaited()
 
 
 @pytest.mark.asyncio

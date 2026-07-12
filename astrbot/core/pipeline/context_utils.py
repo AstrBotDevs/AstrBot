@@ -1,12 +1,79 @@
+import asyncio
 import inspect
 import traceback
 import typing as T
+from dataclasses import replace
 
 from astrbot import logger
+from astrbot.core.agent.stop_policy import event_requests_agent_stop
 from astrbot.core.message.message_event_result import CommandResult, MessageEventResult
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
+from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+
+
+def _should_stop_hook_propagation(
+    event: AstrMessageEvent, hook_type: EventType
+) -> bool:
+    return (
+        event_requests_agent_stop(event)
+        if hook_type
+        in {
+            EventType.OnLLMResponseEvent,
+            EventType.OnUsingLLMToolEvent,
+            EventType.OnLLMToolRespondEvent,
+        }
+        else event.is_stopped()
+    )
+
+
+async def call_agent_done_hook(
+    event: AstrMessageEvent,
+    run_context: T.Any,
+    llm_response: LLMResponse | None,
+) -> None:
+    """Dispatch all agent-done handlers with per-handler safe responses.
+
+    Args:
+        event: Current message event.
+        run_context: Agent run context passed to lifecycle handlers.
+        llm_response: Original final model response, if one exists.
+    """
+    handlers = star_handlers_registry.get_handlers_by_event_type(
+        EventType.OnAgentDoneEvent,
+        plugins_name=getattr(event, "plugins_name", None),
+    )
+    safe_response_id = getattr(llm_response, "id", None) if llm_response else None
+    safe_response_usage = (
+        replace(llm_response.usage) if llm_response and llm_response.usage else None
+    )
+    stop_seen = False
+    for handler in handlers:
+        response_for_handler = llm_response
+        stop_seen = stop_seen or event_requests_agent_stop(event)
+        if stop_seen:
+            response_for_handler = LLMResponse(
+                role="assistant",
+                completion_text="",
+                id=safe_response_id,
+                usage=(replace(safe_response_usage) if safe_response_usage else None),
+            )
+
+        try:
+            assert inspect.iscoroutinefunction(handler.handler)
+            logger.debug(
+                f"hook({EventType.OnAgentDoneEvent.name}) -> "
+                f"{star_map[handler.handler_module_path].name} - {handler.handler_name}",
+            )
+            await handler.handler(event, run_context, response_for_handler)
+        except asyncio.CancelledError:
+            raise
+        except BaseException:
+            logger.error(traceback.format_exc())
+        stop_seen = stop_seen or event_requests_agent_stop(event)
+        if stop_seen:
+            event.set_extra("agent_stop_requested", True)
 
 
 async def call_handler(
@@ -90,19 +157,24 @@ async def call_event_hook(
         plugins_name=event.plugins_name,
     )
     for handler in handlers:
+        if _should_stop_hook_propagation(event, hook_type):
+            return True
+
         try:
             assert inspect.iscoroutinefunction(handler.handler)
             logger.debug(
                 f"hook({hook_type.name}) -> {star_map[handler.handler_module_path].name} - {handler.handler_name}",
             )
             await handler.handler(event, *args, **kwargs)
+        except asyncio.CancelledError:
+            raise
         except BaseException:
             logger.error(traceback.format_exc())
 
-        if event.is_stopped():
+        if _should_stop_hook_propagation(event, hook_type):
             logger.info(
                 f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
             )
             return True
 
-    return event.is_stopped()
+    return _should_stop_hook_propagation(event, hook_type)

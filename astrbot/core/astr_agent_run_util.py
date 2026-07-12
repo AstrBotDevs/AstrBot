@@ -8,6 +8,7 @@ from typing import Any
 from astrbot.core import logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.message.components import BaseMessageComponent, Json, Plain
 from astrbot.core.message.message_event_result import (
@@ -22,10 +23,6 @@ from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
-
-
-def _should_stop_agent(astr_event) -> bool:
-    return astr_event.is_stopped() or bool(astr_event.get_extra("agent_stop_requested"))
 
 
 def _truncate_tool_result(text: str, limit: int = 70) -> str:
@@ -131,10 +128,20 @@ async def run_agent(
         stream_to_general,
         agent_runner,
     )
+
+    def _request_stop_if_needed() -> bool:
+        """Synchronize event stop state into the runner abort signal."""
+        if not event_requests_agent_stop(astr_event):
+            return False
+        agent_runner.request_stop()
+        return True
+
     while step_idx < max_step + 1:
         step_idx += 1
 
-        if step_idx == max_step + 1:
+        stop_requested = _request_stop_if_needed()
+
+        if step_idx == max_step + 1 and not stop_requested:
             logger.warning(
                 f"Agent reached max steps ({max_step}), forcing a final response."
             )
@@ -155,32 +162,14 @@ async def run_agent(
         )
         try:
             async for resp in agent_runner.step():
-                if _should_stop_agent(astr_event):
-                    agent_runner.request_stop()
+                stop_requested = _request_stop_if_needed()
 
                 if resp.type == "aborted":
-                    if can_buffer_llm_result:
-                        merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
-                        if merged_chain:
-                            astr_event.set_result(
-                                MessageEventResult(
-                                    chain=merged_chain.chain,
-                                    result_content_type=ResultContentType.LLM_RESULT,
-                                ),
-                            )
-                            yield merged_chain
-                            astr_event.clear_result()
-                    if not stop_watcher.done():
-                        stop_watcher.cancel()
-                        try:
-                            await stop_watcher
-                        except asyncio.CancelledError:
-                            pass
-                    astr_event.set_extra("agent_user_aborted", True)
-                    astr_event.set_extra("agent_stop_requested", False)
+                    buffered_llm_chains.clear()
+                    astr_event.clear_result()
                     return
 
-                if _should_stop_agent(astr_event):
+                if stop_requested:
                     continue
 
                 if resp.type == "tool_call_result":
@@ -196,9 +185,11 @@ async def run_agent(
                     if msg_chain.type == "tool_direct_result":
                         # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
                         await astr_event.send(msg_chain)
+                        _request_stop_if_needed()
                         continue
                     if astr_event.get_platform_id() == "webchat":
                         await astr_event.send(msg_chain)
+                        _request_stop_if_needed()
                     elif show_tool_use and show_tool_call_result:
                         status_msg = _build_tool_result_status_message(
                             msg_chain, tool_name_by_call_id
@@ -206,6 +197,7 @@ async def run_agent(
                         await astr_event.send(
                             MessageChain(type="tool_call").message(status_msg)
                         )
+                        _request_stop_if_needed()
                     # 对于其他情况，暂时先不处理
                     continue
                 elif resp.type == "tool_call":
@@ -217,6 +209,8 @@ async def run_agent(
                         # 需要分段才能保证消息顺序正确。
                         # 若 show_tool_use 为 False，不会有独立消息插入，无需分段。
                         yield MessageChain(chain=[], type="break")
+                        if _request_stop_if_needed():
+                            continue
 
                     tool_info = _extract_chain_json_data(resp.data["chain"])
                     astr_event.trace.record(
@@ -227,6 +221,7 @@ async def run_agent(
 
                     if astr_event.get_platform_name() == "webchat":
                         await astr_event.send(resp.data["chain"])
+                        _request_stop_if_needed()
                     elif show_tool_use:
                         if show_tool_call_result and isinstance(tool_info, dict):
                             # Delay tool status notification until tool_call_result.
@@ -235,6 +230,7 @@ async def run_agent(
                             _build_tool_call_status_message(tool_info)
                         )
                         await astr_event.send(chain)
+                        _request_stop_if_needed()
                     continue
                 elif resp.type == "llm_result":
                     chain = resp.data["chain"]
@@ -264,34 +260,40 @@ async def run_agent(
                     )
                     yield resp.data["chain"]
                     astr_event.clear_result()
+                    _request_stop_if_needed()
                 elif resp.type == "streaming_delta":
                     chain = resp.data["chain"]
                     if chain.type == "reasoning" and not show_reasoning:
                         # display the reasoning content only when configured
                         continue
                     yield resp.data["chain"]  # MessageChain
+                    _request_stop_if_needed()
 
             if can_buffer_llm_result and agent_runner.done():
-                merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
-                if merged_chain:
-                    astr_event.set_result(
-                        MessageEventResult(
-                            chain=merged_chain.chain,
-                            result_content_type=ResultContentType.LLM_RESULT,
-                        ),
-                    )
-                    yield merged_chain
+                if _request_stop_if_needed():
+                    buffered_llm_chains.clear()
                     astr_event.clear_result()
+                    agent_runner.discard_late_aborted_result()
+                else:
+                    merged_chain = _merge_buffered_llm_chains(buffered_llm_chains)
+                    if merged_chain:
+                        astr_event.set_result(
+                            MessageEventResult(
+                                chain=merged_chain.chain,
+                                result_content_type=ResultContentType.LLM_RESULT,
+                            ),
+                        )
+                        yield merged_chain
+                        astr_event.clear_result()
+                        if _request_stop_if_needed():
+                            agent_runner.discard_late_aborted_result()
 
-            if not stop_watcher.done():
-                stop_watcher.cancel()
-                try:
-                    await stop_watcher
-                except asyncio.CancelledError:
-                    pass
             if agent_runner.done():
                 # send agent stats to webchat
-                if astr_event.get_platform_name() == "webchat":
+                if (
+                    astr_event.get_platform_name() == "webchat"
+                    and not event_requests_agent_stop(astr_event)
+                ):
                     await astr_event.send(
                         MessageChain(
                             type="agent_stats",
@@ -301,13 +303,14 @@ async def run_agent(
 
                 break
 
+        except (GeneratorExit, asyncio.CancelledError):
+            agent_runner.request_stop()
+            if agent_runner.done():
+                agent_runner.discard_late_aborted_result()
+            else:
+                await agent_runner._finalize_aborted_step()
+            raise
         except Exception as e:
-            if "stop_watcher" in locals() and not stop_watcher.done():
-                stop_watcher.cancel()
-                try:
-                    await stop_watcher
-                except asyncio.CancelledError:
-                    pass
             logger.error(traceback.format_exc())
 
             custom_error_message = extract_persona_custom_error_message_from_event(
@@ -326,6 +329,14 @@ async def run_agent(
                 role="err",
                 completion_text=err_msg,
             )
+            if event_requests_agent_stop(astr_event):
+                agent_runner.request_stop()
+                astr_event.clear_result()
+                if agent_runner.done():
+                    agent_runner.discard_late_aborted_result()
+                else:
+                    await agent_runner._finalize_aborted_step(error_llm_response)
+                return
             try:
                 await agent_runner.agent_hooks.on_agent_done(
                     agent_runner.run_context, error_llm_response
@@ -338,14 +349,21 @@ async def run_agent(
             else:
                 astr_event.set_result(MessageEventResult().message(err_msg))
             return
+        finally:
+            if not stop_watcher.done():
+                stop_watcher.cancel()
+                try:
+                    await stop_watcher
+                except asyncio.CancelledError:
+                    pass
 
 
 async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> None:
-    while not agent_runner.done():
-        if _should_stop_agent(astr_event):
+    while True:
+        if event_requests_agent_stop(astr_event):
             agent_runner.request_stop()
             return
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.1)
 
 
 async def run_live_agent(
@@ -419,7 +437,12 @@ async def run_live_agent(
     # 2. 启动 TTS 任务：负责从 text_queue 读取文本并生成音频到 audio_queue
     if support_stream:
         tts_task = asyncio.create_task(
-            _safe_tts_stream_wrapper(tts_provider, text_queue, audio_queue)
+            _safe_tts_stream_wrapper(
+                tts_provider,
+                text_queue,
+                audio_queue,
+                agent_runner.run_context.context.event,
+            )
         )
     else:
         tts_task = asyncio.create_task(
@@ -438,6 +461,11 @@ async def run_live_agent(
 
             if queue_item is None:
                 break
+
+            if agent_runner.was_aborted() or event_requests_agent_stop(
+                agent_runner.run_context.context.event
+            ):
+                continue
 
             text = None
             if isinstance(queue_item, tuple):
@@ -468,16 +496,17 @@ async def run_live_agent(
             feeder_task.cancel()
         if not tts_task.done():
             tts_task.cancel()
-
-        # 确保队列被消费
-        pass
+        await asyncio.gather(feeder_task, tts_task, return_exceptions=True)
 
     tts_end_time = time.time()
 
     # 发送 TTS 统计信息
     try:
         astr_event = agent_runner.run_context.context.event
-        if astr_event.get_platform_name() == "webchat":
+        if (
+            astr_event.get_platform_name() == "webchat"
+            and not event_requests_agent_stop(astr_event)
+        ):
             tts_duration = tts_end_time - tts_start_time
             await astr_event.send(
                 MessageChain(
@@ -509,6 +538,7 @@ async def _run_agent_feeder(
 ) -> None:
     """运行 Agent 并将文本输出分句放入队列"""
     buffer = ""
+    astr_event = agent_runner.run_context.context.event
     try:
         async for chain in run_agent(
             agent_runner,
@@ -520,6 +550,8 @@ async def _run_agent_feeder(
             buffer_intermediate_messages=buffer_intermediate_messages,
         ):
             if chain is None:
+                continue
+            if event_requests_agent_stop(astr_event):
                 continue
 
             # 提取文本
@@ -542,7 +574,9 @@ async def _run_agent_feeder(
                         temp_buffer += full_sentence
 
                         if len(temp_buffer) >= 10:
-                            if temp_buffer.strip():
+                            if temp_buffer.strip() and not event_requests_agent_stop(
+                                astr_event
+                            ):
                                 logger.info(f"[Live Agent Feeder] 分句: {temp_buffer}")
                                 await text_queue.put(temp_buffer)
                             temp_buffer = ""
@@ -550,8 +584,12 @@ async def _run_agent_feeder(
                     # 更新 buffer 为剩余部分
                     buffer = temp_buffer + parts[-1]
 
-        # 处理剩余 buffer
-        if buffer.strip():
+        # Do not enqueue residual text after a stop request.
+        if (
+            buffer.strip()
+            and not agent_runner.was_aborted()
+            and not event_requests_agent_stop(astr_event)
+        ):
             await text_queue.put(buffer)
 
     except Exception as e:
@@ -565,10 +603,34 @@ async def _safe_tts_stream_wrapper(
     tts_provider: TTSProvider,
     text_queue: asyncio.Queue[str | None],
     audio_queue: "asyncio.Queue[bytes | tuple[str, bytes] | None]",
+    astr_event: Any,
 ) -> None:
     """包装原生流式 TTS 确保异常处理和队列关闭"""
+
+    class _StopAwareTextQueue:
+        """Expose the source queue while blocking new reads after stop."""
+
+        def __init__(self) -> None:
+            self.astr_event = astr_event
+
+        async def get(self) -> str | None:
+            if event_requests_agent_stop(astr_event):
+                raise AgentOutputStopped
+            item = await text_queue.get()
+            if event_requests_agent_stop(astr_event):
+                raise AgentOutputStopped
+            return item
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(text_queue, name)
+
     try:
-        await tts_provider.get_audio_stream(text_queue, audio_queue)
+        await tts_provider.get_audio_stream(  # type: ignore[arg-type]
+            _StopAwareTextQueue(),
+            audio_queue,
+        )
+    except AgentOutputStopped:
+        pass
     except Exception as e:
         logger.error(f"[Live TTS Stream] Error: {e}", exc_info=True)
     finally:
@@ -596,14 +658,18 @@ async def _simulated_stream_tts(
             text = await text_queue.get()
             if text is None:
                 break
+            if event_requests_agent_stop(astr_event):
+                continue
 
             try:
                 audio_path = await tts_provider.get_audio(text)
 
                 if audio_path:
+                    astr_event.track_temporary_local_file(audio_path)
+                    if event_requests_agent_stop(astr_event):
+                        continue
                     with open(audio_path, "rb") as f:
                         audio_data = f.read()
-                    astr_event.track_temporary_local_file(audio_path)
                     await audio_queue.put((text, audio_data))
             except Exception as e:
                 logger.error(

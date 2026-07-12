@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import At, Image, Plain
+from astrbot.core.agent.stop_policy import AgentOutputStopped, event_requests_agent_stop
 
 from .wecomai_api import WecomAIBotAPIClient
 from .wecomai_queue_mgr import WecomAIQueueMgr
@@ -64,9 +65,12 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         queue_mgr: WecomAIQueueMgr,
         streaming: bool = False,
         suppress_unsupported_log: bool = False,
+        stop_event: AstrMessageEvent | None = None,
     ):
         back_queue = queue_mgr.get_or_create_back_queue(stream_id)
 
+        if event_requests_agent_stop(stop_event):
+            raise AgentOutputStopped
         if not message_chain:
             await back_queue.put(
                 {
@@ -79,6 +83,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
 
         data = ""
         for comp in message_chain.chain:
+            if event_requests_agent_stop(stop_event):
+                raise AgentOutputStopped
             if isinstance(comp, At):
                 data = f"@{comp.name} "
                 await back_queue.put(
@@ -103,6 +109,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 # 处理图片消息
                 try:
                     image_base64 = await comp.convert_to_base64()
+                    if event_requests_agent_stop(stop_event):
+                        raise AgentOutputStopped
                     if image_base64:
                         await back_queue.put(
                             {
@@ -114,8 +122,11 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                         )
                     else:
                         logger.warning("图片数据为空，跳过")
+                except AgentOutputStopped:
+                    raise
                 except Exception as e:
                     logger.error("处理图片消息失败: %s", e)
+                    raise
             else:
                 if not suppress_unsupported_log:
                     logger.warning(
@@ -151,6 +162,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         """发送消息"""
         if message is None:
             return
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         raw = self.message_obj.raw_message
         assert isinstance(raw, dict), (
             "wecom_ai_bot platform event raw_message should be a dict"
@@ -169,7 +182,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             and req_id
         ):
             if self.only_use_webhook_url_to_send and self.webhook_client and message:
-                await self.webhook_client.send_message_chain(message)
+                await self.webhook_client.send_message_chain(message, stop_event=self)
                 await super().send(MessageChain([]))
                 return
 
@@ -177,10 +190,13 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 await self.webhook_client.send_message_chain(
                     message,
                     unsupported_only=True,
+                    stop_event=self,
                 )
 
             content = self._extract_plain_text_from_chain(message)
-            await self.long_connection_sender(
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
+            sent = await self.long_connection_sender(
                 req_id,
                 {
                     "msgtype": "stream",
@@ -191,11 +207,13 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     },
                 },
             )
+            if not sent:
+                raise RuntimeError("WeCom long-connection message delivery failed.")
             await super().send(MessageChain([]))
             return
 
         if self.only_use_webhook_url_to_send and self.webhook_client and message:
-            await self.webhook_client.send_message_chain(message)
+            await self.webhook_client.send_message_chain(message, stop_event=self)
             await self._mark_stream_complete(stream_id)
             await super().send(MessageChain([]))
             return
@@ -204,6 +222,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             await self.webhook_client.send_message_chain(
                 message,
                 unsupported_only=True,
+                stop_event=self,
             )
 
         await WecomAIBotMessageEvent._send(
@@ -211,6 +230,7 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             stream_id,
             self.queue_mgr,
             suppress_unsupported_log=self.webhook_client is not None,
+            stop_event=self,
         )
         await super().send(MessageChain([]))
 
@@ -240,7 +260,14 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                 async for chain in generator:
                     merged_chain.chain.extend(chain.chain)
                 merged_chain.squash_plain()
-                await self.webhook_client.send_message_chain(merged_chain)
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
+                await self.webhook_client.send_message_chain(
+                    merged_chain,
+                    stop_event=self,
+                )
+                if event_requests_agent_stop(self):
+                    return
                 await self.long_connection_sender(
                     req_id,
                     {
@@ -262,7 +289,10 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     await self.webhook_client.send_message_chain(
                         chain,
                         unsupported_only=True,
+                        stop_event=self,
                     )
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
 
                 chain.squash_plain()
                 # 流式输出不 strip，保留换行等格式字符
@@ -273,7 +303,9 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     increment_plain += chunk_text
                 now = asyncio.get_running_loop().time()
                 if now - last_stream_update_time >= self.STREAM_FLUSH_INTERVAL:
-                    await self.long_connection_sender(
+                    if event_requests_agent_stop(self):
+                        raise AgentOutputStopped
+                    sent = await self.long_connection_sender(
                         req_id,
                         {
                             "msgtype": "stream",
@@ -284,9 +316,15 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                             },
                         },
                     )
+                    if not sent:
+                        raise RuntimeError(
+                            "WeCom long-connection message delivery failed."
+                        )
                     last_stream_update_time = now
 
-            await self.long_connection_sender(
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
+            sent = await self.long_connection_sender(
                 req_id,
                 {
                     "msgtype": "stream",
@@ -297,6 +335,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     },
                 },
             )
+            if not sent:
+                raise RuntimeError("WeCom long-connection message delivery failed.")
             await super().send_streaming(generator, use_fallback)
             return
 
@@ -305,7 +345,14 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
             async for chain in generator:
                 merged_chain.chain.extend(chain.chain)
             merged_chain.squash_plain()
-            await self.webhook_client.send_message_chain(merged_chain)
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
+            await self.webhook_client.send_message_chain(
+                merged_chain,
+                stop_event=self,
+            )
+            if event_requests_agent_stop(self):
+                return
             await self._mark_stream_complete(stream_id)
             await super().send_streaming(generator, use_fallback)
             return
@@ -317,6 +364,8 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         async def enqueue_stream_plain(text: str) -> None:
             if not text:
                 return
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             await back_queue.put(
                 {
                     "type": "plain",
@@ -329,12 +378,18 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
         async for chain in generator:
             if self.webhook_client:
                 await self.webhook_client.send_message_chain(
-                    chain, unsupported_only=True
+                    chain,
+                    unsupported_only=True,
+                    stop_event=self,
                 )
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
 
             if chain.type == "break" and final_data:
                 if increment_plain:
                     await enqueue_stream_plain(increment_plain)
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 # 分割符
                 await back_queue.put(
                     {
@@ -367,10 +422,13 @@ class WecomAIBotMessageEvent(AstrMessageEvent):
                     queue_mgr=self.queue_mgr,
                     streaming=True,
                     suppress_unsupported_log=self.webhook_client is not None,
+                    stop_event=self,
                 )
 
         await enqueue_stream_plain(increment_plain)
 
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
         await back_queue.put(
             {
                 "type": "complete",  # complete means we return the final result

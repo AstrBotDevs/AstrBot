@@ -9,6 +9,10 @@ from time import time
 from typing import Any
 
 from astrbot import logger
+from astrbot.core.agent.stop_policy import (
+    AgentOutputStopped,
+    event_requests_agent_stop,
+)
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.components import (
@@ -266,15 +270,39 @@ class AstrMessageEvent(abc.ABC):
     async def process_buffer(self, buffer: str, pattern: re.Pattern) -> str:
         """将消息缓冲区中的文本按指定正则表达式分割后发送至消息平台，作为不支持流式输出平台的Fallback。"""
         while True:
+            if event_requests_agent_stop(self):
+                raise AgentOutputStopped
             match = re.search(pattern, buffer)
             if not match:
                 break
             matched_text = match.group().strip()
             if matched_text:
                 await self.send(MessageChain([Plain(matched_text)]))
+                if event_requests_agent_stop(self):
+                    raise AgentOutputStopped
                 await asyncio.sleep(1.5)  # 限速
             buffer = buffer[match.end() :]
         return buffer
+
+    async def send_streaming_fallback_component(
+        self,
+        component: BaseMessageComponent,
+        delay: float = 1.5,
+    ) -> None:
+        """Send one fallback component with stop-aware rate limiting.
+
+        Args:
+            component: Non-text component to send.
+            delay: Rate-limit delay after delivery.
+        """
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
+        await self.send(MessageChain([component]))
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
+        await asyncio.sleep(delay)
+        if event_requests_agent_stop(self):
+            raise AgentOutputStopped
 
     async def send_streaming(
         self,
