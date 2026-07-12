@@ -96,6 +96,60 @@ async def test_record_with_legacy_bare_base64_does_not_call_get_record():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "audio_bytes",
+    [
+        b"\x00\x00\x00\x18ftypM4A \x00\x00\x00\x00M4A isom",
+        b"\xff\xf3\x90\x00",
+        b"\xff\xf2\x90\x00",
+    ],
+)
+async def test_record_with_supported_bare_base64_signature_skips_get_record(
+    audio_bytes,
+):
+    encoded_audio = base64.b64encode(audio_bytes).decode()
+    bot = AsyncMock()
+
+    message = await _adapter(bot)._convert_handle_message_event(
+        _record_event({"file": encoded_audio})
+    )
+
+    record = message.message[0]
+    assert isinstance(record, Record)
+    assert record.file == encoded_audio
+    bot.call_action.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "file_ref",
+    [
+        "0d2bb1468a87d64414f8e563cc61c33c",
+        "550e8400e29b41d4a716446655440000",
+    ],
+)
+async def test_hash_or_uuid_record_file_is_resolved_through_onebot_get_record(
+    file_ref,
+):
+    bot = AsyncMock()
+    bot.call_action.return_value = {}
+
+    message = await _adapter(bot)._convert_handle_message_event(
+        _record_event({"file": file_ref})
+    )
+
+    record = message.message[0]
+    assert isinstance(record, Record)
+    assert record.file == file_ref
+    bot.call_action.assert_awaited_once_with(
+        action="get_record",
+        file=file_ref,
+        out_format="wav",
+        self_id=300,
+    )
+
+
+@pytest.mark.asyncio
 async def test_record_with_url_does_not_call_get_record():
     bot = AsyncMock()
     data = {

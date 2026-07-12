@@ -175,7 +175,7 @@ class AiocqhttpAdapter(Platform):
         )
         try:
             has_direct_source = has_direct_source or Path(file_ref).is_file()
-        except OSError:
+        except (OSError, ValueError):
             pass
         if not has_direct_source:
             compact = "".join(file_ref.split())
@@ -183,7 +183,32 @@ class AiocqhttpAdapter(Platform):
             if padding:
                 compact += "=" * (4 - padding)
             try:
-                has_direct_source = bool(base64.b64decode(compact, validate=True))
+                decoded = base64.b64decode(compact, validate=True)
+                has_direct_source = (
+                    (
+                        len(decoded) >= 12
+                        and decoded[:4] == b"RIFF"
+                        and decoded[8:12] == b"WAVE"
+                    )
+                    or (len(decoded) >= 12 and decoded[4:8] == b"ftyp")
+                    or decoded.startswith(
+                        (
+                            b"#!AMR\n",
+                            b"#!AMR-WB\n",
+                            b"OggS",
+                            b"fLaC",
+                            b"ID3",
+                            b"\xff\xfb",
+                            b"\xff\xfa",
+                            b"\xff\xf3",
+                            b"\xff\xf2",
+                            b"\xff\xe3",
+                            b"\xff\xe2",
+                            b"#!SILK_V3",
+                            b"\x02#!SILK_V3",
+                        )
+                    )
+                )
             except (binascii.Error, ValueError):
                 pass
         if has_direct_source:
@@ -217,7 +242,7 @@ class AiocqhttpAdapter(Platform):
                 if Path(file_uri_to_path(converted_file)).is_file():
                     normalized["file"] = converted_file
                     return normalized
-            except OSError:
+            except (OSError, ValueError):
                 pass
 
         logger.warning(
