@@ -85,9 +85,11 @@ def test_load_plugin_i18n_reads_locale_files(tmp_path: Path):
     plugin_path = tmp_path / "plugin"
     i18n_path = plugin_path / ".astrbot-plugin" / "i18n"
     i18n_path.mkdir(parents=True)
-    (i18n_path / "zh-CN.json").write_text(
-        json.dumps({"metadata": {"desc": "中文描述"}}, ensure_ascii=False),
-        encoding="utf-8",
+    (i18n_path / "zh-CN.json").write_bytes(
+        b"\xef\xbb\xbf"
+        + json.dumps({"metadata": {"desc": "中文描述"}}, ensure_ascii=False).encode(
+            "utf-8"
+        ),
     )
     (i18n_path / "en-US.json").write_text(
         json.dumps({"metadata": {"desc": "English description"}}),

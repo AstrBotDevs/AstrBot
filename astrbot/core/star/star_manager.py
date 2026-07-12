@@ -559,7 +559,7 @@ class PluginManager:
                     continue
 
                 try:
-                    with file_path.open(encoding="utf-8") as f:
+                    with file_path.open(encoding="utf-8-sig") as f:
                         locale_data = json.load(f)
                     if isinstance(locale_data, dict):
                         translations[locale] = locale_data
