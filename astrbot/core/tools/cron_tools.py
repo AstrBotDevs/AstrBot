@@ -99,7 +99,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
         event = context.context.event
-        if getattr(event, "role", None) != "admin":
+        if not event.is_admin():
             return (
                 "error: Permission denied. Future task management is only allowed "
                 f"for admin users. User's ID is: {event.get_sender_id()}."
