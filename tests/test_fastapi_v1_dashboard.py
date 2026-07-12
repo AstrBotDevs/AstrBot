@@ -3235,7 +3235,7 @@ async def test_v1_skill_archive_errors_return_http_status(
     skill_service = asgi_app.state.services.skills
 
     def fake_prepare_skill_archive_404(_name: str):
-        raise SkillsServiceError("Local skill not found")
+        raise SkillsServiceError("Local skill not found", status_code=404)
 
     monkeypatch.setattr(
         skill_service,

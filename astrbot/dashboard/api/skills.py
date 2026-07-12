@@ -95,8 +95,7 @@ async def _download_skill(service: SkillsService, name: str):
         return _archive_response(service.prepare_skill_archive(name))
     except SkillsServiceError as exc:
         message = str(exc)
-        status_code = 404 if "not found" in message.lower() else 400
-        raise HTTPException(status_code=status_code, detail=message) from exc
+        raise HTTPException(status_code=exc.status_code, detail=message) from exc
     except Exception as exc:
         logger.error(str(exc), exc_info=True)
         raise HTTPException(
