@@ -5,9 +5,18 @@ from pathlib import Path
 import click
 from filelock import FileLock, Timeout
 
-from ..utils import check_dashboard, get_astrbot_root
-
 DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
+
+
+async def check_dashboard(astrbot_root: Path) -> None:
+    """Check whether dashboard assets are available.
+
+    Args:
+        astrbot_root: AstrBot data directory path.
+    """
+    from ..utils import check_dashboard as _check_dashboard
+
+    await _check_dashboard(astrbot_root)
 
 
 def _initialize_config_from_env(astrbot_root: Path) -> None:
@@ -52,7 +61,10 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
 @click.command()
 def init() -> None:
     """Initialize AstrBot"""
+    from ..utils import get_astrbot_root
+
     click.echo("Initializing AstrBot...")
+
     astrbot_root = get_astrbot_root()
     lock_file = astrbot_root / "astrbot.lock"
     lock = FileLock(lock_file, timeout=5)

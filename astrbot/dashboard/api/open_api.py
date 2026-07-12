@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, WebSocket
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from astrbot.dashboard.responses import ApiError, error, ok
@@ -19,7 +19,7 @@ from astrbot.dashboard.services.open_api_service import (
 )
 
 from .auth import AuthContext, require_scope
-from .multipart import single_upload
+from .multipart import UploadFileAdapter
 
 router = APIRouter(tags=["Open API"])
 
@@ -230,31 +230,46 @@ async def get_chat_configs(
     return ok(service.get_chat_configs())
 
 
-@router.post("/file", include_in_schema=False)
+@router.post(
+    "/file",
+    summary="Upload a file",
+    operation_id="uploadOpenApiFile",
+    openapi_extra={"x-astrbot-scope": "file"},
+)
 async def upload_open_api_file(
-    request: Request,
+    file: UploadFile = File(...),
     _auth: AuthContext = Depends(require_file_scope),
     chat_service: ChatService = Depends(get_chat_service),
 ):
     try:
-        upload = await single_upload(request)
-        if upload is None:
-            raise ChatServiceError("Missing key: file")
-        return ok(await chat_service.save_uploaded_file(upload))
+        return ok(await chat_service.save_uploaded_file(UploadFileAdapter(file)))
     except ChatServiceError as exc:
         return error(str(exc))
 
 
-@router.get("/file", include_in_schema=False)
+@router.get(
+    "/file",
+    summary="Download an uploaded file by attachment ID",
+    operation_id="downloadOpenApiFile",
+    responses={
+        200: {
+            "description": "File content or an error envelope",
+            "content": {
+                "application/octet-stream": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            },
+        },
+    },
+    openapi_extra={"x-astrbot-scope": "file"},
+)
 async def get_open_api_file(
-    request: Request,
+    attachment_id: str = Query(...),
     _auth: AuthContext = Depends(require_file_scope),
     chat_service: ChatService = Depends(get_chat_service),
 ):
     try:
-        file_path, mimetype = await chat_service.resolve_attachment_file(
-            request.query_params.get("attachment_id")
-        )
+        file_path, mimetype = await chat_service.resolve_attachment_file(attachment_id)
         return FileResponse(file_path, media_type=mimetype)
     except ChatServiceError as exc:
         return _open_api_error(str(exc))

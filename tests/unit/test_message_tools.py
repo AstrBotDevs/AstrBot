@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.message.message_event_result import MessageEventResult
+from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 
 
@@ -21,19 +23,83 @@ def _make_context(
             "computer_use_runtime": runtime,
         }
     }
+    extras = {}
+    event = SimpleNamespace(
+        unified_msg_origin=current_session,
+        role=role,
+        _has_send_oper=False,
+        get_sender_id=lambda: "user-1",
+    )
+    event.set_extra = lambda key, value: extras.__setitem__(key, value)
+    event.get_extra = lambda key, default=None: extras.get(key, default)
     return SimpleNamespace(
         context=SimpleNamespace(
-            event=SimpleNamespace(
-                unified_msg_origin=current_session,
-                role=role,
-                get_sender_id=lambda: "user-1",
-            ),
+            event=event,
             context=SimpleNamespace(
                 get_config=lambda umo: cfg,
                 send_message=AsyncMock(),
             ),
         )
     )
+
+
+class _DummyRespondEvent:
+    def __init__(self, result_text: str, sent_plain_texts: list[str]) -> None:
+        self._extras = {
+            "_send_message_to_user_current_session_plain_texts": sent_plain_texts,
+        }
+        self._result = MessageEventResult().message(result_text)
+        self.send = AsyncMock()
+        self.plugins_name = []
+
+    def get_result(self):
+        """Return the current message result."""
+        return self._result
+
+    def set_extra(self, key, value) -> None:
+        """Set pipeline extra data."""
+        self._extras[key] = value
+
+    def get_extra(self, key, default=None):
+        """Get pipeline extra data."""
+        return self._extras.get(key, default)
+
+    def get_sender_name(self) -> str:
+        """Return a sender name for respond-stage logging."""
+        return "tester"
+
+    def get_sender_id(self) -> str:
+        """Return a sender ID for respond-stage logging."""
+        return "user-1"
+
+    def get_platform_id(self) -> str:
+        """Return a platform ID for respond-stage logging."""
+        return "test"
+
+    def get_platform_name(self) -> str:
+        """Return a platform name for segmented-reply checks."""
+        return "test"
+
+    def _outline_chain(self, chain) -> str:
+        """Return a readable outline for respond-stage logging."""
+        return " ".join(comp.text for comp in chain if hasattr(comp, "text"))
+
+    def is_stopped(self) -> bool:
+        """Return whether this dummy event has stopped."""
+        return False
+
+    def clear_result(self) -> None:
+        """Clear the current message result."""
+        self._result = None
+
+
+def _make_respond_stage() -> RespondStage:
+    """Build a minimally initialized RespondStage for unit tests."""
+    stage = RespondStage()
+    stage.config = {"provider_settings": {}}
+    stage.platform_settings = {"path_mapping": []}
+    stage.enable_seg = False
+    return stage
 
 
 @pytest.mark.asyncio
@@ -81,6 +147,61 @@ async def test_send_message_defaults_to_current_session():
     call_args = ctx.context.context.send_message.call_args
     target_session = call_args[0][0]
     assert str(target_session) == "feishu:GroupMessage:oc_xxx"
+    assert ctx.context.event._has_send_oper is True
+    assert ctx.context.event.get_extra(
+        "_send_message_to_user_current_session_plain_texts",
+    ) == ["hello"]
+
+
+@pytest.mark.asyncio
+async def test_send_message_other_session_does_not_record_current_text():
+    """Messages sent to another session do not affect current-session dedupe."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(current_session="feishu:GroupMessage:oc_xxx")
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "plain", "text": "hello"}],
+        session="feishu:GroupMessage:oc_other",
+    )
+    assert "Message sent to session" in result
+    assert ctx.context.event._has_send_oper is False
+    assert (
+        ctx.context.event.get_extra(
+            "_send_message_to_user_current_session_plain_texts",
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_respond_stage_skips_same_text_after_send_message_to_user():
+    """RespondStage skips only when the tool already sent the same text."""
+    stage = _make_respond_stage()
+    event = _DummyRespondEvent(
+        result_text="duplicate reply",
+        sent_plain_texts=["duplicate reply"],
+    )
+
+    result = await stage.process(event)
+
+    assert result is None
+    event.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_respond_stage_sends_different_text_after_send_message_to_user():
+    """RespondStage still sends a distinct completion after the tool call."""
+    stage = _make_respond_stage()
+    event = _DummyRespondEvent(
+        result_text="I have sent the message with the tool.",
+        sent_plain_texts=["duplicate reply"],
+    )
+
+    result = await stage.process(event)
+
+    assert result is None
+    event.send.assert_awaited_once()
+    assert event.get_result() is None
 
 
 @pytest.mark.asyncio
@@ -235,3 +356,97 @@ async def test_non_admin_can_send_temp_file(tmp_path, monkeypatch):
 
     assert "Message sent to session" in result
     ctx.context.context.send_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_message_downloads_windows_sandbox_file_with_original_name(
+    tmp_path, monkeypatch
+):
+    """Windows sandbox paths keep their basename when sent as files."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(runtime="sandbox")
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    async def _exec(_command):
+        return {"content": "_&exists_"}
+
+    async def _download_file(_remote_path, local_path):
+        assert local_path.endswith("report.txt")
+        assert "\\" not in local_path
+        with open(local_path, "w", encoding="utf-8") as file:
+            file.write("report")
+
+    booter = SimpleNamespace(
+        shell=SimpleNamespace(exec=AsyncMock(side_effect=_exec)),
+        download_file=AsyncMock(side_effect=_download_file),
+    )
+
+    async def mock_get_booter(*args, **kwargs):
+        del args, kwargs
+        return booter
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_booter",
+        mock_get_booter,
+    )
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": r"C:\Users\AstrBot\report.txt"}],
+    )
+
+    assert "Message sent to session" in result
+    sent_chain = ctx.context.context.send_message.await_args.args[1]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "report.txt"
+
+
+@pytest.mark.asyncio
+async def test_send_message_downloads_trailing_slash_sandbox_file_with_basename(
+    tmp_path, monkeypatch
+):
+    tool = SendMessageToUserTool()
+    ctx = _make_context(runtime="sandbox")
+    temp_root = tmp_path / "temp"
+    temp_root.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_astrbot_temp_path",
+        lambda: str(temp_root),
+    )
+
+    async def _exec(_command):
+        return {"content": "_&exists_"}
+
+    async def _download_file(_remote_path, local_path):
+        assert local_path.endswith("export")
+        with open(local_path, "w", encoding="utf-8") as file:
+            file.write("export")
+
+    booter = SimpleNamespace(
+        shell=SimpleNamespace(exec=AsyncMock(side_effect=_exec)),
+        download_file=AsyncMock(side_effect=_download_file),
+    )
+
+    async def mock_get_booter(*args, **kwargs):
+        del args, kwargs
+        return booter
+
+    monkeypatch.setattr(
+        "astrbot.core.tools.message_tools.get_booter",
+        mock_get_booter,
+    )
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "file", "path": "reports/export/"}],
+    )
+
+    assert "Message sent to session" in result
+    sent_chain = ctx.context.context.send_message.await_args.args[1]
+    sent_file = sent_chain.chain[0]
+    assert sent_file.name == "export"

@@ -11,8 +11,8 @@
 
     <v-dialog v-model="dialog" max-width="700">
       <v-card class="file-dialog-card" variant="flat">
-        <v-card-title class="d-flex align-center">
-          <span class="text-h3">{{ tm('fileUpload.dialogTitle') }}</span>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+          <span>{{ tm('fileUpload.dialogTitle') }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="dialog = false" />
         </v-card-title>
@@ -63,7 +63,7 @@
 
         <v-card-actions class="file-dialog-actions">
           <v-spacer />
-          <v-btn color="primary" variant="elevated" @click="dialog = false">
+          <v-btn color="primary" variant="tonal" @click="dialog = false">
             {{ tm('fileUpload.done') }}
           </v-btn>
         </v-card-actions>

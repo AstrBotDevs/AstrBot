@@ -41,6 +41,7 @@ from astrbot.core.utils.network_utils import (
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 
 from ..register import register_provider_adapter
+from .request_retry import retry_provider_request
 
 
 @register_provider_adapter(
@@ -403,10 +404,26 @@ class ProviderOpenAIOfficial(Provider):
             return value.strip().lower() in {"1", "true", "yes", "on"}
         return bool(value)
 
-    def _apply_provider_specific_extra_body_overrides(
-        self, extra_body: dict[str, Any]
+    def _apply_provider_specific_request_overrides(
+        self,
+        payloads: dict[str, Any],
+        extra_body: dict[str, Any],
     ) -> None:
-        if self.provider_config.get("provider") != "ollama":
+        provider = self.provider_config.get("provider")
+        model = str(payloads.get("model", "")).lower()
+
+        # NVIDIA's hosted MiniMax M3 endpoint can return empty choices when
+        # max_tokens is omitted (#9206). Scope the compatibility default to
+        # that model; other NVIDIA models have different token limits.
+        if (
+            provider == "nvidia"
+            and model == "minimaxai/minimax-m3"
+            and "max_tokens" not in payloads
+            and "max_tokens" not in extra_body
+        ):
+            payloads["max_tokens"] = 8192
+
+        if provider != "ollama":
             return
         if not self._ollama_disable_thinking_enabled():
             return
@@ -420,7 +437,10 @@ class ProviderOpenAIOfficial(Provider):
     async def get_models(self):
         try:
             models_str = []
-            models = await self.client.models.list()
+            models = await retry_provider_request(
+                "OpenAI",
+                lambda: self.client.models.list(),
+            )
             models = sorted(models.data, key=lambda x: x.id)
             for model in models:
                 models_str.append(model.id)
@@ -454,18 +474,67 @@ class ProviderOpenAIOfficial(Provider):
             tool_calls = msg.get("tool_calls")
             reasoning_content = msg.get("reasoning_content")
 
-            if _is_empty(content) and not tool_calls and not reasoning_content:
-                logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
-                continue
+            if _is_empty(content) and not tool_calls:
+                if not reasoning_content:
+                    # 三者全空，真正的垃圾消息，丢弃
+                    logger.debug(
+                        f"过滤第 {idx} 条空 assistant 消息 (无 content | tool_calls | reasoning_content)"
+                    )
+                    continue
+                else:
+                    # ⭐ 有 reasoning_content 但没有 content 和 tool_calls
+                    # 不能丢（推理模型需要 reasoning 历史）
+                    # 但 API 要求 content 或 tool_calls 至少有一个
+                    # → 设空字符串占位，满足校验
+                    msg["content"] = ""
 
-            if _is_empty(content) and tool_calls:
-                msg["content"] = None
+            elif _is_empty(content) and tool_calls:
+                msg["content"] = None  # 有 tool_calls，按 OpenAI 规范
 
             cleaned.append(msg)
 
-        payloads["messages"] = cleaned
+        # Drop orphaned or duplicate tool messages whose assistant(tool_calls)
+        # was removed by context truncation / compression.
+        pending_tool_call_ids: set[str] = set()
+        final: list = []
+        removed_tool_messages = 0
+        for msg in cleaned:
+            if not isinstance(msg, dict):
+                final.append(msg)
+                pending_tool_call_ids = set()
+                continue
+            role = msg.get("role")
+            if role == "assistant" and msg.get("tool_calls"):
+                pending_tool_call_ids = {
+                    tc["id"]
+                    for tc in msg["tool_calls"]
+                    if isinstance(tc, dict) and "id" in tc
+                }
+                final.append(msg)
+            elif role == "tool":
+                tool_call_id = msg.get("tool_call_id")
+                if tool_call_id in pending_tool_call_ids:
+                    final.append(msg)
+                    pending_tool_call_ids.remove(tool_call_id)
+                else:
+                    removed_tool_messages += 1
+            else:
+                pending_tool_call_ids = set()
+                final.append(msg)
+        if removed_tool_messages:
+            logger.debug(
+                "Filtered %d orphaned or duplicate tool message(s)",
+                removed_tool_messages,
+            )
+        payloads["messages"] = final
 
-    async def _query(self, payloads: dict, tools: ToolSet | None) -> LLMResponse:
+    async def _query(
+        self,
+        payloads: dict,
+        tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
+    ) -> LLMResponse:
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -490,16 +559,20 @@ class ProviderOpenAIOfficial(Provider):
         custom_extra_body = self.provider_config.get("custom_extra_body", {})
         if isinstance(custom_extra_body, dict):
             extra_body.update(custom_extra_body)
-        self._apply_provider_specific_extra_body_overrides(extra_body)
+        self._apply_provider_specific_request_overrides(payloads, extra_body)
 
         model = payloads.get("model", "").lower()
 
         self._sanitize_assistant_messages(payloads)
 
-        completion = await self.client.chat.completions.create(
-            **payloads,
-            stream=False,
-            extra_body=extra_body,
+        completion = await retry_provider_request(
+            "OpenAI",
+            lambda: self.client.chat.completions.create(
+                **payloads,
+                stream=False,
+                extra_body=extra_body,
+            ),
+            max_attempts=request_max_retries,
         )
 
         if not isinstance(completion, ChatCompletion):
@@ -517,6 +590,8 @@ class ProviderOpenAIOfficial(Provider):
         self,
         payloads: dict,
         tools: ToolSet | None,
+        *,
+        request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式查询API，逐步返回结果"""
         if tools:
@@ -544,15 +619,19 @@ class ProviderOpenAIOfficial(Provider):
                 to_del.append(key)
         for key in to_del:
             del payloads[key]
-        self._apply_provider_specific_extra_body_overrides(extra_body)
+        self._apply_provider_specific_request_overrides(payloads, extra_body)
 
         self._sanitize_assistant_messages(payloads)
 
-        stream = await self.client.chat.completions.create(
-            **payloads,
-            stream=True,
-            extra_body=extra_body,
-            stream_options={"include_usage": True},
+        stream = await retry_provider_request(
+            "OpenAI",
+            lambda: self.client.chat.completions.create(
+                **payloads,
+                stream=True,
+                extra_body=extra_body,
+                stream_options={"include_usage": True},
+            ),
+            max_attempts=request_max_retries,
         )
 
         llm_response = LLMResponse("assistant", is_chunk=True)
@@ -852,8 +931,9 @@ class ProviderOpenAIOfficial(Provider):
         llm_response.raw_completion = completion
         llm_response.id = completion.id
 
-        if completion.usage:
-            llm_response.usage = self._extract_usage(completion.usage)
+        llm_response.usage = (
+            self._extract_usage(completion.usage) if completion.usage else TokenUsage()
+        )
 
         return llm_response
 
@@ -913,11 +993,13 @@ class ProviderOpenAIOfficial(Provider):
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
         is_gemini = "gemini" in model
-        deepseek_reasoning_models = {"deepseek-v4-pro", "deepseek-v4-flash"}
+        _deepseek_v4_markers = ("deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4")
         is_deepseek_v4_reasoning = (
-            model in deepseek_reasoning_models
+            any(marker in model for marker in _deepseek_v4_markers)
             or "api.deepseek.com" in self.client.base_url.host
         )
+        # deepseek-chat and deepseek-reasoner now point to V4 models (per official website)
+
         # MiMo 推理模型（MiMo-V2.5-Pro / MiMo-V2.5 / MiMo-V2-Pro / MiMo-V2-Omni / MiMo-V2-Flash）
         # 要求 assistant 历史消息必须回传 reasoning_content，否则返回 400
         mimo_reasoning_models = {
@@ -1104,6 +1186,7 @@ class ProviderOpenAIOfficial(Provider):
         model=None,
         extra_user_content_parts=None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> LLMResponse:
         payloads, context_query = await self._prepare_chat_payload(
@@ -1131,7 +1214,11 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
-                llm_response = await self._query(payloads, func_tool)
+                llm_response = await self._query(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                )
                 break
             except Exception as e:
                 last_exception = e
@@ -1176,6 +1263,7 @@ class ProviderOpenAIOfficial(Provider):
         tool_calls_result=None,
         model=None,
         tool_choice: Literal["auto", "required"] = "auto",
+        request_max_retries: int | None = None,
         **kwargs,
     ) -> AsyncGenerator[LLMResponse, None]:
         """流式对话，与服务商交互并逐步返回结果"""
@@ -1202,7 +1290,11 @@ class ProviderOpenAIOfficial(Provider):
         for retry_cnt in range(max_retries):
             try:
                 self.client.api_key = chosen_key
-                async for response in self._query_stream(payloads, func_tool):
+                async for response in self._query_stream(
+                    payloads,
+                    func_tool,
+                    request_max_retries=request_max_retries,
+                ):
                     yield response
                 break
             except Exception as e:

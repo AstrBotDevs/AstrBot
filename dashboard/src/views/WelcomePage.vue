@@ -170,7 +170,7 @@
     <ProviderConfigDialog v-model="showProviderDialog" />
     <v-dialog v-model="showComputerAccessHelpDialog" max-width="640">
       <v-card>
-        <v-card-title class="text-h3 font-weight-bold pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ tm('onboard.step3HelpTitle') }}
         </v-card-title>
         <v-card-text>
@@ -329,7 +329,7 @@ const greetingText = computed(() => {
 });
 
 async function loadPlatformConfigBase() {
-  const res = await systemConfigApi.get();
+  const res = await systemConfigApi.runtime();
   const payload = (res.data.data || {}) as any;
   platformMetadata.value = payload.metadata || {};
   platformConfigData.value = payload.config || {};

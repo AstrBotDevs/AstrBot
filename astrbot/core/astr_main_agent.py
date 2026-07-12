@@ -29,6 +29,7 @@ from astrbot.core.astr_main_agent_resources import (
     TOOL_CALL_PROMPT_SKILLS_LIKE_MODE,
 )
 from astrbot.core.conversation_mgr import Conversation
+from astrbot.core.db import BaseDatabase
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -73,7 +74,6 @@ from astrbot.core.tools.computer_tools import (
     RollbackSkillReleaseTool,
     RunBrowserSkillTool,
     SyncSkillReleaseTool,
-    normalize_umo_for_workspace,
 )
 from astrbot.core.tools.cron_tools import FutureTaskTool
 from astrbot.core.tools.knowledge_base_tools import (
@@ -85,6 +85,8 @@ from astrbot.core.tools.web_search_tools import (
     BaiduWebSearchTool,
     BochaWebSearchTool,
     BraveWebSearchTool,
+    ExaGetContentsTool,
+    ExaWebSearchTool,
     FirecrawlExtractWebPageTool,
     FirecrawlWebSearchTool,
     TavilyExtractWebPageTool,
@@ -113,6 +115,10 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_text,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.workspace import (
+    normalize_umo_for_workspace,
+    resolve_workspace_root_for_umo,
+)
 
 LLM_ERROR_MESSAGE_EXTRA_KEY = "_llm_error_message"
 WEEKDAY_NAMES = (
@@ -130,6 +136,7 @@ WEB_SEARCH_CITATION_TOOL_NAMES = frozenset(
         "web_search_tavily",
         "web_search_bocha",
         "web_search_brave",
+        "web_search_exa",
     }
 )
 WEB_SEARCH_CITATION_PROMPT = (
@@ -278,10 +285,11 @@ async def _apply_kb(
             )
             if not kb_result:
                 return
-            if req.system_prompt is not None:
-                req.system_prompt += (
-                    f"\n\n[Related Knowledge Base Results]:\n{kb_result}"
-                )
+            req.extra_user_content_parts.append(
+                TextPart(
+                    text=f"[Related Knowledge Base Results]:\n{kb_result}",
+                ).mark_as_temp()
+            )
         except Exception as exc:  # noqa: BLE001
             logger.error("Error occurred while retrieving knowledge base: %s", exc)
     else:
@@ -353,41 +361,63 @@ def _apply_prompt_prefix(req: ProviderRequest, cfg: dict) -> None:
         req.prompt = f"{prefix}{req.prompt}"
 
 
-def _get_workspace_path_for_umo(umo: str) -> Path:
-    normalized_umo = normalize_umo_for_workspace(umo)
-    return Path(get_astrbot_workspaces_path()) / normalized_umo
+async def _get_workspace_path_for_umo(umo: str, plugin_context: Context) -> Path:
+    """Resolve the workspace path for the current request.
+
+    Args:
+        umo: Unified message origin.
+        plugin_context: Star context containing the database instance.
+
+    Returns:
+        Workspace path used as cwd.
+    """
+    fallback_root = (
+        Path(get_astrbot_workspaces_path()) / normalize_umo_for_workspace(umo)
+    ).resolve(strict=False)
+    db = getattr(plugin_context, "_db", None)
+    if not isinstance(db, BaseDatabase):
+        return fallback_root
+    try:
+        return await resolve_workspace_root_for_umo(umo, db)
+    except Exception:
+        return fallback_root
 
 
-def _apply_workspace_extra_prompt(
+async def _apply_workspace_extra_prompt(
     event: AstrMessageEvent,
     req: ProviderRequest,
+    plugin_context: Context,
 ) -> None:
-    extra_prompt_path = _get_workspace_path_for_umo(event.unified_msg_origin) / (
-        "EXTRA_PROMPT.md"
+    workspace_root = await _get_workspace_path_for_umo(
+        event.unified_msg_origin,
+        plugin_context,
     )
-    if not extra_prompt_path.is_file():
+    extra_prompts: list[str] = []
+    extra_prompt_path = workspace_root / "EXTRA_PROMPT.md"
+    if extra_prompt_path.is_file():
+        try:
+            extra_prompt = extra_prompt_path.read_text(encoding="utf-8").strip()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to read workspace extra prompt for umo=%s from %s: %s",
+                event.unified_msg_origin,
+                extra_prompt_path,
+                exc,
+            )
+        else:
+            if extra_prompt:
+                extra_prompts.append(f"From `{extra_prompt_path}`:\n{extra_prompt}")
+
+    if not extra_prompts:
         return
 
-    try:
-        extra_prompt = extra_prompt_path.read_text(encoding="utf-8").strip()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Failed to read workspace extra prompt for umo=%s from %s: %s",
-            event.unified_msg_origin,
-            extra_prompt_path,
-            exc,
-        )
-        return
-
-    if not extra_prompt:
-        return
-
+    extra_prompt_text = "\n\n".join(extra_prompts)
     req.system_prompt = (
         f"{req.system_prompt or ''}\n"
         "[Workspace Extra Prompt]\n"
         "The following instructions are loaded from the current workspace "
         "`EXTRA_PROMPT.md` file.\n"
-        f"{extra_prompt}\n"
+        f"{extra_prompt_text}\n"
     )
 
 
@@ -494,14 +524,26 @@ async def _ensure_persona_and_skills(
     skill_manager = SkillManager()
     skills = skill_manager.list_skills(active_only=True, runtime=runtime)
     skills = _filter_skills_for_current_config(skills, cfg)
+    workspace_skills: list[SkillInfo] = []
+    if runtime == "local":
+        workspace_root = await _get_workspace_path_for_umo(
+            event.unified_msg_origin,
+            plugin_context,
+        )
+        workspace_skills.extend(skill_manager.list_workspace_skills(workspace_root))
 
-    if skills:
+    if skills or workspace_skills:
         if persona and persona.get("skills") is not None:
             if not persona["skills"]:
                 skills = []
             else:
                 allowed = set(persona["skills"])
                 skills = [skill for skill in skills if skill.name in allowed]
+        if workspace_skills and (not persona or persona.get("skills") != []):
+            skills_by_name = {skill.name: skill for skill in skills}
+            for skill in workspace_skills:
+                skills_by_name[skill.name] = skill
+            skills = [skills_by_name[name] for name in sorted(skills_by_name)]
         if skills:
             req.system_prompt += f"\n{build_skills_prompt(skills)}\n"
             if runtime == "none":
@@ -973,7 +1015,7 @@ async def _decorate_llm_request(
     if tz is None:
         tz = plugin_context.get_config().get("timezone")
     _append_system_reminders(event, req, cfg, tz)
-    _apply_workspace_extra_prompt(event, req)
+    await _apply_workspace_extra_prompt(event, req, plugin_context)
 
 
 def _plugin_tool_fix(event: AstrMessageEvent, req: ProviderRequest) -> None:
@@ -1194,6 +1236,9 @@ async def _apply_web_search_tools(
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
     elif provider == "baidu_ai_search":
         req.func_tool.add_tool(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
+    elif provider == "exa":
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaWebSearchTool))
+        req.func_tool.add_tool(tool_mgr.get_builtin_tool(ExaGetContentsTool))
 
 
 def _apply_web_search_citation_prompt(
@@ -1571,10 +1616,14 @@ async def build_main_agent(
         )
 
         if config.computer_use_runtime == "local":
+            workspace_root = await _get_workspace_path_for_umo(
+                event.unified_msg_origin,
+                plugin_context,
+            )
+            workspace_prompt = f"\nCurrent workspace you can use: `{workspace_root}`\n"
             tool_prompt += (
-                f"\nCurrent workspace you can use: "
-                f"`{_get_workspace_path_for_umo(event.unified_msg_origin)}`\n"
-                "Unless the user explicitly specifies a different directory, "
+                workspace_prompt
+                + "Unless the user explicitly specifies a different directory, "
                 "perform all file-related operations in this workspace.\n"
             )
 
@@ -1603,6 +1652,7 @@ async def build_main_agent(
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
+        request_max_retries=config.provider_settings.get("request_max_retries", 5),
         tool_result_overflow_dir=(
             get_astrbot_system_tmp_path()
             if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")
