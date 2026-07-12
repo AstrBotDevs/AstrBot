@@ -98,6 +98,13 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs
     ) -> ToolExecResult:
+        event = context.context.event
+        if getattr(event, "role", None) != "admin":
+            return (
+                "error: Permission denied. Future task management is only allowed "
+                f"for admin users. User's ID is: {event.get_sender_id()}."
+            )
+
         cron_mgr = context.context.context.cron_manager
         if cron_mgr is None:
             return "error: cron manager is not available."

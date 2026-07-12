@@ -8,11 +8,18 @@ import pytest
 from astrbot.core.tools.cron_tools import FutureTaskTool
 
 
-def _context(cron_mgr, *, umo: str = "test:group:shared", sender_id: str = "user-1"):
+def _context(
+    cron_mgr,
+    *,
+    umo: str = "test:group:shared",
+    sender_id: str = "user-1",
+    role: str = "admin",
+):
     return SimpleNamespace(
         context=SimpleNamespace(
             context=SimpleNamespace(cron_manager=cron_mgr),
             event=SimpleNamespace(
+                role=role,
                 unified_msg_origin=umo,
                 get_sender_id=lambda: sender_id,
             ),
@@ -80,6 +87,7 @@ async def test_future_task_edit_requires_job_id():
         context=SimpleNamespace(
             context=SimpleNamespace(cron_manager=cron_mgr),
             event=SimpleNamespace(
+                role="admin",
                 unified_msg_origin="test:private:session",
                 get_sender_id=lambda: "user-1",
             ),
@@ -123,6 +131,7 @@ async def test_future_task_edit_updates_existing_job():
         context=SimpleNamespace(
             context=SimpleNamespace(cron_manager=cron_mgr),
             event=SimpleNamespace(
+                role="admin",
                 unified_msg_origin="test:private:session",
                 get_sender_id=lambda: "user-1",
             ),
@@ -154,6 +163,26 @@ async def test_future_task_edit_updates_existing_job():
         },
     )
     assert result == "Updated future task job-1 (new name)."
+
+
+@pytest.mark.asyncio
+async def test_future_task_create_rejects_non_admin_users():
+    """Regular members must not create persistent, token-consuming tasks."""
+    tool = FutureTaskTool()
+    cron_mgr = SimpleNamespace(add_active_job=AsyncMock())
+
+    result = await tool.call(
+        _context(cron_mgr, sender_id="regular-user", role="member"),
+        action="create",
+        cron_expression="0 8 * * *",
+        note="Generate a daily report",
+    )
+
+    assert result == (
+        "error: Permission denied. Future task management is only allowed for "
+        "admin users. User's ID is: regular-user."
+    )
+    cron_mgr.add_active_job.assert_not_awaited()
 
 
 @pytest.mark.asyncio
