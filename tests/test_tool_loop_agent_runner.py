@@ -1284,8 +1284,8 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
 
 @pytest.mark.asyncio
-async def test_skills_like_requery_passes_extra_user_content_parts():
-    """skills-like 模式 re-query 时应传递 extra_user_content_parts（如 image_caption）"""
+async def test_skills_like_requery_preserves_request_and_tool_metadata():
+    """skills-like re-query preserves request parts and provider tool metadata."""
     from astrbot.core.agent.message import TextPart
 
     captured_kwargs = {}
@@ -1301,6 +1301,11 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                     tools_call_name=["test_tool"],
                     tools_call_args=[{"query": "test"}],
                     tools_call_ids=["call_1"],
+                    tools_call_extra_content={
+                        "call_1": {
+                            "google": {"thought_signature": "selection-signature"}
+                        }
+                    },
                     usage=TokenUsage(input_other=10, output=5),
                 )
             if self.call_count == 2:
@@ -1312,6 +1317,9 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                     tools_call_name=["test_tool"],
                     tools_call_args=[{"query": "actual"}],
                     tools_call_ids=["call_2"],
+                    tools_call_extra_content={
+                        "call_2": {"google": {"thought_signature": "requery-signature"}}
+                    },
                     usage=TokenUsage(input_other=10, output=5),
                 )
             # 后续调用：正常回复
@@ -1362,6 +1370,16 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     parts = captured_kwargs["extra_user_content_parts"]
     assert len(parts) == 1
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+
+    assistant_tool_message = next(
+        message
+        for message in run_context.messages
+        if message.role == "assistant" and message.tool_calls
+    )
+    assert assistant_tool_message.tool_calls[0].id == "call_2"
+    assert assistant_tool_message.tool_calls[0].extra_content == {
+        "google": {"thought_signature": "requery-signature"}
+    }
 
 
 @pytest.mark.asyncio

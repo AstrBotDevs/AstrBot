@@ -871,6 +871,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     llm_resp.tools_call_name = requery_resp.tools_call_name
                     llm_resp.tools_call_args = requery_resp.tools_call_args
                     llm_resp.tools_call_ids = requery_resp.tools_call_ids
+                    llm_resp.tools_call_extra_content = (
+                        requery_resp.tools_call_extra_content
+                    )
 
             tool_call_result_blocks = []
             cached_images = []  # Collect cached images for LLM visibility
