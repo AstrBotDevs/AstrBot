@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 321 icons */
+/* Auto-generated MDI subset – 322 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -206,6 +206,10 @@
 
 .mdi-checkbox-marked::before {
   content: "\F0132";
+}
+
+.mdi-checkbox-multiple-blank-outline::before {
+  content: "\F0137";
 }
 
 .mdi-chevron-double-left::before {
