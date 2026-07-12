@@ -3234,13 +3234,13 @@ async def test_v1_skill_archive_errors_return_http_status(
 ):
     skill_service = asgi_app.state.services.skills
 
-    def fake_prepare_skill_archive(_name: str):
+    def fake_prepare_skill_archive_404(_name: str):
         raise SkillsServiceError("Local skill not found")
 
     monkeypatch.setattr(
         skill_service,
         "prepare_skill_archive",
-        fake_prepare_skill_archive,
+        fake_prepare_skill_archive_404,
     )
 
     by_name_response = await asgi_client.get(
@@ -3260,6 +3260,47 @@ async def test_v1_skill_archive_errors_return_http_status(
     assert path_response.status_code == 404
     assert path_response.headers["content-type"].startswith("application/json")
     assert path_response.json()["message"] == "Local skill not found"
+
+    def fake_prepare_skill_archive_400(_name: str):
+        raise SkillsServiceError("Invalid skill name")
+
+    monkeypatch.setattr(
+        skill_service,
+        "prepare_skill_archive",
+        fake_prepare_skill_archive_400,
+    )
+
+    bad_request_response = await asgi_client.get(
+        "/api/v1/skills/archive",
+        params={"skill_name": "invalid_skill"},
+        headers=_jwt_headers(),
+    )
+
+    assert bad_request_response.status_code == 400
+    assert bad_request_response.headers["content-type"].startswith("application/json")
+    assert bad_request_response.json()["status"] == "error"
+    assert bad_request_response.json()["message"] == "Invalid skill name"
+
+    def fake_prepare_skill_archive_500(_name: str):
+        raise RuntimeError("Unexpected database error")
+
+    monkeypatch.setattr(
+        skill_service,
+        "prepare_skill_archive",
+        fake_prepare_skill_archive_500,
+    )
+
+    server_error_response = await asgi_client.get(
+        "/api/v1/skills/archive",
+        params={"skill_name": "error_skill"},
+        headers=_jwt_headers(),
+    )
+
+    assert server_error_response.status_code == 500
+    assert server_error_response.headers["content-type"].startswith("application/json")
+    assert server_error_response.json()["status"] == "error"
+    assert server_error_response.json()["message"] == "Failed to prepare skill archive"
+    assert "Unexpected database error" not in server_error_response.text
 
 
 @pytest.mark.asyncio

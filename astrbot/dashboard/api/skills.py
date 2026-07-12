@@ -95,11 +95,14 @@ async def _download_skill(service: SkillsService, name: str):
         return _archive_response(service.prepare_skill_archive(name))
     except SkillsServiceError as exc:
         message = str(exc)
-        status_code = 404 if message == "Local skill not found" else 400
+        status_code = 404 if "not found" in message.lower() else 400
         raise HTTPException(status_code=status_code, detail=message) from exc
     except Exception as exc:
         logger.error(str(exc), exc_info=True)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to prepare skill archive",
+        ) from exc
 
 
 @router.get("/skills")
