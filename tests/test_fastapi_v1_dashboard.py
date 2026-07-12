@@ -28,7 +28,7 @@ from astrbot.dashboard.services.plugin_service import (
     PLUGIN_UPDATE_SOURCE_REQUIRED_MESSAGE,
     PluginServiceError,
 )
-from astrbot.dashboard.services.skills_service import SkillArchive
+from astrbot.dashboard.services.skills_service import SkillArchive, SkillsServiceError
 
 JWT_SECRET = "fastapi-v1-test-secret-with-32-bytes"
 
@@ -1215,8 +1215,7 @@ async def test_v1_knowledge_base_create_validation_uses_api_error_shape(
     assert missing_provider_response.status_code == 200
     assert missing_provider_response.json()["status"] == "error"
     assert (
-        missing_provider_response.json()["message"]
-        == "缺少参数 embedding_provider_id"
+        missing_provider_response.json()["message"] == "缺少参数 embedding_provider_id"
     )
 
 
@@ -3225,6 +3224,42 @@ async def test_v1_safe_skill_routes_accept_slash_names(
     }
     assert delete_response.status_code == 200
     assert delete_response.json()["data"]["payload"] == {"name": skill_name}
+
+
+@pytest.mark.asyncio
+async def test_v1_skill_archive_errors_return_http_status(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    skill_service = asgi_app.state.services.skills
+
+    def fake_prepare_skill_archive(_name: str):
+        raise SkillsServiceError("Local skill not found")
+
+    monkeypatch.setattr(
+        skill_service,
+        "prepare_skill_archive",
+        fake_prepare_skill_archive,
+    )
+
+    by_name_response = await asgi_client.get(
+        "/api/v1/skills/archive",
+        params={"skill_name": "missing_skill"},
+        headers=_jwt_headers(),
+    )
+    path_response = await asgi_client.get(
+        "/api/v1/skills/missing_skill/archive",
+        headers=_jwt_headers(),
+    )
+
+    assert by_name_response.status_code == 404
+    assert by_name_response.headers["content-type"].startswith("application/json")
+    assert by_name_response.json()["status"] == "error"
+    assert by_name_response.json()["message"] == "Local skill not found"
+    assert path_response.status_code == 404
+    assert path_response.headers["content-type"].startswith("application/json")
+    assert path_response.json()["message"] == "Local skill not found"
 
 
 @pytest.mark.asyncio
