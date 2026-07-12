@@ -39,7 +39,9 @@ _EDITABLE_SKILL_FILENAMES = {"Dockerfile", "Makefile"}
 
 
 class SkillsServiceError(Exception):
-    pass
+    def __init__(self, message: str, *, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 @dataclass
@@ -436,7 +438,7 @@ class SkillsService:
         skill_dir = Path(skill_mgr.skills_root) / skill_name
         skill_md = skill_dir / "SKILL.md"
         if not skill_dir.is_dir() or not skill_md.exists():
-            raise SkillsServiceError("Local skill not found")
+            raise SkillsServiceError("Local skill not found", status_code=404)
 
         export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
         export_dir.mkdir(parents=True, exist_ok=True)
