@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import astrbot.core.message.components as Comp
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.tools.message_tools import SendMessageToUserTool
@@ -17,6 +18,7 @@ def _make_context(
     runtime="local",
 ):
     """Build a minimal ContextWrapper for SendMessageToUserTool."""
+    platform_id = current_session.split(":", 1)[0]
     cfg = {
         "provider_settings": {
             "computer_use_require_admin": require_admin,
@@ -28,15 +30,22 @@ def _make_context(
         unified_msg_origin=current_session,
         role=role,
         _has_send_oper=False,
+        get_platform_id=lambda: platform_id,
+        get_platform_name=lambda: platform_id,
+        get_self_id=lambda: "bot-1",
         get_sender_id=lambda: "user-1",
     )
     event.set_extra = lambda key, value: extras.__setitem__(key, value)
     event.get_extra = lambda key, default=None: extras.get(key, default)
+    platform = SimpleNamespace(
+        meta=lambda: SimpleNamespace(id=platform_id, name=platform_id)
+    )
     return SimpleNamespace(
         context=SimpleNamespace(
             event=event,
             context=SimpleNamespace(
                 get_config=lambda umo: cfg,
+                get_platform_inst=lambda _platform_id: platform,
                 send_message=AsyncMock(),
             ),
         )
@@ -151,6 +160,87 @@ async def test_send_message_defaults_to_current_session():
     assert ctx.context.event.get_extra(
         "_send_message_to_user_current_session_plain_texts",
     ) == ["hello"]
+
+
+@pytest.mark.asyncio
+async def test_send_message_applies_aiocqhttp_forward_threshold():
+    """Long aiocqhttp tool messages are wrapped as merged-forward nodes."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(current_session="napcat:GroupMessage:123456")
+    ctx.context.context.get_platform_inst = lambda _platform_id: SimpleNamespace(
+        meta=lambda: SimpleNamespace(name="aiocqhttp")
+    )
+    ctx.context.context.get_config = lambda umo: {
+        "platform_settings": {"forward_threshold": 5}
+    }
+    ctx.context.event.get_platform_name = lambda: "aiocqhttp"
+
+    result = await tool.call(
+        ctx,
+        messages=[
+            {"type": "plain", "text": "abc"},
+            {"type": "plain", "text": "def"},
+        ],
+    )
+
+    assert "Message sent to session" in result
+    sent_chain = ctx.context.context.send_message.await_args.args[1]
+    assert len(sent_chain.chain) == 1
+    node = sent_chain.chain[0]
+    assert isinstance(node, Comp.Node)
+    assert node.uin == "bot-1"
+    assert [comp.text for comp in node.content] == ["abc", "def"]
+    assert ctx.context.event._has_send_oper is True
+    assert ctx.context.event.get_extra(
+        "_send_message_to_user_current_session_plain_texts"
+    ) == ["abc def"]
+
+
+@pytest.mark.asyncio
+async def test_send_message_keeps_aiocqhttp_text_at_forward_threshold():
+    """Text equal to the threshold keeps the existing plain-message behavior."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(current_session="napcat:GroupMessage:123456")
+    ctx.context.context.get_platform_inst = lambda _platform_id: SimpleNamespace(
+        meta=lambda: SimpleNamespace(name="aiocqhttp")
+    )
+    ctx.context.context.get_config = lambda umo: {
+        "platform_settings": {"forward_threshold": 5}
+    }
+
+    result = await tool.call(
+        ctx,
+        messages=[{"type": "plain", "text": "hello"}],
+    )
+
+    assert "Message sent to session" in result
+    sent_chain = ctx.context.context.send_message.await_args.args[1]
+    assert len(sent_chain.chain) == 1
+    assert isinstance(sent_chain.chain[0], Comp.Plain)
+
+
+@pytest.mark.asyncio
+async def test_send_message_keeps_cross_platform_aiocqhttp_text():
+    """Do not create an invalid merged-forward node without the target bot ID."""
+    tool = SendMessageToUserTool()
+    ctx = _make_context(current_session="cron:FriendMessage:user-1")
+    ctx.context.context.get_platform_inst = lambda _platform_id: SimpleNamespace(
+        meta=lambda: SimpleNamespace(name="aiocqhttp")
+    )
+    ctx.context.context.get_config = lambda umo: {
+        "platform_settings": {"forward_threshold": 5}
+    }
+
+    result = await tool.call(
+        ctx,
+        session="napcat:GroupMessage:123456",
+        messages=[{"type": "plain", "text": "long message"}],
+    )
+
+    assert "Message sent to session" in result
+    sent_chain = ctx.context.context.send_message.await_args.args[1]
+    assert len(sent_chain.chain) == 1
+    assert isinstance(sent_chain.chain[0], Comp.Plain)
 
 
 @pytest.mark.asyncio

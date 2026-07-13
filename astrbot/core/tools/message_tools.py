@@ -332,10 +332,43 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 return f"error: invalid session: {session}"
 
         message_chain = MessageChain(chain=components)
+        forwarded_plain_text: str | None = None
+
+        # Tool messages bypass ResultDecorateStage, so apply its QQ threshold here.
+        target_platform = context.context.context.get_platform_inst(
+            target_session.platform_id
+        )
+        if (
+            target_platform
+            and target_platform.meta().name == "aiocqhttp"
+            and context.context.event.get_platform_name() == "aiocqhttp"
+            and context.context.event.get_platform_id() == target_session.platform_id
+        ):
+            cfg = context.context.context.get_config(umo=str(target_session))
+            threshold = cfg.get("platform_settings", {}).get("forward_threshold", 1500)
+            word_cnt = 0
+            for comp in message_chain.chain:
+                if isinstance(comp, Comp.Plain):
+                    word_cnt += len(comp.text)
+            if word_cnt > threshold:
+                if str(target_session) == current_session:
+                    forwarded_plain_text = message_chain.get_plain_text().strip()
+                message_chain.chain = [
+                    Comp.Node(
+                        uin=context.context.event.get_self_id(),
+                        name="AstrBot",
+                        content=[*message_chain.chain],
+                    )
+                ]
+
         await context.context.context.send_message(target_session, message_chain)
         if str(target_session) == current_session:
             context.context.event._has_send_oper = True
-            sent_plain_text = message_chain.get_plain_text().strip()
+            sent_plain_text = (
+                forwarded_plain_text
+                if forwarded_plain_text is not None
+                else message_chain.get_plain_text().strip()
+            )
             if sent_plain_text:
                 sent_plain_texts = context.context.event.get_extra(
                     "_send_message_to_user_current_session_plain_texts",
