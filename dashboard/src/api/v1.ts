@@ -84,10 +84,12 @@ export interface ProviderSchemaData {
 export interface ProviderListData {
   providers?: OpenConfig[];
   model_metadata?: Record<string, unknown>;
+  compression_thresholds?: Record<string, unknown>;
 }
 
 export interface ProviderByTypeEnvelope extends ApiEnvelope<OpenConfig[]> {
   model_metadata?: Record<string, unknown>;
+  compression_thresholds?: Record<string, unknown>;
 }
 
 export interface ProviderByIdData {
@@ -527,6 +529,8 @@ export const providerApi = {
           ...response.data,
           data: response.data.data.providers || [],
           model_metadata: response.data.data.model_metadata || {},
+          compression_thresholds:
+            response.data.data.compression_thresholds || {},
         },
       };
     }
@@ -542,6 +546,13 @@ export const providerApi = {
       }),
       {},
     );
+    const compressionThresholds = responses.reduce<Record<string, unknown>>(
+      (acc, response) => ({
+        ...acc,
+        ...(response.data.data.compression_thresholds || {}),
+      }),
+      {},
+    );
     return {
       ...first,
       data: {
@@ -550,6 +561,7 @@ export const providerApi = {
           (response) => response.data.data.providers || [],
         ),
         model_metadata: modelMetadata,
+        compression_thresholds: compressionThresholds,
       },
     };
   },

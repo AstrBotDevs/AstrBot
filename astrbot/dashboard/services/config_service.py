@@ -1552,11 +1552,17 @@ class ProviderConfigService:
         source_id: str | None = None,
         enabled: bool | None = None,
     ) -> dict:
+        from astrbot.core.agent.context.config import (
+            DEFAULT_FALLBACK_MAX_CONTEXT_TOKENS,
+            resolve_compression_threshold,
+        )
+        from astrbot.core.utils.config_number import coerce_int_config
         from astrbot.core.utils.llm_metadata import LLM_METADATAS
 
         provider_type = self._resolve_provider_type(capability)
         providers = []
         model_metadata = {}
+        compression_thresholds = {}
         source_provider_type = {
             source["id"]: source.get("provider_type", "chat_completion")
             for source in self.provider_manager.provider_sources_config
@@ -1580,10 +1586,60 @@ class ProviderConfigService:
             else:
                 provider_response = copy.deepcopy(provider)
             model_id = provider_response.get("model")
-            if isinstance(model_id, str) and model_id in LLM_METADATAS:
-                model_metadata[model_id] = LLM_METADATAS[model_id]
+            model_info = (
+                LLM_METADATAS.get(model_id) if isinstance(model_id, str) else None
+            )
+            if model_info:
+                model_metadata[model_id] = model_info
+            settings = self.config.get("provider_settings", {})
+            metadata_limit = (model_info.get("limit") or {}) if model_info else {}
+            context_tokens = (
+                coerce_int_config(
+                    provider_response.get("max_context_tokens", 0),
+                    default=0,
+                    min_value=0,
+                    warn=False,
+                )
+                or coerce_int_config(
+                    metadata_limit.get("context", 0),
+                    default=0,
+                    min_value=0,
+                    warn=False,
+                )
+                or coerce_int_config(
+                    settings.get("fallback_max_context_tokens"),
+                    default=DEFAULT_FALLBACK_MAX_CONTEXT_TOKENS,
+                    min_value=1,
+                    warn=False,
+                )
+            )
+            configured_output_tokens = coerce_int_config(
+                settings.get("compression_max_output_tokens", 0),
+                default=0,
+                min_value=0,
+                warn=False,
+            )
+            provider_id = provider_response.get("id")
+            if provider_id:
+                compression_thresholds[provider_id] = resolve_compression_threshold(
+                    mode=settings.get("compression_threshold_mode", "percentage"),
+                    percentage=settings.get("compression_threshold_percentage", 0.82),
+                    max_context_tokens=context_tokens,
+                    max_output_tokens=configured_output_tokens
+                    or coerce_int_config(
+                        metadata_limit.get("output", 0),
+                        default=0,
+                        min_value=0,
+                        warn=False,
+                    ),
+                    warn=False,
+                )
             providers.append(provider_response)
-        return {"providers": providers, "model_metadata": model_metadata}
+        return {
+            "providers": providers,
+            "model_metadata": model_metadata,
+            "compression_thresholds": compression_thresholds,
+        }
 
     def list_providers_for_dashboard_types(
         self, provider_type: str | None

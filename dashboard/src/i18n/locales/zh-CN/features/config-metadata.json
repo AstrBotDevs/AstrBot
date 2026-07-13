@@ -263,6 +263,24 @@
           "description": "轮次超限时一次丢弃轮数",
           "hint": "当超过\"压缩前最多保留对话轮数\"且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。"
         },
+        "compression_threshold_mode": {
+          "description": "上下文压缩阈值模式",
+          "labels": [
+            "仅按百分比",
+            "上下文窗口减去最大输出",
+            "两者取较小值（更早压缩）",
+            "两者取较大值（更晚压缩）"
+          ],
+          "hint": "决定实际压缩阈值如何结合百分比与模型最大输出空间。输出上限未知时，依赖输出预留的模式会退化为百分比阈值。"
+        },
+        "compression_threshold_percentage": {
+          "description": "上下文压缩百分比阈值",
+          "hint": "0.82 表示上下文使用率超过 82% 时触发压缩。"
+        },
+        "compression_max_output_tokens": {
+          "description": "压缩策略使用的最大输出 Token",
+          "hint": "0 表示自动读取当前模型元数据；元数据也不可用时退化为百分比阈值。大于 0 时覆盖模型元数据。"
+        },
         "context_limit_reached_strategy": {
           "description": "历史超限或上下文接近上限时的处理方式",
           "labels": [

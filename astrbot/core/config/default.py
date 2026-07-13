@@ -125,6 +125,9 @@ DEFAULT_CONFIG = {
         "persona_pool": ["*"],
         "prompt_prefix": "{{prompt}}",
         "context_limit_reached_strategy": "llm_compress",  # or truncate_by_turns
+        "compression_threshold_mode": "percentage",
+        "compression_threshold_percentage": 0.82,
+        "compression_max_output_tokens": 0,
         "llm_compress_instruction": (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
             "The primary goal of this summary is to enable seamless continuation of the work that follows.\n"
@@ -3588,6 +3591,38 @@ CONFIG_METADATA_3 = {
                         "description": "轮次超限时一次丢弃轮数",
                         "type": "int",
                         "hint": "当超过“压缩前最多保留对话轮数”且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compression_threshold_mode": {
+                        "description": "上下文压缩阈值模式",
+                        "type": "string",
+                        "options": ["percentage", "output_reserve", "min", "max"],
+                        "labels": [
+                            "仅按百分比",
+                            "上下文窗口减去最大输出",
+                            "两者取较小值（更早压缩）",
+                            "两者取较大值（更晚压缩）",
+                        ],
+                        "hint": "输出上限未知时，依赖输出预留的模式会自动退化为百分比阈值。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compression_threshold_percentage": {
+                        "description": "上下文压缩百分比阈值",
+                        "type": "float",
+                        "slider": {"min": 0.01, "max": 1, "step": 0.01},
+                        "hint": "0.82 表示上下文使用率超过 82% 时触发压缩。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.compression_max_output_tokens": {
+                        "description": "压缩策略使用的最大输出 Token",
+                        "type": "int",
+                        "hint": "0 表示自动读取当前模型元数据；元数据也不可用时退化为百分比阈值。大于 0 时覆盖模型元数据。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },

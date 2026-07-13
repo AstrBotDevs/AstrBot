@@ -42,6 +42,119 @@ class MockProvider:
         return MagicMock(id="test_provider", type="openai")
 
 
+class TestCompressionThresholdResolution:
+    """Verify configurable thresholds match the compressor trigger boundary."""
+
+    @pytest.mark.parametrize(
+        ("mode", "percentage", "context", "output", "expected"),
+        [
+            ("percentage", 0.75, 1000, 400, 0.75),
+            ("output_reserve", 0.82, 1000, 400, 0.6),
+            ("min", 0.82, 1000, 400, 0.6),
+            ("max", 0.82, 1000, 400, 0.82),
+        ],
+    )
+    def test_resolves_supported_modes(
+        self,
+        mode: str,
+        percentage: float,
+        context: int,
+        output: int,
+        expected: float,
+    ) -> None:
+        from astrbot.core.agent.context.config import resolve_compression_threshold
+
+        result = resolve_compression_threshold(mode, percentage, context, output)
+
+        assert result["effective_threshold"] == pytest.approx(expected)
+        assert result["fallback_reason"] is None
+
+    @pytest.mark.parametrize("mode", ["output_reserve", "min", "max"])
+    def test_missing_output_limit_falls_back_to_percentage(self, mode: str) -> None:
+        from astrbot.core.agent.context.config import resolve_compression_threshold
+
+        result = resolve_compression_threshold(mode, 0.73, 1000, 0)
+
+        assert result["effective_threshold"] == pytest.approx(0.73)
+        assert result["output_threshold"] is None
+        assert result["fallback_reason"] == "max_output_tokens_unavailable"
+
+    def test_percentage_mode_does_not_require_output_limit(self) -> None:
+        from astrbot.core.agent.context.config import resolve_compression_threshold
+
+        result = resolve_compression_threshold("percentage", 0.73, 1000, 0)
+
+        assert result["effective_threshold"] == pytest.approx(0.73)
+        assert result["fallback_reason"] is None
+
+    def test_invalid_mode_and_percentage_are_normalized(self) -> None:
+        from astrbot.core.agent.context.config import resolve_compression_threshold
+
+        result = resolve_compression_threshold("invalid", 2.0, 1000, 100)
+
+        assert result["mode"] == "percentage"
+        assert result["percentage"] == 1.0
+        assert result["effective_threshold"] == pytest.approx(1.0)
+
+    def test_output_larger_than_context_triggers_before_first_token(self) -> None:
+        from astrbot.core.agent.context.config import resolve_compression_threshold
+
+        result = resolve_compression_threshold("output_reserve", 0.82, 1000, 1200)
+
+        assert result["output_threshold"] == 0.0
+        assert result["effective_threshold"] == 0.0
+
+    @pytest.mark.parametrize("percentage", [None, "invalid", float("nan")])
+    def test_invalid_percentage_falls_back_to_default(self, percentage: object) -> None:
+        from astrbot.core.agent.context.config import resolve_compression_threshold
+
+        result = resolve_compression_threshold(  # type: ignore[arg-type]
+            "percentage", percentage, None, "invalid"
+        )
+
+        assert result["percentage"] == pytest.approx(0.82)
+        assert result["effective_threshold"] == pytest.approx(0.82)
+        assert result["output_tokens"] == 0
+
+    def test_zero_percentage_is_clamped_to_configured_minimum(self) -> None:
+        from astrbot.core.agent.context.config import resolve_compression_threshold
+
+        result = resolve_compression_threshold("percentage", 0, 1000, 100)
+
+        assert result["percentage"] == pytest.approx(0.01)
+        assert result["effective_threshold"] == pytest.approx(0.01)
+
+    def test_invalid_context_and_negative_output_fall_back_safely(self) -> None:
+        from astrbot.core.agent.context.config import resolve_compression_threshold
+
+        result = resolve_compression_threshold(  # type: ignore[arg-type]
+            "output_reserve", 0.7, "invalid", -100
+        )
+
+        assert result["output_threshold"] is None
+        assert result["output_tokens"] == 0
+        assert result["effective_threshold"] == pytest.approx(0.7)
+        assert result["fallback_reason"] == "max_output_tokens_unavailable"
+
+    @pytest.mark.parametrize("use_llm", [False, True])
+    def test_effective_threshold_is_used_by_both_compressors(
+        self, use_llm: bool
+    ) -> None:
+        from astrbot.core.agent.context.config import ContextConfig
+        from astrbot.core.agent.context.manager import ContextManager
+
+        config = ContextConfig(
+            max_context_tokens=1000,
+            compression_threshold=0.6,
+            llm_compress_provider=MockProvider() if use_llm else None,  # type: ignore[arg-type]
+        )
+        manager = ContextManager(config)
+
+        assert manager.compressor.compression_threshold == pytest.approx(0.6)
+        assert not manager.compressor.should_compress([], 600, 1000)
+        assert manager.compressor.should_compress([], 601, 1000)
+
+
 class TestContextManager:
     """Test suite for ContextManager."""
 

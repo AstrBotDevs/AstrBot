@@ -1421,6 +1421,67 @@ async def test_v1_providers_matches_dashboard_provider_alias_list(
     assert v1_data["data"]["providers"] == dashboard_alias_data["data"]
 
 
+def test_provider_list_exposes_backend_resolved_compression_threshold(
+    fake_core_lifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
+    settings = fake_core_lifecycle.astrbot_config.setdefault("provider_settings", {})
+    settings.update(
+        {
+            "compression_threshold_mode": "min",
+            "compression_threshold_percentage": 0.82,
+            "compression_max_output_tokens": 0,
+        }
+    )
+    monkeypatch.setitem(
+        LLM_METADATAS,
+        "gpt-4o-mini",
+        {"limit": {"context": 1000, "output": 400}},
+    )
+    service = config_service.ProviderConfigService(fake_core_lifecycle)
+
+    result = service.list_providers(capability="chat")
+
+    threshold = result["compression_thresholds"]["gpt-mini"]
+    assert threshold["effective_threshold"] == pytest.approx(0.6)
+    assert threshold["output_threshold"] == pytest.approx(0.6)
+    assert "compression_threshold" not in result["providers"][0]
+    assert (
+        "compression_threshold" not in fake_core_lifecycle.astrbot_config["provider"][0]
+    )
+
+
+def test_provider_list_handles_null_numeric_compression_config(
+    fake_core_lifecycle,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from astrbot.core.agent.context.config import (
+        DEFAULT_FALLBACK_MAX_CONTEXT_TOKENS,
+    )
+    from astrbot.core.utils.llm_metadata import LLM_METADATAS
+
+    settings = fake_core_lifecycle.astrbot_config.setdefault("provider_settings", {})
+    settings.update(
+        {
+            "compression_threshold_mode": "output_reserve",
+            "compression_threshold_percentage": None,
+            "compression_max_output_tokens": 32_000,
+            "fallback_max_context_tokens": None,
+        }
+    )
+    monkeypatch.setitem(LLM_METADATAS, "gpt-4o-mini", {"limit": {}})
+    service = config_service.ProviderConfigService(fake_core_lifecycle)
+
+    result = service.list_providers(capability="chat")
+
+    threshold = result["compression_thresholds"]["gpt-mini"]
+    assert threshold["effective_threshold"] == pytest.approx(0.75)
+    assert threshold["output_threshold"] == pytest.approx(0.75)
+    assert DEFAULT_FALLBACK_MAX_CONTEXT_TOKENS == 128_000
+
+
 @pytest.mark.asyncio
 async def test_v1_provider_source_rename_updates_provider_refs(
     asgi_client: httpx.AsyncClient,

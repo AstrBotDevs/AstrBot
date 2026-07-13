@@ -36,10 +36,12 @@ class ContextManager:
                 keep_recent_ratio=config.llm_compress_keep_recent_ratio,
                 instruction_text=config.llm_compress_instruction,
                 token_counter=self.token_counter,
+                compression_threshold=config.compression_threshold,
             )
         else:
             self.compressor = TruncateByTurnsCompressor(
-                truncate_turns=config.truncate_turns
+                truncate_turns=config.truncate_turns,
+                compression_threshold=config.compression_threshold,
             )
 
     async def process(
