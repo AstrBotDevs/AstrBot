@@ -45,7 +45,7 @@ localStorage.setItem('uiTheme', uiTheme);
 const config: ConfigProps = {
   Sidebar_drawer: true,
   Customizer_drawer: false,
-  mini_sidebar: true,
+  mini_sidebar: false,
   fontTheme: 'Roboto',
   uiTheme,
   themeMode,

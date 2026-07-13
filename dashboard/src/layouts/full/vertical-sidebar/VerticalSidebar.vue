@@ -113,7 +113,6 @@ if (isMobile) {
   customizer.Sidebar_drawer = false;
 } else {
   customizer.Sidebar_drawer = true;
-  customizer.SET_MINI_SIDEBAR(true);
 }
 
 function clamp(value, min, max) {
