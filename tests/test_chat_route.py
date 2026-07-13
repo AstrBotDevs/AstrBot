@@ -6,8 +6,9 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from astrbot.dashboard.api.chat import resume_chat_run
 from astrbot.dashboard.services import chat_service
-from astrbot.dashboard.services.chat_service import ChatService
+from astrbot.dashboard.services.chat_service import ChatService, ChatServiceError
 
 
 @pytest.fixture
@@ -49,6 +50,24 @@ def _decode_sse_event(event: str) -> dict:
         Decoded event payload.
     """
     return json.loads(event.removeprefix("data: ").strip())
+
+
+@pytest.mark.asyncio
+async def test_resume_chat_run_does_not_expose_service_error():
+    service = SimpleNamespace(
+        build_chat_run_stream=AsyncMock(
+            side_effect=ChatServiceError("internal stack trace details")
+        )
+    )
+    auth = SimpleNamespace(username="alice")
+
+    response = await resume_chat_run("missing-run", auth, service)
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {
+        "status": "error",
+        "message": "Chat run is unavailable",
+    }
 
 
 @pytest.mark.asyncio
