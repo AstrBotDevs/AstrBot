@@ -653,6 +653,57 @@ async def test_stats_separate_latest_context_from_cumulative_usage(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
+async def test_stats_emit_update_after_each_completed_llm_request(
+    runner, provider_request, mock_tool_executor, mock_hooks, streaming
+):
+    """Emit one stats update for every completed LLM request."""
+    provider = VaryingUsageProvider()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+
+    responses = [response async for response in runner.step_until_done(3)]
+    stats_responses = [
+        response for response in responses if response.type == "agent_stats"
+    ]
+
+    assert provider.call_count == 2
+    assert len(stats_responses) == 2
+    assert [response.data["chain"].type for response in stats_responses] == [
+        "agent_stats",
+        "agent_stats",
+    ]
+    stats_snapshots = [
+        response.data["chain"].chain[0].data for response in stats_responses
+    ]
+    assert [snapshot["current_context_tokens"] for snapshot in stats_snapshots] == [
+        110,
+        220,
+    ]
+    assert stats_snapshots[0]["token_usage"]["input_other"] == 100
+    assert stats_snapshots[0]["token_usage"]["input_cached"] == 10
+    assert stats_snapshots[1]["token_usage"]["input_other"] == 300
+    assert stats_snapshots[1]["token_usage"]["input_cached"] == 30
+
+    # Emitted events keep their own snapshots even if live stats mutate later.
+    runner.stats.token_usage.input_other = 999
+    assert stats_snapshots[0]["token_usage"]["input_other"] == 100
+    assert stats_snapshots[1]["token_usage"]["input_other"] == 300
+
+    assert responses.index(stats_responses[0]) < next(
+        index
+        for index, response in enumerate(responses)
+        if response.type == "tool_call"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
 async def test_stats_clear_current_context_when_latest_usage_is_missing(
     runner, provider_request, mock_tool_executor, mock_hooks, streaming
 ):
@@ -1236,6 +1287,8 @@ async def test_stop_interrupts_pending_subagent_handoff(mock_hooks):
 
     step_iter = runner.step()
     first_resp = await step_iter.__anext__()
+    if first_resp.type == "agent_stats":
+        first_resp = await step_iter.__anext__()
     assert first_resp.type == "tool_call"
     assert provider.abort_signal is not None
     assert provider.abort_signal.is_set() is False
@@ -1286,6 +1339,8 @@ async def test_stop_interrupts_pending_regular_tool(mock_hooks):
 
     step_iter = runner.step()
     first_resp = await step_iter.__anext__()
+    if first_resp.type == "agent_stats":
+        first_resp = await step_iter.__anext__()
     assert first_resp.type == "tool_call"
     assert provider.abort_signal is not None
     assert provider.abort_signal.is_set() is False

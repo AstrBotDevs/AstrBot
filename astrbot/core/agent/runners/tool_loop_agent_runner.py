@@ -780,6 +780,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 self.stats.current_context_tokens = llm_response.usage.input
                 if self.req.conversation:
                     self.req.conversation.token_usage = llm_response.usage.total
+            yield AgentResponse(
+                type="agent_stats",
+                data=AgentResponseData(
+                    chain=MessageChain(
+                        type="agent_stats",
+                        chain=[Json(data=self.stats.to_dict())],
+                    )
+                ),
+            )
             break  # got final response
 
         if not llm_resp_result:
