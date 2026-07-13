@@ -264,9 +264,13 @@ async def run_agent(
                     )
                     yield resp.data["chain"]
                     astr_event.clear_result()
-                elif resp.type == "streaming_delta":
+                elif resp.type in ("streaming_delta", "err"):
                     chain = resp.data["chain"]
-                    if chain.type == "reasoning" and not show_reasoning:
+                    if (
+                        resp.type == "streaming_delta"
+                        and chain.type == "reasoning"
+                        and not show_reasoning
+                    ):
                         # display the reasoning content only when configured
                         continue
                     yield resp.data["chain"]  # MessageChain
