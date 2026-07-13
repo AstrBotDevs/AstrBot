@@ -2,6 +2,7 @@
   <MarkdownCodeBlockNode
     :key="themeRenderKey"
     v-bind="forwardedBindings"
+    @copy="copyToClipboard"
   >
     <template
       v-for="(_, slotName) in $slots"
@@ -16,6 +17,7 @@
 import { computed, inject, type Ref } from "vue";
 import { MarkdownCodeBlockNode } from "markstream-vue";
 import { useAttrs } from "vue";
+import { copyToClipboard } from "@/utils/clipboard";
 
 defineOptions({
   inheritAttrs: false,
