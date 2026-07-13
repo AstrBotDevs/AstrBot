@@ -78,6 +78,14 @@ export const getPluginSearchFields = (plugin) => {
     ? plugin.support_platforms.join(" ")
     : "";
   const tags = Array.isArray(plugin?.tags) ? plugin.tags.join(" ") : "";
+  const repositoryPath = normalizeStr(plugin?.repo)
+    .replace(
+      /^(?:(?:[a-z][a-z\d+.-]*:)?\/\/[^/]+|(?:www\.)?github\.com)\/?/i,
+      "",
+    )
+    .replace(/[?#].*$/, "")
+    .replace(/\/+$/, "")
+    .replace(/\.git$/i, "");
 
   return [
     plugin?.name,
@@ -86,7 +94,7 @@ export const getPluginSearchFields = (plugin) => {
     plugin?.short_desc,
     plugin?.desc,
     plugin?.author,
-    plugin?.repo,
+    repositoryPath,
     plugin?.version,
     plugin?.astrbot_version,
     supportPlatforms,

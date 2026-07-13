@@ -11,7 +11,7 @@ import {
   normalizeStr,
   toInitials,
   toPinyinText,
-} from "@/utils/pluginSearch";
+} from "@/utils/pluginSearch.mjs";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
