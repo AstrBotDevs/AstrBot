@@ -968,9 +968,27 @@ class ChatService:
                                     pass
                         if msg_type == "end":
                             break
+            except (asyncio.CancelledError, GeneratorExit):
+                client_disconnected = True
+                raise
             except BaseException as e:
                 logger.exception(f"WebChat stream unexpected error: {e}", exc_info=True)
             finally:
+                if client_disconnected:
+                    unified_msg_origin = build_thread_unified_msg_origin(
+                        username,
+                        webchat_conv_id,
+                    )
+                    stopped_count = active_event_registry.request_agent_stop_all(
+                        unified_msg_origin
+                    )
+                    logger.debug(
+                        "[WebChat] Requested agent stop after client disconnect, "
+                        "umo=%s, stopped_count=%s",
+                        unified_msg_origin,
+                        stopped_count,
+                    )
+                webchat_queue_mgr.remove_back_queue(message_id)
                 try:
                     await flush_pending_bot_message()
                 except Exception as e:
@@ -978,7 +996,6 @@ class ChatService:
                         f"Failed to persist pending webchat message: {e}",
                         exc_info=True,
                     )
-                webchat_queue_mgr.remove_back_queue(message_id)
 
         chat_queue = webchat_queue_mgr.get_or_create_queue(webchat_conv_id)
         await chat_queue.put(

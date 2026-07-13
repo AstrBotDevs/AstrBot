@@ -43,13 +43,9 @@ class WebChatMessageEvent(AstrMessageEvent):
         emit_complete: bool = False,
     ) -> str | None:
         request_id = str(message_id)
-        conversation_id = _extract_conversation_id(session_id)
-        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(
-            request_id,
-            conversation_id,
-        )
         if not message:
-            await web_chat_back_queue.put(
+            await webchat_queue_mgr.put_back_queue(
+                request_id,
                 {
                     "type": "end",
                     "data": "",
@@ -63,7 +59,8 @@ class WebChatMessageEvent(AstrMessageEvent):
         for comp in message.chain:
             if isinstance(comp, Plain):
                 data = comp.text
-                await web_chat_back_queue.put(
+                accepted = await webchat_queue_mgr.put_back_queue(
+                    request_id,
                     {
                         "type": "plain",
                         "data": data,
@@ -72,8 +69,11 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "message_id": message_id,
                     },
                 )
+                if not accepted:
+                    return None
             elif isinstance(comp, Json):
-                await web_chat_back_queue.put(
+                accepted = await webchat_queue_mgr.put_back_queue(
+                    request_id,
                     {
                         "type": "plain",
                         "data": json.dumps(comp.data, ensure_ascii=False),
@@ -82,6 +82,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "message_id": message_id,
                     },
                 )
+                if not accepted:
+                    return None
             elif isinstance(comp, Image):
                 # save image to local
                 image_base64 = await comp.convert_to_base64()
@@ -95,7 +97,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                 path = os.path.join(attachments_dir, filename)
                 await asyncio.to_thread(Path(path).write_bytes, image_bytes)
                 data = f"[IMAGE]{filename}"
-                await web_chat_back_queue.put(
+                accepted = await webchat_queue_mgr.put_back_queue(
+                    request_id,
                     {
                         "type": "image",
                         "data": data,
@@ -103,6 +106,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "message_id": message_id,
                     },
                 )
+                if not accepted:
+                    return None
             elif isinstance(comp, Record):
                 # save record to local
                 filename = f"{str(uuid.uuid4())}.wav"
@@ -111,7 +116,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                 record_bytes = base64.b64decode(record_base64)
                 await asyncio.to_thread(Path(path).write_bytes, record_bytes)
                 data = f"[RECORD]{filename}"
-                await web_chat_back_queue.put(
+                accepted = await webchat_queue_mgr.put_back_queue(
+                    request_id,
                     {
                         "type": "record",
                         "data": data,
@@ -119,6 +125,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "message_id": message_id,
                     },
                 )
+                if not accepted:
+                    return None
             elif isinstance(comp, File):
                 # save file to local
                 file_path = await comp.get_file()
@@ -135,7 +143,8 @@ class WebChatMessageEvent(AstrMessageEvent):
                 dest_path = os.path.join(attachments_dir, filename)
                 shutil.copy2(file_path, dest_path)
                 data = f"[FILE]{filename}|{original_name}"
-                await web_chat_back_queue.put(
+                accepted = await webchat_queue_mgr.put_back_queue(
+                    request_id,
                     {
                         "type": "file",
                         "data": data,
@@ -143,11 +152,14 @@ class WebChatMessageEvent(AstrMessageEvent):
                         "message_id": message_id,
                     },
                 )
+                if not accepted:
+                    return None
             else:
                 logger.debug(f"webchat 忽略: {comp.type}")
 
         if emit_complete:
-            await web_chat_back_queue.put(
+            await webchat_queue_mgr.put_back_queue(
+                request_id,
                 {
                     "type": "complete",
                     "data": data,
@@ -169,11 +181,6 @@ class WebChatMessageEvent(AstrMessageEvent):
         reasoning_content = ""
         message_id = self.message_obj.message_id
         request_id = str(message_id)
-        conversation_id = _extract_conversation_id(self.session_id)
-        web_chat_back_queue = webchat_queue_mgr.get_or_create_back_queue(
-            request_id,
-            conversation_id,
-        )
         async for chain in generator:
             # 处理音频流（Live Mode）
             if chain.type == "audio_chunk":
@@ -196,7 +203,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                 if text:
                     payload["text"] = text
 
-                await web_chat_back_queue.put(payload)
+                await webchat_queue_mgr.put_back_queue(request_id, payload)
                 continue
 
             # if chain.type == "break" and final_data:
@@ -224,7 +231,8 @@ class WebChatMessageEvent(AstrMessageEvent):
             else:
                 final_data += r
 
-        await web_chat_back_queue.put(
+        await webchat_queue_mgr.put_back_queue(
+            request_id,
             {
                 "type": "complete",  # complete means we return the final result
                 "data": final_data,
