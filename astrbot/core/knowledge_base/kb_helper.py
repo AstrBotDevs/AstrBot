@@ -546,8 +546,11 @@ class KBHelper:
             media_dir = self.kb_medias_dir / doc_id
             if media_dir.exists() and media_dir.is_dir():
                 media_dir.rmdir()
-        except Exception:
-            pass
+        except Exception as de:
+            logger.warning(
+                f"Failed to remove media directory after failed upload "
+                f"(doc_id={doc_id}): {de}",
+            )
 
     async def list_documents(
         self,
