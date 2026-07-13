@@ -938,7 +938,7 @@ class ChatService:
                 result = await run.back_queue.get()
                 if not result:
                     continue
-                if result.get("message_id") and result["message_id"] != run.run_id:
+                if result.get("message_id") and str(result["message_id"]) != run.run_id:
                     logger.warning("webchat stream message_id mismatch")
                     continue
 

@@ -43,6 +43,14 @@ class _StreamingErrorRunner:
         return self.finished
 
 
+class _MalformedStreamingErrorRunner(_StreamingErrorRunner):
+    """Agent runner that returns an invalid provider error payload."""
+
+    async def step(self):
+        self.finished = True
+        yield AgentResponse(type="err", data={})
+
+
 @pytest.mark.asyncio
 async def test_run_agent_forwards_streaming_provider_error():
     error_text = (
@@ -54,3 +62,13 @@ async def test_run_agent_forwards_streaming_provider_error():
 
     assert len(chains) == 1
     assert chains[0].get_plain_text() == error_text
+
+
+@pytest.mark.asyncio
+async def test_run_agent_replaces_malformed_streaming_provider_error():
+    runner = _MalformedStreamingErrorRunner("unused")
+
+    chains = [chain async for chain in run_agent(runner)]
+
+    assert len(chains) == 1
+    assert chains[0].get_plain_text() == "Error occurred during AI execution."

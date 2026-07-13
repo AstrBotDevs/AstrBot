@@ -251,7 +251,17 @@ async def run_agent(
                     and agent_runner.streaming
                     and not stream_to_general
                 ):
-                    yield resp.data["chain"]
+                    chain = (
+                        resp.data.get("chain") if isinstance(resp.data, dict) else None
+                    )
+                    if not isinstance(chain, MessageChain):
+                        logger.error(
+                            "Agent runner returned an error response without a message chain."
+                        )
+                        chain = MessageChain().message(
+                            "Error occurred during AI execution."
+                        )
+                    yield chain
                     continue
 
                 if stream_to_general or not agent_runner.streaming:

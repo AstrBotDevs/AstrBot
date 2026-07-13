@@ -678,7 +678,7 @@ export function useMessages(options: UseMessagesOptions) {
           lastError = error;
         }
 
-        if (!retryable || attempt === 4) break;
+        if (!retryable || attempt === 4 || abort.signal.aborted) break;
         await new Promise<void>((resolve) => {
           const timeout = window.setTimeout(resolve, 250 * 2 ** attempt);
           abort.signal.addEventListener(
