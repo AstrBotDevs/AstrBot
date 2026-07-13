@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -5,6 +6,7 @@ import pytest
 from sqlalchemy import event, text
 from sqlalchemy import inspect as sqlalchemy_inspect
 
+from astrbot.core.conversation_mgr import ConversationManager
 from astrbot.core.db.po import ConversationV2
 from astrbot.core.db.sqlite import SQLiteDatabase
 
@@ -74,6 +76,20 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
         "other",
     ]
     assert all("content" in sqlalchemy_inspect(item).unloaded for item in summary)
+
+    manager_summary, manager_total = await ConversationManager(
+        db,
+    ).get_filtered_conversations(
+        page=1,
+        page_size=10,
+        include_history=False,
+        message_types=["GroupMessage", "FriendMessage"],
+        exclude_ids=["astrbot"],
+        exclude_platforms=["webchat"],
+    )
+    assert manager_total == total
+    assert all(item.history == "[]" for item in manager_summary)
+    assert all(json.loads(item.history) == [] for item in manager_summary)
 
     title_matches, _ = await db.get_filtered_conversations(
         search_query="中文标题",

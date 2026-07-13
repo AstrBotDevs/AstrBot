@@ -79,7 +79,7 @@ class ConversationManager:
             platform_id=conv_v2.platform_id,
             user_id=conv_v2.user_id,
             cid=conv_v2.conversation_id,
-            history=json.dumps(conv_v2.content or []) if include_history else "",
+            history=json.dumps(conv_v2.content or []) if include_history else "[]",
             title=conv_v2.title,
             persona_id=conv_v2.persona_id,
             created_at=created_at,
