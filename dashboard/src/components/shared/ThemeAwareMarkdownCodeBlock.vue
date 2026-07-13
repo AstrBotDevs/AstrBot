@@ -2,7 +2,12 @@
   <MarkdownCodeBlockNode
     :key="themeRenderKey"
     v-bind="forwardedBindings"
-    @copy="copyToClipboard"
+    @copy="
+      (payload) =>
+        typeof payload === 'string' &&
+        shouldUseClipboardFallback &&
+        copyToClipboard(payload)
+    "
   >
     <template
       v-for="(_, slotName) in $slots"
@@ -27,6 +32,12 @@ const props = defineProps<{
   node: Record<string, unknown>;
   isDark?: boolean;
 }>();
+
+const shouldUseClipboardFallback =
+  typeof window !== "undefined" &&
+  (!window.isSecureContext ||
+    typeof navigator === "undefined" ||
+    !navigator.clipboard?.writeText);
 
 const injectedIsDark = inject<Ref<boolean> | boolean>("isDark");
 const effectiveIsDark = computed(
