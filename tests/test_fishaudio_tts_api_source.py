@@ -81,4 +81,5 @@ async def test_fishaudio_tts_sends_configured_model_header(
         "content-type": "application/msgpack",
         "model": expected_model,
     }
+    assert provider.headers == {"Authorization": "Bearer test-key"}
     assert Path(audio_path).read_bytes() == b"test-audio"

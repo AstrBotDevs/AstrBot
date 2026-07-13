@@ -144,7 +144,6 @@ class ProviderFishAudioTTSAPI(TTSProvider):
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
         path = os.path.join(temp_dir, f"fishaudio_tts_api_{uuid.uuid4()}.wav")
-        self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)
         async with AsyncClient(
             base_url=self.api_base,
@@ -153,7 +152,11 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         ).stream(
             "POST",
             "/tts",
-            headers={**self.headers, "model": self.model_name},
+            headers={
+                **self.headers,
+                "content-type": "application/msgpack",
+                "model": self.model_name,
+            },
             content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
         ) as response:
             if response.status_code == 200 and response.headers.get(
