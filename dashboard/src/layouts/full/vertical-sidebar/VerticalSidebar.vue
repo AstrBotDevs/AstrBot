@@ -1,5 +1,5 @@
 <script setup>
-import { ref, shallowRef, onMounted, onUnmounted, watch } from 'vue';
+import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems, { MORE_GROUP_KEY } from './sidebarItem';
@@ -108,8 +108,11 @@ const maxSidebarWidth = 300;
 const isResizing = ref(false);
 
 const isMobile = window.innerWidth < 768;
+const isRailSidebar = computed(() => !isMobile && customizer.mini_sidebar);
 if (isMobile) {
   customizer.Sidebar_drawer = false;
+} else {
+  customizer.Sidebar_drawer = true;
 }
 
 function startSidebarResize(event) {
@@ -156,23 +159,39 @@ function startSidebarResize(event) {
     app
     class="leftSidebar"
     :width="sidebarWidth"
-    :rail="customizer.mini_sidebar"
+    :rail="isRailSidebar"
   >
     <div class="sidebar-container">
-      <v-list :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': customizer.mini_sidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
+      <div v-if="!isRailSidebar" class="sidebar-brand">
+        <img
+          class="sidebar-brand-logo"
+          src="@/assets/images/plugin_icon.png"
+          alt="AstrBot logo"
+        >
+        <div class="sidebar-brand-copy">
+          <span class="sidebar-brand-title">AstrBot</span>
+          <span class="sidebar-brand-subtitle">WebUI</span>
+        </div>
+      </div>
+
+      <v-list :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': isRailSidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
         <template v-for="(item, i) in sidebarMenu" :key="item.title || item.to || `sidebar-item-${i}`">
-          <NavItem :item="item" class="leftPadding" />
+          <NavItem :item="item" class="leftPadding" :rail="isRailSidebar" />
         </template>
       </v-list>
-      <div class="sidebar-footer" v-if="!customizer.mini_sidebar">
-        <v-btn class="sidebar-footer-btn" size="small" variant="tonal" color="primary" to="/settings" prepend-icon="mdi-cog">
-          {{ t('core.navigation.settings') }}
+      <div class="sidebar-footer">
+        <v-btn class="sidebar-footer-btn" :class="{ 'sidebar-footer-icon-btn': isRailSidebar }" :size="isRailSidebar ? 'default' : 'small'"
+          variant="text" to="/settings"
+          :prepend-icon="isRailSidebar ? undefined : 'mdi-cog'" :aria-label="t('core.navigation.settings')">
+          <v-icon v-if="isRailSidebar" icon="mdi-cog" />
+          <template v-else>{{ t('core.navigation.settings') }}</template>
+          <v-tooltip v-if="isRailSidebar" activator="parent" location="right" :text="t('core.navigation.settings')" open-delay="180" />
         </v-btn>
       </div>
     </div>
     
     <div 
-      v-if="!customizer.mini_sidebar && customizer.Sidebar_drawer"
+      v-if="!isRailSidebar && !isMobile && customizer.Sidebar_drawer"
       class="sidebar-resize-handle"
       @mousedown="startSidebarResize"
       :class="{ 'resizing': isResizing }"
@@ -223,5 +242,76 @@ function startSidebarResize(event) {
 /* 确保侧边栏容器支持相对定位 */
 .leftSidebar .v-navigation-drawer__content {
   position: relative;
+}
+
+.leftSidebar:not(.v-navigation-drawer--rail) .sidebar-footer {
+  align-items: stretch;
+  padding: 10px 16px 16px !important;
+  border-top: 1px solid rgba(var(--v-theme-borderLight), 0.35);
+}
+
+.leftSidebar:not(.v-navigation-drawer--rail) .sidebar-footer-btn {
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 40px;
+  justify-content: flex-start !important;
+  border-radius: 12px !important;
+  color: rgba(var(--v-theme-on-surface), 0.76);
+  font-weight: 500;
+  letter-spacing: 0;
+  padding-inline: 12px !important;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.leftSidebar:not(.v-navigation-drawer--rail) .sidebar-footer-btn:hover,
+.leftSidebar:not(.v-navigation-drawer--rail) .sidebar-footer-btn.v-btn--active {
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.09);
+}
+
+.leftSidebar:not(.v-navigation-drawer--rail) .sidebar-footer-btn :deep(.v-btn__content) {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid rgba(var(--v-theme-borderLight), 0.35);
+  flex-shrink: 0;
+}
+
+.sidebar-brand-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.sidebar-brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.1;
+}
+
+.sidebar-brand-title {
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sidebar-brand-subtitle {
+  margin-top: 3px;
+  color: rgba(var(--v-theme-on-surface), 0.58);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 </style>
