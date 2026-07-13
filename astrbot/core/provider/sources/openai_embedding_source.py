@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urlparse
 
 import httpx
 from openai import AsyncOpenAI
@@ -70,6 +71,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         kwargs = {}
         dimensions_mode = self.provider_config.get("embedding_dimensions_mode", "auto")
         if dimensions_mode not in {"auto", "always", "never"}:
+            logger.warning(
+                f"Unknown embedding_dimensions_mode in embedding configs: '{dimensions_mode}', fallback to 'auto'."
+            )
             dimensions_mode = "auto"
         send_dimensions = dimensions_mode == "always"
         if dimensions_mode == "auto":
@@ -79,18 +83,23 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 )
                 or "https://api.openai.com/v1"
             )
-            model = getattr(
-                self,
-                "model",
-                self.provider_config.get("embedding_model", "text-embedding-3-small"),
+            parsed_api_base = urlparse(api_base)
+            model = (
+                getattr(self, "model", None)
+                or self.provider_config.get("embedding_model")
+                or "text-embedding-3-small"
             )
-            model_lower = model.lower()
+            model_lower = str(model).lower()
+            model_name = model_lower.rsplit("/", 1)[-1]
             send_dimensions = (
-                api_base == "https://api.openai.com/v1"
-                and model_lower.startswith("text-embedding-3")
+                parsed_api_base.scheme == "https"
+                and parsed_api_base.hostname == "api.openai.com"
+                and parsed_api_base.path.rstrip("/") == "/v1"
+                and model_name.startswith("text-embedding-3")
             ) or (
-                api_base.startswith("https://api.siliconflow.cn")
-                and model_lower.startswith("qwen")
+                parsed_api_base.scheme == "https"
+                and parsed_api_base.hostname == "api.siliconflow.cn"
+                and model_name.startswith("qwen")
             )
         if send_dimensions and "embedding_dimensions" in self.provider_config:
             try:
