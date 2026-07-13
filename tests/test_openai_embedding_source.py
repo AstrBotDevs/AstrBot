@@ -21,20 +21,45 @@ def test_openai_embedding_api_base_adds_default_version():
     )
 
 
-def test_openai_embedding_dimensions_are_local_by_default():
+def test_openai_embedding_dimensions_auto_sends_for_official_openai_embedding_3():
     provider = OpenAIEmbeddingProvider.__new__(OpenAIEmbeddingProvider)
     provider.provider_config = {"embedding_dimensions": 1024}
+    provider.model = "text-embedding-3-small"
 
     assert provider.get_dim() == 1024
+    assert provider._embedding_kwargs() == {"dimensions": 1024}
+
+
+def test_openai_embedding_dimensions_auto_skips_custom_api_base():
+    provider = OpenAIEmbeddingProvider.__new__(OpenAIEmbeddingProvider)
+    provider.provider_config = {
+        "embedding_api_base": "https://api.siliconflow.cn/v1",
+        "embedding_dimensions": 1024,
+        "embedding_dimensions_mode": "auto",
+    }
+    provider.model = "BAAI/bge-m3"
+
     assert provider._embedding_kwargs() == {}
 
 
-def test_openai_embedding_dimensions_are_sent_when_enabled():
+def test_openai_embedding_dimensions_are_sent_when_mode_is_always():
     provider = OpenAIEmbeddingProvider.__new__(OpenAIEmbeddingProvider)
     provider.provider_config = {
         "embedding_dimensions": 1024,
-        "send_embedding_dimensions": True,
+        "embedding_dimensions_mode": "always",
     }
 
     assert provider.get_dim() == 1024
     assert provider._embedding_kwargs() == {"dimensions": 1024}
+
+
+def test_openai_embedding_dimensions_are_local_when_mode_is_never():
+    provider = OpenAIEmbeddingProvider.__new__(OpenAIEmbeddingProvider)
+    provider.provider_config = {
+        "embedding_dimensions": 1024,
+        "embedding_dimensions_mode": "never",
+    }
+    provider.model = "text-embedding-3-small"
+
+    assert provider.get_dim() == 1024
+    assert provider._embedding_kwargs() == {}

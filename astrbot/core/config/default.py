@@ -1839,7 +1839,7 @@ CONFIG_METADATA_2 = {
                         "embedding_api_base": "",
                         "embedding_model": "",
                         "embedding_dimensions": 1024,
-                        "send_embedding_dimensions": False,
+                        "embedding_dimensions_mode": "auto",
                         "timeout": 20,
                         "proxy": "",
                     },
@@ -2212,10 +2212,11 @@ CONFIG_METADATA_2 = {
                         "hint": "嵌入向量的维度。根据模型不同，可能需要调整，请参考具体模型的文档。此配置项请务必填写正确，否则将导致向量数据库无法正常工作。",
                         "_special": "get_embedding_dim",
                     },
-                    "send_embedding_dimensions": {
-                        "description": "发送嵌入维度参数",
-                        "type": "bool",
-                        "hint": "是否在 OpenAI 兼容 Embedding 请求中发送 dimensions 参数。仅当目标 API 明确支持该参数时开启；多数第三方 OpenAI 兼容服务应保持关闭。",
+                    "embedding_dimensions_mode": {
+                        "description": "嵌入维度参数发送模式",
+                        "type": "string",
+                        "options": ["auto", "always", "never"],
+                        "hint": "控制是否在 OpenAI 兼容 Embedding 请求中发送 dimensions 参数。auto 会仅对官方 OpenAI embedding-3 模型自动发送；第三方兼容 API 如需该参数可改为 always，报错时改为 never。",
                     },
                     "embedding_model": {
                         "description": "嵌入模型",

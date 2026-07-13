@@ -66,11 +66,29 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         return [item.embedding for item in embeddings.data]
 
     def _embedding_kwargs(self) -> dict:
-        """构建嵌入请求的可选参数"""
+        """Build optional embedding request parameters."""
         kwargs = {}
-        if self.provider_config.get("send_embedding_dimensions") and (
-            "embedding_dimensions" in self.provider_config
-        ):
+        dimensions_mode = self.provider_config.get("embedding_dimensions_mode", "auto")
+        if dimensions_mode not in {"auto", "always", "never"}:
+            dimensions_mode = "auto"
+        send_dimensions = dimensions_mode == "always"
+        if dimensions_mode == "auto":
+            api_base = _normalize_api_base(
+                self.provider_config.get(
+                    "embedding_api_base", "https://api.openai.com/v1"
+                )
+                or "https://api.openai.com/v1"
+            )
+            model = getattr(
+                self,
+                "model",
+                self.provider_config.get("embedding_model", "text-embedding-3-small"),
+            )
+            send_dimensions = (
+                api_base == "https://api.openai.com/v1"
+                and model.lower().startswith("text-embedding-3")
+            )
+        if send_dimensions and "embedding_dimensions" in self.provider_config:
             try:
                 kwargs["dimensions"] = int(self.provider_config["embedding_dimensions"])
             except (ValueError, TypeError):
