@@ -1,18 +1,15 @@
 <script setup>
-import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from 'vue';
-import { useTheme } from 'vuetify';
+import { ref, shallowRef, onMounted, onUnmounted, watch } from 'vue';
 import { useCustomizerStore } from '../../../stores/customizer';
 import { useI18n } from '@/i18n/composables';
 import sidebarItems, { MORE_GROUP_KEY } from './sidebarItem';
 import NavItem from './NavItem.vue';
 import { applySidebarCustomization } from '@/utils/sidebarCustomization';
-import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 import { usePluginSidebarItems } from '@/composables/usePluginSidebarItems';
 
-const { t, locale } = useI18n();
+const { t } = useI18n();
 
 const customizer = useCustomizerStore();
-const theme = useTheme();
 const { pluginItems } = usePluginSidebarItems();
 
 function buildSidebarMenu() {
@@ -105,157 +102,14 @@ onUnmounted(() => {
   window.removeEventListener('sidebar-customization-changed', handleCustomEvent);
 });
 
-const showIframe = ref(false);
-const starCount = ref(null);
-
-// 更新日志对话框
-const changelogDialog = ref(false);
-
 const sidebarWidth = ref(235);
 const minSidebarWidth = 200;
 const maxSidebarWidth = 300;
 const isResizing = ref(false);
 
-const isDark = computed(() => customizer.uiTheme === 'PurpleThemeDark');
-const themeColors = computed(() => theme.current.value.colors);
-const iframeBackground = computed(() => isDark.value ? themeColors.value.surface || 'white' : 'white');
-const dragHeaderBackground = computed(() => isDark.value ? themeColors.value.mcpCardBg || themeColors.value.surface || 'white' : '#f0f0f0');
-const frameBorder = computed(() => `1px solid ${isDark.value ? (themeColors.value.borderLight || '#ccc') : '#ccc'}`);
-
 const isMobile = window.innerWidth < 768;
 if (isMobile) {
   customizer.Sidebar_drawer = false;
-}
-
-const dragPos = ref({ left: '', top: '' });
-
-const iframeStyle = computed(() => {
-  const base = isMobile
-    ? { position: 'fixed', top: '10%', left: '0%', width: '100%', height: '80%', zIndex: '1002' }
-    : { position: 'fixed', bottom: '16px', right: '16px', width: '490px', height: '640px', zIndex: '10000000' };
-  const pos = dragPos.value.left ? { left: dragPos.value.left, top: dragPos.value.top, bottom: 'auto', right: 'auto' } : {};
-  return {
-    ...base,
-    ...pos,
-    minWidth: '300px',
-    minHeight: '200px',
-    background: iframeBackground.value,
-    resize: 'both',
-    overflow: 'auto',
-    borderRadius: '12px',
-    boxShadow: isDark.value ? '0px 4px 16px rgba(0, 0, 0, 0.5)' : '0px 4px 12px rgba(0, 0, 0, 0.1)',
-  };
-});
-
-const iframeInnerStyle = computed(() => ({
-  width: '100%',
-  height: 'calc(100% - 66px)',
-  border: 'none',
-  borderBottomLeftRadius: '12px',
-  borderBottomRightRadius: '12px',
-  filter: isDark.value ? 'invert(0.88) hue-rotate(180deg)' : 'none',
-}));
-
-const dragHeaderStyle = computed(() => ({
-  width: '100%',
-  padding: '8px',
-  background: dragHeaderBackground.value,
-  borderBottom: frameBorder.value,
-  borderTopLeftRadius: '8px',
-  borderTopRightRadius: '8px',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  cursor: 'move'
-}));
-
-function toggleIframe() {
-  showIframe.value = !showIframe.value;
-}
-
-function openIframeLink(url) {
-  if (typeof window !== 'undefined') {
-    let url_ = url || "https://docs.astrbot.app";
-    window.open(url_, "_blank");
-  }
-}
-
-function openFaqLink() {
-  const faqUrl = locale.value === 'en-US'
-    ? 'https://docs.astrbot.app/en/faq.html'
-    : 'https://docs.astrbot.app/faq.html';
-  openIframeLink(faqUrl);
-}
-
-let offsetX = 0;
-let offsetY = 0;
-let isDragging = false;
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function startDrag(clientX, clientY) {
-  isDragging = true;
-  const dm = document.getElementById('draggable-iframe');
-  const rect = dm.getBoundingClientRect();
-  offsetX = clientX - rect.left;
-  offsetY = clientY - rect.top;
-  document.body.style.userSelect = 'none';
-  document.addEventListener('mousemove', onMouseMove);
-  document.addEventListener('mouseup', onMouseUp);
-  document.addEventListener('touchmove', onTouchMove, { passive: false });
-  document.addEventListener('touchend', onTouchEnd);
-}
-
-function onMouseDown(event) {
-  startDrag(event.clientX, event.clientY);
-}
-
-function onMouseMove(event) {
-  if (isDragging) {
-    moveAt(event.clientX, event.clientY);
-  }
-}
-
-function onMouseUp() {
-  endDrag();
-}
-
-function onTouchStart(event) {
-  if (event.touches.length === 1) {
-    const touch = event.touches[0];
-    startDrag(touch.clientX, touch.clientY);
-  }
-}
-
-function onTouchMove(event) {
-  if (isDragging && event.touches.length === 1) {
-    event.preventDefault();
-    const touch = event.touches[0];
-    moveAt(touch.clientX, touch.clientY);
-  }
-}
-
-function onTouchEnd() {
-  endDrag();
-}
-
-function moveAt(clientX, clientY) {
-  const dm = document.getElementById('draggable-iframe');
-  const newLeft = clamp(clientX - offsetX, 0, window.innerWidth - dm.offsetWidth);
-  const newTop = clamp(clientY - offsetY, 0, window.innerHeight - dm.offsetHeight);
-  // Sync dragged position to reactive variable
-  dragPos.value = { left: newLeft + 'px', top: newTop + 'px' };
-}
-
-function endDrag() {
-  isDragging = false;
-  document.body.style.userSelect = '';
-  document.removeEventListener('mousemove', onMouseMove);
-  document.removeEventListener('mouseup', onMouseUp);
-  document.removeEventListener('touchmove', onTouchMove);
-  document.removeEventListener('touchend', onTouchEnd);
 }
 
 function startSidebarResize(event) {
@@ -291,30 +145,6 @@ function startSidebarResize(event) {
   document.addEventListener('mouseup', onMouseUpResize);
 }
 
-function formatNumber(num) {
-  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-async function fetchStarCount() {
-  try {
-    const response = await fetch('https://cloud.astrbot.app/api/v1/github/repo-info');
-    const data = await response.json();
-    if (data.data && data.data.stargazers_count) {
-      starCount.value = data.data.stargazers_count;
-      console.debug('Fetched star count:', starCount.value);
-    }
-  } catch (error) {
-    console.debug('Failed to fetch star count:', error);
-  }
-}
-
-fetchStarCount();
-
-// 打开更新日志对话框
-function openChangelogDialog() {
-  changelogDialog.value = true;
-}
-
 </script>
 
 <template>
@@ -338,29 +168,6 @@ function openChangelogDialog() {
         <v-btn class="sidebar-footer-btn" size="small" variant="tonal" color="primary" to="/settings" prepend-icon="mdi-cog">
           {{ t('core.navigation.settings') }}
         </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-note-text-outline"
-          @click="openChangelogDialog">
-          {{ t('core.navigation.changelog') }}
-        </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-book-open-variant"
-          @click="toggleIframe">
-          {{ t('core.navigation.documentation') }}
-        </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-frequently-asked-questions"
-          @click="openFaqLink">
-          {{ t('core.navigation.faq') }}
-        </v-btn>
-        <v-btn class="sidebar-footer-btn" size="small" variant="text" prepend-icon="mdi-github"
-          @click="openIframeLink('https://github.com/AstrBotDevs/AstrBot')">
-          {{ t('core.navigation.github') }}
-           <v-chip
-            v-if="starCount"
-            size="x-small"
-            variant="outlined"
-            class="ml-2"
-            style="font-weight: normal;"
-          >{{ formatNumber(starCount) }}</v-chip>
-        </v-btn>
       </div>
     </div>
     
@@ -373,44 +180,6 @@ function openChangelogDialog() {
     </div>
   </v-navigation-drawer>
   
-  <div
-    v-if="showIframe"
-    id="draggable-iframe"
-    :style="iframeStyle"
-  >
-
-    <div :style="dragHeaderStyle" @mousedown="onMouseDown" @touchstart="onTouchStart">
-      <div style="display: flex; align-items: center;">
-        <v-icon icon="mdi-cursor-move" />
-        <span style="margin-left: 8px;">{{ t('core.navigation.drag') }}</span>
-      </div>
-      <div style="display: flex; gap: 8px;">
-        <v-btn
-          icon
-          @click.stop="openIframeLink('https://docs.astrbot.app')"
-          @mousedown.stop
-          :style="{ borderRadius: '8px', border: frameBorder }"
-        >
-          <v-icon icon="mdi-open-in-new" />
-        </v-btn>
-        <v-btn
-          icon
-          @click.stop="toggleIframe"
-          @mousedown.stop
-          :style="{ borderRadius: '8px', border: frameBorder }"
-        >
-          <v-icon icon="mdi-close" />
-        </v-btn>
-      </div>
-    </div>
-    <iframe
-      src="https://docs.astrbot.app"
-      :style="iframeInnerStyle"
-      ></iframe>
-  </div>
-
-  <!-- 更新日志对话框 -->
-  <ChangelogDialog v-model="changelogDialog" />
 </template>
 
 <style scoped>
