@@ -203,7 +203,9 @@ class WebChatMessageEvent(AstrMessageEvent):
                 if text:
                     payload["text"] = text
 
-                await webchat_queue_mgr.put_back_queue(request_id, payload)
+                accepted = await webchat_queue_mgr.put_back_queue(request_id, payload)
+                if not accepted:
+                    return
                 continue
 
             # if chain.type == "break" and final_data:

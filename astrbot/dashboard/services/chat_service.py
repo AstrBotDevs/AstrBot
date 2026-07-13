@@ -990,7 +990,7 @@ class ChatService:
                     )
                 webchat_queue_mgr.remove_back_queue(message_id)
                 try:
-                    await flush_pending_bot_message()
+                    await asyncio.shield(flush_pending_bot_message())
                 except Exception as e:
                     logger.exception(
                         f"Failed to persist pending webchat message: {e}",

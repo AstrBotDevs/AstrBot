@@ -66,6 +66,8 @@ class WebChatQueueMgr:
         except asyncio.QueueFull:
             pass
 
+        # A full queue can block indefinitely after its SSE consumer disconnects.
+        # Race the pending write against queue closure so removal wakes the sender.
         put_task = asyncio.create_task(queue.put(data))
         close_task = asyncio.create_task(close_event.wait())
         try:
@@ -78,6 +80,7 @@ class WebChatQueueMgr:
             await put_task
             return True
         finally:
+            # Cancel and consume the losing task to avoid leaking pending tasks.
             for task in (put_task, close_task):
                 if not task.done():
                     task.cancel()
