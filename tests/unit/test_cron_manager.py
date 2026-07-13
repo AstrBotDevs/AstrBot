@@ -596,8 +596,128 @@ class TestRunActiveAgentJob:
 
         config = captured["config"]
         assert config.tool_call_timeout == 77
-        assert config.provider_settings is provider_settings
+        assert config.provider_settings is not provider_settings
         assert config.provider_settings["fallback_chat_models"] == ["fallback-provider"]
+        assert config.provider_settings["request_max_retries"] == 1
+        assert "request_max_retries" not in provider_settings
+
+    @pytest.mark.asyncio
+    async def test_woke_main_agent_allows_proactive_retry_override(
+        self, cron_manager
+    ):
+        """Test active cron agent can override request retries for proactive runs."""
+        provider_settings = {
+            "tool_call_timeout": 77,
+            "request_max_retries": 5,
+            "proactive_capability": {"request_max_retries": 2},
+        }
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": provider_settings,
+        }
+        cron_manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.history = "[]"
+
+        class FakeRunner:
+            def step_until_done(self, max_step):
+                async def gen():
+                    if False:
+                        yield None
+
+                return gen()
+
+            def get_final_llm_resp(self):
+                return None
+
+        captured = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            captured["config"] = config
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(return_value=None),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+
+        assert captured["config"].provider_settings["request_max_retries"] == 2
+        assert provider_settings["request_max_retries"] == 5
+
+    @pytest.mark.asyncio
+    async def test_woke_main_agent_uses_default_when_proactive_retry_is_none(
+        self, cron_manager
+    ):
+        """Test None proactive retry config falls back to the cron default."""
+        provider_settings = {
+            "request_max_retries": 5,
+            "proactive_capability": {"request_max_retries": None},
+        }
+        ctx = MagicMock()
+        ctx.get_config.return_value = {
+            "admins_id": [],
+            "provider_settings": provider_settings,
+        }
+        cron_manager.ctx = ctx
+
+        conv = MagicMock()
+        conv.history = "[]"
+
+        class FakeRunner:
+            def step_until_done(self, max_step):
+                async def gen():
+                    if False:
+                        yield None
+
+                return gen()
+
+            def get_final_llm_resp(self):
+                return None
+
+        captured = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            captured["config"] = config
+            return MagicMock(agent_runner=FakeRunner())
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                AsyncMock(return_value=conv),
+            ),
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.cron.manager.persist_agent_history",
+                AsyncMock(return_value=None),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="run scheduled task",
+                session_str="test:FriendMessage:user123",
+                extras={"cron_job": {"id": "job-1"}, "cron_payload": {}},
+            )
+
+        assert captured["config"].provider_settings["request_max_retries"] == 1
 
 
 class TestGetNextRunTime:

@@ -169,6 +169,7 @@ DEFAULT_CONFIG = {
         },
         "proactive_capability": {
             "add_cron_tools": True,
+            "request_max_retries": 1,
         },
         "computer_use_runtime": "none",
         "computer_use_require_admin": True,
@@ -2895,6 +2896,9 @@ CONFIG_METADATA_2 = {
                             "add_cron_tools": {
                                 "type": "bool",
                             },
+                            "request_max_retries": {
+                                "type": "int",
+                            },
                         },
                     },
                 },
@@ -3560,6 +3564,11 @@ CONFIG_METADATA_3 = {
                 "hint": "https://docs.astrbot.app/use/proactive-agent.html",
                 "type": "object",
                 "items": {
+                    "provider_settings.proactive_capability.request_max_retries": {
+                        "description": "LLM request retries",
+                        "type": "int",
+                        "hint": "Maximum retry attempts for proactive scheduled Agent LLM requests. Lower values prevent future tasks from waiting several minutes before trying fallback providers or failing fast.",
+                    },
                     "provider_settings.proactive_capability.add_cron_tools": {
                         "description": "启用",
                         "type": "bool",
