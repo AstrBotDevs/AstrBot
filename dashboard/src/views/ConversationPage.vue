@@ -71,7 +71,7 @@
                         class="elevation-0" :items-per-page="pagination.page_size"
                         :items-per-page-options="pageSizeOptions" show-select return-object
                         @update:options="handleTableOptions">
-                        <template v-slot:top v-if="listLoadState === 'error'">
+                        <template v-slot:top v-if="listLoadState === 'error' && conversations.length">
                             <v-alert type="error" variant="tonal" density="compact" class="ma-3" closable>
                                 {{ tm('messages.fetchError') }}
                                 <template v-slot:append>
