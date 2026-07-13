@@ -867,11 +867,16 @@ const currentTokenMetadata = computed(() => {
   const model = currentTokenProvider.value?.model;
   return model ? tokenModelMetadata.value[model] || null : null;
 });
-const latestTokenUsageTotal = computed(() => {
+const latestContextTokens = computed(() => {
   for (let index = activeMessages.value.length - 1; index >= 0; index -= 1) {
     const message = activeMessages.value[index];
     if (isUserMessage(message)) continue;
-    const usage = message.content?.agentStats?.token_usage;
+    const stats = message.content?.agentStats;
+    if (!stats) continue;
+    if (stats.current_context_tokens != null) {
+      return readTokenCount(stats.current_context_tokens);
+    }
+    const usage = stats.token_usage;
     if (!usage) continue;
     return (
       readTokenCount(usage.input_other) +
@@ -882,7 +887,7 @@ const latestTokenUsageTotal = computed(() => {
   return 0;
 });
 const tokenUsageIndicator = computed(() => {
-  const used = latestTokenUsageTotal.value;
+  const used = latestContextTokens.value;
   const limit = contextLimit(currentTokenProvider.value, currentTokenMetadata.value);
   if (used <= 0 || limit <= 0) return null;
 

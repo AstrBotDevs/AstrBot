@@ -142,6 +142,41 @@ class MockMixedContentToolExecutor:
         return generator()
 
 
+class VaryingUsageProvider(MockProvider):
+    """Return distinct token usage values for each tool-loop request."""
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.call_count += 1
+        usage = TokenUsage(
+            input_other=self.call_count * 100,
+            input_cached=self.call_count * 10,
+            output=self.call_count,
+        )
+        if self.call_count == 1:
+            return LLMResponse(
+                role="assistant",
+                tools_call_name=["test_tool"],
+                tools_call_args=[{"query": "test"}],
+                tools_call_ids=["call_varying_usage"],
+                usage=usage,
+            )
+        return LLMResponse(
+            role="assistant",
+            completion_text="final",
+            usage=usage,
+        )
+
+
+class MissingFinalUsageProvider(VaryingUsageProvider):
+    """Omit usage from the final response after reporting an earlier request."""
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        response = await super().text_chat(**kwargs)
+        if self.call_count == 2:
+            response.usage = None
+        return response
+
+
 class MockFailingProvider(MockProvider):
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -585,6 +620,63 @@ async def test_normal_completion_without_max_step(
 
     # 验证工具仍然可用（没有被禁用）
     assert runner.req.func_tool is not None, "正常完成时工具不应该被禁用"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_stats_separate_latest_context_from_cumulative_usage(
+    runner, provider_request, mock_tool_executor, mock_hooks, streaming
+):
+    """Context occupancy uses the latest input while usage remains cumulative."""
+    provider = VaryingUsageProvider()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert provider.call_count == 2
+    assert runner.stats.token_usage == TokenUsage(
+        input_other=300,
+        input_cached=30,
+        output=3,
+    )
+    assert runner.stats.current_context_tokens == 220
+    assert runner.stats.to_dict()["current_context_tokens"] == 220
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_stats_clear_current_context_when_latest_usage_is_missing(
+    runner, provider_request, mock_tool_executor, mock_hooks, streaming
+):
+    """Do not expose stale context occupancy when the latest usage is unknown."""
+    provider = MissingFinalUsageProvider()
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=streaming,
+    )
+
+    async for _ in runner.step_until_done(3):
+        pass
+
+    assert runner.stats.token_usage == TokenUsage(
+        input_other=100,
+        input_cached=10,
+        output=1,
+    )
+    assert runner.stats.current_context_tokens == 0
+    assert runner.stats.to_dict()["current_context_tokens"] == 0
 
 
 @pytest.mark.asyncio
