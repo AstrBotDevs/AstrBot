@@ -1,5 +1,5 @@
 <template>
-    <v-dialog v-model="showDialog" :max-width="$vuetify.display.smAndDown ? undefined : '1200px'" scrollable>
+    <v-dialog v-model="showDialog" :max-width="$vuetify.display.smAndDown ? undefined : '1200px'" scrollable persistent>
         <v-card class="persona-form-card" :class="{ 'persona-form-card-mobile': $vuetify.display.smAndDown }">
             <v-card-title class="persona-form-title text-h3 pa-4 pb-0 pl-6">
                 {{ editingPersona ? tm('dialog.edit.title') : tm('dialog.create.title') }}
