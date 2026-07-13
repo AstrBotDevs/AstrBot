@@ -409,8 +409,72 @@ class ProviderOpenAIOfficial(Provider):
         payloads: dict[str, Any],
         extra_body: dict[str, Any],
     ) -> None:
+        """Apply request compatibility adjustments for known providers.
+
+        Args:
+            payloads: Standard OpenAI request fields sent to the SDK.
+            extra_body: Provider-specific fields sent through ``extra_body``.
+        """
         provider = self.provider_config.get("provider")
         model = str(payloads.get("model", "")).lower()
+
+        # Spark Lite rejects system messages and function-calling fields. Keep
+        # this compatibility path limited to iFlytek's official endpoint and
+        # exact Lite model so Spark Max/Ultra and compatible proxies are intact.
+        if self.client.base_url.host == "spark-api-open.xf-yun.com" and model == "lite":
+            for field in (
+                "tools",
+                "tool_choice",
+                "parallel_tool_calls",
+                "functions",
+                "function_call",
+                "tool_calls_switch",
+            ):
+                payloads.pop(field, None)
+                extra_body.pop(field, None)
+
+            messages = payloads.get("messages")
+            if isinstance(messages, list):
+                system_parts: list[str] = []
+                compatible_messages: list[Any] = []
+                for message in messages:
+                    if not isinstance(message, dict):
+                        compatible_messages.append(message)
+                        continue
+
+                    role = message.get("role")
+                    if role == "system":
+                        content = message.get("content")
+                        if isinstance(content, str):
+                            if content:
+                                system_parts.append(content)
+                            continue
+                    compatible_messages.append(message)
+
+                if system_parts:
+                    system_prompt = "\n\n".join(system_parts)
+                    for index, message in enumerate(compatible_messages):
+                        if (
+                            isinstance(message, dict)
+                            and message.get("role") == "user"
+                            and isinstance(message.get("content"), str)
+                        ):
+                            user_message = dict(message)
+                            user_content = user_message.get("content", "")
+                            user_message["content"] = (
+                                f"{system_prompt}\n\n{user_content}"
+                                if user_content
+                                else system_prompt
+                            )
+                            compatible_messages[index] = user_message
+                            break
+                    else:
+                        compatible_messages.insert(
+                            0,
+                            {"role": "user", "content": system_prompt},
+                        )
+
+                payloads["messages"] = compatible_messages
 
         # NVIDIA's hosted MiniMax M3 endpoint can return empty choices when
         # max_tokens is omitted (#9206). Scope the compatibility default to

@@ -11,6 +11,7 @@ from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
@@ -1293,6 +1294,191 @@ async def test_apply_provider_specific_request_overrides_disables_ollama_thinkin
         assert "reasoning" not in extra_body
         assert "think" not in extra_body
         assert extra_body["temperature"] == 0.2
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("api_base", "model"),
+    [
+        ("https://spark-api-open.xf-yun.com/v1", "generalv3.5"),
+        ("https://spark-api-open.xf-yun.com/v1", "4.0Ultra"),
+        ("https://example.com/v1", "lite"),
+    ],
+)
+async def test_spark_lite_request_overrides_are_strictly_scoped(api_base, model):
+    """Leave Spark Max/Ultra and non-iFlytek Lite payloads unchanged."""
+    provider = _make_provider({"api_base": api_base, "model": model})
+    try:
+        payloads = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "persona"},
+                {"role": "user", "content": "hello"},
+                {"role": "tool", "tool_call_id": "call-1", "content": "result"},
+            ],
+            "tools": [{"type": "function"}],
+            "tool_choice": "auto",
+        }
+        extra_body = {"function_call": "auto"}
+
+        provider._apply_provider_specific_request_overrides(payloads, extra_body)
+
+        assert payloads == {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "persona"},
+                {"role": "user", "content": "hello"},
+                {"role": "tool", "tool_call_id": "call-1", "content": "result"},
+            ],
+            "tools": [{"type": "function"}],
+            "tool_choice": "auto",
+        }
+        assert extra_body == {"function_call": "auto"}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_spark_lite_does_not_drop_unsupported_history_content():
+    """Keep unsupported history content so fallback can handle the error."""
+    provider = _make_provider(
+        {
+            "api_base": "https://spark-api-open.xf-yun.com/v1",
+            "model": "lite",
+        }
+    )
+    try:
+        structured_content = [{"type": "text", "text": "persona"}]
+        messages = [
+            {"role": "system", "content": structured_content},
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"id": "call-1", "type": "function"}],
+            },
+            {"role": "tool", "tool_call_id": "call-1", "content": "result"},
+        ]
+        payloads = {
+            "model": "lite",
+            "messages": messages,
+        }
+
+        provider._apply_provider_specific_request_overrides(payloads, {})
+
+        assert payloads["messages"] == messages
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_spark_lite_query_removes_unsupported_request_fields(
+    monkeypatch,
+    streaming,
+):
+    """Send Spark Lite only supported roles and fields in both query paths."""
+    provider = _make_provider(
+        {
+            "api_base": "https://spark-api-open.xf-yun.com/v1",
+            "model": "lite",
+            "custom_extra_body": {
+                "temperature": 0.2,
+                "tool_calls_switch": True,
+            },
+        }
+    )
+    try:
+        captured_kwargs = {}
+
+        async def fake_stream():
+            yield ChatCompletionChunk.model_validate(
+                {
+                    "id": "chatcmpl-spark-lite",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": "lite",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                }
+            )
+
+        async def fake_create(**kwargs):
+            captured_kwargs.update(kwargs)
+            if streaming:
+                return fake_stream()
+            return ChatCompletion.model_validate(
+                {
+                    "id": "chatcmpl-spark-lite",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": "lite",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "ok"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 1,
+                        "completion_tokens": 1,
+                        "total_tokens": 2,
+                    },
+                }
+            )
+
+        monkeypatch.setattr(provider.client.chat.completions, "create", fake_create)
+
+        tools = ToolSet(
+            tools=[
+                FunctionTool(
+                    name="search",
+                    description="Search for information.",
+                    parameters={"type": "object", "properties": {}},
+                )
+            ]
+        )
+        payloads = {
+            "model": "lite",
+            "messages": [
+                {"role": "system", "content": "Follow the persona."},
+                {"role": "user", "content": "Hello."},
+                {"role": "assistant", "content": "Previous answer."},
+                {"role": "user", "content": "Continue."},
+            ],
+            "functions": [{"name": "legacy"}],
+            "function_call": "auto",
+            "parallel_tool_calls": True,
+        }
+
+        if streaming:
+            async for _ in provider._query_stream(payloads=payloads, tools=tools):
+                pass
+        else:
+            await provider._query(payloads=payloads, tools=tools)
+
+        assert captured_kwargs["messages"] == [
+            {"role": "user", "content": "Follow the persona.\n\nHello."},
+            {"role": "assistant", "content": "Previous answer."},
+            {"role": "user", "content": "Continue."},
+        ]
+        for field in (
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "functions",
+            "function_call",
+        ):
+            assert field not in captured_kwargs
+        assert captured_kwargs["extra_body"] == {"temperature": 0.2}
     finally:
         await provider.terminate()
 
