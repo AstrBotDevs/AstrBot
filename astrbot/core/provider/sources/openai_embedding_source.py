@@ -84,9 +84,13 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
                 "model",
                 self.provider_config.get("embedding_model", "text-embedding-3-small"),
             )
+            model_lower = model.lower()
             send_dimensions = (
                 api_base == "https://api.openai.com/v1"
-                and model.lower().startswith("text-embedding-3")
+                and model_lower.startswith("text-embedding-3")
+            ) or (
+                api_base.startswith("https://api.siliconflow.cn")
+                and model_lower.startswith("qwen")
             )
         if send_dimensions and "embedding_dimensions" in self.provider_config:
             try:

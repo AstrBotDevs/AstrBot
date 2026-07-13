@@ -42,6 +42,18 @@ def test_openai_embedding_dimensions_auto_skips_custom_api_base():
     assert provider._embedding_kwargs() == {}
 
 
+def test_openai_embedding_dimensions_auto_sends_for_siliconflow_qwen():
+    provider = OpenAIEmbeddingProvider.__new__(OpenAIEmbeddingProvider)
+    provider.provider_config = {
+        "embedding_api_base": "https://api.siliconflow.cn/v1",
+        "embedding_dimensions": 1024,
+        "embedding_dimensions_mode": "auto",
+    }
+    provider.model = "Qwen/Qwen3-Embedding-4B"
+
+    assert provider._embedding_kwargs() == {"dimensions": 1024}
+
+
 def test_openai_embedding_dimensions_are_sent_when_mode_is_always():
     provider = OpenAIEmbeddingProvider.__new__(OpenAIEmbeddingProvider)
     provider.provider_config = {
