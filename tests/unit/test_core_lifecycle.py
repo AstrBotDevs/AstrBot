@@ -77,6 +77,48 @@ class TestAstrBotCoreLifecycleInit:
             assert "localhost" in os.environ.get("no_proxy", "")
             assert "127.0.0.1" in os.environ.get("no_proxy", "")
 
+    @pytest.mark.parametrize(
+        ("configured_proxy", "expected_proxy"),
+        [
+            ("127.0.0.1:7890", "http://127.0.0.1:7890"),
+            ("  proxy.example.com:8080  ", "http://proxy.example.com:8080"),
+            (" http://proxy.example.com:8080 ", "http://proxy.example.com:8080"),
+            (" https://proxy.example.com:8080 ", "https://proxy.example.com:8080"),
+            ("socks5://proxy.example.com:1080", "socks5://proxy.example.com:1080"),
+            ("   ", None),
+            (None, None),
+        ],
+    )
+    def test_init_normalizes_proxy_scheme(
+        self,
+        configured_proxy,
+        expected_proxy,
+        mock_log_broker,
+        mock_db,
+        mock_astrbot_config,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Normalize configured proxies before exporting environment variables."""
+        mock_astrbot_config.get = MagicMock(
+            side_effect=lambda key, default="": {
+                "http_proxy": configured_proxy,
+                "no_proxy": [],
+            }.get(key, default)
+        )
+        monkeypatch.delenv("http_proxy", raising=False)
+        monkeypatch.delenv("https_proxy", raising=False)
+        monkeypatch.delenv("no_proxy", raising=False)
+
+        with patch("astrbot.core.core_lifecycle.astrbot_config", mock_astrbot_config):
+            AstrBotCoreLifecycle(mock_log_broker, mock_db)
+
+        if expected_proxy is None:
+            assert "http_proxy" not in os.environ
+            assert "https_proxy" not in os.environ
+        else:
+            assert os.environ.get("http_proxy") == expected_proxy
+            assert os.environ.get("https_proxy") == expected_proxy
+
     def test_init_clears_proxy(
         self,
         mock_log_broker,
