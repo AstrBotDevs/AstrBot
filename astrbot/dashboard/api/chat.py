@@ -178,6 +178,28 @@ async def stop_chat_session(
     return await _run(lambda: service.stop_session(auth.username, session_id))
 
 
+@router.get("/chat/runs/{run_id}/stream")
+async def resume_chat_run(
+    run_id: str,
+    auth: AuthContext = Depends(require_chat_scope),
+    service: ChatService = Depends(get_service),
+):
+    try:
+        stream = await service.build_chat_run_stream(auth.username, run_id)
+    except ChatServiceError:
+        return JSONResponse(error("Chat run is unavailable"))
+
+    return StreamingResponse(
+        stream,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Transfer-Encoding": "chunked",
+            "Connection": "keep-alive",
+        },
+    )
+
+
 @router.patch("/chat/sessions/{session_id}/messages/{message_id}")
 async def update_chat_message(
     session_id: str,

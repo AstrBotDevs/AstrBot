@@ -1799,6 +1799,31 @@
         }
       }
     },
+    "/api/v1/chat/runs/{run_id}/stream": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Resume an active webchat run as an SSE stream",
+        "operationId": "resumeChatRun",
+        "x-astrbot-scope": "chat",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumed server-sent chat stream or an error envelope"
+          }
+        }
+      }
+    },
     "/api/v1/chat/sessions/{session_id}/messages/{message_id}": {
       "patch": {
         "tags": [

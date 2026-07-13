@@ -795,6 +795,9 @@ export const chatApi = {
   sendStreamUrl() {
     return '/api/v1/chat';
   },
+  resumeRunStreamUrl(runId: string) {
+    return `/api/v1/chat/runs/${encodeURIComponent(runId)}/stream`;
+  },
   liveWebSocketUrl(token: string, host = window.location.host) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${host}/api/v1/live-chat/ws?token=${encodeURIComponent(token)}`;

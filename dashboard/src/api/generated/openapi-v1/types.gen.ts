@@ -1371,6 +1371,16 @@ export type StopChatSessionResponse = (SuccessEnvelope);
 
 export type StopChatSessionError = unknown;
 
+export type ResumeChatRunData = {
+    path: {
+        run_id: string;
+    };
+};
+
+export type ResumeChatRunResponse = (unknown);
+
+export type ResumeChatRunError = unknown;
+
 export type UpdateChatMessageData = {
     body: ChatMessagePatchRequest;
     path: {
