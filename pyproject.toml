@@ -65,7 +65,7 @@ dependencies = [
   "python-socks>=2.8.0",
   "pysocks>=1.7.1",
   "packaging>=24.2",
-  "python-ripgrep==0.0.8",
+  "python-ripgrep==0.0.8 ; python_version < '3.14'",
   "pyotp>=2.9.0",
 ]
 
