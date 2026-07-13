@@ -246,6 +246,14 @@ async def run_agent(
                 if stream_to_general and resp.type == "streaming_delta":
                     continue
 
+                if (
+                    resp.type == "err"
+                    and agent_runner.streaming
+                    and not stream_to_general
+                ):
+                    yield resp.data["chain"]
+                    continue
+
                 if stream_to_general or not agent_runner.streaming:
                     if can_buffer_llm_result and resp.type == "llm_result":
                         buffered_llm_chains.append(resp.data["chain"])
