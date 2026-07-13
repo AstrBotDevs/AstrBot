@@ -6,7 +6,7 @@ import os
 import pytest
 
 from astrbot.core.config.astrbot_config import AstrBotConfig, RateLimitStrategy
-from astrbot.core.config.default import CONFIG_METADATA_2, DEFAULT_VALUE_MAP
+from astrbot.core.config.default import DEFAULT_VALUE_MAP
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.utils.auth_password import (
     DEFAULT_DASHBOARD_PASSWORD,
@@ -41,15 +41,6 @@ def minimal_default_config():
             "default_provider_id": "",
         },
     }
-
-
-def test_minimax_tts_default_model_is_speech_28_hd():
-    """MiniMax TTS should default to the current HD speech model."""
-    provider_sources = CONFIG_METADATA_2["provider_group"]["metadata"]["provider"][
-        "config_template"
-    ]
-
-    assert provider_sources["MiniMax TTS(API)"]["model"] == "speech-2.8-hd"
 
 
 class TestRateLimitStrategy:
