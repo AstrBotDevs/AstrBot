@@ -53,13 +53,63 @@ def on_error(func, path, exc_info) -> None:
         raise exc_info[1]
 
 
+def _force_remove_file_windows(path: str, retries: int = 5, delay: float = 0.1) -> None:
+    """在 Windows 上强制删除被占用的文件，带重试。"""
+    import stat
+
+    try:
+        os.chmod(path, stat.S_IWUSR | stat.S_IRUSR)
+    except Exception:
+        pass
+
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            os.remove(path)
+            return
+        except PermissionError as e:
+            last_exc = e
+            if attempt < retries - 1:
+                time.sleep(delay)
+        except FileNotFoundError:
+            return
+
+    raise PermissionError(
+        f"无法删除文件（已重试 {retries} 次），文件可能仍被其他进程占用: {path}"
+    ) from last_exc
+
+
+def _on_error_windows(func, path, exc_info) -> None:
+    """rmtree 的 Windows 错误回调，对被锁定的文件做重试。"""
+    import stat
+
+    exc = exc_info[1]
+    win_error = getattr(exc, "winerror", None)
+    if win_error in (5, 32) and func is os.unlink:
+        _force_remove_file_windows(path)
+        return
+
+    if not os.access(path, os.W_OK):
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        raise exc
+
+
 def remove_dir(file_path: str) -> bool:
     if not os.path.lexists(file_path):
         return True
     if os.path.isfile(file_path) or os.path.islink(file_path):
-        os.remove(file_path)
+        try:
+            os.remove(file_path)
+        except PermissionError:
+            if os.name == "nt":
+                _force_remove_file_windows(file_path)
+            else:
+                raise
     else:
-        shutil.rmtree(file_path, onerror=on_error)
+        error_handler = _on_error_windows if os.name == "nt" else on_error
+        shutil.rmtree(file_path, onerror=error_handler)
     return True
 
 
