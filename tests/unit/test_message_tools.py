@@ -207,6 +207,7 @@ async def test_send_message_keeps_aiocqhttp_text_at_forward_threshold():
     ctx.context.context.get_config = lambda umo: {
         "platform_settings": {"forward_threshold": 5}
     }
+    ctx.context.event.get_platform_name = lambda: "aiocqhttp"
 
     result = await tool.call(
         ctx,
