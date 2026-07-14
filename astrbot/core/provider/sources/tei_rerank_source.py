@@ -20,7 +20,9 @@ class TEIRerankProvider(RerankProvider):
         self.provider_config = provider_config
         self.provider_settings = provider_settings
         self.api_key = provider_config.get("rerank_api_key", "")
-        self.base_url = provider_config.get("rerank_api_base", "http://127.0.0.1:8080").rstrip("/")
+        self.base_url = provider_config.get(
+            "rerank_api_base", "http://127.0.0.1:8080"
+        ).rstrip("/")
         self.timeout = provider_config.get("timeout", 20)
         self.truncate = provider_config.get("tei_rerank_truncate", False)
         self.truncation_direction = provider_config.get(
@@ -47,7 +49,9 @@ class TEIRerankProvider(RerankProvider):
             logger.error("[TEI Rerank] Client session is not initialized or closed")
             return []
         if not documents:
-            logger.warning("[TEI Rerank] Document list is empty, returning empty results")
+            logger.warning(
+                "[TEI Rerank] Document list is empty, returning empty results"
+            )
             return []
         if not query.strip():
             logger.warning("[TEI Rerank] Query is empty, returning empty results")
@@ -83,9 +87,7 @@ class TEIRerankProvider(RerankProvider):
                     logger.error(
                         f"[TEI Rerank] API returned HTTP {response.status}: {error_msg}"
                     )
-                    raise Exception(
-                        f"TEI Rerank HTTP {response.status}: {error_msg}"
-                    )
+                    raise Exception(f"TEI Rerank HTTP {response.status}: {error_msg}")
 
                 response_data = await response.json()
 
@@ -108,7 +110,9 @@ class TEIRerankProvider(RerankProvider):
                 if top_n is not None and top_n > 0:
                     results = results[:top_n]
 
-                logger.debug(f"[TEI Rerank] Successfully returned {len(results)} results")
+                logger.debug(
+                    f"[TEI Rerank] Successfully returned {len(results)} results"
+                )
                 return results
 
         except aiohttp.ClientError as e:
