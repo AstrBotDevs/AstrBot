@@ -25,7 +25,7 @@ from tenacity import (
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
 
@@ -304,9 +304,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             plain_text = plain_text + "\n"
 
-        # 根据消息链的 use_markdown_ 标记决定发送模式
+        # QQ only resolves <@openid> mentions in Markdown messages.
+        has_mention = any(
+            isinstance(item, At) and str(item.qq) != "all"
+            for item in message_to_send.chain
+        )
         use_md = getattr(self.send_buffer, "use_markdown_", None)
-        if use_md is False:
+        if use_md is False and not has_mention:
             payload: dict = {
                 "content": plain_text,
                 "msg_type": 0,
@@ -741,6 +745,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
+            elif isinstance(i, At):
+                qq_id = str(getattr(i, "qq", ""))
+                if qq_id and qq_id != "all":
+                    plain_text += f"<@{qq_id}>"
             elif isinstance(i, Image) and not image_base64:
                 if not i.file:
                     raise ValueError("Unsupported image file format")
