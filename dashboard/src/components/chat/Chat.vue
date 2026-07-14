@@ -890,31 +890,9 @@ const todoBarStyle = computed(() => {
 
 function startDragTodoBar(e: MouseEvent) {
   if (!todoBarPos.value) {
-    // 第一次出现: 把 todoBarPos 锚定到"鼠标按下的瞬间气泡的真实位置",
-    // 这样 (a) 不会瞬移, (b) actuallyStartDrag 里的 barStartLeft/Top
-    // 与 mouseStartX/Y 天然对齐,后续 drag 的 delta 计算正确。
-    const bar = document.querySelector(
-      ".todo-summary-bar",
-    ) as HTMLElement | null;
-    const main = document.querySelector(".chat-main") as HTMLElement | null;
-    if (bar && main) {
-      const barRect = bar.getBoundingClientRect();
-      const mainRect = main.getBoundingClientRect();
-      const offsetX = e.clientX - barRect.left;
-      const offsetY = e.clientY - barRect.top;
-      const desiredLeft = e.clientX - offsetX;
-      const desiredTop = e.clientY - offsetY;
-      todoBarPos.value = clampBarPos(
-        desiredLeft,
-        desiredTop,
-        barRect,
-        mainRect,
-      );
-      actuallyStartDrag(e);
-      return;
-    }
-    // 兜底:元素尚未挂载时退回到原始的居中初始化逻辑
+    // 第一次出现: 同步初始化位置,然后进入拖动
     initTodoBarPos();
+    // 等下一帧位置就绪后再开始 drag,否则 mouseStart 基准是错的
     nextTick(() => {
       if (todoBarPos.value) actuallyStartDrag(e);
     });
@@ -1206,16 +1184,11 @@ const currentTokenMetadata = computed(() => {
   const model = currentTokenProvider.value?.model;
   return model ? tokenModelMetadata.value[model] || null : null;
 });
-const latestContextTokens = computed(() => {
+const latestTokenUsageTotal = computed(() => {
   for (let index = activeMessages.value.length - 1; index >= 0; index -= 1) {
     const message = activeMessages.value[index];
     if (isUserMessage(message)) continue;
-    const stats = message.content?.agentStats;
-    if (!stats) continue;
-    if (stats.current_context_tokens != null) {
-      return readTokenCount(stats.current_context_tokens);
-    }
-    const usage = stats.token_usage;
+    const usage = message.content?.agentStats?.token_usage;
     if (!usage) continue;
     return (
       readTokenCount(usage.input_other) +
@@ -1226,7 +1199,7 @@ const latestContextTokens = computed(() => {
   return 0;
 });
 const tokenUsageIndicator = computed(() => {
-  const used = latestContextTokens.value;
+  const used = latestTokenUsageTotal.value;
   const limit = contextLimit(
     currentTokenProvider.value,
     currentTokenMetadata.value,
