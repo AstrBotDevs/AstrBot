@@ -121,7 +121,7 @@ class TEIRerankProvider(RerankProvider):
     async def test(self) -> None:
         if not self.client or self.client.closed:
             raise Exception("TEI Rerank client session is not initialized")
-        
+
         health_url = f"{self.base_url}/health"
         try:
             async with self.client.get(health_url) as response:
