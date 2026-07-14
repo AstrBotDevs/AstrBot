@@ -307,9 +307,12 @@
       "toolbar": {
         "expandAll": "Expand all",
         "collapseAll": "Collapse all",
+        "selectAll": "Select all",
+        "deselectAll": "Deselect all",
         "selectedCount": "{count} selected",
         "stageSelected": "Stage ({count})",
         "unstageSelected": "Unstage ({count})",
+        "restoreSelected": "Restore changes ({count})",
         "clearSelection": "Clear selection",
         "selectAllInGroup": "Select all in {label}",
         "selectFile": "Select {path}"
@@ -382,6 +385,7 @@
           "empty": "No comments yet",
           "closeButton": "Close",
           "clearAllButton": "Clear all",
+          "clearAllConfirm": "Delete all comments? This cannot be undone.",
           "deleteButton": "Delete this comment",
           "lineLabel": "L {line}",
           "openWithCount": "Open comments preview ({count})",
@@ -508,10 +512,15 @@
         "buttonAria": "Restore file {path}",
         "confirmTitle": "Restore file?",
         "confirmMessage": "This will discard all uncommitted changes to \"{path}\". This cannot be undone.",
+        "confirmTitleMultiple": "Restore {count} files?",
+        "confirmMessageMultiple": "This will discard all uncommitted changes in {count} selected files. This cannot be undone.",
         "confirmAction": "Restore",
         "confirmCancel": "Cancel",
         "success": "Restored {path}",
+        "successMultiple": "Restored {count} files",
+        "successPartial": "Restored {success} of {total} files ({failed} failed)",
         "error": {
+          "allFailed": "Failed to restore any of the {count} selected files",
           "reason": {
             "network": "Network error",
             "unknown": "Restore failed ({reason})",
@@ -728,6 +737,78 @@
       "activeTooltipMulti": "Plan mode is on · {count} build turns this session · Click to switch to Build",
       "activeSegment": "Plan mode",
       "inactiveSegment": "Build mode"
+    },
+    "gitDiffSidebar": {
+      "tabs": {
+        "docs": "Documents"
+      }
+    },
+    "documentManager": {
+      "pathBar": {
+        "label": "Docs root",
+        "editHint": "Click to edit path",
+        "resetTitle": "Reset to default docs/",
+        "goUpTitle": "Go up one level",
+        "invalidPath": "Invalid path: must be a project-relative path",
+        "storageWarning": "Browser storage is unavailable; settings will not persist after this session"
+      },
+      "pane": {
+        "collapseTree": "Hide tree",
+        "expandTree": "Show tree",
+        "collapseHistory": "Hide history",
+        "expandHistory": "Show history"
+      },
+      "tree": {
+        "empty": "No .md files in this directory",
+        "noHistory": "This document has no commit history yet",
+        "loadError": "Failed to load directory tree: {reason}",
+        "pathMissing": "Path '{path}' does not exist; reverting to default in 5 seconds"
+      },
+      "viewMode": {
+        "raw": "Raw",
+        "rendered": "Rendered",
+        "diff": "Diff vs current",
+        "viewingRevision": "Viewing historical revision {sha}",
+        "backToCurrent": "Back to current"
+      },
+      "raw": {
+        "binaryPlaceholder": "Binary file — cannot display as raw",
+        "emptyPlaceholder": "Empty file",
+        "loading": "Preparing view…"
+      },
+      "history": {
+        "title": "History",
+        "currentPlaceholder": "Working tree",
+        "viewThisRevision": "View this revision",
+        "compareWithCurrent": "Diff vs current",
+        "loadFail": "Failed to read history"
+      },
+      "editor": {
+        "newFile": "New",
+        "createFilePlaceholder": "File name, e.g. plan.md or notes.txt",
+        "filenameInvalid": "File name must end in .md or .txt and only contain letters/digits/_/-/spaces/.",
+        "filenameExists": "A file with that name already exists",
+        "edit": "Edit",
+        "save": "Save",
+        "saving": "Saving",
+        "cancel": "Cancel",
+        "cancelDirty": "You have unsaved changes. Discard them?",
+        "delete": "Delete",
+        "rename": "Rename",
+        "renameUnavailable": "Rename is now available",
+        "deleteConfirmTitle": "Delete document?",
+        "deleteConfirmBody": "Will permanently delete {path}",
+        "saveError": "Save failed",
+        "deleteError": "Delete failed"
+      },
+      "fullscreen": {
+        "enter": "Enter fullscreen",
+        "exit": "Exit fullscreen",
+        "openDrawer": "Open file tree"
+      },
+      "newFile": "Select a .md file or create one",
+      "noFileSelected": "Select a document to begin",
+      "noProject": "Load a project to begin"
     }
   },
   "copy": {

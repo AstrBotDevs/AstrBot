@@ -296,9 +296,12 @@
       "toolbar": {
         "expandAll": "Развернуть все",
         "collapseAll": "Свернуть все",
+        "selectAll": "Выбрать все",
+        "deselectAll": "Снять выбор",
         "selectedCount": "Выбрано: {count}",
         "stageSelected": "В индекс ({count})",
         "unstageSelected": "Из индекса ({count})",
+        "restoreSelected": "Отменить изменения ({count})",
         "clearSelection": "Очистить выбор",
         "selectAllInGroup": "Выбрать всё в {label}",
         "selectFile": "Выбрать {path}"
@@ -441,10 +444,15 @@
         "buttonAria": "Восстановить файл {path}",
         "confirmTitle": "Восстановить файл?",
         "confirmMessage": "Это отменит все незафиксированные изменения в \"{path}\". Действие необратимо.",
+        "confirmTitleMultiple": "Восстановить {count} файлов?",
+        "confirmMessageMultiple": "Это отменит все незафиксированные изменения в {count} выбранных файлах. Действие необратимо.",
         "confirmAction": "Восстановить",
         "confirmCancel": "Отмена",
         "success": "Восстановлено: {path}",
+        "successMultiple": "Восстановлено файлов: {count}",
+        "successPartial": "Восстановлено {success} из {total} файлов ({failed} с ошибкой)",
         "error": {
+          "allFailed": "Не удалось восстановить ни один из {count} выбранных файлов",
           "reason": {
             "network": "Ошибка сети",
             "unknown": "Не удалось восстановить ({reason})",
@@ -714,6 +722,68 @@
       "activeTooltipMulti": "Режим Plan включён · {count} шагов сборки в этой беседе · Нажмите, чтобы переключиться на Build",
       "activeSegment": "Режим Plan",
       "inactiveSegment": "Режим Build"
+    },
+    "gitDiffSidebar": {
+      "tabs": {
+        "docs": "Документы"
+      }
+    },
+    "documentManager": {
+      "pathBar": {
+        "label": "Корень документации",
+        "editHint": "Нажмите, чтобы изменить путь",
+        "resetTitle": "Сбросить на docs/",
+        "goUpTitle": "На уровень вверх",
+        "invalidPath": "Недопустимый путь: должен быть относительным внутри проекта",
+        "storageWarning": "Хранилище браузера недоступно; настройки не сохранятся после сессии"
+      },
+      "pane": {
+        "collapseTree": "Скрыть дерево",
+        "expandTree": "Показать дерево",
+        "collapseHistory": "Скрыть историю",
+        "expandHistory": "Показать историю"
+      },
+      "tree": {
+        "empty": "В этом каталоге нет файлов .md",
+        "noHistory": "У этого документа ещё нет истории коммитов",
+        "loadError": "Не удалось загрузить дерево каталога: {reason}",
+        "pathMissing": "Путь '{path}' не существует; возврат к значению по умолчанию через 5 секунд"
+      },
+      "viewMode": {
+        "raw": "Исходник",
+        "rendered": "Рендер",
+        "diff": "Сравнить с текущим",
+        "viewingRevision": "Просмотр ревизии {sha}",
+        "backToCurrent": "К текущей версии"
+      },
+      "history": {
+        "title": "История",
+        "currentPlaceholder": "Рабочее дерево",
+        "viewThisRevision": "Открыть эту ревизию",
+        "compareWithCurrent": "Сравнить с текущей",
+        "loadFail": "Не удалось прочитать историю"
+      },
+      "editor": {
+        "newFile": "Новый",
+        "createFilePlaceholder": "Имя файла, например plan.md или notes.txt",
+        "filenameInvalid": "Имя файла должно оканчиваться на .md или .txt и содержать только буквы/цифры/_/-/пробел/.",
+        "filenameExists": "Файл с таким именем уже существует",
+        "edit": "Изменить",
+        "save": "Сохранить",
+        "saving": "Сохранение",
+        "cancel": "Отмена",
+        "cancelDirty": "Есть несохранённые изменения. Отменить их?",
+        "delete": "Удалить",
+        "rename": "Переименовать",
+        "renameUnavailable": "Переименование теперь доступно",
+        "deleteConfirmTitle": "Удалить документ?",
+        "deleteConfirmBody": "Документ {path} будет удалён без возможности восстановления",
+        "saveError": "Не удалось сохранить",
+        "deleteError": "Не удалось удалить"
+      },
+      "newFile": "Выберите файл .md или создайте новый",
+      "noFileSelected": "Выберите документ",
+      "noProject": "Загрузите проект, чтобы начать"
     }
   },
   "copy": {

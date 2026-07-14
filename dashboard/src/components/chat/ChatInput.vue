@@ -332,11 +332,7 @@
             class="mr-1"
             width="1.5"
           />
-          <v-tooltip
-            v-if="tokenUsageVisible"
-            location="top"
-            max-width="320"
-          >
+          <v-tooltip v-if="tokenUsageVisible" location="top" max-width="320">
             <template #activator="{ props: tokenTooltipProps }">
               <span
                 v-bind="tokenTooltipProps"
@@ -1585,14 +1581,16 @@ defineExpose({
 }
 
 /*
- * Left cluster: project indicator + codegraph chip. Now horizontal
- * (was column) because both chips are compact (26px) status badges
- * with similar visual weight.
+ * Left cluster: project indicator + codegraph chip. Stacked vertically
+ * because both chips may carry long localized text (project path,
+ * codegraph server name) that would overflow or wrap awkwardly when
+ * laid out side-by-side at narrow widths.
  */
 .input-area__status-row__left {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 0;
   min-width: 0;
 }
 

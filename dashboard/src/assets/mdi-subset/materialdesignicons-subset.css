@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 321 icons */
+/* Auto-generated MDI subset – 325 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -208,6 +208,10 @@
   content: "\F0132";
 }
 
+.mdi-checkbox-multiple-blank-outline::before {
+  content: "\F0137";
+}
+
 .mdi-chevron-double-left::before {
   content: "\F013D";
 }
@@ -314,6 +318,10 @@
 
 .mdi-comment-text-outline::before {
   content: "\F0189";
+}
+
+.mdi-compare::before {
+  content: "\F018A";
 }
 
 .mdi-compare-vertical::before {
@@ -510,6 +518,10 @@
 
 .mdi-file-document-multiple::before {
   content: "\F1517";
+}
+
+.mdi-file-document-multiple-outline::before {
+  content: "\F1518";
 }
 
 .mdi-file-document-outline::before {
@@ -1018,6 +1030,10 @@
 
 .mdi-rename-box::before {
   content: "\F0455";
+}
+
+.mdi-rename-outline::before {
+  content: "\F1C1A";
 }
 
 .mdi-reply::before {

@@ -22,6 +22,19 @@ const props = defineProps<{
   /** Path of the file currently being previewed in the right pane;
    *  used to highlight the matching entry in this list. */
   selectedPath: string | null;
+  /**
+   * When set, only files whose extension (case-insensitive,
+   * including the leading dot) appears in this list are shown.
+   * Directories are always shown regardless — the tree needs
+   * them for navigation. Omit or pass an empty array to show
+   * every file (workspace / generic browser mode).
+   *
+   * Used by DocumentTreePanel to restrict the docs sub-page to
+   * `.md` / `.txt` (the formats the doc manager edits); the
+   * workspace FileBrowserView leaves this unset so the user
+   * still sees every file in the repo.
+   */
+  allowedExtensions?: string[];
 }>();
 // Emit the full entry (not just the path) so the parent can inspect
 // `entry.type` and route correctly:
@@ -45,8 +58,26 @@ const TYPE_ICONS: Record<
 };
 
 const entries = computed<SpcodeFileBrowserEntry[]>(() => {
-  if (props.state.kind === "directory") return props.state.snapshot.entries;
-  return [];
+  if (props.state.kind !== "directory") return [];
+  const all = props.state.snapshot.entries;
+  const filter = props.allowedExtensions;
+  // No filter configured (or an explicitly empty list) → show
+  // every entry, including all files. Used by the workspace
+  // FileBrowserView, which must surface every file in the repo.
+  if (!filter || filter.length === 0) return all;
+  const normalized = filter.map((e) => e.toLowerCase());
+  return all.filter((entry) => {
+    // Directories are always shown so the user can still drill
+    // into subfolders. Symlinks are kept too — the existing
+    // dangling-symlink CSS already covers the "broken target"
+    // case, and following the symlink would require an extra
+    // round-trip to determine the target's file type, which is
+    // out of scope here.
+    if (entry.type !== "file") return true;
+    const dot = entry.name.lastIndexOf(".");
+    if (dot < 0) return false;
+    return normalized.includes(entry.name.slice(dot).toLowerCase());
+  });
 });
 
 const truncated = computed<boolean>(() => {

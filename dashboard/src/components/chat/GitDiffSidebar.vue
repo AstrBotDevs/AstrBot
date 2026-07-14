@@ -62,6 +62,7 @@ import GitCommitDialog from "@/components/chat/message_list_comps/GitCommitDialo
 import WorktreeCreateDialog from "@/components/chat/message_list_comps/WorktreeCreateDialog.vue";
 import LockReasonDialogBody from "@/components/chat/message_list_comps/LockReasonDialogBody.vue";
 import GitLogView from "@/components/chat/message_list_comps/GitLogView.vue";
+import DocumentManager from "@/components/chat/message_list_comps/DocumentManager.vue";
 const { tm } = useModuleI18n("features/chat");
 
 // ── localStorage persistence (spec 2026-06-20 §5.1 + §6) ────────────
@@ -99,10 +100,13 @@ function safeSetItem(key: string, value: string): void {
   }
 }
 
-function loadViewMode(): "files" | "diff" | "history" {
+function loadViewMode(): "files" | "diff" | "history" | "docs" {
   const v = safeGetItem(STORAGE_KEYS.viewMode);
   // Spec §2 决策 #10:History 是第 3 个 viewMode,持久化时同样支持。
-  if (v === "files" || v === "diff" || v === "history") return v;
+  // 2026-07-11 document-manager:docs 是第 4 个 viewMode。
+  if (v === "files" || v === "diff" || v === "history" || v === "docs") {
+    return v;
+  }
   return "files";
 }
 function loadFileBrowserCurrentPath(): string {
@@ -199,9 +203,10 @@ const selectedWorktree = ref<string | null>(null);
 // ── View-mode tab (spec 2026-06-20 §5.1 + §5.2) ─────────────────────
 // "files" shows <FileBrowserView>; "diff" shows <GitDiffBodyContent>;
 // "history" shows <GitLogView> (spec 2026-06-24 §2 决策 #10)。
+// "docs" shows <DocumentManager> (spec 2026-07-11 document-manager §2 #1)。
 // Default: "files" per spec §2 decision #10 (the more general view;
 // first-time users likely want to "see what's in the project").
-const viewMode = ref<"files" | "diff" | "history">(loadViewMode());
+const viewMode = ref<"files" | "diff" | "history" | "docs">(loadViewMode());
 const fileBrowserCurrentPath = ref<string>(loadFileBrowserCurrentPath());
 // fileBrowserPreviewPath is the file (if any) currently shown in the
 // right pane. It is intentionally NOT persisted: when the user reloads
@@ -536,6 +541,16 @@ const restoringFile = ref<string | null>(null);
 // Confirm dialog state.
 const confirmDialogOpen = ref(false);
 const confirmTargetPath = ref<string | null>(null);
+
+// Bulk-restore state. The handler iterates the captured path list
+// one file at a time and aggregates the result into a single
+// snackbar. We use a dedicated dialog (rather than reusing the
+// single-file `confirmDialogOpen`) so the message can include the
+// file count and so a single `false` button click cleanly aborts
+// the whole batch.
+const confirmRestorePathsOpen = ref(false);
+const pendingRestorePaths = ref<string[]>([]);
+const isBulkRestoring = ref(false);
 
 // ── Worktree management state (spec 2026-06-27 §2.4) ────────
 const createDialogOpen = ref(false);
@@ -1588,6 +1603,103 @@ async function onConfirmRestore(): Promise<void> {
   }
 }
 
+// ── Bulk restore (multi-select from GitDiffBodyContent) ────────────
+//
+// GitDiffBodyContent emits `restore-paths` with the array of currently
+// selected paths. We open a dedicated confirmation dialog (showing the
+// file count) and, on confirm, iterate one file at a time because the
+// file-restore endpoint accepts a single `file` per request. The
+// snackbar aggregates the result so the user sees a single toast
+// (success / partial / all-failed) rather than N toasts.
+function onRestorePaths(paths: string[]): void {
+  if (paths.length === 0) return;
+  pendingRestorePaths.value = paths.slice();
+  confirmRestorePathsOpen.value = true;
+}
+
+function onCancelRestorePaths(): void {
+  if (isBulkRestoring.value) return;
+  confirmRestorePathsOpen.value = false;
+  pendingRestorePaths.value = [];
+}
+
+async function onConfirmRestorePaths(): Promise<void> {
+  const paths = pendingRestorePaths.value;
+  if (paths.length === 0) return;
+  confirmRestorePathsOpen.value = false;
+  // Snapshot the list before clearing state so concurrent scope/worktree
+  // switches (which would reset pendingRestorePaths via teardown) cannot
+  // shorten the iteration.
+  const toRestore = paths.slice();
+  pendingRestorePaths.value = [];
+  const umo = spcodeStatus.status.value.umo;
+  const worktree = selectedWorktree.value;
+  isBulkRestoring.value = true;
+  let successCount = 0;
+  let failedCount = 0;
+  let aborted = false;
+  try {
+    for (const path of toRestore) {
+      restoringFile.value = path;
+      const result: RestoreResult = await fileRestore.restore({
+        file: path,
+        worktree,
+        umo,
+      });
+      restoringFile.value = null;
+      if (!result.ok) {
+        if (result.reason === "aborted") {
+          aborted = true;
+          break;
+        }
+        failedCount++;
+        continue;
+      }
+      successCount++;
+    }
+  } finally {
+    restoringFile.value = null;
+    isBulkRestoring.value = false;
+  }
+  // Aborted usually means the component is unmounting or the user
+  // switched scope/worktree; skip the snackbar and leave the
+  // selection in whatever state it ended up in (the new view will
+  // rebuild it from scratch anyway).
+  if (aborted) {
+    return;
+  }
+  // Drop the toolbar's "已选 N 个" counter on a full success so the
+  // user starts fresh; on partial / all-failed, keep the selection
+  // so they can retry without re-ticking every box.
+  if (successCount > 0 && failedCount === 0) {
+    gitDiffBodyRef.value?.clearSelection();
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.restore.successMultiple", {
+        count: successCount,
+      }),
+      "success",
+    );
+    await composable.refresh();
+  } else if (successCount > 0 && failedCount > 0) {
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.restore.successPartial", {
+        success: successCount,
+        total: toRestore.length,
+        failed: failedCount,
+      }),
+      "warning",
+    );
+    await composable.refresh();
+  } else {
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.restore.error.allFailed", {
+        count: toRestore.length,
+      }),
+      "error",
+    );
+  }
+}
+
 // Spec 2026-07-07 §3.3: hunk discard handler. Child (GitDiffFileItem)
 // invokes this through the `onDiscardHunk` callback prop with a single
 // object arg (matching the DiffPreview prop signature threaded through
@@ -2302,6 +2414,21 @@ const currentRoot = computed<string | null>(() => {
           <v-icon size="14">mdi-folder-outline</v-icon>
           <span>{{ tm("spcodeProjectLoad.fileBrowser.viewMode.files") }}</span>
         </button>
+        <!-- 2026-07-11 document-manager:Documents 文档管理 sub-tab。 -->
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="viewMode === 'docs'"
+          :aria-label="tm('spcodeProjectLoad.gitDiffSidebar.tabs.docs')"
+          :class="[
+            'git-diff-sidebar-view-tab',
+            { 'is-active': viewMode === 'docs' },
+          ]"
+          @click="viewMode = 'docs'"
+        >
+          <v-icon size="14">mdi-file-document-multiple-outline</v-icon>
+          <span>{{ tm("spcodeProjectLoad.gitDiffSidebar.tabs.docs") }}</span>
+        </button>
         <button
           type="button"
           role="tab"
@@ -2624,6 +2751,7 @@ const currentRoot = computed<string | null>(() => {
           @open-file="onOpenFile"
           @stage-paths="onStagePaths"
           @unstage-paths="onUnstagePaths"
+          @restore-paths="onRestorePaths"
         />
         <!-- Spec 2026-06-24 §6.5:History view 渲染 GitLogView。
              Spec 2026-06-25 §3.1:GitLogView 也接收 gitShow 句柄用于
@@ -2638,6 +2766,31 @@ const currentRoot = computed<string | null>(() => {
           @reset="onLogReset"
           @load-more="onLogLoadMore"
           @refresh="() => gitLog.refresh()"
+        />
+        <!-- 2026-07-11 document-manager:Documents 文档管理 sub-tab body。 -->
+        <!--
+          2026-07-14: pass currentRoot (not projectRoot) to
+          DocumentManager so the docs sub-page is rooted at the
+          active worktree. The file-browser endpoint
+          (/spcode/file-browser) is stateless and resolves
+          whatever absolute path we hand it, so feeding it the
+          worktree root is what makes the breadcrumb's "项目根"
+          segment show the worktree path (e.g.
+          F:/repo/.worktrees/feature-x) instead of always
+          collapsing back to the main repo root. The docs CRUD
+          composable (useSpcodeDocs) already pins writes to
+          `:worktree` above, so the listing + writes now agree
+          on which worktree is in scope. Mirrors what
+          FileBrowserView has been doing for the workspace tab.
+        -->
+        <DocumentManager
+          v-else-if="viewMode === 'docs'"
+          :worktree="selectedWorktree"
+          :umo="spcodeStatus.status.value.umo"
+          :project-root="currentRoot"
+          :is-dark="!!isDark"
+          :git-log="gitLog"
+          :git-show="gitShow"
         />
       </div>
 
@@ -2679,6 +2832,53 @@ const currentRoot = computed<string | null>(() => {
               color="warning"
               :loading="restoringFile !== null"
               @click="onConfirmRestore"
+              >{{
+                tm("spcodeProjectLoad.diffSidebar.restore.confirmAction")
+              }}</v-btn
+            >
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <!-- Bulk-restore confirmation: separate dialog so the message
+           can include the file count and so a single Cancel cleanly
+           aborts the whole batch (the underlying endpoint only
+           accepts one file per request, so a partial-restore
+           mid-flight would be confusing UX). Tinted `warning` to
+           match the single-file dialog and signal irreversibility. -->
+      <v-dialog v-model="confirmRestorePathsOpen" persistent max-width="440">
+        <v-card>
+          <v-card-title class="text-h6">
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.restore.confirmTitleMultiple",
+                { count: pendingRestorePaths.length },
+              )
+            }}
+          </v-card-title>
+          <v-card-text>
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.restore.confirmMessageMultiple",
+                { count: pendingRestorePaths.length },
+              )
+            }}
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn
+              variant="text"
+              :disabled="isBulkRestoring"
+              @click="onCancelRestorePaths"
+              >{{
+                tm("spcodeProjectLoad.diffSidebar.restore.confirmCancel")
+              }}</v-btn
+            >
+            <v-btn
+              variant="flat"
+              color="warning"
+              :loading="isBulkRestoring"
+              @click="onConfirmRestorePaths"
               >{{
                 tm("spcodeProjectLoad.diffSidebar.restore.confirmAction")
               }}</v-btn

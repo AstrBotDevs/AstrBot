@@ -6,7 +6,8 @@
 // Light theme (default)
 :root,
 .v-theme--light {
-  --sp-chip-bg: rgba(var(--v-theme-on-surface), 0.03);
+  // Solid light gray for opaque resting background on chips and ghost buttons.
+  --sp-chip-bg: #ededed;
   --sp-chip-border: rgba(var(--v-theme-on-surface), 0.12);
   --sp-chip-border-strong: rgba(var(--v-theme-on-surface), 0.16);
   --sp-chip-divider: rgba(var(--v-theme-on-surface), 0.08);
@@ -28,8 +29,19 @@
   --sp-segmented-height: 28px;
 }
 
-// Dark theme override
-.v-theme--dark {
+// Dark theme override.
+// IMPORTANT: Vuetify names the dark theme `PurpleThemeDark` (see
+// `plugins/vuetify.ts`), so the root class is `.v-theme--PurpleThemeDark` —
+// NOT the generic `.v-theme--dark`. Using the wrong selector here would
+// silently fall through to the light tokens defined in :root above.
+.v-theme--PurpleThemeDark {
+  // Solid dark gray for opaque resting background on chips and ghost buttons.
+  // Intentionally close to the dark-theme page background (#1a1a1a, from
+  // DarkTheme.ts) so the chips recede and don't glare against the
+  // surrounding surface. The 5-unit lift over #1a1a1a (plus the 0.16
+  // white-alpha border) keeps them findable. Sits well below the chat
+  // input container (#2d2d2d) in the elevation stack.
+  --sp-chip-bg: #1f1f1f;
   --sp-chip-border: rgba(var(--v-theme-on-surface), 0.16);
   --sp-chip-border-strong: rgba(var(--v-theme-on-surface), 0.2);
   --sp-chip-divider: rgba(var(--v-theme-on-surface), 0.12);

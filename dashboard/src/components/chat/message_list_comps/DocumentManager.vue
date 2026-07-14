@@ -1,0 +1,1454 @@
+<!-- Author: elecvoid243, 2026-07-12
+     Spec: docs/superpowers/specs/2026-07-11-document-manager-design.md §4.1
+     Page container for the Documents sub-tab. Owns all editable
+     state (docsRoot / selectedDoc / viewMode / selectedRevision /
+     editMode / editBuffer) and orchestrates the 3 docs CRUD
+     endpoints. Reuses the sidebar's existing useSpcodeGitLog and
+     useSpcodeGitShow instances (per spec §2 decision #9 + §3.5). -->
+<script setup lang="ts">
+import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
+import { useSpcodeGitFile } from "@/composables/useSpcodeGitFile";
+import { useSpcodeDocs } from "@/composables/useSpcodeDocs";
+import { useSpcodeFileBrowser } from "@/composables/useSpcodeFileBrowser";
+import {
+  loadDocsRoot,
+  saveDocsRoot,
+  DEFAULT_DOCS_ROOT,
+  coerceDocsRoot,
+  isValidDocsRoot,
+  isProjectRootDocs,
+} from "@/composables/docsRootStorage";
+import { projectRelativeFromDoc } from "@/composables/pathUtils";
+import type { UseSpcodeGitLog } from "@/composables/useSpcodeGitLog";
+import type { UseSpcodeGitShow } from "@/composables/useSpcodeGitShow";
+import { useModuleI18n } from "@/i18n/composables";
+
+import DocumentPathBar from "./DocumentPathBar.vue";
+import DocumentViewModeTab from "./DocumentViewModeTab.vue";
+import FileBrowserCodeView from "./FileBrowserCodeView.vue";
+import FileCommentEditor from "./FileCommentEditor.vue";
+import { useDocumentMarkdownHighlight } from "@/composables/useDocumentMarkdownHighlight";
+import {
+  useFileComments,
+  extractLineContext,
+  type LineContext,
+} from "@/composables/useFileComments";
+import DocumentTreePanel from "./DocumentTreePanel.vue";
+import DocumentEditor from "./DocumentEditor.vue";
+import DocumentHistoryPanel from "./DocumentHistoryPanel.vue";
+import FileBrowserBreadcrumb from "./FileBrowserBreadcrumb.vue";
+import DiffPreview from "./DiffPreview.vue";
+import MarkdownView from "@/components/shared/MarkdownView.vue";
+import { useResizableSplit } from "@/composables/useResizableSplit";
+import { projectRelativePath } from "@/composables/pathUtils";
+
+const props = defineProps<{
+  worktree: string | null;
+  umo: string | null;
+  /**
+   * Root of the file tree the docs sub-page is rooted at.
+   * In a worktree context this is the ACTIVE worktree's path
+   * (e.g. `F:/repo/.worktrees/feature-x`), not the loaded
+   * spcode project's main checkout. GitDiffSidebar wires this
+   * to its `currentRoot` computed (selectedWorktree ??
+   * mainWorktreePath ?? projectRoot), which is the same value
+   * the workspace FileBrowserView uses — so the breadcrumb's
+   * "项目根" segment and the docsRoot path math both reflect
+   * the worktree the user is currently looking at.
+   *
+   * The CRUD composable (useSpcodeDocs) is rooted at `worktree`
+   * separately, so the listing/preview path (= this prop) and
+   * the writes path (= :worktree) are in sync.
+   */
+  projectRoot: string | null;
+  isDark?: boolean;
+  gitLog: UseSpcodeGitLog;
+  gitShow: UseSpcodeGitShow;
+}>();
+
+const { tm } = useModuleI18n("features/chat");
+const spcodeStatus = useSpcodeProjectStatus();
+const isDark = computed(() => !!props.isDark);
+const isProjectLoaded = computed(() => spcodeStatus.status.value.loaded);
+
+// Persisted state
+const docsRoot = ref<string>(DEFAULT_DOCS_ROOT);
+const storageOk = ref<boolean>(true);
+
+// Per-file state
+const selectedDoc = ref<string | null>(null);
+const viewMode = ref<"raw" | "rendered" | "diff">("rendered");
+const selectedRevision = ref<string | null>(null);
+const editMode = ref<boolean>(false);
+const editBuffer = ref<string>("");
+const saveError = ref<string | null>(null);
+const deleteError = ref<string | null>(null);
+const renameError = ref<string | null>(null);
+const pathMissingNotice = ref<string | null>(null);
+let pathMissingTimer: ReturnType<typeof setTimeout> | null = null;
+
+// The single fileBrowser is shared between two states:
+//   - no selectedDoc  → pathRef points at the docs/ directory so
+//                       the right pane is idle (tree is the source
+//                       of truth for the listing).
+//   - selectedDoc set → pathRef points at the projectRoot+selectedDoc
+//                       file so fileBrowser transitions to kind="file"
+//                       and fileContent picks up the snapshot.content.
+// useSpcodeFileBrowser's internal watcher drives the fetch whenever
+// this pathRef changes, so the parent's `onSave`/`onRename`/etc.
+// just need to call `fileBrowser.refresh()` (no path arg) to
+// re-read the same path after a mutation.
+// The file-browser composable takes an absolute path and lists/previews
+// whatever sits under it. We glue `projectRoot` + `docsRoot` + (when
+// previewing a file) `selectedDoc`. A docsRoot of "." means "list the
+// project root itself" — in that case we skip the `${root}/${docsRoot}`
+// step and pass the projectRoot straight through. The same rule
+// applies to breadcrumbPath below.
+const fileBrowser = useSpcodeFileBrowser(
+  computed(() => {
+    const root = props.projectRoot;
+    if (!root) return "";
+    const base = docsRoot.value?.trim() ?? "";
+    if (!base || isProjectRootDocs(base)) return root;
+    const baseRel = `${root.replace(/[\\/]+$/, "")}/${base.replace(
+      /^[\\/]+/,
+      "",
+    )}`;
+    if (selectedDoc.value) {
+      return `${baseRel}/${selectedDoc.value.replace(/^[\\/]+/, "")}`;
+    }
+    return baseRel;
+  }),
+);
+const docsApi = useSpcodeDocs(computed(() => props.worktree));
+const gitFile = useSpcodeGitFile(computed(() => props.worktree));
+
+// The left-pane tree lives inside DocumentTreePanel which owns
+// its own useSpcodeFileBrowser instance pointed at docsRoot. Our
+// top-level `fileBrowser` is pointed at the *selected file*, not
+// at the tree, so refreshing it does not re-fetch the listing.
+// After save / rename / delete / create we have to nudge the
+// tree to re-list explicitly — exposing refresh via a ref is the
+// cheapest way without restructuring into a shared composable.
+const treeRef = ref<{ refresh: () => Promise<void> } | null>(null);
+
+// File preview from working tree (reuses file-browser).
+const fileState = computed(() => {
+  if (!selectedDoc.value) return { kind: "idle" as const };
+  return fileBrowser.state.value;
+});
+
+const fileContent = computed<string>(() => {
+  if (!selectedDoc.value) return "";
+  const s = fileState.value;
+  if (s.kind === "file" && typeof s.snapshot.content === "string") {
+    return s.snapshot.content;
+  }
+  return "";
+});
+
+// Historical blob content
+const historicalFileState = computed(() => {
+  if (!selectedDoc.value || !selectedRevision.value) {
+    return { kind: "idle" as const };
+  }
+  return gitFile.getState(selectedDoc.value, selectedRevision.value);
+});
+const historicalFileContent = computed<string>(() => {
+  if (!selectedDoc.value || !selectedRevision.value) return "";
+  const d = gitFile.getData(selectedDoc.value, selectedRevision.value);
+  return d?.content ?? "";
+});
+
+/** Raw view text: historical blob when a revision is selected, otherwise
+ *  the current file content. Single source of truth so the
+ *  FileBrowserCodeView and the binary/empty fallback agree. */
+const rawContent = computed<string>(() =>
+  selectedRevision.value ? historicalFileContent.value : fileContent.value,
+);
+
+/** The docsRoot-relative path (matches FileBrowser's partition key
+ *  convention). Used as the filePath prop on FileBrowserCodeView and
+ *  as the partition key for useFileComments in Task 3. Empty string
+ *  when no doc is selected — consumers guard with v-if. */
+const rawFilePath = computed<string>(() => selectedDoc.value ?? "");
+
+const { highlightedHtml: rawHighlightedHtml, isReady: rawHighlightReady } =
+  useDocumentMarkdownHighlight(rawContent, isDark);
+
+/** True for binary historical files. The raw view must not attempt to
+ *  render binary bytes as markdown — fall back to a "binary file"
+ *  placeholder. The current (HEAD) view does not expose is_binary,
+ *  so this is only true when a revision is selected. */
+const rawIsBinary = computed<boolean>(() => {
+  if (!selectedRevision.value) return false;
+  const state = gitFile.getState(
+    selectedDoc.value ?? "",
+    selectedRevision.value,
+  );
+  return state.kind === "ok" && state.data.isBinary === true;
+});
+
+// ── Inline comments (in-memory, shared singleton with FileBrowser) ──
+// Store is keyed on docsRoot-relative path so different docs have
+// independent comment lists. Module-level singleton means comments
+// survive switching between Documents / Files sub-tabs (matches
+// FileBrowser's expected behavior).
+const fileComments = useFileComments();
+const activeEditLine = ref<number | null>(null);
+const activeEditCommentId = ref<string | null>(null);
+const activeEditContext = ref<LineContext | null>(null);
+const editorInitialText = ref<string>("");
+
+const rawComments = computed(() =>
+  rawFilePath.value ? fileComments.commentsForFile(rawFilePath.value) : [],
+);
+
+/** INVARIANT: register the current raw content into the comments store
+ *  so addComment can extract line context. Same pattern as
+ *  FileBrowserFilePreview.vue:300. */
+watch(
+  () => rawContent.value,
+  (content) => {
+    if (rawFilePath.value && content) {
+      fileComments.registerFileContent(rawFilePath.value, content);
+    }
+  },
+  { immediate: true },
+);
+
+// Diff patch (revision vs current)
+const diffPatch = ref<string | null>(null);
+
+watch(
+  () => [selectedDoc.value, selectedRevision.value, viewMode.value] as const,
+  async ([doc, rev, mode]) => {
+    if (mode !== "diff" || !doc || !rev) {
+      diffPatch.value = null;
+      return;
+    }
+    diffPatch.value = null;
+    await props.gitShow.fetchFile(rev, doc);
+    const snap = props.gitShow.getFileData(rev, doc);
+    if (snap) diffPatch.value = snap.patch ?? null;
+  },
+  { immediate: true },
+);
+
+// Body ref feeds the resizable-split composable so the percent math
+// uses our actual layout width (not document.body).
+const containerRef = ref<HTMLElement | null>(null);
+const treeSplit = useResizableSplit({
+  initialPercent: 30,
+  minPercent: 15,
+  maxPercent: 70,
+  containerRef,
+});
+// History pane resizer. Anchored to the RIGHT edge (so percent
+// is "distance from the right", matching the pane being on the
+// right of the body). 220/15/40 keeps it usable as a commit
+// list at default width while still permitting the user to
+// shrink it almost out of the way to give the preview more room.
+const historySplit = useResizableSplit({
+  initialPercent: 22,
+  minPercent: 15,
+  maxPercent: 40,
+  containerRef,
+  direction: "right",
+});
+const isLeftPaneCollapsed = ref<boolean>(false);
+const isHistoryCollapsed = ref<boolean>(false);
+
+/** Fullscreen review mode. NOT persisted — each visit starts at false. */
+const isFullscreen = ref<boolean>(false);
+const leftDrawerOpen = ref<boolean>(false);
+
+function toggleFullscreen(): void {
+  isFullscreen.value = !isFullscreen.value;
+  if (!isFullscreen.value) {
+    // Closing fullscreen also closes the drawer (otherwise the
+    // drawer would visually pop out from behind the now-restored
+    // left pane).
+    leftDrawerOpen.value = false;
+  }
+}
+
+function exitFullscreen(): void {
+  isFullscreen.value = false;
+  leftDrawerOpen.value = false;
+}
+
+function openLeftDrawer(): void {
+  leftDrawerOpen.value = true;
+}
+
+function closeLeftDrawer(): void {
+  leftDrawerOpen.value = false;
+}
+
+/** Esc exits fullscreen (when fullscreen is on). Listener is attached
+ *  on mount, detached on unmount. It does NOT preventDefault so other
+ *  components can still handle Esc for their own purposes (e.g. close
+ *  the comment editor) — we only react when fullscreen is on. The
+ *  listener is bound to `document` (not the overlay) so that the
+ *  keydown still fires after the root is teleported to <body>; the
+ *  `isFullscreen` guard filters out the non-overlay case. */
+function onKeyDown(e: KeyboardEvent): void {
+  if (e.key === "Escape" && isFullscreen.value) {
+    exitFullscreen();
+  }
+}
+onMounted(() => document.addEventListener("keydown", onKeyDown));
+
+/** Body scroll lock while fullscreen is on. Matches the DiffPreview
+ *  fullscreen pattern (spec 2026-06-30 §3.4) — saves the user's
+ *  scroll position implicitly via `overflow: hidden`. The watcher
+ *  resets to "" (browser default), so any *previous* element on
+ *  <body> that had set overflow:hidden is silently overwritten; we
+ *  restore on unmount so the body returns to its normal scroll
+ *  state even if the user navigates away mid-fullscreen. */
+watch(isFullscreen, (v) => {
+  document.body.style.overflow = v ? "hidden" : "";
+});
+
+// Breadcrumb path. FileBrowserBreadcrumb expects an absolute
+// path (it uses case-insensitive root match to render the
+// "项目根 / docs / ... / README.md" hierarchy). When a file is
+// being previewed we anchor on that file so the leaf shows a
+// document icon; otherwise we anchor on the docs directory.
+// A docsRoot of "." resolves to the project root — the breadcrumb
+// shows just "项目根" with no extra "docs" segment in that case.
+const breadcrumbPath = computed<string>(() => {
+  const root = props.projectRoot;
+  if (!root) return "";
+  const dir = docsRoot.value?.trim() ?? "";
+  const base =
+    !dir || isProjectRootDocs(dir)
+      ? root
+      : `${root.replace(/[\\/]+$/, "")}/${dir.replace(/^[\\/]+/, "")}`;
+  if (selectedDoc.value) {
+    return `${base.replace(/[\\/]+$/, "")}/${selectedDoc.value.replace(
+      /^[\\/]+/,
+      "",
+    )}`;
+  }
+  return base;
+});
+const breadcrumbPreviewPath = computed<string | null>(() => {
+  return selectedDoc.value ? breadcrumbPath.value : null;
+});
+
+function hydrate() {
+  if (!props.umo) {
+    docsRoot.value = DEFAULT_DOCS_ROOT;
+    return;
+  }
+  docsRoot.value = loadDocsRoot(props.umo);
+}
+
+onMounted(hydrate);
+watch(() => props.umo, hydrate);
+
+function onPathChange(newPath: string) {
+  const cleaned = coerceDocsRoot(newPath);
+  if (!isValidDocsRoot(cleaned)) {
+    return;
+  }
+  docsRoot.value = cleaned;
+  selectedDoc.value = null;
+  selectedRevision.value = null;
+  editMode.value = false;
+  if (props.umo) {
+    const r = saveDocsRoot(props.umo, cleaned);
+    storageOk.value = r.ok || r.reason !== "storage_unavailable";
+  }
+}
+
+function onTreeNavigate(dirRel: string) {
+  // The breadcrumb's "Project root" segment emits an empty string;
+  // fall back to the default docs root in that case so we don't
+  // accidentally list the entire project.
+  docsRoot.value = dirRel || DEFAULT_DOCS_ROOT;
+  selectedDoc.value = null;
+  selectedRevision.value = null;
+  editMode.value = false;
+}
+
+// FileBrowserBreadcrumb emits absolute paths (its segments are
+// derived from the absolute breadcrumbPath we feed it). Convert
+// back to a project-relative string before forwarding to
+// onTreeNavigate, otherwise docsRoot ends up holding an absolute
+// path and the next pathRef computation glues projectRoot on
+// top of it, producing "F:\repo\F:\repo\docs/..." that the
+// backend resolves as path_not_found.
+function onBreadcrumbNavigate(absPath: string) {
+  onTreeNavigate(projectRelativePath(absPath, props.projectRoot));
+}
+
+function onTreeSelect(fileRel: string) {
+  if (editMode.value) {
+    const ok = window.confirm(
+      tm("spcodeProjectLoad.documentManager.editor.cancelDirty"),
+    );
+    if (!ok) return;
+  }
+  selectedDoc.value = fileRel;
+  selectedRevision.value = null;
+  viewMode.value = "rendered";
+  editMode.value = false;
+  editBuffer.value = "";
+  saveError.value = null;
+}
+
+function onStartEdit() {
+  editBuffer.value = fileContent.value;
+  editMode.value = true;
+}
+
+async function onSave(content: string) {
+  if (!selectedDoc.value) return;
+  saveError.value = null;
+  // docsApi.save expects a project-relative path (the backend
+  // resolves it against projectRoot via _validate_repo_relative_file).
+  // selectedDoc is docsRoot-relative, so we have to glue docsRoot
+  // on the front. For docsRoot="." the file is already at the root
+  // and projectRelativeFromDoc returns selectedDoc unchanged.
+  const r = await docsApi.save({
+    path: projectRelativeFromDoc(docsRoot.value, selectedDoc.value),
+    content,
+  });
+  if (r.ok) {
+    // Sync `editBuffer` to whatever we just sent to the backend so
+    // DocumentEditor's `isDirty` (buffer !== props.initialContent) is
+    // false on the next render. Without this the editor kept showing
+    // "unsaved changes" after a successful save and a subsequent
+    // cancel would surface a misleading dirty-confirm dialog. Pin
+    // viewMode to "rendered" so the user lands on the read view they
+    // were in before pressing Edit (matches the cancel path).
+    editMode.value = false;
+    viewMode.value = "rendered";
+    editBuffer.value = content;
+    void fileBrowser.refresh();
+    void treeRef.value?.refresh();
+  } else {
+    saveError.value = `${tm(
+      "spcodeProjectLoad.documentManager.editor.saveError",
+    )}: ${r.reason}`;
+    // Drop the stale editBuffer so the editor reverts to whatever is
+    // actually on disk. The user can re-open the file and start over
+    // from the latest persisted content rather than the failed draft.
+    editBuffer.value = fileContent.value;
+  }
+}
+
+function onCancelEdit() {
+  editMode.value = false;
+}
+
+async function onDelete() {
+  if (!selectedDoc.value) return;
+  deleteError.value = null;
+  // Same project-relative path fix as onSave: selectedDoc is
+  // docsRoot-relative, the backend needs the project-relative form.
+  const r = await docsApi.remove(
+    projectRelativeFromDoc(docsRoot.value, selectedDoc.value),
+  );
+  if (r.ok) {
+    selectedDoc.value = null;
+    selectedRevision.value = null;
+    editMode.value = false;
+    void fileBrowser.refresh();
+    void treeRef.value?.refresh();
+  } else {
+    deleteError.value = `${tm(
+      "spcodeProjectLoad.documentManager.editor.deleteError",
+    )}: ${r.reason}`;
+  }
+}
+
+function onRename(newPath: string) {
+  if (!selectedDoc.value) return;
+  renameError.value = null;
+  // Both `path` (the existing file) and `newPath` (the user-typed
+  // value from DocumentEditor's rename input) are docsRoot-relative;
+  // the backend resolves them against projectRoot, so we have to
+  // glue docsRoot onto each.
+  void docsApi
+    .rename({
+      path: projectRelativeFromDoc(docsRoot.value, selectedDoc.value),
+      newPath: projectRelativeFromDoc(docsRoot.value, newPath),
+    })
+    .then((r) => {
+      if (r.ok) {
+        // Keep selectedDoc in docsRoot-relative form (it's still
+        // the same file, just with a new name).
+        selectedDoc.value = newPath;
+        void fileBrowser.refresh();
+        void treeRef.value?.refresh();
+      } else {
+        renameError.value = `${tm(
+          "spcodeProjectLoad.documentManager.editor.renameError",
+        )}: ${r.reason}`;
+      }
+    });
+}
+
+function onSelectRevision(sha: string) {
+  if (!selectedDoc.value) return;
+  selectedRevision.value = sha;
+  viewMode.value = "rendered";
+  if (selectedDoc.value && sha) {
+    void gitFile.fetchRef(selectedDoc.value, sha);
+  }
+}
+
+function onCompareCurrent(sha: string) {
+  if (!selectedDoc.value) return;
+  selectedRevision.value = sha;
+  viewMode.value = "diff";
+}
+
+function onCreateNew(name: string) {
+  // selectedDoc is always stored as a docsRoot-relative path.
+  // The backend POST /spcode/docs resolves `path` against the
+  // project root (project-relative), so we have to glue docsRoot
+  // onto the user-supplied filename before sending. projectRelativeFromDoc
+  // handles the docsRoot="." (project root) case by returning
+  // `name` unchanged.
+  const cleanName = name.replace(/^\/+/, "");
+  selectedDoc.value = cleanName;
+  editBuffer.value = "";
+  editMode.value = true;
+  void docsApi
+    .save({
+      path: projectRelativeFromDoc(docsRoot.value, cleanName),
+      content: "",
+    })
+    .then((r) => {
+      if (r.ok) {
+        void fileBrowser.refresh();
+        void treeRef.value?.refresh();
+      } else {
+        saveError.value = r.reason;
+        selectedDoc.value = null;
+        editMode.value = false;
+      }
+    });
+}
+
+function onBackToCurrent() {
+  selectedRevision.value = null;
+}
+
+function onRequestAddComment(line: number): void {
+  if (!rawFilePath.value || !rawContent.value) return;
+  const ctx = extractLineContext(rawContent.value, line);
+  if (!ctx) return;
+  activeEditLine.value = line;
+  activeEditCommentId.value = null;
+  activeEditContext.value = ctx;
+  editorInitialText.value = "";
+}
+
+function onRequestEditComment(commentId: string): void {
+  const c = fileComments.findCommentById(commentId);
+  if (!c) return;
+  activeEditLine.value = c.line;
+  activeEditCommentId.value = c.id;
+  activeEditContext.value = {
+    lineContent: c.lineContent,
+    contextBefore: c.contextBefore,
+    contextAfter: c.contextAfter,
+  };
+  editorInitialText.value = c.text;
+}
+
+function onSaveComment(payload: {
+  text: string;
+  commentId: string | null;
+  line: number;
+}): void {
+  if (payload.commentId) {
+    fileComments.updateComment(payload.commentId, payload.text);
+    closeCommentEditor();
+    return;
+  }
+  if (!rawFilePath.value) return;
+  const created = fileComments.addComment({
+    filePath: rawFilePath.value,
+    line: payload.line,
+    text: payload.text,
+  });
+  // created === null means the contentCache was empty (would happen
+  // only if the user clicked a line before rawContent arrived).
+  // Silently close — same behavior as FileBrowserFilePreview.
+  closeCommentEditor();
+}
+
+function onDeleteComment(commentId: string): void {
+  fileComments.deleteComment(commentId);
+  closeCommentEditor();
+}
+
+function closeCommentEditor(): void {
+  activeEditLine.value = null;
+  activeEditCommentId.value = null;
+  activeEditContext.value = null;
+}
+
+/** Single teardown hook: detach the Esc listener, release the body
+ *  scroll lock if it was applied, and dispose of the long-lived
+ *  composables. Kept as one hook (instead of three small ones) per
+ *  AGENTS.md's "no unnecessary helpers / no fragmentation" rule:
+ *  every line here runs unconditionally on unmount, and the order
+ *  doesn't matter — splitting them would just produce more Vue
+ *  lifecycle overhead. */
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", onKeyDown);
+  if (isFullscreen.value) {
+    document.body.style.overflow = "";
+  }
+  if (pathMissingTimer) {
+    clearTimeout(pathMissingTimer);
+    pathMissingTimer = null;
+  }
+  gitFile.dispose();
+  docsApi.dispose();
+});
+</script>
+
+<template>
+  <!--
+    Fullscreen overlay (spec 2026-07-14 §3.2 + DiffPreview pattern
+    from spec 2026-06-30): escape the parent sidebar by teleporting
+    the root to <body> while fullscreen is on, then position it
+    fixed inset 0. The `:disabled` flag keeps the same component
+    tree in-place when fullscreen is off — Vue 3's Teleport becomes
+    a transparent pass-through, so the existing chat-panel layout
+    (sidebar body → document-manager flex column) is untouched on
+    the normal-render path. No duplicated templates, no duplicated
+    refs, no duplicated state.
+  -->
+  <Teleport to="body" :disabled="!isFullscreen">
+    <div class="document-manager" :class="{ 'is-fullscreen': isFullscreen }">
+      <DocumentPathBar
+        :current-path="docsRoot"
+        :storage-ok="storageOk"
+        :default-path="DEFAULT_DOCS_ROOT"
+        @path-change="onPathChange"
+      />
+      <div
+        v-if="pathMissingNotice"
+        class="document-manager__notice document-manager__notice--warn"
+      >
+        {{
+          tm("spcodeProjectLoad.documentManager.tree.pathMissing", {
+            path: docsRoot,
+          })
+        }}
+      </div>
+      <div v-if="!isProjectLoaded" class="document-manager__empty">
+        <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
+        <span>{{ tm("spcodeProjectLoad.documentManager.noProject") }}</span>
+      </div>
+      <template v-else>
+        <!--
+        2026-07-13: mirror the FileBrowserView layout — lift the
+        breadcrumb out of the file-list pane so it stays visible
+        while a file is being previewed, then put the resizable +
+        collapsible panes below. FileBrowserBreadcrumb's
+        case-insensitive root match needs an absolute currentPath
+        (we feed it projectRoot+docsRoot+selectedDoc), and the
+        breadcrumb-navigate emit is wired to onTreeNavigate so
+        clicking a segment updates docsRoot via the toProjectRel
+        conversion in DocumentTreePanel.
+      -->
+        <FileBrowserBreadcrumb
+          v-if="projectRoot"
+          class="document-manager__breadcrumb"
+          :current-path="breadcrumbPath"
+          :root-path="projectRoot"
+          :preview-path="breadcrumbPreviewPath"
+          :is-dark="isDark"
+          @navigate="onBreadcrumbNavigate"
+        />
+        <div
+          ref="containerRef"
+          class="document-manager__body"
+          :class="{
+            // The .resizing class flips the pane transition off
+            // (see .document-manager__body.resizing … in the styles).
+            // Both instances must be considered: the original code
+            // only watched treeSplit, which made the tree drag feel
+            // smooth (transition was off) but the history drag feel
+            // laggy (the 0.2s transition was still firing on every
+            // mousemove). OR-ing both keeps either drag equally
+            // responsive.
+            resizing:
+              treeSplit.isResizing.value || historySplit.isResizing.value,
+            'left-collapsed': isLeftPaneCollapsed,
+            'history-collapsed': isHistoryCollapsed,
+          }"
+        >
+          <!-- Tree expand handle: shown only when the left pane is
+             collapsed, sitting at the leftmost flex position so the
+             user can restore the tree at its previous width. -->
+          <button
+            v-if="isLeftPaneCollapsed"
+            type="button"
+            class="document-manager__expand-handle"
+            :title="tm('spcodeProjectLoad.documentManager.pane.expandTree')"
+            :aria-label="
+              tm('spcodeProjectLoad.documentManager.pane.expandTree')
+            "
+            @click="isLeftPaneCollapsed = false"
+          >
+            <v-icon size="14" class="document-manager__expand-handle-icon"
+              >mdi-chevron-double-right</v-icon
+            >
+            <span class="document-manager__expand-handle-label">{{
+              tm("spcodeProjectLoad.documentManager.pane.expandTree")
+            }}</span>
+          </button>
+
+          <!-- Left pane wrapper (tree + collapse button). The wrapper
+             carries the inline width set by the resize handler so
+             collapse ↔ expand preserves the user's chosen share. -->
+          <div
+            v-show="!isLeftPaneCollapsed && !isFullscreen"
+            class="document-manager__pane-left"
+            :style="{ width: treeSplit.percent.value + '%' }"
+          >
+            <DocumentTreePanel
+              ref="treeRef"
+              class="document-manager__left"
+              :current-dir="docsRoot"
+              :root-path="projectRoot"
+              :is-dark="isDark"
+              :selected-file="selectedDoc"
+              :breadcrumb="false"
+              @navigate="onTreeNavigate"
+              @breadcrumb-navigate="onTreeNavigate"
+              @select="onTreeSelect"
+              @create-new="onCreateNew"
+            />
+            <button
+              type="button"
+              class="document-manager__collapse-btn document-manager__collapse-btn--tree"
+              :title="tm('spcodeProjectLoad.documentManager.pane.collapseTree')"
+              :aria-label="
+                tm('spcodeProjectLoad.documentManager.pane.collapseTree')
+              "
+              @click="isLeftPaneCollapsed = true"
+            >
+              <v-icon size="14">mdi-chevron-double-left</v-icon>
+            </button>
+          </div>
+
+          <div
+            v-show="!isLeftPaneCollapsed"
+            class="document-manager__divider"
+            role="separator"
+            aria-orientation="vertical"
+            :aria-valuenow="Math.round(treeSplit.percent.value)"
+            :aria-valuemin="15"
+            :aria-valuemax="70"
+            @mousedown="treeSplit.startResize"
+          />
+
+          <button
+            v-if="isFullscreen"
+            type="button"
+            class="document-manager__left-rail"
+            :aria-label="
+              tm('spcodeProjectLoad.documentManager.fullscreen.openDrawer')
+            "
+            @click="openLeftDrawer"
+          >
+            <v-icon size="16">mdi-chevron-double-right</v-icon>
+          </button>
+          <div
+            v-if="isFullscreen && leftDrawerOpen"
+            class="document-manager__left-drawer"
+            data-testid="document-manager-left-drawer"
+          >
+            <DocumentTreePanel
+              ref="treeRef"
+              :current-dir="docsRoot"
+              :root-path="projectRoot"
+              :is-dark="isDark"
+              :selected-file="selectedDoc"
+              :breadcrumb="false"
+              @navigate="onTreeNavigate"
+              @breadcrumb-navigate="onTreeNavigate"
+              @select="onTreeSelect"
+              @create-new="onCreateNew"
+            />
+          </div>
+          <div
+            v-if="isFullscreen && leftDrawerOpen"
+            class="document-manager__drawer-backdrop"
+            @click="closeLeftDrawer"
+          />
+
+          <section
+            class="document-manager__right"
+            :class="{
+              'is-expanded': isLeftPaneCollapsed && isHistoryCollapsed,
+            }"
+          >
+            <!-- Error banners are surfaced at the top of the right pane so
+               they stay visible while the user is still in the editor
+               (previously they only rendered in the read view, which
+               meant a failed save / delete appeared to "succeed" since
+               the editor kept showing the pre-failure draft). -->
+            <div v-if="saveError" class="document-manager__error">
+              {{ saveError }}
+            </div>
+            <div v-if="deleteError" class="document-manager__error">
+              {{ deleteError }}
+            </div>
+            <div v-if="renameError" class="document-manager__error">
+              {{ renameError }}
+            </div>
+            <div v-if="!selectedDoc" class="document-manager__empty">
+              <v-icon size="32" color="grey">mdi-file-document-outline</v-icon>
+              <span>{{ tm("spcodeProjectLoad.documentManager.newFile") }}</span>
+            </div>
+            <template v-else-if="editMode">
+              <DocumentEditor
+                :initial-content="editBuffer"
+                :file-relative="selectedDoc"
+                :is-saving="docsApi.isSaving.value"
+                :is-deleting="docsApi.isDeleting.value"
+                :is-renaming="docsApi.isRenaming.value"
+                :rename-error-message="renameError"
+                @save="onSave"
+                @cancel="onCancelEdit"
+                @delete="onDelete"
+                @rename="onRename"
+                @rename-cancel="renameError = null"
+              />
+            </template>
+            <template v-else>
+              <div v-if="selectedRevision" class="document-manager__banner">
+                <span>
+                  {{
+                    tm(
+                      "spcodeProjectLoad.documentManager.viewMode.viewingRevision",
+                      {
+                        sha: selectedRevision.slice(0, 7),
+                      },
+                    )
+                  }}
+                </span>
+                <button
+                  type="button"
+                  class="document-manager__banner-btn"
+                  @click="onBackToCurrent"
+                >
+                  {{
+                    tm(
+                      "spcodeProjectLoad.documentManager.viewMode.backToCurrent",
+                    )
+                  }}
+                </button>
+              </div>
+
+              <div class="document-manager__view-toolbar">
+                <DocumentViewModeTab
+                  v-model="viewMode"
+                  :has-revision="!!selectedRevision"
+                />
+                <button
+                  type="button"
+                  class="document-manager__fullscreen-btn"
+                  :aria-pressed="isFullscreen"
+                  :title="
+                    tm(
+                      isFullscreen
+                        ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                        : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+                    )
+                  "
+                  @click="toggleFullscreen"
+                >
+                  <v-icon size="14">
+                    {{
+                      isFullscreen ? "mdi-fullscreen-exit" : "mdi-fullscreen"
+                    }}
+                  </v-icon>
+                  {{
+                    tm(
+                      isFullscreen
+                        ? "spcodeProjectLoad.documentManager.fullscreen.exit"
+                        : "spcodeProjectLoad.documentManager.fullscreen.enter",
+                    )
+                  }}
+                </button>
+              </div>
+              <div
+                v-if="viewMode === 'rendered'"
+                class="document-manager__rendered"
+              >
+                <MarkdownView
+                  v-if="selectedRevision"
+                  :source="historicalFileContent"
+                  :is-dark="isDark"
+                  :container-class="selectedRevision ? 'historical' : ''"
+                />
+                <MarkdownView v-else :source="fileContent" :is-dark="isDark" />
+              </div>
+              <!-- Raw view (no edit): line numbers + (later) inline
+                 comments via FileBrowserCodeView. Binary / empty /
+                 not-ready cases render a small placeholder rather than
+                 an empty code view. -->
+              <div v-else-if="viewMode === 'raw'" class="document-manager__raw">
+                <FileBrowserCodeView
+                  v-if="
+                    !editMode &&
+                    rawFilePath &&
+                    !rawIsBinary &&
+                    rawContent &&
+                    rawHighlightReady
+                  "
+                  class="document-manager__raw-codeview"
+                  :highlighted-html="rawHighlightedHtml"
+                  :file-path="rawFilePath"
+                  :comments="rawComments"
+                  :active-edit-line="activeEditLine"
+                  :active-edit-comment-id="activeEditCommentId"
+                  :is-dark="isDark"
+                  @request-add="onRequestAddComment"
+                  @request-edit="onRequestEditComment"
+                />
+                <div
+                  v-else-if="rawIsBinary"
+                  class="document-manager__raw-placeholder"
+                >
+                  {{
+                    tm(
+                      "spcodeProjectLoad.documentManager.raw.binaryPlaceholder",
+                    )
+                  }}
+                </div>
+                <div
+                  v-else-if="rawFilePath && !rawContent"
+                  class="document-manager__raw-placeholder"
+                >
+                  {{
+                    tm("spcodeProjectLoad.documentManager.raw.emptyPlaceholder")
+                  }}
+                </div>
+                <div v-else class="document-manager__raw-placeholder">
+                  {{ tm("spcodeProjectLoad.documentManager.raw.loading") }}
+                </div>
+                <FileCommentEditor
+                  v-if="activeEditLine !== null && activeEditContext"
+                  :line="activeEditLine"
+                  :comment-id="activeEditCommentId"
+                  :initial-text="editorInitialText"
+                  :line-content="activeEditContext.lineContent"
+                  :context-before="activeEditContext.contextBefore"
+                  :context-after="activeEditContext.contextAfter"
+                  :file-path="rawFilePath"
+                  @save="onSaveComment"
+                  @cancel="closeCommentEditor"
+                  @delete="onDeleteComment"
+                />
+              </div>
+              <DiffPreview
+                v-else
+                :content="diffPatch ?? ''"
+                :is-dark="isDark"
+              />
+              <!--
+                2026-07-14: the "查看评论列表" button (and its
+                CommentsPreviewDialog instance) is removed. Users
+                still browse / delete / clear comments via the
+                chip + preview dialog surfaced from ChatInput's
+                comment indicator, which is the canonical entry
+                point. The line-level comment editor on the right
+                pane is unchanged.
+              -->
+              <button
+                type="button"
+                class="document-manager__edit-btn"
+                @click="onStartEdit"
+              >
+                <v-icon size="14">mdi-pencil-outline</v-icon>
+                {{ tm("spcodeProjectLoad.documentManager.editor.edit") }}
+              </button>
+            </template>
+          </section>
+
+          <div
+            v-show="!isHistoryCollapsed"
+            class="document-manager__divider document-manager__divider--history"
+            role="separator"
+            aria-orientation="vertical"
+            :aria-valuenow="Math.round(historySplit.percent.value)"
+            :aria-valuemin="15"
+            :aria-valuemax="40"
+            @mousedown="historySplit.startResize"
+          />
+
+          <DocumentHistoryPanel
+            v-show="!isHistoryCollapsed"
+            class="document-manager__history"
+            :style="{ width: historySplit.percent.value + '%' }"
+            :git-log="gitLog"
+            :file-relative="selectedDoc"
+            :current-revision="selectedRevision"
+            :is-loading="gitLog.state.value.kind === 'loading'"
+            @select-revision="onSelectRevision"
+            @compare-current="onCompareCurrent"
+            @collapse="isHistoryCollapsed = true"
+          />
+
+          <!-- History expand handle: mirrors the left expand handle
+             but anchored to the right edge of the body. -->
+          <button
+            v-if="isHistoryCollapsed"
+            type="button"
+            class="document-manager__expand-handle document-manager__expand-handle--history"
+            :title="tm('spcodeProjectLoad.documentManager.pane.expandHistory')"
+            :aria-label="
+              tm('spcodeProjectLoad.documentManager.pane.expandHistory')
+            "
+            @click="isHistoryCollapsed = false"
+          >
+            <v-icon size="14" class="document-manager__expand-handle-icon"
+              >mdi-chevron-double-left</v-icon
+            >
+            <span class="document-manager__expand-handle-label">{{
+              tm("spcodeProjectLoad.documentManager.pane.expandHistory")
+            }}</span>
+          </button>
+        </div>
+      </template>
+    </div>
+  </Teleport>
+</template>
+
+<style scoped>
+.document-manager {
+  /* Mirror the .file-browser-view sizing in
+     dashboard/src/components/chat/message_list_comps/FileBrowserView.vue:
+     height: 100% so the root is constrained to the parent
+     .git-diff-sidebar-body (which is itself sized by its own
+     column-flex `flex: 1` slot). Without an explicit height here,
+     the root falls back to its content height — and the content is
+     the long markdown file, which blows past the sidebar body and
+     triggers the sidebar body's own `overflow-y: auto`. The
+     historical `flex: 1 1 auto` line was a no-op: the parent
+     .git-diff-sidebar-body is not a flex container, so no flex
+     sizing rule applied and the root height became content-sized.
+     Keeping `display: flex; flex-direction: column; min-height: 0;
+     overflow: hidden` so the rest of the existing flex-column
+     pattern (__body, __right, __rendered scroll) still works. */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.document-manager__notice {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.document-manager__notice--warn {
+  background: rgba(var(--v-theme-warning), 0.1);
+  color: rgb(var(--v-theme-warning));
+}
+.document-manager__breadcrumb {
+  /* No extra padding: the breadcrumb component already carries
+     its own 9px 12px padding. */
+  flex: 0 0 auto;
+}
+/* 2026-07-13: flex-based body so we can drive pane widths from
+   useResizableSplit. Mirrors the FileBrowserView layout. */
+.document-manager__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.document-manager__body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+.document-manager__pane-left {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 120px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.document-manager__left {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+.document-manager__right {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Flex-column + overflow: hidden so that the inner
+     __rendered / __raw / __diff (and DocumentEditor's textarea in
+     edit mode) — each declared as `flex: 1 1 auto; overflow: auto` —
+     actually act as the *scrolling* sub-pane, matching the
+     .file-browser-preview pattern used by the workspace tab. Without
+     `display: flex; flex-direction: column; min-height: 0` here, the
+     inner `flex: 1` rules are no-ops (the children stack as ordinary
+     block elements), the right pane's content height blows past the
+     body's available height, and the user-visible scroll ends up
+     happening on a much higher ancestor (the whole project-changes
+     panel), which is what made the bottom action button get pushed
+     off-screen on long files. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+.document-manager__history {
+  /* Width is now driven by useResizableSplit (history pane lives on
+     the right edge, direction: 'right'). flex: 0 0 auto lets the
+     inline style from `historySplit.percent.value` take over while
+     still preventing the pane from flex-growing. min-width: 0 lets
+     the panel's internal scroll/list handle overflow without
+     blowing out the layout. */
+  flex: 0 0 auto;
+  min-width: 0;
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+/* 6px drag target. Negative horizontal margin widens the hit
+   area without changing the visible 1px line. */
+.document-manager__divider {
+  flex: 0 0 6px;
+  margin: 0 -2px;
+  background: transparent;
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  cursor: col-resize;
+  position: relative;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.document-manager__divider:hover,
+.document-manager__divider:active {
+  background: rgba(var(--v-theme-primary), 0.18);
+  border-left-color: rgba(var(--v-theme-primary), 0.5);
+}
+.document-manager__empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-size: 12.5px;
+  text-align: center;
+}
+.document-manager__banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(var(--v-theme-info), 0.08);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  font-size: 11.5px;
+  color: rgb(var(--v-theme-info));
+}
+.document-manager__banner-btn {
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.document-manager__raw {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: transparent;
+}
+.document-manager__raw-codeview {
+  /* FileBrowserCodeView sets flex: 1 on its .code-view root. Filling
+     the container here so the gutter stays sticky. */
+  flex: 1;
+  min-height: 0;
+}
+.document-manager__raw-placeholder {
+  padding: 24px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  font-size: 13px;
+  text-align: center;
+}
+.document-manager__rendered {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+.document-manager__error {
+  padding: 6px 10px;
+  font-size: 11px;
+  color: rgb(var(--v-theme-error));
+  background: rgba(var(--v-theme-error), 0.08);
+}
+.document-manager__edit-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
+  background: var(--v-theme-surface, transparent);
+  border-radius: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.75);
+  cursor: pointer;
+  z-index: 1;
+}
+.document-manager__edit-btn:hover {
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  color: rgb(var(--v-theme-primary));
+}
+.document-manager__view-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.document-manager__fullscreen-btn {
+  background: transparent;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+.document-manager__fullscreen-btn[aria-pressed="true"] {
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  color: rgb(var(--v-theme-primary));
+}
+.document-manager.is-fullscreen {
+  /* True viewport fullscreen (spec 2026-07-14 §3.2 + DiffPreview
+     pattern, spec 2026-06-30). The Teleport wrapper in <template>
+     moves this element to <body> when fullscreen is on; CSS then
+     positions it `fixed; inset: 0` so it covers the entire
+     viewport — not just the .git-diff-sidebar-body that normally
+     hosts DocumentManager.
+
+     The existing inner layout rules (flex-column for the root,
+     flex-row for .document-manager__body) keep working unchanged:
+     `position: fixed` resets the containing-block for absolutely
+     positioned descendants, but the document-manager itself is
+     still the flex parent for its children. */
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  width: 100%;
+  height: 100%;
+  background: rgb(var(--v-theme-background));
+  /* The chat page keeps other fullscreen surfaces in this slot
+     (e.g. image viewers, dialog overlays). z-index: 9999 matches
+     the DiffPreview overlay so they layer consistently. */
+}
+.document-manager__left-rail {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.document-manager__left-drawer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  z-index: 20;
+  background: rgb(var(--v-theme-surface));
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  overflow: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.document-manager__drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: rgba(0, 0, 0, 0.15);
+  cursor: default;
+}
+
+/* Collapse button: small chevron anchored to the top-right of
+   the tree pane. The history pane owns its own collapse button
+   inside DocumentHistoryPanel — that keeps the button inside a
+   `position: relative` ancestor and avoids the "absolute
+   positioning escapes to a far-away ancestor" pitfall we hit
+   when the button lived here with a hard-coded right offset. */
+.document-manager__collapse-btn {
+  position: absolute;
+  top: 4px;
+  z-index: 5;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--v-theme-surface), 0.85);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease,
+    border-color 0.1s ease;
+}
+.document-manager__collapse-btn:hover,
+.document-manager__collapse-btn:focus-visible {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  outline: none;
+}
+.document-manager__collapse-btn--tree {
+  right: 4px;
+}
+
+/* Expand handle: thin vertical strip on the outermost edge of
+   the body when its pane is collapsed. Mirrors the divider's
+   hover treatment and the FileBrowserView handle: flex column
+   with a chevron (top) and a vertical text label (bottom). */
+.document-manager__expand-handle {
+  flex: 0 0 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  cursor: pointer;
+  padding: 14px 0;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease,
+    border-color 0.1s ease;
+}
+.document-manager__expand-handle:hover,
+.document-manager__expand-handle:focus-visible {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+  outline: none;
+}
+.document-manager__expand-handle:not(
+    .document-manager__expand-handle--history
+  ) {
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+.document-manager__expand-handle--history {
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+.document-manager__expand-handle--history:hover,
+.document-manager__expand-handle--history:focus-visible {
+  border-left-color: rgba(var(--v-theme-primary), 0.4);
+}
+.document-manager__expand-handle-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+  writing-mode: horizontal-tb;
+}
+.document-manager__expand-handle-label {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Smooth width transition for collapse / expand. Suppressed while
+   dragging so mousemove updates don't lag behind the cursor. */
+.document-manager__pane-left,
+.document-manager__right,
+.document-manager__divider,
+.document-manager__history,
+.document-manager__expand-handle {
+  transition:
+    width 0.2s ease,
+    flex-basis 0.2s ease,
+    padding 0.2s ease;
+}
+.document-manager__body.resizing .document-manager__pane-left,
+.document-manager__body.resizing .document-manager__right,
+.document-manager__body.resizing .document-manager__divider,
+.document-manager__body.resizing .document-manager__history,
+.document-manager__body.resizing .document-manager__expand-handle {
+  transition: none;
+}
+
+/* Mobile: stack vertically and hide the desktop-only collapse /
+   expand affordances (the user can scroll the list out of view
+   instead). */
+@media (max-width: 760px) {
+  .document-manager__body {
+    flex-direction: column;
+  }
+  .document-manager__pane-left,
+  .document-manager__right,
+  .document-manager__history {
+    width: 100% !important;
+    flex: 1 1 auto;
+  }
+  .document-manager__history {
+    flex: 0 0 auto;
+    max-height: 40vh;
+  }
+  .document-manager__divider {
+    width: auto;
+    height: 6px;
+    margin: 0;
+    border-left: none;
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+    cursor: default;
+  }
+  .document-manager__collapse-btn,
+  .document-manager__expand-handle {
+    display: none;
+  }
+}
+</style>

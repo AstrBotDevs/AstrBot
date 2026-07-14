@@ -96,6 +96,10 @@ const emit = defineEmits<{
   // authoritative server response.
   (e: "stage-paths", paths: string[]): void;
   (e: "unstage-paths", paths: string[]): void;
+  // Bulk restore: parent iterates the array and calls the file-restore
+  // endpoint once per path (the backend only accepts a single file per
+  // request), then aggregates the result into one snackbar + refresh.
+  (e: "restore-paths", paths: string[]): void;
 }>();
 
 const spcodeStatus = useSpcodeProjectStatus();
@@ -111,6 +115,19 @@ const showUnstageButton = computed(() => {
   if (!spcodeStatus.status.value.loaded) return false;
   if (!spcodeStatus.status.value.umo) return false;
   return props.selectedScope === "staged";
+});
+// Bulk restore (toolbar + per-file / per-section checkboxes) is
+// available in every scope — staged, unstaged, AND `all` (with HEAD).
+// The underlying `git checkout -- <file>` discards the working-tree
+// change regardless of staging state, so a user looking at the
+// unified `all` view can still bulk-revert a subset of files. The
+// single-file "restore" button on GitDiffFileItem uses the same gate
+// (it just isn't scope-aware), so the bulk UI mirrors it 1:1.
+const showRestoreButton = computed(() => {
+  if (!props.onRestore) return false;
+  if (!spcodeStatus.status.value.loaded) return false;
+  if (!spcodeStatus.status.value.umo) return false;
+  return true;
 });
 // UI #3: bulk stage / unstage of selected files is only meaningful
 // in the `unstaged` and `staged` scopes (every visible file is by
@@ -346,6 +363,41 @@ function onClickUnstageSelected(): void {
   emit("unstage-paths", paths);
 }
 
+// "Select all" toggle: when every visible file is already in the
+// selection, clicking again clears the selection (matches the
+// user-described "再次点击则取消全选" semantics). The selection
+// stays scoped to the currently-visible file list (`files.value`),
+// so switching scope or worktree naturally resets it via the
+// `watch(selectedScope)` and component re-mount respectively.
+const allSelected = computed<boolean>(() => {
+  const list = files.value;
+  if (list.length === 0) return false;
+  for (const f of list) {
+    if (!selectedFiles.value.has(f.path)) return false;
+  }
+  return true;
+});
+
+function toggleSelectAll(): void {
+  if (allSelected.value) {
+    clearSelection();
+    return;
+  }
+  const updated = new Set<string>();
+  for (const f of files.value) updated.add(f.path);
+  selectedFiles.value = updated;
+}
+
+// Bulk restore: emit the full selection so the parent can show a
+// confirmation dialog and then iterate. We do NOT clear the
+// selection here — the parent drives that on success so failures
+// leave the user's checkboxes intact for retry.
+function onClickRestoreSelected(): void {
+  const paths = Array.from(selectedFiles.value);
+  if (paths.length === 0) return;
+  emit("restore-paths", paths);
+}
+
 function toggleGroupSelect(section: DiffSection, next: boolean): void {
   const updated = new Set(selectedFiles.value);
   for (const f of section.files) {
@@ -435,9 +487,16 @@ function isSectionPartiallySelected(section: DiffSection): boolean {
     </div>
 
     <!-- UI #3: toolbar. Expand / collapse all + (when something is
-         selected) the count + bulk stage / unstage buttons. Renders
-         even when no items are selected so the user can find the
-         "expand all" affordance. -->
+         selected) the count + bulk stage / unstage / restore buttons.
+         The "select all" toggle is shown alongside expand/collapse
+         (matching the per-section "select all" pattern below) so it
+         is always reachable, regardless of whether the user has
+         already started selecting. Renders even when no items are
+         selected so the user can find the "expand all" affordance.
+         Note: stage / unstage are gated to their respective scopes
+         (no per-file classification is available in `all`), but the
+         select-all + restore affordances are reachable in every
+         scope — see `showRestoreButton` above. -->
     <div v-if="files.length > 0" class="git-diff-toolbar">
       <div class="git-diff-toolbar-group">
         <button
@@ -459,6 +518,43 @@ function isSectionPartiallySelected(section: DiffSection): boolean {
         >
           <v-icon size="14">mdi-unfold-less-horizontal</v-icon>
           <span>{{ tm("spcodeProjectLoad.diffPreview.toolbar.collapseAll") }}</span>
+        </button>
+        <!-- "Select all" toggle. Reachable whenever ANY bulk
+             affordance is available — stage, unstage, OR restore.
+             This means it shows in the `all` scope too, where
+             per-file checkboxes are also visible specifically for
+             the bulk-restore flow. Label/icon flip between
+             "all selected" and "not all selected" for clarity. -->
+        <button
+          v-if="
+            showStageButton || showUnstageButton || showRestoreButton
+          "
+          type="button"
+          class="git-diff-toolbar-btn"
+          :class="{ 'is-active': allSelected }"
+          :title="
+            allSelected
+              ? tm('spcodeProjectLoad.diffPreview.toolbar.deselectAll')
+              : tm('spcodeProjectLoad.diffPreview.toolbar.selectAll')
+          "
+          :aria-label="
+            allSelected
+              ? tm('spcodeProjectLoad.diffPreview.toolbar.deselectAll')
+              : tm('spcodeProjectLoad.diffPreview.toolbar.selectAll')
+          "
+          :aria-pressed="allSelected"
+          @click="toggleSelectAll"
+        >
+          <v-icon size="14">{{
+            allSelected
+              ? "mdi-checkbox-marked"
+              : "mdi-checkbox-multiple-blank-outline"
+          }}</v-icon>
+          <span>{{
+            allSelected
+              ? tm("spcodeProjectLoad.diffPreview.toolbar.deselectAll")
+              : tm("spcodeProjectLoad.diffPreview.toolbar.selectAll")
+          }}</span>
         </button>
       </div>
       <div v-if="selectedFiles.size > 0" class="git-diff-toolbar-group">
@@ -493,6 +589,29 @@ function isSectionPartiallySelected(section: DiffSection): boolean {
           <v-icon size="14">mdi-arrow-down-bold-circle-outline</v-icon>
           <span>{{
             tm("spcodeProjectLoad.diffPreview.toolbar.unstageSelected", {
+              count: selectedFiles.size,
+            })
+          }}</span>
+        </button>
+        <!-- "Restore changes" sits next to stage/unstage. Reachable
+             in every scope (staged, unstaged, all) because the
+             underlying git checkout works on working-tree state
+             regardless of staging. Only enabled when at least one
+             file is selected. The parent shows a confirmation
+             dialog before discarding anything, since restore is
+             irreversible. -->
+        <button
+          v-if="showRestoreButton"
+          type="button"
+          class="git-diff-toolbar-btn is-restore"
+          :disabled="selectedFiles.size === 0"
+          :title="tm('spcodeProjectLoad.diffPreview.toolbar.restoreSelected', { count: selectedFiles.size })"
+          :aria-label="tm('spcodeProjectLoad.diffPreview.toolbar.restoreSelected', { count: selectedFiles.size })"
+          @click="onClickRestoreSelected"
+        >
+          <v-icon size="14">mdi-restore</v-icon>
+          <span>{{
+            tm("spcodeProjectLoad.diffPreview.toolbar.restoreSelected", {
               count: selectedFiles.size,
             })
           }}</span>
@@ -540,7 +659,10 @@ function isSectionPartiallySelected(section: DiffSection): boolean {
              Renders a real <input> so a11y is native (vs. our
              aria-checked button used in the file row). -->
         <span
-          v-if="(showStageButton || showUnstageButton) && section.files.length > 0"
+          v-if="
+            (showStageButton || showUnstageButton || showRestoreButton) &&
+            section.files.length > 0
+          "
           class="git-diff-section-check"
           @click.stop
         >
@@ -585,7 +707,9 @@ function isSectionPartiallySelected(section: DiffSection): boolean {
           :is-unstaging="isUnstagingForPath(f.path)"
           :is-new-file="newFilePaths?.has(f.path) ?? false"
           :on-open-file="onOpenFile"
-          :selectable="showStageButton || showUnstageButton"
+          :selectable="
+            showStageButton || showUnstageButton || showRestoreButton
+          "
           :is-selected="selectedFiles.has(f.path)"
           :selectable-aria-label="
             tm('spcodeProjectLoad.diffPreview.toolbar.selectFile', { path: f.path })
@@ -717,6 +841,26 @@ function isSectionPartiallySelected(section: DiffSection): boolean {
 }
 .git-diff-toolbar-btn.is-unstage:hover:not(:disabled) {
   background: rgba(255, 152, 0, 0.1);
+}
+/* "Restore changes" tints warning-red to match the destructive
+   intent of git checkout (the single-file restore dialog uses
+   the same color). Distinct from the orange unstage accent so
+   the two are never confused at a glance. */
+.git-diff-toolbar-btn.is-restore {
+  color: rgb(248, 81, 73);
+}
+.git-diff-toolbar-btn.is-restore:hover:not(:disabled) {
+  background: rgba(248, 81, 73, 0.1);
+}
+/* "Select all" pressed state mirrors the per-section checkbox's
+   primary accent so the toolbar reflects the same selection
+   signal the user sees in each section header. */
+.git-diff-toolbar-btn.is-active {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+}
+.git-diff-toolbar-btn.is-active:hover:not(:disabled) {
+  background: rgba(var(--v-theme-primary), 0.18);
 }
 
 .git-diff-toolbar-selected {

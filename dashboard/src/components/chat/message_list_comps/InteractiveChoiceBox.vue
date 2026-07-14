@@ -27,8 +27,10 @@
         >mdi-check-circle</v-icon
       >
       <div class="choice-header-text">
-        <div v-if="part.title" class="choice-title">{{ part.title }}</div>
-        <div class="choice-prompt">{{ part.prompt }}</div>
+        <div v-if="part.title" class="choice-title" :title="part.title">
+          {{ part.title }}
+        </div>
+        <div class="choice-prompt" :title="part.prompt">{{ part.prompt }}</div>
       </div>
     </div>
     <div v-else class="choice-header choice-header--ignored">
@@ -36,9 +38,18 @@
       <span class="choice-ignored-label">{{
         tm("interactiveChoice.ignored")
       }}</span>
-      <span v-if="part.prompt" class="choice-prompt choice-prompt--muted">{{
-        part.prompt
-      }}</span>
+      <span
+        v-if="part.title"
+        class="choice-title choice-title--ignored"
+        :title="part.title"
+        >{{ part.title }}</span
+      >
+      <span
+        v-if="part.prompt"
+        class="choice-prompt choice-prompt--muted"
+        :title="part.prompt"
+        >{{ part.prompt }}</span
+      >
     </div>
 
     <!-- Pending: prose 段(帮用户决策)+ 选项按钮 + 自由输入 -->
@@ -58,11 +69,15 @@
           :aria-label="ariaLabelForOption(opt)"
           @click="onOptionClick(opt)"
         >
-          <span class="choice-option-label">
+          <span class="choice-option-label" :title="opt.label">
             <span v-if="opt.id" class="choice-option-id">{{ opt.id }}.</span>
             {{ opt.label }}
           </span>
-          <span v-if="opt.description" class="choice-option-description">
+          <span
+            v-if="opt.description"
+            class="choice-option-description"
+            :title="opt.description"
+          >
             {{ opt.description }}
           </span>
         </button>
@@ -129,9 +144,7 @@
             ? tm("interactiveChoice.collapseDetails")
             : tm("interactiveChoice.expandDetails")
         }}</span>
-        <span class="choice-collapse-count"
-          >({{ collapseItemCount }})</span
-        >
+        <span class="choice-collapse-count">({{ collapseItemCount }})</span>
       </button>
       <div v-if="optionsExpanded" class="choice-details">
         <InteractiveChoiceProse
@@ -157,12 +170,18 @@
                 class="choice-option-check"
                 >mdi-check</v-icon
               >
-              <span class="choice-option-label">
-                <span v-if="opt.id" class="choice-option-id">{{ opt.id }}.</span>
+              <span class="choice-option-label" :title="opt.label">
+                <span v-if="opt.id" class="choice-option-id"
+                  >{{ opt.id }}.</span
+                >
                 {{ opt.label }}
               </span>
             </div>
-            <span v-if="opt.description" class="choice-option-description">
+            <span
+              v-if="opt.description"
+              class="choice-option-description"
+              :title="opt.description"
+            >
               {{ opt.description }}
             </span>
           </div>
@@ -389,6 +408,18 @@ function ariaLabelForOption(opt: InteractiveChoiceOption): string {
 
 .choice-header--ignored {
   color: rgba(var(--v-theme-on-surface), 0.6);
+  /* 让长 title / prompt 能在 header 行内自然换行,不被压成单字符。
+     v1.2 之前 ignored header 只渲染 label + prompt,内容短;补上
+     title 渲染后(见模板),CJK 长 title 可能在 560px 容器里被
+     flex 默认 shrink 挤扁,加 wrap 让浏览器自动换行。 */
+  flex-wrap: wrap;
+}
+
+.choice-title--ignored {
+  /* 与 pending/submitted 的 .choice-title 共享字号字重,这里只
+     收敛 line-height 让行内 title 不与 label 基线打架。 */
+  line-height: 1.3;
+  word-break: break-word;
 }
 
 .choice-ignored-label {

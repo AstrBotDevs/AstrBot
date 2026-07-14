@@ -307,9 +307,12 @@
       "toolbar": {
         "expandAll": "全部展开",
         "collapseAll": "全部折叠",
+        "selectAll": "全选",
+        "deselectAll": "取消全选",
         "selectedCount": "已选 {count} 个",
         "stageSelected": "暂存 ({count})",
         "unstageSelected": "取消暂存 ({count})",
+        "restoreSelected": "恢复改动 ({count})",
         "clearSelection": "清空选择",
         "selectAllInGroup": "选中 {label} 下的全部文件",
         "selectFile": "选中 {path}"
@@ -382,6 +385,7 @@
           "empty": "暂无评论",
           "closeButton": "关闭",
           "clearAllButton": "全部删除",
+          "clearAllConfirm": "确定删除全部评论吗?此操作不可撤销",
           "deleteButton": "删除此评论",
           "lineLabel": "L {line}",
           "openWithCount": "打开评论预览 ({count})",
@@ -508,10 +512,15 @@
         "buttonAria": "恢复文件 {path}",
         "confirmTitle": "恢复文件？",
         "confirmMessage": "将丢弃 \"{path}\" 相对于 index 的所有改动，该操作不可撤销。",
+        "confirmTitleMultiple": "恢复 {count} 个文件？",
+        "confirmMessageMultiple": "将丢弃已选 {count} 个文件的未提交改动，该操作不可撤销。",
         "confirmAction": "恢复",
         "confirmCancel": "取消",
         "success": "已恢复 {path}",
+        "successMultiple": "已恢复 {count} 个文件",
+        "successPartial": "已恢复 {success}/{total} 个文件（{failed} 个失败）",
         "error": {
+          "allFailed": "未能恢复所选的 {count} 个文件",
           "reason": {
             "network": "网络连接失败",
             "unknown": "恢复失败（{reason}）",
@@ -728,6 +737,78 @@
       "activeTooltipMulti": "Plan 模式已开启 · 本会话 {count} 次构建 · 点击切换到 Build",
       "activeSegment": "Plan 模式",
       "inactiveSegment": "Build 模式"
+    },
+    "gitDiffSidebar": {
+      "tabs": {
+        "docs": "文档管理"
+      }
+    },
+    "documentManager": {
+      "pathBar": {
+        "label": "文档目录",
+        "editHint": "点击修改路径",
+        "resetTitle": "恢复为默认 docs/",
+        "goUpTitle": "返回上一级",
+        "invalidPath": "路径无效:必须是项目内的相对路径",
+        "storageWarning": "浏览器存储不可用,本次会话结束后保存将失效"
+      },
+      "pane": {
+        "collapseTree": "隐藏目录",
+        "expandTree": "显示目录",
+        "collapseHistory": "隐藏历史",
+        "expandHistory": "显示历史"
+      },
+      "tree": {
+        "empty": "该目录下没有 .md 文件",
+        "noHistory": "此文档还未被提交过任何历史",
+        "loadError": "无法加载目录树:{reason}",
+        "pathMissing": "路径 '{path}' 不存在,5 秒后回到默认"
+      },
+      "viewMode": {
+        "raw": "原文",
+        "rendered": "渲染",
+        "diff": "与当前对比",
+        "viewingRevision": "正在查看历史版本 {sha}",
+        "backToCurrent": "回到当前"
+      },
+      "raw": {
+        "binaryPlaceholder": "二进制文件,无法以原文方式显示",
+        "emptyPlaceholder": "空文件",
+        "loading": "正在准备视图…"
+      },
+      "history": {
+        "title": "历史",
+        "currentPlaceholder": "当前工作树",
+        "viewThisRevision": "查看此版本",
+        "compareWithCurrent": "与当前对比",
+        "loadFail": "无法读取历史版本"
+      },
+      "editor": {
+        "newFile": "新建",
+        "createFilePlaceholder": "文件名,如 plan.md 或 notes.txt",
+        "filenameInvalid": "文件名必须以 .md 或 .txt 结尾,只允许字母/数字/_/-/空格/.",
+        "filenameExists": "同名文件已存在",
+        "edit": "修改",
+        "save": "保存",
+        "saving": "保存中",
+        "cancel": "取消",
+        "cancelDirty": "有未保存修改,确定放弃?",
+        "delete": "删除",
+        "rename": "重命名",
+        "renameUnavailable": "重命名功能已可用",
+        "deleteConfirmTitle": "确认删除文档?",
+        "deleteConfirmBody": "将删除 {path},不可撤销",
+        "saveError": "保存失败",
+        "deleteError": "删除失败"
+      },
+      "fullscreen": {
+        "enter": "进入全屏",
+        "exit": "退出全屏",
+        "openDrawer": "展开左侧文件树"
+      },
+      "newFile": "选择 .md 文件或新建",
+      "noFileSelected": "请先选择一个文档",
+      "noProject": "请先加载项目"
     }
   },
   "copy": {

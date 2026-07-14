@@ -1,38 +1,9 @@
 <script setup>
-import { ref, watch, computed, onUnmounted } from "vue";
+import { ref, watch, computed } from "vue";
 import { useTheme } from "vuetify";
-import MarkdownIt from "markdown-it";
-import DOMPurify from "dompurify";
 import { pluginApi, statsApi } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
-import { copyToClipboard } from "@/utils/clipboard";
-import {
-  escapeHtml,
-  ensureShikiLanguages,
-  normalizeShikiLanguage,
-  renderShikiCode,
-} from "@/utils/shiki";
-
-// 1. 在 setup 作用域创建 MarkdownIt 实例
-const md = new MarkdownIt({
-  html: true,
-  linkify: true,
-  typographer: true,
-  breaks: false,
-});
-
-md.enable(["table", "strikethrough"]);
-md.renderer.rules.table_open = () => '<div class="table-container"><table>';
-md.renderer.rules.table_close = () => "</table></div>";
-
-// 2. 复制按钮的 SVG 图标常量
-const ICONS = {
-  SUCCESS:
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20,6 9,17 4,12"></polyline></svg>',
-  ERROR:
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
-  COPY: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>',
-};
+import MarkdownView from "@/components/shared/MarkdownView.vue";
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -53,214 +24,8 @@ const content = ref(null);
 const error = ref(null);
 const loading = ref(false);
 const isEmpty = ref(false);
-const copyFeedbackTimer = ref(null);
 const lastRequestId = ref(0);
-const lastRenderId = ref(0);
-const scrollContainer = ref(null);
-const renderedHtml = ref("");
 const isDark = computed(() => theme.global.current.value.dark);
-
-const MARKDOWN_SANITIZE_OPTIONS = {
-  ALLOWED_TAGS: [
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "p",
-    "br",
-    "hr",
-    "ul",
-    "ol",
-    "li",
-    "blockquote",
-    "pre",
-    "code",
-    "a",
-    "img",
-    "table",
-    "thead",
-    "tbody",
-    "tr",
-    "th",
-    "td",
-    "strong",
-    "em",
-    "del",
-    "s",
-    "details",
-    "summary",
-    "div",
-    "span",
-    "input",
-    "button",
-    "svg",
-    "rect",
-    "path",
-    "polyline",
-  ],
-  ALLOWED_ATTR: [
-    "href",
-    "src",
-    "alt",
-    "title",
-    "class",
-    "id",
-    "target",
-    "rel",
-    "type",
-    "checked",
-    "disabled",
-    "open",
-    "align",
-    "width",
-    "height",
-    "viewBox",
-    "fill",
-    "stroke",
-    "stroke-width",
-    "points",
-    "d",
-    "x",
-    "y",
-    "rx",
-    "ry",
-    "data-code-block-index",
-  ],
-};
-
-const CODE_BLOCK_SANITIZE_OPTIONS = {
-  ALLOWED_TAGS: ["div", "span", "button", "svg", "rect", "path", "polyline", "pre", "code"],
-  ALLOWED_ATTR: [
-    "class",
-    "title",
-    "type",
-    "width",
-    "height",
-    "viewBox",
-    "fill",
-    "stroke",
-    "stroke-width",
-    "points",
-    "d",
-    "x",
-    "y",
-    "rx",
-    "ry",
-    "style",
-    "tabindex",
-  ],
-};
-
-function slugifyHeading(text, slugCounts) {
-  const base = (text || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-
-  if (!base) return "";
-
-  const count = slugCounts.get(base) || 0;
-  slugCounts.set(base, count + 1);
-  return count === 0 ? base : `${base}-${count}`;
-}
-
-onUnmounted(() => {
-  if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
-});
-
-function sanitizeHighlightedBlock(html) {
-  return DOMPurify.sanitize(html, CODE_BLOCK_SANITIZE_OPTIONS);
-}
-
-async function updateRenderedHtml() {
-  const source = content.value;
-  const renderId = ++lastRenderId.value;
-  void locale?.value;
-
-  if (!source) {
-    renderedHtml.value = "";
-    return;
-  }
-
-  let highlighter = null;
-  const env = {};
-  const tokens = md.parse(source, env);
-
-  try {
-    const languages = tokens
-      .filter((token) => token.type === "fence")
-      .map((token) => normalizeShikiLanguage(token.info));
-    highlighter = await ensureShikiLanguages(languages);
-  } catch (err) {
-    console.error("Failed to initialize Shiki for README dialog:", err);
-  }
-
-  if (renderId !== lastRenderId.value) return;
-
-  const highlightedBlocks = [];
-
-  md.renderer.rules.fence = (tokens, idx) => {
-    const token = tokens[idx];
-    const lang = normalizeShikiLanguage(token.info);
-    const code = token.content;
-    const escapedLangLabel =
-      lang && lang !== "text" ? escapeHtml(lang) : "";
-    const highlighted = highlighter
-      ? renderShikiCode(highlighter, code, lang, isDark.value ? "dark" : "light")
-      : `<pre class="shiki shiki-fallback"><code>${escapeHtml(code)}</code></pre>`;
-    const html = sanitizeHighlightedBlock(`<div class="code-block-wrapper">
-      ${escapedLangLabel ? `<span class="code-lang-label">${escapedLangLabel}</span>` : ""}
-      <button class="copy-code-btn" title="${t("core.common.copy")}">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-      </button>
-      ${highlighted}
-    </div>`);
-
-    const placeholderIndex = highlightedBlocks.push(html) - 1;
-    return `<div data-code-block-index="${placeholderIndex}"></div>`;
-  };
-
-  const rawHtml = md.renderer.render(tokens, md.options, env);
-
-  const cleanHtml = DOMPurify.sanitize(rawHtml, MARKDOWN_SANITIZE_OPTIONS);
-
-  const tempDiv = document.createElement("div");
-  tempDiv.innerHTML = cleanHtml;
-
-  const slugCounts = new Map();
-  tempDiv.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
-    if (heading.id) {
-      slugCounts.set(heading.id, (slugCounts.get(heading.id) || 0) + 1);
-      return;
-    }
-
-    const slug = slugifyHeading(heading.textContent, slugCounts);
-    if (slug) heading.id = slug;
-  });
-
-  tempDiv.querySelectorAll("a").forEach((link) => {
-    const href = link.getAttribute("href");
-    if (href && (href.startsWith("http") || href.startsWith("//"))) {
-      link.setAttribute("target", "_blank");
-      link.setAttribute("rel", "noopener noreferrer");
-    }
-  });
-
-  tempDiv.querySelectorAll("[data-code-block-index]").forEach((placeholder) => {
-    const index = Number(placeholder.getAttribute("data-code-block-index"));
-    placeholder.outerHTML = highlightedBlocks[index] || "";
-  });
-
-  if (renderId === lastRenderId.value) {
-    renderedHtml.value = tempDiv.innerHTML;
-  }
-}
 
 const modeConfig = computed(() => {
   if (props.mode === "changelog") {
@@ -344,53 +109,6 @@ watch(
   { immediate: true },
 );
 
-watch([content, locale, isDark], () => {
-  updateRenderedHtml();
-}, { immediate: true });
-
-async function handleContainerClick(event) {
-  const btn = event.target.closest(".copy-code-btn");
-  if (btn) {
-    const code = btn.closest(".code-block-wrapper")?.querySelector("code");
-    if (code) {
-      const success = await copyToClipboard(code.textContent || "");
-      showCopyFeedback(btn, success);
-    }
-    return;
-  }
-
-  const anchor = event.target.closest('a[href^="#"]');
-  if (!anchor) return;
-
-  const rawHref = anchor.getAttribute("href");
-  const targetId = rawHref ? decodeURIComponent(rawHref.slice(1)) : "";
-  if (!targetId) return;
-
-  const target = scrollContainer.value?.querySelector(
-    `#${CSS.escape(targetId)}`,
-  );
-  if (!target) return;
-
-  event.preventDefault();
-  target.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function showCopyFeedback(btn, success) {
-  if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
-  btn.setAttribute("title", t(`core.common.${success ? "copied" : "error"}`));
-  btn.innerHTML = success ? ICONS.SUCCESS : ICONS.ERROR;
-  btn.style.color = success ? "var(--v-theme-success)" : "var(--v-theme-error)";
-
-  copyFeedbackTimer.value = setTimeout(() => {
-    if (document.body.contains(btn)) {
-      btn.innerHTML = ICONS.COPY;
-      btn.style.color = "";
-      btn.setAttribute("title", t("core.common.copy"));
-    }
-    copyFeedbackTimer.value = null;
-  }, 2000);
-}
-
 const _show = computed({
   get: () => props.show,
   set: (val) => emit("update:show", val),
@@ -417,7 +135,7 @@ const showActionArea = computed(() => {
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-card-title>
-      <v-card-text ref="scrollContainer" style="overflow-y: auto">
+      <v-card-text style="overflow-y: auto">
         <div v-if="showActionArea" class="d-flex justify-space-between mb-4">
           <v-btn
             v-if="modeConfig.showGithubButton && repoUrl"
@@ -453,12 +171,11 @@ const showActionArea = computed(() => {
           <p class="text-body-1 text-center">{{ modeConfig.loading }}</p>
         </div>
 
-        <div
-          v-else-if="renderedHtml"
-          class="markdown-body"
-          v-html="renderedHtml"
-          @click="handleContainerClick"
-        ></div>
+        <MarkdownView
+          v-else-if="content"
+          :source="content"
+          :is-dark="isDark"
+        />
 
         <div
           v-else-if="error"
@@ -502,237 +219,13 @@ const showActionArea = computed(() => {
   </v-dialog>
 </template>
 
-<style scoped>
-:deep(.markdown-body) {
-  --markdown-border: rgba(128, 128, 128, 0.3);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
-    sans-serif;
-  line-height: 1.6;
-  padding: 8px 0;
-  color: var(--v-theme-secondaryText);
-}
-
-:deep(.markdown-body [align="center"]) {
-  text-align: center;
-}
-:deep(.markdown-body [align="right"]) {
-  text-align: right;
-}
-
-:deep(.markdown-body h1),
-:deep(.markdown-body h2),
-:deep(.markdown-body h3),
-:deep(.markdown-body h4),
-:deep(.markdown-body h5),
-:deep(.markdown-body h6) {
-  margin-top: 24px;
-  margin-bottom: 16px;
-  font-weight: 600;
-  line-height: 1.25;
-  scroll-margin-top: 12px;
-}
-
-:deep(.markdown-body h1) {
-  font-size: 2em;
-  border-bottom: 1px solid var(--v-theme-border);
-  padding-bottom: 0.3em;
-}
-:deep(.markdown-body h2) {
-  font-size: 1.5em;
-  border-bottom: 1px solid var(--v-theme-border);
-  padding-bottom: 0.3em;
-}
-:deep(.markdown-body p) {
-  margin-top: 0;
-  margin-bottom: 16px;
-}
-
-:deep(.markdown-body .code-block-wrapper) {
-  position: relative;
-  margin-bottom: 16px;
-}
-:deep(.markdown-body .code-lang-label) {
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  font-size: 12px;
-  color: #8b949e;
-  text-transform: uppercase;
-  font-weight: 500;
-  z-index: 1;
-}
-
-:deep(.markdown-body .copy-code-btn) {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(110, 118, 129, 0.4);
-  border: none;
-  border-radius: 6px;
-  padding: 6px;
-  cursor: pointer;
-  color: #c9d1d9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background-color 0.2s,
-    color 0.2s;
-  z-index: 1;
-}
-
-:deep(.markdown-body .copy-code-btn:hover) {
-  background: rgba(110, 118, 129, 0.6);
-  color: #fff;
-}
-
-:deep(.markdown-body code) {
-  padding: 0.2em 0.4em;
-  margin: 0;
-  background-color: rgba(110, 118, 129, 0.2);
-  border-radius: 6px;
-  font-size: 85%;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-}
-
-:deep(.markdown-body pre.shiki) {
-  padding: 16px;
-  padding-top: 32px;
-  overflow: auto;
-  font-size: 85%;
-  line-height: 1.45;
-  border-radius: 6px;
-  margin: 0;
-  border: 1px solid rgba(128, 128, 128, 0.18);
-}
-
-:deep(.markdown-body pre.shiki code) {
-  background-color: transparent;
-  padding: 0;
-  border-radius: 0;
-  color: inherit;
-}
-
-:deep(.markdown-body pre.shiki .line) {
-  display: block;
-  min-height: 1.45em;
-}
-
-:deep(.markdown-body pre.shiki.shiki-fallback) {
-  background-color: #f6f8fa;
-  color: #24292f;
-}
-:deep(.markdown-body ul),
-:deep(.markdown-body ol) {
-  padding-left: 2em;
-  margin-bottom: 16px;
-}
-
-:deep(.markdown-body img) {
-  max-width: 100%;
-  margin: 8px 0;
-  box-sizing: border-box;
-  background-color: var(--v-theme-background);
-  border-radius: 3px;
-}
-
-:deep(.markdown-body img[src*="shields.io"]),
-:deep(.markdown-body img[src*="badge"]) {
-  display: inline-block;
-  vertical-align: middle;
-  height: auto;
-  margin: 2px 4px;
-  background-color: transparent;
-}
-
-:deep(.markdown-body blockquote) {
-  padding: 0 1em;
-  color: var(--v-theme-secondaryText);
-  border-left: 0.25em solid var(--v-theme-border);
-  margin-bottom: 16px;
-}
-
-:deep(.markdown-body a) {
-  color: var(--v-theme-primary);
-  text-decoration: none;
-}
-:deep(.markdown-body a:hover) {
-  text-decoration: underline;
-}
-
-:deep(.markdown-body table) {
-  border-spacing: 0;
-  border-collapse: collapse;
-  width: 100%;
-  margin-bottom: 0;
-  border: 1px solid var(--markdown-border);
-}
-:deep(.markdown-body .table-container) {
-  width: 100%;
-  overflow-x: auto;
-  margin-bottom: 16px;
-  border: 1px solid var(--markdown-border);
-  border-radius: 6px;
-}
-
-:deep(.markdown-body table th),
-:deep(.markdown-body table td) {
-  padding: 6px 13px;
-  border: 1px solid var(--markdown-border);
-}
-:deep(.markdown-body table th) {
-  font-weight: 600;
-  background-color: rgba(128, 128, 128, 0.1);
-}
-:deep(.markdown-body table tr) {
-  background-color: transparent;
-}
-:deep(.markdown-body table tr:nth-child(2n)) {
-  background-color: rgba(128, 128, 128, 0.05);
-}
-
-:deep(.markdown-body hr) {
-  height: 0.25em;
-  padding: 0;
-  margin: 24px 0;
-  background-color: var(--v-theme-containerBg);
-  border: 0;
-}
-
-:deep(.markdown-body details) {
-  margin-bottom: 16px;
-  border: 1px solid var(--v-theme-border);
-  border-radius: 6px;
-  padding: 8px 12px;
-  background-color: var(--v-theme-surface);
-}
-
-:deep(.markdown-body details[open]) {
-  padding-bottom: 12px;
-}
-:deep(.markdown-body summary) {
-  cursor: pointer;
-  font-weight: 600;
-  padding: 4px 0;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-:deep(.markdown-body summary::before) {
-  content: "▶";
-  font-size: 0.75em;
-  transition: transform 0.2s ease;
-}
-:deep(.markdown-body details[open] summary::before) {
-  transform: rotate(90deg);
-}
-:deep(.markdown-body summary::-webkit-details-marker) {
-  display: none;
-}
-:deep(.markdown-body details > *:not(summary)) {
-  margin-top: 12px;
-}
-
-</style>
+<!--
+  2026-07-13: Markdown rendering delegated to <MarkdownView>, which
+  itself delegates to markstream-vue's <MarkdownRender> — the same
+  component ChatUI uses. This drops the self-built createMarkdownRenderer
+  pipeline + ~370 lines of hand-rolled CSS, and the readme modal now
+  renders identically to the chat message view. MarkdownView handles
+  the copy-code button click and in-document anchor jumps itself, so
+  the previously bespoke click handler + copy feedback code in this
+  file is no longer needed.
+-->

@@ -10,8 +10,8 @@ import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useSpcodeFileBrowser } from "@/composables/useSpcodeFileBrowser";
 import type { SpcodeFileBrowserEntry } from "@/composables/parseSpcodeFileBrowser";
 import FileBrowserBreadcrumb from "./FileBrowserBreadcrumb.vue";
-import FileBrowserEntryList from "./FileBrowserEntryList.vue";
 import FileBrowserFilePreview from "./FileBrowserFilePreview.vue";
+import FileTreeList from "./FileTreeList.vue";
 import SearchPanel from "./SearchPanel.vue";
 
 const props = defineProps<{
@@ -275,7 +275,24 @@ onBeforeUnmount(() => {
         <!-- Expand handle: only when collapsed. Placed FIRST in DOM
                order so it sits at the leftmost position in the flex
                row. Click to restore the left pane at its previous
-               width (leftPanePercent ref is preserved across collapse). -->
+               width (leftPanePercent ref is preserved across collapse).
+
+             2026-07-14: the previous incarnation stacked a chevron
+             and a vertical-text label inside a 24px-wide, fully
+             transparent strip. The vertical label forced the button
+             to grow to ~90–255px tall (zh-CN ≈ 90px, en-US ≈ 225px,
+             ru-RU ≈ 255px — see the 2026-07-09 author comment).
+             When the surrounding container was short (e.g. inside
+             the diff-preview fullscreen overlay where the body can
+             be only ~100px tall), the label overflowed the button,
+             rendering on top of the breadcrumb above and making
+             the affordance look like floating text. This rewrite
+             keeps the chevron only and drops the vertical label;
+             the i18n string is still surfaced via the native
+             `title` tooltip on hover / focus, so accessibility is
+             unchanged. A subtle primary-tinted background gives
+             the handle visual chrome so it no longer reads as
+             floating glyphs. -->
         <button
           v-if="isLeftPaneCollapsed"
           type="button"
@@ -284,20 +301,9 @@ onBeforeUnmount(() => {
           :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
           @click="isLeftPaneCollapsed = false"
         >
-          <!--
-            2026-07-09: vertical text label so the (otherwise
-            affordance-less) 24px-wide handle reads as a real
-            button. The chevron sits at the top (visual "point
-            right" hint), the i18n label runs vertically below it.
-            The label uses writing-mode: vertical-rl with
-            text-orientation: upright — see the styles for why.
-          -->
-          <v-icon size="14" class="file-browser-expand-handle-icon"
+          <v-icon size="16" class="file-browser-expand-handle-icon"
             >mdi-chevron-double-right</v-icon
           >
-          <span class="file-browser-expand-handle-label">{{
-            tm("spcodeProjectLoad.fileBrowser.pane.expand")
-          }}</span>
         </button>
 
         <!-- Left pane wrapper: holds the entry list AND the collapse
@@ -310,10 +316,15 @@ onBeforeUnmount(() => {
           class="file-browser-pane-left"
           :style="{ width: leftPanePercent + '%' }"
         >
-          <FileBrowserEntryList
+          <FileTreeList
             :state="dirComposable.state.value"
             :selected-path="previewPath"
+            :root-path="rootPath"
+            :preview-path="previewPath"
+            :is-dark="!!isDark"
+            :breadcrumb="false"
             @navigate="onEntryNavigate"
+            @breadcrumb-navigate="onBreadcrumbNavigate"
           />
           <button
             v-if="previewPath"
@@ -495,30 +506,36 @@ onBeforeUnmount(() => {
   border-color: rgba(var(--v-theme-primary), 0.4);
   outline: none;
 }
-/* Expand handle: thin vertical strip at the leftmost edge of the
-   body when the left pane is collapsed. Mirrors the divider's
-   hover treatment so the affordance is discoverable. 24px gives
-   a generous click target without being obtrusive.
+/* Expand handle: thin strip at the leftmost edge of the body when
+   the left pane is collapsed. Mirrors the divider's hover treatment
+   so the affordance is discoverable.
 
-   2026-07-09: switched the inner layout to flex-column so the
-   handle now stacks a chevron (top) and a vertical text label
-   (bottom). The vertical label — rendered via writing-mode +
-   text-orientation: upright — turns a previously bare 24px-wide
-   strip into a clearly labelled button. `padding: 12px 0` adds
-   vertical breathing room so the label doesn't kiss the edges. */
+   2026-07-14: the previous version stacked a chevron and a vertical
+   text label inside a fully-transparent 24px-wide strip. The label
+   forced the button to grow to ~90–255px tall (zh-CN ≈ 90px, en-US
+   ≈ 225px, ru-RU ≈ 255px), which overflowed the button area inside
+   short containers (notably the diff-preview fullscreen overlay)
+   and rendered on top of the breadcrumb above — making the handle
+   look like floating text. This rewrite:
+     - drops the vertical label (the i18n string is still on the
+       native `title` tooltip, so accessibility is unchanged);
+     - adds a subtle primary-tinted background + 1px border so the
+       handle reads as a real button, not a floating glyph;
+     - keeps the icon-only chevron centered so the button height
+       stays anchored to the icon (~16px) plus padding, no matter
+       how short the parent is. */
 .file-browser-expand-handle {
   flex: 0 0 24px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  background: transparent;
+  background: rgba(var(--v-theme-primary), 0.08);
   border: none;
-  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  color: rgba(var(--v-theme-on-surface), 0.5);
+  border-right: 1px solid rgba(var(--v-theme-primary), 0.2);
+  color: rgb(var(--v-theme-primary));
   cursor: pointer;
-  padding: 14px 0;
+  padding: 6px 0;
+  align-self: stretch;
   transition:
     background 0.1s ease,
     color 0.1s ease,
@@ -526,53 +543,18 @@ onBeforeUnmount(() => {
 }
 .file-browser-expand-handle:hover,
 .file-browser-expand-handle:focus-visible {
-  background: rgba(var(--v-theme-primary), 0.12);
+  background: rgba(var(--v-theme-primary), 0.18);
   color: rgb(var(--v-theme-primary));
-  border-right-color: rgba(var(--v-theme-primary), 0.4);
+  border-right-color: rgba(var(--v-theme-primary), 0.5);
   outline: none;
 }
-/* Icon: stays horizontal (writing-mode default) so the chevron
-   points right as expected. A small opacity dip makes it
-   subordinate to the text label — the icon is a hint, the text
-   is the explanation. */
+/* Icon: stays horizontal so the chevron points right as expected.
+   A small opacity dip keeps the icon from screaming at the user
+   while still being clearly readable as the only label. */
 .file-browser-expand-handle-icon {
   flex-shrink: 0;
-  opacity: 0.85;
-  /* writing-mode: horizontal-tb explicitly so the icon doesn't
-     inherit the vertical writing-mode from a parent rule (Vuetify
-     buttons can carry writing-mode from a v-app ancestor in some
-     themes). */
+  opacity: 0.95;
   writing-mode: horizontal-tb;
-}
-/* Vertical text label.
-   - writing-mode: vertical-rl makes text flow top-to-bottom
-     (each character stacked). The `rl` (right-to-left column
-     progression) is the conventional CJK vertical-writing mode
-     and reads the same for Latin text in our use-case.
-   - text-orientation: upright keeps each glyph standing upright
-     (no 90deg rotation of Latin letters), so the label reads as
-     readable text top-to-bottom in every locale. Without this,
-     Latin letters would be rotated 90deg clockwise, which looks
-     like typographic "noise" for a button label.
-   - letter-spacing: 4px adds horizontal gap between stacked
-     glyphs so the label doesn't read as a wall of text; each
-     character gets a brief visual pause.
-   - line-height: 1 + white-space: nowrap + writing-mode vertical
-     together guarantee the label stays a single stacked column
-     without unintended wrapping. */
-.file-browser-expand-handle-label {
-  writing-mode: vertical-rl;
-  text-orientation: upright;
-  letter-spacing: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  user-select: none;
-  /* The label's vertical extent depends on character count
-     (6 for zh-CN, 15 for en-US, 17 for ru-RU); 11px font +
-     4px gap = ~15px per char ≈ 90–255px total. Fits comfortably
-     in the file-browser's typically 400px+ height. */
 }
 .file-browser-empty {
   display: flex;
