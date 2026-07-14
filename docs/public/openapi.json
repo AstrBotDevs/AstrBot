@@ -3418,6 +3418,31 @@
         }
       }
     },
+    "/api/v1/plugins/validate/repo": {
+      "post": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Validate a GitHub plugin repository before installation",
+        "operationId": "validatePluginRepo",
+        "x-astrbot-scope": "plugin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginValidateRepoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
     "/api/v1/plugins/failed": {
       "get": {
         "tags": [
@@ -4052,6 +4077,97 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/McpServerConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/resources": {
+      "get": {
+        "tags": [
+          "MCP"
+        ],
+        "summary": "List resources exposed by a connected MCP server",
+        "operationId": "listMcpResources",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "name": "server_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/resource-templates": {
+      "get": {
+        "tags": [
+          "MCP"
+        ],
+        "summary": "List resource templates exposed by a connected MCP server",
+        "operationId": "listMcpResourceTemplates",
+        "x-astrbot-scope": "mcp",
+        "parameters": [
+          {
+            "name": "server_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/mcp/resources/read": {
+      "post": {
+        "tags": [
+          "MCP"
+        ],
+        "summary": "Read a text preview or binary metadata from an MCP resource",
+        "operationId": "readMcpResource",
+        "x-astrbot-scope": "mcp",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpResourceReadRequest"
               }
             }
           }
@@ -6180,6 +6296,17 @@
           },
           "description": {
             "type": "string"
+          },
+          "workspace_type": {
+            "type": "string",
+            "enum": [
+              "session",
+              "project",
+              "custom"
+            ]
+          },
+          "workspace_path": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -6213,6 +6340,9 @@
             "type": "string"
           },
           "filename": {
+            "type": "string"
+          },
+          "stored_filename": {
             "type": "string"
           },
           "mime_type": {
@@ -6272,6 +6402,9 @@
       "PluginSourceBindRequest": {
         "type": "object",
         "properties": {
+          "install_method": {
+            "type": "string"
+          },
           "registry_url": {
             "type": "string",
             "nullable": true
@@ -6337,6 +6470,16 @@
           },
           "ignore_version_check": {
             "type": "boolean"
+          },
+          "install_method": {
+            "type": "string"
+          },
+          "registry_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "market_plugin_id": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -6361,6 +6504,31 @@
           },
           "ignore_version_check": {
             "type": "boolean"
+          },
+          "install_method": {
+            "type": "string"
+          },
+          "registry_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "market_plugin_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PluginValidateRepoRequest": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "proxy": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -6452,6 +6620,24 @@
           }
         },
         "additionalProperties": true
+      },
+      "McpResourceReadRequest": {
+        "type": "object",
+        "required": [
+          "server_name",
+          "uri"
+        ],
+        "properties": {
+          "server_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uri": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
       },
       "ModelScopeSyncRequest": {
         "type": "object",

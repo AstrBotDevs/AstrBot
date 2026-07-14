@@ -114,6 +114,61 @@ export interface ProviderEmbeddingDimensionData {
   [key: string]: unknown;
 }
 
+export interface McpResource {
+  uri: string;
+  name: string;
+  title?: string | null;
+  description?: string | null;
+  mime_type?: string | null;
+  size?: number | null;
+  annotations?: Record<string, unknown> | null;
+}
+
+export interface McpResourceTemplate {
+  uri_template: string;
+  name: string;
+  title?: string | null;
+  description?: string | null;
+  mime_type?: string | null;
+  annotations?: Record<string, unknown> | null;
+}
+
+export interface McpResourceListData {
+  resources: McpResource[];
+  next_cursor?: string | null;
+}
+
+export interface McpResourceTemplateListData {
+  resource_templates: McpResourceTemplate[];
+  next_cursor?: string | null;
+}
+
+export interface McpTextResourceContent {
+  type: 'text';
+  uri: string;
+  mime_type?: string | null;
+  text: string;
+  size: number;
+  truncated: boolean;
+  annotations?: Record<string, unknown> | null;
+}
+
+export interface McpBlobResourceContent {
+  type: 'blob';
+  uri: string;
+  mime_type?: string | null;
+  size: number;
+  annotations?: Record<string, unknown> | null;
+}
+
+export type McpResourceContent =
+  | McpTextResourceContent
+  | McpBlobResourceContent;
+
+export interface McpResourceReadData {
+  contents: McpResourceContent[];
+}
+
 export interface VersionData {
   version?: string;
   dashboard_version?: string;
@@ -1126,6 +1181,36 @@ export const mcpApi = {
   syncModelScope(payload?: ModelScopeSyncRequest) {
     return typed<OpenConfig>(
       openApiV1.syncModelScopeMcpServers({ body: payload }),
+    );
+  },
+  listResources(serverName: string, cursor?: string) {
+    return typed<McpResourceListData>(
+      openApiV1.listMcpResources({
+        query: {
+          server_name: serverName,
+          ...(cursor ? { cursor } : {}),
+        },
+      }),
+    );
+  },
+  listResourceTemplates(serverName: string, cursor?: string) {
+    return typed<McpResourceTemplateListData>(
+      openApiV1.listMcpResourceTemplates({
+        query: {
+          server_name: serverName,
+          ...(cursor ? { cursor } : {}),
+        },
+      }),
+    );
+  },
+  readResource(serverName: string, uri: string) {
+    return typed<McpResourceReadData>(
+      openApiV1.readMcpResource({
+        body: {
+          server_name: serverName,
+          uri,
+        },
+      }),
     );
   },
 };

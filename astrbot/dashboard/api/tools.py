@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from astrbot.dashboard.async_utils import run_maybe_async
 from astrbot.dashboard.responses import ApiError, ok
 from astrbot.dashboard.schemas import (
+    McpResourceReadRequest,
     McpServerByNameRequest,
     McpServerRequest,
     ModelScopeSyncRequest,
@@ -216,6 +217,37 @@ async def list_mcp_servers(
     service: ToolsService = Depends(get_service),
 ):
     return await _run(service.get_mcp_servers)
+
+
+@router.get("/mcp/resources")
+async def list_mcp_resources(
+    server_name: str = Query(..., min_length=1),
+    cursor: str | None = Query(default=None),
+    _auth: AuthContext = Depends(require_mcp_scope),
+    service: ToolsService = Depends(get_service),
+):
+    return await _run(lambda: service.list_mcp_resources(server_name, cursor))
+
+
+@router.get("/mcp/resource-templates")
+async def list_mcp_resource_templates(
+    server_name: str = Query(..., min_length=1),
+    cursor: str | None = Query(default=None),
+    _auth: AuthContext = Depends(require_mcp_scope),
+    service: ToolsService = Depends(get_service),
+):
+    return await _run(lambda: service.list_mcp_resource_templates(server_name, cursor))
+
+
+@router.post("/mcp/resources/read")
+async def read_mcp_resource(
+    payload: McpResourceReadRequest,
+    _auth: AuthContext = Depends(require_mcp_scope),
+    service: ToolsService = Depends(get_service),
+):
+    return await _run(
+        lambda: service.read_mcp_resource(payload.server_name, payload.uri)
+    )
 
 
 @router.post("/mcp/servers")

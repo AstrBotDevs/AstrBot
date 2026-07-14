@@ -96,6 +96,19 @@ Configure it in the AstrBot WebUI:
 
 That's it.
 
+## Browsing MCP Resources
+
+When a connected MCP server advertises the `resources` capability, its entry in
+the WebUI shows a **Resources** button. Open it to browse the server's resource
+catalog and resource templates. AstrBot reads a concrete resource only after
+you select it, then displays its metadata and a plain-text preview.
+
+The combined text preview for each read is limited to 256 KiB. Binary payloads
+are not sent to the browser; only their URI, MIME type, and size are shown.
+Browsing does not register Resources as model-callable Tools or add their
+contents to the model context. Resource subscriptions and change notifications
+are not supported yet.
+
 Reference links:
 
 1. Learn how to use MCP here: [Model Context Protocol](https://modelcontextprotocol.io/introduction)

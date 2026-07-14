@@ -81,6 +81,18 @@
               </v-icon>
               {{ tm('mcpServers.status.noTools') }}
             </template>
+
+            <v-btn
+              v-if="server.supports_resources"
+              class="ms-3"
+              color="primary"
+              prepend-icon="mdi-eye-outline"
+              size="x-small"
+              variant="tonal"
+              @click.stop="openResourceBrowser(server)"
+            >
+              {{ tm('mcpServers.resources.button') }}
+            </v-btn>
           </div>
 
           <template #actions>
@@ -235,6 +247,11 @@
       </v-card>
     </v-dialog>
 
+    <McpResourceBrowserDialog
+      v-model="showResourceBrowserDialog"
+      :server-name="resourceBrowserServerName"
+    />
+
     <!-- 同步 MCP 服务器对话框 -->
     <v-dialog v-model="showSyncMcpServerDialog" max-width="500px" persistent>
       <v-card>
@@ -303,6 +320,7 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import { mcpApi } from '@/api/v1';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import OutlinedActionListItem from '@/components/shared/OutlinedActionListItem.vue';
+import McpResourceBrowserDialog from './McpResourceBrowserDialog.vue';
 import {
   askForConfirmation as askForConfirmationDialog,
   useConfirmDialog
@@ -312,7 +330,8 @@ export default {
   name: 'McpServersSection',
   components: {
     VueMonacoEditor,
-    OutlinedActionListItem
+    OutlinedActionListItem,
+    McpResourceBrowserDialog
   },
   setup() {
     const { t } = useI18n();
@@ -333,6 +352,8 @@ export default {
       loading: false,
       loadingGettingServers: false,
       mcpServerUpdateLoaders: {},
+      showResourceBrowserDialog: false,
+      resourceBrowserServerName: '',
       isEditMode: false,
       serverConfigJson: '',
       jsonError: null,
@@ -360,7 +381,7 @@ export default {
           return `${server.command} ${(server.args || []).join(' ')}`;
         }
         const configKeys = Object.keys(server).filter(key =>
-          !['name', 'active', 'tools'].includes(key)
+          !['name', 'active', 'tools', 'supports_resources'].includes(key)
         );
         if (configKeys.length > 0) {
           return this.tm('mcpServers.status.configSummary', { keys: configKeys.join(', ') });
@@ -399,6 +420,10 @@ export default {
   methods: {
     openurl(url) {
       window.open(url, '_blank');
+    },
+    openResourceBrowser(server) {
+      this.resourceBrowserServerName = server.name;
+      this.showResourceBrowserDialog = true;
     },
     getServers() {
       this.loadingGettingServers = true;
@@ -523,6 +548,7 @@ export default {
       delete configCopy.active;
       delete configCopy.tools;
       delete configCopy.errlogs;
+      delete configCopy.supports_resources;
       this.currentServer = {
         name: server.name,
         active: server.active,

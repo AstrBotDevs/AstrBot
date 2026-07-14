@@ -411,6 +411,7 @@ class MCPClient:
 
         self._mcp_server_config: dict | None = None
         self._server_name: str | None = None
+        self._server_capabilities: mcp.types.ServerCapabilities | None = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False
 
@@ -521,6 +522,7 @@ class MCPClient:
         """Internal: perform the actual connection inside _run_connection's task."""
         # exit_stack is always set by _run_connection before _do_connect is called.
         assert self.exit_stack is not None
+        self._server_capabilities = None
         cfg = _prepare_config(mcp_server_config.copy())
 
         def logging_callback(
@@ -649,15 +651,81 @@ class MCPClient:
             self.session = await self.exit_stack.enter_async_context(
                 mcp.ClientSession(*stdio_transport),
             )
-        await self.session.initialize()
+        initialize_result = await self.session.initialize()
+        self._server_capabilities = initialize_result.capabilities
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
         """List all tools from the server and save them to self.tools"""
         if not self.session:
             raise Exception("MCP Client is not initialized")
-        response = await self.session.list_tools()
+        if (
+            self._server_capabilities is not None
+            and getattr(self._server_capabilities, "tools", None) is None
+        ):
+            response = mcp.types.ListToolsResult(tools=[])
+        else:
+            response = await self.session.list_tools()
         self.tools = response.tools
         return response
+
+    @property
+    def supports_resources(self) -> bool:
+        """Whether the connected server advertises MCP resources support."""
+        return bool(self._server_capabilities and self._server_capabilities.resources)
+
+    async def list_resources(
+        self,
+        cursor: str | None = None,
+    ) -> mcp.types.ListResourcesResult:
+        """List resources exposed by the connected MCP server."""
+        if not self.session:
+            raise ValueError("MCP session is not available for resource listing.")
+        if not self.supports_resources:
+            raise RuntimeError("MCP server does not advertise resources support.")
+
+        if cursor is None:
+            return await self.session.list_resources()
+
+        try:
+            return await self.session.list_resources(cursor=cursor)
+        except TypeError as exc:
+            if "unexpected keyword argument 'cursor'" not in str(exc):
+                raise
+            raise RuntimeError(
+                "The installed MCP SDK does not support resource pagination."
+            ) from exc
+
+    async def list_resource_templates(
+        self,
+        cursor: str | None = None,
+    ) -> mcp.types.ListResourceTemplatesResult:
+        """List resource templates exposed by the connected MCP server."""
+        if not self.session:
+            raise ValueError(
+                "MCP session is not available for resource template listing."
+            )
+        if not self.supports_resources:
+            raise RuntimeError("MCP server does not advertise resources support.")
+
+        if cursor is None:
+            return await self.session.list_resource_templates()
+
+        try:
+            return await self.session.list_resource_templates(cursor=cursor)
+        except TypeError as exc:
+            if "unexpected keyword argument 'cursor'" not in str(exc):
+                raise
+            raise RuntimeError(
+                "The installed MCP SDK does not support resource template pagination."
+            ) from exc
+
+    async def read_resource(self, uri: str) -> mcp.types.ReadResourceResult:
+        """Read an MCP resource from the current connected session."""
+        if not self.session:
+            raise ValueError("MCP session is not available for resource reading.")
+        if not self.supports_resources:
+            raise RuntimeError("MCP server does not advertise resources support.")
+        return await self.session.read_resource(uri=uri)
 
     def _cancel_connection_task(self, task: asyncio.Task) -> None:
         """Cancel a connection owner task and track it until it finishes."""
@@ -786,6 +854,8 @@ class MCPClient:
             if pending:
                 await asyncio.gather(*pending, return_exceptions=True)
             self._old_connection_tasks.clear()
+
+        self._server_capabilities = None
 
         # Set running_event to unblock any waiting tasks
         self.running_event.set()

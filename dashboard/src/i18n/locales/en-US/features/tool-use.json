@@ -27,6 +27,31 @@
       "availableTools": "Available tools",
       "configSummary": "Config: {keys}",
       "noConfig": "No configuration set"
+    },
+    "resources": {
+      "button": "Resources",
+      "title": "Resources · {name}",
+      "applicationControlled": "Resources are browsed in the dashboard and read only after you select one. They are not exposed to the model as tools.",
+      "tabs": {
+        "resources": "Resources",
+        "templates": "Resource templates"
+      },
+      "catalogTitle": "Resource catalog",
+      "previewTitle": "Preview",
+      "selectPrompt": "Select a resource to read and preview it",
+      "empty": "This server did not return any resources",
+      "templatesEmpty": "This server did not return any resource templates",
+      "loadMore": "Load more",
+      "noContents": "This resource did not return any content",
+      "truncated": "The preview was truncated to keep the response size bounded.",
+      "binaryUnavailable": "Binary resource content is not sent to the browser or previewed.",
+      "close": "Close",
+      "errors": {
+        "list": "Failed to load resources: {error}",
+        "templates": "Failed to load resource templates: {error}",
+        "read": "Failed to read resource: {error}",
+        "unknown": "Unknown error"
+      }
     }
   },
   "functionTools": {
