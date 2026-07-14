@@ -1267,6 +1267,22 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/chat/runs/{run_id}/stream:
+    get:
+      tags: [Chat]
+      summary: Resume an active webchat run as an SSE stream
+      operationId: resumeChatRun
+      x-astrbot-scope: chat
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resumed server-sent chat stream or an error envelope
+
   /api/v1/chat/sessions/{session_id}/messages/{message_id}:
     patch:
       tags: [Chat]
@@ -2166,6 +2182,24 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/plugins/{plugin_id}/source:
+    post:
+      tags: [Plugins]
+      summary: Bind an installed plugin to a marketplace source
+      operationId: bindPluginSource
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginSourceBindRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/plugins/{plugin_id}/enabled:
     patch:
       tags: [Plugins]
@@ -2230,6 +2264,22 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/PluginVersionSupportRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/plugins/validate/repo:
+    post:
+      tags: [Plugins]
+      summary: Validate a GitHub plugin repository before installation
+      operationId: validatePluginRepo
+      x-astrbot-scope: plugin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PluginValidateRepoRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -3347,7 +3397,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/KnowledgeBaseRequest"
+              $ref: "#/components/schemas/KnowledgeBaseCreateRequest"
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -3412,6 +3462,12 @@ paths:
         - $ref: "#/components/parameters/KbId"
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter documents by name (case-insensitive partial match).
       responses:
         "200":
           $ref: "#/components/responses/Ok"
@@ -5393,6 +5449,11 @@ components:
           type: string
         description:
           type: string
+        workspace_type:
+          type: string
+          enum: [session, project, custom]
+        workspace_path:
+          type: string
       additionalProperties: false
 
     MessagePart:
@@ -5409,6 +5470,8 @@ components:
         url:
           type: string
         filename:
+          type: string
+        stored_filename:
           type: string
         mime_type:
           type: string
@@ -5442,6 +5505,18 @@ components:
         reinstall:
           type: boolean
           default: false
+      additionalProperties: false
+
+    PluginSourceBindRequest:
+      type: object
+      properties:
+        install_method:
+          type: string
+        registry_url:
+          type: string
+          nullable: true
+        market_plugin_id:
+          type: string
       additionalProperties: false
 
     PluginBatchUpdateRequest:
@@ -5485,6 +5560,13 @@ components:
           type: string
         ignore_version_check:
           type: boolean
+        install_method:
+          type: string
+        registry_url:
+          type: string
+          nullable: true
+        market_plugin_id:
+          type: string
       additionalProperties: false
 
     PluginUrlInstallRequest:
@@ -5502,6 +5584,24 @@ components:
           type: string
         ignore_version_check:
           type: boolean
+        install_method:
+          type: string
+        registry_url:
+          type: string
+          nullable: true
+        market_plugin_id:
+          type: string
+      additionalProperties: false
+
+    PluginValidateRepoRequest:
+      type: object
+      properties:
+        repository:
+          type: string
+        url:
+          type: string
+        proxy:
+          type: string
       additionalProperties: false
 
     PluginUploadInstallRequest:
@@ -5623,21 +5723,39 @@ components:
 
     KnowledgeBaseRequest:
       type: object
-      required: [name]
       properties:
-        name:
+        kb_name:
           type: string
         description:
           type: string
+        emoji:
+          type: string
         embedding_provider_id:
-          type: string
+          type: [string, "null"]
         rerank_provider_id:
-          type: string
-        chunking:
-          $ref: "#/components/schemas/DynamicConfig"
-        metadata:
-          $ref: "#/components/schemas/DynamicConfig"
+          type: [string, "null"]
+        chunk_size:
+          type: integer
+        chunk_overlap:
+          type: integer
+        top_k_dense:
+          type: integer
+        top_k_sparse:
+          type: integer
+        top_m_final:
+          type: integer
       additionalProperties: false
+
+    KnowledgeBaseCreateRequest:
+      allOf:
+        - $ref: "#/components/schemas/KnowledgeBaseRequest"
+        - type: object
+          required: [kb_name, embedding_provider_id]
+          properties:
+            kb_name:
+              type: string
+            embedding_provider_id:
+              type: string
 
     KnowledgeDocumentUploadRequest:
       type: object
@@ -5646,8 +5764,6 @@ components:
         file:
           type: string
           format: binary
-        parser:
-          type: string
 
     KnowledgeDocumentImportRequest:
       type: object

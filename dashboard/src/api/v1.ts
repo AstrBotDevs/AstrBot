@@ -32,12 +32,15 @@ import {
   type DynamicConfig,
   type EnabledPatch,
   type GhproxyTestRequest,
+  type KnowledgeBaseCreateRequest,
+  type KnowledgeBaseRequest,
   type LoginRequest,
   type ListConversationsData,
   type McpServerConfig,
   type ModelScopeSyncRequest,
   type PipInstallRequest,
   type PluginVersionSupportRequest,
+  type PluginValidateRepoRequest,
   type PluginConfigFileDeleteRequest,
   type ProviderConfigRequest,
   type BatchSessionProviderRequest,
@@ -75,6 +78,21 @@ export interface ProviderSchemaData {
   config_schema?: OpenConfig;
   providers?: OpenConfig[];
   provider_sources?: OpenConfig[];
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderListData {
+  providers?: OpenConfig[];
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderByTypeEnvelope extends ApiEnvelope<OpenConfig[]> {
+  model_metadata?: Record<string, unknown>;
+}
+
+export interface ProviderByIdData {
+  provider?: OpenConfig;
+  model_metadata?: Record<string, unknown>;
 }
 
 export interface ProviderSourceModelsData {
@@ -493,11 +511,13 @@ export const providerApi = {
     );
   },
   list(params?: ProviderListParams) {
-    return typed<{ providers: OpenConfig[] }>(
+    return typed<ProviderListData>(
       openApiV1.listProviders({ query: generatedQuery(params) }),
     );
   },
-  async listByProviderType(providerType: string): Promise<AxiosResponse<ApiEnvelope<OpenConfig[]>>> {
+  async listByProviderType(
+    providerType: string,
+  ): Promise<AxiosResponse<ProviderByTypeEnvelope>> {
     const capabilities = providerTypeToCapabilities(providerType);
     if (capabilities.length === 0) {
       const response = await providerApi.list();
@@ -506,6 +526,7 @@ export const providerApi = {
         data: {
           ...response.data,
           data: response.data.data.providers || [],
+          model_metadata: response.data.data.model_metadata || {},
         },
       };
     }
@@ -514,11 +535,21 @@ export const providerApi = {
       capabilities.map((capability) => providerApi.list({ capability })),
     );
     const first = responses[0];
+    const modelMetadata = responses.reduce<Record<string, unknown>>(
+      (acc, response) => ({
+        ...acc,
+        ...(response.data.data.model_metadata || {}),
+      }),
+      {},
+    );
     return {
       ...first,
       data: {
         ...first.data,
-        data: responses.flatMap((response) => response.data.data.providers || []),
+        data: responses.flatMap(
+          (response) => response.data.data.providers || [],
+        ),
+        model_metadata: modelMetadata,
       },
     };
   },
@@ -542,7 +573,7 @@ export const providerApi = {
     );
   },
   get(providerId: string, merged = false) {
-    return typed<{ provider: OpenConfig }>(
+    return typed<ProviderByIdData>(
       openApiV1.getProviderById({
         query: { provider_id: providerId, merged },
       }),
@@ -763,6 +794,9 @@ export const chatApi = {
   },
   sendStreamUrl() {
     return '/api/v1/chat';
+  },
+  resumeRunStreamUrl(runId: string) {
+    return `/api/v1/chat/runs/${encodeURIComponent(runId)}/stream`;
   },
   liveWebSocketUrl(token: string, host = window.location.host) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1294,6 +1328,19 @@ export const pluginApi = {
       openApiV1.installPluginFromUrl({ body: body as any }),
     );
   },
+  validateRepo(body: PluginValidateRepoRequest) {
+    return typed<OpenConfig>(
+      openApiV1.validatePluginRepo({ body }),
+    );
+  },
+  bindSource(pluginId: string, body: OpenConfig) {
+    return typed<OpenConfig>(
+      openApiV1.bindPluginSource({
+        path: { plugin_id: pluginId },
+        body: body as any,
+      }),
+    );
+  },
   page(pluginId: string, pageName: string) {
     return typed<any>(
       openApiV1.getPluginPageById({
@@ -1352,16 +1399,16 @@ export const knowledgeApi = {
       openApiV1.getKnowledgeBase({ path: { kb_id: kbId } }),
     );
   },
-  create(config: OpenConfig) {
+  create(config: KnowledgeBaseCreateRequest) {
     return typed<OpenConfig>(
-      openApiV1.createKnowledgeBase({ body: config as any }),
+      openApiV1.createKnowledgeBase({ body: config }),
     );
   },
-  update(kbId: string, config: OpenConfig) {
+  update(kbId: string, config: KnowledgeBaseRequest) {
     return typed<OpenConfig>(
       openApiV1.updateKnowledgeBase({
         path: { kb_id: kbId },
-        body: config as any,
+        body: config,
       }),
     );
   },
@@ -1370,7 +1417,7 @@ export const knowledgeApi = {
       openApiV1.deleteKnowledgeBase({ path: { kb_id: kbId } }),
     );
   },
-  documents(kbId: string, params?: { page?: number; page_size?: number }) {
+  documents(kbId: string, params?: { page?: number; page_size?: number; search?: string }) {
     return typed<any>(
       openApiV1.listKnowledgeDocuments({
         path: { kb_id: kbId },

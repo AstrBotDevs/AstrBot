@@ -20,6 +20,42 @@ html {
 .v-overlay.v-snackbar {
   --v-layout-left: 0px !important;
   --v-layout-right: 0px !important;
+
+  .v-snackbar__wrapper {
+    min-height: 52px;
+    border-radius: 8px !important;
+    box-shadow: 0 10px 24px rgba(16, 24, 40, 0.16) !important;
+  }
+
+  .v-snackbar__content {
+    padding: 14px 18px;
+    line-height: 1.35;
+    font-weight: 600;
+  }
+
+  .v-snackbar__actions {
+    margin-inline-end: 6px;
+  }
+
+  .v-snackbar__actions .v-btn {
+    color: inherit;
+  }
+
+  .v-snackbar__wrapper.bg-success {
+    color: #ffffff !important;
+    background-color: #457c3c !important;
+  }
+}
+
+.app-snackbar-message {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+
+  .v-icon {
+    flex: 0 0 auto;
+    opacity: 0.95;
+  }
 }
 
 .customizer-btn .icon {
@@ -43,6 +79,23 @@ html {
 pre, code, .markdown pre, .markdown code, .release-notes pre, .release-notes code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Helvetica Neue", monospace;
   color: var(--astrbot-code-color);
+}
+
+:root {
+  --astrbot-menu-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.v-overlay.v-menu {
+  .v-overlay__content > .v-card,
+  .v-overlay__content > .v-list {
+    border: 0 !important;
+    box-shadow: var(--astrbot-menu-shadow) !important;
+  }
+
+  .v-overlay__content .v-card,
+  .v-overlay__content .v-list {
+    border: 0 !important;
+  }
 }
 
 // Dark mode global overrides

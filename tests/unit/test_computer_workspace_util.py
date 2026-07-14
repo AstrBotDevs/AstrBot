@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from astrbot.core.tools.computer_tools import util as computer_util
+from astrbot.core.workspace import UNKNOWN_WORKSPACE_NAME
 
 
 def test_normalize_umo_for_workspace_preserves_normal_session_names() -> None:
@@ -17,22 +18,10 @@ def test_normalize_umo_for_workspace_preserves_normal_session_names() -> None:
 
 
 def test_normalize_umo_for_workspace_rejects_dot_only_values() -> None:
-    assert (
-        computer_util.normalize_umo_for_workspace(".")
-        == computer_util.UNKNOWN_WORKSPACE_NAME
-    )
-    assert (
-        computer_util.normalize_umo_for_workspace("..")
-        == computer_util.UNKNOWN_WORKSPACE_NAME
-    )
-    assert (
-        computer_util.normalize_umo_for_workspace("...")
-        == computer_util.UNKNOWN_WORKSPACE_NAME
-    )
-    assert (
-        computer_util.normalize_umo_for_workspace(" _._ ")
-        == computer_util.UNKNOWN_WORKSPACE_NAME
-    )
+    assert computer_util.normalize_umo_for_workspace(".") == UNKNOWN_WORKSPACE_NAME
+    assert computer_util.normalize_umo_for_workspace("..") == UNKNOWN_WORKSPACE_NAME
+    assert computer_util.normalize_umo_for_workspace("...") == UNKNOWN_WORKSPACE_NAME
+    assert computer_util.normalize_umo_for_workspace(" _._ ") == UNKNOWN_WORKSPACE_NAME
 
 
 @pytest.mark.parametrize(
@@ -61,7 +50,5 @@ def test_workspace_root_for_unsafe_umo_stays_under_workspaces(
 
     root = computer_util.workspace_root(unsafe_umo)
 
-    assert root == (workspaces_root / computer_util.UNKNOWN_WORKSPACE_NAME).resolve(
-        strict=False
-    )
+    assert root == (workspaces_root / UNKNOWN_WORKSPACE_NAME).resolve(strict=False)
     assert root.is_relative_to(workspaces_root.resolve(strict=False))
