@@ -434,7 +434,19 @@ class ProviderOpenAIOfficial(Provider):
                 extra_body.pop(field, None)
 
             messages = payloads.get("messages")
-            if isinstance(messages, list):
+            first_user = (
+                next(
+                    (
+                        message
+                        for message in messages
+                        if isinstance(message, dict) and message.get("role") == "user"
+                    ),
+                    None,
+                )
+                if isinstance(messages, list)
+                else None
+            )
+            if first_user is None or isinstance(first_user.get("content"), str):
                 system_parts: list[str] = []
                 compatible_messages: list[Any] = []
                 for message in messages:
@@ -454,11 +466,7 @@ class ProviderOpenAIOfficial(Provider):
                 if system_parts:
                     system_prompt = "\n\n".join(system_parts)
                     for index, message in enumerate(compatible_messages):
-                        if (
-                            isinstance(message, dict)
-                            and message.get("role") == "user"
-                            and isinstance(message.get("content"), str)
-                        ):
+                        if isinstance(message, dict) and message.get("role") == "user":
                             user_message = dict(message)
                             user_content = user_message.get("content", "")
                             user_message["content"] = (

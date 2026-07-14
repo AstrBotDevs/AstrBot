@@ -1374,6 +1374,84 @@ async def test_spark_lite_does_not_drop_unsupported_history_content():
 
 
 @pytest.mark.asyncio
+async def test_spark_lite_keeps_structured_first_user_content_unchanged():
+    """Keep structured first-user content unchanged for fallback handling."""
+    provider = _make_provider(
+        {
+            "api_base": "https://spark-api-open.xf-yun.com/v1",
+            "model": "lite",
+        }
+    )
+    try:
+        messages = [
+            {"role": "system", "content": "persona"},
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "hello"}],
+            },
+        ]
+        payloads = {"model": "lite", "messages": messages}
+
+        provider._apply_provider_specific_request_overrides(payloads, {})
+
+        assert payloads["messages"] == messages
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_spark_lite_converts_string_system_without_user():
+    """Preserve the existing system-only compatibility conversion."""
+    provider = _make_provider(
+        {
+            "api_base": "https://spark-api-open.xf-yun.com/v1",
+            "model": "lite",
+        }
+    )
+    try:
+        payloads = {
+            "model": "lite",
+            "messages": [{"role": "system", "content": "persona"}],
+        }
+
+        provider._apply_provider_specific_request_overrides(payloads, {})
+
+        assert payloads["messages"] == [
+            {"role": "user", "content": "persona"}
+        ]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_spark_lite_does_not_move_system_prompt_past_structured_user():
+    """Do not move a system prompt into a later string user message."""
+    provider = _make_provider(
+        {
+            "api_base": "https://spark-api-open.xf-yun.com/v1",
+            "model": "lite",
+        }
+    )
+    try:
+        messages = [
+            {"role": "system", "content": "persona"},
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "hello"}],
+            },
+            {"role": "assistant", "content": "answer"},
+            {"role": "user", "content": "continue"},
+        ]
+        payloads = {"model": "lite", "messages": messages}
+
+        provider._apply_provider_specific_request_overrides(payloads, {})
+
+        assert payloads["messages"] == messages
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
 async def test_spark_lite_query_removes_unsupported_request_fields(
     monkeypatch,
