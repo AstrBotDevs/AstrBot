@@ -67,6 +67,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const modelSearch = ref('')
 
   let suppressSourceWatch = false
+  let persistedProviderSourceIds = new Set<string>()
 
   const providerTypes = computed(() => [
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
@@ -454,8 +455,14 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     )
     if (!confirmed) return
 
+    const sourceId = String(source.id || '')
+    const isPersisted = persistedProviderSourceIds.has(sourceId)
+
     try {
-      await providerApi.deleteSource(source.id)
+      if (isPersisted) {
+        await providerApi.deleteSource(sourceId)
+        persistedProviderSourceIds.delete(sourceId)
+      }
 
       providers.value = providers.value.filter((p) => p.provider_source_id !== source.id)
       providerSources.value = providerSources.value.filter((s) => s.id !== source.id)
@@ -464,13 +471,18 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         selectedProviderSource.value = null
         selectedProviderSourceOriginalId.value = null
         editableProviderSource.value = null
+        availableModels.value = []
+        modelMetadata.value = {}
+        isSourceModified.value = false
       }
 
       showMessage(tm('providerSources.deleteSuccess'))
     } catch (error: any) {
       showMessage(error.message || tm('providerSources.deleteError'), 'error')
     } finally {
-      await loadConfig()
+      if (isPersisted) {
+        await loadConfig()
+      }
     }
   }
 
@@ -691,6 +703,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           providerTemplates.value = configSchema.value.provider.config_template
         }
         providerSources.value = response.data.data.provider_sources || []
+        persistedProviderSourceIds = new Set(
+          providerSources.value.map((source: any) => String(source.id || ''))
+        )
         modelMetadata.value = (response.data.data.model_metadata || {}) as Record<string, any>
         providers.value = response.data.data.providers || []
       }

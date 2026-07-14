@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from astrbot.core import LogBroker
+from astrbot.core import LogBroker, logger
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.dashboard.responses import ApiError, error
@@ -161,6 +161,25 @@ def create_dashboard_asgi_app(
     async def http_error_handler(_request: Request, exc: HTTPException):
         detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
         return JSONResponse(error(detail), status_code=exc.status_code)
+
+    @app.exception_handler(Exception)
+    async def unhandled_error_handler(request: Request, exc: Exception):
+        """Log unexpected API failures and return a safe JSON response.
+
+        Args:
+            request: Dashboard request that raised the exception.
+            exc: Unhandled exception raised while serving the request.
+
+        Returns:
+            A generic JSON error response without internal exception details.
+        """
+        logger.exception(
+            "Unhandled dashboard API exception for %s %s: %s",
+            request.method,
+            request.url.path,
+            exc,
+        )
+        return JSONResponse(error("Internal server error"), status_code=500)
 
     # Legacy dashboard routes keep old /api/* callers working without entering OpenAPI.
     app.include_router(legacy_api_keys_router)
