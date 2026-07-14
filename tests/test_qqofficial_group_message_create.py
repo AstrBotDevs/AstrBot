@@ -19,12 +19,12 @@ from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
+    QQOfficialMessageEvent,
+)
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     QQOfficialPlatformAdapter,
     _ensure_group_message_create_parser,
-)
-from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
-    QQOfficialMessageEvent,
 )
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     botClient as QQOfficialBotClient,
@@ -201,6 +201,19 @@ async def test_parse_to_qqofficial_preserves_at_component_order():
     )
 
     assert parsed[0] == "<@member-1> hello"
+
+
+@pytest.mark.parametrize("qq", [None, ""])
+@pytest.mark.asyncio
+async def test_parse_to_qqofficial_ignores_empty_at_component(qq: str | None):
+    mention = At(qq="placeholder")
+    mention.qq = cast(Any, qq)
+    chain = MessageChain(chain=[mention, Plain("hello")])
+
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(chain)
+
+    assert parsed[0] == "hello"
+    assert QQOfficialMessageEvent._has_mention(chain) is False
 
 
 @pytest.mark.asyncio
