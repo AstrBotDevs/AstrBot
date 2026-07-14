@@ -26,8 +26,8 @@ class TEIRerankProvider(RerankProvider):
         self.timeout = provider_config.get("timeout", 20)
         self.truncate = provider_config.get("tei_rerank_truncate", False)
         self.truncation_direction = provider_config.get(
-            "tei_rerank_truncation_direction", "Right"
-        )
+            "tei_rerank_truncation_direction", "right"
+        ).lower()
         self.raw_scores = provider_config.get("tei_rerank_raw_scores", False)
         self.return_text = provider_config.get("tei_rerank_return_text", False)
 

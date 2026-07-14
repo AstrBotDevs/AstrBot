@@ -2052,8 +2052,8 @@ CONFIG_METADATA_2 = {
                     "tei_rerank_truncation_direction": {
                         "description": "截断方向",
                         "type": "string",
-                        "options": ["Left", "Right"],
-                        "hint": "选择从文本的左侧(Left)还是右侧(Right)开始截断。仅在 截断超长文本 为 True 时生效。",
+                        "options": ["left", "right"],
+                        "hint": "选择从文本的左侧(left)还是右侧(right)开始截断。仅在 截断超长文本 为 True 时生效。",
                     },
                     "tei_rerank_raw_scores": {
                         "description": "返回原始分数",
