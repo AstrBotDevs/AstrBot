@@ -1685,7 +1685,10 @@ async def test_skills_like_requery_error_response_finishes_runner_without_repair
     mock_tool_executor,
     mock_hooks,
 ):
-    fallback_error = LLMResponse(role="err", completion_text="")
+    fallback_error = LLMResponse(
+        role="err",
+        completion_text="429 Too Many Requests",
+    )
     primary_provider = ScriptedProvider(
         "primary",
         [_tool_call_response(), LLMResponse(role="err", completion_text="")],
@@ -1703,6 +1706,10 @@ async def test_skills_like_requery_error_response_finishes_runner_without_repair
     responses = [response async for response in runner.step()]
 
     assert responses[-1].type == "err"
+    assert (
+        responses[-1].data["chain"].get_plain_text()
+        == "LLM 响应错误: 429 Too Many Requests"
+    )
     assert runner.done() is True
     assert runner.get_final_llm_resp() is fallback_error
     assert primary_provider.call_count == 2
