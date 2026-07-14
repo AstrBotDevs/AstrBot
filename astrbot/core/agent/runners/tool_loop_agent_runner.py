@@ -194,7 +194,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             parts.append(TextPart(text=llm_resp.completion_text))
         if len(parts) == 0:
             logger.warning("LLM returned empty assistant message with no tool calls.")
-        self.run_context.messages.append(Message(role="assistant", content=parts))
+        self._append_run_messages([Message(role="assistant", content=parts)])
 
         try:
             await self.agent_hooks.on_agent_done(self.run_context, llm_resp)
@@ -313,6 +313,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         ):
             m = await self._assemble_request_context_for_provider(request)
             messages.append(Message.model_validate(m))
+        self._persistent_messages = list(messages)
         if request.system_prompt:
             messages.insert(
                 0,
@@ -322,6 +323,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+
+    def _append_run_messages(self, messages: list[Message]) -> None:
+        """Append new agent messages to request and persistent histories.
+
+        Args:
+            messages: New messages produced during the current agent run.
+        """
+        self.run_context.messages.extend(messages)
+        self._persistent_messages.extend(messages)
+
+    def get_persistent_messages(self) -> list[Message]:
+        """Return the complete conversation history for persistence.
+
+        Returns:
+            A copy of the untrimmed messages accumulated during this agent run.
+        """
+        return list(self._persistent_messages)
 
     def _read_tool_hint(self) -> str:
         if self.read_tool is not None:
@@ -926,9 +944,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 tool_calls_result=tool_call_result_blocks,
             )
             # record the assistant message with tool calls
-            self.run_context.messages.extend(
-                tool_calls_result.to_openai_messages_model()
-            )
+            self._append_run_messages(tool_calls_result.to_openai_messages_model())
 
             # If there are cached images and the model supports image input,
             # append a user message with images so LLM can see them
@@ -960,8 +976,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                 )
                             )
                     if image_parts:
-                        self.run_context.messages.append(
-                            Message(role="user", content=image_parts)
+                        self._append_run_messages(
+                            [Message(role="user", content=image_parts)]
                         )
                         logger.debug(
                             f"Appended {len(cached_images)} cached image(s) to context for LLM review"
@@ -988,11 +1004,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if self.req:
                 self.req.func_tool = None
             # 注入提示词
-            self.run_context.messages.append(
-                Message(
-                    role="user",
-                    content=self.MAX_STEPS_REACHED_PROMPT,
-                )
+            self._append_run_messages(
+                [
+                    Message(
+                        role="user",
+                        content=self.MAX_STEPS_REACHED_PROMPT,
+                    )
+                ]
             )
             # 再执行最后一步
             async for resp in self.step():
@@ -1411,7 +1429,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.completion_text:
             parts.append(TextPart(text=llm_resp.completion_text))
         if parts:
-            self.run_context.messages.append(Message(role="assistant", content=parts))
+            self._append_run_messages([Message(role="assistant", content=parts)])
 
         try:
             await self.agent_hooks.on_agent_done(self.run_context, llm_resp)

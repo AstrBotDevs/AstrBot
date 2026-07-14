@@ -992,6 +992,35 @@ def _jwt_headers() -> dict[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_unhandled_dashboard_exception_returns_json_error(
+    asgi_app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def raise_unhandled_error():
+        raise RuntimeError("sensitive internal detail")
+
+    monkeypatch.setattr(
+        asgi_app.state.services.stats,
+        "get_start_time",
+        raise_unhandled_error,
+    )
+    transport = httpx.ASGITransport(app=asgi_app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get("/api/v1/stats/start-time")
+
+    assert response.status_code == 500
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json() == {
+        "status": "error",
+        "message": "Internal server error",
+    }
+    assert "sensitive internal detail" not in response.text
+
+
+@pytest.mark.asyncio
 async def test_public_versions_route_uses_static_folder(
     fake_core_lifecycle,
     fake_db: FakeDb,

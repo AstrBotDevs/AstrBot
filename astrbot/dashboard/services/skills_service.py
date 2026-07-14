@@ -443,7 +443,7 @@ class SkillsService:
         export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
         export_dir.mkdir(parents=True, exist_ok=True)
         zip_base = export_dir / skill_name
-        zip_path = zip_base.with_suffix(".zip")
+        zip_path = Path(f"{zip_base}.zip")
         if zip_path.exists():
             zip_path.unlink()
 

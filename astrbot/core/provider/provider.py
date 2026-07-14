@@ -172,19 +172,38 @@ class Provider(AbstractProvider):
         raise NotImplementedError()
 
     async def pop_record(self, context: list) -> None:
-        """弹出 context 第一条非系统提示词对话记录"""
-        poped = 0
-        indexs_to_pop = []
-        for idx, record in enumerate(context):
-            if record["role"] == "system":
-                continue
-            indexs_to_pop.append(idx)
-            poped += 1
-            if poped == 2:
-                break
+        """Remove the oldest complete conversation turn from a request context.
 
-        for idx in reversed(indexs_to_pop):
-            context.pop(idx)
+        Args:
+            context: OpenAI-compatible message dictionaries to trim in place.
+        """
+        first_message_index = next(
+            (
+                index
+                for index, record in enumerate(context)
+                if record.get("role") != "system"
+            ),
+            None,
+        )
+        if first_message_index is None:
+            return
+
+        next_user_index = next(
+            (
+                index
+                for index in range(first_message_index + 1, len(context))
+                if context[index].get("role") == "user"
+            ),
+            len(context),
+        )
+        context[:] = [
+            record
+            for index, record in enumerate(context)
+            if not (
+                first_message_index <= index < next_user_index
+                and record.get("role") != "system"
+            )
+        ]
 
     def _ensure_message_to_dicts(
         self,

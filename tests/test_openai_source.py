@@ -1,6 +1,7 @@
 import base64
 import builtins
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -58,6 +59,36 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
         provider_config=provider_config,
         provider_settings={},
     )
+
+
+@pytest.mark.asyncio
+async def test_pop_record_removes_complete_oldest_tool_call_turn():
+    provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
+    context = [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "first request"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "search", "arguments": "{}"},
+                }
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call-1", "content": "result"},
+        {"role": "assistant", "content": "first response"},
+        {"role": "user", "content": "second request"},
+    ]
+
+    await provider.pop_record(context)
+
+    assert context == [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "second request"},
+    ]
 
 
 def test_create_http_client_uses_openai_httpx_module(monkeypatch):
@@ -902,21 +933,21 @@ async def test_prepare_chat_payload_materializes_context_file_uri_image_urls(tmp
         await provider.terminate()
 
 
-def test_file_uri_to_path_preserves_windows_drive_letter():
-    assert file_uri_to_path("file:///C:/tmp/quoted-image.png") == (
-        "C:/tmp/quoted-image.png"
+def test_file_uri_to_path_normalizes_windows_drive_letter():
+    assert file_uri_to_path("file:///C:/tmp/quoted-image.png") == str(
+        Path("C:/tmp/quoted-image.png")
     )
 
 
-def test_file_uri_to_path_preserves_windows_netloc_drive_letter():
-    assert file_uri_to_path("file://C:/tmp/quoted-image.png") == (
-        "C:/tmp/quoted-image.png"
+def test_file_uri_to_path_normalizes_windows_netloc_drive_letter():
+    assert file_uri_to_path("file://C:/tmp/quoted-image.png") == str(
+        Path("C:/tmp/quoted-image.png")
     )
 
 
-def test_file_uri_to_path_preserves_remote_netloc_as_unc_path():
-    assert file_uri_to_path("file://server/share/quoted-image.png") == (
-        "//server/share/quoted-image.png"
+def test_file_uri_to_path_normalizes_remote_netloc_as_unc_path():
+    assert file_uri_to_path("file://server/share/quoted-image.png") == str(
+        Path("//server/share/quoted-image.png")
     )
 
 
