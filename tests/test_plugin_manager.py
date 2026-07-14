@@ -2147,7 +2147,7 @@ async def test_turn_on_plugin_rebinds_handlers_after_deactivated_reload(
     async def mock_global_put(*_):
         pass
 
-    async def mock_load(specified_module_path=None):
+    async def mock_load(specified_module_path=None, **kwargs):
         assert specified_module_path == module_path
 
         related_handlers = (
