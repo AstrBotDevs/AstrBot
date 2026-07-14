@@ -724,6 +724,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
         llm_resp_result = None
+        got_complete_response = False
 
         # Process request-time context before sending it to the provider.
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
@@ -769,6 +770,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     break
                 continue
             llm_resp_result = llm_response
+            got_complete_response = True
 
             # Chunk responses have already continued above. A missing usage report
             # means the latest context occupancy is unknown.
@@ -788,9 +790,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             else:
                 return
 
-        if self._is_stop_requested():
+        if self._is_stop_requested() and not got_complete_response:
             yield await self._finalize_aborted_step(llm_resp_result)
             return
+
+        if self._is_stop_requested() and got_complete_response:
+            logger.info(
+                "Agent was requested to stop, but LLM already returned a "
+                "complete response. Proceeding with normal response delivery."
+            )
 
         # 处理 LLM 响应
         llm_resp = llm_resp_result
