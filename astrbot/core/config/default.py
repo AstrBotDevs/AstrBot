@@ -2047,13 +2047,13 @@ CONFIG_METADATA_2 = {
                     "tei_rerank_truncate": {
                         "description": "截断超长文本",
                         "type": "bool",
-                        "hint": "当输入超过模型最大上下文长度时，是否自动截断。启用后需配合 tei_rerank_truncation_direction 使用。",
+                        "hint": "当输入超过模型最大上下文长度时，是否自动截断。启用后需配合 截断方向 使用。",
                     },
                     "tei_rerank_truncation_direction": {
                         "description": "截断方向",
                         "type": "string",
                         "options": ["Left", "Right"],
-                        "hint": "选择从文本的左侧(Left)还是右侧(Right)开始截断。仅在 tei_rerank_truncate 为 True 时生效。",
+                        "hint": "选择从文本的左侧(Left)还是右侧(Right)开始截断。仅在 截断超长文本 为 True 时生效。",
                     },
                     "tei_rerank_raw_scores": {
                         "description": "返回原始分数",
