@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import pytest
 import yaml
 
 from astrbot.core.star import star_manager as star_manager_module
+from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
@@ -627,7 +629,7 @@ async def test_turn_plugin_toggles_llm_tools_from_plugin_child_module(
     async def mock_terminate(star_metadata):
         assert star_metadata is plugin
 
-    async def mock_reload(plugin_name):
+    async def mock_reload(plugin_name, **_):
         assert plugin_name == plugin.root_dir_name
         return True, None
 
@@ -721,7 +723,7 @@ async def test_turn_plugin_preserves_user_disabled_llm_tools(
     async def mock_terminate(star_metadata):
         assert star_metadata is plugin
 
-    async def mock_reload(plugin_name):
+    async def mock_reload(plugin_name, **_):
         assert plugin_name == plugin.root_dir_name
         return True, None
 
@@ -2110,6 +2112,81 @@ async def test_reload_deactivated_plugin_preserves_tools(
 
 
 @pytest.mark.asyncio
+async def test_turn_on_plugin_rebinds_handlers_after_deactivated_reload(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    _clear_star_runtime_state()
+    plugin_name = "demo_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    plugin = star_manager_module.StarMetadata(
+        name=plugin_name,
+        root_dir_name=plugin_name,
+        module_path=module_path,
+        activated=False,
+    )
+    cast(Any, plugin_manager_pm.context).stars.append(plugin)
+    star_manager_module.star_map[module_path] = plugin
+    star_manager_module.star_registry.append(plugin)
+
+    async def raw_handler(plugin_instance, event):
+        return plugin_instance, event
+
+    handler = StarHandlerMetadata(
+        event_type=EventType.OnLLMRequestEvent,
+        handler_full_name=f"{module_path}.handler",
+        handler_name="handler",
+        handler_module_path=module_path,
+        handler=functools.partial(raw_handler, None),
+        event_filters=[],
+    )
+    star_manager_module.star_handlers_registry.append(handler)
+
+    async def mock_global_get(key, default=None):
+        return [module_path] if key == "inactivated_plugins" else default
+
+    async def mock_global_put(*_):
+        pass
+
+    async def mock_load(specified_module_path=None):
+        assert specified_module_path == module_path
+
+        related_handlers = (
+            star_manager_module.star_handlers_registry.get_handlers_by_module_name(
+                module_path
+            )
+        )
+        if not related_handlers:
+            handler.handler = raw_handler
+            star_manager_module.star_handlers_registry.append(handler)
+            related_handlers = [handler]
+
+        for registered_handler in related_handlers:
+            registered_handler.handler = functools.partial(
+                registered_handler.handler, object()
+            )
+        return True, None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(plugin_manager_pm, "load", mock_load)
+
+    try:
+        await plugin_manager_pm.turn_on_plugin(plugin_name)
+        handlers = (
+            star_manager_module.star_handlers_registry.get_handlers_by_module_name(
+                module_path
+            )
+        )
+        assert len(handlers) == 1
+        result = await handlers[0].handler("event")
+        assert result[0] is not None
+        assert result[1] == "event"
+    finally:
+        cast(Any, plugin_manager_pm.context).stars.remove(plugin)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
 async def test_reload_activated_plugin_still_unbinds(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
@@ -2238,7 +2315,7 @@ async def test_turn_on_plugin_after_deactivated_reload_reactivates_tools(
     async def mock_terminate(smd):
         pass
 
-    async def mock_reload(plugin_name_arg):
+    async def mock_reload(plugin_name_arg, **_):
         assert plugin_name_arg == plugin_name
         return True, None
 
