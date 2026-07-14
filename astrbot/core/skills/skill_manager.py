@@ -27,6 +27,7 @@ DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
 SANDBOX_SKILLS_ROOT = "skills"
 SANDBOX_WORKSPACE_ROOT = "/workspace"
 WORKSPACE_SKILLS_ROOT = "skills"
+AGENT_SKILLS_ROOT = ".agent/skills"
 WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS = 64 * 1024
 _SANDBOX_SKILLS_CACHE_VERSION = 1
 
@@ -40,6 +41,15 @@ def _normalize_skill_name(name: str | None) -> str:
 
 def _default_sandbox_skill_path(name: str) -> str:
     return f"{SANDBOX_WORKSPACE_ROOT}/{SANDBOX_SKILLS_ROOT}/{name}/SKILL.md"
+
+
+def _default_global_skills_root() -> str:
+    """Return the default global Agent skills directory.
+
+    Returns:
+        Absolute path to the current user's global Agent skills root.
+    """
+    return (Path.home() / ".agent" / "skills").as_posix()
 
 
 def _normalize_cached_sandbox_skill_path(name: str, path: str) -> str:
@@ -146,6 +156,27 @@ def _parse_frontmatter_description(text: str) -> str:
     if not isinstance(description, str):
         return ""
     return description.strip()
+
+
+def _read_skill_description(skill_md: Path, *, max_chars: int | None = None) -> str:
+    """Read a skill description from a SKILL.md frontmatter block.
+
+    Args:
+        skill_md: Path to the skill markdown file.
+        max_chars: Optional maximum number of characters to read.
+
+    Returns:
+        The parsed description, or an empty string if it cannot be read.
+    """
+    try:
+        if max_chars is None:
+            content = skill_md.read_text(encoding="utf-8")
+        else:
+            with skill_md.open(encoding="utf-8") as f:
+                content = f.read(max_chars)
+        return _parse_frontmatter_description(content)
+    except (OSError, UnicodeError):
+        return ""
 
 
 # Regex for sanitizing paths used in prompt examples — only allow
@@ -289,9 +320,11 @@ class SkillManager:
         self,
         skills_root: str | None = None,
         plugins_root: str | None = None,
+        global_skills_root: str | None = None,
     ) -> None:
         self.skills_root = skills_root or get_astrbot_skills_path()
         self.plugins_root = plugins_root or get_astrbot_plugin_path()
+        self.global_skills_root = global_skills_root or _default_global_skills_root()
         data_path = Path(get_astrbot_data_path())
         self.config_path = str(data_path / SKILLS_CONFIG_FILENAME)
         self.sandbox_skills_cache_path = str(data_path / SANDBOX_SKILLS_CACHE_FILENAME)
@@ -339,6 +372,35 @@ class SkillManager:
                 return skill_dir
         return None
 
+    def _get_global_skill_dir(self, name: str) -> Path | None:
+        """Return the global Agent skill directory for a skill name.
+
+        Args:
+            name: Skill directory name to resolve.
+
+        Returns:
+            The resolved global skill directory, or None if it is unavailable.
+        """
+        if not _SKILL_NAME_RE.match(str(name or "")):
+            return None
+
+        skills_root = Path(self.global_skills_root).expanduser()
+        skill_dir = skills_root / name
+        skill_md = _normalize_skill_markdown_path(skill_dir, rename_legacy=False)
+        if skill_md is None or skill_md.name != "SKILL.md":
+            return None
+        try:
+            resolved_skills_root = skills_root.resolve(strict=True)
+            resolved_skill_dir = skill_dir.resolve(strict=True)
+            resolved_skill_md = skill_md.resolve(strict=True)
+        except OSError:
+            return None
+        if not resolved_skill_dir.is_relative_to(resolved_skills_root):
+            return None
+        if not resolved_skill_md.is_relative_to(resolved_skill_dir):
+            return None
+        return resolved_skill_dir
+
     def list_workspace_skills(
         self, workspace_root: str | Path | None
     ) -> list[SkillInfo]:
@@ -354,57 +416,56 @@ class SkillManager:
             return []
 
         raw_workspace_root = Path(workspace_root)
-        skills_root = raw_workspace_root / WORKSPACE_SKILLS_ROOT
-        if not skills_root.is_dir():
-            return []
+        workspace_skill_roots = (
+            raw_workspace_root / AGENT_SKILLS_ROOT,
+            raw_workspace_root / WORKSPACE_SKILLS_ROOT,
+        )
 
-        try:
-            resolved_workspace_root = raw_workspace_root.resolve(strict=True)
-            resolved_skills_root = skills_root.resolve(strict=True)
-            if not resolved_skills_root.is_relative_to(resolved_workspace_root):
-                return []
-            skill_dirs = sorted(
-                resolved_skills_root.iterdir(), key=lambda item: item.name
-            )
-        except OSError:
-            return []
+        skills_by_name: dict[str, SkillInfo] = {}
+        for skills_root in workspace_skill_roots:
+            if not skills_root.is_dir():
+                continue
 
-        skills: list[SkillInfo] = []
-        for skill_dir in skill_dirs:
-            if not skill_dir.is_dir():
-                continue
-            skill_name = skill_dir.name
-            if not _SKILL_NAME_RE.match(skill_name):
-                continue
             try:
-                entry_names = {entry.name for entry in skill_dir.iterdir()}
+                resolved_workspace_root = raw_workspace_root.resolve(strict=True)
+                resolved_skills_root = skills_root.resolve(strict=True)
+                if not resolved_skills_root.is_relative_to(resolved_workspace_root):
+                    continue
+                skill_dirs = sorted(
+                    resolved_skills_root.iterdir(), key=lambda item: item.name
+                )
             except OSError:
                 continue
-            if "SKILL.md" not in entry_names:
-                continue
-            skill_md = skill_dir / "SKILL.md"
-            if not skill_md.is_file():
-                continue
 
-            try:
-                resolved_skill_md = skill_md.resolve(strict=True)
-            except OSError:
-                continue
-            if not resolved_skill_md.is_relative_to(resolved_skills_root):
-                continue
+            for skill_dir in skill_dirs:
+                if not skill_dir.is_dir():
+                    continue
+                skill_name = skill_dir.name
+                if skill_name in skills_by_name or not _SKILL_NAME_RE.match(skill_name):
+                    continue
+                try:
+                    entry_names = {entry.name for entry in skill_dir.iterdir()}
+                except OSError:
+                    continue
+                if "SKILL.md" not in entry_names:
+                    continue
+                skill_md = skill_dir / "SKILL.md"
+                if not skill_md.is_file():
+                    continue
 
-            description = ""
-            try:
-                with resolved_skill_md.open(encoding="utf-8") as f:
-                    content = f.read(WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS)
-                description = _parse_frontmatter_description(content)
-            except (OSError, UnicodeError):
-                description = ""
+                try:
+                    resolved_skill_md = skill_md.resolve(strict=True)
+                except OSError:
+                    continue
+                if not resolved_skill_md.is_relative_to(resolved_skills_root):
+                    continue
 
-            skills.append(
-                SkillInfo(
+                skills_by_name[skill_name] = SkillInfo(
                     name=skill_name,
-                    description=description,
+                    description=_read_skill_description(
+                        resolved_skill_md,
+                        max_chars=WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS,
+                    ),
                     path=resolved_skill_md.as_posix(),
                     active=True,
                     source_type="workspace",
@@ -412,9 +473,8 @@ class SkillManager:
                     local_exists=True,
                     readonly=True,
                 )
-            )
 
-        return skills
+        return [skills_by_name[name] for name in sorted(skills_by_name)]
 
     def _load_config(self) -> dict:
         if not os.path.exists(self.config_path):
@@ -523,47 +583,69 @@ class SkillManager:
             sandbox_cached_descriptions[name] = str(item.get("description", "") or "")
             sandbox_cached_paths[name] = path
 
-        for entry in sorted(Path(self.skills_root).iterdir()):
-            if not entry.is_dir():
+        skill_roots = (
+            (Path(self.skills_root), "local_only", "local", False, True),
+            (
+                Path(self.global_skills_root).expanduser(),
+                "global",
+                "global",
+                True,
+                False,
+            ),
+        )
+        for (
+            skills_root,
+            root_source_type,
+            root_source_label,
+            readonly,
+            rename_legacy,
+        ) in skill_roots:
+            if not skills_root.is_dir():
                 continue
-            skill_name = entry.name
-            skill_md = _normalize_skill_markdown_path(entry)
-            if skill_md is None:
-                continue
-            active = skill_configs.get(skill_name, {}).get("active", True)
-            if skill_name not in skill_configs:
-                skill_configs[skill_name] = {"active": active}
-                modified = True
-            if active_only and not active:
-                continue
-            description = ""
-            try:
-                content = skill_md.read_text(encoding="utf-8")
-                description = _parse_frontmatter_description(content)
-            except Exception:
-                description = ""
-            sandbox_exists = (
-                runtime == "sandbox" and skill_name in sandbox_cached_descriptions
-            )
-            source_type = "both" if sandbox_exists else "local_only"
-            source_label = "synced" if sandbox_exists else "local"
-            if runtime == "sandbox" and show_sandbox_path:
-                path_str = sandbox_cached_paths.get(
-                    skill_name
-                ) or _default_sandbox_skill_path(skill_name)
-            else:
-                path_str = str(skill_md)
-            path_str = path_str.replace("\\", "/")
-            skills_by_name[skill_name] = SkillInfo(
-                name=skill_name,
-                description=description,
-                path=path_str,
-                active=active,
-                source_type=source_type,
-                source_label=source_label,
-                local_exists=True,
-                sandbox_exists=sandbox_exists,
-            )
+            for entry in sorted(skills_root.iterdir()):
+                if not entry.is_dir():
+                    continue
+                skill_name = entry.name
+                if skill_name in skills_by_name or not _SKILL_NAME_RE.match(skill_name):
+                    continue
+                skill_md = _normalize_skill_markdown_path(
+                    entry,
+                    rename_legacy=rename_legacy,
+                )
+                if skill_md is None or (readonly and skill_md.name != "SKILL.md"):
+                    continue
+                active = skill_configs.get(skill_name, {}).get("active", True)
+                if skill_name not in skill_configs:
+                    skill_configs[skill_name] = {"active": active}
+                    modified = True
+                if active_only and not active:
+                    continue
+                sandbox_exists = (
+                    runtime == "sandbox" and skill_name in sandbox_cached_descriptions
+                )
+                source_type = root_source_type
+                source_label = root_source_label
+                if root_source_type == "local_only" and sandbox_exists:
+                    source_type = "both"
+                    source_label = "synced"
+                if runtime == "sandbox" and show_sandbox_path:
+                    path_str = sandbox_cached_paths.get(
+                        skill_name
+                    ) or _default_sandbox_skill_path(skill_name)
+                else:
+                    path_str = str(skill_md)
+                path_str = path_str.replace("\\", "/")
+                skills_by_name[skill_name] = SkillInfo(
+                    name=skill_name,
+                    description=_read_skill_description(skill_md),
+                    path=path_str,
+                    active=active,
+                    source_type=source_type,
+                    source_label=source_label,
+                    local_exists=True,
+                    sandbox_exists=sandbox_exists,
+                    readonly=readonly,
+                )
 
         for skill_name, plugin_name, skill_dir in self._iter_plugin_skill_dirs():
             if skill_name in skills_by_name:
@@ -577,12 +659,6 @@ class SkillManager:
                 modified = True
             if active_only and not active:
                 continue
-            description = ""
-            try:
-                content = skill_md.read_text(encoding="utf-8")
-                description = _parse_frontmatter_description(content)
-            except Exception:
-                description = ""
             sandbox_exists = (
                 runtime == "sandbox" and skill_name in sandbox_cached_descriptions
             )
@@ -594,7 +670,7 @@ class SkillManager:
                 path_str = str(skill_md)
             skills_by_name[skill_name] = SkillInfo(
                 name=skill_name,
-                description=description,
+                description=_read_skill_description(skill_md),
                 path=path_str.replace("\\", "/"),
                 active=active,
                 source_type="plugin",
@@ -652,6 +728,10 @@ class SkillManager:
         skill_md_exists = _normalize_skill_markdown_path(skill_dir) is not None
         if skill_md_exists:
             return False
+        if self._get_global_skill_dir(name) is not None:
+            return False
+        if self._get_plugin_skill_dir(name) is not None:
+            return False
         cache = self._load_sandbox_skills_cache()
         skills = cache.get("skills", [])
         if not isinstance(skills, list):
@@ -665,6 +745,17 @@ class SkillManager:
 
     def is_plugin_skill(self, name: str) -> bool:
         return self._get_plugin_skill_dir(name) is not None
+
+    def is_global_skill(self, name: str) -> bool:
+        """Return whether a skill is provided by the global Agent directory.
+
+        Args:
+            name: Skill name to check.
+
+        Returns:
+            True if ``~/.agent/skills/<name>/SKILL.md`` is available.
+        """
+        return self._get_global_skill_dir(name) is not None
 
     def set_skill_active(self, name: str, active: bool) -> None:
         if self.is_sandbox_only_skill(name):
@@ -699,14 +790,18 @@ class SkillManager:
             raise PermissionError(
                 "Sandbox preset skill cannot be deleted from local skill management."
             )
-        if self.is_plugin_skill(name):
-            raise PermissionError(
-                "Plugin-provided skill cannot be deleted from local skill management."
-            )
 
         skill_dir = Path(self.skills_root) / name
         if skill_dir.exists():
             shutil.rmtree(skill_dir)
+        elif self.is_global_skill(name):
+            raise PermissionError(
+                "Global Agent skill cannot be deleted from local skill management."
+            )
+        elif self.is_plugin_skill(name):
+            raise PermissionError(
+                "Plugin-provided skill cannot be deleted from local skill management."
+            )
 
         # Ensure UI consistency even when there is no active sandbox session
         # to refresh cache from runtime side.

@@ -950,6 +950,7 @@ export default {
           plugin: skill?.source_label || skill?.plugin_name || "",
         });
       }
+      if (sourceType === "global") return tm("skills.sourceGlobal");
       if (sourceType === "sandbox_only") return tm("skills.sourceSandboxOnly");
       if (sourceType === "both") return tm("skills.sourceBoth");
       return tm("skills.sourceLocalOnly");
@@ -958,6 +959,7 @@ export default {
     const sourceTypeColor = (sourceType) => {
       if (sourceType === "sandbox_only") return "indigo";
       if (sourceType === "plugin") return "secondary";
+      if (sourceType === "global") return "teal";
       if (sourceType === "both") return "success";
       return "primary";
     };
@@ -966,7 +968,9 @@ export default {
       skill?.source_type === "sandbox_only";
     const isPluginProvidedSkill = (skill) => skill?.source_type === "plugin";
     const isReadOnlySourceSkill = (skill) =>
-      isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
+      !!skill?.readonly ||
+      isSandboxPresetSkill(skill) ||
+      isPluginProvidedSkill(skill);
 
     const normalizeNeoItemsPayload = (res) => {
       const payload = res?.data?.data || [];
@@ -1266,6 +1270,10 @@ export default {
         showMessage(tm("skills.pluginReadonly"), "warning");
         return;
       }
+      if (isReadOnlySourceSkill(skill)) {
+        showMessage(tm("skills.readonlySource"), "warning");
+        return;
+      }
       skillToDelete.value = skill;
       deleteDialog.value = true;
     };
@@ -1298,6 +1306,10 @@ export default {
       }
       if (isPluginProvidedSkill(skill)) {
         showMessage(tm("skills.pluginReadonly"), "warning");
+        return;
+      }
+      if (isReadOnlySourceSkill(skill)) {
+        showMessage(tm("skills.readonlySource"), "warning");
         return;
       }
       itemLoading[skill.name] = true;
@@ -1399,7 +1411,7 @@ export default {
       editorDialog.show = true;
       const entries = await loadSkillDir("");
       const skillMd = entries.find((entry) => entry.path === "SKILL.md");
-      if (skillMd?.editable) {
+      if (skillMd) {
         await loadSkillFile(skillMd.path);
       }
     };

@@ -133,17 +133,42 @@ class SkillsService:
                 "Sandbox preset skill cannot be opened from local skill files."
             )
 
+        skills_root = Path(skill_mgr.skills_root).resolve(strict=True)
+        local_skill_dir = skills_root / skill_name
+        if local_skill_dir.exists():
+            skill_dir = local_skill_dir.resolve(strict=True)
+            if not skill_dir.is_relative_to(skills_root):
+                raise PermissionError("Invalid skill path")
+            if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+                return skill_dir
+
+        global_skill_dir = skill_mgr._get_global_skill_dir(skill_name)
+        if global_skill_dir is not None:
+            return global_skill_dir.resolve(strict=True)
+
         plugin_skill_dir = skill_mgr._get_plugin_skill_dir(skill_name)
         if plugin_skill_dir is not None:
             return plugin_skill_dir.resolve(strict=True)
 
-        skills_root = Path(skill_mgr.skills_root).resolve(strict=True)
-        skill_dir = (skills_root / skill_name).resolve(strict=True)
-        if not skill_dir.is_relative_to(skills_root):
-            raise PermissionError("Invalid skill path")
-        if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").exists():
-            raise FileNotFoundError("Local skill not found")
-        return skill_dir
+        raise FileNotFoundError("Local skill not found")
+
+    @staticmethod
+    def is_skill_dir_readonly(skill_mgr: SkillManager, skill_dir: Path) -> bool:
+        """Return whether a resolved skill directory is externally managed.
+
+        Args:
+            skill_mgr: Skill manager carrying the editable AstrBot skills root.
+            skill_dir: Resolved skill directory.
+
+        Returns:
+            True when the skill is outside the editable AstrBot skills root.
+        """
+        try:
+            skills_root = Path(skill_mgr.skills_root).resolve(strict=True)
+            resolved_skill_dir = skill_dir.resolve(strict=True)
+        except OSError:
+            return True
+        return not resolved_skill_dir.is_relative_to(skills_root)
 
     @staticmethod
     def resolve_skill_relative_path(
@@ -430,14 +455,18 @@ class SkillsService:
             raise SkillsServiceError(
                 "Sandbox preset skill cannot be downloaded from local skill files."
             )
-        if skill_mgr.is_plugin_skill(skill_name):
-            raise SkillsServiceError(
-                "Plugin-provided skill cannot be downloaded from local skill files."
-            )
 
         skill_dir = Path(skill_mgr.skills_root) / skill_name
         skill_md = skill_dir / "SKILL.md"
         if not skill_dir.is_dir() or not skill_md.exists():
+            if skill_mgr.is_global_skill(skill_name):
+                raise SkillsServiceError(
+                    "Global Agent skill cannot be downloaded from local skill files."
+                )
+            if skill_mgr.is_plugin_skill(skill_name):
+                raise SkillsServiceError(
+                    "Plugin-provided skill cannot be downloaded from local skill files."
+                )
             raise SkillsServiceError("Local skill not found", status_code=404)
 
         export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
@@ -462,8 +491,9 @@ class SkillsService:
 
     def list_skill_files(self, name: str, relative_path: str | None = "") -> dict:
         skill_name = str(name or "").strip()
-        readonly = SkillManager().is_plugin_skill(skill_name)
+        skill_mgr = SkillManager()
         skill_dir = self.resolve_local_skill_dir(skill_name)
+        readonly = self.is_skill_dir_readonly(skill_mgr, skill_dir)
         target_dir = self.resolve_skill_relative_path(
             skill_dir,
             relative_path,
@@ -507,7 +537,9 @@ class SkillsService:
 
     def get_skill_file(self, name: str, relative_path: str | None = "SKILL.md") -> dict:
         skill_name = str(name or "").strip()
+        skill_mgr = SkillManager()
         skill_dir = self.resolve_local_skill_dir(skill_name)
+        readonly = self.is_skill_dir_readonly(skill_mgr, skill_dir)
         target_file = self.resolve_skill_relative_path(
             skill_dir,
             relative_path,
@@ -530,7 +562,7 @@ class SkillsService:
             "path": self.skill_relative_path(skill_dir, target_file),
             "content": content,
             "size": size,
-            "editable": not SkillManager().is_plugin_skill(skill_name),
+            "editable": not readonly,
         }
 
     def get_skill_file_from_dashboard_query(
@@ -555,8 +587,9 @@ class SkillsService:
             raise SkillsServiceError("File content is too large")
 
         skill_dir = self.resolve_local_skill_dir(skill_name)
-        if SkillManager().is_plugin_skill(skill_name):
-            raise SkillsServiceError("Plugin-provided skill is read-only.")
+        skill_mgr = SkillManager()
+        if self.is_skill_dir_readonly(skill_mgr, skill_dir):
+            raise SkillsServiceError("This skill is read-only.")
         target_file = self.resolve_skill_relative_path(
             skill_dir,
             relative_path,

@@ -496,6 +496,43 @@ def test_list_workspace_skills_parses_workspace_skill(tmp_path: Path):
     assert skill.path.endswith("workspace/skills/workspace-skill/SKILL.md")
 
 
+def test_list_workspace_skills_prefers_agent_workspace_skill(tmp_path: Path):
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    workspace_root = tmp_path / "workspace"
+    skills_root.mkdir(parents=True, exist_ok=True)
+    plugins_root.mkdir(parents=True, exist_ok=True)
+
+    agent_skill_dir = workspace_root / ".agent" / "skills" / "workspace-skill"
+    agent_skill_dir.mkdir(parents=True)
+    agent_skill_dir.joinpath("SKILL.md").write_text(
+        "---\n"
+        "name: workspace-skill\n"
+        "description: Agent workspace scoped skill.\n"
+        "---\n"
+        "# Agent Workspace Skill\n",
+        encoding="utf-8",
+    )
+
+    legacy_skill_dir = workspace_root / "skills" / "workspace-skill"
+    legacy_skill_dir.mkdir(parents=True)
+    legacy_skill_dir.joinpath("SKILL.md").write_text(
+        "---\ndescription: Legacy workspace skill.\n---\n",
+        encoding="utf-8",
+    )
+
+    mgr = SkillManager(skills_root=str(skills_root), plugins_root=str(plugins_root))
+    skills = mgr.list_workspace_skills(workspace_root)
+
+    assert len(skills) == 1
+    skill = skills[0]
+    assert skill.name == "workspace-skill"
+    assert skill.description == "Agent workspace scoped skill."
+    assert skill.source_type == "workspace"
+    assert skill.readonly is True
+    assert skill.path.endswith("workspace/.agent/skills/workspace-skill/SKILL.md")
+
+
 def test_list_workspace_skills_skips_invalid_names_and_legacy_files(tmp_path: Path):
     skills_root = tmp_path / "skills"
     plugins_root = tmp_path / "plugins"
@@ -567,6 +604,150 @@ def test_list_workspace_skills_rejects_symlinked_root_outside_workspace(
     mgr = SkillManager(skills_root=str(skills_root), plugins_root=str(plugins_root))
 
     assert mgr.list_workspace_skills(workspace_root) == []
+
+
+def test_list_skills_includes_global_agent_skills(monkeypatch, tmp_path: Path):
+    data_dir = tmp_path / "data"
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    global_skills_root = tmp_path / "home" / ".agent" / "skills"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    skills_root.mkdir(parents=True, exist_ok=True)
+    plugins_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+
+    global_skill_dir = global_skills_root / "global-skill"
+    global_skill_dir.mkdir(parents=True)
+    global_skill_dir.joinpath("SKILL.md").write_text(
+        "---\n"
+        "name: global-skill\n"
+        "description: Global Agent skill.\n"
+        "---\n"
+        "# Global Skill\n",
+        encoding="utf-8",
+    )
+
+    mgr = SkillManager(
+        skills_root=str(skills_root),
+        plugins_root=str(plugins_root),
+        global_skills_root=str(global_skills_root),
+    )
+    skills = mgr.list_skills()
+
+    assert len(skills) == 1
+    skill = skills[0]
+    assert skill.name == "global-skill"
+    assert skill.description == "Global Agent skill."
+    assert skill.source_type == "global"
+    assert skill.source_label == "global"
+    assert skill.readonly is True
+    assert skill.path.endswith("home/.agent/skills/global-skill/SKILL.md")
+
+
+def test_global_agent_skill_is_not_treated_as_sandbox_only(
+    monkeypatch,
+    tmp_path: Path,
+):
+    data_dir = tmp_path / "data"
+    temp_dir = tmp_path / "temp"
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    global_skills_root = tmp_path / "home" / ".agent" / "skills"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    skills_root.mkdir(parents=True, exist_ok=True)
+    plugins_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_temp_path",
+        lambda: str(temp_dir),
+    )
+
+    global_skill_dir = global_skills_root / "global-skill"
+    global_skill_dir.mkdir(parents=True)
+    global_skill_dir.joinpath("SKILL.md").write_text(
+        "---\ndescription: Global Agent skill.\n---\n",
+        encoding="utf-8",
+    )
+
+    mgr = SkillManager(
+        skills_root=str(skills_root),
+        plugins_root=str(plugins_root),
+        global_skills_root=str(global_skills_root),
+    )
+    mgr.set_sandbox_skills_cache(
+        [
+            {
+                "name": "global-skill",
+                "description": "synced global skill",
+                "path": "skills/global-skill/SKILL.md",
+            }
+        ]
+    )
+
+    mgr.set_skill_active("global-skill", False)
+
+    skills = mgr.list_skills(runtime="sandbox")
+    assert skills[0].name == "global-skill"
+    assert skills[0].source_type == "global"
+    assert skills[0].sandbox_exists is True
+    assert skills[0].active is False
+
+
+def test_skills_service_reads_global_agent_skill_as_readonly(
+    monkeypatch,
+    tmp_path: Path,
+):
+    from astrbot.dashboard.services.skills_service import SkillsService
+
+    data_dir = tmp_path / "data"
+    skills_root = tmp_path / "skills"
+    plugins_root = tmp_path / "plugins"
+    global_skills_root = tmp_path / "home" / ".agent" / "skills"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    skills_root.mkdir(parents=True, exist_ok=True)
+    plugins_root.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_dir),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
+        lambda: str(skills_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
+        lambda: str(plugins_root),
+    )
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager._default_global_skills_root",
+        lambda: str(global_skills_root),
+    )
+
+    global_skill_dir = global_skills_root / "global-skill"
+    global_skill_dir.mkdir(parents=True)
+    global_skill_dir.joinpath("SKILL.md").write_text(
+        "---\ndescription: Global Agent skill.\n---\n# Global\n",
+        encoding="utf-8",
+    )
+
+    service = SkillsService(core_lifecycle=object())
+    files = service.list_skill_files("global-skill")
+    skill_md = next(item for item in files["entries"] if item["path"] == "SKILL.md")
+    content = service.get_skill_file("global-skill", "SKILL.md")
+
+    assert skill_md["editable"] is False
+    assert content["editable"] is False
+    assert "# Global" in content["content"]
 
 
 def test_list_skills_includes_plugin_provided_skills(monkeypatch, tmp_path: Path):
