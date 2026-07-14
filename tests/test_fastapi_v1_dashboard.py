@@ -3216,10 +3216,24 @@ async def test_v1_mcp_resource_routes_require_mcp_scope(
     monkeypatch: pytest.MonkeyPatch,
 ):
     list_resources = AsyncMock(return_value={"resources": [], "next_cursor": None})
+    list_resource_templates = AsyncMock(
+        return_value={"resource_templates": [], "next_cursor": None}
+    )
+    read_resource = AsyncMock(return_value={"contents": []})
     monkeypatch.setattr(
         asgi_app.state.services.tools,
         "list_mcp_resources",
         list_resources,
+    )
+    monkeypatch.setattr(
+        asgi_app.state.services.tools,
+        "list_mcp_resource_templates",
+        list_resource_templates,
+    )
+    monkeypatch.setattr(
+        asgi_app.state.services.tools,
+        "read_mcp_resource",
+        read_resource,
     )
     tool_key = "abk_fastapi_v1_tool_only"
     mcp_key = "abk_fastapi_v1_mcp_resources"
@@ -3236,11 +3250,41 @@ async def test_v1_mcp_resource_routes_require_mcp_scope(
         params={"server_name": "demo-server"},
         headers={"X-API-Key": mcp_key},
     )
+    forbidden_templates_response = await asgi_client.get(
+        "/api/v1/mcp/resource-templates",
+        params={"server_name": "demo-server"},
+        headers={"X-API-Key": tool_key},
+    )
+    allowed_templates_response = await asgi_client.get(
+        "/api/v1/mcp/resource-templates",
+        params={"server_name": "demo-server"},
+        headers={"X-API-Key": mcp_key},
+    )
+    forbidden_read_response = await asgi_client.post(
+        "/api/v1/mcp/resources/read",
+        json={"server_name": "demo-server", "uri": "file:///guide.md"},
+        headers={"X-API-Key": tool_key},
+    )
+    allowed_read_response = await asgi_client.post(
+        "/api/v1/mcp/resources/read",
+        json={"server_name": "demo-server", "uri": "file:///guide.md"},
+        headers={"X-API-Key": mcp_key},
+    )
 
     assert forbidden_response.status_code == 403
     assert forbidden_response.json()["message"] == "Insufficient API key scope"
     assert allowed_response.status_code == 200
+    assert forbidden_templates_response.status_code == 403
+    assert forbidden_templates_response.json()["message"] == (
+        "Insufficient API key scope"
+    )
+    assert allowed_templates_response.status_code == 200
+    assert forbidden_read_response.status_code == 403
+    assert forbidden_read_response.json()["message"] == "Insufficient API key scope"
+    assert allowed_read_response.status_code == 200
     list_resources.assert_awaited_once_with("demo-server", None)
+    list_resource_templates.assert_awaited_once_with("demo-server", None)
+    read_resource.assert_awaited_once_with("demo-server", "file:///guide.md")
 
 
 @pytest.mark.asyncio

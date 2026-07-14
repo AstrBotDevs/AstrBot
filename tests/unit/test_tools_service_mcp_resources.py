@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from astrbot.core.agent.mcp_client import MCPResourcePaginationNotSupportedError
 from astrbot.dashboard.services import tools_service as tools_service_module
 from astrbot.dashboard.services.tools_service import ToolsService, ToolsServiceError
 
@@ -259,7 +260,7 @@ async def test_mcp_resource_errors_do_not_expose_server_payloads(monkeypatch):
 @pytest.mark.asyncio
 async def test_mcp_resource_pagination_compatibility_error_remains_actionable():
     client = _make_client()
-    client.list_resources.side_effect = RuntimeError(
+    client.list_resources.side_effect = MCPResourcePaginationNotSupportedError(
         "The installed MCP SDK does not support resource pagination."
     )
     service = _make_service(

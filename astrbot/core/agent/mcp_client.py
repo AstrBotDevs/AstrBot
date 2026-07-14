@@ -94,6 +94,11 @@ _DENIED_DOCKER_ARGS = frozenset(
 )
 _STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS"
 
+
+class MCPResourcePaginationNotSupportedError(RuntimeError):
+    """Raised when the installed MCP SDK cannot pass pagination cursors."""
+
+
 try:
     import anyio
     import mcp
@@ -691,7 +696,7 @@ class MCPClient:
         except TypeError as exc:
             if "unexpected keyword argument 'cursor'" not in str(exc):
                 raise
-            raise RuntimeError(
+            raise MCPResourcePaginationNotSupportedError(
                 "The installed MCP SDK does not support resource pagination."
             ) from exc
 
@@ -715,7 +720,7 @@ class MCPClient:
         except TypeError as exc:
             if "unexpected keyword argument 'cursor'" not in str(exc):
                 raise
-            raise RuntimeError(
+            raise MCPResourcePaginationNotSupportedError(
                 "The installed MCP SDK does not support resource template pagination."
             ) from exc
 

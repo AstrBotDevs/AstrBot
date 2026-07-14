@@ -91,7 +91,10 @@
                   </v-list-item>
                 </v-list>
 
-                <div v-if="resourcesNextCursor" class="text-center mt-3">
+                <div
+                  v-if="resourcesNextCursor !== null"
+                  class="text-center mt-3"
+                >
                   <v-btn
                     color="primary"
                     size="small"
@@ -272,7 +275,10 @@
               </v-list-item>
             </v-list>
 
-            <div v-if="templatesNextCursor" class="text-center mt-3">
+            <div
+              v-if="templatesNextCursor !== null"
+              class="text-center mt-3"
+            >
               <v-btn
                 color="primary"
                 size="small"
@@ -392,13 +398,13 @@ export default {
     },
     async loadResources(cursor = null) {
       const generation = this.generation;
-      const append = Boolean(cursor);
+      const append = cursor !== null;
       this.resourcesLoading = true;
       this.resourcesError = "";
       try {
         const response = await mcpApi.listResources(
           this.serverName,
-          cursor || undefined,
+          cursor ?? undefined,
         );
         if (generation !== this.generation) {
           return;
@@ -409,7 +415,7 @@ export default {
         const data = response.data.data || {};
         const items = Array.isArray(data.resources) ? data.resources : [];
         this.resources = append ? [...this.resources, ...items] : items;
-        this.resourcesNextCursor = data.next_cursor || null;
+        this.resourcesNextCursor = data.next_cursor ?? null;
       } catch (error) {
         if (generation === this.generation) {
           this.resourcesError = this.tm("mcpServers.resources.errors.list", {
@@ -424,13 +430,13 @@ export default {
     },
     async loadTemplates(cursor = null) {
       const generation = this.generation;
-      const append = Boolean(cursor);
+      const append = cursor !== null;
       this.templatesLoading = true;
       this.templatesError = "";
       try {
         const response = await mcpApi.listResourceTemplates(
           this.serverName,
-          cursor || undefined,
+          cursor ?? undefined,
         );
         if (generation !== this.generation) {
           return;
@@ -443,7 +449,7 @@ export default {
           ? data.resource_templates
           : [];
         this.templates = append ? [...this.templates, ...items] : items;
-        this.templatesNextCursor = data.next_cursor || null;
+        this.templatesNextCursor = data.next_cursor ?? null;
       } catch (error) {
         if (generation === this.generation) {
           this.templatesError = this.tm(

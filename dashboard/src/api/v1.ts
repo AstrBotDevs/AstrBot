@@ -150,7 +150,6 @@ export interface McpTextResourceContent {
   text: string;
   size: number;
   truncated: boolean;
-  annotations?: Record<string, unknown> | null;
 }
 
 export interface McpBlobResourceContent {
@@ -158,7 +157,6 @@ export interface McpBlobResourceContent {
   uri: string;
   mime_type?: string | null;
   size: number;
-  annotations?: Record<string, unknown> | null;
 }
 
 export type McpResourceContent =
@@ -1188,7 +1186,7 @@ export const mcpApi = {
       openApiV1.listMcpResources({
         query: {
           server_name: serverName,
-          ...(cursor ? { cursor } : {}),
+          ...(cursor !== undefined ? { cursor } : {}),
         },
       }),
     );
@@ -1198,7 +1196,7 @@ export const mcpApi = {
       openApiV1.listMcpResourceTemplates({
         query: {
           server_name: serverName,
-          ...(cursor ? { cursor } : {}),
+          ...(cursor !== undefined ? { cursor } : {}),
         },
       }),
     );

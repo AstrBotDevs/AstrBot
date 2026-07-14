@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import anyio
 import pytest
 
-from astrbot.core.agent.mcp_client import MCPClient
+from astrbot.core.agent.mcp_client import (
+    MCPClient,
+    MCPResourcePaginationNotSupportedError,
+)
 
 
 def _resource_client(session=None):
@@ -120,6 +123,7 @@ class TestMCPResourceListing:
         assert not hasattr(client, "resources")
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("cursor", ["next-page", ""])
     @pytest.mark.parametrize(
         ("method_name", "session_method_name"),
         [
@@ -129,6 +133,7 @@ class TestMCPResourceListing:
     )
     async def test_listing_with_cursor_passes_cursor_keyword(
         self,
+        cursor,
         method_name,
         session_method_name,
     ):
@@ -137,12 +142,10 @@ class TestMCPResourceListing:
         getattr(session, session_method_name).return_value = expected
         client = _resource_client(session)
 
-        result = await getattr(client, method_name)("next-page")
+        result = await getattr(client, method_name)(cursor)
 
         assert result is expected
-        getattr(session, session_method_name).assert_awaited_once_with(
-            cursor="next-page"
-        )
+        getattr(session, session_method_name).assert_awaited_once_with(cursor=cursor)
 
     @pytest.mark.asyncio
     async def test_cursor_on_unsupported_sdk_raises_clear_error(self):
@@ -152,7 +155,10 @@ class TestMCPResourceListing:
         )
         client = _resource_client(session)
 
-        with pytest.raises(RuntimeError, match="does not support resource pagination"):
+        with pytest.raises(
+            MCPResourcePaginationNotSupportedError,
+            match="does not support resource pagination",
+        ):
             await client.list_resources("next-page")
 
     @pytest.mark.asyncio

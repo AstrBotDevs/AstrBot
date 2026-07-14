@@ -4,7 +4,12 @@ import traceback
 from typing import Any, NoReturn
 
 from astrbot.core import logger, sp
-from astrbot.core.agent.mcp_client import MCPClient, MCPTool, validate_mcp_stdio_config
+from astrbot.core.agent.mcp_client import (
+    MCPClient,
+    MCPResourcePaginationNotSupportedError,
+    MCPTool,
+    validate_mcp_stdio_config,
+)
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 from astrbot.core.tools.registry import get_builtin_tool_config_statuses
@@ -20,12 +25,6 @@ class EmptyMcpServersError(ValueError):
 
 _MCP_RESOURCE_TEXT_PREVIEW_MAX_BYTES = 256 * 1024
 _MCP_RESOURCE_TEXT_SIZE_CHUNK_CHARS = 64 * 1024
-_MCP_RESOURCE_PAGINATION_ERRORS = frozenset(
-    {
-        "The installed MCP SDK does not support resource pagination.",
-        "The installed MCP SDK does not support resource template pagination.",
-    }
-)
 
 
 def _serialize_mcp_annotations(annotations: object) -> dict[str, Any] | None:
@@ -137,9 +136,8 @@ def _raise_mcp_resource_operation_error(
     server_name: str,
     exc: Exception,
 ) -> NoReturn:
-    detail = str(exc)
-    if detail in _MCP_RESOURCE_PAGINATION_ERRORS:
-        raise ToolsServiceError(detail) from None
+    if isinstance(exc, MCPResourcePaginationNotSupportedError):
+        raise ToolsServiceError(str(exc)) from None
 
     logger.error(
         f"Failed to {operation} for MCP server {server_name} ({type(exc).__name__})"
