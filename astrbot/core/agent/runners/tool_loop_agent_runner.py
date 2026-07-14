@@ -1022,6 +1022,12 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_args,
             llm_response.tools_call_ids,
         ):
+            if not func_tool_name or not func_tool_id:
+                logger.warning(
+                    f"Skipping tool call with missing name or id: "
+                    f"name={func_tool_name!r}, id={func_tool_id!r}, args={func_tool_args!r}"
+                )
+                continue
             tool_result_blocks_start = len(tool_call_result_blocks)
             tool_call_streak = self._track_tool_call_streak(func_tool_name)
             yield _HandleFunctionToolsResult.from_message_chain(
