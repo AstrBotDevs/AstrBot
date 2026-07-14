@@ -44,6 +44,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             http_client=http_client,
         )
         self.model = provider_config.get("embedding_model", "text-embedding-3-small")
+        # 一次性构建并缓存 embedding 请求参数，避免每次调用都执行 SiliconFlow 检测并刷 WARN 日志
+        self._cached_kwargs = self._build_embedding_kwargs()
 
     async def get_embedding(self, text: str) -> list[float]:
         """获取文本的嵌入"""
@@ -66,7 +68,11 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         return [item.embedding for item in embeddings.data]
 
     def _embedding_kwargs(self) -> dict:
-        """构建嵌入请求的可选参数"""
+        """返回启动时构建并缓存的 embedding 请求参数"""
+        return self._cached_kwargs.copy()
+
+    def _build_embedding_kwargs(self) -> dict:
+        """构建嵌入请求的可选参数。仅在 __init__ 时调用一次，SiliconFlow 检测与 WARN 日志只触发一次。"""
         kwargs = {}
         if "embedding_dimensions" in self.provider_config:
             try:
