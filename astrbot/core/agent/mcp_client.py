@@ -93,6 +93,11 @@ _DENIED_DOCKER_ARGS = frozenset(
     }
 )
 _STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS"
+_MCP_ERROR_LOG_LEVELS = frozenset(
+    {"warning", "error", "critical", "alert", "emergency"}
+)
+_MCP_SERVER_ERROR_LOG_MAX_ENTRIES = 100
+_MCP_SERVER_ERROR_LOG_MAX_CHARS = 4096
 
 
 class MCPResourcePaginationNotSupportedError(RuntimeError):
@@ -420,6 +425,21 @@ class MCPClient:
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False
 
+    async def _handle_protocol_logging_message(
+        self,
+        msg: mcp.types.LoggingMessageNotificationParams,
+    ) -> None:
+        if msg.level not in _MCP_ERROR_LOG_LEVELS:
+            return
+
+        log_msg = f"[{msg.level.upper()}] {msg.data!s}"
+        if len(log_msg) > _MCP_SERVER_ERROR_LOG_MAX_CHARS:
+            log_msg = log_msg[: _MCP_SERVER_ERROR_LOG_MAX_CHARS - 3] + "..."
+
+        self.server_errlogs.append(log_msg)
+        if len(self.server_errlogs) > _MCP_SERVER_ERROR_LOG_MAX_ENTRIES:
+            del self.server_errlogs[:-_MCP_SERVER_ERROR_LOG_MAX_ENTRIES]
+
     async def _run_connection(
         self,
         mcp_server_config: dict,
@@ -530,15 +550,6 @@ class MCPClient:
         self._server_capabilities = None
         cfg = _prepare_config(mcp_server_config.copy())
 
-        def logging_callback(
-            msg: str | mcp.types.LoggingMessageNotificationParams,
-        ) -> None:
-            # Handle MCP service error logs
-            if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
-                if msg.level in ("warning", "error", "critical", "alert", "emergency"):
-                    log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
-                    self.server_errlogs.append(log_msg)
-
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
             if not success:
@@ -569,7 +580,7 @@ class MCPClient:
                     mcp.ClientSession(
                         *streams,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=self._handle_protocol_logging_message,
                     ),
                 )
             else:
@@ -616,7 +627,7 @@ class MCPClient:
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=self._handle_protocol_logging_message,
                     ),
                 )
 
@@ -627,19 +638,6 @@ class MCPClient:
                 **cfg,
             )
 
-            def callback(msg: str | mcp.types.LoggingMessageNotificationParams) -> None:
-                # Handle MCP service error logs
-                if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
-                    if msg.level in (
-                        "warning",
-                        "error",
-                        "critical",
-                        "alert",
-                        "emergency",
-                    ):
-                        log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
-                        self.server_errlogs.append(log_msg)
-
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
                     server_params,
@@ -647,14 +645,16 @@ class MCPClient:
                         level=logging.INFO,
                         logger=logger,
                         identifier=f"MCPServer-{name}",
-                        callback=callback,
                     ),  # type: ignore
                 ),
             )
 
             # Create a new client session
             self.session = await self.exit_stack.enter_async_context(
-                mcp.ClientSession(*stdio_transport),
+                mcp.ClientSession(
+                    *stdio_transport,
+                    logging_callback=self._handle_protocol_logging_message,
+                ),
             )
         initialize_result = await self.session.initialize()
         self._server_capabilities = initialize_result.capabilities
