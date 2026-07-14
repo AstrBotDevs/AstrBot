@@ -1260,6 +1260,33 @@
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
       },
+      "google_vertex_ai": {
+        "hint": "Vertex AI through the native Gemini API. The default API Base URL is https://aiplatform.googleapis.com/v1 and the default location is global. Use either a Vertex AI API key or a service account JSON."
+      },
+      "vertex_ai_auth_type": {
+        "description": "Key format",
+        "hint": "Use either a Vertex AI API key or a service account JSON. Service account JSON supports model discovery; API key is generation-only and always uses the global endpoint (the location setting is ignored)."
+      },
+      "vertex_ai_api_key": {
+        "description": "API Key",
+        "hint": "Vertex AI API key. Used when key format is API key; leave empty when using service account JSON."
+      },
+      "vertex_ai_project_id": {
+        "description": "Vertex AI project ID",
+        "hint": "Google Cloud project ID. If omitted, AstrBot tries to read it from the service account JSON."
+      },
+      "vertex_ai_location": {
+        "description": "Vertex AI location",
+        "hint": "Model location, for example global, us-central1. Default: global. Ignored when using an API key."
+      },
+      "vertex_ai_credentials_path": {
+        "description": "Service account JSON path",
+        "hint": "Absolute path to a Google Cloud service account JSON file. Leave empty if you paste JSON below."
+      },
+      "vertex_ai_credentials_json": {
+        "description": "Service account JSON",
+        "hint": "Google Cloud service account JSON can be created at https://console.cloud.google.com/iam-admin/serviceaccounts"
+      },
       "ollama_disable_thinking": {
         "description": "Disable thinking mode",
         "hint": "Close Ollama thinking mode."

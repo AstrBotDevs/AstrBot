@@ -204,7 +204,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const basicSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
-    const fields = ['id', 'key', 'api_base']
+    const fields = editableProviderSource.value.provider === 'google-vertex-ai'
+      ? ['id', 'api_base']
+      : ['id', 'key', 'api_base']
     const basic: Record<string, any> = {}
 
     fields.forEach((field) => {
@@ -222,13 +224,45 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return basic
   })
 
+  const vertexHiddenFields = new Set([
+    'vertex_ai_project_id',
+    'vertex_ai_credentials_path'
+  ])
+
+  const vertexAdvancedSourceFields = [
+    'vertex_ai_auth_type',
+    'vertex_ai_api_key',
+    'vertex_ai_credentials_json',
+    'vertex_ai_location',
+    'timeout',
+    'proxy',
+    'gm_resp_image_modal',
+    'gm_native_search',
+    'gm_native_coderunner',
+    'gm_url_context',
+    'gm_safety_settings',
+    'gm_thinking_config'
+  ]
+
   const advancedSourceConfig = computed(() => {
     if (!editableProviderSource.value) return null
 
     const excluded = new Set(['id', 'key', 'api_base', 'enable', 'type', 'provider_type', 'provider'])
+    if (editableProviderSource.value.provider === 'google-vertex-ai') {
+      for (const field of vertexHiddenFields) {
+        excluded.add(field)
+      }
+    }
     const advanced: Record<string, any> = {}
+    const sourceKeys = Object.keys(editableProviderSource.value)
+    const keys = editableProviderSource.value.provider === 'google-vertex-ai'
+      ? [
+          ...vertexAdvancedSourceFields.filter((field) => sourceKeys.includes(field)),
+          ...sourceKeys.filter((field) => !vertexAdvancedSourceFields.includes(field))
+        ]
+      : sourceKeys
 
-    for (const key of Object.keys(editableProviderSource.value)) {
+    for (const key of keys) {
       Object.defineProperty(advanced, key, {
         get() {
           return editableProviderSource.value![key]
@@ -390,6 +424,24 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
     if (source.provider === 'ollama' && source.ollama_disable_thinking === undefined) {
       source.ollama_disable_thinking = false
+    }
+
+    // Keep in sync with normalize_vertex_ai_provider_config in
+    // astrbot/core/provider/sources/vertex_ai.py, which applies the same
+    // defaults on the backend side.
+    if (source.provider === 'google-vertex-ai') {
+      if (!source.vertex_ai_auth_type || source.vertex_ai_auth_type === 'service_account') {
+        source.vertex_ai_auth_type = 'json'
+      }
+      if (source.vertex_ai_api_key === undefined) {
+        source.vertex_ai_api_key = source.vertex_ai_auth_type === 'api_key' ? (source.key || []) : []
+      }
+      if (source.vertex_ai_credentials_json === undefined) {
+        source.vertex_ai_credentials_json = ''
+      }
+      if (!source.vertex_ai_location) {
+        source.vertex_ai_location = 'global'
+      }
     }
 
     return source

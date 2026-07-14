@@ -22,6 +22,9 @@ from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider.register import provider_registry
+from astrbot.core.provider.sources.vertex_ai import (
+    normalize_vertex_ai_provider_source_config,
+)
 from astrbot.core.star.star import star_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 from astrbot.core.utils.totp import (
@@ -1325,6 +1328,9 @@ class ProviderConfigService:
 
     async def upsert_provider_source(self, source_id: str, config: dict) -> None:
         config = copy.deepcopy(config)
+        # Drop the runtime-only mirrored ``key`` list from Vertex AI sources and
+        # normalize auth fields before persisting (no-op for other providers).
+        config = normalize_vertex_ai_provider_source_config(config)
         next_source_id = str(config.get("id") or source_id).strip()
         if not next_source_id:
             raise ValueError("Provider source config must have an 'id' field")
