@@ -1361,6 +1361,105 @@ async def test_generated_password_requires_password_change_until_changed(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("endpoint", "method"),
+    [
+        ("/api/auth/account/edit", "post"),
+        ("/api/v1/auth/account", "patch"),
+    ],
+)
+@pytest.mark.parametrize("new_username", ["ab", "   "])
+async def test_account_edit_rejects_invalid_username(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    endpoint: str,
+    method: str,
+    new_username: str,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    current_username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    current_password = _resolve_dashboard_password(core_lifecycle_td)
+
+    try:
+        login_response = await test_client.post(
+            "/api/auth/login",
+            json={"username": current_username, "password": current_password},
+        )
+        login_data = await login_response.get_json()
+        assert login_data["status"] == "ok"
+        headers = {"Authorization": f"Bearer {login_data['data']['token']}"}
+
+        payload = {
+            "password": current_password,
+            "new_password": "",
+            "confirm_password": "",
+            "new_username": new_username,
+        }
+        request = getattr(test_client, method)
+        response = await request(endpoint, headers=headers, json=payload)
+        data = await response.get_json()
+
+        assert data["status"] == "error"
+        assert data["message"] == "用户名长度至少3位"
+        assert (
+            core_lifecycle_td.astrbot_config["dashboard"]["username"]
+            == (original_dashboard_config["username"])
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
+async def test_account_edit_trims_valid_username(
+    app: FastAPIAppAdapter,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+):
+    original_dashboard_config = copy.deepcopy(
+        core_lifecycle_td.astrbot_config["dashboard"]
+    )
+    test_client = app.test_client()
+    current_username = core_lifecycle_td.astrbot_config["dashboard"]["username"]
+    current_password = _resolve_dashboard_password(core_lifecycle_td)
+
+    try:
+        login_response = await test_client.post(
+            "/api/auth/login",
+            json={"username": current_username, "password": current_password},
+        )
+        login_data = await login_response.get_json()
+        assert login_data["status"] == "ok"
+        headers = {"Authorization": f"Bearer {login_data['data']['token']}"}
+
+        response = await test_client.post(
+            "/api/auth/account/edit",
+            headers=headers,
+            json={
+                "password": current_password,
+                "new_password": "",
+                "confirm_password": "",
+                "new_username": "  astrbot-admin  ",
+            },
+        )
+        data = await response.get_json()
+
+        assert data["status"] == "ok"
+        assert core_lifecycle_td.astrbot_config["dashboard"]["username"] == (
+            "astrbot-admin"
+        )
+    finally:
+        await _restore_dashboard_password_state(
+            core_lifecycle_td,
+            original_dashboard_config,
+        )
+
+
+@pytest.mark.asyncio
 async def test_local_setup_can_skip_default_password_auth(
     app: FastAPIAppAdapter,
     core_lifecycle_td: AstrBotCoreLifecycle,
@@ -2215,6 +2314,51 @@ async def test_batch_delete_sessions_uses_batch_lookup(
     assert data["data"]["deleted_count"] == 1
     assert data["data"]["failed_count"] == 0
     assert called["batch_lookup_count"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path_template",
+    [
+        "/api/chat/get_session?session_id={session_id}",
+        "/api/v1/chat/sessions/{session_id}",
+    ],
+)
+async def test_get_chat_session_rejects_session_owned_by_another_user(
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
+    path_template: str,
+):
+    test_client = app.test_client()
+    session_id = f"foreign_get_session_{uuid.uuid4().hex[:8]}"
+    await core_lifecycle_td.db.create_platform_session(
+        creator="not_dashboard_user",
+        platform_id="webchat",
+        session_id=session_id,
+        display_name="Foreign Session",
+        is_group=0,
+    )
+    await core_lifecycle_td.platform_message_history_manager.insert(
+        platform_id="webchat",
+        user_id=session_id,
+        content={
+            "type": "user",
+            "message": [{"type": "text", "text": "foreign session secret"}],
+        },
+        sender_id="not_dashboard_user",
+        sender_name="not_dashboard_user",
+    )
+
+    response = await test_client.get(
+        path_template.format(session_id=session_id),
+        headers=authenticated_header,
+    )
+
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["status"] == "error"
+    assert data["message"] == "Permission denied"
 
 
 @pytest.mark.asyncio

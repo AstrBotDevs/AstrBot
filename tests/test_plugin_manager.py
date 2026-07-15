@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+from types import ModuleType
 from typing import Any, cast
 
 import pytest
@@ -1982,6 +1983,89 @@ async def test_uninstall_failed_plugin_without_plugin_id_in_record(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("inactivated_plugins", "expected_activated"),
+    [
+        ([], True),
+        (["data.plugins.demo_plugin.main"], False),
+    ],
+)
+async def test_load_syncs_existing_metadata_activation_from_preferences(
+    plugin_manager_pm: PluginManager,
+    monkeypatch,
+    inactivated_plugins: list[str],
+    expected_activated: bool,
+):
+    """Existing plugin metadata activation follows persisted preferences."""
+    _clear_star_runtime_state()
+    plugin_name = "demo_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+    metadata = star_manager_module.StarMetadata(
+        name=plugin_name,
+        author="AstrBot Team",
+        desc="Demo plugin",
+        version="1.0.0",
+        root_dir_name=plugin_name,
+        module_path=module_path,
+        activated=False,
+    )
+    star_manager_module.star_map[module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+    preferences = {
+        "inactivated_plugins": inactivated_plugins,
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_import_plugin_with_dependency_recovery(
+        path,
+        module_str,
+        root_dir_name,
+        requirements_path,
+        *,
+        reserved=False,
+    ):
+        del module_str, root_dir_name, requirements_path, reserved
+        assert path == module_path
+        return ModuleType(module_path)
+
+    async def mock_sync_command_configs():
+        return None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_name, "module": "main"}],
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        mock_import_plugin_with_dependency_recovery,
+    )
+    monkeypatch.setattr(plugin_manager_pm, "_load_plugin_metadata", lambda **_: None)
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
+
+    try:
+        success, error = await plugin_manager_pm.load(
+            specified_module_path=module_path,
+        )
+
+        assert success is True
+        assert error is None
+        assert metadata.activated is expected_activated
+    finally:
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
 async def test_reload_deactivated_plugin_preserves_tools(
     plugin_manager_pm: PluginManager, monkeypatch
 ):
@@ -2156,9 +2240,6 @@ async def test_turn_on_plugin_after_deactivated_reload_reactivates_tools(
 
     async def mock_reload(plugin_name_arg):
         assert plugin_name_arg == plugin_name
-        # Simulate what load() does: re-register with activated=True
-        # since it's no longer in inactivated_plugins
-        plugin.activated = True
         return True, None
 
     monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
