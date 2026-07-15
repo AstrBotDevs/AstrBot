@@ -858,22 +858,20 @@ function clampBarPos(
   };
 }
 
-/** 根据当前 chat-main 容器 + 元素本身尺寸,初始化居中位置。
- *  仅在 todoBarPos === null 时调用(首次出现 / 持久化位置超出边界时回退)。
+/** 记录当前 CSS 居中渲染出的视觉位置,作为首次 mousedown 的拖动起点。
+ *  直接复用 .todo-summary-bar--centered (left: 50% / top: 60px + translateX(-50%))
+ *  此刻的 getBoundingClientRect —— 它已经包含了 transform,
+ *  因此后续切到内联 left/top 像素值时,坐标完全一致,不会瞬移。
+ *  仅在 todoBarPos === null 时调用。
  */
 function initTodoBarPos() {
   nextTick(() => {
     const bar = document.querySelector(
       ".todo-summary-bar",
     ) as HTMLElement | null;
-    const main = document.querySelector(".chat-main") as HTMLElement | null;
-    if (!bar || !main) return;
-    const mainRect = main.getBoundingClientRect();
-    const barRect = bar.getBoundingClientRect();
-    const desiredLeft =
-      mainRect.left + Math.max(16, (mainRect.width - barRect.width) / 2);
-    const desiredTop = mainRect.top + 16;
-    todoBarPos.value = clampBarPos(desiredLeft, desiredTop, barRect, mainRect);
+    if (!bar) return;
+    const rect = bar.getBoundingClientRect();
+    todoBarPos.value = { left: rect.left, top: rect.top };
   });
 }
 
