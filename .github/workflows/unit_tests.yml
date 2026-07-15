@@ -35,3 +35,13 @@ jobs:
         run: |
           chmod +x scripts/run_pytests_ci.sh
           bash ./scripts/run_pytests_ci.sh ./tests
+
+      - name: Run MCP minimum-version compatibility tests
+        run: |
+          uv pip install --python .venv/bin/python "mcp==1.8.0"
+          uv run --no-sync python -c \
+            "from importlib.metadata import version; assert version('mcp') == '1.8.0'"
+          uv run --no-sync pytest -q \
+            tests/unit/test_mcp_client_resources.py \
+            tests/unit/test_mcp_client_logging.py \
+            tests/unit/test_mcp_client_tools.py
