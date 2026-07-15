@@ -1,7 +1,16 @@
 <!-- Author: elecvoid243, 2026-06-20
      Spec: docs/superpowers/specs/2026-06-20-git-diff-sidebar-file-browser-design.md §4.5 -->
 <script setup lang="ts">
-import { computed, ref, inject, onBeforeUnmount, onMounted, watch } from "vue";
+import {
+  computed,
+  inject,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+  type ComputedRef,
+  type Ref,
+} from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   ensureShikiLanguages,
@@ -52,6 +61,31 @@ const { tm } = useModuleI18n("features/chat");
 // where the sidebar is not an ancestor.
 const setLogPathFilter = inject<(path: string) => void>(
   "spcode:setLogPathFilter",
+  () => {},
+);
+
+// Inner fullscreen bridge (spec 2026-07-15 gitdiff-workspace-fullscreen).
+// GitDiffSidebar provides `globalFullscreen` / `innerFullscreen` /
+// `isAnyFullscreen` / `toggleInnerFullscreen`. The button we render in
+// the preview-file meta header calls `toggleInnerFullscreen()`, which
+// in the sidebar enforces the "only one mode on at a time" rule and
+// also turns any active global fullscreen off. The noop defaults keep
+// the component usable in isolation (storybook / unit tests) where
+// the sidebar is not an ancestor.
+const globalFullscreen = inject<Ref<boolean>>(
+  "spcode:globalFullscreen",
+  ref(false),
+);
+const innerFullscreen = inject<Ref<boolean>>(
+  "spcode:innerFullscreen",
+  ref(false),
+);
+const isAnyFullscreen = inject<ComputedRef<boolean>>(
+  "spcode:isAnyFullscreen",
+  computed(() => false),
+);
+const toggleInnerFullscreen = inject<() => void>(
+  "spcode:toggleInnerFullscreen",
   () => {},
 );
 
@@ -440,7 +474,20 @@ function onDeleteComment(commentId: string): void {
     </div>
 
     <!-- 文件 -->
-    <div v-else-if="state.kind === 'file'" class="preview-file">
+        <!-- Inner fullscreen (spec 2026-07-15 gitdiff-workspace-fullscreen):
+             teleport the entire preview-file block to <body> only while
+             innerFullscreen is on. The wrapper div outside the Teleport
+             keeps the v-else-if narrowing intact for Vue's template
+             type-checking (Teleport cannot forward a parent's v-if
+             narrowing into its children); the inner <div> carries the
+             `preview-file` class + `is-fullscreen` modifier and is the
+             actual element the CSS rules target. -->
+        <div v-else-if="state.kind === 'file'">
+        <Teleport to="body" :disabled="!innerFullscreen">
+        <div
+          class="preview-file"
+          :class="{ 'is-fullscreen': innerFullscreen }"
+        >
       <!-- 元信息头 -->
       <div class="preview-file-meta">
         <span class="preview-file-path" :title="state.snapshot.meta.path">{{
@@ -499,6 +546,38 @@ function onDeleteComment(commentId: string): void {
         >
           {{ copyButtonText }}
         </v-btn>
+        <!-- Inner fullscreen button (spec 2026-07-15 gitdiff-
+             workspace-fullscreen). Reuses the document manager
+             translations so the icon/aria-label read consistently
+             with the top-bar fullscreen control. `isAnyFullscreen`
+             covers BOTH global and inner modes — clicking the button
+             while global is on cancels global (per the sidebar's
+             toggleInnerFullscreen helper, which enforces mutual
+             exclusion). -->
+        <v-btn
+          size="x-small"
+          variant="text"
+          color="primary"
+          :icon="
+            isAnyFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'
+          "
+          :aria-pressed="isAnyFullscreen"
+          :aria-label="
+            tm(
+              isAnyFullscreen
+                ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+            )
+          "
+          :title="
+            tm(
+              isAnyFullscreen
+                ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+            )
+          "
+          @click="toggleInnerFullscreen"
+        />
       </div>
 
       <!-- 二进制文件 -->
@@ -543,6 +622,8 @@ function onDeleteComment(commentId: string): void {
         @cancel="closeEditor"
         @delete="onDeleteComment"
       />
+    </div>
+    </Teleport>
     </div>
     <v-snackbar
       v-model="snackbar.visible"
@@ -595,6 +676,38 @@ function onDeleteComment(commentId: string): void {
   max-width: 320px;
 }
 
+/* Inner fullscreen (spec 2026-07-15 gitdiff-workspace-fullscreen).
+   Matches the document-manager pattern: when the inner fullscreen
+   button is clicked, the entire preview-file block teleports to
+   <body> and these rules turn it into a fixed fullscreen flex
+   column. The meta header stays at the top; the content area (text
+   code view or binary placeholder) takes the remaining height and
+   scrolls within itself. */
+.preview-file.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  margin: 0;
+}
+.preview-file.is-fullscreen .preview-file-meta {
+  flex-shrink: 0;
+  border-bottom: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+}
+.preview-file.is-fullscreen :deep(.file-browser-code-view) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.preview-file.is-fullscreen .preview-binary {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
 .preview-file {
   display: flex;
   flex-direction: column;

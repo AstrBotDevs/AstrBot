@@ -2,72 +2,85 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a non-persisted fullscreen mode to the GitDiffSidebar workspace page while preserving the existing file-browser layout and state.
+**Goal:** Add a sidebar-wide fullscreen control and a file-preview fullscreen control to GitDiffSidebar with mutually-exclusive semantics that share a single "cancel" action.
 
-**Architecture:** Add fullscreen state and lifecycle cleanup to `GitDiffSidebar.vue`, teleport the existing sidebar transition/aside tree to `body` only while fullscreen is active, and style the existing root aside as a fixed viewport-sized flex container. The fullscreen control is shown only for `viewMode === "files"`; switching to another page exits fullscreen.
+**Architecture:** Two non-persisted refs (`globalFullscreen`, `innerFullscreen`) live in `GitDiffSidebar.vue` and are toggled through functions that enforce mutual exclusion. The top button toggles `globalFullscreen`; the inner button (in `FileBrowserFilePreview`) toggles `innerFullscreen`. Both buttons show an exit icon when either mode is on, and clicking either while any fullscreen is active cancels all fullscreen. Global fullscreen persists across page switches; inner fullscreen applies only while a file is previewed.
 
-**Tech Stack:** Vue 3 `<script setup>` with TypeScript, Vue `Teleport`/`Transition`, Vuetify `v-btn`/`v-icon`, scoped CSS, pnpm dashboard typecheck/build.
+**Tech Stack:** Vue 3 `<script setup>` with TypeScript, Vue `Teleport`, Vuetify `v-btn`/`v-icon`, scoped CSS, provide/inject for state sharing, pnpm dashboard typecheck/build.
 
 ## Global Constraints
 
-- Modify only `dashboard/src/components/chat/GitDiffSidebar.vue` for the feature.
+- Modify only `dashboard/src/components/chat/GitDiffSidebar.vue` and `dashboard/src/components/chat/message_list_comps/FileBrowserFilePreview.vue`.
 - Do not add a new `localStorage` key or persist fullscreen state.
-- Reuse `spcodeProjectLoad.documentManager.fullscreen.enter` and `.exit` translations already used by `DocumentManager.vue`.
-- Keep the existing four page modes, file-browser refs, pane state, worktree state, and data fetching unchanged.
-- Use `Escape` to exit fullscreen and restore `document.body.style.overflow` on exit and unmount.
-- Keep existing mobile fullscreen behavior intact; the new `.is-fullscreen` modifier must not weaken the existing `@media (max-width: 760px)` rules.
+- Reuse `spcodeProjectLoad.documentManager.fullscreen.enter` and `.exit` translations.
+- Do not nest fullscreen: only one of `globalFullscreen` / `innerFullscreen` can be `true` at a time.
+- Keep existing close button, mobile fullscreen rules, and all existing fetch/state behavior.
+- Use `Escape` to cancel whichever fullscreen is on and restore `document.body.style.overflow`.
+- The top button must be visible regardless of `viewMode`.
+- The inner button must only render when `state.kind === "file"`.
 
 ---
 
-### Task 1: Add workspace fullscreen state and lifecycle behavior
+### Task 1: Refactor fullscreen state and lifecycle in `GitDiffSidebar.vue`
 
 **Files:**
-- Modify: `dashboard/src/components/chat/GitDiffSidebar.vue:209-276` for state and existing `viewMode` persistence watcher.
-- Modify: `dashboard/src/components/chat/GitDiffSidebar.vue:888-902` for the existing mount listener registration.
-- Modify: `dashboard/src/components/chat/GitDiffSidebar.vue:2246-2269` for unmount cleanup.
-- Test: No new test file; this component has no existing covering test and the repository has no isolated fullscreen state module. Validate through the focused dashboard typecheck/build and diff review in Task 3.
+- Modify: `dashboard/src/components/chat/GitDiffSidebar.vue` — the prior `isFullscreen` block (added in the reverted commit).
+- Modify: `dashboard/src/components/chat/GitDiffSidebar.vue` — the `watch(viewMode, ...)` block (remove the exit-fullscreen rule).
+- Modify: `dashboard/src/components/chat/GitDiffSidebar.vue` — `onMounted`/`onBeforeUnmount` blocks (keep the keydown listener with shared semantics).
 
 **Interfaces:**
-- Consumes: the existing `viewMode` ref, `onMounted` callback, `onBeforeUnmount` callback, and `document`/`body` DOM APIs.
-- Produces: `isFullscreen`, `toggleFullscreen()`, `exitFullscreen()`, and `onFullscreenKeyDown()` used by the template and lifecycle hooks.
+- Consumes: existing `viewMode` ref, `onMounted`, `onBeforeUnmount`.
+- Produces: `globalFullscreen`, `innerFullscreen`, `toggleGlobalFullscreen`, `toggleInnerFullscreen`, `isAnyFullscreen`, `onFullscreenKeyDown`, plus three `provide()` values for the inner component.
 
-- [ ] **Step 1: Add non-persisted fullscreen state and handlers immediately after the `viewMode`/file-browser state declarations.**
+- [ ] **Step 1: Replace the single `isFullscreen` ref with two refs and mutual-exclusion helpers.**
 
-Use this implementation:
+Use this implementation in place of the prior `isFullscreen` + `toggleFullscreen` + `exitFullscreen` + `onFullscreenKeyDown` block:
 
 ```ts
-const viewMode = ref<"files" | "diff" | "history" | "docs">(loadViewMode());
-const fileBrowserCurrentPath = ref<string>(loadFileBrowserCurrentPath());
-const isFullscreen = ref(false);
+const globalFullscreen = ref(false);
+const innerFullscreen = ref(false);
+const isAnyFullscreen = computed(() => globalFullscreen.value || innerFullscreen.value);
 
-function toggleFullscreen(): void {
-  isFullscreen.value = !isFullscreen.value;
+function toggleGlobalFullscreen(): void {
+  if (isAnyFullscreen.value) {
+    globalFullscreen.value = false;
+    innerFullscreen.value = false;
+    return;
+  }
+  globalFullscreen.value = true;
 }
 
-function exitFullscreen(): void {
-  isFullscreen.value = false;
+function toggleInnerFullscreen(): void {
+  if (isAnyFullscreen.value) {
+    globalFullscreen.value = false;
+    innerFullscreen.value = false;
+    return;
+  }
+  innerFullscreen.value = true;
 }
 
 function onFullscreenKeyDown(e: KeyboardEvent): void {
-  if (e.key === "Escape" && isFullscreen.value) {
-    exitFullscreen();
-  }
+  if (e.key !== "Escape" || !isAnyFullscreen.value) return;
+  globalFullscreen.value = false;
+  innerFullscreen.value = false;
 }
 ```
 
-Keep `fileBrowserPreviewPath` directly after `fileBrowserCurrentPath`; the new state does not replace or persist any file-browser state.
-
-- [ ] **Step 2: Extend the existing `watch(viewMode, ...)` without changing its localStorage behavior.**
-
-Change the watcher body from:
+Keep the body-overflow watcher but key it on both refs:
 
 ```ts
-watch(viewMode, (v) => safeSetItem(STORAGE_KEYS.viewMode, v), {
-  flush: "post",
-});
+watch(
+  isAnyFullscreen,
+  (v) => {
+    document.body.style.overflow = v ? "hidden" : "";
+  },
+  { immediate: true },
+);
 ```
 
-to:
+- [ ] **Step 2: Restore the original `watch(viewMode, ...)` body so `viewMode` only persists its value.**
+
+Replace:
 
 ```ts
 watch(
@@ -80,38 +93,34 @@ watch(
 );
 ```
 
-This keeps the existing persisted page selection while ensuring fullscreen is scoped to the workspace page.
-
-- [ ] **Step 3: Add body scroll locking and mount/unmount listener cleanup.**
-
-Insert the fullscreen watcher near the new handlers:
+with:
 
 ```ts
-watch(
-  isFullscreen,
-  (v) => {
-    document.body.style.overflow = v ? "hidden" : "";
-  },
-  { immediate: true },
-);
+watch(viewMode, (v) => safeSetItem(STORAGE_KEYS.viewMode, v), {
+  flush: "post",
+});
 ```
 
-Append the event registration to the existing `onMounted(() => { ... })` callback:
+`globalFullscreen` no longer exits when the page changes — that is required for the new "global survives sub-page switches" semantics.
+
+- [ ] **Step 3: Provide the new state to the inner component via inject keys.**
+
+Add right after the existing `provide`/`setLogPathFilter` block:
 
 ```ts
-document.addEventListener("keydown", onFullscreenKeyDown);
+const FULLSCREEN_GLOBAL_KEY = "spcode:globalFullscreen";
+const FULLSCREEN_INNER_KEY = "spcode:innerFullscreen";
+const FULLSCREEN_IS_ANY_KEY = "spcode:isAnyFullscreen";
+const FULLSCREEN_TOGGLE_INNER_KEY = "spcode:toggleInnerFullscreen";
+provide<Ref<boolean>>(FULLSCREEN_GLOBAL_KEY, globalFullscreen);
+provide<Ref<boolean>>(FULLSCREEN_INNER_KEY, innerFullscreen);
+provide<ComputedRef<boolean>>(FULLSCREEN_IS_ANY_KEY, isAnyFullscreen);
+provide<() => void>(FULLSCREEN_TOGGLE_INNER_KEY, toggleInnerFullscreen);
 ```
 
-Append cleanup to the existing `onBeforeUnmount(() => { ... })` callback:
+These are consumed in Task 2 by `FileBrowserFilePreview.vue`.
 
-```ts
-document.removeEventListener("keydown", onFullscreenKeyDown);
-document.body.style.overflow = "";
-```
-
-Do not create a second `onMounted` or `onBeforeUnmount` callback. The existing capture-phase context-menu listener remains unchanged; the fullscreen handler is a normal document listener and only reacts when fullscreen is active.
-
-- [ ] **Step 4: Run the focused typecheck before editing the template.**
+- [ ] **Step 4: Run `pnpm typecheck` before continuing.**
 
 Run:
 
@@ -120,158 +129,209 @@ cd /d F:\github\Astrbot\.worktrees\gitdiff-workspace-fullscreen\dashboard
 pnpm typecheck
 ```
 
-Expected: the command completes successfully. If it fails, fix only the new state/lifecycle typing before continuing.
+Expected: passes without errors. The previous `.is-fullscreen` class binding and Teleport wiring still references `globalFullscreen` only — that is correct.
 
 ---
 
-### Task 2: Teleport the existing sidebar and add the workspace control
+### Task 2: Update the top button and global fullscreen wiring in `GitDiffSidebar.vue`
 
 **Files:**
-- Modify: `dashboard/src/components/chat/GitDiffSidebar.vue:2360-2370` for the Teleport wrapper and root class.
-- Modify: `dashboard/src/components/chat/GitDiffSidebar.vue:2385-2412` for the workspace fullscreen button.
-- Modify: `dashboard/src/components/chat/GitDiffSidebar.vue:3214-3228` for the fullscreen root styles.
+- Modify: `dashboard/src/components/chat/GitDiffSidebar.vue` — the header action group and the `<aside>`/Teleport wrapper.
 
 **Interfaces:**
-- Consumes: `isFullscreen`, `toggleFullscreen`, `viewMode`, and `tm` from Task 1.
-- Produces: an unchanged sidebar component tree that moves to `body` only when fullscreen is active, plus an accessible workspace fullscreen action.
+- Consumes: `isAnyFullscreen`, `toggleGlobalFullscreen` from Task 1.
+- Produces: a top button that always renders and shows the correct icon; an `<aside>` whose `.is-fullscreen` class tracks only `globalFullscreen`.
 
-- [ ] **Step 1: Wrap the existing transition/aside tree with a disabled Teleport.**
+- [ ] **Step 1: Make the top button always render and reflect the combined state.**
 
-Replace the current template opening:
-
-```vue
-<template>
-  <transition name="slide-left">
-    <aside
-      v-if="modelValue"
-      ref="sidebarRef"
-      class="git-diff-sidebar"
-      :class="{ resizing: isResizing }"
-      :style="{ width: sidebarWidth + 'px' }"
-    >
-```
-
-with:
-
-```vue
-<template>
-  <Teleport to="body" :disabled="!isFullscreen">
-    <transition name="slide-left">
-      <aside
-        v-if="modelValue"
-        ref="sidebarRef"
-        class="git-diff-sidebar"
-        :class="{ resizing: isResizing, 'is-fullscreen': isFullscreen }"
-        :style="{ width: sidebarWidth + 'px' }"
-      >
-```
-
-At the end of the template, close the new wrapper after the existing transition:
-
-```vue
-      </aside>
-    </transition>
-  </Teleport>
-</template>
-```
-
-Do not duplicate or move any of the four page templates. The existing `aside` remains the single stateful component tree.
-
-- [ ] **Step 2: Add the workspace-only fullscreen button to the existing header action group.**
-
-Insert this button in `.git-diff-sidebar-actions` between the refresh tooltip and the existing close button:
+Replace the current top button (with the `v-if="viewMode === 'files'"` guard and `isFullscreen`-based icon/title/aria-label) with:
 
 ```vue
           <v-btn
-            v-if="viewMode === 'files'"
             :icon="
-              isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'
+              isAnyFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'
             "
             size="small"
             variant="text"
-            :aria-pressed="isFullscreen"
+            :aria-pressed="isAnyFullscreen"
             :aria-label="
               tm(
-                isFullscreen
+                isAnyFullscreen
                   ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
                   : 'spcodeProjectLoad.documentManager.fullscreen.enter',
               )
             "
             :title="
               tm(
-                isFullscreen
+                isAnyFullscreen
                   ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
                   : 'spcodeProjectLoad.documentManager.fullscreen.enter',
               )
             "
-            @click="toggleFullscreen"
+            @click="toggleGlobalFullscreen"
           />
 ```
 
-Keep the refresh and close buttons unchanged. The button is intentionally hidden on `diff`, `history`, and `docs`; changing `viewMode` exits fullscreen through the watcher from Task 1.
+Do not add `v-if`. The button now appears in every page mode.
 
-- [ ] **Step 3: Add a fullscreen modifier that overrides the inline sidebar width.**
+- [ ] **Step 2: Keep the global Teleport and `.is-fullscreen` class bound to `globalFullscreen` only.**
 
-Insert this rule immediately after the existing `.git-diff-sidebar` rule:
+The reverted commit's `<Teleport to="body" :disabled="!isFullscreen">` and `<aside ... :class="{ resizing: isResizing, 'is-fullscreen': isFullscreen }" ...>` must read `globalFullscreen` instead. Update both expressions to use `globalFullscreen`. No change is required to the scoped `.git-diff-sidebar.is-fullscreen` CSS rule.
 
-```css
-.git-diff-sidebar.is-fullscreen {
-  position: fixed;
-  inset: 0;
-  z-index: 1300;
-  width: 100vw !important;
-  height: 100vh;
-  margin-top: 0;
-  border-left: 0;
-}
-```
-
-Keep the normal `.git-diff-sidebar` rule and the existing mobile media-query rule unchanged. The modifier preserves the existing flex-column layout, so `.git-diff-sidebar-body` continues to provide the scrollable workspace body and `FileBrowserView` continues to fill its parent.
-
-- [ ] **Step 4: Run formatting-safe focused checks on the changed SFC.**
+- [ ] **Step 3: Run `pnpm typecheck` again before touching the inner component.**
 
 Run:
 
 ```cmd
 cd /d F:\github\Astrbot\.worktrees\gitdiff-workspace-fullscreen\dashboard
-pnpm exec eslint src/components/chat/GitDiffSidebar.vue
 pnpm typecheck
 ```
 
-Expected: ESLint and Vue TypeScript checking both complete without errors.
+Expected: passes.
 
 ---
 
-### Task 3: Verify the integrated dashboard behavior and commit the implementation
+### Task 3: Add the inner button and inner-fullscreen wiring to `FileBrowserFilePreview.vue`
 
 **Files:**
-- Verify: `dashboard/src/components/chat/GitDiffSidebar.vue`.
-- Verify: `docs/superpowers/specs/2026-07-15-gitdiff-workspace-fullscreen-design.md`.
+- Modify: `dashboard/src/components/chat/message_list_comps/FileBrowserFilePreview.vue` — the imports, the `<template>` root, and the `.preview-file-meta` row.
 
 **Interfaces:**
-- Consumes: the complete implementation from Tasks 1–2.
-- Produces: a clean, typechecked, buildable feature branch with a focused conventional commit.
+- Consumes: `globalFullscreen`, `innerFullscreen`, `isAnyFullscreen`, `toggleInnerFullscreen` from `GitDiffSidebar` via inject.
+- Produces: an inner button visible when a file is previewed; a Teleport + `.is-fullscreen` class on the preview root that activates only for `innerFullscreen`.
 
-- [ ] **Step 1: Review the final diff for scope and lifecycle correctness.**
+- [ ] **Step 1: Import the inject helper and the shared keys, then wire up the four bindings.**
+
+Update the existing import line near the top of `<script setup>` so it also brings in `inject` from `vue` (it is likely already imported; verify with `grep`). Add the four inject calls near the other inject calls (`setLogPathFilter`):
+
+```ts
+import { computed, inject, ref, watch } from "vue";
+
+const globalFullscreen = inject<Ref<boolean>>(
+  "spcode:globalFullscreen",
+  ref(false),
+);
+const innerFullscreen = inject<Ref<boolean>>(
+  "spcode:innerFullscreen",
+  ref(false),
+);
+const isAnyFullscreen = inject<ComputedRef<boolean>>(
+  "spcode:isAnyFullscreen",
+  computed(() => false),
+);
+const toggleInnerFullscreen = inject<() => void>(
+  "spcode:toggleInnerFullscreen",
+  () => {},
+);
+```
+
+The fallbacks keep the component usable in isolation (storybook / unit tests).
+
+- [ ] **Step 2: Wrap the existing `.preview-file` root in a Teleport and apply the `is-fullscreen` class.**
+
+Change the existing opening:
+
+```vue
+      <!-- 文件 -->
+      <div v-else-if="state.kind === 'file'" class="preview-file">
+```
+
+to:
+
+```vue
+      <!-- 文件 -->
+      <Teleport to="body" :disabled="!innerFullscreen">
+        <div
+          v-else-if="state.kind === 'file'"
+          class="preview-file"
+          :class="{ 'is-fullscreen': innerFullscreen }"
+        >
+```
+
+and change the matching closing `</div>` to `</div></Teleport>`. The `v-else-if` stays on the inner `<div>`; Vue's Teleport is transparent when disabled, so the existing v-if/v-else-if chain in the parent is unaffected.
+
+- [ ] **Step 3: Add the inner button after the existing copy button.**
+
+Insert this button immediately after the existing `<v-btn>` that toggles `copyContent` and before the closing `</div>` of `.preview-file-meta`:
+
+```vue
+        <v-btn
+          v-if="state.kind === 'file'"
+          size="x-small"
+          variant="text"
+          color="primary"
+          :icon="
+            isAnyFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'
+          "
+          :aria-pressed="isAnyFullscreen"
+          :aria-label="
+            tm(
+              isAnyFullscreen
+                ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+            )
+          "
+          :title="
+            tm(
+              isAnyFullscreen
+                ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+            )
+          "
+          @click="toggleInnerFullscreen"
+        />
+```
+
+It mirrors the size/style of the existing history/copy buttons. The `state.kind === "file"` guard is intentionally repeated even though the parent `v-else-if` already enforces it; it keeps the button a no-op if the inner-fullscreen wrapper is ever generalized.
+
+- [ ] **Step 4: Add the inner-fullscreen CSS to the existing `<style scoped>` block.**
+
+Insert this rule next to the existing `.preview-file` styles:
+
+```css
+.preview-file.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--v-theme-surface));
+  margin: 0;
+}
+.preview-file.is-fullscreen .preview-file-meta {
+  flex-shrink: 0;
+  border-bottom: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+}
+.preview-file.is-fullscreen :deep(.file-browser-code-view),
+.preview-file.is-fullscreen .preview-binary {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+```
+
+The deep selector targets the `<FileBrowserCodeView>` component inside the preview area; if its actual class name differs (verify via grep before committing), update the selector.
+
+---
+
+### Task 4: Verify and commit
+
+**Files:**
+- Verify: `dashboard/src/components/chat/GitDiffSidebar.vue` and `dashboard/src/components/chat/message_list_comps/FileBrowserFilePreview.vue`.
+
+- [ ] **Step 1: Run dashboard typecheck.**
 
 Run:
 
 ```cmd
-cd /d F:\github\Astrbot\.worktrees\gitdiff-workspace-fullscreen
-git diff --check
-git diff -- dashboard/src/components/chat/GitDiffSidebar.vue
+cd /d F:\github\Astrbot\.worktrees\gitdiff-workspace-fullscreen\dashboard
+pnpm typecheck
 ```
 
-Confirm the diff contains only:
+Expected: passes.
 
-- the non-persisted fullscreen state and handlers;
-- the view-mode exit guard;
-- body overflow and keydown lifecycle cleanup;
-- the disabled Teleport wrapper;
-- the workspace-only action button;
-- the fullscreen CSS modifier.
-
-- [ ] **Step 2: Run the dashboard production build.**
+- [ ] **Step 2: Run dashboard production build.**
 
 Run:
 
@@ -280,28 +340,44 @@ cd /d F:\github\Astrbot\.worktrees\gitdiff-workspace-fullscreen\dashboard
 pnpm build
 ```
 
-Expected: `vue-tsc --noEmit` and the Vite production build both complete successfully.
+Expected: `vue-tsc --noEmit` and the Vite production build complete successfully.
 
-- [ ] **Step 3: Perform the behavior review against the approved design.**
+- [ ] **Step 3: Restore the working tree's MDI font subset artifact (if produced).**
 
-Check the following manually in the dashboard if the development environment is available:
-
-1. Open the GitDiffSidebar and select the workspace/files page.
-2. Click the fullscreen icon; confirm the entire sidebar (header, path strip, tabs, worktree controls, search, file tree, and preview) fills the browser viewport.
-3. Navigate directories, open a file, resize/collapse panes, and confirm those states remain intact while entering and exiting fullscreen.
-4. Press `Escape`; confirm fullscreen exits and the body becomes scrollable again.
-5. Switch to `diff`, `history`, or `docs`; confirm fullscreen exits and the selected page remains usable.
-6. Resize the sidebar in normal mode, enter and exit fullscreen, and confirm the previous sidebar width is restored.
-
-- [ ] **Step 4: Commit the implementation.**
-
-Run:
+If `pnpm build` modified `dashboard/src/assets/mdi-subset/materialdesignicons-subset.css`, revert that file so the commit does not include a generated artifact:
 
 ```cmd
 cd /d F:\github\Astrbot\.worktrees\gitdiff-workspace-fullscreen
-git add dashboard/src/components/chat/GitDiffSidebar.vue
-git commit -m "feat(dashboard): add workspace fullscreen mode"
+git checkout -- dashboard/src/assets/mdi-subset/materialdesignicons-subset.css
 git status --short --branch
 ```
 
-Expected: the commit succeeds with no uncommitted implementation changes, and the branch remains `feat/gitdiff-workspace-fullscreen`.
+Expected: `git status` shows only the two intentionally modified SFCs.
+
+- [ ] **Step 4: Commit the spec, plan, and implementation.**
+
+Stage and commit the design + plan + code as a single commit (or split them if the user prefers):
+
+```cmd
+cd /d F:\github\Astrbot\.worktrees\gitdiff-workspace-fullscreen
+git add docs/superpowers/specs/2026-07-15-gitdiff-workspace-fullscreen-design.md docs/superpowers/plans/2026-07-15-gitdiff-workspace-fullscreen.md dashboard/src/components/chat/GitDiffSidebar.vue dashboard/src/components/chat/message_list_comps/FileBrowserFilePreview.vue
+git commit -m "feat(dashboard): add sidebar and file-preview fullscreen"
+git status --short --branch
+git log -4 --oneline
+```
+
+Expected: a clean commit on `feat/gitdiff-workspace-fullscreen` and no uncommitted changes.
+
+---
+
+### Self-Review Notes (filled in after writing the plan)
+
+- Spec coverage:
+  - Two non-persisted refs → covered by Task 1.
+  - Mutual exclusion / shared cancel → covered by `isAnyFullscreen` checks in `toggleGlobalFullscreen`/`toggleInnerFullscreen`.
+  - Inner button placement in preview header → covered by Task 3 Step 3.
+  - Global fullscreen survives page switches → covered by Task 1 Step 2 (removed the exit-on-page-switch rule).
+  - Esc cancels whichever is on → covered by `onFullscreenKeyDown`.
+  - Body overflow restored on unmount → covered by the watcher + Task 1 Step 1.
+- Placeholder scan: no TBD/TODO/"implement later" markers.
+- Type consistency: refs and `provide` types (`Ref<boolean>`, `ComputedRef<boolean>`, `() => void`) match between provider and consumer.

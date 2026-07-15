@@ -12,6 +12,8 @@ import {
   computed,
   onMounted,
   nextTick,
+  type Ref,
+  type ComputedRef,
 } from "vue";
 import {
   useSpcodeGitDiff,
@@ -208,24 +210,46 @@ const selectedWorktree = ref<string | null>(null);
 // first-time users likely want to "see what's in the project").
 const viewMode = ref<"files" | "diff" | "history" | "docs">(loadViewMode());
 const fileBrowserCurrentPath = ref<string>(loadFileBrowserCurrentPath());
-const isFullscreen = ref(false);
+// ── Fullscreen state ──────────────────────────────────────────────
+// Two non-persisted modes that share a single "cancel" affordance.
+// They are mutually exclusive: at most one can be true at a time.
+//   globalFullscreen: the entire sidebar expands to the viewport;
+//                     survives page switches (e.g. files → diff).
+//   innerFullscreen: only the selected file's preview area expands.
+// Provided to descendants (FileBrowserFilePreview) via string-keyed
+// inject so the inner button can mirror the same cancel semantics.
+const globalFullscreen = ref(false);
+const innerFullscreen = ref(false);
+const isAnyFullscreen = computed(
+  () => globalFullscreen.value || innerFullscreen.value,
+);
 
-function toggleFullscreen(): void {
-  isFullscreen.value = !isFullscreen.value;
+function toggleGlobalFullscreen(): void {
+  if (isAnyFullscreen.value) {
+    globalFullscreen.value = false;
+    innerFullscreen.value = false;
+    return;
+  }
+  globalFullscreen.value = true;
 }
 
-function exitFullscreen(): void {
-  isFullscreen.value = false;
+function toggleInnerFullscreen(): void {
+  if (isAnyFullscreen.value) {
+    globalFullscreen.value = false;
+    innerFullscreen.value = false;
+    return;
+  }
+  innerFullscreen.value = true;
 }
 
 function onFullscreenKeyDown(e: KeyboardEvent): void {
-  if (e.key === "Escape" && isFullscreen.value) {
-    exitFullscreen();
-  }
+  if (e.key !== "Escape" || !isAnyFullscreen.value) return;
+  globalFullscreen.value = false;
+  innerFullscreen.value = false;
 }
 
 watch(
-  isFullscreen,
+  isAnyFullscreen,
   (v) => {
     document.body.style.overflow = v ? "hidden" : "";
   },
@@ -292,14 +316,9 @@ const projectRoot = computed(() => spcodeStatus.status.value.directory);
 
 // Persist viewMode / selectedScope / selectedWorktree on every change.
 // fileBrowserCurrentPath uses persistCurrentPath (300ms debounce).
-watch(
-  viewMode,
-  (v) => {
-    if (v !== "files") exitFullscreen();
-    safeSetItem(STORAGE_KEYS.viewMode, v);
-  },
-  { flush: "post" },
-);
+watch(viewMode, (v) => safeSetItem(STORAGE_KEYS.viewMode, v), {
+  flush: "post",
+});
 watch(selectedScope, (v) => safeSetItem(STORAGE_KEYS.selectedScope, v), {
   flush: "post",
 });
@@ -546,6 +565,18 @@ function setLogPathFilter(path: string): void {
 // module just to host the constant; not worth it for one consumer.
 const SET_LOG_PATH_FILTER_KEY = "spcode:setLogPathFilter";
 provide<(path: string) => void>(SET_LOG_PATH_FILTER_KEY, setLogPathFilter);
+
+// Fullscreen shared keys. String keys keep the import surface in
+// FileBrowserFilePreview trivial. A Symbol would force a shared module
+// just to host the constants for one consumer; not worth it.
+const FULLSCREEN_GLOBAL_KEY = "spcode:globalFullscreen";
+const FULLSCREEN_INNER_KEY = "spcode:innerFullscreen";
+const FULLSCREEN_IS_ANY_KEY = "spcode:isAnyFullscreen";
+const FULLSCREEN_TOGGLE_INNER_KEY = "spcode:toggleInnerFullscreen";
+provide<Ref<boolean>>(FULLSCREEN_GLOBAL_KEY, globalFullscreen);
+provide<Ref<boolean>>(FULLSCREEN_INNER_KEY, innerFullscreen);
+provide<ComputedRef<boolean>>(FULLSCREEN_IS_ANY_KEY, isAnyFullscreen);
+provide<() => void>(FULLSCREEN_TOGGLE_INNER_KEY, toggleInnerFullscreen);
 
 // Spec §3.3.3:confirm dialog for "Stage all"。
 const confirmStageAllOpen = ref(false);
@@ -927,8 +958,13 @@ onMounted(() => {
   // preventDefault when our sidebar is visible + in files view, so
   // outside of those contexts the native find-in-page still works.
   window.addEventListener("keydown", onSearchKeydown);
-  document.addEventListener("keydown", onFullscreenKeyDown);
-});
+    // Fullscreen cancel handler: bound to document (not window) in
+    // bubble phase so the existing window-level search Escape handler
+    // and component-local Escape handlers run first. The isAnyFullscreen
+    // guard filters out non-fullscreen cases so other Escape shortcuts
+    // keep working unchanged.
+    document.addEventListener("keydown", onFullscreenKeyDown);
+  });
 
 // ── Worktree polling (added 2026-06-25, elecvoid243) ──────────────
 // Spec: "当且仅当侧边栏打开时才触发轮询" — the agent can run
@@ -2292,12 +2328,16 @@ onBeforeUnmount(() => {
     persistCurrentPathTimer = null;
   }
   document.removeEventListener("mousedown", closeContextMenuOnOutside, true);
-  document.removeEventListener("keydown", closeContextMenuOnEscape, true);
-  // 2026-07-02 sidebar-search: tear down the Cmd/Ctrl-F handler.
-  window.removeEventListener("keydown", onSearchKeydown);
-  document.removeEventListener("keydown", onFullscreenKeyDown);
-  document.body.style.overflow = "";
-});
+    document.removeEventListener("keydown", closeContextMenuOnEscape, true);
+    // 2026-07-02 sidebar-search: tear down the Cmd/Ctrl-F handler.
+    window.removeEventListener("keydown", onSearchKeydown);
+    document.removeEventListener("keydown", onFullscreenKeyDown);
+    // Always restore body overflow on unmount. The watcher above already
+    // does this whenever both modes become false; the explicit reset
+    // covers the edge case where the sidebar closes while fullscreen is
+    // still on (the watcher would otherwise leak the hidden overflow).
+    document.body.style.overflow = "";
+  });
 
 function toggleFile(path: string): void {
   const next = new Set(expandedSet.value);
@@ -2389,13 +2429,19 @@ const currentRoot = computed<string | null>(() => {
 </script>
 
 <template>
-  <Teleport to="body" :disabled="!isFullscreen">
+  <!-- Global fullscreen escape: teleport the sidebar shell to <body>
+       only while globalFullscreen is on. When disabled, Teleport is a
+       transparent pass-through — the existing chat-panel layout
+       (sidebar body → document-manager flex column) is unchanged.
+       The .is-fullscreen class on the <aside> drives the fixed
+       viewport styles in the scoped CSS below. -->
+  <Teleport to="body" :disabled="!globalFullscreen">
     <transition name="slide-left">
       <aside
         v-if="modelValue"
         ref="sidebarRef"
         class="git-diff-sidebar"
-        :class="{ resizing: isResizing, 'is-fullscreen': isFullscreen }"
+        :class="{ resizing: isResizing, 'is-fullscreen': globalFullscreen }"
         :style="{ width: sidebarWidth + 'px' }"
       >
         <div class="git-diff-sidebar-resizer" @mousedown="startResize" />
@@ -2436,28 +2482,27 @@ const currentRoot = computed<string | null>(() => {
             {{ tm("spcodeProjectLoad.diffSidebar.refreshTooltip") }}
           </v-tooltip>
           <v-btn
-            v-if="viewMode === 'files'"
             :icon="
-              isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'
+              isAnyFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'
             "
             size="small"
             variant="text"
-            :aria-pressed="isFullscreen"
+            :aria-pressed="isAnyFullscreen"
             :aria-label="
               tm(
-                isFullscreen
+                isAnyFullscreen
                   ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
                   : 'spcodeProjectLoad.documentManager.fullscreen.enter',
               )
             "
             :title="
               tm(
-                isFullscreen
+                isAnyFullscreen
                   ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
                   : 'spcodeProjectLoad.documentManager.fullscreen.enter',
               )
             "
-            @click="toggleFullscreen"
+            @click="toggleGlobalFullscreen"
           />
           <v-btn
             icon="mdi-close"
@@ -3284,6 +3329,12 @@ const currentRoot = computed<string | null>(() => {
   position: relative;
 }
 
+/* Global workspace fullscreen: teleport's destination is fixed and
+   fills the viewport. The inline width binding (user-resized sidebar)
+   would otherwise cap us at the drag width, so it is overridden with
+   !important. The high z-index sits above the chat layout (sidebar
+   normally lives inside the chat-panel flex; teleporting to <body>
+   removes that stacking context). */
 .git-diff-sidebar.is-fullscreen {
   position: fixed;
   inset: 0;
