@@ -443,7 +443,11 @@ class SkillsService:
         export_dir = Path(get_astrbot_temp_path()) / "skill_exports"
         export_dir.mkdir(parents=True, exist_ok=True)
         zip_base = export_dir / skill_name
-        zip_path = zip_base.with_suffix(".zip")
+        # with_suffix(".zip") replaces only the last suffix (e.g. ".0" in
+        # "skill-writing-1.0.0"), producing "skill-writing-1.0.zip" —
+        # which mismatches shutil.make_archive's "skill-writing-1.0.0.zip".
+        # Append ".zip" to the full name instead.
+        zip_path = zip_base.with_name(zip_base.name + ".zip")
         if zip_path.exists():
             zip_path.unlink()
 
