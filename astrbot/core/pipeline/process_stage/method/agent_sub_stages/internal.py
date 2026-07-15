@@ -275,9 +275,12 @@ class InternalAgentSubStage(Stage):
                         "LLMAgent", span_type="llm_agent"
                     )
                     _sys_prompt = req.system_prompt or ""
+                    _req_prompt = req.prompt or ""
                     llm_agent_span.set_input(
                         system_prompt=_sys_prompt,
                         system_prompt_chars=len(_sys_prompt),
+                        prompt=_req_prompt,
+                        prompt_chars=len(_req_prompt),
                         context_length=len(req.contexts) if req.contexts else 0,
                         tools=req.func_tool.names() if req.func_tool else [],
                         stream=streaming_response,

@@ -1,16 +1,59 @@
 <script setup>
 defineOptions({ name: 'SpanDetail' });
 
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import VueJsonPretty from 'vue-json-pretty';
 import 'vue-json-pretty/lib/styles.css';
 
-defineProps({
+const props = defineProps({
   span: {
     type: Object,
     default: null
   }
 });
+
+// Threshold: strings longer than this are considered "long" and collapsed by default
+const LONG_STRING_THRESHOLD = 200;
+
+// Track which long-string fields are expanded, keyed by "section.fieldPath"
+const expandedFields = ref(new Set());
+
+function toggleField(key) {
+  if (expandedFields.value.has(key)) {
+    expandedFields.value.delete(key);
+  } else {
+    expandedFields.value.add(key);
+  }
+  // Trigger reactivity
+  expandedFields.value = new Set(expandedFields.value);
+}
+
+/**
+ * Split a data object into:
+ *   - shortFields: fields safe for vue-json-pretty (non-long-string values)
+ *   - longFields:  long string fields rendered separately with collapse/expand
+ */
+function splitFields(obj) {
+  if (!obj || typeof obj !== 'object') return { shortFields: null, longFields: [] };
+  const shortFields = {};
+  const longFields = [];
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === 'string' && value.length > LONG_STRING_THRESHOLD) {
+      longFields.push({ key, value });
+    } else {
+      shortFields[key] = value;
+    }
+  }
+  return {
+    shortFields: Object.keys(shortFields).length > 0 ? shortFields : null,
+    longFields,
+  };
+}
+
+// Computed splits for each section
+const inputSplit = computed(() => splitFields(props.span?.input));
+const outputSplit = computed(() => splitFields(props.span?.output));
+const metaSplit = computed(() => splitFields(props.span?.meta));
 
 function formatJson(obj) {
   if (!obj || Object.keys(obj).length === 0) return null;
@@ -52,13 +95,21 @@ const SPAN_TYPE_META = {
 function spanMeta(type) {
   return SPAN_TYPE_META[type] || { icon: 'mdi-circle-small', color: '#9e9e9e' };
 }
+
+function truncateStr(str, len = 120) {
+  if (str.length <= len) return str;
+  return str.slice(0, len) + '…';
+}
+
+function hasData(obj) {
+  return obj && typeof obj === 'object' && Object.keys(obj).length > 0;
+}
 </script>
 
 <template>
   <div v-if="span" class="span-detail">
-    <!-- ── Header (LangFuse ObservationDetailViewHeader style) ──────── -->
+    <!-- ── Header ──────────────────────────────────────────────────────── -->
     <div class="sd-header">
-      <!-- Title row: type icon + span name -->
       <div class="sd-title-row">
         <div class="sd-item-badge">
           <v-icon :style="{ color: spanMeta(span.span_type).color }" size="12">
@@ -68,12 +119,10 @@ function spanMeta(type) {
         <span class="sd-title">{{ span.name }}</span>
       </div>
 
-      <!-- Timestamp row -->
       <div v-if="formatTime(span.started_at)" class="sd-timestamp">
         {{ formatTime(span.started_at) }}
       </div>
 
-      <!-- Badges row (LangFuse "tertiary" style) -->
       <div class="sd-badges-row">
         <v-chip
           size="x-small"
@@ -101,11 +150,12 @@ function spanMeta(type) {
 
     <!-- ── Stacked sections ──────────────────────────────────────────── -->
     <div class="sd-body">
+      <!-- Input -->
       <div class="sd-section">
         <div class="sd-section-hd">
           <span class="sd-section-label">Input</span>
           <v-btn
-            v-if="formatJson(span.input)"
+            v-if="hasData(span.input)"
             icon="mdi-content-copy"
             size="x-small"
             variant="text"
@@ -115,24 +165,58 @@ function spanMeta(type) {
           />
         </div>
         <div class="sd-section-bd">
-          <div v-if="span.input && Object.keys(span.input).length > 0" class="sd-json-wrapper">
-            <vue-json-pretty
-              :data="span.input"
-              :deep="2"
-              :show-double-quotes="true"
-              :show-length="true"
-              theme="monikai"
-            />
-          </div>
+          <template v-if="hasData(span.input)">
+            <!-- Short fields rendered via vue-json-pretty -->
+            <div v-if="inputSplit.shortFields" class="sd-json-wrapper">
+              <vue-json-pretty
+                :data="inputSplit.shortFields"
+                :deep="1"
+                :show-double-quotes="true"
+                :show-length="true"
+                :collapsed-on-click-brackets="true"
+                theme="monikai"
+              />
+            </div>
+            <!-- Long string fields rendered as collapsible blocks -->
+            <div
+              v-for="field in inputSplit.longFields"
+              :key="'input-' + field.key"
+              class="sd-long-field"
+            >
+              <div
+                class="sd-long-field-header"
+                @click="toggleField('input.' + field.key)"
+              >
+                <v-icon size="14" class="sd-long-field-arrow">
+                  {{ expandedFields.has('input.' + field.key) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                </v-icon>
+                <span class="sd-long-field-key">"{{ field.key }}"</span>
+                <span class="sd-long-field-meta">string · {{ field.value.length }} chars</span>
+                <v-btn
+                  icon="mdi-content-copy"
+                  size="x-small"
+                  variant="text"
+                  density="compact"
+                  class="sd-copy sd-long-field-copy"
+                  @click.stop="copyText(field.value)"
+                />
+              </div>
+              <div v-if="!expandedFields.has('input.' + field.key)" class="sd-long-field-preview">
+                {{ truncateStr(field.value) }}
+              </div>
+              <pre v-else class="sd-long-field-full">{{ field.value }}</pre>
+            </div>
+          </template>
           <span v-else class="sd-nil">No input data</span>
         </div>
       </div>
 
+      <!-- Output -->
       <div class="sd-section">
         <div class="sd-section-hd">
           <span class="sd-section-label">Output</span>
           <v-btn
-            v-if="formatJson(span.output)"
+            v-if="hasData(span.output)"
             icon="mdi-content-copy"
             size="x-small"
             variant="text"
@@ -142,24 +226,56 @@ function spanMeta(type) {
           />
         </div>
         <div class="sd-section-bd">
-          <div v-if="span.output && Object.keys(span.output).length > 0" class="sd-json-wrapper">
-            <vue-json-pretty
-              :data="span.output"
-              :deep="2"
-              :show-double-quotes="true"
-              :show-length="true"
-              theme="monikai"
-            />
-          </div>
+          <template v-if="hasData(span.output)">
+            <div v-if="outputSplit.shortFields" class="sd-json-wrapper">
+              <vue-json-pretty
+                :data="outputSplit.shortFields"
+                :deep="1"
+                :show-double-quotes="true"
+                :show-length="true"
+                :collapsed-on-click-brackets="true"
+                theme="monikai"
+              />
+            </div>
+            <div
+              v-for="field in outputSplit.longFields"
+              :key="'output-' + field.key"
+              class="sd-long-field"
+            >
+              <div
+                class="sd-long-field-header"
+                @click="toggleField('output.' + field.key)"
+              >
+                <v-icon size="14" class="sd-long-field-arrow">
+                  {{ expandedFields.has('output.' + field.key) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                </v-icon>
+                <span class="sd-long-field-key">"{{ field.key }}"</span>
+                <span class="sd-long-field-meta">string · {{ field.value.length }} chars</span>
+                <v-btn
+                  icon="mdi-content-copy"
+                  size="x-small"
+                  variant="text"
+                  density="compact"
+                  class="sd-copy sd-long-field-copy"
+                  @click.stop="copyText(field.value)"
+                />
+              </div>
+              <div v-if="!expandedFields.has('output.' + field.key)" class="sd-long-field-preview">
+                {{ truncateStr(field.value) }}
+              </div>
+              <pre v-else class="sd-long-field-full">{{ field.value }}</pre>
+            </div>
+          </template>
           <span v-else class="sd-nil">No output data</span>
         </div>
       </div>
 
+      <!-- Metadata -->
       <div class="sd-section">
         <div class="sd-section-hd">
           <span class="sd-section-label">Metadata</span>
           <v-btn
-            v-if="formatJson(span.meta)"
+            v-if="hasData(span.meta)"
             icon="mdi-content-copy"
             size="x-small"
             variant="text"
@@ -169,15 +285,46 @@ function spanMeta(type) {
           />
         </div>
         <div class="sd-section-bd">
-          <div v-if="span.meta && Object.keys(span.meta).length > 0" class="sd-json-wrapper">
-            <vue-json-pretty
-              :data="span.meta"
-              :deep="2"
-              :show-double-quotes="true"
-              :show-length="true"
-              theme="monikai"
-            />
-          </div>
+          <template v-if="hasData(span.meta)">
+            <div v-if="metaSplit.shortFields" class="sd-json-wrapper">
+              <vue-json-pretty
+                :data="metaSplit.shortFields"
+                :deep="1"
+                :show-double-quotes="true"
+                :show-length="true"
+                :collapsed-on-click-brackets="true"
+                theme="monikai"
+              />
+            </div>
+            <div
+              v-for="field in metaSplit.longFields"
+              :key="'meta-' + field.key"
+              class="sd-long-field"
+            >
+              <div
+                class="sd-long-field-header"
+                @click="toggleField('meta.' + field.key)"
+              >
+                <v-icon size="14" class="sd-long-field-arrow">
+                  {{ expandedFields.has('meta.' + field.key) ? 'mdi-chevron-down' : 'mdi-chevron-right' }}
+                </v-icon>
+                <span class="sd-long-field-key">"{{ field.key }}"</span>
+                <span class="sd-long-field-meta">string · {{ field.value.length }} chars</span>
+                <v-btn
+                  icon="mdi-content-copy"
+                  size="x-small"
+                  variant="text"
+                  density="compact"
+                  class="sd-copy sd-long-field-copy"
+                  @click.stop="copyText(field.value)"
+                />
+              </div>
+              <div v-if="!expandedFields.has('meta.' + field.key)" class="sd-long-field-preview">
+                {{ truncateStr(field.value) }}
+              </div>
+              <pre v-else class="sd-long-field-full">{{ field.value }}</pre>
+            </div>
+          </template>
           <span v-else class="sd-nil">No metadata</span>
         </div>
       </div>
@@ -237,7 +384,6 @@ function spanMeta(type) {
   color: rgba(var(--v-theme-on-surface), 0.9);
   line-height: 1.5;
   word-break: break-all;
-  /* line-clamp-2 equivalent */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -249,7 +395,7 @@ function spanMeta(type) {
 .sd-timestamp {
   font-size: 14px;
   color: rgba(var(--v-theme-on-surface), 0.45);
-  padding-left: 30px; /* align with title text */
+  padding-left: 30px;
 }
 
 /* Badges row */
@@ -266,7 +412,6 @@ function spanMeta(type) {
   height: 20px !important;
 }
 
-/* LangFuse "tertiary" badge style */
 .sd-badge {
   display: inline-flex;
   align-items: center;
@@ -338,20 +483,6 @@ function spanMeta(type) {
   padding: 4px 20px 16px;
 }
 
-.sd-pre {
-  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: rgba(var(--v-theme-on-surface), 0.85);
-  margin: 0;
-  line-height: 1.65;
-  background: rgba(var(--v-theme-on-surface), 0.03);
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.07);
-  border-radius: 6px;
-  padding: 10px 12px;
-}
-
 .sd-json-wrapper {
   background: rgba(var(--v-theme-on-surface), 0.03);
   border: 1px solid rgba(var(--v-theme-on-surface), 0.07);
@@ -366,19 +497,92 @@ function spanMeta(type) {
 }
 
 :deep(.vjs-key) {
-  color: #ab47bc !important; /* Vuetify purple-lighten-1 like */
+  color: #ab47bc !important;
 }
 
 :deep(.vjs-value__string) {
-  color: #43a047 !important; /* Green */
+  color: #43a047 !important;
 }
 
 :deep(.vjs-value__number) {
-  color: #ef6c00 !important; /* Orange */
+  color: #ef6c00 !important;
 }
 
 :deep(.vjs-value__boolean) {
-  color: #1e88e5 !important; /* Blue */
+  color: #1e88e5 !important;
+}
+
+/* ── Long-string collapsible field ───────────────────────────────────── */
+.sd-long-field {
+  margin-top: 6px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.07);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sd-long-field-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s;
+}
+
+.sd-long-field-header:hover {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.sd-long-field-arrow {
+  color: rgba(var(--v-theme-on-surface), 0.45);
+  flex-shrink: 0;
+}
+
+.sd-long-field-key {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ab47bc;
+  flex-shrink: 0;
+}
+
+.sd-long-field-meta {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  flex-shrink: 0;
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+.sd-long-field-copy {
+  flex-shrink: 0;
+}
+
+.sd-long-field-preview {
+  padding: 0 10px 8px 30px;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  color: #43a047;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sd-long-field-full {
+  margin: 0;
+  padding: 0 10px 10px 30px;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  color: #43a047;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.65;
+  max-height: 400px;
+  overflow-y: auto;
+  background: transparent;
+  border: none;
 }
 
 .sd-nil {
