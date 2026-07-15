@@ -81,7 +81,12 @@ function shortSha(sha: string): string {
       </button>
     </header>
     <div v-if="!fileRelative" class="document-history-panel__empty">
-      {{ tm("spcodeProjectLoad.documentManager.tree.empty") }}
+      <!-- 2026-07-15 document-history-empty: this is the *history*
+           pane's idle state ("no file picked"), not the file-tree's
+           "directory has no .md files" state. Using tree.empty here
+           was misleading because the user is looking at a right-side
+           panel with no file context, not a folder listing. -->
+      {{ tm("spcodeProjectLoad.documentManager.history.noSelection") }}
     </div>
     <div v-else-if="isLoading" class="document-history-panel__loading">
       <v-progress-circular indeterminate size="16" width="2" />

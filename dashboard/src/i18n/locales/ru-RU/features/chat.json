@@ -752,7 +752,7 @@
       "viewMode": {
         "raw": "Исходник",
         "rendered": "Рендер",
-        "diff": "Сравнить с текущим",
+        "diff": "Этот коммит",
         "viewingRevision": "Просмотр ревизии {sha}",
         "backToCurrent": "К текущей версии"
       },
@@ -760,8 +760,9 @@
         "title": "История",
         "currentPlaceholder": "Рабочее дерево",
         "viewThisRevision": "Открыть эту ревизию",
-        "compareWithCurrent": "Сравнить с текущей",
-        "loadFail": "Не удалось прочитать историю"
+        "compareWithCurrent": "Изменения этого коммита",
+        "loadFail": "Не удалось прочитать историю",
+        "noSelection": "Файл не выбран"
       },
       "editor": {
         "newFile": "Новый",

@@ -258,33 +258,34 @@ const historySplit = useResizableSplit({
   direction: "right",
 });
 const isLeftPaneCollapsed = ref<boolean>(false);
-const isHistoryCollapsed = ref<boolean>(false);
+// 2026-07-15 document-history-empty: the history pane is per-file
+// (commits belong to a specific doc), so when no file is selected
+// on mount there's nothing useful to show there. Default the pane
+// to collapsed in that case so the user doesn't see the (now fixed)
+// "no file selected" placeholder for no reason. Once the user
+// manually toggles it, that choice wins — no forced sync with
+// selectedDoc.
+const isHistoryCollapsed = ref<boolean>(!selectedDoc.value);
 
-/** Fullscreen review mode. NOT persisted — each visit starts at false. */
+/** Fullscreen review mode. NOT persisted — each visit starts at false.
+ *
+ *  2026-07-15 fullscreen-layout-parity: fullscreen and normal modes
+ *  share the SAME layout (same pane tree, same expand handles). The
+ *  only thing that changes between modes is positioning: the root
+ *  gets teleported to <body> and styled `position: fixed; inset: 0`
+ *  in fullscreen (see <Teleport> + .document-manager.is-fullscreen).
+ *  Earlier revisions overlaid a separate left-rail trigger + offscreen
+ *  drawer in fullscreen, which both differed from the normal layout
+ *  AND leaked a `position: absolute` collapse button over the
+ *  breadcrumb. */
 const isFullscreen = ref<boolean>(false);
-const leftDrawerOpen = ref<boolean>(false);
 
 function toggleFullscreen(): void {
   isFullscreen.value = !isFullscreen.value;
-  if (!isFullscreen.value) {
-    // Closing fullscreen also closes the drawer (otherwise the
-    // drawer would visually pop out from behind the now-restored
-    // left pane).
-    leftDrawerOpen.value = false;
-  }
 }
 
 function exitFullscreen(): void {
   isFullscreen.value = false;
-  leftDrawerOpen.value = false;
-}
-
-function openLeftDrawer(): void {
-  leftDrawerOpen.value = true;
-}
-
-function closeLeftDrawer(): void {
-  leftDrawerOpen.value = false;
 }
 
 /** Esc exits fullscreen (when fullscreen is on). Listener is attached
@@ -715,8 +716,12 @@ onBeforeUnmount(() => {
           <!-- Left pane wrapper (tree + collapse button). The wrapper
              carries the inline width set by the resize handler so
              collapse ↔ expand preserves the user's chosen share. -->
+          <!-- 2026-07-15 fullscreen-layout-parity: pane-left is
+               visible in BOTH normal AND fullscreen modes — fullscreen
+               shares the same layout tree. The only gate is the user's
+               collapse choice. -->
           <div
-            v-show="!isLeftPaneCollapsed && !isFullscreen"
+            v-show="!isLeftPaneCollapsed"
             class="document-manager__pane-left"
             :style="{ width: treeSplit.percent.value + '%' }"
           >
@@ -757,40 +762,6 @@ onBeforeUnmount(() => {
             @mousedown="treeSplit.startResize"
           />
 
-          <button
-            v-if="isFullscreen"
-            type="button"
-            class="document-manager__left-rail"
-            :aria-label="
-              tm('spcodeProjectLoad.documentManager.fullscreen.openDrawer')
-            "
-            @click="openLeftDrawer"
-          >
-            <v-icon size="16">mdi-chevron-double-right</v-icon>
-          </button>
-          <div
-            v-if="isFullscreen && leftDrawerOpen"
-            class="document-manager__left-drawer"
-            data-testid="document-manager-left-drawer"
-          >
-            <DocumentTreePanel
-              ref="treeRef"
-              :current-dir="docsRoot"
-              :root-path="projectRoot"
-              :is-dark="isDark"
-              :selected-file="selectedDoc"
-              :breadcrumb="false"
-              @navigate="onTreeNavigate"
-              @breadcrumb-navigate="onTreeNavigate"
-              @select="onTreeSelect"
-              @create-new="onCreateNew"
-            />
-          </div>
-          <div
-            v-if="isFullscreen && leftDrawerOpen"
-            class="document-manager__drawer-backdrop"
-            @click="closeLeftDrawer"
-          />
 
           <section
             class="document-manager__right"
@@ -1272,41 +1243,6 @@ onBeforeUnmount(() => {
   /* The chat page keeps other fullscreen surfaces in this slot
      (e.g. image viewers, dialog overlays). z-index: 9999 matches
      the DiffPreview overlay so they layer consistently. */
-}
-.document-manager__left-rail {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 10;
-  background: rgb(var(--v-theme-surface));
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 6px;
-  padding: 6px 8px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-}
-.document-manager__left-drawer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 240px;
-  z-index: 20;
-  background: rgb(var(--v-theme-surface));
-  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  overflow: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.document-manager__drawer-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 15;
-  background: rgba(0, 0, 0, 0.15);
-  cursor: default;
 }
 
 /* Collapse button: small chevron anchored to the top-right of

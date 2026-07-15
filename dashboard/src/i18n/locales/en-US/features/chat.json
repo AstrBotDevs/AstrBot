@@ -767,7 +767,7 @@
       "viewMode": {
         "raw": "Raw",
         "rendered": "Rendered",
-        "diff": "Diff vs current",
+        "diff": "This commit",
         "viewingRevision": "Viewing historical revision {sha}",
         "backToCurrent": "Back to current"
       },
@@ -780,8 +780,9 @@
         "title": "History",
         "currentPlaceholder": "Working tree",
         "viewThisRevision": "View this revision",
-        "compareWithCurrent": "Diff vs current",
-        "loadFail": "Failed to read history"
+        "compareWithCurrent": "View this commit's changes",
+        "loadFail": "Failed to read history",
+        "noSelection": "No file selected"
       },
       "editor": {
         "newFile": "New",
@@ -803,8 +804,7 @@
       },
       "fullscreen": {
         "enter": "Enter fullscreen",
-        "exit": "Exit fullscreen",
-        "openDrawer": "Open file tree"
+        "exit": "Exit fullscreen"
       },
       "newFile": "Select a .md file or create one",
       "noFileSelected": "Select a document to begin",
