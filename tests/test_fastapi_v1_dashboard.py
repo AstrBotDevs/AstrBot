@@ -1070,6 +1070,7 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert "/api/v1/mcp/resources" in spec["paths"]
     assert "/api/v1/mcp/resource-templates" in spec["paths"]
     assert "/api/v1/mcp/prompts" in spec["paths"]
+    assert "/api/v1/mcp/prompts/preview" in spec["paths"]
     assert "/api/v1/mcp/resources/read" in spec["paths"]
     assert "/api/v1/skills" in spec["paths"]
     assert "/api/v1/file" in spec["paths"]
@@ -1091,6 +1092,7 @@ def test_static_openapi_v1_paths_include_api_version():
     assert path_keys
     assert all(path.startswith("/api/v1/") for path in path_keys)
     assert "/api/v1/mcp/prompts" in path_keys
+    assert "/api/v1/mcp/prompts/preview" in path_keys
 
 
 @pytest.mark.asyncio
@@ -3386,6 +3388,141 @@ async def test_v1_mcp_prompt_catalog_requires_mcp_scope(
         "next_cursor": None,
     }
     list_prompts.assert_awaited_once_with("demo-server", None)
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_prompt_preview_route(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    client = SimpleNamespace(
+        supports_prompts=True,
+        get_prompt=AsyncMock(
+            return_value=SimpleNamespace(
+                description="not exposed",
+                messages=[
+                    SimpleNamespace(
+                        role="user",
+                        content=SimpleNamespace(
+                            type="text",
+                            text="Review MCP SDK as Python.",
+                            _meta={"secret": "not exposed"},
+                        ),
+                    ),
+                    SimpleNamespace(
+                        role="assistant",
+                        content=SimpleNamespace(
+                            type="resource",
+                            resource=SimpleNamespace(
+                                uri="file:///review.md",
+                                mimeType="text/markdown",
+                                text="Looks good",
+                            ),
+                        ),
+                    ),
+                ],
+                _meta={"secret": "not exposed"},
+            )
+        ),
+    )
+    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    fake_tools.mcp_server_runtime_view["demo-server"] = SimpleNamespace(client=client)
+
+    response = await asgi_client.post(
+        "/api/v1/mcp/prompts/preview",
+        json={
+            "server_name": "demo-server",
+            "name": "review",
+            "arguments": {"language": "Python", "focus": ""},
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "messages": [
+            {
+                "role": "user",
+                "content": {
+                    "type": "text",
+                    "text": "Review MCP SDK as Python.",
+                    "size": 25,
+                    "truncated": False,
+                },
+            },
+            {
+                "role": "assistant",
+                "content": {
+                    "type": "resource",
+                    "resource": {
+                        "type": "text",
+                        "uri": "file:///review.md",
+                        "mime_type": "text/markdown",
+                        "text": "Looks good",
+                        "size": 10,
+                        "truncated": False,
+                    },
+                },
+            },
+        ],
+        "total_messages": 2,
+        "messages_truncated": False,
+        "text_truncated": False,
+    }
+    client.get_prompt.assert_awaited_once_with(
+        "review",
+        {"language": "Python", "focus": ""},
+    )
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_prompt_preview_requires_mcp_scope_and_strict_body(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    preview_prompt = AsyncMock(
+        return_value={
+            "messages": [],
+            "total_messages": 0,
+            "messages_truncated": False,
+            "text_truncated": False,
+        }
+    )
+    monkeypatch.setattr(
+        asgi_app.state.services.tools,
+        "preview_mcp_prompt",
+        preview_prompt,
+    )
+    tool_key = "abk_fastapi_v1_prompt_preview_tool_only"
+    mcp_key = "abk_fastapi_v1_prompt_preview"
+    fake_db.add_api_key(tool_key, scopes=["tool"])
+    fake_db.add_api_key(mcp_key, scopes=["mcp"])
+    payload = {"server_name": "demo-server", "name": "review"}
+
+    forbidden_response = await asgi_client.post(
+        "/api/v1/mcp/prompts/preview",
+        json=payload,
+        headers={"X-API-Key": tool_key},
+    )
+    allowed_response = await asgi_client.post(
+        "/api/v1/mcp/prompts/preview",
+        json=payload,
+        headers={"X-API-Key": mcp_key},
+    )
+    invalid_response = await asgi_client.post(
+        "/api/v1/mcp/prompts/preview",
+        json={**payload, "_meta": {"secret": "not accepted"}},
+        headers={"X-API-Key": mcp_key},
+    )
+
+    assert forbidden_response.status_code == 403
+    assert forbidden_response.json()["message"] == "Insufficient API key scope"
+    assert allowed_response.status_code == 200
+    assert allowed_response.json()["data"]["messages"] == []
+    assert invalid_response.status_code == 422
+    preview_prompt.assert_awaited_once_with("demo-server", "review", None)
 
 
 @pytest.mark.asyncio

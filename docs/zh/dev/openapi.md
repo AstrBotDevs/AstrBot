@@ -42,7 +42,7 @@ X-API-Key: abk_xxx
 | `chat` | 调用对话能力、查询对话会话 | `POST /api/v1/chat`、`GET /api/v1/chat/sessions` |
 | `file` | 上传和下载对话附件 | `POST /api/v1/file`、`GET /api/v1/file`、`POST /api/v1/files` |
 | `plugin` | 管理插件、插件配置、插件源和插件市场 | `GET /api/v1/plugins`、`GET/PUT /api/v1/plugins/config`、`POST /api/v1/plugins/install/url` |
-| `mcp` | 管理 MCP 服务器并查看服务端能力 | `GET/POST /api/v1/mcp/servers`、`GET /api/v1/mcp/prompts`、`PATCH /api/v1/mcp/servers/{server_name}/enabled`、`POST /api/v1/mcp/providers/modelscope/sync` |
+| `mcp` | 管理 MCP 服务器并查看服务端能力 | `GET/POST /api/v1/mcp/servers`、`GET /api/v1/mcp/prompts`、`POST /api/v1/mcp/prompts/preview`、`PATCH /api/v1/mcp/servers/{server_name}/enabled`、`POST /api/v1/mcp/providers/modelscope/sync` |
 | `skill` | 管理 Skills、Skill 压缩包、Skill 文件和 Shipyard Neo Skill 流程 | `GET/POST /api/v1/skills`、`PUT /api/v1/skills/{skill_name}/files/{file_path}`、`POST /api/v1/skills/neo/sync` |
 
 如果 API Key 未包含目标接口所需 scope，请求会返回 `403 Insufficient API key scope`。
@@ -75,6 +75,7 @@ X-API-Key: abk_xxx
 - `GET /api/v1/plugins`：获取插件列表
 - `GET /api/v1/mcp/servers`：获取 MCP 服务器列表
 - `GET /api/v1/mcp/prompts`：获取已连接 MCP 服务器公开的 Prompt 元数据
+- `POST /api/v1/mcp/prompts/preview`：安全解析 Prompt，不启动对话，也不执行工具
 - `GET /api/v1/skills`：获取 Skills 列表
 
 **IM 消息发送**

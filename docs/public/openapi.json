@@ -4187,6 +4187,31 @@
         }
       }
     },
+    "/api/v1/mcp/prompts/preview": {
+      "post": {
+        "tags": [
+          "MCP"
+        ],
+        "summary": "Safely preview a prompt from a connected MCP server",
+        "operationId": "previewMcpPrompt",
+        "x-astrbot-scope": "mcp",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpPromptPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
     "/api/v1/mcp/resources/read": {
       "post": {
         "tags": [
@@ -6668,6 +6693,37 @@
           "uri": {
             "type": "string",
             "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "McpPromptPreviewRequest": {
+        "type": "object",
+        "required": [
+          "server_name",
+          "name"
+        ],
+        "properties": {
+          "server_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "arguments": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false

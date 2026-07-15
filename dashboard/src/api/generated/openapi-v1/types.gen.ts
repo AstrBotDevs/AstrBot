@@ -307,6 +307,14 @@ export type LoginRequest = {
     trust_device_flag?: boolean;
 };
 
+export type McpPromptPreviewRequest = {
+    server_name: string;
+    name: string;
+    arguments?: ({
+    [key: string]: (string);
+} | null);
+};
+
 export type McpResourceReadRequest = {
     server_name: string;
     uri: string;
@@ -2301,6 +2309,14 @@ export type ListMcpPromptsData = {
 export type ListMcpPromptsResponse = (SuccessEnvelope);
 
 export type ListMcpPromptsError = unknown;
+
+export type PreviewMcpPromptData = {
+    body: McpPromptPreviewRequest;
+};
+
+export type PreviewMcpPromptResponse = (SuccessEnvelope);
+
+export type PreviewMcpPromptError = unknown;
 
 export type ReadMcpResourceData = {
     body: McpResourceReadRequest;

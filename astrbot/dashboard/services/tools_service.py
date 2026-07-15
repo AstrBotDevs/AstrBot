@@ -3,6 +3,8 @@ from __future__ import annotations
 import traceback
 from typing import Any, NoReturn
 
+from mcp.shared.exceptions import McpError
+
 from astrbot.core import logger, sp
 from astrbot.core.agent.mcp_client import (
     MCPClient,
@@ -26,6 +28,12 @@ class EmptyMcpServersError(ValueError):
 
 _MCP_RESOURCE_TEXT_PREVIEW_MAX_BYTES = 256 * 1024
 _MCP_RESOURCE_TEXT_SIZE_CHUNK_CHARS = 64 * 1024
+_MCP_PROMPT_PREVIEW_MAX_MESSAGES = 100
+_MCP_PROMPT_TEXT_PREVIEW_MAX_BYTES = 256 * 1024
+_MCP_PROMPT_METADATA_MAX_BYTES = 64 * 1024
+_MCP_BASE64_ALPHABET = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+)
 
 
 def _serialize_mcp_annotations(annotations: object) -> dict[str, Any] | None:
@@ -130,6 +138,156 @@ def _serialize_mcp_resource_content(
         }
 
     raise ToolsServiceError("MCP server returned an unsupported resource content type")
+
+
+def _serialize_mcp_prompt_content(
+    content: object,
+    text_preview_budget: int,
+    metadata_budget: int,
+) -> tuple[dict[str, Any], int, int, bool]:
+    content_type = getattr(content, "type", None)
+    if content_type == "text":
+        text = getattr(content, "text", None)
+        if not isinstance(text, str):
+            raise ToolsServiceError("MCP server returned invalid prompt text content")
+        preview, size, truncated = _bounded_mcp_text_preview(
+            text,
+            text_preview_budget,
+        )
+        return (
+            {
+                "type": "text",
+                "text": preview,
+                "size": size,
+                "truncated": truncated,
+            },
+            len(preview.encode("utf-8")),
+            0,
+            truncated,
+        )
+
+    if content_type in {"image", "audio"}:
+        data = getattr(content, "data", None)
+        mime_type = getattr(content, "mimeType", None)
+        if not isinstance(data, str) or not isinstance(mime_type, str):
+            raise ToolsServiceError("MCP server returned invalid prompt binary content")
+        metadata_size = _validate_mcp_prompt_metadata(
+            metadata_budget,
+            mime_type,
+        )
+        return (
+            {
+                "type": content_type,
+                "mime_type": mime_type,
+                "size": _validated_mcp_prompt_base64_size(data),
+            },
+            0,
+            metadata_size,
+            False,
+        )
+
+    if content_type == "resource":
+        resource = getattr(content, "resource", None)
+        if resource is None:
+            raise ToolsServiceError("MCP server returned invalid embedded resource")
+        uri = getattr(resource, "uri", None)
+        mime_type = getattr(resource, "mimeType", None)
+        if uri is None or (mime_type is not None and not isinstance(mime_type, str)):
+            raise ToolsServiceError("MCP server returned invalid embedded resource")
+        has_text = isinstance(getattr(resource, "text", None), str)
+        has_blob = isinstance(getattr(resource, "blob", None), str)
+        if has_text == has_blob:
+            raise ToolsServiceError("MCP server returned invalid embedded resource")
+        if has_blob:
+            _validated_mcp_prompt_base64_size(getattr(resource, "blob"))
+        metadata_size = _validate_mcp_prompt_metadata(
+            metadata_budget,
+            str(uri),
+            mime_type,
+        )
+        serialized = _serialize_mcp_resource_content(resource, text_preview_budget)
+        preview = serialized.get("text", "")
+        return (
+            {"type": "resource", "resource": serialized},
+            len(preview.encode("utf-8")),
+            metadata_size,
+            bool(serialized.get("truncated", False)),
+        )
+
+    if content_type == "resource_link":
+        uri = getattr(content, "uri", None)
+        name = getattr(content, "name", None)
+        mime_type = getattr(content, "mimeType", None)
+        size = getattr(content, "size", None)
+        if (
+            uri is None
+            or not isinstance(name, str)
+            or (mime_type is not None and not isinstance(mime_type, str))
+            or (
+                size is not None
+                and (not isinstance(size, int) or isinstance(size, bool) or size < 0)
+            )
+        ):
+            raise ToolsServiceError("MCP server returned invalid resource link content")
+        uri = str(uri)
+        metadata_size = _validate_mcp_prompt_metadata(
+            metadata_budget,
+            uri,
+            name,
+            mime_type,
+        )
+        return (
+            {
+                "type": "resource_link",
+                "uri": uri,
+                "name": name,
+                "mime_type": mime_type,
+                "size": size,
+            },
+            0,
+            metadata_size,
+            False,
+        )
+
+    raise ToolsServiceError("MCP server returned an unsupported prompt content type")
+
+
+def _validated_mcp_prompt_base64_size(data: str) -> int:
+    padding = 2 if data.endswith("==") else int(data.endswith("="))
+    encoded_length = len(data) - padding
+    remainder = encoded_length % 4
+    if remainder == 1 or (padding and padding != (4 - remainder) % 4):
+        raise ToolsServiceError("MCP server returned invalid prompt binary content")
+
+    for index, character in enumerate(data):
+        if index < encoded_length:
+            if character not in _MCP_BASE64_ALPHABET:
+                raise ToolsServiceError(
+                    "MCP server returned invalid prompt binary content"
+                )
+        elif character != "=":
+            raise ToolsServiceError("MCP server returned invalid prompt binary content")
+
+    return encoded_length * 6 // 8
+
+
+def _validate_mcp_prompt_metadata(
+    metadata_budget: int,
+    *values: str | None,
+) -> int:
+    size = 0
+    for value in values:
+        if value is None:
+            continue
+        for offset in range(0, len(value), _MCP_RESOURCE_TEXT_SIZE_CHUNK_CHARS):
+            size += len(
+                value[offset : offset + _MCP_RESOURCE_TEXT_SIZE_CHUNK_CHARS].encode(
+                    "utf-8"
+                )
+            )
+            if size > metadata_budget:
+                raise ToolsServiceError("MCP server returned oversized prompt metadata")
+    return size
 
 
 def _raise_mcp_resource_operation_error(
@@ -353,6 +511,92 @@ class ToolsService:
             )
             raise ToolsServiceError(
                 f"Failed to list prompts for MCP server {server_name}"
+            ) from None
+
+    async def preview_mcp_prompt(
+        self,
+        server_name: str,
+        name: str,
+        arguments: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        runtime = self.tool_mgr.mcp_server_runtime_view.get(server_name)
+        if runtime is None:
+            raise ToolsServiceError(f"MCP server {server_name} is not connected")
+
+        client = runtime.client
+        if not getattr(client, "supports_prompts", False):
+            raise ToolsServiceError(
+                f"MCP server {server_name} does not advertise prompts support"
+            )
+
+        try:
+            result = await client.get_prompt(name, arguments)
+            messages = getattr(result, "messages", None)
+            if not isinstance(messages, list):
+                raise ToolsServiceError(
+                    "MCP server returned an invalid prompt message list"
+                )
+
+            serialized_messages = []
+            text_preview_budget = _MCP_PROMPT_TEXT_PREVIEW_MAX_BYTES
+            metadata_budget = _MCP_PROMPT_METADATA_MAX_BYTES
+            text_truncated = False
+            for message in messages[:_MCP_PROMPT_PREVIEW_MAX_MESSAGES]:
+                role = getattr(message, "role", None)
+                role = getattr(role, "value", role)
+                if role not in {"user", "assistant"}:
+                    raise ToolsServiceError(
+                        "MCP server returned an unsupported prompt message role"
+                    )
+
+                (
+                    content,
+                    consumed_text_bytes,
+                    consumed_metadata_bytes,
+                    content_truncated,
+                ) = _serialize_mcp_prompt_content(
+                    getattr(message, "content", None),
+                    text_preview_budget,
+                    metadata_budget,
+                )
+                text_preview_budget = max(
+                    0,
+                    text_preview_budget - consumed_text_bytes,
+                )
+                metadata_budget = max(
+                    0,
+                    metadata_budget - consumed_metadata_bytes,
+                )
+                text_truncated = text_truncated or content_truncated
+                serialized_messages.append({"role": role, "content": content})
+
+            return {
+                "messages": serialized_messages,
+                "total_messages": len(messages),
+                "messages_truncated": len(messages) > _MCP_PROMPT_PREVIEW_MAX_MESSAGES,
+                "text_truncated": text_truncated,
+            }
+        except MemoryError:
+            raise
+        except ToolsServiceError:
+            raise
+        except McpError as exc:
+            if getattr(exc.error, "code", None) == -32602:
+                raise ToolsServiceError(
+                    f"MCP server {server_name} rejected the prompt name or arguments"
+                ) from None
+            logger.error(
+                f"Failed to preview prompt for MCP server {server_name} ({type(exc).__name__})"
+            )
+            raise ToolsServiceError(
+                f"Failed to preview prompt for MCP server {server_name}"
+            ) from None
+        except Exception as exc:
+            logger.error(
+                f"Failed to preview prompt for MCP server {server_name} ({type(exc).__name__})"
+            )
+            raise ToolsServiceError(
+                f"Failed to preview prompt for MCP server {server_name}"
             ) from None
 
     def get_mcp_server_config(self, name: str) -> dict | None:
