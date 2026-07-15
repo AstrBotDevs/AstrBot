@@ -21,15 +21,21 @@
                 </div>
                 <pre v-if="item.full && openSet[i]" class="item-full">{{ item.full }}</pre>
             </div>
-            <div v-if="data.items.length > 8" class="more-note">
-                +{{ data.items.length - 8 }} more (total {{ data.count }})
+            <div
+                v-if="data.items.length > 8"
+                class="more-note"
+                role="button"
+                @click="showAll = !showAll"
+            >
+                <template v-if="showAll">Show fewer</template>
+                <template v-else>+{{ data.items.length - 8 }} more (total {{ data.count }})</template>
             </div>
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from "vue";
+import { computed, reactive, ref } from "vue";
 import CopyableText from "../__shared__/CopyableText.vue";
 
 interface EsSearchItem {
@@ -47,7 +53,14 @@ interface EsSearchData {
 
 const props = defineProps<{ data: EsSearchData; args?: any }>();
 const openSet = reactive<Record<number, boolean>>({});
-const displayedItems = computed(() => (props.data?.items || []).slice(0, 8));
+// When true, render every matched file; otherwise only the first 8.
+// Toggled from the footer link so users can expand/collapse the trimmed tail.
+const showAll = ref(false);
+
+const displayedItems = computed(() => {
+    const items = props.data?.items || [];
+    return showAll.value ? items : items.slice(0, 8);
+});
 
 function toggleItem(i: number) {
     openSet[i] = !openSet[i];
@@ -110,5 +123,13 @@ function humanSize(n: number): string {
     margin-top: 4px; padding: 2px 8px;
     font-size: 11px; font-style: italic;
     color: rgba(var(--v-theme-on-surface), 0.45);
+    cursor: pointer;
+    user-select: none;
+    border-radius: 3px;
+    transition: color 0.15s, background 0.15s;
+}
+.more-note:hover {
+    color: rgba(var(--v-theme-on-surface), 0.7);
+    background: rgba(var(--v-theme-on-surface), 0.04);
 }
 </style>
