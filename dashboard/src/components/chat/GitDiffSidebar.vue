@@ -208,6 +208,29 @@ const selectedWorktree = ref<string | null>(null);
 // first-time users likely want to "see what's in the project").
 const viewMode = ref<"files" | "diff" | "history" | "docs">(loadViewMode());
 const fileBrowserCurrentPath = ref<string>(loadFileBrowserCurrentPath());
+const isFullscreen = ref(false);
+
+function toggleFullscreen(): void {
+  isFullscreen.value = !isFullscreen.value;
+}
+
+function exitFullscreen(): void {
+  isFullscreen.value = false;
+}
+
+function onFullscreenKeyDown(e: KeyboardEvent): void {
+  if (e.key === "Escape" && isFullscreen.value) {
+    exitFullscreen();
+  }
+}
+
+watch(
+  isFullscreen,
+  (v) => {
+    document.body.style.overflow = v ? "hidden" : "";
+  },
+  { immediate: true },
+);
 // fileBrowserPreviewPath is the file (if any) currently shown in the
 // right pane. It is intentionally NOT persisted: when the user reloads
 // the page we want the directory listing (persisted via currentPath),
@@ -269,9 +292,14 @@ const projectRoot = computed(() => spcodeStatus.status.value.directory);
 
 // Persist viewMode / selectedScope / selectedWorktree on every change.
 // fileBrowserCurrentPath uses persistCurrentPath (300ms debounce).
-watch(viewMode, (v) => safeSetItem(STORAGE_KEYS.viewMode, v), {
-  flush: "post",
-});
+watch(
+  viewMode,
+  (v) => {
+    if (v !== "files") exitFullscreen();
+    safeSetItem(STORAGE_KEYS.viewMode, v);
+  },
+  { flush: "post" },
+);
 watch(selectedScope, (v) => safeSetItem(STORAGE_KEYS.selectedScope, v), {
   flush: "post",
 });
@@ -899,6 +927,7 @@ onMounted(() => {
   // preventDefault when our sidebar is visible + in files view, so
   // outside of those contexts the native find-in-page still works.
   window.addEventListener("keydown", onSearchKeydown);
+  document.addEventListener("keydown", onFullscreenKeyDown);
 });
 
 // ── Worktree polling (added 2026-06-25, elecvoid243) ──────────────
@@ -2266,6 +2295,8 @@ onBeforeUnmount(() => {
   document.removeEventListener("keydown", closeContextMenuOnEscape, true);
   // 2026-07-02 sidebar-search: tear down the Cmd/Ctrl-F handler.
   window.removeEventListener("keydown", onSearchKeydown);
+  document.removeEventListener("keydown", onFullscreenKeyDown);
+  document.body.style.overflow = "";
 });
 
 function toggleFile(path: string): void {
@@ -2358,15 +2389,16 @@ const currentRoot = computed<string | null>(() => {
 </script>
 
 <template>
-  <transition name="slide-left">
-    <aside
-      v-if="modelValue"
-      ref="sidebarRef"
-      class="git-diff-sidebar"
-      :class="{ resizing: isResizing }"
-      :style="{ width: sidebarWidth + 'px' }"
-    >
-      <div class="git-diff-sidebar-resizer" @mousedown="startResize" />
+  <Teleport to="body" :disabled="!isFullscreen">
+    <transition name="slide-left">
+      <aside
+        v-if="modelValue"
+        ref="sidebarRef"
+        class="git-diff-sidebar"
+        :class="{ resizing: isResizing, 'is-fullscreen': isFullscreen }"
+        :style="{ width: sidebarWidth + 'px' }"
+      >
+        <div class="git-diff-sidebar-resizer" @mousedown="startResize" />
       <div class="git-diff-sidebar-header">
         <div class="git-diff-sidebar-title-wrap">
           <span class="git-diff-sidebar-title">
@@ -2403,6 +2435,30 @@ const currentRoot = computed<string | null>(() => {
             </template>
             {{ tm("spcodeProjectLoad.diffSidebar.refreshTooltip") }}
           </v-tooltip>
+          <v-btn
+            v-if="viewMode === 'files'"
+            :icon="
+              isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'
+            "
+            size="small"
+            variant="text"
+            :aria-pressed="isFullscreen"
+            :aria-label="
+              tm(
+                isFullscreen
+                  ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                  : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+              )
+            "
+            :title="
+              tm(
+                isFullscreen
+                  ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                  : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+              )
+            "
+            @click="toggleFullscreen"
+          />
           <v-btn
             icon="mdi-close"
             size="small"
@@ -3206,8 +3262,9 @@ const currentRoot = computed<string | null>(() => {
         </div>
         <div v-else>{{ snackbar.message }}</div>
       </v-snackbar>
-    </aside>
-  </transition>
+      </aside>
+    </transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -3225,6 +3282,16 @@ const currentRoot = computed<string | null>(() => {
   flex-direction: column;
   flex-shrink: 0;
   position: relative;
+}
+
+.git-diff-sidebar.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  width: 100vw !important;
+  height: 100vh;
+  margin-top: 0;
+  border-left: 0;
 }
 
 /* ── Drag handle ──────────────────────────────────────────────── */
