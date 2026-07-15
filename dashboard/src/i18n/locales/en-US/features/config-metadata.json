@@ -1393,6 +1393,10 @@
         "description": "Embedding dimensions",
         "hint": "Embedding vector dimensions. May need adjustment per model; see model documentation. This must be correct or the vector database will not work."
       },
+      "embedding_dimensions_mode": {
+        "description": "Embedding dimensions mode",
+        "hint": "Controls whether to send the dimensions parameter in OpenAI-compatible embedding requests. auto sends it only for official OpenAI embedding-3 models; use always when a compatible API supports it, or never when it rejects the parameter."
+      },
       "embedding_model": {
         "description": "Embedding model",
         "hint": "Embedding model name."
