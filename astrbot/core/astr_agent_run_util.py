@@ -183,6 +183,11 @@ async def run_agent(
                 if _should_stop_agent(astr_event):
                     continue
 
+                if resp.type == "agent_stats":
+                    if astr_event.get_platform_name() == "webchat":
+                        await astr_event.send(resp.data["chain"])
+                    continue
+
                 if resp.type == "tool_call_result":
                     msg_chain = resp.data["chain"]
 
@@ -308,15 +313,6 @@ async def run_agent(
                 except asyncio.CancelledError:
                     pass
             if agent_runner.done():
-                # send agent stats to webchat
-                if astr_event.get_platform_name() == "webchat":
-                    await astr_event.send(
-                        MessageChain(
-                            type="agent_stats",
-                            chain=[Json(data=agent_runner.stats.to_dict())],
-                        )
-                    )
-
                 break
 
         except Exception as e:
