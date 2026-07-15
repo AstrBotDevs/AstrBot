@@ -202,6 +202,7 @@ class CommandFilter(HandlerFilter):
             if message_str.startswith(f"{full_cmd} ") or message_str == full_cmd:
                 ok = True
                 message_str = message_str[len(full_cmd) :].strip()
+                break
         if not ok:
             return False
 
