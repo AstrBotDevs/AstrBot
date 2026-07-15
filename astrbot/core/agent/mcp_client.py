@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import inspect
 import logging
 import os
 import re
@@ -98,6 +99,7 @@ _MCP_ERROR_LOG_LEVELS = frozenset(
 )
 _MCP_SERVER_ERROR_LOG_MAX_ENTRIES = 100
 _MCP_SERVER_ERROR_LOG_MAX_CHARS = 4096
+_MCP_TOOL_LIST_MAX_PAGES = 100
 
 
 class MCPResourcePaginationNotSupportedError(RuntimeError):
@@ -670,6 +672,86 @@ class MCPClient:
             response = mcp.types.ListToolsResult(tools=[])
         else:
             response = await self.session.list_tools()
+
+        next_cursor = getattr(response, "nextCursor", None)
+        if next_cursor is None:
+            self.tools = response.tools
+            return response
+
+        def use_first_page(reason: str) -> mcp.ListToolsResult:
+            server_name = self._server_name or self.name or "unknown"
+            logger.warning(
+                f"MCP server {server_name} returned a paginated tool catalog, "
+                f"but {reason}; using the first page only."
+            )
+            self.tools = response.tools
+            return response
+
+        try:
+            parameters = inspect.signature(self.session.list_tools).parameters
+        except (TypeError, ValueError):
+            return use_first_page(
+                "the installed MCP SDK pagination support could not be detected"
+            )
+
+        params_parameter = parameters.get("params")
+        supports_params = bool(
+            hasattr(mcp.types, "PaginatedRequestParams")
+            and params_parameter
+            and params_parameter.kind
+            in {
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            }
+        )
+        cursor_parameter = parameters.get("cursor")
+        supports_cursor = bool(
+            cursor_parameter
+            and cursor_parameter.kind
+            in {
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            }
+        ) or any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        if not supports_params and not supports_cursor:
+            return use_first_page(
+                "the installed MCP SDK does not support pagination cursors"
+            )
+
+        all_tools = list(response.tools)
+        seen_cursors: set[str] = set()
+        page_count = 1
+        while next_cursor is not None:
+            if next_cursor in seen_cursors:
+                return use_first_page("the server repeated a pagination cursor")
+            if page_count >= _MCP_TOOL_LIST_MAX_PAGES:
+                return use_first_page(
+                    f"the catalog exceeded {_MCP_TOOL_LIST_MAX_PAGES} pages"
+                )
+
+            seen_cursors.add(next_cursor)
+            try:
+                if supports_params:
+                    page = await self.session.list_tools(
+                        params=mcp.types.PaginatedRequestParams(cursor=next_cursor)
+                    )
+                else:
+                    page = await self.session.list_tools(cursor=next_cursor)
+                all_tools.extend(page.tools)
+                next_cursor = getattr(page, "nextCursor", None)
+            except (TypeError, MemoryError):
+                raise
+            except Exception as exc:
+                return use_first_page(
+                    f"requesting a later page failed ({type(exc).__name__})"
+                )
+            page_count += 1
+
+        response.tools = all_tools
+        response.nextCursor = None
         self.tools = response.tools
         return response
 
