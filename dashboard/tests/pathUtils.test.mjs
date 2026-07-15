@@ -259,6 +259,36 @@ test("absoluteFromSelectedDoc: POSIX root normalises user-typed / in selectedDoc
   );
 });
 
+test("absoluteFromSelectedDoc: Windows root + docsRoot='.' uses \\ and drops the docs prefix", async () => {
+  const { absoluteFromSelectedDoc } = await import(
+    "../src/composables/pathUtils.ts"
+  );
+  // 2026-07-15 regression guard: DocumentManager's fileBrowser
+  // pathRef delegates to this helper. With docsRoot="." the docs
+  // subtree IS the project root, so the constructed absolute
+  // path is `projectRoot + selectedDoc` (no docs segment) and
+  // uses the platform separator. The previous hand-rolled glue
+  // in DocumentManager had an early-return `if (!base ||
+  // isProjectRootDocs(base)) return root` that ignored
+  // selectedDoc — leaving pathRef stuck at projectRoot when the
+  // user clicked a file, so the file-browser request was never
+  // sent and the right-side preview stayed empty.
+  assert.equal(
+    absoluteFromSelectedDoc("F:\\github\\Astrbot", ".", "README.md"),
+    "F:\\github\\Astrbot\\README.md",
+  );
+  assert.equal(
+    absoluteFromSelectedDoc("F:\\repo", ".", "specs\\foo.md"),
+    "F:\\repo\\specs\\foo.md",
+  );
+  // No file selected — pathRef must still be just the projectRoot
+  // (so the listing shows the project root's children).
+  assert.equal(
+    absoluteFromSelectedDoc("F:\\github\\Astrbot", ".", ""),
+    "F:\\github\\Astrbot",
+  );
+});
+
 test("absoluteFromSelectedDoc: Windows round-trip matches backend entry.path shape", async () => {
   const { absoluteFromSelectedDoc, docsRootRelativePath } = await import(
     "../src/composables/pathUtils.ts"

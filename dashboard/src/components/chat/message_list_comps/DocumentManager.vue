@@ -41,7 +41,10 @@ import FileBrowserBreadcrumb from "./FileBrowserBreadcrumb.vue";
 import DiffPreview from "./DiffPreview.vue";
 import MarkdownView from "@/components/shared/MarkdownView.vue";
 import { useResizableSplit } from "@/composables/useResizableSplit";
-import { projectRelativePath } from "@/composables/pathUtils";
+import {
+  projectRelativePath,
+  absoluteFromSelectedDoc,
+} from "@/composables/pathUtils";
 
 const props = defineProps<{
   worktree: string | null;
@@ -100,26 +103,33 @@ let pathMissingTimer: ReturnType<typeof setTimeout> | null = null;
 // just need to call `fileBrowser.refresh()` (no path arg) to
 // re-read the same path after a mutation.
 // The file-browser composable takes an absolute path and lists/previews
-// whatever sits under it. We glue `projectRoot` + `docsRoot` + (when
-// previewing a file) `selectedDoc`. A docsRoot of "." means "list the
-// project root itself" — in that case we skip the `${root}/${docsRoot}`
-// step and pass the projectRoot straight through. The same rule
-// applies to breadcrumbPath below.
+// whatever sits under it. The glue `projectRoot + docsRoot + selectedDoc`
+// lives in `absoluteFromSelectedDoc` (see pathUtils.ts) — it's the
+// inverse of `docsRootRelativePath` and already covers the docsRoot="."
+// (project root) and empty docsRoot cases. A docsRoot of "." means
+// "list the project root itself" — the helper drops the docs prefix
+// and just hands projectRoot + selectedDoc to the file-browser
+// endpoint.
+//
+// 2026-07-15 docsRoot-dot-bug-fix: the previous hand-rolled glue had
+// an early return `if (!base || isProjectRootDocs(base)) return root`
+// that ignored `selectedDoc`. With docsRoot="." and no file selected
+// pathRef == projectRoot; once the user clicked a file, selectedDoc
+// became "README.md" but the early return fired again, so pathRef
+// stayed at projectRoot and `useSpcodeFileBrowser`'s deep-equal
+// watcher saw no change — no file-browser request was sent, the
+// preview pane stayed empty, and the right side silently looked
+// dead. Delegating to the helper removes the duplicate and routes
+// the file preview through the same code path DocumentTreePanel
+// already uses for its `is-selected` highlight.
 const fileBrowser = useSpcodeFileBrowser(
-  computed(() => {
-    const root = props.projectRoot;
-    if (!root) return "";
-    const base = docsRoot.value?.trim() ?? "";
-    if (!base || isProjectRootDocs(base)) return root;
-    const baseRel = `${root.replace(/[\\/]+$/, "")}/${base.replace(
-      /^[\\/]+/,
-      "",
-    )}`;
-    if (selectedDoc.value) {
-      return `${baseRel}/${selectedDoc.value.replace(/^[\\/]+/, "")}`;
-    }
-    return baseRel;
-  }),
+  computed(() =>
+    absoluteFromSelectedDoc(
+      props.projectRoot,
+      docsRoot.value,
+      selectedDoc.value ?? "",
+    ),
+  ),
 );
 const docsApi = useSpcodeDocs(computed(() => props.worktree));
 const gitFile = useSpcodeGitFile(computed(() => props.worktree));
