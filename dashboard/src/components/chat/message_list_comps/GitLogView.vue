@@ -12,7 +12,7 @@
      a previously seen commit is a no-op (ETag 304 short-circuit).
      Spec: docs/superpowers/specs/2026-06-25-git-show-design.md. -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import type { LogFetchState, LogFilter } from "@/composables/useSpcodeGitLog";
 import type {
@@ -44,6 +44,15 @@ const props = defineProps<{
    *  fetches on expand; the sidebar owns the lifecycle (worktree +
    *  umo + dispose). */
   gitShow: UseSpcodeGitShow;
+  /**
+   * 2026-07-15 history-sha-jump: SHA to highlight after a deep
+   * link from a per-file history panel (workspace / document
+   * manager). When set, the matching commit row gets the
+   * `is-focused` class and is scrolled into view. `null` means
+   * no deep-link is active. The parent owns persistence; we just
+   * highlight.
+   */
+  focusedCommitSha: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -59,6 +68,56 @@ const emit = defineEmits<{
 
 // Local filter form state. Emitted on Apply; reset on Reset.
 const localFilter = ref<LogFilter>({ ref: "HEAD", n: 20 });
+
+/**
+ * 2026-07-15 history-sha-jump: scroll the focused commit into
+ * view after the list re-renders. Three subtleties:
+ *
+ *   1. We use a `data-commit-sha` attribute (set on each row)
+ *      rather than a Vue template ref. With v-for + function refs,
+ *      storing N refs is awkward and the lookup cost is the same.
+ *   2. We await TWO `nextTick`s: one for the list to re-render,
+ *      one for the freshly fetched `state` to settle into
+ *      `commits` (when a deep-link lands, the parent's
+ *      `focusCommit` runs a fresh `refresh()` which transitions
+ *      through `loading` then `ok`, and we don't want to scroll
+ *      on the stale snapshot).
+ *   3. We auto-expand the focused row (when it isn't already) so
+ *      the commit body + changed-files list render in the same
+ *      motion as the scroll. This matches the deep-link affordance
+ *      in the per-file history panel's "view this revision"
+ *      action. We re-query the DOM after the expansion tick so
+ *      scrollIntoView runs against the row's full (expanded)
+ *      height — without the extra tick the row would scroll to
+ *      its collapsed position and the expanded body would
+ *      overflow below the viewport.
+ *   4. We no-op silently if the SHA isn't in the visible
+ *      window — the parent already pinned `ref` to the SHA so
+ *      it should land at the top; if the user manually triggered
+ *      a deeper filter (e.g. typed `path:` into the filter bar)
+ *      that excludes the SHA we just skip the scroll.
+ */
+watch(
+  () => [props.focusedCommitSha, props.state.kind] as const,
+  async ([sha, kind]) => {
+    if (!sha || kind !== "ok") return;
+    await nextTick();
+    await nextTick();
+    const root = document.querySelector(".git-log-view");
+    if (!root) return;
+    const selector = `[data-commit-sha="${CSS.escape(sha)}"]`;
+    const initialEl = root.querySelector(selector);
+    if (!initialEl) return;
+    if (!expanded.value.has(sha)) {
+      toggleCommit(sha);
+      await nextTick();
+    }
+    (root.querySelector(selector) ?? initialEl).scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  },
+);
 
 const commits = computed(() => {
   if (props.state.kind === "ok") return props.state.snapshot.commits;
@@ -438,7 +497,15 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
         v-for="c in commits"
         :key="c.sha"
         class="git-log-item"
-        :class="{ expanded: expanded.has(c.sha) }"
+        :class="{
+          expanded: expanded.has(c.sha),
+          // 2026-07-15 history-sha-jump: only one row at a time
+          // carries this class; it is consumed by the CSS rule
+          // below AND by the watcher above which uses the
+          // `data-commit-sha` selector to scrollIntoView.
+          'is-focused': props.focusedCommitSha === c.sha,
+        }"
+        :data-commit-sha="c.sha"
       >
         <button
           type="button"
@@ -759,6 +826,14 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
 .git-log-item {
   padding: 8px 12px;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+/* 2026-07-15 history-sha-jump: highlight the row targeted by a
+   deep-link from the per-file history panels (workspace / doc
+   manager). Uses inset box-shadow so the 2px accent doesn't shift
+   the inner content (the existing padding is preserved exactly). */
+.git-log-item.is-focused {
+  background: rgba(var(--v-theme-primary), 0.08);
+  box-shadow: inset 2px 0 0 0 rgb(var(--v-theme-primary));
 }
 .git-log-item-header {
   display: flex;

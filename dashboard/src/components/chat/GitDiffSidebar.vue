@@ -566,6 +566,49 @@ function setLogPathFilter(path: string): void {
 const SET_LOG_PATH_FILTER_KEY = "spcode:setLogPathFilter";
 provide<(path: string) => void>(SET_LOG_PATH_FILTER_KEY, setLogPathFilter);
 
+/**
+ * 2026-07-15 history-sha-jump: jump from the per-file history
+ * side panel (workspace + document manager) straight to a
+ * specific commit in the global Git log. Mirrors `setLogPathFilter`
+ * in shape but routes through a fresh inject key because the
+ * semantic is different ("jump to THIS commit", not "filter the
+ * log by THIS path"). The implementation:
+ *
+ *   1. Switches `viewMode` to `"history"` so the GitLogView
+ *      mounts. Already-persisted via the existing
+ *      `watch(viewMode, ...)` so the user lands back here next
+ *      time.
+ *   2. Pins the log's `ref` filter to the clicked SHA. `git log
+ *      <sha>` returns that commit plus its ancestors, which is
+ *      exactly what a deep-link to a single commit should show
+ *      — the user gets the commit they clicked as the first
+ *      row, with its history reachable via "load more". Drop the
+ *      per-file panel's `path` filter too: the commit of interest
+ *      is not guaranteed to touch the picked file in *this*
+ *      revision (it might be a renaming or a non-related history).
+ *   3. Stashes the SHA in `focusedCommitSha`, which is forwarded
+ *      to <GitLogView> as `focused-commit-sha`. GitLogView owns
+ *      the highlight + expansion + scrollIntoView; see its
+ *      watcher.
+ */
+const focusedCommitSha = ref<string | null>(null);
+function focusCommit(sha: string): void {
+  if (!sha) return;
+  viewMode.value = "history";
+  focusedCommitSha.value = sha;
+  // Preserve the user's optional filter knobs (author / since /
+  // until / n) but pin ref+path so the request is scoped to the
+  // clicked commit. The explicit assignments after the spread
+  // win over anything carried over from `gitLog.filter.value`.
+  const { path: _path, ref: _ref, ...rest } = gitLog.filter.value;
+  void gitLog.refresh({ ...rest, ref: sha, path: undefined });
+}
+// Dedicated key: this is a sibling affordance to setLogPathFilter
+// and the two are not interchangeable. Both <FileBrowserView> and
+// <DocumentManager> consume it via the same string literal.
+const FOCUS_COMMIT_KEY = "spcode:focusCommit";
+provide<(sha: string) => void>(FOCUS_COMMIT_KEY, focusCommit);
+
 // Fullscreen shared keys. String keys keep the import surface in
 // FileBrowserFilePreview trivial. A Symbol would force a shared module
 // just to host the constants for one consumer; not worth it.
@@ -2917,6 +2960,7 @@ const currentRoot = computed<string | null>(() => {
             :has-more="logHasMore"
             :is-loading="logIsLoading"
             :git-show="gitShow"
+            :focused-commit-sha="focusedCommitSha"
             @apply="onLogApply"
             @reset="onLogReset"
             @load-more="onLogLoadMore"

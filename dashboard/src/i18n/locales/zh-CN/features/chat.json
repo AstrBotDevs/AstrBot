@@ -781,7 +781,8 @@
         "viewThisRevision": "查看此版本",
         "compareWithCurrent": "查看本次改动",
         "loadFail": "无法读取历史版本",
-        "noSelection": "未选中文件"
+        "noSelection": "未选中文件",
+        "jumpToCommit": "跳转到 Git 历史中的提交 {sha}"
       },
       "editor": {
         "newFile": "新建",

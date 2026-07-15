@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 326 icons */
+/* Auto-generated MDI subset – 325 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -654,10 +654,6 @@
 
 .mdi-function-variant::before {
   content: "\F0871";
-}
-
-.mdi-git::before {
-  content: "\F02A2";
 }
 
 .mdi-github::before {

@@ -832,32 +832,6 @@ onBeforeUnmount(() => {
                   v-model="viewMode"
                   :has-revision="!!selectedRevision"
                 />
-                <button
-                  type="button"
-                  class="document-manager__fullscreen-btn"
-                  :aria-pressed="isFullscreen"
-                  :title="
-                    tm(
-                      isFullscreen
-                        ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
-                        : 'spcodeProjectLoad.documentManager.fullscreen.enter',
-                    )
-                  "
-                  @click="toggleFullscreen"
-                >
-                  <v-icon size="14">
-                    {{
-                      isFullscreen ? "mdi-fullscreen-exit" : "mdi-fullscreen"
-                    }}
-                  </v-icon>
-                  {{
-                    tm(
-                      isFullscreen
-                        ? "spcodeProjectLoad.documentManager.fullscreen.exit"
-                        : "spcodeProjectLoad.documentManager.fullscreen.enter",
-                    )
-                  }}
-                </button>
               </div>
               <div
                 v-if="viewMode === 'rendered'"

@@ -781,7 +781,8 @@
         "viewThisRevision": "View this revision",
         "compareWithCurrent": "View this commit's changes",
         "loadFail": "Failed to read history",
-        "noSelection": "No file selected"
+        "noSelection": "No file selected",
+        "jumpToCommit": "Jump to commit {sha} in Git history"
       },
       "editor": {
         "newFile": "New",

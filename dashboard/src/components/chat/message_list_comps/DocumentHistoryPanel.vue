@@ -5,7 +5,7 @@
      "view this revision" + "compare with current". A pseudo row
      for the working tree is always shown. -->
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, inject, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import type { UseSpcodeGitLog } from "@/composables/useSpcodeGitLog";
 import type { SpcodeLogCommit } from "@/composables/parseSpcodeGitWorkflow";
@@ -52,6 +52,28 @@ const isWorkingTreeActive = computed(
 
 function shortSha(sha: string): string {
   return sha.slice(0, 7);
+}
+
+/**
+ * 2026-07-15 history-sha-jump: clicking the SHA jumps the user
+ * to the global Git Log tab with that commit highlighted + scrolled
+ * into view. The inject key is provided by <GitDiffSidebar>; both
+ * <FileBrowserView> (workspace tab) and <DocumentManager> (docs
+ * tab) sit inside it, so the same handler covers both surfaces.
+ *
+ * The noop default keeps this component reusable in isolation
+ * (stories / tests where the sidebar isn't mounted).
+ */
+const focusCommit = inject<(sha: string) => void>(
+  "spcode:focusCommit",
+  () => {},
+);
+function onShaClick(sha: string): void {
+  // .stop so the row's own click semantics (none today, but the
+  // row uses `cursor: default` for now) don't get tangled with
+  // future row-level handlers — the action buttons (view /
+  // compare) are separate elements with their own listeners.
+  focusCommit(sha);
 }
 </script>
 
@@ -111,7 +133,30 @@ function shortSha(sha: string): string {
         :key="c.sha"
         :class="['document-history-panel__row', { active: currentRevision === c.sha }]"
       >
-        <div class="document-history-panel__row-sha">{{ shortSha(c.sha) }}</div>
+        <!--
+          2026-07-15 history-sha-jump: the SHA is now an
+          interactive control. Clicking it jumps to the global Git
+          Log tab with this commit highlighted and scrolled into
+          view (handled by <GitLogView>'s `focusedCommitSha` prop
+          + watcher). The `__row-sha-link` modifier carries the
+          click/hover affordances; the base `__row-sha` class is
+          kept so the existing 56px column / monospace font /
+          muted color stay byte-identical to the previous span.
+        -->
+        <button
+          type="button"
+          class="document-history-panel__row-sha document-history-panel__row-sha-link"
+          :title="c.sha"
+          :aria-label="
+            tm(
+              'spcodeProjectLoad.documentManager.history.jumpToCommit',
+              { sha: shortSha(c.sha) },
+            )
+          "
+          @click.stop="onShaClick(c.sha)"
+        >
+          {{ shortSha(c.sha) }}
+        </button>
         <div class="document-history-panel__row-subject">
           <div class="document-history-panel__row-subject-text">{{ c.subject }}</div>
           <div class="document-history-panel__row-author">{{ c.author }}</div>
@@ -226,6 +271,48 @@ function shortSha(sha: string): string {
 .document-history-panel__row-sha {
   font-family: monospace;
   color: rgba(var(--v-theme-on-surface), 0.55);
+}
+/* 2026-07-15 history-sha-jump: the SHA is rendered as a button
+   that jumps to the global Git log. Resets the default button
+   chrome and matches the previous text styling so the rest of
+   the row layout is byte-identical when no link class is
+   applied (e.g. the "working" pseudo row). The 56px grid
+   column is already very tight (the 7-char shortSha barely
+   fits) so we keep padding/min-width off and let `width: 100%`
+   cover the cell. The full SHA is on the title attribute. */
+.document-history-panel__row-sha-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  /* `font: inherit` re-applies the row's `font-size: 11.5px`
+     and the document's default `font-family`; restore the
+     monospace family the base `__row-sha` class set so the
+     short SHA renders the same as the original span. */
+  font: inherit;
+  font-family: monospace;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  border-radius: 3px;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
+}
+.document-history-panel__row-sha-link:hover,
+.document-history-panel__row-sha-link:focus-visible {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+  outline: none;
+}
+/* Active row's blue background swallows the hover background —
+   keep the link color readable instead. */
+.document-history-panel__row.active
+  .document-history-panel__row-sha-link,
+.document-history-panel__row.active
+  .document-history-panel__row-sha-link:hover {
+  color: rgb(var(--v-theme-primary));
 }
 .document-history-panel__row-subject {
   min-width: 0;

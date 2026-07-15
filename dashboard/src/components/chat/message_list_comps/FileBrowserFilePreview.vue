@@ -84,6 +84,18 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "navigate-target", resolvedPath: string): void;
   (e: "retry"): void;
+  /**
+   * 2026-07-15 workspace-history-banner: fired from the
+   * "正在查看历史版本" banner's "回到当前" button. The parent
+   * (FileBrowserView) owns the canonical `selectedRevision`
+   * state, so we just bubble the click up — same shape as
+   * DocumentManager's `onBackToCurrent`, which sets
+   * `selectedRevision = null` directly. Mirrors
+   * <DocumentManager>'s banner UX so the workspace tab and
+   * the document-manager tab read identically when a revision
+   * is picked.
+   */
+  (e: "back-to-current"): void;
 }>();
 const { tm } = useModuleI18n("features/chat");
 
@@ -608,6 +620,45 @@ function onDeleteComment(commentId: string): void {
         <div v-else-if="state.kind === 'file'" class="preview-file">
           <Teleport to="body" :disabled="!innerFullscreen">
             <div class="preview-file" :class="{ 'is-fullscreen': innerFullscreen }">
+          <!--
+            2026-07-15 workspace-history-banner: when a revision
+            is picked, show the same "正在查看历史版本 {sha}" +
+            "回到当前" banner that <DocumentManager> renders for
+            its document-manager tab. Reuses the document-manager
+            i18n keys (viewingRevision / backToCurrent) so both
+            tabs read identically. The banner sits ABOVE the
+            preview-file-meta row so it has full pane width and
+            the user always sees a clear "you are looking at a
+            historical revision" cue, plus a one-click way back.
+            The previous inline `@0be821a` chip (right of the
+            action buttons) was easy to miss; the banner matches
+            the document-manager UX and is consistent with the
+            user-feedback request to align the two tabs.
+          -->
+          <div
+            v-if="props.selectedRevision"
+            class="preview-file__banner"
+          >
+            <span>
+              {{
+                tm(
+                  "spcodeProjectLoad.documentManager.viewMode.viewingRevision",
+                  { sha: shortRevisionLabel }
+                )
+              }}
+            </span>
+            <button
+              type="button"
+              class="preview-file__banner-btn"
+              @click="emit('back-to-current')"
+            >
+              {{
+                tm(
+                  "spcodeProjectLoad.documentManager.viewMode.backToCurrent"
+                )
+              }}
+            </button>
+          </div>
           <!-- 元信息头 -->
           <div class="preview-file-meta">
             <span class="preview-file-path" :title="state.snapshot.meta.path">{{
@@ -638,33 +689,24 @@ function onDeleteComment(commentId: string): void {
               formatMtime(state.snapshot.meta.mtime)
             }}</span>
             <!--
-          2026-07-15 workspace-history-inline: when a revision is
-          picked the preview body is no longer the working copy —
-          a small chip next to the file name tells the user which
-          revision they're looking at, with `mdi-git` as the icon
-          and the long SHA stored in the tooltip so a hover reveals
-          the full hash. Mirrors <DocumentManager>'s revision badge
-          placement (same chip styling, same slot between meta
-          values and the action buttons).
-        -->
-            <span
-              v-if="shortRevisionLabel"
-              class="preview-file-revision"
-              :title="props.selectedRevision ?? ''"
-            >
-              <v-icon size="14">mdi-git</v-icon>
-              <span>@{{ shortRevisionLabel }}</span>
-            </span>
-            <!--
-          2026-07-15 workspace-history-parity: the per-file "View
-          file history" button used to live here. It was removed
-          so the workspace tab mirrors the document-manager tab,
-          where history is shown in a right-edge SIDE PANEL
-          (<DocumentHistoryPanel>) owned by <FileBrowserView>.
-          The "Copy" button (next) is the only remaining per-file
-          action in this meta header.
+              2026-07-15 workspace-history-parity: the per-file "View
+              file history" button used to live here. It was removed
+              so the workspace tab mirrors the document-manager tab,
+              where history is shown in a right-edge SIDE PANEL
+              (<DocumentHistoryPanel>) owned by <FileBrowserView>.
+              The "Copy" button (next) is the only remaining per-file
+              action in this meta header.
 
-          2026-07-15 workspace-history-inline: the copy button now
+              2026-07-15 workspace-history-banner: the inline
+              `@<sha>` chip that previously lived here was removed
+              in favor of the full-width banner rendered ABOVE this
+              meta row (see `.preview-file__banner`). The chip was
+              easy to miss and the document-manager tab already
+              uses the banner pattern; aligning the two tabs here
+              keeps the "viewing historical revision" affordance
+              consistent across the workspace.
+
+              2026-07-15 workspace-history-inline: the copy button now
           also serves the historical-raw view — copying the picked
           revision's content is a reasonable action (the user is
           inspecting it precisely because they want to compare).
@@ -956,27 +998,39 @@ function onDeleteComment(commentId: string): void {
   cursor: help;
   user-select: none;
 }
-/* 2026-07-15 workspace-history-inline: pill that announces
-   "viewing commit @abc1234" in the meta header. Mirrors the
-   encoding chip visually (same monospace / padding / muted
-   background) but uses a primary-tinted background so the user
-   immediately notices they're NOT looking at the current file.
-   `user-select: none` keeps the chip from being selected when
-   the user copy-pastes adjacent text; the title attribute carries
-   the full SHA on hover. */
-.preview-file-revision {
-  display: inline-flex;
+/*
+  2026-07-15 workspace-history-banner: full-width banner shown
+  ABOVE `.preview-file-meta` when a historical revision is
+  picked. Mirrors `.document-manager__banner` from
+  <DocumentManager> verbatim (same info-tinted background,
+  same border-bottom separator, same body-font-size cue) so
+  the "you are looking at an old version" affordance reads
+  identically across the workspace tab and the document
+  manager tab. The previous inline revision chip (the
+  `.preview-file-revision` rule removed in the same change)
+  was easy to miss and only used a tiny pill in the meta
+  header; the user-feedback request was to align the two
+  tabs, so we now render the same banner DocumentManager
+  uses for its document-manager tab.
+*/
+.preview-file__banner {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  font-family: ui-monospace, monospace;
-  font-size: 10.5px;
-  padding: 1px 6px;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(var(--v-theme-info), 0.08);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  font-size: 11.5px;
+  color: rgb(var(--v-theme-info));
+}
+.preview-file__banner-btn {
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
   border-radius: 3px;
-  background: rgba(var(--v-theme-primary), 0.12);
-  color: rgba(var(--v-theme-primary), 1);
-  border: 1px solid rgba(var(--v-theme-primary), 0.32);
-  cursor: help;
-  user-select: none;
+  padding: 1px 6px;
+  font-size: 11px;
+  cursor: pointer;
 }
 .preview-file-content {
   flex: 1;

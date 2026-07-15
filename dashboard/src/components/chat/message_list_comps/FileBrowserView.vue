@@ -414,6 +414,22 @@ function onHistoryCompareCurrent(sha: string): void {
   void gitFile.fetchRef(gitLogPath.value, sha);
 }
 
+/**
+ * 2026-07-15 workspace-history-banner: drop the picked
+ * revision and snap back to the working copy. Mirrors
+ * <DocumentManager>'s `onBackToCurrent`: the state lives
+ * here, so the child (`<FileBrowserFilePreview>`) just
+ * emits a `back-to-current` event and we mutate
+ * `selectedRevision` + reset `viewMode` so the diff watcher
+ * above clears `diffPatch`. Bound to the banner's
+ * "回到当前" button so the workspace tab reads identically
+ * to the document-manager tab.
+ */
+function onBackToCurrent(): void {
+  selectedRevision.value = null;
+  viewMode.value = "raw";
+}
+
 onBeforeUnmount(() => {
   // If user is mid-drag on either divider, release cleanly.
   if (isResizing.value) onMouseUp();
@@ -586,6 +602,7 @@ onBeforeUnmount(() => {
           :diff-is-binary="diffIsBinary"
           @navigate-target="onPreviewTargetNavigate"
           @retry="() => previewComposable.refresh()"
+          @back-to-current="onBackToCurrent"
         />
         <div v-else class="file-browser-pane-right file-browser-preview-empty">
           <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
