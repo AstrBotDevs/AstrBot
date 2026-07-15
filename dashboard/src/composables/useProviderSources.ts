@@ -67,6 +67,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const modelSearch = ref('')
 
   let suppressSourceWatch = false
+  const unsavedProviderSourceMarker = Symbol('unsavedProviderSource')
 
   const providerTypes = computed(() => [
     { value: 'chat_completion', label: tm('providers.tabs.chatCompletion'), icon: 'mdi-message-text' },
@@ -422,6 +423,27 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     return candidate
   }
 
+  function removeProviderSourceFromLocalState(sourceId: string) {
+    providers.value = providers.value.filter(
+      (p) => p.provider_source_id == null || String(p.provider_source_id) !== sourceId
+    )
+    providerSources.value = providerSources.value.filter(
+      (s) => s.id == null || String(s.id) !== sourceId
+    )
+
+    if (
+      selectedProviderSource.value?.id != null &&
+      String(selectedProviderSource.value.id) === sourceId
+    ) {
+      selectedProviderSource.value = null
+      selectedProviderSourceOriginalId.value = null
+      editableProviderSource.value = null
+      availableModels.value = []
+      modelMetadata.value = {}
+      isSourceModified.value = false
+    }
+  }
+
   function addProviderSource(templateKey: string) {
     const template = providerTemplates.value[templateKey]
     if (!template) {
@@ -439,6 +461,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       enable: true
     })
 
+    newSource[unsavedProviderSourceMarker] = true
     providerSources.value.push(newSource)
     selectedProviderSource.value = newSource
     selectedProviderSourceOriginalId.value = newId
@@ -454,18 +477,16 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     )
     if (!confirmed) return
 
+    const sourceId = String(source.id)
+    if (source[unsavedProviderSourceMarker]) {
+      removeProviderSourceFromLocalState(sourceId)
+      showMessage(tm('providerSources.deleteSuccess'))
+      return
+    }
+
     try {
-      await providerApi.deleteSource(source.id)
-
-      providers.value = providers.value.filter((p) => p.provider_source_id !== source.id)
-      providerSources.value = providerSources.value.filter((s) => s.id !== source.id)
-
-      if (selectedProviderSource.value?.id === source.id) {
-        selectedProviderSource.value = null
-        selectedProviderSourceOriginalId.value = null
-        editableProviderSource.value = null
-      }
-
+      await providerApi.deleteSource(sourceId)
+      removeProviderSourceFromLocalState(sourceId)
       showMessage(tm('providerSources.deleteSuccess'))
     } catch (error: any) {
       showMessage(error.message || tm('providerSources.deleteError'), 'error')
@@ -478,7 +499,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!selectedProviderSource.value) return
 
     savingSource.value = true
-    const originalId = String(selectedProviderSourceOriginalId.value || selectedProviderSource.value.id || '')
+    const sourceBeingSaved = selectedProviderSource.value
+    const originalId = String(selectedProviderSourceOriginalId.value || sourceBeingSaved.id || '')
     try {
       const response = await providerApi.upsertSource(originalId, editableProviderSource.value)
 
@@ -507,6 +529,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         suppressSourceWatch = false
       })
 
+      delete sourceBeingSaved[unsavedProviderSourceMarker]
       isSourceModified.value = false
       showMessage(response.data.message || tm('providerSources.saveSuccess'))
       return true
