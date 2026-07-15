@@ -20,6 +20,7 @@ from astrbot.core.config.default import (
 from astrbot.core.config.i18n_utils import ConfigMetadataI18n
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.log import LogManager
 from astrbot.core.platform.register import platform_cls_map, platform_registry
 from astrbot.core.provider.register import provider_registry
 from astrbot.core.star.star import star_registry
@@ -559,6 +560,7 @@ class ConfigProfileService:
         if protected_2fa_changed and self.db is not None:
             await revoke_user_trusted_devices(self.db)
         await self.core_lifecycle.reload_pipeline_scheduler(config_id)
+        LogManager.configure_trace_logger(config)
         warning = await _validate_neo_connectivity(config)
         if warning:
             return f"保存成功。{warning}"

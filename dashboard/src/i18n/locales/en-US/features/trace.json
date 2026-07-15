@@ -1,10 +1,10 @@
 {
   "title": "Trace",
-  "autoScroll": {
-    "enabled": "Auto-scroll: On",
-    "disabled": "Auto-scroll: Off"
-  },
-  "hint": "Currently only recording partial model call paths from AstrBot main Agent. More coverage will be added.",
+  "hint": "Full-chain tracing: pipeline stages, LLM calls, tool calls, plugin handlers.",
   "recording": "Recording",
-  "paused": "Paused"
+  "paused": "Paused",
+  "clearAll": "Clear All",
+  "clearConfirm": "This will permanently delete all trace records. Continue?",
+  "cancel": "Cancel",
+  "confirm": "Confirm"
 }

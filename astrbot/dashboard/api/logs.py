@@ -63,6 +63,56 @@ def _update_trace_settings(payload: TraceSettingsRequest, service: LogService):
         _raise_log_error(exc)
 
 
+def _get_trace_history(service: LogService):
+    try:
+        return ok(service.get_trace_history())
+    except LogServiceError as exc:
+        _raise_log_error(exc)
+
+
+async def _list_traces(
+    service: LogService,
+    page: int,
+    page_size: int,
+    umo: str | None,
+    search: str | None,
+    sender: str | None,
+):
+    try:
+        return ok(
+            await service.list_traces(
+                page=page,
+                page_size=page_size,
+                umo=umo or None,
+                search=search or None,
+                sender=sender or None,
+            )
+        )
+    except LogServiceError as exc:
+        _raise_log_error(exc)
+
+
+async def _get_trace_sources(service: LogService):
+    try:
+        return ok(await service.get_trace_sources())
+    except LogServiceError as exc:
+        _raise_log_error(exc)
+
+
+async def _get_trace_detail(service: LogService, trace_id: str | None):
+    try:
+        return ok(await service.get_trace_detail(trace_id))
+    except LogServiceError as exc:
+        _raise_log_error(exc)
+
+
+async def _clear_traces(service: LogService, before_ts: float | None):
+    try:
+        return ok(await service.clear_traces(before_ts))
+    except LogServiceError as exc:
+        _raise_log_error(exc)
+
+
 @router.get("/logs/history")
 async def get_log_history(
     _auth: AuthContext = Depends(require_system_scope),
@@ -97,6 +147,53 @@ async def update_trace_settings(
     return _update_trace_settings(payload, service)
 
 
+@router.get("/trace/history")
+async def get_trace_history(
+    _auth: AuthContext = Depends(require_system_scope),
+    service: LogService = Depends(get_service),
+):
+    return _get_trace_history(service)
+
+
+@router.get("/trace/list")
+async def list_traces(
+    page: int = 1,
+    page_size: int = 20,
+    umo: str | None = None,
+    search: str | None = None,
+    sender: str | None = None,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: LogService = Depends(get_service),
+):
+    return await _list_traces(service, page, page_size, umo, search, sender)
+
+
+@router.get("/trace/sources")
+async def get_trace_sources(
+    _auth: AuthContext = Depends(require_system_scope),
+    service: LogService = Depends(get_service),
+):
+    return await _get_trace_sources(service)
+
+
+@router.get("/trace/detail")
+async def get_trace_detail(
+    trace_id: str | None = None,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: LogService = Depends(get_service),
+):
+    return await _get_trace_detail(service, trace_id)
+
+
+@router.delete("/trace/clear")
+async def clear_traces(
+    before_ts: float | None = None,
+    _auth: AuthContext = Depends(require_system_scope),
+    service: LogService = Depends(get_service),
+):
+    return await _clear_traces(service, before_ts)
+
+
 @legacy_router.get("/log-history")
 async def get_dashboard_log_history(
     _username: str = Depends(require_dashboard_user),
@@ -129,3 +226,50 @@ async def update_dashboard_trace_settings(
     service: LogService = Depends(get_service),
 ):
     return _update_trace_settings(payload, service)
+
+
+@legacy_router.get("/trace/history")
+async def get_dashboard_trace_history(
+    _username: str = Depends(require_dashboard_user),
+    service: LogService = Depends(get_service),
+):
+    return _get_trace_history(service)
+
+
+@legacy_router.get("/trace/list")
+async def list_dashboard_traces(
+    page: int = 1,
+    page_size: int = 20,
+    umo: str | None = None,
+    search: str | None = None,
+    sender: str | None = None,
+    _username: str = Depends(require_dashboard_user),
+    service: LogService = Depends(get_service),
+):
+    return await _list_traces(service, page, page_size, umo, search, sender)
+
+
+@legacy_router.get("/trace/sources")
+async def get_dashboard_trace_sources(
+    _username: str = Depends(require_dashboard_user),
+    service: LogService = Depends(get_service),
+):
+    return await _get_trace_sources(service)
+
+
+@legacy_router.get("/trace/detail")
+async def get_dashboard_trace_detail(
+    trace_id: str | None = None,
+    _username: str = Depends(require_dashboard_user),
+    service: LogService = Depends(get_service),
+):
+    return await _get_trace_detail(service, trace_id)
+
+
+@legacy_router.delete("/trace/clear")
+async def clear_dashboard_traces(
+    before_ts: float | None = None,
+    _username: str = Depends(require_dashboard_user),
+    service: LogService = Depends(get_service),
+):
+    return await _clear_traces(service, before_ts)

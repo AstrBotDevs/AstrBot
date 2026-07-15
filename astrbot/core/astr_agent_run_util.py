@@ -5,7 +5,7 @@ import traceback
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from astrbot.core import logger
+from astrbot.core import astrbot_config, logger
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
 from astrbot.core.astr_agent_context import AstrAgentContext
@@ -20,6 +20,7 @@ from astrbot.core.persona_error_reply import (
 )
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.utils.trace import TraceSpan, get_current_span
 
 AgentRunner = ToolLoopAgentRunner[AstrAgentContext]
 
@@ -125,6 +126,17 @@ async def run_agent(
     step_idx = 0
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
+    # Trace: parent span for all step spans.
+    # Prefer the ContextVar (set by internal.py before calling run_agent) so
+    # this function works correctly even when called without an event attribute.
+    _trace_on = astrbot_config.get("trace_enable", False)
+    _llm_parent = get_current_span() or getattr(
+        astr_event, "_llm_agent_span", astr_event.trace
+    )
+    # Per-step span and per-tool-call spans
+    _step_span = None
+    _tool_spans: dict[str, TraceSpan] = {}  # call_id -> TraceSpan
+
     buffered_llm_chains: list[MessageChain] = []
     can_buffer_llm_result = _should_buffer_llm_result(
         buffer_intermediate_messages,
@@ -149,6 +161,20 @@ async def run_agent(
                         content="工具调用次数已达到上限，请停止使用工具，并根据已经收集到的信息，对你的任务和发现进行总结，然后直接回复用户。",
                     )
                 )
+
+        # Create a span for this LLM iteration
+        if _trace_on:
+            _step_span = _llm_parent.child(
+                f"llm_step_{step_idx}",
+                span_type="llm_call",
+                model=agent_runner.provider.get_model()
+                if agent_runner.provider
+                else "",
+            )
+            _step_span.set_input(
+                message_count=len(agent_runner.run_context.messages),
+            )
+            _tool_spans = {}
 
         stop_watcher = asyncio.create_task(
             _watch_agent_stop_signal(agent_runner, astr_event),
@@ -178,6 +204,12 @@ async def run_agent(
                             pass
                     astr_event.set_extra("agent_user_aborted", True)
                     astr_event.set_extra("agent_stop_requested", False)
+                    if (
+                        _trace_on
+                        and _step_span is not None
+                        and _step_span.finished_at is None
+                    ):
+                        _step_span.finish(status="error", reason="aborted")
                     return
 
                 if _should_stop_agent(astr_event):
@@ -190,13 +222,16 @@ async def run_agent(
 
                 if resp.type == "tool_call_result":
                     msg_chain = resp.data["chain"]
+                    result_text = msg_chain.get_plain_text(with_other_comps_mark=True)
 
-                    astr_event.trace.record(
-                        "agent_tool_result",
-                        tool_result=msg_chain.get_plain_text(
-                            with_other_comps_mark=True
-                        ),
-                    )
+                    # Finish matching tool span
+                    if _trace_on:
+                        result_data = _extract_chain_json_data(msg_chain)
+                        call_id = str(result_data.get("id", "")) if result_data else ""
+                        tool_span = _tool_spans.pop(call_id, None)
+                        if tool_span is not None and tool_span.finished_at is None:
+                            tool_span.set_output(result=result_text[:4000])
+                            tool_span.finish()
 
                     if msg_chain.type == "tool_direct_result":
                         # tool_direct_result 用于标记 llm tool 需要直接发送给用户的内容
@@ -224,10 +259,41 @@ async def run_agent(
                         yield MessageChain(chain=[], type="break")
 
                     tool_info = _extract_chain_json_data(resp.data["chain"])
-                    astr_event.trace.record(
-                        "agent_tool_call",
-                        tool_name=tool_info if tool_info else "unknown",
-                    )
+                    # Create tool call span
+                    if _trace_on and _step_span is not None:
+                        tool_name = (
+                            tool_info.get("name", "unknown")
+                            if isinstance(tool_info, dict)
+                            else "unknown"
+                        )
+                        tool_call_id = (
+                            str(tool_info.get("id", ""))
+                            if isinstance(tool_info, dict)
+                            else ""
+                        )
+                        tool_args = (
+                            tool_info.get("arguments", {})
+                            if isinstance(tool_info, dict)
+                            else {}
+                        )
+                        _ts = _step_span.child(tool_name, span_type="tool_call")
+                        _ts.set_input(
+                            **(
+                                tool_args
+                                if isinstance(tool_args, dict)
+                                else {"args": tool_args}
+                            )
+                        )
+                        # Attach plugin attribution to the tool_call span so the
+                        # originating plugin is visible even outside the plugin_handler
+                        # subtree (e.g. @llm_tool registered by a third-party plugin).
+                        _tool_plugin_meta = _resolve_tool_plugin_meta(
+                            agent_runner, tool_name
+                        )
+                        if _tool_plugin_meta:
+                            _ts.set_meta(**_tool_plugin_meta)
+                        if tool_call_id:
+                            _tool_spans[tool_call_id] = _ts
                     _record_tool_call_name(tool_info, tool_name_by_call_id)
 
                     if astr_event.get_platform_name() == "webchat":
@@ -250,6 +316,21 @@ async def run_agent(
 
                 if stream_to_general and resp.type == "streaming_delta":
                     continue
+
+                # Finish step span on llm_result
+                if _trace_on and resp.type == "llm_result" and _step_span is not None:
+                    resp_chain = resp.data.get("chain")
+                    completion = resp_chain.get_plain_text() if resp_chain else ""
+                    _step_span.set_output(completion=completion[:2000])
+                    stats = agent_runner.stats
+                    if stats and stats.token_usage:
+                        _step_span.set_meta(
+                            input_tokens=stats.token_usage.input,
+                            output_tokens=stats.token_usage.output,
+                            cached_tokens=stats.token_usage.input_cached,
+                        )
+                    if _step_span.finished_at is None:
+                        _step_span.finish()
 
                 if (
                     resp.type == "err"
@@ -312,6 +393,9 @@ async def run_agent(
                     await stop_watcher
                 except asyncio.CancelledError:
                     pass
+            # Finish step span if not already done (e.g. streaming case)
+            if _trace_on and _step_span is not None and _step_span.finished_at is None:
+                _step_span.finish()
             if agent_runner.done():
                 break
 
@@ -352,6 +436,35 @@ async def run_agent(
             else:
                 astr_event.set_result(MessageEventResult().message(err_msg))
             return
+
+
+def _resolve_tool_plugin_meta(agent_runner: AgentRunner, tool_name: str) -> dict | None:
+    """Return plugin attribution meta for a tool call span.
+
+    Looks up the tool by name in the agent runner's tool set, then resolves
+    the originating plugin via star_map using the tool's handler_module_path.
+    Returns None for MCP tools or when attribution cannot be determined.
+    """
+    try:
+        from astrbot.core.star.star import star_map
+
+        req = agent_runner.req
+        if req is None or req.func_tool is None:
+            return None
+        tool = req.func_tool.get_tool(tool_name)
+        if tool is None or not tool.handler_module_path:
+            # MCP tools and built-in framework tools have no handler_module_path
+            return None
+        md = star_map.get(tool.handler_module_path)
+        if md is None:
+            return None
+        return {
+            "plugin": md.name,
+            "plugin_type": "builtin" if md.reserved else "third_party",
+        }
+    except Exception as e:
+        logger.debug(f"[trace] Failed to resolve tool plugin meta: {e}")
+        return None
 
 
 async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> None:
