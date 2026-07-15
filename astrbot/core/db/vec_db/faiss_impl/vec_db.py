@@ -135,26 +135,8 @@ class FaissVecDB(BaseVecDB):
                 },
             )
 
-        # 使用 DocumentStorage 的批量插入方法
-        int_ids = await self.document_storage.insert_documents_batch(
-            ids,
-            contents,
-            metadatas,
-        )
-        if len(int_ids) != content_count:
-            raise KnowledgeBaseUploadError(
-                stage="storage",
-                user_message=(
-                    f"存储失败：写入文档索引后返回的内部 ID 数量与文本分块数量不一致"
-                    f"（期望 {content_count}，实际 {len(int_ids)}）。"
-                ),
-                details={
-                    "expected_contents": content_count,
-                    "actual_int_ids": len(int_ids),
-                },
-            )
-
-        # 批量插入向量到 FAISS
+        # Validate vector format/dimension before any local write so validation
+        # failures never leave a half-written document store.
         try:
             vectors_array = np.asarray(vectors, dtype=np.float32)
         except (TypeError, ValueError) as exc:
@@ -187,7 +169,31 @@ class FaissVecDB(BaseVecDB):
                     "actual_dimension": int(vectors_array.shape[1]),
                 },
             )
-        await self.embedding_storage.insert_batch(vectors_array, int_ids)
+
+        # DocumentStorage and FAISS cannot share a transaction. If FAISS
+        # write fails after documents are committed, compensate by deleting.
+        int_ids = await self.document_storage.insert_documents_batch(
+            ids,
+            contents,
+            metadatas,
+        )
+        try:
+            if len(int_ids) != content_count:
+                raise KnowledgeBaseUploadError(
+                    stage="storage",
+                    user_message=(
+                        f"存储失败：写入文档索引后返回的内部 ID 数量与文本分块数量不一致"
+                        f"（期望 {content_count}，实际 {len(int_ids)}）。"
+                    ),
+                    details={
+                        "expected_contents": content_count,
+                        "actual_int_ids": len(int_ids),
+                    },
+                )
+            await self.embedding_storage.insert_batch(vectors_array, int_ids)
+        except Exception:
+            await self._rollback_partial_insert(ids=ids, int_ids=int_ids)
+            raise
         return int_ids
 
     async def retrieve(
@@ -254,6 +260,39 @@ class FaissVecDB(BaseVecDB):
             ]
 
         return top_k_results
+
+    async def _rollback_partial_insert(
+        self,
+        ids: list[str],
+        int_ids: list[int],
+    ) -> None:
+        """Best-effort cleanup after a partial ``insert_batch`` write.
+
+        DocumentStorage commits independently from FAISS. When FAISS insertion
+        fails after documents are written — or after vectors were added in
+        memory but not flushed — remove those rows/ids so the two stores do
+        not diverge.
+
+        Args:
+            ids: Chunk UUID strings written to DocumentStorage.
+            int_ids: Internal integer ids returned by DocumentStorage, also
+                used as FAISS ids when any vectors may have been added.
+        """
+        if int_ids:
+            try:
+                await self.embedding_storage.delete(int_ids)
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to roll back FAISS vectors for partial insert: {exc}",
+                )
+
+        for doc_id in ids:
+            try:
+                await self.document_storage.delete_document_by_doc_id(doc_id)
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to roll back document storage entry {doc_id}: {exc}",
+                )
 
     async def delete(self, doc_id: str) -> None:
         """删除一条文档块（chunk）"""
