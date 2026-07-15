@@ -1934,6 +1934,20 @@ CONFIG_METADATA_2 = {
                         "timeout": 20,
                         "nvidia_rerank_truncate": "",
                     },
+                    "TEI Rerank": {
+                        "id": "tei_rerank",
+                        "type": "tei_rerank",
+                        "provider": "huggingface",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "rerank_api_key": "",
+                        "rerank_api_base": "http://127.0.0.1:8080",
+                        "timeout": 20,
+                        "tei_rerank_truncate": False,
+                        "tei_rerank_truncation_direction": "Right",
+                        "tei_rerank_raw_scores": False,
+                        "tei_rerank_return_text": False,
+                    },
                     "Xinference STT": {
                         "id": "xinference_stt",
                         "type": "xinference_stt",
@@ -2029,6 +2043,27 @@ CONFIG_METADATA_2 = {
                             "NONE",
                             "END",
                         ],
+                    },
+                    "tei_rerank_truncate": {
+                        "description": "截断超长文本",
+                        "type": "bool",
+                        "hint": "当输入超过模型最大上下文长度时，是否自动截断。启用后需配合 截断方向 使用。",
+                    },
+                    "tei_rerank_truncation_direction": {
+                        "description": "截断方向",
+                        "type": "string",
+                        "options": ["left", "right"],
+                        "hint": "选择从文本的左侧(left)还是右侧(right)开始截断。仅在 截断超长文本 为 True 时生效。",
+                    },
+                    "tei_rerank_raw_scores": {
+                        "description": "返回原始分数",
+                        "type": "bool",
+                        "hint": "如果为 True，返回模型原始 logit 分数（可能为负值），不经过 sigmoid 归一化。默认 False。",
+                    },
+                    "tei_rerank_return_text": {
+                        "description": "返回排序结果中的文档原文",
+                        "type": "bool",
+                        "hint": "如果为 True，每个排序结果将附带原始文本。默认 False 以减少网络传输。",
                     },
                     "modalities": {
                         "description": "模型能力",

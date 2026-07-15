@@ -1244,6 +1244,22 @@
         "description": "文本截断策略",
         "hint": "当输入文本过长时，是否截断输入以适应模型的最大上下文长度。"
       },
+      "tei_rerank_truncate": {
+        "description": "截断超长文本",
+        "hint": "当输入超过模型最大上下文长度时，是否自动截断。启用后需配合 截断方向 使用。"
+      },
+      "tei_rerank_truncation_direction": {
+        "description": "截断方向",
+        "hint": "选择从文本的左侧(left)还是右侧(right)开始截断。仅在 截断超长文本 为 True 时生效。"
+      },
+      "tei_rerank_raw_scores": {
+        "description": "返回原始分数",
+        "hint": "如果为 True，返回模型原始 logit 分数（可能为负值），不经过 sigmoid 归一化。默认 False。"
+      },
+      "tei_rerank_return_text": {
+        "description": "返回排序结果中的文档原文",
+        "hint": "如果为 True，每个排序结果将附带原始文本。默认 False 以减少网络传输。"
+      },
       "launch_model_if_not_running": {
         "description": "模型未运行时自动启动",
         "hint": "如果模型当前未在 Xinference 服务中运行，是否尝试自动启动它。在生产环境中建议关闭。"

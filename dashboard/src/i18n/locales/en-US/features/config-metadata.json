@@ -1242,6 +1242,22 @@
         "description": "Text Truncation Strategy",
         "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
       },
+      "tei_rerank_truncate": {
+        "description": "Truncate Long Text",
+        "hint": "Whether to automatically truncate input when it exceeds the model's maximum context length. Requires Truncation Direction when enabled."
+      },
+      "tei_rerank_truncation_direction": {
+        "description": "Truncation Direction",
+        "hint": "Choose to truncate from the left or right side of the text. Only takes effect when Truncate Long Text is True."
+      },
+      "tei_rerank_raw_scores": {
+        "description": "Return Raw Scores",
+        "hint": "If True, returns raw model logit scores (which may be negative) without sigmoid normalization. Default is False."
+      },
+      "tei_rerank_return_text": {
+        "description": "Return Document Text in Results",
+        "hint": "If True, each result will include the original document text. Default is False to reduce network overhead."
+      },
       "launch_model_if_not_running": {
         "description": "Auto-start model if not running",
         "hint": "If the model is not running in Xinference, attempt to start it automatically. Recommended to disable in production."
