@@ -958,13 +958,13 @@ onMounted(() => {
   // preventDefault when our sidebar is visible + in files view, so
   // outside of those contexts the native find-in-page still works.
   window.addEventListener("keydown", onSearchKeydown);
-    // Fullscreen cancel handler: bound to document (not window) in
-    // bubble phase so the existing window-level search Escape handler
-    // and component-local Escape handlers run first. The isAnyFullscreen
-    // guard filters out non-fullscreen cases so other Escape shortcuts
-    // keep working unchanged.
-    document.addEventListener("keydown", onFullscreenKeyDown);
-  });
+  // Fullscreen cancel handler: bound to document (not window) in
+  // bubble phase so the existing window-level search Escape handler
+  // and component-local Escape handlers run first. The isAnyFullscreen
+  // guard filters out non-fullscreen cases so other Escape shortcuts
+  // keep working unchanged.
+  document.addEventListener("keydown", onFullscreenKeyDown);
+});
 
 // ── Worktree polling (added 2026-06-25, elecvoid243) ──────────────
 // Spec: "当且仅当侧边栏打开时才触发轮询" — the agent can run
@@ -2328,16 +2328,16 @@ onBeforeUnmount(() => {
     persistCurrentPathTimer = null;
   }
   document.removeEventListener("mousedown", closeContextMenuOnOutside, true);
-    document.removeEventListener("keydown", closeContextMenuOnEscape, true);
-    // 2026-07-02 sidebar-search: tear down the Cmd/Ctrl-F handler.
-    window.removeEventListener("keydown", onSearchKeydown);
-    document.removeEventListener("keydown", onFullscreenKeyDown);
-    // Always restore body overflow on unmount. The watcher above already
-    // does this whenever both modes become false; the explicit reset
-    // covers the edge case where the sidebar closes while fullscreen is
-    // still on (the watcher would otherwise leak the hidden overflow).
-    document.body.style.overflow = "";
-  });
+  document.removeEventListener("keydown", closeContextMenuOnEscape, true);
+  // 2026-07-02 sidebar-search: tear down the Cmd/Ctrl-F handler.
+  window.removeEventListener("keydown", onSearchKeydown);
+  document.removeEventListener("keydown", onFullscreenKeyDown);
+  // Always restore body overflow on unmount. The watcher above already
+  // does this whenever both modes become false; the explicit reset
+  // covers the edge case where the sidebar closes while fullscreen is
+  // still on (the watcher would otherwise leak the hidden overflow).
+  document.body.style.overflow = "";
+});
 
 function toggleFile(path: string): void {
   const next = new Set(expandedSet.value);
@@ -2445,75 +2445,73 @@ const currentRoot = computed<string | null>(() => {
         :style="{ width: sidebarWidth + 'px' }"
       >
         <div class="git-diff-sidebar-resizer" @mousedown="startResize" />
-      <div class="git-diff-sidebar-header">
-        <div class="git-diff-sidebar-title-wrap">
-          <span class="git-diff-sidebar-title">
-            {{
-              viewMode === "files"
-                ? tm("spcodeProjectLoad.fileBrowser.title")
-                : tm("spcodeProjectLoad.diffSidebar.title")
-            }}
-          </span>
-          <!-- UI #5: directory path is now shown as a compact breadcrumb-style
+        <div class="git-diff-sidebar-header">
+          <div class="git-diff-sidebar-title-wrap">
+            <span class="git-diff-sidebar-title">
+              {{
+                viewMode === "files"
+                  ? tm("spcodeProjectLoad.fileBrowser.title")
+                  : tm("spcodeProjectLoad.diffSidebar.title")
+              }}
+            </span>
+            <!-- UI #5: directory path is now shown as a compact breadcrumb-style
                strip directly under the title, with an inline folder icon.
                This keeps the header row uncluttered (title + actions only)
                while still giving the user a visible project root in all
                three view modes (not just diff). -->
-        </div>
-        <div class="git-diff-sidebar-actions">
-          <!-- UI #5: refresh button dropped the `tonal` background and
+          </div>
+          <div class="git-diff-sidebar-actions">
+            <!-- UI #5: refresh button dropped the `tonal` background and
                dropped to `variant="text"` + `size="small"` so the header
                reads as a lightweight toolbar instead of three chunky
                "circle" buttons. Loading state is preserved (a small
                spinner replaces the icon while the request is in flight). -->
-          <v-tooltip location="bottom" :open-delay="200">
-            <template #activator="{ props: tipProps }">
-              <v-btn
-                v-bind="tipProps"
-                icon
-                size="small"
-                variant="text"
-                :loading="isFetching"
-                @click="onManualRefresh"
-              >
-                <v-icon size="18">mdi-restart</v-icon>
-              </v-btn>
-            </template>
-            {{ tm("spcodeProjectLoad.diffSidebar.refreshTooltip") }}
-          </v-tooltip>
-          <v-btn
-            :icon="
-              isAnyFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'
-            "
-            size="small"
-            variant="text"
-            :aria-pressed="isAnyFullscreen"
-            :aria-label="
-              tm(
-                isAnyFullscreen
-                  ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
-                  : 'spcodeProjectLoad.documentManager.fullscreen.enter',
-              )
-            "
-            :title="
-              tm(
-                isAnyFullscreen
-                  ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
-                  : 'spcodeProjectLoad.documentManager.fullscreen.enter',
-              )
-            "
-            @click="toggleGlobalFullscreen"
-          />
-          <v-btn
-            icon="mdi-close"
-            size="small"
-            variant="text"
-            @click="emit('update:modelValue', false)"
-          />
+            <v-tooltip location="bottom" :open-delay="200">
+              <template #activator="{ props: tipProps }">
+                <v-btn
+                  v-bind="tipProps"
+                  icon
+                  size="small"
+                  variant="text"
+                  :loading="isFetching"
+                  @click="onManualRefresh"
+                >
+                  <v-icon size="18">mdi-restart</v-icon>
+                </v-btn>
+              </template>
+              {{ tm("spcodeProjectLoad.diffSidebar.refreshTooltip") }}
+            </v-tooltip>
+            <v-btn
+              :icon="isAnyFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
+              size="small"
+              variant="text"
+              :aria-pressed="isAnyFullscreen"
+              :aria-label="
+                tm(
+                  isAnyFullscreen
+                    ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                    : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+                )
+              "
+              :title="
+                tm(
+                  isAnyFullscreen
+                    ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                    : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+                )
+              "
+              @click="toggleGlobalFullscreen"
+            />
+            <v-btn
+              icon="mdi-close"
+              size="small"
+              variant="text"
+              @click="emit('update:modelValue', false)"
+            />
+          </div>
         </div>
-      </div>
 
-      <!-- UI #5: a fixed path strip directly under the header. Visible in
+        <!-- UI #5: a fixed path strip directly under the header. Visible in
            all three view modes so the user always knows which project
            (and which worktree) they are looking at. Two-line layout:
              [folder] <project-root>           (top)
@@ -2521,166 +2519,170 @@ const currentRoot = computed<string | null>(() => {
                                                 non-main worktree)
            The strip is muted (low-contrast) so it doesn't compete with
            the title above or the diff content below. -->
-      <div
-        v-if="currentRoot"
-        class="git-diff-sidebar-path-strip"
-        :title="currentRoot"
-      >
-        <div class="git-diff-sidebar-path-line">
-          <v-icon size="12" class="git-diff-sidebar-path-icon"
-            >mdi-folder-outline</v-icon
-          >
-          <span class="git-diff-sidebar-path-text">{{ currentRoot }}</span>
-        </div>
         <div
-          v-if="selectedWorktree && worktreeList.length > 0"
-          class="git-diff-sidebar-path-sub"
+          v-if="currentRoot"
+          class="git-diff-sidebar-path-strip"
+          :title="currentRoot"
         >
-          {{
-            worktreeList.find((w) => w.path === selectedWorktree)?.branch ??
-            tm("spcodeProjectLoad.diffSidebar.worktreeTabs.detachedBadge")
-          }}
+          <div class="git-diff-sidebar-path-line">
+            <v-icon size="12" class="git-diff-sidebar-path-icon"
+              >mdi-folder-outline</v-icon
+            >
+            <span class="git-diff-sidebar-path-text">{{ currentRoot }}</span>
+          </div>
+          <div
+            v-if="selectedWorktree && worktreeList.length > 0"
+            class="git-diff-sidebar-path-sub"
+          >
+            {{
+              worktreeList.find((w) => w.path === selectedWorktree)?.branch ??
+              tm("spcodeProjectLoad.diffSidebar.worktreeTabs.detachedBadge")
+            }}
+          </div>
         </div>
-      </div>
 
-      <!-- View-mode tab (spec 2026-06-20 §5.2): Files / Diff.
+        <!-- View-mode tab (spec 2026-06-20 §5.2): Files / Diff.
            aria-label is hardcoded (per advisory R2) to avoid adding
            a 31st i18n key — the visible button text already conveys
            the purpose for sighted users. -->
-      <div
-        class="git-diff-sidebar-view-tabs"
-        role="tablist"
-        aria-label="Switch view"
-      >
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="viewMode === 'files'"
-          :class="[
-            'git-diff-sidebar-view-tab',
-            { 'is-active': viewMode === 'files' },
-          ]"
-          @click="viewMode = 'files'"
+        <div
+          class="git-diff-sidebar-view-tabs"
+          role="tablist"
+          aria-label="Switch view"
         >
-          <v-icon size="14">mdi-folder-outline</v-icon>
-          <span>{{ tm("spcodeProjectLoad.fileBrowser.viewMode.files") }}</span>
-        </button>
-        <!-- 2026-07-11 document-manager:Documents 文档管理 sub-tab。 -->
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="viewMode === 'docs'"
-          :aria-label="tm('spcodeProjectLoad.gitDiffSidebar.tabs.docs')"
-          :class="[
-            'git-diff-sidebar-view-tab',
-            { 'is-active': viewMode === 'docs' },
-          ]"
-          @click="viewMode = 'docs'"
-        >
-          <v-icon size="14">mdi-file-document-multiple-outline</v-icon>
-          <span>{{ tm("spcodeProjectLoad.gitDiffSidebar.tabs.docs") }}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="viewMode === 'diff'"
-          :class="[
-            'git-diff-sidebar-view-tab',
-            { 'is-active': viewMode === 'diff' },
-          ]"
-          @click="viewMode = 'diff'"
-        >
-          <v-icon size="14">mdi-source-pull</v-icon>
-          <span>{{ tm("spcodeProjectLoad.fileBrowser.viewMode.diff") }}</span>
-        </button>
-        <!-- Spec 2026-06-24 §2 决策 #10:History 是第 3 个 viewMode。 -->
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="viewMode === 'history'"
-          :aria-label="
-            tm('spcodeProjectLoad.diffSidebar.gitWorkflow.history.tabAria')
-          "
-          :class="[
-            'git-diff-sidebar-view-tab',
-            { 'is-active': viewMode === 'history' },
-          ]"
-          @click="viewMode = 'history'"
-        >
-          <v-icon size="14">mdi-history</v-icon>
-          <span>{{
-            tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.tab")
-          }}</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="viewMode === 'files'"
+            :class="[
+              'git-diff-sidebar-view-tab',
+              { 'is-active': viewMode === 'files' },
+            ]"
+            @click="viewMode = 'files'"
+          >
+            <v-icon size="14">mdi-folder-outline</v-icon>
+            <span>{{
+              tm("spcodeProjectLoad.fileBrowser.viewMode.files")
+            }}</span>
+          </button>
+          <!-- 2026-07-11 document-manager:Documents 文档管理 sub-tab。 -->
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="viewMode === 'docs'"
+            :aria-label="tm('spcodeProjectLoad.gitDiffSidebar.tabs.docs')"
+            :class="[
+              'git-diff-sidebar-view-tab',
+              { 'is-active': viewMode === 'docs' },
+            ]"
+            @click="viewMode = 'docs'"
+          >
+            <v-icon size="14">mdi-file-document-multiple-outline</v-icon>
+            <span>{{ tm("spcodeProjectLoad.gitDiffSidebar.tabs.docs") }}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="viewMode === 'diff'"
+            :class="[
+              'git-diff-sidebar-view-tab',
+              { 'is-active': viewMode === 'diff' },
+            ]"
+            @click="viewMode = 'diff'"
+          >
+            <v-icon size="14">mdi-source-pull</v-icon>
+            <span>{{ tm("spcodeProjectLoad.fileBrowser.viewMode.diff") }}</span>
+          </button>
+          <!-- Spec 2026-06-24 §2 决策 #10:History 是第 3 个 viewMode。 -->
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="viewMode === 'history'"
+            :aria-label="
+              tm('spcodeProjectLoad.diffSidebar.gitWorkflow.history.tabAria')
+            "
+            :class="[
+              'git-diff-sidebar-view-tab',
+              { 'is-active': viewMode === 'history' },
+            ]"
+            @click="viewMode = 'history'"
+          >
+            <v-icon size="14">mdi-history</v-icon>
+            <span>{{
+              tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.tab")
+            }}</span>
+          </button>
+        </div>
 
-      <!-- Worktree tabs (visible in BOTH views, spec 2026-06-20 §5.3) -->
-      <div
-        v-if="hasMultipleWorktrees"
-        class="git-diff-sidebar-tabs"
-        role="tablist"
-        :aria-label="tm('spcodeProjectLoad.diffSidebar.worktreeTabs.ariaLabel')"
-      >
-        <!-- Section label: clarifies that the buttons below switch
+        <!-- Worktree tabs (visible in BOTH views, spec 2026-06-20 §5.3) -->
+        <div
+          v-if="hasMultipleWorktrees"
+          class="git-diff-sidebar-tabs"
+          role="tablist"
+          :aria-label="
+            tm('spcodeProjectLoad.diffSidebar.worktreeTabs.ariaLabel')
+          "
+        >
+          <!-- Section label: clarifies that the buttons below switch
              worktrees (otherwise they look like generic pills with
              no obvious purpose). Anchored to the left of the flex row;
              existing flex-wrap still lets the tabs wrap to a new line
              on narrow widths. -->
-        <span class="git-diff-sidebar-tabs-label">
-          {{ tm("spcodeProjectLoad.diffSidebar.worktreeTabs.label") }}
-        </span>
-        <button
-          v-for="wt in worktreeList"
-          :key="wt.path"
-          type="button"
-          role="tab"
-          :aria-selected="(selectedWorktree ?? mainWorktreePath) === wt.path"
-          :class="[
-            'git-diff-sidebar-tab',
-            {
-              'git-diff-sidebar-tab--active':
-                (selectedWorktree ?? mainWorktreePath) === wt.path,
-            },
-          ]"
-          :title="wt.path"
-          @click="onWorktreeChange(wt.isMain ? null : wt.path)"
-          @contextmenu.prevent="(e) => openContextMenu(e, wt)"
-        >
-          <v-icon v-if="wt.isMain" size="12" class="git-diff-sidebar-tab-icon"
-            >mdi-home</v-icon
-          >
-          <v-icon
-            v-else-if="wt.locked"
-            size="12"
-            class="git-diff-sidebar-tab-icon"
-            >mdi-lock</v-icon
-          >
-          <span class="git-diff-sidebar-tab-label">
-            {{
-              wt.branch ??
-              (wt.isMain
-                ? tm("spcodeProjectLoad.diffSidebar.worktreeTabs.mainBadge")
-                : wt.headSha.slice(0, 7))
-            }}
+          <span class="git-diff-sidebar-tabs-label">
+            {{ tm("spcodeProjectLoad.diffSidebar.worktreeTabs.label") }}
           </span>
-          <span v-if="!wt.branch" class="git-diff-sidebar-tab-badge">{{
-            tm("spcodeProjectLoad.diffSidebar.worktreeTabs.detachedBadge")
-          }}</span>
-        </button>
-        <!-- Add button (spec 2026-06-27 §2.1) -->
-        <button
-          type="button"
-          class="git-diff-sidebar-tab-add"
-          :aria-label="
-            tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButtonAria')
-          "
-          :title="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButton')"
-          @click="openCreateDialog"
-        >
-          <v-icon size="14">mdi-plus</v-icon>
-        </button>
+          <button
+            v-for="wt in worktreeList"
+            :key="wt.path"
+            type="button"
+            role="tab"
+            :aria-selected="(selectedWorktree ?? mainWorktreePath) === wt.path"
+            :class="[
+              'git-diff-sidebar-tab',
+              {
+                'git-diff-sidebar-tab--active':
+                  (selectedWorktree ?? mainWorktreePath) === wt.path,
+              },
+            ]"
+            :title="wt.path"
+            @click="onWorktreeChange(wt.isMain ? null : wt.path)"
+            @contextmenu.prevent="(e) => openContextMenu(e, wt)"
+          >
+            <v-icon v-if="wt.isMain" size="12" class="git-diff-sidebar-tab-icon"
+              >mdi-home</v-icon
+            >
+            <v-icon
+              v-else-if="wt.locked"
+              size="12"
+              class="git-diff-sidebar-tab-icon"
+              >mdi-lock</v-icon
+            >
+            <span class="git-diff-sidebar-tab-label">
+              {{
+                wt.branch ??
+                (wt.isMain
+                  ? tm("spcodeProjectLoad.diffSidebar.worktreeTabs.mainBadge")
+                  : wt.headSha.slice(0, 7))
+              }}
+            </span>
+            <span v-if="!wt.branch" class="git-diff-sidebar-tab-badge">{{
+              tm("spcodeProjectLoad.diffSidebar.worktreeTabs.detachedBadge")
+            }}</span>
+          </button>
+          <!-- Add button (spec 2026-06-27 §2.1) -->
+          <button
+            type="button"
+            class="git-diff-sidebar-tab-add"
+            :aria-label="
+              tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButtonAria')
+            "
+            :title="tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.addButton')"
+            @click="openCreateDialog"
+          >
+            <v-icon size="14">mdi-plus</v-icon>
+          </button>
 
-        <!-- Context menu (spec 2026-06-27 §2.3)
+          <!-- Context menu (spec 2026-06-27 §2.3)
                      Teleported to <body> and positioned with manual
                      `position: fixed` styles so the menu opens exactly at the
                      right-click cursor. Vuetify 3 v-menu's positioning pipeline
@@ -2690,134 +2692,134 @@ const currentRoot = computed<string | null>(() => {
                      left corner of the viewport regardless of cursor position.
                      Manual positioning gives us deterministic behavior and a
                      single source of truth (contextMenuStyle computed). -->
-        <Teleport to="body">
-          <div
-            v-if="contextMenu.open"
-            ref="contextMenuEl"
-            class="worktree-context-menu"
-            :style="contextMenuStyle"
-            role="menu"
-            :aria-label="
-              tm(
-                'spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.ariaLabel',
-              )
-            "
-            @click.stop
-            @contextmenu.prevent
-          >
-            <v-list density="compact">
-              <template v-if="contextMenu.wt && !contextMenu.wt.isMain">
-                <!-- Lock/unlock toggle: never disabled. When the worktree
+          <Teleport to="body">
+            <div
+              v-if="contextMenu.open"
+              ref="contextMenuEl"
+              class="worktree-context-menu"
+              :style="contextMenuStyle"
+              role="menu"
+              :aria-label="
+                tm(
+                  'spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.ariaLabel',
+                )
+              "
+              @click.stop
+              @contextmenu.prevent
+            >
+              <v-list density="compact">
+                <template v-if="contextMenu.wt && !contextMenu.wt.isMain">
+                  <!-- Lock/unlock toggle: never disabled. When the worktree
                              is locked this button reads "unlock" and the click
                              opens the unlock confirm dialog; when unlocked it
                              reads "lock" and opens the lock-reason dialog.
                              Disabling it when locked would prevent the very
                              action it represents. -->
-                <v-list-item @click="onLockClick(contextMenu.wt!)">
-                  <template #prepend>
-                    <v-icon>{{
+                  <v-list-item @click="onLockClick(contextMenu.wt!)">
+                    <template #prepend>
+                      <v-icon>{{
+                        contextMenu.wt.locked
+                          ? "mdi-lock-open-variant"
+                          : "mdi-lock"
+                      }}</v-icon>
+                    </template>
+                    <v-list-item-title>{{
                       contextMenu.wt.locked
-                        ? "mdi-lock-open-variant"
-                        : "mdi-lock"
-                    }}</v-icon>
-                  </template>
-                  <v-list-item-title>{{
-                    contextMenu.wt.locked
-                      ? tm(
-                          "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.unlock",
-                        )
-                      : tm(
-                          "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.lock",
-                        )
-                  }}</v-list-item-title>
-                </v-list-item>
-                <!-- Remove: disabled only when locked (a locked worktree
+                        ? tm(
+                            "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.unlock",
+                          )
+                        : tm(
+                            "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.lock",
+                          )
+                    }}</v-list-item-title>
+                  </v-list-item>
+                  <!-- Remove: disabled only when locked (a locked worktree
                              must be unlocked before it can be removed). -->
-                <v-list-item
-                  :disabled="!!contextMenu.wt.locked"
-                  @click="onRemoveClick(contextMenu.wt!)"
-                >
-                  <template #prepend>
-                    <v-icon color="error">mdi-trash-can-outline</v-icon>
-                  </template>
-                  <v-list-item-title>{{
-                    tm(
-                      "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.remove",
-                    )
-                  }}</v-list-item-title>
-                </v-list-item>
-              </template>
-              <template v-else>
-                <v-list-item disabled>
-                  <v-list-item-title class="text-caption">
-                    {{
+                  <v-list-item
+                    :disabled="!!contextMenu.wt.locked"
+                    @click="onRemoveClick(contextMenu.wt!)"
+                  >
+                    <template #prepend>
+                      <v-icon color="error">mdi-trash-can-outline</v-icon>
+                    </template>
+                    <v-list-item-title>{{
                       tm(
-                        "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.mainDisabled",
+                        "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.remove",
                       )
-                    }}
-                  </v-list-item-title>
-                </v-list-item>
-              </template>
-            </v-list>
-          </div>
-        </Teleport>
-      </div>
-
-      <!-- Diff-only sub-UI: scope bar + truncation warning -->
-      <template v-if="viewMode === 'diff'">
-        <div
-          class="git-diff-sidebar-scope"
-          role="tablist"
-          :aria-label="tm('spcodeProjectLoad.diffSidebar.scopeBar.ariaLabel')"
-        >
-          <div class="git-diff-sidebar-scope-pills">
-            <button
-              v-for="opt in SCOPE_OPTIONS"
-              :key="opt.value"
-              type="button"
-              role="tab"
-              :aria-selected="selectedScope === opt.value"
-              :aria-label="tm(opt.labelKey)"
-              :class="[
-                'git-diff-sidebar-scope-pill',
-                `is-${opt.value}`,
-                { 'is-active': selectedScope === opt.value },
-              ]"
-              :disabled="
-                !isProjectLoaded ||
-                (isScopeLoading && pendingScope !== opt.value)
-              "
-              @click="onScopeChange(opt.value)"
-            >
-              <v-icon size="14" class="git-diff-sidebar-scope-pill-icon">
-                {{ opt.icon }}
-              </v-icon>
-              <span class="git-diff-sidebar-scope-pill-text">
-                {{ tm(opt.labelKey) }}
-              </span>
-              <v-progress-circular
-                v-if="isScopeLoading && pendingScope === opt.value"
-                indeterminate
-                :size="12"
-                :width="2"
-                class="git-diff-sidebar-scope-pill-spinner"
-              />
-            </button>
-          </div>
+                    }}</v-list-item-title>
+                  </v-list-item>
+                </template>
+                <template v-else>
+                  <v-list-item disabled>
+                    <v-list-item-title class="text-caption">
+                      {{
+                        tm(
+                          "spcodeProjectLoad.diffSidebar.worktreeMgmt.contextMenu.mainDisabled",
+                        )
+                      }}
+                    </v-list-item-title>
+                  </v-list-item>
+                </template>
+              </v-list>
+            </div>
+          </Teleport>
         </div>
-        <div v-if="isTruncated" class="git-diff-sidebar-warning">
-          {{
-            tm("spcodeProjectLoad.diffSidebar.truncated", {
-              shown: truncatedShown,
-              max: truncatedMax,
-            })
-          }}
-        </div>
-      </template>
 
-      <!-- Body: Files / Diff / History -->
-      <div class="git-diff-sidebar-body">
-        <!-- 2026-07-02 sidebar-search: Files-view toolbar with a search
+        <!-- Diff-only sub-UI: scope bar + truncation warning -->
+        <template v-if="viewMode === 'diff'">
+          <div
+            class="git-diff-sidebar-scope"
+            role="tablist"
+            :aria-label="tm('spcodeProjectLoad.diffSidebar.scopeBar.ariaLabel')"
+          >
+            <div class="git-diff-sidebar-scope-pills">
+              <button
+                v-for="opt in SCOPE_OPTIONS"
+                :key="opt.value"
+                type="button"
+                role="tab"
+                :aria-selected="selectedScope === opt.value"
+                :aria-label="tm(opt.labelKey)"
+                :class="[
+                  'git-diff-sidebar-scope-pill',
+                  `is-${opt.value}`,
+                  { 'is-active': selectedScope === opt.value },
+                ]"
+                :disabled="
+                  !isProjectLoaded ||
+                  (isScopeLoading && pendingScope !== opt.value)
+                "
+                @click="onScopeChange(opt.value)"
+              >
+                <v-icon size="14" class="git-diff-sidebar-scope-pill-icon">
+                  {{ opt.icon }}
+                </v-icon>
+                <span class="git-diff-sidebar-scope-pill-text">
+                  {{ tm(opt.labelKey) }}
+                </span>
+                <v-progress-circular
+                  v-if="isScopeLoading && pendingScope === opt.value"
+                  indeterminate
+                  :size="12"
+                  :width="2"
+                  class="git-diff-sidebar-scope-pill-spinner"
+                />
+              </button>
+            </div>
+          </div>
+          <div v-if="isTruncated" class="git-diff-sidebar-warning">
+            {{
+              tm("spcodeProjectLoad.diffSidebar.truncated", {
+                shown: truncatedShown,
+                max: truncatedMax,
+              })
+            }}
+          </div>
+        </template>
+
+        <!-- Body: Files / Diff / History -->
+        <div class="git-diff-sidebar-body">
+          <!-- 2026-07-02 sidebar-search: Files-view toolbar with a search
              toggle AND the search input. Sits ABOVE the FileBrowserView
              so it survives the v-if/v-else switching inside
              FileBrowserView (toolbar is independent of whether the
@@ -2829,97 +2831,99 @@ const currentRoot = computed<string | null>(() => {
              :value + @input; the composable owns the 300ms debounce.
              Esc on the input closes the panel (stopPropagation
              prevents the window-level handler from also firing). -->
-        <div
-          v-if="viewMode === 'files'"
-          class="git-diff-sidebar-files-toolbar"
-          data-testid="git-diff-sidebar-files-toolbar"
-        >
-          <v-btn
-            icon
-            size="small"
-            variant="text"
-            :class="[
-              'git-diff-sidebar-search-toggle',
-              { 'is-active': searchOpen },
-            ]"
-            :title="tm('spcodeProjectLoad.diffSidebar.search.button')"
-            :aria-label="tm('spcodeProjectLoad.diffSidebar.search.button')"
-            @click="searchOpen = !searchOpen"
+          <div
+            v-if="viewMode === 'files'"
+            class="git-diff-sidebar-files-toolbar"
+            data-testid="git-diff-sidebar-files-toolbar"
           >
-            <v-icon size="16">mdi-magnify</v-icon>
-          </v-btn>
-          <input
-            v-if="searchOpen"
-            ref="searchInputRef"
-            :value="fileSearchQuery"
-            type="text"
-            class="git-diff-sidebar-search-input"
-            :placeholder="
-              tm('spcodeProjectLoad.diffSidebar.search.placeholder')
-            "
-            spellcheck="false"
-            autocomplete="off"
-            @input="onSearchInput"
-            @keydown.escape.stop="onSearchClose"
+            <v-btn
+              icon
+              size="small"
+              variant="text"
+              :class="[
+                'git-diff-sidebar-search-toggle',
+                { 'is-active': searchOpen },
+              ]"
+              :title="tm('spcodeProjectLoad.diffSidebar.search.button')"
+              :aria-label="tm('spcodeProjectLoad.diffSidebar.search.button')"
+              @click="searchOpen = !searchOpen"
+            >
+              <v-icon size="16">mdi-magnify</v-icon>
+            </v-btn>
+            <input
+              v-if="searchOpen"
+              ref="searchInputRef"
+              :value="fileSearchQuery"
+              type="text"
+              class="git-diff-sidebar-search-input"
+              :placeholder="
+                tm('spcodeProjectLoad.diffSidebar.search.placeholder')
+              "
+              spellcheck="false"
+              autocomplete="off"
+              @input="onSearchInput"
+              @keydown.escape.stop="onSearchClose"
+            />
+          </div>
+          <FileBrowserView
+            v-if="viewMode === 'files'"
+            ref="fileBrowserRef"
+            :current-path="fileBrowserCurrentPath"
+            :preview-path="fileBrowserPreviewPath"
+            :is-dark="!!isDark"
+            :root-path="currentRoot"
+            :search-open="searchOpen"
+            :scroll-to-line="fileSearchScrollToLine"
+            :umo="spcodeStatus.status.value.umo"
+            :worktree="selectedWorktree"
+            :git-log="gitLog"
+            :git-show="gitShow"
+            @navigate="onFileBrowserNavigate"
+            @open-file="onFileOpen"
+            @update:search-open="searchOpen = $event"
           />
-        </div>
-        <FileBrowserView
-          v-if="viewMode === 'files'"
-          ref="fileBrowserRef"
-          :current-path="fileBrowserCurrentPath"
-          :preview-path="fileBrowserPreviewPath"
-          :is-dark="!!isDark"
-          :root-path="currentRoot"
-          :search-open="searchOpen"
-          :scroll-to-line="fileSearchScrollToLine"
-          :umo="spcodeStatus.status.value.umo"
-          :worktree="selectedWorktree"
-          @navigate="onFileBrowserNavigate"
-          @open-file="onFileOpen"
-          @update:search-open="searchOpen = $event"
-        />
-        <GitDiffBodyContent
-          v-else-if="viewMode === 'diff'"
-          ref="gitDiffBodyRef"
-          :state="diffBodyState"
-          :expanded="expandedSet"
-          :is-dark="!!isDark"
-          :on-restore="onFileRestore"
-          :selected-scope="selectedScope"
-          :on-stage="onStageFile"
-          :on-unstage="onUnstageFile"
-          :is-staging="gitStage.isStaging"
-          :is-unstaging="gitUnstage.isUnstaging"
-          :new-file-paths="newFilePaths"
-          :on-open-file="onOpenFile"
-          :on-discard-hunk="onDiscardHunk"
-          :discarding-hunks="fileDiscardHunk.isDiscardingHunk.value"
-          @toggle="toggleFile"
-          @retry="onManualRefresh"
-          @restore="onFileRestore"
-          @stage="onStageFile"
-          @unstage="onUnstageFile"
-          @open-file="onOpenFile"
-          @stage-paths="onStagePaths"
-          @unstage-paths="onUnstagePaths"
-          @restore-paths="onRestorePaths"
-        />
-        <!-- Spec 2026-06-24 §6.5:History view 渲染 GitLogView。
+          <GitDiffBodyContent
+            v-else-if="viewMode === 'diff'"
+            ref="gitDiffBodyRef"
+            :state="diffBodyState"
+            :expanded="expandedSet"
+            :is-dark="!!isDark"
+            :on-restore="onFileRestore"
+            :selected-scope="selectedScope"
+            :on-stage="onStageFile"
+            :on-unstage="onUnstageFile"
+            :is-staging="gitStage.isStaging"
+            :is-unstaging="gitUnstage.isUnstaging"
+            :new-file-paths="newFilePaths"
+            :on-open-file="onOpenFile"
+            :on-discard-hunk="onDiscardHunk"
+            :discarding-hunks="fileDiscardHunk.isDiscardingHunk.value"
+            @toggle="toggleFile"
+            @retry="onManualRefresh"
+            @restore="onFileRestore"
+            @stage="onStageFile"
+            @unstage="onUnstageFile"
+            @open-file="onOpenFile"
+            @stage-paths="onStagePaths"
+            @unstage-paths="onUnstagePaths"
+            @restore-paths="onRestorePaths"
+          />
+          <!-- Spec 2026-06-24 §6.5:History view 渲染 GitLogView。
              Spec 2026-06-25 §3.1:GitLogView 也接收 gitShow 句柄用于
              在 commit 展开时拉取 /spcode/git-show 并渲染变更文件列表。 -->
-        <GitLogView
-          v-else-if="viewMode === 'history'"
-          :state="gitLog.state.value"
-          :has-more="logHasMore"
-          :is-loading="logIsLoading"
-          :git-show="gitShow"
-          @apply="onLogApply"
-          @reset="onLogReset"
-          @load-more="onLogLoadMore"
-          @refresh="() => gitLog.refresh()"
-        />
-        <!-- 2026-07-11 document-manager:Documents 文档管理 sub-tab body。 -->
-        <!--
+          <GitLogView
+            v-else-if="viewMode === 'history'"
+            :state="gitLog.state.value"
+            :has-more="logHasMore"
+            :is-loading="logIsLoading"
+            :git-show="gitShow"
+            @apply="onLogApply"
+            @reset="onLogReset"
+            @load-more="onLogLoadMore"
+            @refresh="() => gitLog.refresh()"
+          />
+          <!-- 2026-07-11 document-manager:Documents 文档管理 sub-tab body。 -->
+          <!--
           2026-07-14: pass currentRoot (not projectRoot) to
           DocumentManager so the docs sub-page is rooted at the
           active worktree. The file-browser endpoint
@@ -2934,33 +2938,33 @@ const currentRoot = computed<string | null>(() => {
           on which worktree is in scope. Mirrors what
           FileBrowserView has been doing for the workspace tab.
         -->
-        <DocumentManager
-          v-else-if="viewMode === 'docs'"
-          :worktree="selectedWorktree"
-          :umo="spcodeStatus.status.value.umo"
-          :project-root="currentRoot"
-          :is-dark="!!isDark"
-          :git-log="gitLog"
-          :git-show="gitShow"
-        />
-      </div>
+          <DocumentManager
+            v-else-if="viewMode === 'docs'"
+            :worktree="selectedWorktree"
+            :umo="spcodeStatus.status.value.umo"
+            :project-root="currentRoot"
+            :is-dark="!!isDark"
+            :git-log="gitLog"
+            :git-show="gitShow"
+          />
+        </div>
 
-      <!-- Spec §6.7:粘性 commit bar(diff 视图下显示)。
+        <!-- Spec §6.7:粘性 commit bar(diff 视图下显示)。
            移动端 spec §10 风险 #10:仍可见,按钮缩窄。 -->
-      <GitCommitBar
-        v-if="viewMode === 'diff' && isProjectLoaded"
-        :staged-count="stagedCount"
-        :unstaged-count="unstagedCount"
-        :is-staging-all="gitStage.isStagingAll.value"
-        :is-unstaging-all="gitUnstage.isUnstagingAll.value"
-        :is-committing="gitCommit.isCommitting.value"
-        :selected-scope="selectedScope"
-        @stage-all="onClickStageAll"
-        @unstage-all="onClickUnstageAll"
-        @commit="onClickCommit"
-      />
+        <GitCommitBar
+          v-if="viewMode === 'diff' && isProjectLoaded"
+          :staged-count="stagedCount"
+          :unstaged-count="unstagedCount"
+          :is-staging-all="gitStage.isStagingAll.value"
+          :is-unstaging-all="gitUnstage.isUnstagingAll.value"
+          :is-committing="gitCommit.isCommitting.value"
+          :selected-scope="selectedScope"
+          @stage-all="onClickStageAll"
+          @unstage-all="onClickUnstageAll"
+          @commit="onClickCommit"
+        />
 
-      <!-- Spec §6.3: inline <v-dialog persistent> confirmation.
+        <!-- Spec §6.3: inline <v-dialog persistent> confirmation.
            Two guards against "stacking" / flicker:
              1. `v-if="confirmDialogOpen"` on v-card so the v-card
                 is unmounted SYNCHRONOUSLY the instant the dialog
@@ -2975,338 +2979,342 @@ const currentRoot = computed<string | null>(() => {
                 reopening after cancel) unmounts the previous
                 v-card and mounts a fresh one. Avoids the
                 in-place text swap flicker on open. -->
-      <v-dialog v-model="confirmDialogOpen" persistent max-width="440">
-        <v-card
-          v-if="confirmDialogOpen"
-          :key="confirmTargetPath ?? 'empty'"
-        >
-          <v-card-title class="text-h6">
-            {{ tm("spcodeProjectLoad.diffSidebar.restore.confirmTitle") }}
-          </v-card-title>
-          <v-card-text>
-            {{
-              tm(
-                confirmTargetIsNew
-                  ? "spcodeProjectLoad.diffSidebar.restore.confirmMessageNewFile"
-                  : "spcodeProjectLoad.diffSidebar.restore.confirmMessage",
-                {
-                  path: confirmTargetPath ?? "",
-                }
-              )
-            }}
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn variant="text" @click="onCancelRestore">{{
-              tm("spcodeProjectLoad.diffSidebar.restore.confirmCancel")
-            }}</v-btn>
-            <v-btn
-              variant="flat"
-              color="warning"
-              :loading="restoringFile !== null"
-              @click="onConfirmRestore"
-              >{{
-                tm("spcodeProjectLoad.diffSidebar.restore.confirmAction")
-              }}</v-btn
-            >
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+        <v-dialog v-model="confirmDialogOpen" persistent max-width="440">
+          <v-card v-if="confirmDialogOpen" :key="confirmTargetPath ?? 'empty'">
+            <v-card-title class="text-h6">
+              {{ tm("spcodeProjectLoad.diffSidebar.restore.confirmTitle") }}
+            </v-card-title>
+            <v-card-text>
+              {{
+                tm(
+                  confirmTargetIsNew
+                    ? "spcodeProjectLoad.diffSidebar.restore.confirmMessageNewFile"
+                    : "spcodeProjectLoad.diffSidebar.restore.confirmMessage",
+                  {
+                    path: confirmTargetPath ?? "",
+                  },
+                )
+              }}
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="onCancelRestore">{{
+                tm("spcodeProjectLoad.diffSidebar.restore.confirmCancel")
+              }}</v-btn>
+              <v-btn
+                variant="flat"
+                color="warning"
+                :loading="restoringFile !== null"
+                @click="onConfirmRestore"
+                >{{
+                  tm("spcodeProjectLoad.diffSidebar.restore.confirmAction")
+                }}</v-btn
+              >
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
 
-      <!-- Bulk-restore confirmation: separate dialog so the message
+        <!-- Bulk-restore confirmation: separate dialog so the message
            can include the file count and so a single Cancel cleanly
            aborts the whole batch (the underlying endpoint only
            accepts one file per request, so a partial-restore
            mid-flight would be confusing UX). Tinted `warning` to
            match the single-file dialog and signal irreversibility. -->
-      <v-dialog v-model="confirmRestorePathsOpen" persistent max-width="440">
-        <v-card>
-          <v-card-title class="text-h6">
-            {{
-              tm(
-                "spcodeProjectLoad.diffSidebar.restore.confirmTitleMultiple",
-                { count: pendingRestorePaths.length },
-              )
-            }}
-          </v-card-title>
-          <v-card-text>
-            {{
-              tm(
-                "spcodeProjectLoad.diffSidebar.restore.confirmMessageMultiple",
-                { count: pendingRestorePaths.length },
-              )
-            }}
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn
-              variant="text"
-              :disabled="isBulkRestoring"
-              @click="onCancelRestorePaths"
-              >{{
-                tm("spcodeProjectLoad.diffSidebar.restore.confirmCancel")
-              }}</v-btn
-            >
-            <v-btn
-              variant="flat"
-              color="warning"
-              :loading="isBulkRestoring"
-              @click="onConfirmRestorePaths"
-              >{{
-                tm("spcodeProjectLoad.diffSidebar.restore.confirmAction")
-              }}</v-btn
-            >
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
-
-      <!-- Spec §6.3: 全部暂存确认弹窗(spec 2026-06-24 §3.3.3 + Q4)。 -->
-      <v-dialog v-model="confirmStageAllOpen" persistent max-width="440">
-        <v-card>
-          <v-card-title class="text-h6">
-            {{
-              tm(
-                "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmTitle",
-              )
-            }}
-          </v-card-title>
-          <v-card-text>
-            {{
-              tm(
-                "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmMessage",
-                { count: pendingStageAllCount },
-              )
-            }}
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn variant="text" @click="onCancelStageAll">
+        <v-dialog v-model="confirmRestorePathsOpen" persistent max-width="440">
+          <v-card>
+            <v-card-title class="text-h6">
               {{
                 tm(
-                  "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmCancel",
+                  "spcodeProjectLoad.diffSidebar.restore.confirmTitleMultiple",
+                  { count: pendingRestorePaths.length },
                 )
               }}
-            </v-btn>
-            <v-btn
-              variant="flat"
-              color="primary"
-              :loading="gitStage.isStagingAll.value"
-              @click="onConfirmStageAll"
-            >
+            </v-card-title>
+            <v-card-text>
               {{
                 tm(
-                  "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmAction",
+                  "spcodeProjectLoad.diffSidebar.restore.confirmMessageMultiple",
+                  { count: pendingRestorePaths.length },
                 )
               }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn
+                variant="text"
+                :disabled="isBulkRestoring"
+                @click="onCancelRestorePaths"
+                >{{
+                  tm("spcodeProjectLoad.diffSidebar.restore.confirmCancel")
+                }}</v-btn
+              >
+              <v-btn
+                variant="flat"
+                color="warning"
+                :loading="isBulkRestoring"
+                @click="onConfirmRestorePaths"
+                >{{
+                  tm("spcodeProjectLoad.diffSidebar.restore.confirmAction")
+                }}</v-btn
+              >
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
 
-      <!-- Symmetric dialog for the staged scope's "取消全部暂存"
+        <!-- Spec §6.3: 全部暂存确认弹窗(spec 2026-06-24 §3.3.3 + Q4)。 -->
+        <v-dialog v-model="confirmStageAllOpen" persistent max-width="440">
+          <v-card>
+            <v-card-title class="text-h6">
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmTitle",
+                )
+              }}
+            </v-card-title>
+            <v-card-text>
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmMessage",
+                  { count: pendingStageAllCount },
+                )
+              }}
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="onCancelStageAll">
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmCancel",
+                  )
+                }}
+              </v-btn>
+              <v-btn
+                variant="flat"
+                color="primary"
+                :loading="gitStage.isStagingAll.value"
+                @click="onConfirmStageAll"
+              >
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.gitWorkflow.stage.stageAll.confirmAction",
+                  )
+                }}
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
+        <!-- Symmetric dialog for the staged scope's "取消全部暂存"
            bulk action. Mirrors confirmStageAllOpen in structure so
            the two flows feel identical from the user's POV — same
            persistent modal, same title/message/cancel/action layout,
            just routed through the unstage endpoint and tinted
            `warning` to signal the index-mutating direction. -->
-      <v-dialog v-model="confirmUnstageAllOpen" persistent max-width="440">
-        <v-card>
-          <v-card-title class="text-h6">
-            {{
-              tm(
-                "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmTitle",
-              )
-            }}
-          </v-card-title>
-          <v-card-text>
-            {{
-              tm(
-                "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmMessage",
-                { count: pendingUnstageAllCount },
-              )
-            }}
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn variant="text" @click="onCancelUnstageAll">
+        <v-dialog v-model="confirmUnstageAllOpen" persistent max-width="440">
+          <v-card>
+            <v-card-title class="text-h6">
               {{
                 tm(
-                  "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmCancel",
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmTitle",
                 )
               }}
-            </v-btn>
-            <v-btn
-              variant="flat"
-              color="warning"
-              :loading="gitUnstage.isUnstagingAll.value"
-              @click="onConfirmUnstageAll"
-            >
+            </v-card-title>
+            <v-card-text>
               {{
                 tm(
-                  "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmAction",
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmMessage",
+                  { count: pendingUnstageAllCount },
                 )
               }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="onCancelUnstageAll">
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmCancel",
+                  )
+                }}
+              </v-btn>
+              <v-btn
+                variant="flat"
+                color="warning"
+                :loading="gitUnstage.isUnstagingAll.value"
+                @click="onConfirmUnstageAll"
+              >
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmAction",
+                  )
+                }}
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
 
-      <!-- Worktree CREATE dialog (spec 2026-06-27 §2.2.A) -->
-      <WorktreeCreateDialog
-        v-model="createDialogOpen"
-        :is-submitting="isCreating"
-        @submit="onCreateSubmit"
-        @cancel="createDialogOpen = false"
-      />
-
-      <!-- Worktree REMOVE confirm dialog (spec 2026-06-27 §2.2.B) -->
-      <v-dialog v-model="removeDialogOpen" persistent max-width="480">
-        <v-card>
-          <v-card-title class="text-h6">
-            {{
-              tm(
-                "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmTitle",
-              )
-            }}
-          </v-card-title>
-          <v-card-text>
-            <p class="mb-2">
-              {{
-                tm(
-                  "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmMessageWithPath",
-                  {
-                    path: removeDialogTarget?.path ?? "",
-                    branch: removeDialogTarget?.branch ?? "",
-                  },
-                )
-              }}
-            </p>
-            <p
-              v-if="dirtyCount !== null && dirtyCount > 0"
-              class="text-caption text-warning mb-2"
-            >
-              {{
-                tm(
-                  "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.dirtyHint",
-                  { count: dirtyCount },
-                )
-              }}
-            </p>
-            <v-checkbox
-              v-if="dirtyCount !== null && dirtyCount > 0"
-              v-model="removeForceChecked"
-              density="compact"
-              :label="
-                tm('spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.force', {
-                  count: dirtyCount,
-                })
-              "
-              color="warning"
-              hide-details
-            />
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn
-              variant="text"
-              :disabled="isRemoving"
-              @click="removeDialogOpen = false"
-            >
-              {{
-                tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.cancel")
-              }}
-            </v-btn>
-            <v-btn
-              variant="flat"
-              color="warning"
-              :loading="isRemoving"
-              @click="onConfirmRemove(removeForceChecked)"
-            >
-              {{
-                tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirm")
-              }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
-
-      <!-- Worktree LOCK dialog (spec 2026-06-27 §2.2.C) -->
-      <v-dialog v-model="lockDialogOpen" persistent max-width="480">
-        <LockReasonDialogBody
-          v-if="lockDialogOpen"
-          :target-branch="lockDialogTarget?.branch ?? null"
-          :is-locking="isLocking"
-          @submit="onLockSubmit"
-          @cancel="lockDialogOpen = false"
+        <!-- Worktree CREATE dialog (spec 2026-06-27 §2.2.A) -->
+        <WorktreeCreateDialog
+          v-model="createDialogOpen"
+          :is-submitting="isCreating"
+          @submit="onCreateSubmit"
+          @cancel="createDialogOpen = false"
         />
-      </v-dialog>
 
-      <!-- Worktree UNLOCK confirm dialog (spec 2026-06-27 §2.2.D) -->
-      <v-dialog v-model="confirmUnlockOpen" persistent max-width="440">
-        <v-card>
-          <v-card-title class="text-h6">
-            {{
-              tm(
-                "spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmTitle",
-              )
-            }}
-          </v-card-title>
-          <v-card-text>
-            {{
-              tm(
-                "spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmMessage",
-              )
-            }}
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn
-              variant="text"
-              :disabled="isUnlocking"
-              @click="onCancelUnlock"
-            >
+        <!-- Worktree REMOVE confirm dialog (spec 2026-06-27 §2.2.B) -->
+        <v-dialog v-model="removeDialogOpen" persistent max-width="480">
+          <v-card>
+            <v-card-title class="text-h6">
               {{
-                tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.cancel")
+                tm(
+                  "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmTitle",
+                )
               }}
-            </v-btn>
-            <v-btn
-              variant="flat"
-              color="primary"
-              :loading="isUnlocking"
-              @click="onConfirmUnlock"
-            >
+            </v-card-title>
+            <v-card-text>
+              <p class="mb-2">
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirmMessageWithPath",
+                    {
+                      path: removeDialogTarget?.path ?? "",
+                      branch: removeDialogTarget?.branch ?? "",
+                    },
+                  )
+                }}
+              </p>
+              <p
+                v-if="dirtyCount !== null && dirtyCount > 0"
+                class="text-caption text-warning mb-2"
+              >
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.dirtyHint",
+                    { count: dirtyCount },
+                  )
+                }}
+              </p>
+              <v-checkbox
+                v-if="dirtyCount !== null && dirtyCount > 0"
+                v-model="removeForceChecked"
+                density="compact"
+                :label="
+                  tm(
+                    'spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.force',
+                    {
+                      count: dirtyCount,
+                    },
+                  )
+                "
+                color="warning"
+                hide-details
+              />
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn
+                variant="text"
+                :disabled="isRemoving"
+                @click="removeDialogOpen = false"
+              >
+                {{
+                  tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.cancel")
+                }}
+              </v-btn>
+              <v-btn
+                variant="flat"
+                color="warning"
+                :loading="isRemoving"
+                @click="onConfirmRemove(removeForceChecked)"
+              >
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.worktreeMgmt.remove.confirm",
+                  )
+                }}
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
+        <!-- Worktree LOCK dialog (spec 2026-06-27 §2.2.C) -->
+        <v-dialog v-model="lockDialogOpen" persistent max-width="480">
+          <LockReasonDialogBody
+            v-if="lockDialogOpen"
+            :target-branch="lockDialogTarget?.branch ?? null"
+            :is-locking="isLocking"
+            @submit="onLockSubmit"
+            @cancel="lockDialogOpen = false"
+          />
+        </v-dialog>
+
+        <!-- Worktree UNLOCK confirm dialog (spec 2026-06-27 §2.2.D) -->
+        <v-dialog v-model="confirmUnlockOpen" persistent max-width="440">
+          <v-card>
+            <v-card-title class="text-h6">
               {{
-                tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirm")
+                tm(
+                  "spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmTitle",
+                )
               }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
+            </v-card-title>
+            <v-card-text>
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirmMessage",
+                )
+              }}
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn
+                variant="text"
+                :disabled="isUnlocking"
+                @click="onCancelUnlock"
+              >
+                {{
+                  tm("spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.cancel")
+                }}
+              </v-btn>
+              <v-btn
+                variant="flat"
+                color="primary"
+                :loading="isUnlocking"
+                @click="onConfirmUnlock"
+              >
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.worktreeMgmt.unlock.confirm",
+                  )
+                }}
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
 
-      <!-- Spec §6.4: 提交弹窗。 -->
-      <GitCommitDialog
-        v-model="commitDialogOpen"
-        :staged-files="Array.from(stagedFiles)"
-        :is-committing="gitCommit.isCommitting.value"
-        :last-error="commitLastError ?? undefined"
-        @confirm="onConfirmCommit"
-        @cancel="onCancelCommit"
-      />
+        <!-- Spec §6.4: 提交弹窗。 -->
+        <GitCommitDialog
+          v-model="commitDialogOpen"
+          :staged-files="Array.from(stagedFiles)"
+          :is-committing="gitCommit.isCommitting.value"
+          :last-error="commitLastError ?? undefined"
+          @confirm="onConfirmCommit"
+          @cancel="onCancelCommit"
+        />
 
-      <!-- Spec §6.4: result snackbar (扩展:支持 stderr <pre> 块)。 -->
-      <v-snackbar
-        v-model="snackbar.show"
-        :color="snackbar.color"
-        :timeout="snackbar.color === 'success' ? 4000 : 6000"
-        location="bottom right"
-        multi-line
-      >
-        <div v-if="snackbar.stderr" class="spcode-snackbar-stderr">
-          <div class="spcode-snackbar-message">{{ snackbar.message }}</div>
-          <pre class="spcode-snackbar-pre">{{ snackbar.stderr }}</pre>
-        </div>
-        <div v-else>{{ snackbar.message }}</div>
-      </v-snackbar>
+        <!-- Spec §6.4: result snackbar (扩展:支持 stderr <pre> 块)。 -->
+        <v-snackbar
+          v-model="snackbar.show"
+          :color="snackbar.color"
+          :timeout="snackbar.color === 'success' ? 4000 : 6000"
+          location="bottom right"
+          multi-line
+        >
+          <div v-if="snackbar.stderr" class="spcode-snackbar-stderr">
+            <div class="spcode-snackbar-message">{{ snackbar.message }}</div>
+            <pre class="spcode-snackbar-pre">{{ snackbar.stderr }}</pre>
+          </div>
+          <div v-else>{{ snackbar.message }}</div>
+        </v-snackbar>
       </aside>
     </transition>
   </Teleport>

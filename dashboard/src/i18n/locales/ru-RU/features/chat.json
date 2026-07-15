@@ -344,8 +344,7 @@
         "copySuccess": "Скопировано",
         "copyFail": "Ошибка копирования",
         "goToTarget": "Перейти к цели",
-        "encodingLabel": "Кодировка: {encoding}",
-        "showHistory": "История файла"
+        "encodingLabel": "Кодировка: {encoding}"
       },
       "comment": {
         "addButton": "Добавить комментарий",

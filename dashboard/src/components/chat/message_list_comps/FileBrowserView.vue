@@ -9,10 +9,16 @@ import { useModuleI18n } from "@/i18n/composables";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useSpcodeFileBrowser } from "@/composables/useSpcodeFileBrowser";
 import type { SpcodeFileBrowserEntry } from "@/composables/parseSpcodeFileBrowser";
+import type { UseSpcodeGitLog } from "@/composables/useSpcodeGitLog";
+import type { UseSpcodeGitShow } from "@/composables/useSpcodeGitShow";
+import { useSpcodeGitFile } from "@/composables/useSpcodeGitFile";
+import { useResizableSplit } from "@/composables/useResizableSplit";
+import { projectRelativePath } from "@/composables/pathUtils";
 import FileBrowserBreadcrumb from "./FileBrowserBreadcrumb.vue";
 import FileBrowserFilePreview from "./FileBrowserFilePreview.vue";
 import FileTreeList from "./FileTreeList.vue";
 import SearchPanel from "./SearchPanel.vue";
+import DocumentHistoryPanel from "./DocumentHistoryPanel.vue";
 
 const props = defineProps<{
   /** Directory whose entries are shown in the left pane. */
@@ -35,6 +41,27 @@ const props = defineProps<{
   umo?: string | null;
   /** Search scope (currently the active worktree path). */
   worktree?: string | null;
+  /**
+   * 2026-07-15 workspace-history-parity: the sidebar's
+   * `useSpcodeGitLog` instance. Reused by the per-file history
+   * pane so the workspace tab stays consistent with the
+   * document-manager tab — both invoke the same composable
+   * shared with the History sub-tab. `DocumentHistoryPanel`
+   * needs the live composable (refresh + state), not a snapshot,
+   * because it re-runs the refresh whenever the previewed file
+   * changes.
+   */
+  gitLog: UseSpcodeGitLog;
+  /**
+   * 2026-07-15 workspace-history-inline: the sidebar's
+   * `useSpcodeGitShow` instance. Per-file patch fetches (`?path=`)
+   * are reusable across tabs — same composite as DocumentManager's
+   * — so we receive the instance instead of mounting a fresh one.
+   * Used by the [gitLogPath, selectedRevision, "diff"] watcher
+   * below to lazily fetch `gitShow.fetchFile(rev, path)` whenever
+   * the user asks for "view this change" in the history pane.
+   */
+  gitShow: UseSpcodeGitShow;
 }>();
 
 /**
@@ -216,15 +243,194 @@ watch(
   },
 );
 
+// ── Per-file history pane (2026-07-15 workspace-history-parity) ──
+// Mirrors the right-edge history panel in <DocumentManager> so the
+// workspace tab has the same affordance as the documents tab:
+// preview a file → see the commits that touched it, then either
+// (a) peek at the file at any of those revisions, or (b) see how
+// that revision differs from the current working copy.
+//
+// Data flow:
+//   DocumentHistoryPanel emits `select-revision(sha)` /
+//   `compare-current(sha)`. We own `selectedRevision` + `viewMode`
+//   and forward both into <FileBrowserFilePreview>, exactly the way
+//   <DocumentManager> does for its `selectedDoc` +
+//   `selectedRevision` pair.
+//
+// (2026-07-15 workspace-history-inline:) previously both events
+// routed through the injected `spcode:setLogPathFilter`, which
+// switched the entire sidebar to the History sub-tab. The two tabs
+// now share the same inline behavior — see <DocumentManager>'s
+// `onSelectRevision` / `onCompareCurrent` for the reference impl.
+//
+// Reuses <DocumentHistoryPanel> verbatim + the sidebar's shared
+// `useSpcodeGitLog` and `useSpcodeGitShow` instances. The local
+// `useSpcodeGitFile` composable is mounted here for the same reason
+// DocumentManager mounts its own: it owns the historical blob cache
+// for THIS pane, independent from the document manager's. (The two
+// `useSpcodeGitFile` instances don't share state, but git-show is
+// global anyway, and the document manager's cache lives across
+// file selections in a way we don't need here.)
+const gitFile = useSpcodeGitFile(computed(() => props.worktree ?? null));
+
+/** Repo-relative path of the currently-previewed file (or empty
+ *  string when nothing is selected). Passed straight to
+ *  `<DocumentHistoryPanel>` as `file-relative`; the panel's
+ *  `useSpcodeGitLog` watcher fires a refresh whenever this value
+ *  changes, so switching between files re-fetches the commit list
+ *  for the new path. `projectRelativePath` handles both absolute
+ *  (tree-click) and already-relative (search-result-click) inputs
+ *  and returns "" for the project root itself. */
+const gitLogPath = computed<string>(() =>
+  projectRelativePath(props.previewPath ?? "", props.rootPath),
+);
+
+/** History pane resizer. Anchored to the right edge so the percent
+ *  math matches the pane being on the right (mirrors the layout in
+ *  DocumentManager). 22/15/40 keeps the panel usable as a commit
+ *  list at default width while still permitting the user to shrink
+ *  it almost out of the way to give the preview more room. */
+const historySplit = useResizableSplit({
+  initialPercent: 22,
+  minPercent: 15,
+  maxPercent: 40,
+  containerRef: bodyRef,
+  direction: "right",
+});
+
+// 2026-07-15 document-history-empty: the history pane is per-file
+// (commits belong to a specific file), so when no file is selected
+// on mount there's nothing useful to show there. Default the pane
+// to collapsed in that case so the user doesn't see the "no file
+// selected" placeholder for no reason. Once the user manually
+// toggles it, that choice wins — no forced sync with previewPath
+// (matches DocumentManager's behavior).
+const isHistoryCollapsed = ref<boolean>(!props.previewPath);
+
+// ── Inline history render state (2026-07-15 workspace-history-inline) ──
+// Mirrors <DocumentManager>'s selectedRevision / viewMode pair.
+// `selectedRevision` is null when no revision is picked (= show
+// the current working copy); `viewMode` only matters when a
+// revision is set:
+//   - "raw"  → render the file content at that revision (peeking)
+//   - "diff" → render the unified diff vs the current working copy
+const selectedRevision = ref<string | null>(null);
+const viewMode = ref<"raw" | "diff">("raw");
+/** Lazy-loaded unified diff for the (current-file, picked-revision)
+ *  pair. Populated by the watcher below whenever (path, revision,
+ *  "diff") are all set. Null whenever no revision is picked or the
+ *  fetch is still in flight / failed. */
+const diffPatch = ref<string | null>(null);
+
+/** Pick / replace the historical blob content via gitFile. Mirrors
+ *  DocumentManager's `historicalFileContent` computed — same shape
+ *  (string), same null-on-bad-state contract. */
+const historicalFileContent = computed<string>(() => {
+  const path = gitLogPath.value;
+  const rev = selectedRevision.value;
+  if (!path || !rev) return "";
+  const data = gitFile.getData(path, rev);
+  return data?.content ?? "";
+});
+/** True if the historical blob is binary. Empty content for a binary
+ *  file is expected (the backend never sends blob bytes for
+ *  binaries); the preview must show a "binary file" placeholder
+ *  instead of trying to highlight the empty string. */
+const historicalIsBinary = computed<boolean>(() => {
+  const path = gitLogPath.value;
+  const rev = selectedRevision.value;
+  if (!path || !rev) return false;
+  const state = gitFile.getState(path, rev);
+  return state.kind === "ok" && state.data.isBinary === true;
+});
+/** True if the file at the picked revision is binary or otherwise
+ *  patch-less (the git-show backend returns patch=null for binary
+ *  files). Used by the diff body to render a "binary file"
+ *  placeholder instead of the (also-null) patch text. */
+const diffIsBinary = computed<boolean>(() => {
+  const path = gitLogPath.value;
+  const rev = selectedRevision.value;
+  if (!path || !rev) return false;
+  const data = props.gitShow.getFileData(rev, path);
+  return data?.isBinary === true;
+});
+
+/** Lazy fetch for the (revision, path) patch — runs whenever the
+ *  picker lands on a (path, revision) pair in diff mode, and clears
+ *  the patch whenever any of those three change. Pattern mirrors
+ *  DocumentManager's diff watcher: clear → fetch → read.
+ *  The `immediate: true` guards the initial state (all three
+ *  inputs unset → diffPatch = null). */
+watch(
+  () => [gitLogPath.value, selectedRevision.value, viewMode.value] as const,
+  async ([path, rev, mode]) => {
+    if (mode !== "diff" || !path || !rev) {
+      diffPatch.value = null;
+      return;
+    }
+    diffPatch.value = null;
+    await props.gitShow.fetchFile(rev, path);
+    const snap = props.gitShow.getFileData(rev, path);
+    if (snap) diffPatch.value = snap.patch ?? null;
+  },
+  { immediate: true },
+);
+
+/** Switching to a different file implicitly drops any picked
+ *  revision — same rule DocumentManager enforces in
+ *  `onTreeSelect` / `onPathChange` / `onBreadcrumbNavigate`. We
+ *  reset both `selectedRevision` and `viewMode` here so the
+ *  preview snaps back to the working copy and the diff watcher
+ *  above clears `diffPatch`. */
+watch(
+  () => gitLogPath.value,
+  (path, prev) => {
+    if (path !== prev) {
+      selectedRevision.value = null;
+      viewMode.value = "raw";
+    }
+  },
+);
+
+/** History-panel event handlers. Both accept the SHA emitted by
+ *  <DocumentHistoryPanel> and set local state; the lazy watchers
+ *  above / the gitFile composable do the actual fetching. */
+function onHistorySelectRevision(sha: string): void {
+  if (!gitLogPath.value) return;
+  selectedRevision.value = sha;
+  viewMode.value = "raw";
+  // Kick the historical-blob fetch — `getData()` is reactive so the
+  // computed above re-fires when state transitions to "ok".
+  void gitFile.fetchRef(gitLogPath.value, sha);
+}
+function onHistoryCompareCurrent(sha: string): void {
+  if (!gitLogPath.value) return;
+  selectedRevision.value = sha;
+  viewMode.value = "diff";
+  // No explicit fetch here — the diffPatch watcher above sees the
+  // (path, rev, "diff") triple and runs gitShow.fetchFile itself.
+  // We still want the historical blob too (for the meta-header's
+  // file-name / size, etc.), so kick the same fetchRef.
+  void gitFile.fetchRef(gitLogPath.value, sha);
+}
+
 onBeforeUnmount(() => {
-  // If user is mid-drag when the sidebar unmounts, release cleanly.
+  // If user is mid-drag on either divider, release cleanly.
   if (isResizing.value) onMouseUp();
-  // Release BOTH composables. Without this, an AbortController
+  if (historySplit.isResizing.value) {
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    isResizing.value = false;
+  }
+  // Release ALL THREE composables. Without this, an AbortController
   // stays alive across re-mounts (e.g. toggling viewMode files ↔
   // diff), and the in-flight request can still write to a stale
-  // `state` ref.
+  // `state` ref. gitFile is in here for the same reason — its
+  // inflight history-blob fetches would otherwise leak after the
+  // workspace tab unmounts.
   dirComposable.dispose();
   previewComposable.dispose();
+  gitFile.dispose();
 });
 </script>
 
@@ -268,8 +474,9 @@ onBeforeUnmount(() => {
         ref="bodyRef"
         class="file-browser-body"
         :class="{
-          resizing: isResizing,
+          resizing: isResizing || historySplit.isResizing.value,
           'left-collapsed': isLeftPaneCollapsed,
+          'history-collapsed': isHistoryCollapsed,
         }"
       >
         <!-- Expand handle: only when collapsed. Placed FIRST in DOM
@@ -353,30 +560,103 @@ onBeforeUnmount(() => {
                (rely on flex: 1 1 auto to fill the remaining space
                after the expand handle). Otherwise size to the
                complement of leftPanePercent. -->
+        <!--
+          Right pane: 2026-07-15 width is now driven by flex (the
+          middle item in a row of left-pane / preview / history).
+          Earlier revisions calculated `100 - leftPanePercent%` and
+          applied it inline, which broke as soon as a third pane
+          (the per-file history) was added — the history pane
+          would have eaten into the preview width silently. With
+          `flex: 1 1 auto` on `.file-browser-pane-right`, the
+          preview automatically takes whatever space remains after
+          the tree pane and history pane (and their dividers)
+          have claimed theirs.
+        -->
         <FileBrowserFilePreview
           v-if="previewPath"
           class="file-browser-pane-right"
-          :style="
-            isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }
-          "
           :state="previewComposable.state.value"
           :is-dark="!!isDark"
           :scroll-to-line="props.scrollToLine ?? null"
+          :selected-revision="selectedRevision"
+          :view-mode="viewMode"
+          :historical-content="historicalFileContent"
+          :historical-is-binary="historicalIsBinary"
+          :diff-patch="diffPatch"
+          :diff-is-binary="diffIsBinary"
           @navigate-target="onPreviewTargetNavigate"
           @retry="() => previewComposable.refresh()"
         />
-        <div
-          v-else
-          class="file-browser-pane-right file-browser-preview-empty"
-          :style="
-            isLeftPaneCollapsed ? {} : { width: 100 - leftPanePercent + '%' }
-          "
-        >
+        <div v-else class="file-browser-pane-right file-browser-preview-empty">
           <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
           <span class="preview-hint">
             {{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}
           </span>
         </div>
+
+        <!--
+          2026-07-15 workspace-history-parity: per-file commit list
+          shown on the right edge of the body, mirroring the
+          right-edge pane in <DocumentManager>. Reuses
+          <DocumentHistoryPanel> verbatim and reads from the same
+          `useSpcodeGitLog` instance the History sub-tab uses — so
+          selecting a different file in the preview re-fetches the
+          history for just that file, with no extra wiring.
+
+          Both dividers (tree + history) reuse the .file-browser-divider
+          base styles; the history one opts out of `v-show` when the
+          pane is collapsed via `.history-collapsed` on the parent.
+          Mirrors DocumentManager's `.document-manager__divider--history`
+          pattern (border-left, hover band).
+        -->
+        <div
+          v-show="!isHistoryCollapsed"
+          class="file-browser-divider file-browser-divider--history"
+          role="separator"
+          aria-orientation="vertical"
+          :aria-valuenow="Math.round(historySplit.percent.value)"
+          aria-valuemin="15"
+          aria-valuemax="40"
+          @mousedown="historySplit.startResize"
+        />
+        <div
+          v-show="!isHistoryCollapsed"
+          class="file-browser-history"
+          :style="{ width: historySplit.percent.value + '%' }"
+        >
+          <DocumentHistoryPanel
+            :git-log="gitLog"
+            :file-relative="gitLogPath"
+            :current-revision="selectedRevision"
+            :is-loading="gitLog.state.value.kind === 'loading'"
+            @select-revision="onHistorySelectRevision"
+            @compare-current="onHistoryCompareCurrent"
+            @collapse="isHistoryCollapsed = true"
+          />
+        </div>
+
+        <!--
+          History expand handle: shown only when the history pane
+          is collapsed. Sits at the rightmost flex position so the
+          user can restore the pane at its previous width. Mirrors
+          the left expand handle (same .file-browser-expand-handle
+          base; --history modifier swaps the chevron direction and
+          the border side).
+        -->
+        <button
+          v-if="isHistoryCollapsed"
+          type="button"
+          class="file-browser-expand-handle file-browser-expand-handle--history"
+          :title="tm('spcodeProjectLoad.documentManager.pane.expandHistory')"
+          :aria-label="
+            tm('spcodeProjectLoad.documentManager.pane.expandHistory')
+          "
+          @click="isHistoryCollapsed = false"
+        >
+          <v-icon size="16" class="file-browser-expand-handle-icon"
+            >mdi-chevron-double-left</v-icon
+          >
+        </button>
       </div>
     </template>
   </div>
@@ -417,11 +697,67 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 .file-browser-pane-right {
+  /* 2026-07-15: flex: 1 1 auto is now the SOLE width driver for
+     the preview. Earlier revisions applied
+     `width: 100 - leftPanePercent%` inline, which broke once a
+     third pane (the history pane) was added — the inline style
+     silently ignored the history pane and left the layout
+     overflowing the sidebar body. flex: 1 1 auto lets the
+     preview automatically take whatever space the left-pane /
+     history-pane / dividers leave behind. min-width: 0 keeps
+     long file paths from blowing out the pane. */
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+/* History pane container (2026-07-15 workspace-history-parity).
+   Same flex contract as the document-manager history wrapper:
+   `flex: 0 0 auto` lets the inline `width` from `historySplit`
+   take over without flex-growing, and `min-width: 0` lets the
+   panel's internal scroll handle overflow cleanly. The 1px
+   left border is intentionally OMITTED here because the
+   `file-browser-divider--history` divider right before this
+   pane already supplies the visual separator (DocumentManager
+   applies the same pattern). */
+.file-browser-history {
+  /* 2026-07-15 workspace-history-scroll: re-introduce the flex
+     column context so the panel inside can fill the body height
+     instead of growing with its content. Without `display: flex;
+     flex-direction: column;` here, <DocumentHistoryPanel> renders
+     as a regular block child at content height — long commit lists
+     push past .file-browser-body's bottom edge and get clipped by
+     its overflow:hidden, with .document-history-panel__list's
+     overflow-y:auto never engaging. With it set, the panel
+     becomes a flex item whose own `flex: 0 0 220px` would pin
+     the height to 220px; the :deep() override below swaps that
+     for `flex: 1 1 auto; min-height: 0` so the panel stretches to
+     the body height and the inner list scrolls as intended.
+
+     Width still comes from the inline `historySplit.percent.value`
+     style (driven by the right-edge drag divider); flex: 0 0 auto
+     keeps that inline width from being overridden by flex-grow. */
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Override <DocumentHistoryPanel>'s `flex: 0 0 220px` only inside
+   the FileBrowserView tab. The panel is shared with
+   <DocumentManager>, where its wrapper (.document-manager__history)
+   is a plain block — flex-basis:220px is ignored there and the
+   panel renders at content height. Here, with .file-browser-history
+   a flex column container, the basis would resolve as a HEIGHT
+   constraint in column direction; this override switches it to
+   `flex: 1 1 auto; min-height: 0` so the panel stretches to the
+   body's full height (via the grandparent's align-items: stretch)
+   and the inner commit list scrolls within it. `:deep()` is
+   required because DocumentHistoryPanel's <style scoped> attribute
+   wouldn't otherwise reach into it. */
+.file-browser-history :deep(.document-history-panel) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 /* Smooth width transition for collapse / expand. Suppressed during
    drag (`.resizing`) so mousemove updates don't lag behind the
@@ -430,7 +766,9 @@ onBeforeUnmount(() => {
 .file-browser-pane-left,
 .file-browser-pane-right,
 .file-browser-divider,
-.file-browser-expand-handle {
+.file-browser-divider--history,
+.file-browser-expand-handle,
+.file-browser-history {
   transition:
     width 0.2s ease,
     flex-basis 0.2s ease,
@@ -439,7 +777,9 @@ onBeforeUnmount(() => {
 .file-browser-body.resizing .file-browser-pane-left,
 .file-browser-body.resizing .file-browser-pane-right,
 .file-browser-body.resizing .file-browser-divider,
-.file-browser-body.resizing .file-browser-expand-handle {
+.file-browser-body.resizing .file-browser-divider--history,
+.file-browser-body.resizing .file-browser-expand-handle,
+.file-browser-body.resizing .file-browser-history {
   transition: none;
 }
 .file-browser-preview-empty {
@@ -469,6 +809,16 @@ onBeforeUnmount(() => {
 }
 .file-browser-divider:hover,
 .file-browser-divider:active {
+  background: rgba(var(--v-theme-primary), 0.18);
+  border-left-color: rgba(var(--v-theme-primary), 0.5);
+}
+/* History divider (2026-07-15 workspace-history-parity): same
+   hit-target band + hover treatment as the tree divider, but
+   lives on the right edge of the body (next to the history
+   pane). Identical styling so the two drag affordances read as
+   the same UI component. */
+.file-browser-divider--history:hover,
+.file-browser-divider--history:active {
   background: rgba(var(--v-theme-primary), 0.18);
   border-left-color: rgba(var(--v-theme-primary), 0.5);
 }
@@ -556,6 +906,21 @@ onBeforeUnmount(() => {
   opacity: 0.95;
   writing-mode: horizontal-tb;
 }
+/* History expand handle (2026-07-15 workspace-history-parity):
+   mirror of the left-handle with the chevron pointing the other
+   way and the border on the LEFT edge so the handle reads as
+   part of the body even though it's anchored to the right.
+   Same icon-only chevron + primary tint + hover treatment as
+   the left version — clicking it re-opens the pane at its
+   previous `historySplit.percent` value (the percent ref
+   survives the collapse so the layout doesn't snap to a new
+   size on re-expand). */
+.file-browser-expand-handle--history {
+  /* Swap border-right to border-left so the visible separator
+     sits on the side facing the body, not the outside. */
+  border-right: none;
+  border-left: 1px solid rgba(var(--v-theme-primary), 0.2);
+}
 .file-browser-empty {
   display: flex;
   flex-direction: column;
@@ -598,6 +963,18 @@ onBeforeUnmount(() => {
     border-left: none;
     border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
     cursor: default;
+  }
+  /* 2026-07-15 workspace-history-parity: history pane stacks
+     below the preview on narrow viewports, occupying the same
+     column as the (resized) tree list. `flex: 0 0 auto` +
+     `max-height: 40vh` keeps the per-file commit list scannable
+     without monopolising the screen — mirrors how the tree
+     pane caps itself above. The drag divider also rotates to
+     horizontal here so the user can still resize by gesture. */
+  .file-browser-history {
+    width: 100% !important;
+    flex: 0 0 auto;
+    max-height: 40vh;
   }
   /* On mobile, the collapse button is redundant (the user can
      already scroll the entry list out of view by scrolling the

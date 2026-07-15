@@ -35,7 +35,7 @@ export type LogFilter = {
 /** Spec §3.3.5:完整状态机
  *   idle ─refresh──> loading
  *   loading ─200──> ok { snapshot, notModified: false }
- *   loading ─304──> ok { snapshot, notModified: true } (snapshot 来自 prevSnapshot)
+ *   loading ─304──> ok { snapshot, notModified: true } (snapshot 来自 prevSnapshotMap[key])
  *   loading ─err──> error { reason, previousSnapshot? }
  *
  * `notModified` 字段(spec 公开 API 表面,§3.3.5):UI 端**当前**通过
@@ -105,7 +105,20 @@ export function useSpcodeGitLog(
   const filter = ref<LogFilter>({ ref: "HEAD", n: DEFAULT_N });
   const spcodeStatus = useSpcodeProjectStatus();
   const etagMap = new Map<string, string>();
-  let prevSnapshot: SpcodeLogSnapshot | null = null;
+  // 2026-07-15 fix: prevSnapshot is now keyed by the same etagKey
+  // as etagMap. Previously this was a single `let prevSnapshot` —
+  // once a 200 response arrived, it overwrote whatever the previous
+  // filter's snapshot was, so the next 304 hit would replay the
+  // WRONG filter's data. Concretely: select file A → etag saved for
+  // key(A), prevSnapshot = A_snap; select file B → etag saved for
+  // key(B), prevSnapshot = B_snap (A_snap is lost); select file A
+  // again → etag for key(A) is sent, server returns 304, the 304
+  // branch fell back to `prevSnapshot` which was B_snap, so the
+  // UI showed B's commits under A. The fix mirrors etagMap's
+  // structure: store the snapshot per etagKey and look it up by
+  // key on the 304 path, the same way etagMap.get(key) is used
+  // when building the If-None-Match header.
+  const prevSnapshotMap = new Map<string, SpcodeLogSnapshot>();
   let abortController: AbortController | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let isMounted = true;
@@ -122,11 +135,19 @@ export function useSpcodeGitLog(
     }
     const umo = spcodeStatus.status.value.umo;
     if (!umo) {
-      const prev = prevSnapshot ?? undefined;
+      // no_project_loaded fires before the request is made, so there
+      // is no current etagKey to scope `previousSnapshot` to. The
+      // intent of `previousSnapshot` is "the last good snapshot for
+      // THIS filter, so the UI can show stale data on top of the
+      // error banner" — without a filter, that's undefined. Keeping
+      // it undefined here means the History view's empty branch
+      // (`isEmptyRepository`, the `s.kind === "error" && !s.previousSnapshot`
+      // checks) renders cleanly instead of leaking a snapshot from
+      // an unrelated prior filter.
       state.value = {
         kind: "error",
         reason: "no_project_loaded",
-        previousSnapshot: prev,
+        previousSnapshot: undefined,
       };
       return;
     }
@@ -165,16 +186,21 @@ export function useSpcodeGitLog(
       if (!isMounted) return;
 
       if (resp.status === 304) {
-        // 命中 ETag,复用上次 snapshot(spec §3.3.5)
-        if (prevSnapshot) {
+        // 命中 ETag,复用上次 snapshot(spec §3.3.5). Lookup is keyed
+        // by etagKey so switching between filters doesn't replay
+        // another filter's data — see the prevSnapshotMap declaration
+        // comment for the A → B → A scenario this guards against.
+        const cached = prevSnapshotMap.get(key);
+        if (cached) {
           state.value = {
             kind: "ok",
-            snapshot: prevSnapshot,
+            snapshot: cached,
             notModified: true,
           };
         }
-        // No prevSnapshot yet (theoretical race: 304 before any 200
-        // — shouldn't happen but defensively fall through to loading).
+        // No cached snapshot for this key (theoretical race: 304
+        // before any 200 for this exact filter — shouldn't happen
+        // but defensively fall through to loading).
         return;
       }
 
@@ -190,7 +216,12 @@ export function useSpcodeGitLog(
         state.value = {
           kind: "error",
           reason: "unknown",
-          previousSnapshot: prevSnapshot ?? undefined,
+          // Scoped to the current etagKey so the error banner's
+          // `previousSnapshot` reflects the last good response for
+          // THIS filter, not whichever filter happened to finish
+          // 200-most-recently. See the prevSnapshotMap declaration
+          // comment for the bug this prevents.
+          previousSnapshot: prevSnapshotMap.get(key) ?? undefined,
         };
         return;
       }
@@ -209,7 +240,8 @@ export function useSpcodeGitLog(
         state.value = {
           kind: "error",
           reason: snap.reason ?? "unknown",
-          previousSnapshot: prevSnapshot ?? undefined,
+          // Same per-key scoping as the parser-error branch above.
+          previousSnapshot: prevSnapshotMap.get(key) ?? undefined,
         };
         return;
       }
@@ -232,11 +264,21 @@ export function useSpcodeGitLog(
         state.value = {
           kind: "error",
           reason: "empty_repository",
-          previousSnapshot: prevSnapshot ?? undefined,
+          // Same per-key scoping — the empty-illustration branch
+          // also has access to the last good response for this
+          // filter, though in practice empty_repository is a
+          // whole-repo state and `previousSnapshot` will be
+          // undefined for the matching key here.
+          previousSnapshot: prevSnapshotMap.get(key) ?? undefined,
         };
         return;
       }
-      prevSnapshot = snap;
+      // Store under the current key so a later 304 for the same
+      // filter replays THIS filter's snapshot (not whichever
+      // filter's 200 last landed first). See prevSnapshotMap
+      // declaration for the A → B → A scenario this guards
+      // against.
+      prevSnapshotMap.set(key, snap);
 
       // Update ETag from response header if present.
       const newEtag =
@@ -258,7 +300,13 @@ export function useSpcodeGitLog(
       state.value = {
         kind: "error",
         reason,
-        previousSnapshot: prevSnapshot ?? undefined,
+        // Same per-key scoping as the other error branches — the
+        // network/error catch falls through to here regardless of
+        // which filter was being requested, so `previousSnapshot`
+        // should be the last good response for THIS filter, not
+        // whichever filter's snapshot happened to be cached most
+        // recently.
+        previousSnapshot: prevSnapshotMap.get(key) ?? undefined,
       };
     }
   }
@@ -288,10 +336,16 @@ export function useSpcodeGitLog(
   function invalidateEtag(): void {
     // Spec §3.4 决策 #24 — 切 worktree / 切 umo 时调用
     etagMap.clear();
-    // 不重置 prevSnapshot:切 worktree 后新请求可能产生新 snapshot,
-    // prevSnapshot 仅作为 304 命中兜底;切 worktree 后即便收到 304
-    // 也属新上下文,UI 应当 re-render。最安全的做法是同时清空。
-    prevSnapshot = null;
+    // Same reasoning as the per-key delete in `invalidateEtagFor`:
+    // any 304 that lands after the worktree/umo switch would now
+    // resolve against a stale snapshot from the previous context.
+    // Clearing the per-key map keeps the 304 branch's behavior
+    // honest: it can only replay snapshots produced under the
+    // current umo + worktree. (Previously this cleared a single
+    // `prevSnapshot` variable, which only ever held the most
+    // recent filter's data anyway — the map is the proper fix
+    // regardless of context-switch lifecycle.)
+    prevSnapshotMap.clear();
   }
 
   /** Drop the ETag entry for exactly the given filter tuple (others are
@@ -301,6 +355,16 @@ export function useSpcodeGitLog(
     const worktree = toValue(worktreeRef);
     const key = etagKey({ umo, worktree, filter: target });
     etagMap.delete(key);
+    // Mirror the ETag eviction in the snapshot map: a reset that
+    // re-fetches against the same URL must not 304 against the old
+    // (filtered) snapshot and replay the prior filter's commits.
+    // The GitLogView Reset button is the only caller; the URL it
+    // re-issues matches the original history-load URL bit-for-bit
+    // (same ref/path/etc.), so without this delete the 304 branch
+    // would short-circuit and the reset would render the filtered
+    // view. See prevSnapshotMap declaration for the parallel A → B
+    // → A scenario this guards against.
+    prevSnapshotMap.delete(key);
   }
 
   // Re-fetch when worktree changes (or umo changes — handled by caller
@@ -320,7 +384,14 @@ export function useSpcodeGitLog(
     abortController?.abort();
     abortController = null;
     etagMap.clear();
-    prevSnapshot = null;
+    // Mirror the etagMap clear: when the composable is torn down,
+    // any 304 in flight would have nothing to replay against
+    // (prevSnapshotMap is gone), so future invocations (e.g. on a
+    // remount) start from a clean cache. Without this, a disposed
+    // then re-created instance could in theory share the closure
+    // (it doesn't, but the invariant "all caches cleared on
+    // dispose" is what we want for predictable GC behavior).
+    prevSnapshotMap.clear();
   }
 
   return {

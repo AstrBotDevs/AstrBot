@@ -27,10 +27,52 @@ import {
 } from "@/composables/useFileComments";
 import FileBrowserCodeView from "./FileBrowserCodeView.vue";
 import FileCommentEditor from "./FileCommentEditor.vue";
+import DiffPreview from "./DiffPreview.vue";
+
+/** Mirrors DocumentManager's viewMode union, trimmed to what the
+ *  workspace pane actually renders: 'raw' (file content) and 'diff'
+ *  (unified diff). The 'rendered' branch (markdown rendering) is
+ *  intentionally absent — the workspace tab is a code viewer, not
+ *  a document reader, so there is no markdown path to toggle. */
+type HistoryViewMode = "raw" | "diff";
 
 const props = defineProps<{
   state: FileBrowserFetchState;
   isDark: boolean;
+  /**
+   * 2026-07-15 workspace-history-inline: when non-null, the parent
+   * (<FileBrowserView>) has picked a commit SHA from the history
+   * pane; the preview body switches to either the historical blob
+   * (viewMode === 'raw') or the unified diff vs HEAD ('diff')
+   * instead of the current working-copy content. Matches
+   * <DocumentManager>'s selectedRevision contract; null = no
+   * revision picked = current file (legacy path).
+   */
+  selectedRevision?: string | null;
+  /** 2026-07-15 workspace-history-inline: only meaningful when
+   *  `selectedRevision` is non-null. Defaults to 'raw' so a missed
+   *  prop falls back to "show file content", not to diff mode. */
+  viewMode?: HistoryViewMode;
+  /** Historical blob content for (current preview file, picked
+   *  revision). The parent feeds in the live value from
+   *  `useSpcodeGitFile.getData(path, rev)`; an empty string means
+   *  "fetch not done yet" / "fetch failed" / "no revision picked",
+   *  in which case the preview falls back to the loading / empty
+   *  placeholder. */
+  historicalContent?: string;
+  /** True when the (path, rev) blob came back is_binary=true from
+   *  the backend. Renders a "binary file" placeholder instead of an
+   *  empty highlight pass. Default false. */
+  historicalIsBinary?: boolean;
+  /** Unified diff text from git-show?path= for the (current file,
+   *  picked revision) pair. Null when not in 'diff' mode, or when
+   *  the lazy fetch is still in flight, or when the file was
+   *  binary / not-in-revision (in which case diffIsBinary is true). */
+  diffPatch?: string | null;
+  /** True when the diff backend returned isBinary=true for the
+   *  current (file, revision) pair; renders a "binary file"
+   *  placeholder in place of the (also null) patch. */
+  diffIsBinary?: boolean;
   /**
    * 2026-07-02 sidebar-search: 1-based line number to center in the
    * code view after a search-result click. null = no scroll.
@@ -45,24 +87,16 @@ const emit = defineEmits<{
 }>();
 const { tm } = useModuleI18n("features/chat");
 
-// 2026-07-09: file-level git history bridge.
-//
-// The History tab accepts a `path` filter (the GitDiffSidebar owns
-// useSpcodeGitLog and threads path into GET /spcode/git-log), but
-// the user previously had no way to set it from the file-preview
-// pane — they had to open History, retype the path, and click Apply.
-// We inject a setter from <GitDiffSidebar> so a single click on the
-// new "history" button switches the sidebar to the History tab and
-// pre-fills the path filter.
-//
-// Key string must match the one in GitDiffSidebar.vue's
-// `provide(SET_LOG_PATH_FILTER_KEY, ...)`. The noop default keeps
-// the component usable in isolation (e.g. storybook / unit tests)
-// where the sidebar is not an ancestor.
-const setLogPathFilter = inject<(path: string) => void>(
-  "spcode:setLogPathFilter",
-  () => {},
-);
+// 2026-07-15 workspace-history-parity: the file-level history
+// affordance used to live as an "mdi-history" button in this meta
+// header (2026-07-09). It was removed so the workspace tab matches
+// the document-manager tab, where history is a per-file SIDE PANEL
+// rather than a button that switches the entire sidebar to the
+// History tab. The "spcode:setLogPathFilter" inject key is still
+// provided by GitDiffSidebar; FileBrowserView (the sibling that owns
+// the new right-edge history pane) consumes it directly. Keeping
+// the noop default here makes this component reusable in isolation
+// (storybook / unit tests) without asserting on the inject.
 
 // Inner fullscreen bridge (spec 2026-07-15 gitdiff-workspace-fullscreen).
 // GitDiffSidebar provides `globalFullscreen` / `innerFullscreen` /
@@ -213,6 +247,59 @@ const highlightedHtml = computed(() => {
   }
 });
 
+/** Shiki-highlighted historical blob content (2026-07-15
+ *  workspace-history-inline). Same highlighter pipeline as the
+ *  current-file path above, but sourced from
+ *  `historicalContent` (the (path, rev) blob from useSpcodeGitFile)
+ *  and the language derived from the current file's meta path.
+ *  The path is the same file at a different revision, so the
+ *  extension-based language detection is still correct. Returns ""
+ *  when there's no revision picked (the parent passes "" for that
+ *  case), so callers can v-if on the returned string without
+ *  having to know which view is active. */
+const highlightedHistoricalHtml = computed<string>(() => {
+  if (!props.selectedRevision) return "";
+  const content = props.historicalContent ?? "";
+  if (!content) return "";
+  if (props.state.kind !== "file") return "";
+  if (!shikiReady.value || !shikiHighlighter.value) {
+    return `<pre><code>${escapeHtml(content)}</code></pre>`;
+  }
+  try {
+    return renderShikiCode(
+      shikiHighlighter.value,
+      content,
+      detectLanguage(props.state.snapshot.meta.path),
+      "auto",
+    );
+  } catch (err) {
+    console.error("Shiki (historical) render failed:", err);
+    return `<pre><code>${escapeHtml(content)}</code></pre>`;
+  }
+});
+
+/** Convenience flag for the template: true when a revision is
+ *  picked AND the view is "diff". Used to swap the body out for
+ *  <DiffPreview> instead of <FileBrowserCodeView>. */
+const isHistoricalDiff = computed<boolean>(
+  () => !!props.selectedRevision && (props.viewMode ?? "raw") === "diff",
+);
+/** Convenience flag for the template: true when a revision is
+ *  picked AND the view is "raw". Used to swap the body out for the
+ *  historical-blob code view. Both flags are exclusive with the
+ *  legacy "current file" path below — the parent's `previewPath`
+ *  watcher clears selectedRevision on file change. */
+const isHistoricalRaw = computed<boolean>(
+  () => !!props.selectedRevision && (props.viewMode ?? "raw") === "raw",
+);
+/** Short SHA label (first 7 chars) for the meta-header badge. We
+ *  use git's 7-char convention; longer SHAs still fit the chip
+ *  without wrapping. Empty string when no revision is picked so
+ *  the template can hide the badge with v-if. */
+const shortRevisionLabel = computed<string>(() =>
+  props.selectedRevision ? props.selectedRevision.slice(0, 7) : "",
+);
+
 const copyButtonText = ref<string>("");
 // Vuetify `color` accepts the theme token name; success/error give the
 // user a clear visual hint that distinguishes "已复制" (green) from
@@ -220,18 +307,33 @@ const copyButtonText = ref<string>("");
 const copyButtonColor = ref<"success" | "error" | undefined>(undefined);
 let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
 
-watch(highlightedHtml, () => {
+watch([highlightedHtml, highlightedHistoricalHtml], () => {
   // New file loaded → reset the transient success/fail feedback so
   // a "复制失败" toast from the previous file does not leak into the
   // freshly rendered header. Color is reset here too — without that,
   // a failed copy on the previous file would tint the new file's
-  // copy button red before the user even clicks it.
+  // copy button red before the user even clicks it. The 2026-07-15
+  // workspace-history-inline revision adds `highlightedHistoricalHtml`
+  // to the source list so toggling into / out of historical-raw mode
+  // also clears any "已复制" feedback left from the previous file.
   copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copy");
   copyButtonColor.value = undefined;
 });
 
 async function copyContent(): Promise<void> {
-  if (props.state.kind !== "file" || !props.state.snapshot.content) return;
+  // 2026-07-15 workspace-history-inline: support copying in both
+  // current-file mode AND historical-raw mode. The meta header's
+  // Copy button is already gated by `v-if` to avoid firing in
+  // other states; this guard keeps the helper safe to call from
+  // elsewhere (e.g. a keyboard shortcut) without depending on the
+  // v-if. Diff mode is intentionally excluded — the diff body
+  // isn't our text and is owned by <DiffPreview>.
+  const text = isHistoricalRaw.value
+    ? props.historicalContent ?? ""
+    : props.state.kind === "file"
+    ? props.state.snapshot.content
+    : null;
+  if (text === null || text === undefined || text === "") return;
   // Cancel any in-flight reset timer before scheduling a new one so
   // rapid double-clicks do not race the old timer into flipping the
   // button back to the default state mid-feedback.
@@ -244,7 +346,7 @@ async function copyContent(): Promise<void> {
   // <textarea>+execCommand("copy") fallback for HTTP / non-secure
   // deployments, and logs `[clipboard] ...` breadcrumbs so we can
   // diagnose future failures from the console alone.
-  const ok = await copyToClipboard(props.state.snapshot.content);
+  const ok = await copyToClipboard(text);
   if (ok) {
     copyButtonColor.value = "success";
     copyButtonText.value = tm(
@@ -327,10 +429,18 @@ function currentFileContent(): string | null {
  *  fileComments.contentCache. Both `onRequestAdd` (via extractLineContext
  *  on state.snapshot.content) and `addComment` (via contentCache) read
  *  the same value, so they MUST stay in sync — a stale preview would
- *  show context that doesn't match what the comment will actually store. */
+ *  show context that doesn't match what the comment will actually store.
+ *  2026-07-15 workspace-history-inline: when a revision is picked the
+ *  current-file content no longer represents the rendered body, so we
+ *  skip the registration. Otherwise the cached "context" extracted for
+ *  a comment would mismatch the historical blob the user is reading.
+ *  Both sources (current content + selected revision) are tracked so
+ *  toggling into or out of historical mode also drops / re-establishes
+ *  the cache. */
 watch(
-  () => currentFileContent(),
-  (content) => {
+  [() => currentFileContent(), () => props.selectedRevision],
+  ([content, rev]) => {
+    if (rev) return;
     const path = currentFilePath();
     if (path && content !== null) {
       fileComments.registerFileContent(path, content);
@@ -474,79 +584,107 @@ function onDeleteComment(commentId: string): void {
     </div>
 
     <!-- 文件 -->
-        <!-- Inner fullscreen (spec 2026-07-15 gitdiff-workspace-fullscreen):
-             teleport the entire preview-file block to <body> only while
-             innerFullscreen is on. The wrapper div outside the Teleport
-             keeps the v-else-if narrowing intact for Vue's template
-             type-checking (Teleport cannot forward a parent's v-if
-             narrowing into its children); the inner <div> carries the
-             `preview-file` class + `is-fullscreen` modifier and is the
-             actual element the CSS rules target. -->
-        <div v-else-if="state.kind === 'file'">
-        <Teleport to="body" :disabled="!innerFullscreen">
-        <div
-          class="preview-file"
-          :class="{ 'is-fullscreen': innerFullscreen }"
-        >
-      <!-- 元信息头 -->
-      <div class="preview-file-meta">
-        <span class="preview-file-path" :title="state.snapshot.meta.path">{{
-          state.snapshot.meta.name
-        }}</span>
-        <!-- 2026-07-03 ANSI/GBK 支持:当文件编码不是 utf-8 时,
+    <!-- Inner fullscreen (spec 2026-07-15 gitdiff-workspace-fullscreen):
+                 teleport the entire preview-file block to <body> only while
+                 innerFullscreen is on. The wrapper div outside the Teleport
+                 keeps the v-else-if narrowing intact for Vue's template
+                 type-checking (Teleport cannot forward a parent's v-if
+                 narrowing into its children); the inner <div> carries the
+                 `preview-file` class + `is-fullscreen` modifier and is the
+                 actual element the CSS rules target.
+
+               2026-07-15 fix: this wrapper also carries the `preview-file`
+               class itself. Without it the inner `.preview-file` (a flex
+               column with `height: 100%`) has no parent with a defined
+               height to resolve against — `state.kind === 'file'` is the
+               only thing the wrapper contributes for type narrowing, but
+               Vue still needs the wrapper as a normal block in the DOM,
+               and an undefined-height parent collapses every descendant
+               flex chain. Marking the wrapper `preview-file` re-establishes
+               the height chain (.file-browser-preview → wrapper →
+               inner → .code-view with overflow:auto) so long files scroll
+               inside the preview pane instead of clipping against the
+               outer overflow:hidden. -->
+        <div v-else-if="state.kind === 'file'" class="preview-file">
+          <Teleport to="body" :disabled="!innerFullscreen">
+            <div class="preview-file" :class="{ 'is-fullscreen': innerFullscreen }">
+          <!-- 元信息头 -->
+          <div class="preview-file-meta">
+            <span class="preview-file-path" :title="state.snapshot.meta.path">{{
+              state.snapshot.meta.name
+            }}</span>
+            <!-- 2026-07-03 ANSI/GBK 支持:当文件编码不是 utf-8 时,
              在元信息头显示一个 subtle 灰色 chip 提示用户。utf-8
              不显示(主流情况,避免视觉噪声);cp936/gbk/gb18030/
              latin-1/utf-8-sig 等显示完整编码名。 -->
-        <span
-          v-if="
-            state.snapshot.meta.encoding &&
-            state.snapshot.meta.encoding !== 'utf-8'
-          "
-          class="preview-file-encoding"
-          :title="
-            tm('spcodeProjectLoad.fileBrowser.preview.encodingLabel', {
-              encoding: state.snapshot.meta.encoding,
-            })
-          "
-        >
-          {{ state.snapshot.meta.encoding }}
-        </span>
-        <span class="preview-file-size">{{
-          formatBytes(state.snapshot.meta.size)
-        }}</span>
-        <span class="preview-file-mtime">{{
-          formatMtime(state.snapshot.meta.mtime)
-        }}</span>
-        <!--
-          2026-07-09: file-level git history shortcut.
-          Sits next to the Copy button so both per-file actions are
-          visually grouped at the right edge of the meta header.
-          Unlike Copy, this button is NOT gated on
-          `state.snapshot.content` — binary / too-large files still
-          have a history (when they were added, last touched, etc.)
-          and the user often wants to see exactly that.
+            <span
+              v-if="
+                state.snapshot.meta.encoding &&
+                state.snapshot.meta.encoding !== 'utf-8'
+              "
+              class="preview-file-encoding"
+              :title="
+                tm('spcodeProjectLoad.fileBrowser.preview.encodingLabel', {
+                  encoding: state.snapshot.meta.encoding,
+                })
+              "
+            >
+              {{ state.snapshot.meta.encoding }}
+            </span>
+            <span class="preview-file-size">{{
+              formatBytes(state.snapshot.meta.size)
+            }}</span>
+            <span class="preview-file-mtime">{{
+              formatMtime(state.snapshot.meta.mtime)
+            }}</span>
+            <!--
+          2026-07-15 workspace-history-inline: when a revision is
+          picked the preview body is no longer the working copy —
+          a small chip next to the file name tells the user which
+          revision they're looking at, with `mdi-git` as the icon
+          and the long SHA stored in the tooltip so a hover reveals
+          the full hash. Mirrors <DocumentManager>'s revision badge
+          placement (same chip styling, same slot between meta
+          values and the action buttons).
         -->
-        <v-btn
-          size="x-small"
-          variant="text"
-          color="primary"
-          prepend-icon="mdi-history"
-          :title="tm('spcodeProjectLoad.fileBrowser.preview.showHistory')"
-          @click="setLogPathFilter(state.snapshot.meta.path)"
-        >
-          {{ tm("spcodeProjectLoad.fileBrowser.preview.showHistory") }}
-        </v-btn>
-        <v-btn
-          v-if="state.snapshot.content"
-          size="x-small"
-          variant="text"
-          :color="copyButtonColor"
-          prepend-icon="mdi-content-copy"
-          @click="copyContent"
-        >
-          {{ copyButtonText }}
-        </v-btn>
-        <!-- Inner fullscreen button (spec 2026-07-15 gitdiff-
+            <span
+              v-if="shortRevisionLabel"
+              class="preview-file-revision"
+              :title="props.selectedRevision ?? ''"
+            >
+              <v-icon size="14">mdi-git</v-icon>
+              <span>@{{ shortRevisionLabel }}</span>
+            </span>
+            <!--
+          2026-07-15 workspace-history-parity: the per-file "View
+          file history" button used to live here. It was removed
+          so the workspace tab mirrors the document-manager tab,
+          where history is shown in a right-edge SIDE PANEL
+          (<DocumentHistoryPanel>) owned by <FileBrowserView>.
+          The "Copy" button (next) is the only remaining per-file
+          action in this meta header.
+
+          2026-07-15 workspace-history-inline: the copy button now
+          also serves the historical-raw view — copying the picked
+          revision's content is a reasonable action (the user is
+          inspecting it precisely because they want to compare).
+          Diff mode copies nothing (it'd be the entire patch,
+          which would be surprising); same as <DocumentManager>.
+        -->
+            <v-btn
+              v-if="
+                (state.snapshot.content && !isHistoricalDiff) ||
+                (isHistoricalRaw && (props.historicalContent ?? ''))
+              "
+              size="x-small"
+              variant="text"
+              :color="copyButtonColor"
+              prepend-icon="mdi-content-copy"
+              @click="copyContent"
+            >
+              {{ copyButtonText }}
+            </v-btn>
+            <!-- Inner fullscreen button (spec 2026-07-15 gitdiff-
              workspace-fullscreen). Reuses the document manager
              translations so the icon/aria-label read consistently
              with the top-bar fullscreen control. `isAnyFullscreen`
@@ -554,76 +692,144 @@ function onDeleteComment(commentId: string): void {
              while global is on cancels global (per the sidebar's
              toggleInnerFullscreen helper, which enforces mutual
              exclusion). -->
-        <v-btn
-          size="x-small"
-          variant="text"
-          color="primary"
-          :icon="
-            isAnyFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'
-          "
-          :aria-pressed="isAnyFullscreen"
-          :aria-label="
-            tm(
-              isAnyFullscreen
-                ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
-                : 'spcodeProjectLoad.documentManager.fullscreen.enter',
-            )
-          "
-          :title="
-            tm(
-              isAnyFullscreen
-                ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
-                : 'spcodeProjectLoad.documentManager.fullscreen.enter',
-            )
-          "
-          @click="toggleInnerFullscreen"
-        />
-      </div>
+            <v-btn
+              size="x-small"
+              variant="text"
+              color="primary"
+              :icon="isAnyFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
+              :aria-pressed="isAnyFullscreen"
+              :aria-label="
+                tm(
+                  isAnyFullscreen
+                    ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                    : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+                )
+              "
+              :title="
+                tm(
+                  isAnyFullscreen
+                    ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
+                    : 'spcodeProjectLoad.documentManager.fullscreen.enter',
+                )
+              "
+              @click="toggleInnerFullscreen"
+            />
+          </div>
 
-      <!-- 二进制文件 -->
-      <div v-if="state.snapshot.meta.isBinary === true" class="preview-binary">
-        <v-icon size="32" color="grey">mdi-file-question-outline</v-icon>
-        <span>{{ tm("spcodeProjectLoad.fileBrowser.preview.binary") }}</span>
-      </div>
+          <!--
+        2026-07-15 workspace-history-inline: when a revision is
+        picked in 'diff' mode, the body becomes the unified
+        diff between that revision and the working copy. We
+        reuse <DiffPreview> verbatim (it lives next door and the
+        document-manager tab already drives it the same way).
+        Renders before the legacy branches so the historical view
+        wins over both binary / too-large / current-text paths.
+        DiffPreview accepts plain unified diff text; it parses
+        the hunk headers itself, so the prop is just `content`.
+        `commentable` is intentionally false — comments key on
+        current-file line numbers, which don't match diff lines.
+      -->
+          <DiffPreview
+            v-if="isHistoricalDiff"
+            :content="props.diffPatch ?? ''"
+            :file-path="state.snapshot.meta.path"
+            :summary="
+              props.diffIsBinary
+                ? tm('spcodeProjectLoad.fileBrowser.preview.binary')
+                : (props.diffPatch ?? '').length
+                ? ''
+                : tm('spcodeProjectLoad.fileBrowser.loading')
+            "
+            :is-dark="isDark"
+            :commentable="false"
+          />
 
-      <!-- 过大文件 -->
-      <div v-else-if="state.snapshot.content === null" class="preview-binary">
-        <v-icon size="32" color="grey">mdi-file-alert-outline</v-icon>
-        <span>{{
-          tm("spcodeProjectLoad.fileBrowser.preview.tooLarge", {
-            size: formatBytes(state.snapshot.meta.size),
-          })
-        }}</span>
-      </div>
+          <!--
+        Historical-raw mode: a revision is picked but the user
+        asked to see the file content at that revision (not the
+        diff). The blob is binary → placeholder, otherwise it
+        flows through the same <FileBrowserCodeView> as the
+        current file. We deliberately DO NOT register a comment
+        gutter here — see the historicalContent watcher above.
+      -->
+          <div
+            v-else-if="isHistoricalRaw && props.historicalIsBinary"
+            class="preview-binary"
+          >
+            <v-icon size="32" color="grey">mdi-file-question-outline</v-icon>
+            <span>{{
+              tm("spcodeProjectLoad.fileBrowser.preview.binary")
+            }}</span>
+          </div>
+          <FileBrowserCodeView
+            v-else-if="isHistoricalRaw && highlightedHistoricalHtml"
+            :highlighted-html="highlightedHistoricalHtml"
+            :file-path="state.snapshot.meta.path"
+            :comments="[]"
+            :active-edit-line="null"
+            :active-edit-comment-id="null"
+            :is-dark="isDark"
+            :scroll-to-line="null"
+            @request-add="onRequestAdd"
+            @request-edit="onRequestEdit"
+          />
+          <div v-else-if="isHistoricalRaw" class="preview-binary">
+            <v-progress-circular indeterminate color="primary" :size="20" />
+            <span>{{ tm("spcodeProjectLoad.fileBrowser.loading") }}</span>
+          </div>
 
-      <!-- 文本内容(Shiki 高亮) + 行内评论 gutter/编辑器 -->
-      <FileBrowserCodeView
-        v-else
-        :highlighted-html="highlightedHtml"
-        :file-path="state.snapshot.meta.path"
-        :comments="fileComments.commentsForFile(state.snapshot.meta.path)"
-        :active-edit-line="activeEditLine"
-        :active-edit-comment-id="activeEditCommentId"
-        :is-dark="isDark"
-        :scroll-to-line="props.scrollToLine ?? null"
-        @request-add="onRequestAdd"
-        @request-edit="onRequestEdit"
-      />
-      <FileCommentEditor
-        v-if="activeEditLine !== null"
-        :line="activeEditLine"
-        :comment-id="activeEditCommentId"
-        :initial-text="editorInitialText"
-        :line-content="editorContext?.lineContent ?? null"
-        :context-before="editorContext?.contextBefore ?? null"
-        :context-after="editorContext?.contextAfter ?? null"
-        :file-path="state.snapshot.meta.path"
-        @save="onSaveComment"
-        @cancel="closeEditor"
-        @delete="onDeleteComment"
-      />
-    </div>
-    </Teleport>
+          <!-- 二进制文件 (legacy: current working copy is binary) -->
+          <div
+            v-else-if="state.snapshot.meta.isBinary === true"
+            class="preview-binary"
+          >
+            <v-icon size="32" color="grey">mdi-file-question-outline</v-icon>
+            <span>{{
+              tm("spcodeProjectLoad.fileBrowser.preview.binary")
+            }}</span>
+          </div>
+
+          <!-- 过大文件 (legacy: current working copy is too large) -->
+          <div
+            v-else-if="state.snapshot.content === null"
+            class="preview-binary"
+          >
+            <v-icon size="32" color="grey">mdi-file-alert-outline</v-icon>
+            <span>{{
+              tm("spcodeProjectLoad.fileBrowser.preview.tooLarge", {
+                size: formatBytes(state.snapshot.meta.size),
+              })
+            }}</span>
+          </div>
+
+          <!-- 文本内容(Shiki 高亮) + 行内评论 gutter/编辑器 (legacy: current) -->
+          <FileBrowserCodeView
+            v-else
+            :highlighted-html="highlightedHtml"
+            :file-path="state.snapshot.meta.path"
+            :comments="fileComments.commentsForFile(state.snapshot.meta.path)"
+            :active-edit-line="activeEditLine"
+            :active-edit-comment-id="activeEditCommentId"
+            :is-dark="isDark"
+            :scroll-to-line="props.scrollToLine ?? null"
+            @request-add="onRequestAdd"
+            @request-edit="onRequestEdit"
+          />
+          <FileCommentEditor
+            v-if="activeEditLine !== null"
+            :line="activeEditLine"
+            :comment-id="activeEditCommentId"
+            :initial-text="editorInitialText"
+            :line-content="editorContext?.lineContent ?? null"
+            :context-before="editorContext?.contextBefore ?? null"
+            :context-after="editorContext?.contextAfter ?? null"
+            :file-path="state.snapshot.meta.path"
+            @save="onSaveComment"
+            @cancel="closeEditor"
+            @delete="onDeleteComment"
+          />
+        </div>
+      </Teleport>
     </div>
     <v-snackbar
       v-model="snackbar.visible"
@@ -747,6 +953,28 @@ function onDeleteComment(commentId: string): void {
   background: rgba(var(--v-theme-on-surface), 0.08);
   color: rgba(var(--v-theme-on-surface), 0.7);
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  cursor: help;
+  user-select: none;
+}
+/* 2026-07-15 workspace-history-inline: pill that announces
+   "viewing commit @abc1234" in the meta header. Mirrors the
+   encoding chip visually (same monospace / padding / muted
+   background) but uses a primary-tinted background so the user
+   immediately notices they're NOT looking at the current file.
+   `user-select: none` keeps the chip from being selected when
+   the user copy-pastes adjacent text; the title attribute carries
+   the full SHA on hover. */
+.preview-file-revision {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgba(var(--v-theme-primary), 1);
+  border: 1px solid rgba(var(--v-theme-primary), 0.32);
   cursor: help;
   user-select: none;
 }
