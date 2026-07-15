@@ -329,6 +329,7 @@ export type MessagePart = {
     attachment_id?: string;
     url?: string;
     filename?: string;
+    stored_filename?: string;
     mime_type?: string;
     [key: string]: unknown | string;
 };
@@ -1369,6 +1370,16 @@ export type StopChatSessionData = {
 export type StopChatSessionResponse = (SuccessEnvelope);
 
 export type StopChatSessionError = unknown;
+
+export type ResumeChatRunData = {
+    path: {
+        run_id: string;
+    };
+};
+
+export type ResumeChatRunResponse = (unknown);
+
+export type ResumeChatRunError = unknown;
 
 export type UpdateChatMessageData = {
     body: ChatMessagePatchRequest;

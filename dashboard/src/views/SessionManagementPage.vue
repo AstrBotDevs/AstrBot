@@ -650,7 +650,7 @@
       </v-dialog>
 
       <!-- 提示信息 -->
-      <v-snackbar v-model="snackbar" :timeout="3000" elevation="24" :color="snackbarColor" location="top">
+      <v-snackbar v-model="snackbar" :timeout="3000" elevation="6" :color="snackbarColor" location="top">
         {{ snackbarText }}
       </v-snackbar>
 

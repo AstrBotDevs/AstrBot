@@ -156,6 +156,9 @@
     "duration": "Время",
     "ttft": "Время до первого токена"
   },
+  "tokenUsage": {
+    "tooltip": "{used} / {limit} токенов ({percent}%)"
+  },
   "refs": {
     "title": "Ссылки",
     "sources": "Источники"

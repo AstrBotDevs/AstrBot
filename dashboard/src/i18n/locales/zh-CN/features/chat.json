@@ -156,6 +156,9 @@
     "duration": "耗时",
     "ttft": "首字时间"
   },
+  "tokenUsage": {
+    "tooltip": "{used} / {limit} tokens（{percent}%）"
+  },
   "refs": {
     "title": "引用",
     "sources": "来源"
