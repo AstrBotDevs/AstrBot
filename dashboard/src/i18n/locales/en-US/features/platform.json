@@ -17,11 +17,6 @@
     "token": "Token",
     "description": "Description"
   },
-  "logs": {
-    "title": "Platform Logs",
-    "expand": "Expand",
-    "collapse": "Collapse"
-  },
   "dialog": {
     "add": "Add",
     "edit": "Edit",

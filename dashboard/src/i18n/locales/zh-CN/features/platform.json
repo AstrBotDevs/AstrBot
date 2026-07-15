@@ -17,11 +17,6 @@
     "token": "Token",
     "description": "描述"
   },
-  "logs": {
-    "title": "平台日志",
-    "expand": "展开",
-    "collapse": "收起"
-  },
   "dialog": {
     "add": "新增",
     "edit": "编辑",
