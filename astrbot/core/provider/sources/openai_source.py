@@ -992,6 +992,20 @@ class ProviderOpenAIOfficial(Provider):
     def _finally_convert_payload(self, payloads: dict) -> None:
         """Finally convert the payload. Such as think part conversion, tool inject."""
         model = payloads.get("model", "").lower()
+        # GLM's OpenAI-compatible API only accepts string content.
+        if "glm" in model:
+            for message in payloads.get("messages", []):
+                content = message.get("content")
+
+                if isinstance(content, list):
+                    texts = []
+
+                    for part in content:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            texts.append(part.get("text", ""))
+
+                    message["content"] = "\n".join(texts)
+
         is_gemini = "gemini" in model
         _deepseek_v4_markers = ("deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v4")
         is_deepseek_v4_reasoning = (
@@ -1420,6 +1434,12 @@ class ProviderOpenAIOfficial(Provider):
             and content_blocks[0]["type"] == "text"
         ):
             return {"role": "user", "content": content_blocks[0]["text"]}
+
+        if "glm" in self.get_model().lower() and all(
+            part.get("type") == "text" for part in content_blocks
+        ):
+            text_content = "".join(part.get("text", "") for part in content_blocks)
+            return {"role": "user", "content": text_content}
 
         # 否则返回多模态格式
         return {"role": "user", "content": content_blocks}
