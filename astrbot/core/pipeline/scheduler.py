@@ -126,7 +126,7 @@ class PipelineScheduler:
             if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
                 await event.send(None)
 
-            logger.debug("pipeline 执行完毕。")
+            logger.debug("pipeline execution completed.")
         except Exception as e:
             if event.trace.finished_at is None:
                 event.trace.finish(status="error", error=str(e))

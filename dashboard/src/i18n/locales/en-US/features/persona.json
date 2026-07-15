@@ -10,7 +10,9 @@
     "cancel": "Cancel",
     "save": "Save",
     "move": "Move",
-    "addDialogPair": "Add Dialog Pair"
+    "addDialogPair": "Add Dialog Pair",
+    "export": "Export",
+    "import": "Import Persona"
   },
   "labels": {
     "presetDialogs": "Preset Dialogs ({count} pairs)",
@@ -83,7 +85,15 @@
     "saveError": "Save failed",
     "deleteConfirm": "Are you sure you want to delete persona \"{id}\"? This action cannot be undone.",
     "deleteSuccess": "Deleted successfully",
-    "deleteError": "Delete failed"
+    "deleteError": "Delete failed",
+    "exportConfirm": "Export only includes system prompt and preset dialogs, not tools and Skills config. Continue?",
+    "exportSuccess": "Exported successfully",
+    "exportError": "Export failed: {error}",
+    "importSuccess": "Persona imported successfully, please configure tools and Skills manually",
+    "importError": "Import failed: {error}",
+    "importFormatError": "Invalid file format, please select a valid persona export file",
+    "importMissingPrompt": "Incomplete file content, missing system prompt",
+    "importIdExists": "Persona name already exists, renamed to \"{id}\""
   },
   "persona": {
     "personasTitle": "Personas",

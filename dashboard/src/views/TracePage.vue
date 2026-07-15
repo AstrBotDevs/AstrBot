@@ -2,6 +2,7 @@
 import SpanDetail from "@/components/shared/SpanDetail.vue";
 import SpanTree from "@/components/shared/SpanTree.vue";
 import TraceDisplayer from "@/components/shared/TraceDisplayer.vue";
+import { traceApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import axios from "axios";
 import { computed, onMounted, ref } from "vue";
@@ -85,7 +86,7 @@ const startDraggingTree = (e) => {
 
 const fetchTraceSettings = async () => {
   try {
-    const res = await axios.get("/api/trace/settings");
+    const res = await traceApi.getSettings();
     if (res.data?.status === "ok") {
       traceEnabled.value = res.data.data?.trace_enable ?? false;
     }
@@ -97,7 +98,7 @@ const fetchTraceSettings = async () => {
 const updateTraceSettings = async () => {
   loading.value = true;
   try {
-    await axios.post("/api/trace/settings", {
+    await traceApi.updateSettings({
       trace_enable: traceEnabled.value,
     });
     traceDisplayerKey.value += 1;

@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import base64
 import enum
 import json
-import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from anthropic.types import Message as AnthropicMessage
 from google.genai.types import GenerateContentResponse
@@ -25,8 +21,7 @@ from astrbot.core.agent.message import (
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.db.po import Conversation
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file, download_image_by_url
+from astrbot.core.utils.media_utils import MediaResolver
 
 
 class ProviderType(enum.Enum):
@@ -211,63 +206,43 @@ class ProviderRequest:
         # 3. 图片内容
         if self.image_urls:
             for image_url in self.image_urls:
-                if image_url.startswith("http"):
-                    image_path = await download_image_by_url(image_url)
-                    image_data = await self._encode_image_bs64(image_path)
-                elif image_url.startswith("file:///"):
-                    image_path = image_url.replace("file:///", "")
-                    image_data = await self._encode_image_bs64(image_path)
-                else:
-                    image_data = await self._encode_image_bs64(image_url)
+                image_data = await MediaResolver(
+                    image_url,
+                    media_type="image",
+                ).to_base64_data()
                 if not image_data:
-                    logger.warning(f"图片 {image_url} 得到的结果为空，将忽略。")
+                    logger.warning("图片预处理结果为空，将忽略。")
                     continue
                 content_blocks.append(
-                    {"type": "image_url", "image_url": {"url": image_data}},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_data.to_data_url()},
+                    },
                 )
 
         # 4. 音频内容
         if self.audio_urls:
             for audio_url in self.audio_urls:
-                if audio_url.startswith("http"):
-                    parsed_url = urlparse(audio_url)
-                    suffix = Path(parsed_url.path).suffix
-                    temp_dir = Path(get_astrbot_temp_path())
-                    temp_dir.mkdir(parents=True, exist_ok=True)
-                    temp_audio_path = (
-                        temp_dir / f"provider_request_audio_{uuid.uuid4().hex}{suffix}"
-                    )
-                    try:
-                        await download_file(audio_url, str(temp_audio_path))
-                        audio_data = await self._encode_audio_bs64(
-                            str(temp_audio_path),
-                            source_ref=audio_url,
-                        )
-                    finally:
-                        try:
-                            temp_audio_path.unlink(missing_ok=True)
-                        except Exception as exc:
-                            logger.warning(
-                                "Failed to cleanup %s: %s",
-                                temp_audio_path,
-                                exc,
-                            )
-                elif audio_url.startswith("file:///"):
-                    audio_path = audio_url.replace("file:///", "")
-                    audio_data = await self._encode_audio_bs64(
-                        audio_path,
-                        source_ref=audio_url,
-                    )
-                else:
-                    audio_data = await self._encode_audio_bs64(
+                try:
+                    audio_data = await MediaResolver(
                         audio_url,
-                        source_ref=audio_url,
+                        media_type="audio",
+                        default_suffix=".wav",
+                    ).to_base64_data(
+                        strict=True,
+                        target_format="wav",
                     )
+                except Exception as exc:
+                    logger.warning("音频预处理失败，将忽略。错误: %s", exc)
+                    continue
                 if not audio_data:
-                    logger.warning(f"音频 {audio_url} 得到的结果为空，将忽略。")
+                    logger.warning("音频预处理结果为空，将忽略。")
                     continue
                 content_blocks.append(
-                    {"type": "audio_url", "audio_url": {"url": audio_data}},
+                    {
+                        "type": "audio_url",
+                        "audio_url": {"url": audio_data.to_data_url()},
+                    },
                 )
 
         # 只有当只有一个来自 prompt 的文本块且没有额外内容块时，才降级为简单格式以保持向后兼容
@@ -282,29 +257,6 @@ class ProviderRequest:
 
         # 否则返回多模态格式
         return {"role": "user", "content": content_blocks}
-
-    async def _encode_image_bs64(self, image_url: str) -> str:
-        """将图片转换为 base64"""
-        if image_url.startswith("base64://"):
-            return image_url.replace("base64://", "data:image/jpeg;base64,")
-        with open(image_url, "rb") as f:
-            image_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return "data:image/jpeg;base64," + image_bs64
-
-    async def _encode_audio_bs64(
-        self,
-        audio_path: str,
-        source_ref: str | None = None,
-    ) -> str:
-        """将音频转换为 base64"""
-        mime_type = "audio/wav"
-
-        if audio_path.startswith("base64://"):
-            return audio_path.replace("base64://", f"data:{mime_type};base64,", 1)
-
-        with open(audio_path, "rb") as f:
-            audio_bs64 = base64.b64encode(f.read()).decode("utf-8")
-            return f"data:{mime_type};base64," + audio_bs64
 
 
 @dataclass

@@ -411,8 +411,16 @@ class SlackAdapter(Platform):
     def meta(self) -> PlatformMetadata:
         return self.metadata
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = SlackMessageEvent(
+    def create_event(self, message: AstrBotMessage) -> SlackMessageEvent:
+        """Creates a Slack message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Slack message event.
+        """
+        return SlackMessageEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
@@ -420,7 +428,8 @@ class SlackAdapter(Platform):
             web_client=self.web_client,
         )
 
-        self.commit_event(message_event)
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     def get_client(self):
         return self.web_client

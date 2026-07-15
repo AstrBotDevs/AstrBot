@@ -121,7 +121,7 @@ class WecomAIBotAdapter(Platform):
             name="wecom_ai_bot",
             description="企业微信智能机器人适配器，支持 HTTP 回调和长连接模式",
             id=self.config.get("id", "wecom_ai_bot"),
-            support_proactive_message=bool(self.msg_push_webhook_url),
+            support_proactive_message=True,
         )
 
         self.api_client: WecomAIBotAPIClient | None = None
@@ -568,21 +568,18 @@ class WecomAIBotAdapter(Platform):
     ) -> None:
         """通过消息推送 webhook 发送消息。"""
         if not self.webhook_client:
-            logger.warning(
-                "主动消息发送失败: 未配置企业微信消息推送 Webhook URL，请前往配置添加。session_id=%s",
-                session.session_id,
+            raise RuntimeError(
+                "主动消息发送失败: 未配置企业微信消息推送 Webhook URL，请前往配置添加。"
+                "详见文档: https://docs.astrbot.app/platform/wecom_ai_bot.html#%E9%85%8D%E7%BD%AE-astrbot。"
+                f"session_id={session.session_id}"
             )
-            await super().send_by_session(session, message_chain)
-            return
 
         try:
             await self.webhook_client.send_message_chain(message_chain)
         except Exception as e:
-            logger.error(
-                "企业微信消息推送失败(session=%s): %s",
-                session.session_id,
-                e,
-            )
+            raise RuntimeError(
+                f"企业微信消息推送失败: session_id={session.session_id}, error={e}"
+            ) from e
         await super().send_by_session(session, message_chain)
 
     def run(self) -> Awaitable[Any]:
@@ -645,27 +642,34 @@ class WecomAIBotAdapter(Platform):
         """获取平台元数据"""
         return self.metadata
 
+    def create_event(self, message: AstrBotMessage) -> WecomAIBotMessageEvent:
+        """Creates a WeCom AI Bot message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created WeCom AI Bot message event.
+        """
+        message_event = WecomAIBotMessageEvent(
+            message_str=message.message_str,
+            message_obj=message,
+            platform_meta=self.meta(),
+            session_id=message.session_id,
+            api_client=self.api_client,
+            queue_mgr=self.queue_mgr,
+            webhook_client=self.webhook_client,
+            only_use_webhook_url_to_send=self.only_use_webhook_url_to_send,
+            long_connection_sender=self._send_long_connection_respond_msg,
+        )
+        message_event.is_at_or_wake_command = True
+        message_event.is_wake = True
+        return message_event
+
     async def handle_msg(self, message: AstrBotMessage) -> None:
         """处理消息，创建消息事件并提交到事件队列"""
         try:
-            message_event = WecomAIBotMessageEvent(
-                message_str=message.message_str,
-                message_obj=message,
-                platform_meta=self.meta(),
-                session_id=message.session_id,
-                api_client=self.api_client,
-                queue_mgr=self.queue_mgr,
-                webhook_client=self.webhook_client,
-                only_use_webhook_url_to_send=self.only_use_webhook_url_to_send,
-                long_connection_sender=self._send_long_connection_respond_msg,
-            )
-            message_event.is_at_or_wake_command = (
-                True  # 企业微信智能机器人默认消息都是 at 或唤醒命令
-            )
-            message_event.is_wake = True  # 企业微信智能机器人消息默认当做唤醒命令处理
-
-            self.commit_event(message_event)
-
+            self.commit_event(self.create_event(message))
         except Exception as e:
             logger.error("处理消息时发生异常: %s", e)
 

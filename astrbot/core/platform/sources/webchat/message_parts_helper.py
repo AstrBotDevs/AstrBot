@@ -3,7 +3,7 @@ import mimetypes
 import shutil
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from astrbot.core.db.po import Attachment
@@ -17,6 +17,7 @@ from astrbot.core.message.components import (
     Video,
 )
 from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.utils.media_utils import MediaResolver
 
 AttachmentGetter = Callable[[str], Awaitable[Attachment | None]]
 AttachmentInserter = Callable[[str, str, str], Awaitable[Attachment | None]]
@@ -26,6 +27,23 @@ ReplyHistoryGetter = Callable[
 ]
 
 MEDIA_PART_TYPES = {"image", "record", "file", "video"}
+
+
+def _safe_display_filename(filename: str | None) -> str:
+    """Return a safe basename for display-only filenames.
+
+    Args:
+        filename: Candidate filename from a message payload or component.
+
+    Returns:
+        Sanitized basename, or an empty string when the value is unusable.
+    """
+    if not filename:
+        return ""
+    basename = (
+        PurePosixPath(str(filename).replace("\\", "/")).name.replace("\x00", "").strip()
+    )
+    return "" if basename in {"", ".", ".."} else basename
 
 
 def strip_message_parts_path_fields(message_parts: list[dict]) -> list[dict]:
@@ -151,7 +169,12 @@ async def parse_webchat_message_parts(
         if part_type == "image":
             components.append(Image.fromFileSystem(file_path_str))
         elif part_type == "record":
-            components.append(Record.fromFileSystem(file_path_str))
+            path_wav = await MediaResolver(
+                file_path_str,
+                media_type="audio",
+                default_suffix=".wav",
+            ).to_path(target_format="wav")
+            components.append(Record(file=path_wav, url=path_wav))
         elif part_type == "video":
             components.append(Video.fromFileSystem(file_path_str))
         else:
@@ -223,14 +246,19 @@ async def build_webchat_message_parts(
             continue
 
         attachment_path = Path(attachment.path)
+        display_name = (
+            _safe_display_filename(part.get("filename")) or attachment_path.name
+        )
         message_parts.append(
             {
                 "type": attachment.type,
                 "attachment_id": attachment.attachment_id,
-                "filename": attachment_path.name,
+                "filename": display_name,
                 "path": str(attachment_path),
             }
         )
+        if display_name != attachment_path.name:
+            message_parts[-1]["stored_filename"] = attachment_path.name
 
     return message_parts
 
@@ -334,6 +362,7 @@ async def create_attachment_part_from_existing_file(
     insert_attachment: AttachmentInserter,
     attachments_dir: str | Path,
     fallback_dirs: Sequence[str | Path] = (),
+    display_name: str | None = None,
 ) -> dict | None:
     basename = Path(filename).name
     candidate_paths = [Path(attachments_dir) / basename]
@@ -352,11 +381,15 @@ async def create_attachment_part_from_existing_file(
     if not attachment:
         return None
 
-    return {
+    safe_display_name = _safe_display_filename(display_name)
+    part = {
         "type": attach_type,
         "attachment_id": attachment.attachment_id,
-        "filename": file_path.name,
+        "filename": safe_display_name or file_path.name,
     }
+    if part["filename"] != file_path.name:
+        part["stored_filename"] = file_path.name
+    return part
 
 
 async def message_chain_to_storage_message_parts(
@@ -458,8 +491,11 @@ async def _copy_file_to_attachment_part(
     if not attachment:
         return None
 
-    return {
+    part = {
         "type": attach_type,
         "attachment_id": attachment.attachment_id,
-        "filename": display_name or src_path.name,
+        "filename": _safe_display_filename(display_name) or src_path.name,
     }
+    if part["filename"] != target_path.name:
+        part["stored_filename"] = target_path.name
+    return part

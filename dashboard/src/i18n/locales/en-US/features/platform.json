@@ -9,7 +9,7 @@
   "webhookCopyFailed": "Copy failed, please copy manually",
   "webhookDialog": {
     "title": "Webhook Callback URL",
-    "description": "The callback address is as follows, please ensure that the network environment can be accessed. You can also view the callback address information in the logs.",
+    "description": "The callback address is as follows, please ensure that the network environment can be publicly accessible. You can also view the callback address information in the logs. It is recommended to fill in the \"Externally Accessible Callback API Address\" in Settings -> General.",
     "close": "Close"
   },
   "details": {
@@ -64,6 +64,12 @@
     "editMode": "Edit",
     "noRouteRules": "No route rules for this platform. The default config file will be used.",
     "sessionIdPlaceholder": "Session ID or *",
+    "routeSource": {
+      "selectPlaceholder": "Select session source",
+      "noData": "No unified message source for this bot is available yet. It will appear here after this bot receives at least one message from the corresponding messaging platform.",
+      "switchToKnown": "Switch to existing source selection",
+      "switchToManual": "Switch to manual input"
+    },
     "allSessions": "All sessions",
     "configMissing": "Config file not found",
     "routeHint": "When delivering messages, the first matching config file from top to bottom is used based on session source. Use * to match all. Use /sid to get the session ID. If none match, the default config file is used.",
@@ -157,10 +163,27 @@
       "scanTitle": "Scan with DingTalk on your phone",
       "created": "Setup Complete"
     },
+    "qqOfficial": {
+      "title": "QQ Official Bot QR Binding",
+      "scanTitle": "Scan with QQ on your phone",
+      "created": "Binding Complete",
+      "status": {
+        "idle": "Not Started",
+        "starting": "Getting QR Code",
+        "pending": "Waiting for Scan",
+        "created": "Binding Complete - remember to click the save button!",
+        "denied": "Canceled",
+        "expired": "Expired",
+        "error": "Binding Failed"
+      }
+    },
     "start": "Start Setup",
     "created": "Setup Complete",
     "startFailed": "Failed to start QR setup",
     "pollFailed": "Failed to poll QR setup status",
+    "platformIdLabel": "Bot ID",
+    "platformIdRequired": "Bot ID is required",
+    "platformIdInvalid": "Bot ID cannot contain spaces, ':' or '!'",
     "mode": {
       "title": "Choose setup method",
       "scan": "One-click QR setup",
@@ -188,4 +211,4 @@
     "traceback": "Traceback",
     "close": "Close"
   }
-} 
+}
