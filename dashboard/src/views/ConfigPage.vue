@@ -166,7 +166,7 @@
     </v-card>
   </v-dialog>
 
-  <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack">
+  <v-snackbar :timeout="3000" elevation="6" :color="save_message_success" v-model="save_message_snack">
     {{ save_message }}
   </v-snackbar>
 
