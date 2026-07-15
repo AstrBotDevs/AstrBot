@@ -207,8 +207,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     @classmethod
     def _has_mention(cls, message: MessageChain) -> bool:
         return any(
-            isinstance(component, At)
-            and cls._get_mention_id(component) is not None
+            isinstance(component, At) and cls._get_mention_id(component) is not None
             for component in message.chain
         )
 
