@@ -1069,6 +1069,7 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert "/api/v1/mcp/servers" in spec["paths"]
     assert "/api/v1/mcp/resources" in spec["paths"]
     assert "/api/v1/mcp/resource-templates" in spec["paths"]
+    assert "/api/v1/mcp/prompts" in spec["paths"]
     assert "/api/v1/mcp/resources/read" in spec["paths"]
     assert "/api/v1/skills" in spec["paths"]
     assert "/api/v1/file" in spec["paths"]
@@ -1089,6 +1090,7 @@ def test_static_openapi_v1_paths_include_api_version():
 
     assert path_keys
     assert all(path.startswith("/api/v1/") for path in path_keys)
+    assert "/api/v1/mcp/prompts" in path_keys
 
 
 @pytest.mark.asyncio
@@ -3285,6 +3287,105 @@ async def test_v1_mcp_resource_routes_require_mcp_scope(
     list_resources.assert_awaited_once_with("demo-server", None)
     list_resource_templates.assert_awaited_once_with("demo-server", None)
     read_resource.assert_awaited_once_with("demo-server", "file:///guide.md")
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_prompt_catalog_route(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    client = SimpleNamespace(
+        supports_prompts=True,
+        list_prompts=AsyncMock(
+            return_value=SimpleNamespace(
+                prompts=[
+                    SimpleNamespace(
+                        name="review",
+                        title="Review code",
+                        description="Review a change",
+                        arguments=[
+                            SimpleNamespace(
+                                name="language",
+                                description="Programming language",
+                                required=True,
+                            )
+                        ],
+                        icons=[{"src": "https://example.invalid/icon.png"}],
+                        meta={"secret": "not exposed"},
+                    )
+                ],
+                nextCursor="",
+                meta={"secret": "not exposed"},
+            )
+        ),
+    )
+    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    fake_tools.mcp_server_runtime_view["demo-server"] = SimpleNamespace(client=client)
+
+    response = await asgi_client.get(
+        "/api/v1/mcp/prompts",
+        params={"server_name": "demo-server", "cursor": ""},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "prompts": [
+            {
+                "name": "review",
+                "title": "Review code",
+                "description": "Review a change",
+                "arguments": [
+                    {
+                        "name": "language",
+                        "description": "Programming language",
+                        "required": True,
+                    }
+                ],
+            }
+        ],
+        "next_cursor": "",
+    }
+    client.list_prompts.assert_awaited_once_with("")
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_prompt_catalog_requires_mcp_scope(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    list_prompts = AsyncMock(return_value={"prompts": [], "next_cursor": None})
+    monkeypatch.setattr(
+        asgi_app.state.services.tools,
+        "list_mcp_prompts",
+        list_prompts,
+    )
+    tool_key = "abk_fastapi_v1_prompt_tool_only"
+    mcp_key = "abk_fastapi_v1_mcp_prompts"
+    fake_db.add_api_key(tool_key, scopes=["tool"])
+    fake_db.add_api_key(mcp_key, scopes=["mcp"])
+
+    forbidden_response = await asgi_client.get(
+        "/api/v1/mcp/prompts",
+        params={"server_name": "demo-server"},
+        headers={"X-API-Key": tool_key},
+    )
+    allowed_response = await asgi_client.get(
+        "/api/v1/mcp/prompts",
+        params={"server_name": "demo-server"},
+        headers={"X-API-Key": mcp_key},
+    )
+
+    assert forbidden_response.status_code == 403
+    assert forbidden_response.json()["message"] == "Insufficient API key scope"
+    assert allowed_response.status_code == 200
+    assert allowed_response.json()["data"] == {
+        "prompts": [],
+        "next_cursor": None,
+    }
+    list_prompts.assert_awaited_once_with("demo-server", None)
 
 
 @pytest.mark.asyncio

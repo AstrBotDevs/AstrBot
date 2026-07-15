@@ -239,6 +239,16 @@ async def list_mcp_resource_templates(
     return await _run(lambda: service.list_mcp_resource_templates(server_name, cursor))
 
 
+@router.get("/mcp/prompts")
+async def list_mcp_prompts(
+    server_name: str = Query(..., min_length=1),
+    cursor: str | None = Query(default=None),
+    _auth: AuthContext = Depends(require_mcp_scope),
+    service: ToolsService = Depends(get_service),
+):
+    return await _run(lambda: service.list_mcp_prompts(server_name, cursor))
+
+
 @router.post("/mcp/resources/read")
 async def read_mcp_resource(
     payload: McpResourceReadRequest,

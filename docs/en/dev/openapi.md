@@ -42,7 +42,7 @@ When creating an API Key, you can configure `scopes`. Each scope controls the ra
 | `chat` | Access chat capabilities and query sessions | `POST /api/v1/chat`, `GET /api/v1/chat/sessions` |
 | `file` | Upload and download chat attachments | `POST /api/v1/file`, `GET /api/v1/file`, `POST /api/v1/files` |
 | `plugin` | Manage plugins, plugin config, plugin sources, and marketplace entries | `GET /api/v1/plugins`, `GET/PUT /api/v1/plugins/config`, `POST /api/v1/plugins/install/url` |
-| `mcp` | Manage MCP server configurations and provider sync | `GET/POST /api/v1/mcp/servers`, `PATCH /api/v1/mcp/servers/{server_name}/enabled`, `POST /api/v1/mcp/providers/modelscope/sync` |
+| `mcp` | Manage MCP servers and inspect server capabilities | `GET/POST /api/v1/mcp/servers`, `GET /api/v1/mcp/prompts`, `PATCH /api/v1/mcp/servers/{server_name}/enabled`, `POST /api/v1/mcp/providers/modelscope/sync` |
 | `skill` | Manage skills, skill archives, skill files, and Shipyard Neo skill workflows | `GET/POST /api/v1/skills`, `PUT /api/v1/skills/{skill_name}/files/{file_path}`, `POST /api/v1/skills/neo/sync` |
 
 If the API Key does not include the required scope for the target endpoint, the request will return `403 Insufficient API key scope`.
@@ -74,6 +74,7 @@ Interact with AstrBot's built-in Agent. Supports plugin calls, tool calls, and o
 - `GET /api/v1/personas`: list personas
 - `GET /api/v1/plugins`: list plugins
 - `GET /api/v1/mcp/servers`: list MCP servers
+- `GET /api/v1/mcp/prompts`: list Prompt metadata exposed by a connected MCP server
 - `GET /api/v1/skills`: list skills
 
 **Proactive IM Messages**

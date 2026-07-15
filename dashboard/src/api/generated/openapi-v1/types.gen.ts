@@ -2291,6 +2291,17 @@ export type ListMcpResourceTemplatesResponse = (SuccessEnvelope);
 
 export type ListMcpResourceTemplatesError = unknown;
 
+export type ListMcpPromptsData = {
+    query: {
+        cursor?: string;
+        server_name: string;
+    };
+};
+
+export type ListMcpPromptsResponse = (SuccessEnvelope);
+
+export type ListMcpPromptsError = unknown;
+
 export type ReadMcpResourceData = {
     body: McpResourceReadRequest;
 };

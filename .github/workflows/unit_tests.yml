@@ -45,4 +45,5 @@ jobs:
             tests/unit/test_mcp_client_resources.py \
             tests/unit/test_mcp_client_logging.py \
             tests/unit/test_mcp_client_prompts.py \
-            tests/unit/test_mcp_client_tools.py
+            tests/unit/test_mcp_client_tools.py \
+            tests/unit/test_tools_service_mcp_prompts.py

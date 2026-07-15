@@ -6,6 +6,7 @@ from typing import Any, NoReturn
 from astrbot.core import logger, sp
 from astrbot.core.agent.mcp_client import (
     MCPClient,
+    MCPPromptPaginationNotSupportedError,
     MCPResourcePaginationNotSupportedError,
     MCPTool,
     validate_mcp_stdio_config,
@@ -303,6 +304,56 @@ class ToolsService:
             raise
         except Exception as exc:
             _raise_mcp_resource_operation_error("read resource", server_name, exc)
+
+    async def list_mcp_prompts(
+        self,
+        server_name: str,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        runtime = self.tool_mgr.mcp_server_runtime_view.get(server_name)
+        if runtime is None:
+            raise ToolsServiceError(f"MCP server {server_name} is not connected")
+
+        client = runtime.client
+        if not getattr(client, "supports_prompts", False):
+            raise ToolsServiceError(
+                f"MCP server {server_name} does not advertise prompts support"
+            )
+
+        try:
+            result = await client.list_prompts(cursor)
+            return {
+                "prompts": [
+                    {
+                        "name": str(getattr(prompt, "name")),
+                        "title": getattr(prompt, "title", None),
+                        "description": getattr(prompt, "description", None),
+                        "arguments": [
+                            {
+                                "name": str(getattr(argument, "name")),
+                                "description": getattr(
+                                    argument,
+                                    "description",
+                                    None,
+                                ),
+                                "required": bool(getattr(argument, "required", False)),
+                            }
+                            for argument in (getattr(prompt, "arguments", None) or [])
+                        ],
+                    }
+                    for prompt in result.prompts
+                ],
+                "next_cursor": getattr(result, "nextCursor", None),
+            }
+        except MCPPromptPaginationNotSupportedError as exc:
+            raise ToolsServiceError(str(exc)) from None
+        except Exception as exc:
+            logger.error(
+                f"Failed to list prompts for MCP server {server_name} ({type(exc).__name__})"
+            )
+            raise ToolsServiceError(
+                f"Failed to list prompts for MCP server {server_name}"
+            ) from None
 
     def get_mcp_server_config(self, name: str) -> dict | None:
         config = self.tool_mgr.load_mcp_config()

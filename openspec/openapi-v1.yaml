@@ -2820,6 +2820,27 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/mcp/prompts:
+    get:
+      tags: [MCP]
+      summary: List prompts exposed by a connected MCP server
+      operationId: listMcpPrompts
+      x-astrbot-scope: mcp
+      parameters:
+        - name: server_name
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/mcp/resources/read:
     post:
       tags: [MCP]
