@@ -44,4 +44,5 @@ jobs:
           uv run --no-sync pytest -q \
             tests/unit/test_mcp_client_resources.py \
             tests/unit/test_mcp_client_logging.py \
+            tests/unit/test_mcp_client_prompts.py \
             tests/unit/test_mcp_client_tools.py

@@ -106,6 +106,10 @@ class MCPResourcePaginationNotSupportedError(RuntimeError):
     """Raised when the installed MCP SDK cannot pass pagination cursors."""
 
 
+class MCPPromptPaginationNotSupportedError(RuntimeError):
+    """Raised when the installed MCP SDK cannot paginate MCP prompts."""
+
+
 try:
     import anyio
     import mcp
@@ -813,6 +817,79 @@ class MCPClient:
         if not self.supports_resources:
             raise RuntimeError("MCP server does not advertise resources support.")
         return await self.session.read_resource(uri=uri)
+
+    @property
+    def supports_prompts(self) -> bool:
+        """Whether the connected server advertises MCP prompts support."""
+        return bool(
+            self._server_capabilities
+            and getattr(self._server_capabilities, "prompts", None)
+        )
+
+    async def list_prompts(
+        self,
+        cursor: str | None = None,
+    ) -> mcp.types.ListPromptsResult:
+        """List prompts exposed by the connected MCP server."""
+        if not self.session:
+            raise ValueError("MCP session is not available for prompt listing.")
+        if not self.supports_prompts:
+            raise RuntimeError("MCP server does not advertise prompts support.")
+
+        if cursor is None:
+            return await self.session.list_prompts()
+
+        try:
+            parameters = inspect.signature(self.session.list_prompts).parameters
+        except (TypeError, ValueError) as exc:
+            raise MCPPromptPaginationNotSupportedError(
+                "The installed MCP SDK prompt pagination support could not be detected."
+            ) from exc
+
+        params_parameter = parameters.get("params")
+        supports_params = bool(
+            hasattr(mcp.types, "PaginatedRequestParams")
+            and params_parameter
+            and params_parameter.kind
+            in {
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            }
+        )
+        cursor_parameter = parameters.get("cursor")
+        supports_cursor = bool(
+            cursor_parameter
+            and cursor_parameter.kind
+            in {
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            }
+        ) or any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+
+        if supports_params:
+            return await self.session.list_prompts(
+                params=mcp.types.PaginatedRequestParams(cursor=cursor)
+            )
+        if supports_cursor:
+            return await self.session.list_prompts(cursor=cursor)
+        raise MCPPromptPaginationNotSupportedError(
+            "The installed MCP SDK does not support prompt pagination."
+        )
+
+    async def get_prompt(
+        self,
+        name: str,
+        arguments: dict[str, str] | None = None,
+    ) -> mcp.types.GetPromptResult:
+        """Resolve a prompt exposed by the connected MCP server."""
+        if not self.session:
+            raise ValueError("MCP session is not available for prompt retrieval.")
+        if not self.supports_prompts:
+            raise RuntimeError("MCP server does not advertise prompts support.")
+        return await self.session.get_prompt(name=name, arguments=arguments)
 
     def _cancel_connection_task(self, task: asyncio.Task) -> None:
         """Cancel a connection owner task and track it until it finishes."""
