@@ -329,7 +329,7 @@
       "title": "工作区浏览",
       "viewMode": {
         "files": "工作区",
-        "diff": "Git Diff"
+        "diff": "Git 改动"
       },
       "breadcrumbRoot": "项目根",
       "loading": "加载中…",
@@ -512,6 +512,7 @@
         "buttonAria": "恢复文件 {path}",
         "confirmTitle": "恢复文件？",
         "confirmMessage": "将丢弃 \"{path}\" 相对于 index 的所有改动，该操作不可撤销。",
+        "confirmMessageNewFile": "\"{path}\" 是新增文件，恢复操作将会删除它。该操作不可撤销。",
         "confirmTitleMultiple": "恢复 {count} 个文件？",
         "confirmMessageMultiple": "将丢弃已选 {count} 个文件的未提交改动，该操作不可撤销。",
         "confirmAction": "恢复",
@@ -535,7 +536,6 @@
             "path_unsafe": "文件路径不安全（已拒绝）",
             "file_not_found": "文件不存在",
             "not_modified": "文件无未暂存改动",
-            "untracked_file": "未跟踪的文件无法恢复（请用 git rm --cached 或 git add）",
             "git_error": "Git 执行失败（{stderr}）"
           }
         }
@@ -617,7 +617,7 @@
           "failureHint": "提交失败，请修改 message 或修复错误后重试"
         },
         "history": {
-          "tab": "历史",
+          "tab": "Git 历史",
           "tabAria": "切换到历史视图",
           "filter": {
             "ref": "Ref",

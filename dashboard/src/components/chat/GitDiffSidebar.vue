@@ -538,9 +538,36 @@ const fileRestore = useSpcodeFileRestore();
 const fileDiscardHunk = useSpcodeFileDiscardHunk();
 const restoringFile = ref<string | null>(null);
 
+// Spec §3.2 + restore-refresh-status: after a successful restore
+// (single or batch) we must re-fetch BOTH git-diff and git-status in
+// parallel. useSpcodeGitDiff does NOT touch git-status, and the
+// polling interval is 10s — without an explicit refresh the user
+// would see the row linger in the newFilePaths set / stagedCount
+// counter for up to 10s after the file is gone. Mirrors the refresh
+// pattern used by stage / unstage / commit (8 call sites all use
+// the same `Promise.all([composable.refresh(), gitStatus.refresh()])`).
+async function refreshDiffAndStatus(): Promise<void> {
+  await Promise.all([composable.refresh(), gitStatus.refresh()]);
+}
+
 // Confirm dialog state.
 const confirmDialogOpen = ref(false);
 const confirmTargetPath = ref<string | null>(null);
+// 2026-07-15 restore-edge-cases: when the target file is brand-new
+// (untracked / from git-status newFile scope), restore = unlink the
+// worktree copy, not "discard changes". Surface a different confirm
+// message so the user isn't surprised by an implicit delete.
+//
+// Derived from `confirmTargetPath` + `newFilePaths` rather than a
+// standalone `ref` so the message flag is *always* in lock-step with
+// the path. A manually-set ref risked a brief render where the
+// dialog opened with the new path but the *previous* file's isNew
+// flag — perceived as "stacking" two dialogs.
+const confirmTargetIsNew = computed<boolean>(
+  () =>
+    confirmTargetPath.value !== null &&
+    newFilePaths.value.has(confirmTargetPath.value),
+);
 
 // Bulk-restore state. The handler iterates the captured path list
 // one file at a time and aggregates the result into a single
@@ -778,10 +805,10 @@ const RESTORE_REASON_I18N_KEYS: Record<
     key: "spcodeProjectLoad.diffSidebar.restore.error.reason.not_modified",
     color: "warning",
   },
-  untracked_file: {
-    key: "spcodeProjectLoad.diffSidebar.restore.error.reason.untracked_file",
-    color: "warning",
-  },
+  // 2026-07-15 restore-edge-cases: untracked_file 由 file-restore 端点移除
+  // —— 端点现在直接 unlink 未跟踪文件作为"撤销新增"路径,前端不再渲染
+  // 这个 reason。reason code 仍存在于 file-discard-hunk 路径(useSpcodeFileDiscardHunk
+  // 自己的 REASON 集合),不归此 palette 管。
   git_error: {
     key: "spcodeProjectLoad.diffSidebar.restore.error.reason.git_error",
     color: "error",
@@ -1519,6 +1546,11 @@ function classifySnackbarLevel(
 
 // Spec §3.2 data flow: GitDiffFileItem -> GitDiffBodyContent -> here.
 function onFileRestore(path: string): void {
+  // ORDER MATTERS: set the path FIRST, then open the dialog.
+  // `confirmTargetIsNew` is a computed derived from `confirmTargetPath`
+  // (and `newFilePaths`), so its value is correct as soon as the path
+  // is set. Opening the dialog while the path still held the previous
+  // file's value would render the old file's message for one frame.
   confirmTargetPath.value = path;
   confirmDialogOpen.value = true;
 }
@@ -1560,15 +1592,33 @@ function onOpenFile(path: string): void {
 }
 
 function onCancelRestore(): void {
+  // Close the dialog FIRST so the v-if-guarded v-card unmounts
+  // synchronously — no in-between frame where v-card-text could
+  // re-render with the previous file's flag.
   confirmDialogOpen.value = false;
-  confirmTargetPath.value = null;
+  // Path cleanup happens in a microtask AFTER the close transition
+  // begins, so the v-card is already gone (v-if="confirmDialogOpen"
+  // unmounts it) by the time `confirmTargetIsNew` would flip to
+  // false. The reset is still important for the next open: if we
+  // skipped it, the next `onFileRestore` would see a stale path
+  // (Vue would still pick the new value, but defensive nulling keeps
+  // the state shape tidy).
+  void nextTick(() => {
+    confirmTargetPath.value = null;
+  });
 }
 
 async function onConfirmRestore(): Promise<void> {
   const path = confirmTargetPath.value;
   if (!path) return;
+  // Same pattern as onCancelRestore: close dialog first, clear path
+  // after the next microtask. The v-if guard means no v-card lives
+  // across the state change, so the user never sees the wrong
+  // message text during the close transition.
   confirmDialogOpen.value = false;
-  confirmTargetPath.value = null;
+  void nextTick(() => {
+    confirmTargetPath.value = null;
+  });
   restoringFile.value = path;
   const umo = spcodeStatus.status.value.umo;
   const worktree = selectedWorktree.value;
@@ -1589,7 +1639,7 @@ async function onConfirmRestore(): Promise<void> {
       "success",
     );
     // Spec §3.2: success -> immediate refresh so the row disappears.
-    await composable.refresh();
+    await refreshDiffAndStatus();
   } else {
     const mapping =
       RESTORE_REASON_I18N_KEYS[result.reason] ??
@@ -1679,7 +1729,7 @@ async function onConfirmRestorePaths(): Promise<void> {
       }),
       "success",
     );
-    await composable.refresh();
+    await refreshDiffAndStatus();
   } else if (successCount > 0 && failedCount > 0) {
     showSnackbar(
       tm("spcodeProjectLoad.diffSidebar.restore.successPartial", {
@@ -1689,7 +1739,7 @@ async function onConfirmRestorePaths(): Promise<void> {
       }),
       "warning",
     );
-    await composable.refresh();
+    await refreshDiffAndStatus();
   } else {
     showSnackbar(
       tm("spcodeProjectLoad.diffSidebar.restore.error.allFailed", {
@@ -2809,17 +2859,39 @@ const currentRoot = computed<string | null>(() => {
         @commit="onClickCommit"
       />
 
-      <!-- Spec §6.3: inline <v-dialog persistent> confirmation. -->
+      <!-- Spec §6.3: inline <v-dialog persistent> confirmation.
+           Two guards against "stacking" / flicker:
+             1. `v-if="confirmDialogOpen"` on v-card so the v-card
+                is unmounted SYNCHRONOUSLY the instant the dialog
+                starts closing. Without this, v-dialog's close
+                transition keeps the v-card alive for several
+                frames, during which `confirmTargetIsNew` may
+                already have flipped to false and the v-card-text
+                re-renders the *old* wording in place — perceived
+                as a brief flash of the wrong message.
+             2. `:key="confirmTargetPath ?? 'empty'"` on v-card so
+                opening the dialog with a different path (or
+                reopening after cancel) unmounts the previous
+                v-card and mounts a fresh one. Avoids the
+                in-place text swap flicker on open. -->
       <v-dialog v-model="confirmDialogOpen" persistent max-width="440">
-        <v-card>
+        <v-card
+          v-if="confirmDialogOpen"
+          :key="confirmTargetPath ?? 'empty'"
+        >
           <v-card-title class="text-h6">
             {{ tm("spcodeProjectLoad.diffSidebar.restore.confirmTitle") }}
           </v-card-title>
           <v-card-text>
             {{
-              tm("spcodeProjectLoad.diffSidebar.restore.confirmMessage", {
-                path: confirmTargetPath ?? "",
-              })
+              tm(
+                confirmTargetIsNew
+                  ? "spcodeProjectLoad.diffSidebar.restore.confirmMessageNewFile"
+                  : "spcodeProjectLoad.diffSidebar.restore.confirmMessage",
+                {
+                  path: confirmTargetPath ?? "",
+                }
+              )
             }}
           </v-card-text>
           <v-card-actions>

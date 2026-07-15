@@ -512,6 +512,7 @@
         "buttonAria": "Restore file {path}",
         "confirmTitle": "Restore file?",
         "confirmMessage": "This will discard all uncommitted changes to \"{path}\". This cannot be undone.",
+        "confirmMessageNewFile": "\"{path}\" is a new (untracked) file. Restoring will delete it. This cannot be undone.",
         "confirmTitleMultiple": "Restore {count} files?",
         "confirmMessageMultiple": "This will discard all uncommitted changes in {count} selected files. This cannot be undone.",
         "confirmAction": "Restore",
@@ -535,7 +536,6 @@
             "path_unsafe": "File path is unsafe (rejected)",
             "file_not_found": "File does not exist",
             "not_modified": "File has no uncommitted changes",
-            "untracked_file": "Cannot restore an untracked file (use git rm --cached or git add)",
             "git_error": "Git execution failed ({stderr})"
           }
         }

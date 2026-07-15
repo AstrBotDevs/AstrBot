@@ -18,7 +18,6 @@ export const RESTORE_REASON_CODES = [
   "path_unsafe",
   "file_not_found",
   "not_modified",
-  "untracked_file",
   "git_error",
 ] as const;
 

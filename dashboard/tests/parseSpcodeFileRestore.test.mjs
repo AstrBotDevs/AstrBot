@@ -62,14 +62,18 @@ test("defaults missing/invalid scope to unstaged (forward-compat)", () => {
 });
 
 test("parses failure envelope with reason", () => {
+  // Reason code kept here is "not_modified" (always still a recognized code).
+  // "untracked_file" was removed from RESTORE_REASON_CODES in
+  // 2026-07-15 restore-edge-cases because the file-restore endpoint now
+  // treats untracked files as a successful "撤销新增" (unlink worktree
+  // copy) rather than a failure — see tools/webapi/file_restore.py.
   const r = parseSpcodeFileRestore({
     status: "ok",
-    data: { ...baseData, restored: false, reason: "untracked_file", stderr: "?? new.py" },
+    data: { ...baseData, restored: false, reason: "not_modified", stderr: "" },
   });
   assert.equal(r.kind, "ok");
   assert.equal(r.snapshot.restored, false);
-  assert.equal(r.snapshot.reason, "untracked_file");
-  assert.equal(r.snapshot.stderr, "?? new.py");
+  assert.equal(r.snapshot.reason, "not_modified");
 });
 
 test("parses git_error with stderr", () => {
