@@ -809,6 +809,26 @@
       "newFile": "Select a .md file or create one",
       "noFileSelected": "Select a document to begin",
       "noProject": "Load a project to begin"
+    },
+    "gitHistory": {
+      "banner": {
+        "viewing": "Viewing historical revision {sha}",
+        "backToCurrent": "Back to current"
+      },
+      "preview": {
+        "tabRaw": "Raw",
+        "tabDiff": "Diff",
+        "placeholder": "Select a commit on the left to view its content.",
+        "binaryUnsupported": "Binary files cannot be previewed from history.",
+        "diffLoadFail": "Failed to load diff: {reason}",
+        "rawLoadFail": "Failed to read historical revision: {reason}",
+        "loading": "Loading…"
+      },
+      "sidebar": {
+        "title": "History",
+        "collapse": "Hide history",
+        "expand": "Show history"
+      }
     }
   },
   "copy": {

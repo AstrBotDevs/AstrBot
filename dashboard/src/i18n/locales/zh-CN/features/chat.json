@@ -809,6 +809,26 @@
       "newFile": "选择 .md 文件或新建",
       "noFileSelected": "请先选择一个文档",
       "noProject": "请先加载项目"
+    },
+    "gitHistory": {
+      "banner": {
+        "viewing": "正在查看历史版本 {sha}",
+        "backToCurrent": "回到当前"
+      },
+      "preview": {
+        "tabRaw": "原文",
+        "tabDiff": "本次改动",
+        "placeholder": "选择左侧 commit 查看历史版本",
+        "binaryUnsupported": "二进制文件不支持历史版本预览",
+        "diffLoadFail": "无法加载 diff: {reason}",
+        "rawLoadFail": "无法读取历史版本: {reason}",
+        "loading": "加载中…"
+      },
+      "sidebar": {
+        "title": "历史",
+        "collapse": "隐藏历史",
+        "expand": "显示历史"
+      }
     }
   },
   "copy": {
