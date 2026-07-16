@@ -1,5 +1,5 @@
-import { defineStore } from 'pinia';
-import { router } from '@/router';
+import { defineStore } from "pinia";
+import { router } from "@/router";
 import {
   authApi,
   providerApi,
@@ -8,52 +8,49 @@ import {
   UPGRADE_RECOVERY_TOKEN_KEY,
   type ApiEnvelope,
   type VersionData,
-} from '@/api/v1';
-import { httpClient } from '@/api/http';
+} from "@/api/v1";
+import { httpClient } from "@/api/http";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    // @ts-ignore
-    username: '',
-    returnUrl: null,
+    username: "",
+    returnUrl: null as string | null,
   }),
   actions: {
     async finishAuthenticatedSession(data: any): Promise<void> {
       this.username = data.username;
-      localStorage.setItem('user', this.username);
-      localStorage.setItem('token', data.token);
+      localStorage.setItem("user", this.username);
+      localStorage.setItem("token", data.token);
       const passwordUpgradeRequired = !!data?.password_upgrade_required;
       const md5PwdHint = !!data?.md5_pwd_hint;
-      const passwordWarning =
-        !!data?.change_pwd_hint ||
-        (md5PwdHint && !passwordUpgradeRequired);
+      const passwordWarning = !!data?.change_pwd_hint || (md5PwdHint && !passwordUpgradeRequired);
       if (passwordWarning) {
-        localStorage.setItem('change_pwd_hint', 'true');
+        localStorage.setItem("change_pwd_hint", "true");
         if (md5PwdHint && !passwordUpgradeRequired) {
-          localStorage.setItem('md5_pwd_hint', 'true');
+          localStorage.setItem("md5_pwd_hint", "true");
         } else {
-          localStorage.removeItem('md5_pwd_hint');
+          localStorage.removeItem("md5_pwd_hint");
         }
       } else {
-        localStorage.removeItem('change_pwd_hint');
-        localStorage.removeItem('md5_pwd_hint');
+        localStorage.removeItem("change_pwd_hint");
+        localStorage.removeItem("md5_pwd_hint");
       }
       if (passwordUpgradeRequired) {
-        localStorage.setItem('password_upgrade_required', 'true');
+        localStorage.setItem("password_upgrade_required", "true");
       } else {
-        localStorage.removeItem('password_upgrade_required');
+        localStorage.removeItem("password_upgrade_required");
       }
 
       const onboardingCompleted = await this.checkOnboardingCompleted();
       this.returnUrl = null;
       if (passwordWarning) {
-        router.push('/auth/setup');
+        router.push("/auth/setup");
         return;
       }
       if (onboardingCompleted) {
-        router.push('/dashboard/default');
+        router.push("/dashboard/default");
       } else {
-        router.push('/welcome');
+        router.push("/welcome");
       }
     },
     async login(
@@ -61,7 +58,7 @@ export const useAuthStore = defineStore("auth", {
       password: string,
       code?: string,
       trustDeviceToken = false,
-    ): Promise<'totp_required' | 'upgrade_recovery_required' | void> {
+    ): Promise<"totp_required" | "upgrade_recovery_required" | void> {
       try {
         const res = await authApi.login({
           username,
@@ -70,14 +67,14 @@ export const useAuthStore = defineStore("auth", {
           trust_device_flag: trustDeviceToken,
         });
 
-        if (res.data.status === 'error') {
+        if (res.data.status === "error") {
           return Promise.reject(res.data.message);
         }
 
-        const legacyToken = String(res.data.data?.token || '');
+        const legacyToken = String(res.data.data?.token || "");
         if (res.legacyFallback && legacyToken) {
           const versionRes = await httpClient.get<ApiEnvelope<VersionData>>(
-            '/api/stat/version',
+            "/api/stat/version",
             {
               headers: {
                 Authorization: `Bearer ${legacyToken}`,
@@ -86,12 +83,12 @@ export const useAuthStore = defineStore("auth", {
             },
           );
           const versionData = versionRes.data?.data || {};
-          const coreVersion = String(versionData.version || '')
+          const coreVersion = String(versionData.version || "")
             .trim()
-            .replace(/^v/i, '');
-          const dashboardVersion = String(versionData.dashboard_version || '')
+            .replace(/^v/i, "");
+          const dashboardVersion = String(versionData.dashboard_version || "")
             .trim()
-            .replace(/^v/i, '');
+            .replace(/^v/i, "");
           if (
             versionRes.status < 400 &&
             coreVersion &&
@@ -108,14 +105,14 @@ export const useAuthStore = defineStore("auth", {
                 },
               }),
             );
-            return 'upgrade_recovery_required';
+            return "upgrade_recovery_required";
           }
         }
 
         await this.finishAuthenticatedSession(res.data.data);
       } catch (error: any) {
         if (error?.response?.status === 401 && error.response?.data?.data?.totp_required) {
-          return 'totp_required';
+          return "totp_required";
         }
         return Promise.reject(error?.response?.data?.message || error);
       }
@@ -132,7 +129,7 @@ export const useAuthStore = defineStore("auth", {
           confirm_password: confirmPassword,
         });
 
-        if (res.data.status === 'error') {
+        if (res.data.status === "error") {
           return Promise.reject(res.data.message);
         }
 
@@ -155,34 +152,34 @@ export const useAuthStore = defineStore("auth", {
         const sources = providerRes.data.data?.provider_sources || [];
         const sourceMap = new Map();
         sources.forEach((s: any) => sourceMap.set(s.id, s.provider_type));
-        
+
         const hasProvider = providers.some((provider: any) => {
-          if (provider.provider_type) return provider.provider_type === 'chat_completion';
+          if (provider.provider_type) return provider.provider_type === "chat_completion";
           if (provider.provider_source_id) {
             const type = sourceMap.get(provider.provider_source_id);
-            if (type === 'chat_completion') return true;
+            if (type === "chat_completion") return true;
           }
-          return String(provider.type || '').includes('chat_completion');
+          return String(provider.type || "").includes("chat_completion");
         });
 
         return hasProvider;
       } catch (e) {
-        console.error('Failed to check onboarding status:', e);
+        console.error("Failed to check onboarding status:", e);
         return false;
       }
     },
     logout() {
-      this.username = '';
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
-      localStorage.removeItem('change_pwd_hint');
-      localStorage.removeItem('md5_pwd_hint');
-      localStorage.removeItem('password_upgrade_required');
+      this.username = "";
+      localStorage.removeItem("user");
+      localStorage.removeItem("token");
+      localStorage.removeItem("change_pwd_hint");
+      localStorage.removeItem("md5_pwd_hint");
+      localStorage.removeItem("password_upgrade_required");
       void authApi.logout().catch(() => undefined);
-      router.push('/auth/login');
+      router.push("/auth/login");
     },
     has_token(): boolean {
-      return !!localStorage.getItem('token');
-    }
-  }
+      return !!localStorage.getItem("token");
+    },
+  },
 });

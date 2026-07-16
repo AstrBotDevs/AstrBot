@@ -13,9 +13,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, type Ref } from "vue";
 import { MarkdownCodeBlockNode } from "markstream-vue";
-import { useAttrs } from "vue";
+import { computed, inject, type Ref, useAttrs } from "vue";
 
 defineOptions({
   inheritAttrs: false,
@@ -28,7 +27,10 @@ const props = defineProps<{
 
 const injectedIsDark = inject<Ref<boolean> | boolean>("isDark");
 const effectiveIsDark = computed(
-  () => props.isDark ?? (injectedIsDark instanceof Object && "value" in injectedIsDark ? injectedIsDark.value : injectedIsDark) ?? false,
+  () =>
+    props.isDark ??
+    (injectedIsDark instanceof Object && "value" in injectedIsDark ? injectedIsDark.value : injectedIsDark) ??
+    false,
 );
 
 const attrs = useAttrs();

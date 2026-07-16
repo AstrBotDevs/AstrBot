@@ -1,7 +1,7 @@
-<script setup>
-import { computed } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
+<script setup lang="ts">
+import { computed, ref } from "vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
+import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
 const { tm } = useModuleI18n("features/extension");
@@ -29,9 +29,7 @@ const normalizePlatformList = (platforms) => {
   return platforms.filter((item) => typeof item === "string");
 };
 
-const platformDisplayList = computed(() =>
-  normalizePlatformList(props.plugin?.support_platforms),
-);
+const platformDisplayList = computed(() => normalizePlatformList(props.plugin?.support_platforms));
 
 const cardDescription = computed(() =>
   pluginShortDesc(
@@ -85,8 +83,8 @@ const handleOpen = () => {
               plugin.display_name?.length
                 ? plugin.display_name
                 : showPluginFullName
-                ? plugin.name
-                : plugin.trimmedName
+                  ? plugin.name
+                  : plugin.trimmedName
             }}
           </div>
           <v-chip
@@ -114,12 +112,11 @@ const handleOpen = () => {
             icon="mdi-account"
             size="x-small"
             style="color: rgba(var(--v-theme-on-surface), 0.5)"
-          ></v-icon>
+          />
           <a
             v-if="plugin?.social_link"
             :href="plugin.social_link"
             target="_blank"
-            @click.stop
             class="text-subtitle-2 font-weight-medium"
             style="
               text-decoration: none;
@@ -128,6 +125,7 @@ const handleOpen = () => {
               overflow: hidden;
               text-overflow: ellipsis;
             "
+            @click.stop
           >
             {{ plugin.author }}
           </a>
@@ -144,14 +142,21 @@ const handleOpen = () => {
             {{ plugin.author }}
           </span>
           <div
-            v-if="plugin.stars !== undefined"
             class="d-flex align-center text-subtitle-2 ml-2 market-stat"
           >
             <v-icon
-              icon="mdi-star"
+              icon="mdi-source-branch"
               size="x-small"
               style="margin-right: 2px"
-            ></v-icon>
+            />
+            <span>{{ plugin.version }}</span>
+          </div>
+          <div
+            v-if="plugin.stars !== undefined"
+            class="d-flex align-center text-subtitle-2 ml-2"
+            style="color: rgba(var(--v-theme-on-surface), 0.7)"
+          >
+            <v-icon icon="mdi-star" size="x-small" style="margin-right: 2px" />
             <span>{{ plugin.stars }}</span>
           </div>
           <div
@@ -171,7 +176,7 @@ const handleOpen = () => {
           {{ cardDescription }}
         </div>
 
-        <div class="plugin-stats"></div>
+        <div class="plugin-stats" />
       </div>
     </v-card-text>
 
@@ -179,7 +184,19 @@ const handleOpen = () => {
       style="gap: 6px; padding: 8px 12px; padding-top: 0"
       @click.stop
     >
-      <div v-if="platformDisplayList.length" class="plugin-badges">
+      <div
+        v-if="platformDisplayList.length || (plugin.tags && plugin.tags.length)"
+        class="plugin-badges"
+      >
+        <v-chip
+          v-for="tag in plugin.tags"
+          :key="tag"
+          :color="tag === 'danger' ? 'error' : 'primary'"
+          label
+          size="x-small"
+        >
+          {{ tag === "danger" ? tm("tags.danger") : tag }}
+        </v-chip>
         <PluginPlatformChip
           :platforms="plugin.support_platforms"
           size="x-small"
@@ -197,7 +214,7 @@ const handleOpen = () => {
         target="_blank"
         style="height: 32px"
       >
-        <v-icon icon="mdi-github" start size="small"></v-icon>
+        <v-icon icon="mdi-github" start size="small" />
         {{ tm("buttons.viewRepo") }}
       </v-btn>
       <v-tooltip

@@ -1,6 +1,8 @@
 import asyncio
+import errno
 import ipaddress
 import os
+import platform
 import socket
 import time
 from pathlib import Path
@@ -24,18 +26,14 @@ from astrbot.core.utils.io import (
     get_bundled_dashboard_dist_path,
     get_dashboard_dist_version,
     get_local_ip_addresses,
-    is_dashboard_dist_compatible,
     should_use_bundled_dashboard_dist,
 )
-from astrbot.dashboard.asgi_runtime import (
-    DashboardRequestState,
-    FastAPIAppAdapter,
-)
+from astrbot.dashboard.asgi_runtime import DashboardRequestState, FastAPIAppAdapter
 from astrbot.dashboard.responses import error
+from astrbot.dashboard.services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 
 from .api.app import create_dashboard_asgi_app
 from .plugin_page_auth import PluginPageAuth
-from .services.auth_service import DASHBOARD_JWT_COOKIE_NAME
 
 _RATE_LIMITED_ENDPOINTS: frozenset = frozenset(
     {
@@ -123,6 +121,42 @@ def _parse_env_bool(value: str | None, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _normalize_dashboard_value(
+    value: str | int | None, *, field_name: str
+) -> str | int | None:
+    if not isinstance(value, str):
+        return value
+    return _expand_env_placeholders(value, field_name).strip()
+
+
+def _expand_env_placeholders(value: str, field_name: str) -> str:
+    missing_vars: list[str] = []
+    import re
+
+    pattern = re.compile(
+        r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))"
+    )
+
+    def _replace(match: re.Match[str]) -> str:
+        var_name = match.group("braced") or match.group("plain")
+        default = match.group("default")
+        env_value = os.environ.get(var_name)
+        if env_value is not None:
+            return env_value
+        if default is not None:
+            return default
+        missing_vars.append(var_name)
+        return match.group(0)
+
+    expanded = pattern.sub(_replace, value)
+    if missing_vars:
+        missing = ", ".join(sorted(set(missing_vars)))
+        raise ValueError(
+            f"Unresolved environment variable(s) in dashboard {field_name}: {missing}"
+        )
+    return expanded
+
+
 class _ProxyAwareHypercornLogger(HypercornLogger):
     @staticmethod
     def _get_request_log_host(request_scope) -> str | None:
@@ -171,6 +205,8 @@ class _ProxyAwareHypercornLogger(HypercornLogger):
 
 
 class AstrBotDashboard:
+    """AstrBot Web Dashboard"""
+
     def __init__(
         self,
         core_lifecycle: AstrBotCoreLifecycle,
@@ -181,34 +217,68 @@ class AstrBotDashboard:
         self.core_lifecycle = core_lifecycle
         self.config = core_lifecycle.astrbot_config
         self.db = db
+        self.shutdown_event = shutdown_event
 
-        # Path priority:
-        # 1. Explicit webui_dir argument
-        # 2. data/dist/ when it matches the core version
-        # 3. astrbot/dashboard/dist/ when it matches the core version
+        self.enable_webui = self._check_webui_enabled()
+        self._webui_fallback = False
+
+        self._init_paths(webui_dir)
+        self._rate_limiter_registry = _RateLimiterRegistry()
+        self._init_jwt_secret()
+
+        self.asgi_app = create_dashboard_asgi_app(
+            core_lifecycle=core_lifecycle,
+            db=db,
+            jwt_secret=self._jwt_secret,
+            static_folder=self.data_path,
+        )
+
+        self.app = FastAPIAppAdapter(self.asgi_app, static_folder=self.data_path)
+        self.asgi_app.state.dashboard_app_adapter = self.app
+        self.app._dashboard_server = self
+
+        global APP
+        APP = self.app
+
+        self.app.config["MAX_CONTENT_LENGTH"] = 128 * 1024 * 1024  # compatibility
+
+        @self.asgi_app.middleware("http")
+        async def dashboard_auth_middleware(current_request: Request, call_next):
+            current_request.state.dashboard_g = DashboardRequestState()
+            auth_response = await self.auth_middleware(current_request)
+            if auth_response is not None:
+                return auth_response
+            return await call_next(current_request)
+
+    def _check_webui_enabled(self) -> bool:
+        cfg = self.config.get("dashboard", {})
+        _env = os.environ.get("ASTRBOT_DASHBOARD_ENABLE")
+        if _env is not None:
+            return _env.lower() in ("true", "1", "yes")
+        return cfg.get("enable", True)
+
+    def _init_paths(self, webui_dir: str | None):
         if webui_dir and os.path.exists(webui_dir):
             self.data_path = os.path.abspath(webui_dir)
         else:
             user_dist = os.path.join(get_astrbot_data_path(), "dist")
             bundled_dist = get_bundled_dashboard_dist_path()
+            user_index = Path(user_dist) / "index.html"
             user_version = get_dashboard_dist_version(user_dist)
-            if os.path.exists(user_dist) and is_dashboard_dist_compatible(
-                user_dist,
-                VERSION,
+            if (
+                os.path.exists(user_dist)
+                and user_index.is_file()
+                and not should_use_bundled_dashboard_dist(user_dist, VERSION)
             ):
                 self.data_path = os.path.abspath(user_dist)
-            elif should_use_bundled_dashboard_dist(
-                user_dist,
-                VERSION,
-            ) or is_dashboard_dist_compatible(bundled_dist, VERSION):
+            elif bundled_dist.exists():
                 self.data_path = str(bundled_dist)
                 logger.info("Using bundled dashboard dist: %s", self.data_path)
-            elif (
-                os.path.exists(user_dist) and (Path(user_dist) / "index.html").is_file()
-            ):
+            elif os.path.exists(user_dist) and user_index.is_file():
                 logger.warning(
-                    "Using existing data/dist as a fallback even though WebUI version mismatches core: %s, expected v%s. "
-                    "Some dashboard features may not work until the matching WebUI is available.",
+                    "Using existing data/dist as a fallback even though WebUI "
+                    "version mismatches core: %s, expected v%s. Some dashboard "
+                    "features may not work until the matching WebUI is available.",
                     user_version,
                     VERSION,
                 )
@@ -220,43 +290,28 @@ class AstrBotDashboard:
                 )
                 self.data_path = None
             else:
-                # Fall back to expected user path (will fail gracefully later)
                 self.data_path = os.path.abspath(user_dist)
 
-        self._rate_limiter_registry = _RateLimiterRegistry()
-        self._init_jwt_secret()
-        self.asgi_app = create_dashboard_asgi_app(
-            core_lifecycle=core_lifecycle,
-            db=db,
-            jwt_secret=self._jwt_secret,
-            static_folder=self.data_path,
-        )
-        self.app = FastAPIAppAdapter(self.asgi_app, static_folder=self.data_path)
-        self.asgi_app.state.dashboard_app_adapter = self.app
-        self.app._dashboard_server = self
-        global APP
-        APP = self.app
-        self.app.config["MAX_CONTENT_LENGTH"] = (
-            128 * 1024 * 1024
-        )  # 将 Flask 允许的最大上传文件体大小设置为 128 MB
-
-        @self.asgi_app.middleware("http")
-        async def dashboard_auth_middleware(request_, call_next):
-            request_.state.dashboard_g = DashboardRequestState()
-            auth_response = await self.auth_middleware(request_)
-            if auth_response is not None:
-                return auth_response
-            return await call_next(request_)
-
-        self.shutdown_event = shutdown_event
+        if self.enable_webui and (
+            self.data_path is None or not (Path(self.data_path) / "index.html").exists()
+        ):
+            logger.warning(
+                "前端未内置或未初始化 (index.html missing in %s), "
+                "回退到仅启动后端. 请访问在线面板: dash.astrbot.men",
+                self.data_path or "disabled incomplete data/dist",
+            )
+            self.enable_webui = False
+            self._webui_fallback = True
 
     async def auth_middleware(self, current_request: Request):
         path = current_request.url.path
         if not path.startswith("/api"):
             return None
+
         rate_limit_response = await self._apply_auth_rate_limit(current_request, path)
         if rate_limit_response is not None:
             return rate_limit_response
+
         if path.startswith("/api/v1"):
             return None
 
@@ -272,12 +327,13 @@ class AstrBotDashboard:
             "/api/v1/files/tokens",
             "/api/platform/webhook",
             "/api/stat/start-time",
-            "/api/backup/download",  # 备份下载使用 URL 参数传递 token
+            "/api/backup/download",
         ]
         if path in allowed_exact_endpoints or any(
             path.startswith(prefix) for prefix in allowed_endpoint_prefixes
         ):
             return None
+
         is_plugin_page_path = PluginPageAuth.is_protected_path(path)
         dashboard_token = self._extract_dashboard_jwt(current_request)
         asset_token = (
@@ -319,16 +375,6 @@ class AstrBotDashboard:
         token: str,
         path: str,
     ) -> tuple[dict[str, Any] | None, str]:
-        """Validate a dashboard JWT or scoped plugin page asset token.
-
-        Args:
-            token: JWT value from the Authorization header, cookie, or query string.
-            path: Current request path used for plugin page asset token scope checks.
-
-        Returns:
-            A tuple of the decoded payload and an error message. The payload is
-            present only when the token is valid for the current request path.
-        """
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
         except jwt.ExpiredSignatureError:
@@ -379,7 +425,59 @@ class AstrBotDashboard:
                     return r
         return None
 
-    def _get_request_client_ip(self, current_request) -> str:
+    def check_port_in_use(self, host: str, port: int) -> bool:
+        """跨平台检测端口是否被占用"""
+        probe_host = host
+        if host in ("", "0.0.0.0"):
+            probe_host = "127.0.0.1"
+        elif host == "::":
+            probe_host = "::1"
+
+        family = socket.AF_INET6 if ":" in probe_host else socket.AF_INET
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind((probe_host, port))
+                return False
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE:
+                return True
+            logger.warning(
+                "Skip port preflight for %s:%s due to bind probe failure: %s",
+                host,
+                port,
+                exc,
+            )
+            return False
+
+    def get_process_using_port(self, port: int) -> str:
+        """获取占用端口的进程信息"""
+        try:
+            for proc in psutil.process_iter(["pid", "name"]):
+                try:
+                    connections = proc.net_connections()
+                    for conn in connections:
+                        if conn.laddr.port == port:
+                            return f"PID: {proc.info['pid']}, Name: {proc.info['name']}"
+                except (
+                    psutil.NoSuchProcess,
+                    psutil.AccessDenied,
+                    psutil.ZombieProcess,
+                ):
+                    pass
+        except Exception as e:
+            return f"获取进程信息失败: {e!s}"
+        return "未知进程"
+
+    def _init_jwt_secret(self) -> None:
+        dashboard_cfg = self.config.setdefault("dashboard", {})
+        if not dashboard_cfg.get("jwt_secret"):
+            dashboard_cfg["jwt_secret"] = os.urandom(32).hex()
+            self.config.save_config()
+            logger.info("Initialized random JWT secret for dashboard.")
+        self._jwt_secret = dashboard_cfg["jwt_secret"]
+
+    def _get_request_client_ip(self, current_request: Request) -> str:
         if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False)):
             forwarded_for = str(
                 current_request.headers.get("X-Forwarded-For", "")
@@ -400,9 +498,7 @@ class AstrBotDashboard:
                     pass
 
         remote_addr = (
-            str(current_request.client.host).strip()
-            if current_request.client is not None
-            else ""
+            str(current_request.client.host).strip() if current_request.client else ""
         )
         if remote_addr:
             try:
@@ -421,60 +517,11 @@ class AstrBotDashboard:
                 return token
 
         cookie_token = current_request.cookies.get(
-            DASHBOARD_JWT_COOKIE_NAME,
-            "",
+            DASHBOARD_JWT_COOKIE_NAME, ""
         ).strip()
         if cookie_token:
             return cookie_token
         return None
-
-    def check_port_in_use(self, port: int) -> bool:
-        """跨平台检测端口是否被占用"""
-        try:
-            # 创建 IPv4 TCP Socket
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            # 设置超时时间
-            sock.settimeout(2)
-            result = sock.connect_ex(("127.0.0.1", port))
-            sock.close()
-            # result 为 0 表示端口被占用
-            return result == 0
-        except Exception as e:
-            logger.warning(f"检查端口 {port} 时发生错误: {e!s}")
-            # 如果出现异常，保守起见认为端口可能被占用
-            return True
-
-    def get_process_using_port(self, port: int) -> str:
-        """获取占用端口的进程详细信息"""
-        try:
-            for conn in psutil.net_connections(kind="inet"):
-                if cast(_AddrWithPort, conn.laddr).port == port:
-                    try:
-                        process = psutil.Process(conn.pid)
-                        # 获取详细信息
-                        proc_info = [
-                            f"进程名: {process.name()}",
-                            f"PID: {process.pid}",
-                            f"执行路径: {process.exe()}",
-                            f"工作目录: {process.cwd()}",
-                            f"启动命令: {' '.join(process.cmdline())}",
-                        ]
-                        return "\n           ".join(proc_info)
-                    except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
-                        return f"无法获取进程详细信息(可能需要管理员权限): {e!s}"
-            return "未找到占用进程"
-        except Exception as e:
-            return f"获取进程信息失败: {e!s}"
-
-    def _init_jwt_secret(self) -> None:
-        if not self.config.get("dashboard", {}).get("jwt_secret", None):
-            # 如果没有设置 JWT 密钥，则生成一个新的密钥
-            jwt_secret = os.urandom(32).hex()
-            self.config["dashboard"]["jwt_secret"] = jwt_secret
-            self.config.save_config()
-            logger.info("Initialized random JWT secret for dashboard.")
-        self._jwt_secret = self.config["dashboard"]["jwt_secret"]
 
     def _build_dashboard_credentials_display(self) -> str:
         username = self.config["dashboard"].get("username", "astrbot")
@@ -497,16 +544,19 @@ class AstrBotDashboard:
         cert_file = (
             os.environ.get("DASHBOARD_SSL_CERT")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_CERT")
+            or os.environ.get("ASTRBOT_SSL_CERT")
             or ssl_config.get("cert_file", "")
         )
         key_file = (
             os.environ.get("DASHBOARD_SSL_KEY")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_KEY")
+            or os.environ.get("ASTRBOT_SSL_KEY")
             or ssl_config.get("key_file", "")
         )
         ca_certs = (
             os.environ.get("DASHBOARD_SSL_CA_CERTS")
             or os.environ.get("ASTRBOT_DASHBOARD_SSL_CA_CERTS")
+            or os.environ.get("ASTRBOT_SSL_CA_CERTS")
             or ssl_config.get("ca_certs", "")
         )
 
@@ -520,12 +570,12 @@ class AstrBotDashboard:
         key_path = Path(key_file).expanduser()
         if not cert_path.is_file():
             logger.warning(
-                f"dashboard.ssl.enable is set, but cert file is missing: {cert_path}. SSL disabled.",
+                f"dashboard.ssl.enable is set, but cert file is missing: {cert_path}. SSL disabled."
             )
             return False, {}
         if not key_path.is_file():
             logger.warning(
-                f"dashboard.ssl.enable is set, but key file is missing: {key_path}. SSL disabled.",
+                f"dashboard.ssl.enable is set, but key file is missing: {key_path}. SSL disabled."
             )
             return False, {}
 
@@ -538,27 +588,33 @@ class AstrBotDashboard:
             ca_path = Path(ca_certs).expanduser()
             if not ca_path.is_file():
                 logger.warning(
-                    f"dashboard.ssl.enable is set, but CA cert file is missing: {ca_path}. SSL disabled.",
+                    f"dashboard.ssl.enable is set, but CA cert file is missing: {ca_path}. SSL disabled."
                 )
                 return False, {}
             resolved_ssl_config["ca_certs"] = str(ca_path.resolve())
 
         return True, resolved_ssl_config
 
-    def run(self):
-        ip_addr = []
+    async def run(self) -> None:
+        if self._webui_fallback:
+            logger.warning(
+                "前端未内置或未初始化, 回退到仅启动后端. 请访问在线面板: dash.astrbot.men",
+            )
+        elif not self.enable_webui:
+            logger.warning("前端已禁用, 请访问在线面板: dash.astrbot.men")
+
         dashboard_config = self.core_lifecycle.astrbot_config.get("dashboard", {})
-        port = (
-            os.environ.get("DASHBOARD_PORT")
-            or os.environ.get("ASTRBOT_DASHBOARD_PORT")
-            or dashboard_config.get("port", 6185)
-        )
-        host = (
+
+        host_value = (
             os.environ.get("DASHBOARD_HOST")
             or os.environ.get("ASTRBOT_DASHBOARD_HOST")
+            or os.environ.get("ASTRBOT_HOST")
             or dashboard_config.get("host", "0.0.0.0")
         )
-        enable = dashboard_config.get("enable", True)
+        host = _normalize_dashboard_value(host_value, field_name="host")
+        if not isinstance(host, str) or not host:
+            raise ValueError("Dashboard host must be a non-empty string")
+
         ssl_config = dashboard_config.get("ssl", {})
         if not isinstance(ssl_config, dict):
             ssl_config = {}
@@ -572,11 +628,21 @@ class AstrBotDashboard:
             ssl_enable, resolved_ssl_config = self._resolve_dashboard_ssl_config(
                 ssl_config,
             )
-        scheme = "https" if ssl_enable else "http"
 
-        if not enable:
-            logger.info("WebUI disabled.")
-            return None
+        port_value = (
+            os.environ.get("DASHBOARD_PORT")
+            or os.environ.get("ASTRBOT_DASHBOARD_PORT")
+            or dashboard_config.get("port", 6185)
+        )
+        port = _normalize_dashboard_value(port_value, field_name="port")
+        if not isinstance(port, int) or port < 1 or port > 65535:
+            raise ValueError("Dashboard port must be an integer between 1 and 65535")
+
+        scheme = "https" if ssl_enable else "http"
+        ip_addr: list[Any] = get_local_ip_addresses()
+        binds: list[str] = [self._build_bind(host, port)]
+        if host == "::" and platform.system() in ("Windows", "Darwin"):
+            binds.append(self._build_bind("0.0.0.0", port))
 
         logger.info("Starting WebUI at %s://%s:%s", scheme, host, port)
         if host == "0.0.0.0":
@@ -584,71 +650,71 @@ class AstrBotDashboard:
                 "WebUI listens on all interfaces. Check security. Set dashboard.host in data/cmd_config.json to change it.",
             )
 
-        if host not in ["localhost", "127.0.0.1"]:
-            try:
-                ip_addr = get_local_ip_addresses()
-            except Exception as _:
-                pass
-        if isinstance(port, str):
-            port = int(port)
-
-        if self.check_port_in_use(port):
-            process_info = self.get_process_using_port(port)
-            logger.error(
-                f"错误：端口 {port} 已被占用\n"
-                f"占用信息: \n           {process_info}\n"
-                f"请确保：\n"
-                f"1. 没有其他 AstrBot 实例正在运行\n"
-                f"2. 端口 {port} 没有被其他程序占用\n"
-                f"3. 如需使用其他端口，请修改配置文件",
+        if not self.enable_webui:
+            logger.info(
+                "API server is enabled only. Listening on: %s",
+                ", ".join(f"{scheme}://{bind}" for bind in binds),
             )
-
-            raise Exception(f"端口 {port} 已被占用")
-
-        if self.data_path and (Path(self.data_path) / "index.html").is_file():
-            webui_status = "WebUI is ready"
+            logger.info(
+                "\n ✨✨✨\n  AstrBot v%s API Server is ready\n",
+                VERSION,
+            )
         else:
-            webui_status = (
-                f"WebUI is NOT ready: static files are missing at {self.data_path}"
+            logger.info(
+                "正在启动 WebUI + API, 监听: %s",
+                ", ".join(f"{scheme}://{bind}" for bind in binds),
             )
-        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} {webui_status}\n\n"]
-        parts.append(f"   ➜  Local: {scheme}://localhost:{port}\n")
-        for ip in ip_addr:
-            parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
-        parts.append(self._build_dashboard_credentials_display())
-        display = "".join(parts)
 
+        check_hosts = {host}
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            check_hosts.add("127.0.0.1")
+        for check_host in check_hosts:
+            if self.check_port_in_use(check_host, port):
+                info = self.get_process_using_port(port)
+                raise RuntimeError(f"端口 {port} 已被占用\n{info}")
+
+        parts = [f"\n ✨✨✨\n  AstrBot v{VERSION} WebUI is ready\n\n"]
+        if self.enable_webui:
+            parts.append(f"   ➜  本地: {scheme}://localhost:{port}\n")
+        for ip in ip_addr:
+            if self.enable_webui or ip != "127.0.0.1":
+                parts.append(f"   ➜  Network: {scheme}://{ip}:{port}\n")
+        parts.append(self._build_dashboard_credentials_display())
         if not ip_addr:
-            display += (
+            parts.append(
                 "Set dashboard.host in data/cmd_config.json to enable remote access.\n"
             )
+        logger.info("".join(parts))
 
-        logger.info(display)
-
-        # 配置 Hypercorn
         config = HyperConfig()
-        config.bind = [f"{host}:{port}"]
+        config.bind = binds
         if bool(self.config.get("dashboard", {}).get("trust_proxy_headers", False)):
             config.logger_class = _ProxyAwareHypercornLogger
         if ssl_enable:
             config.certfile = resolved_ssl_config["certfile"]
             config.keyfile = resolved_ssl_config["keyfile"]
-            if "ca_certs" in resolved_ssl_config:
-                config.ca_certs = resolved_ssl_config["ca_certs"]
+            if ca_certs := resolved_ssl_config.get("ca_certs"):
+                config.ca_certs = ca_certs
 
-        # 根据配置决定是否禁用访问日志
         disable_access_log = dashboard_config.get("disable_access_log", True)
         if disable_access_log:
             config.accesslog = None
         else:
-            # 启用访问日志，使用简洁格式
             config.accesslog = "-"
             config.access_log_format = "%(h)s %(r)s %(s)s %(b)s %(D)s"
 
-        return serve(
+        return await serve(
             cast(Any, self.asgi_app), config, shutdown_trigger=self.shutdown_trigger
         )
 
-    async def shutdown_trigger(self) -> None:
+    @staticmethod
+    def _build_bind(host: str, port: int) -> str:
+        try:
+            ip = ipaddress.ip_address(host)
+            return f"[{ip}]:{port}" if ip.version == 6 else f"{ip}:{port}"
+        except ValueError:
+            return f"{host}:{port}"
+
+    async def shutdown_trigger(self):
         await self.shutdown_event.wait()
         logger.info("AstrBot WebUI 已经被关闭")

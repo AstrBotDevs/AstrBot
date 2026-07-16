@@ -1,10 +1,10 @@
 <script setup>
-import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
-import { useModuleI18n } from '@/i18n/composables';
-import { updatesApi } from '@/api/v1';
-import { useToast } from '@/utils/toast';
+import axios from "axios";
+import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
+import { useModuleI18n } from "@/i18n/composables";
+import { useToast } from "@/utils/toast";
 
-const { tm } = useModuleI18n('features/console');
+const { tm } = useModuleI18n("features/console");
 </script>
 
 <template>
@@ -86,7 +86,7 @@ export default {
     pipInstall() {
       const toast = useToast();
       this.loading = true;
-      updatesApi.installPip(this.pipInstallPayload)
+      axios.post('/api/update/pip-install', this.pipInstallPayload)
         .then(res => {
           if (res.data.status === 'ok') {
             toast.success(res.data.message || tm('pipInstall.installSuccess'));

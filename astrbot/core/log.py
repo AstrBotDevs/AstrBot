@@ -1,4 +1,4 @@
-"""日志系统，统一将标准 logging 输出转发到 loguru。"""
+"""日志系统,统一将标准 logging 输出转发到 loguru｡"""
 
 import asyncio
 import logging
@@ -7,7 +7,7 @@ import sys
 import time
 from asyncio import Queue
 from collections import deque
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from loguru import logger as _raw_loguru_logger
 
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 class _RecordEnricherFilter(logging.Filter):
-    """为 logging.LogRecord 注入 AstrBot 日志字段。"""
+    """为 logging.LogRecord 注入 AstrBot 日志字段｡"""
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.plugin_tag = "[Plug]" if _is_plugin_path(record.pathname) else "[Core]"
@@ -38,7 +38,7 @@ class _RecordEnricherFilter(logging.Filter):
 class _QueueAnsiColorFilter(logging.Filter):
     """Attach ANSI color prefix for WebUI console rendering."""
 
-    _LEVEL_COLOR = {
+    _LEVEL_COLOR: ClassVar[dict[str, str]] = {
         "DEBUG": "\u001b[1;34m",
         "INFO": "\u001b[1;36m",
         "WARNING": "\u001b[1;33m",
@@ -93,10 +93,49 @@ def _patch_record(record: "Record") -> None:
 _loguru = _raw_loguru_logger.patch(_patch_record)
 
 
+class _SSLDebugFilter(logging.Filter):
+    """将特定 SSL 错误降级为 DEBUG 级别,避免日志刷屏。"""
+
+    _SSL_IGNORE_PATTERNS = (
+        "APPLICATION_DATA_AFTER_CLOSE_NOTIFY",
+        "SSL: APPLICATION_DATA_AFTER_CLOSE_NOTIFY",
+        "SSL: UNEXPECTED_RECORD",
+        "SSLWantRead",
+        "SSLWantWrite",
+        "SSL_ERROR_CODE",
+        "sslPP: error",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        for pattern in self._SSL_IGNORE_PATTERNS:
+            if pattern in msg:
+                record.levelno = logging.DEBUG
+                record.levelname = "DEBUG"
+                return True
+        # Also check exc_info for the error message
+        if record.exc_info and record.exc_info[1]:
+            exc_msg = str(record.exc_info[1])
+            for pattern in self._SSL_IGNORE_PATTERNS:
+                if pattern in exc_msg:
+                    record.levelno = logging.DEBUG
+                    record.levelname = "DEBUG"
+                    return True
+        return True
+
+
 class _LoguruInterceptHandler(logging.Handler):
-    """将 logging 记录转发到 loguru。"""
+    """将 logging 记录转发到 loguru｡"""
 
     def emit(self, record: logging.LogRecord) -> None:
+        # 检查是否需要降级 SSL 相关错误
+        msg = record.getMessage()
+        for pattern in _SSLDebugFilter._SSL_IGNORE_PATTERNS:
+            if pattern in msg:
+                record.levelno = logging.DEBUG
+                record.levelname = "DEBUG"
+                break
+
         try:
             level: str | int = _loguru.level(record.levelname).name
         except ValueError:
@@ -111,7 +150,9 @@ class _LoguruInterceptHandler(logging.Handler):
             ),
             "astrbot_version_tag": getattr(record, "astrbot_version_tag", ""),
             "source_file": getattr(
-                record, "source_file", _build_source_file(record.pathname)
+                record,
+                "source_file",
+                _build_source_file(record.pathname),
             ),
             "source_line": getattr(record, "source_line", record.lineno),
             "is_trace": getattr(record, "is_trace", record.name == "astrbot.trace"),
@@ -124,14 +165,14 @@ class _LoguruInterceptHandler(logging.Handler):
 
 
 class LogBroker:
-    """日志代理类，用于缓存和分发日志消息。"""
+    """日志代理类,用于缓存和分发日志消息｡"""
 
     def __init__(self) -> None:
-        self.log_cache = deque(maxlen=CACHED_SIZE)
+        self.log_cache: deque[dict[str, Any]] = deque(maxlen=CACHED_SIZE)
         self.subscribers: list[Queue] = []
 
     def register(self) -> Queue:
-        q = Queue(maxsize=CACHED_SIZE + 10)
+        q: Queue[dict[str, Any]] = Queue(maxsize=CACHED_SIZE + 10)
         self.subscribers.append(q)
         return q
 
@@ -148,7 +189,7 @@ class LogBroker:
 
 
 class LogQueueHandler(logging.Handler):
-    """日志处理器，用于将日志消息发送到 LogBroker。"""
+    """日志处理器,用于将日志消息发送到 LogBroker｡"""
 
     def __init__(self, log_broker: LogBroker) -> None:
         super().__init__()
@@ -173,12 +214,16 @@ class LogManager:
     _console_sink_id: int | None = None
     _file_sink_id: int | None = None
     _trace_sink_id: int | None = None
-    _NOISY_LOGGER_LEVELS: dict[str, int] = {
+    _NOISY_LOGGER_LEVELS: ClassVar[dict[str, int]] = {
         "aiosqlite": logging.WARNING,
         "filelock": logging.WARNING,
         "asyncio": logging.WARNING,
         "tzlocal": logging.WARNING,
         "apscheduler": logging.WARNING,
+        "quart": logging.WARNING,
+        "hypercorn": logging.WARNING,
+        "httpcore": logging.WARNING,
+        "httpx": logging.WARNING,
     }
 
     @classmethod
@@ -273,6 +318,7 @@ class LogManager:
         handler = LogQueueHandler(log_broker)
         handler.setLevel(logging.DEBUG)
         handler.addFilter(_QueueAnsiColorFilter())
+        handler.addFilter(_SSLDebugFilter())
         handler.setFormatter(
             logging.Formatter(
                 "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "
@@ -387,7 +433,7 @@ class LogManager:
 
         enable = bool(
             config.get("trace_log_enable")
-            or (config.get("log_file", {}) or {}).get("trace_enable", False)
+            or (config.get("log_file", {}) or {}).get("trace_enable", False),
         )
         path = config.get("trace_log_path")
         max_mb = config.get("trace_log_max_mb")

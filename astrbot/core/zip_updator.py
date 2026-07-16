@@ -5,8 +5,9 @@ import shutil
 import time
 import zipfile
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
+import anyio
 import certifi
 import httpx
 
@@ -107,7 +108,7 @@ class RepoZipUpdator:
         self,
         url: str,
         path: str,
-        timeout: float = 1800.0,
+        request_timeout: float = 1800.0,
         progress_callback=None,
     ) -> None:
         target_path = Path(path)
@@ -121,7 +122,7 @@ class RepoZipUpdator:
                 await result
 
         try:
-            async with self._create_httpx_client(timeout=timeout) as client:
+            async with self._create_httpx_client(timeout=request_timeout) as client:
                 async with client.stream("GET", url) as response:
                     response.raise_for_status()
                     headers = getattr(response, "headers", {})
@@ -137,9 +138,9 @@ class RepoZipUpdator:
                             "speed": 0,
                         },
                     )
-                    with target_path.open("wb") as file:
+                    async with await anyio.open_file(target_path, "wb") as file:
                         async for chunk in response.aiter_bytes(8192):
-                            file.write(chunk)
+                            await file.write(chunk)
                             downloaded_size += len(chunk)
                             elapsed_time = max(time.time() - start_time, 1)
                             await _emit_progress(
@@ -164,8 +165,8 @@ class RepoZipUpdator:
                     )
         except Exception as e:
             logger.error(f"下载文件失败: {url} -> {target_path}, 错误: {e}")
-            if self.rm_on_error and target_path.exists():
-                target_path.unlink()
+            if self.rm_on_error and await anyio.Path(target_path).exists():
+                await anyio.Path(target_path).unlink()
             raise
 
     async def fetch_release_info(self, url: str, latest: bool = True) -> list:
@@ -227,7 +228,7 @@ class RepoZipUpdator:
     def unzip(self) -> NoReturn:
         raise NotImplementedError
 
-    async def update(self) -> NoReturn:
+    async def update(self, **kwargs: Any) -> None:
         raise NotImplementedError
 
     def compare_version(self, v1: str, v2: str) -> int:
@@ -272,7 +273,10 @@ class RepoZipUpdator:
         )
 
     async def download_from_repo_url(
-        self, target_path: str, repo_url: str, proxy=""
+        self,
+        target_path: str,
+        repo_url: str,
+        proxy="",
     ) -> None:
         author, repo, branch = await self.resolve_github_source_branch(repo_url)
 
@@ -326,7 +330,10 @@ class RepoZipUpdator:
         root_candidates: list[str] = []
 
         for raw_entry, normalized_entry, portable_entry in zip(
-            entries, normalized_entries, portable_entries
+            entries,
+            normalized_entries,
+            portable_entries,
+            strict=False,
         ):
             if normalized_entry == ".":
                 continue
@@ -392,7 +399,7 @@ class RepoZipUpdator:
             os.remove(zip_path)
         except Exception:
             logger.warning(
-                f"删除更新文件失败，可以手动删除 {zip_path} 和 {update_root_path}"
+                f"删除更新文件失败，可以手动删除 {zip_path} 和 {update_root_path}",
             )
 
     def format_name(self, name: str) -> str:

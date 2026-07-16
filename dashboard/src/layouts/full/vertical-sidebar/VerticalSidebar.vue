@@ -189,8 +189,8 @@ function startSidebarResize(event) {
         </v-btn>
       </div>
     </div>
-    
-    <div 
+
+    <div
       v-if="!isRailSidebar && !isMobile && customizer.Sidebar_drawer"
       class="sidebar-resize-handle"
       @mousedown="startSidebarResize"
@@ -198,7 +198,7 @@ function startSidebarResize(event) {
     >
     </div>
   </v-navigation-drawer>
-  
+
 </template>
 
 <style scoped>

@@ -5,7 +5,10 @@ import httpx
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
+from astrbot.core.utils.media_utils import (
+    MediaResolver,
+    describe_media_ref,
+)
 
 DEFAULT_MIMO_API_BASE = "https://api.xiaomimimo.com/v1"
 DEFAULT_MIMO_TTS_MODEL = "mimo-v2-tts"
@@ -49,14 +52,14 @@ def get_temp_dir() -> Path:
 
 
 def create_http_client(timeout: int | None, proxy: str) -> httpx.AsyncClient:
-    client_kwargs: dict = {
-        "timeout": timeout,
-        "follow_redirects": True,
-    }
     if proxy:
         logger.info("[MiMo API] Using proxy: %s", proxy)
-        client_kwargs["proxy"] = proxy
-    return httpx.AsyncClient(**client_kwargs)
+        return httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=True,
+            proxy=proxy,
+        )
+    return httpx.AsyncClient(timeout=timeout, follow_redirects=True)
 
 
 def build_api_url(api_base: str) -> str:

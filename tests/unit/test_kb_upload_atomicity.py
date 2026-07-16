@@ -295,10 +295,13 @@ async def test_upload_document_cleans_up_on_storage_failure(
     helper.vec_db = AsyncMock()
     helper.kb_medias_dir = tmp_path / "medias"
     helper.kb_medias_dir.mkdir()
+    helper.kb_files_dir = tmp_path / "files"
+    helper.kb_files_dir.mkdir()
     helper.chunker = AsyncMock()
     helper.chunker.chunk = AsyncMock(return_value=["hello world"])
 
     media_file = helper.kb_medias_dir / "will-be-set" / "img.png"
+    raw_file_path: Path | None = None
 
     async def fake_save_media(**kwargs):
         nonlocal media_file
@@ -312,7 +315,16 @@ async def test_upload_document_cleans_up_on_storage_failure(
         return media
 
     helper._save_media = AsyncMock(side_effect=fake_save_media)
-    helper.vec_db.insert_batch.side_effect = RuntimeError("embedding provider down")
+
+    async def fail_insert_batch(**kwargs):
+        nonlocal raw_file_path
+        del kwargs
+        raw_files = list(helper.kb_files_dir.iterdir())
+        assert len(raw_files) == 1
+        raw_file_path = raw_files[0]
+        raise RuntimeError("embedding provider down")
+
+    helper.vec_db.insert_batch.side_effect = fail_insert_batch
     helper.vec_db.delete_documents = AsyncMock()
     helper.kb_db.get_db = _successful_get_db(_session_with_begin())
 
@@ -347,6 +359,8 @@ async def test_upload_document_cleans_up_on_storage_failure(
     assert "cause" in exc_info.value.details
     helper.vec_db.delete_documents.assert_awaited()
     assert not media_file.exists()
+    assert raw_file_path is not None
+    assert not raw_file_path.exists()
 
 
 @pytest.mark.asyncio

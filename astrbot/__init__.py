@@ -1,4 +1,30 @@
-import logging
+from __future__ import annotations
 
-__version__ = "4.26.6"
-logger = logging.getLogger("astrbot")
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+from typing import TYPE_CHECKING, Any
+
+try:
+    __version__ = _pkg_version("astrbot")
+except PackageNotFoundError:
+    __version__ = "4.26.6"
+
+
+if TYPE_CHECKING:
+    from .core import logger as logger
+
+__all__ = ["logger"]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "cli":
+        from astrbot.cli.__main__ import cli
+
+        return cli()
+
+    if name == "logger":
+        from .core import logger
+
+        return logger
+
+    raise AttributeError(name)

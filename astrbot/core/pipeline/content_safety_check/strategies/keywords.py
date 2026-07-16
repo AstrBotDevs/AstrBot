@@ -20,5 +20,5 @@ class KeywordsStrategy(ContentSafetyStrategy):
     def check(self, content: str) -> tuple[bool, str]:
         for keyword in self.keywords:
             if re.search(keyword, content):
-                return False, "内容安全检查不通过，匹配到敏感词。"
+                return False, "内容安全检查不通过,匹配到敏感词｡"
         return True, ""

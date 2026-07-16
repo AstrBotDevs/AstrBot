@@ -9,12 +9,11 @@ from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext, AstrMessageEvent
 from astrbot.core.computer.computer_client import get_booter, get_local_booter
 from astrbot.core.message.message_event_result import MessageChain
-
-from ..registry import builtin_tool
-from .util import (
+from astrbot.core.tools.computer_tools.util import (
     check_admin_permission,
     workspace_root_for_context,
 )
+from astrbot.core.tools.registry import builtin_tool
 
 _OS_NAME = platform.system()
 _SANDBOX_PYTHON_TOOL_CONFIG = {
@@ -62,8 +61,10 @@ async def handle_result(result: dict, event: AstrMessageEvent) -> ToolExecResult
         for img in images:
             resp.content.append(
                 mcp.types.ImageContent(
-                    type="image", data=img["image/png"], mimeType="image/png"
-                )
+                    type="image",
+                    data=img["image/png"],
+                    mimeType="image/png",
+                ),
             )
 
             if event.get_platform_name() == "webchat":
@@ -110,7 +111,7 @@ class PythonTool(FunctionTool):
             )
             return await handle_result(result, context.context.event)
         except Exception as e:
-            return f"Error executing code: {str(e)}"
+            return f"Error executing code: {e!s}"
 
 
 @builtin_tool(config=_LOCAL_PYTHON_TOOL_CONFIG)
@@ -150,4 +151,4 @@ class LocalPythonTool(FunctionTool):
             )
             return await handle_result(result, context.context.event)
         except Exception as e:
-            return f"Error executing code: {str(e)}"
+            return f"Error executing code: {e!s}"

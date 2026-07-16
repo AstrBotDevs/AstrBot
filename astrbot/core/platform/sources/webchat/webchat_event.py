@@ -44,7 +44,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     "message_id": message_id,
                 },  # end means this request is finished
             )
-            return
+            return None
 
         data = ""
         for comp in message.chain:
@@ -101,7 +101,7 @@ class WebChatMessageEvent(AstrMessageEvent):
                     return None
             elif isinstance(comp, Record):
                 # save record to local
-                filename = f"{str(uuid.uuid4())}.wav"
+                filename = f"{uuid.uuid4()!s}.wav"
                 path = os.path.join(attachments_dir, filename)
                 record_base64 = await comp.convert_to_base64()
                 record_bytes = base64.b64decode(record_base64)
@@ -173,9 +173,9 @@ class WebChatMessageEvent(AstrMessageEvent):
         message_id = self.message_obj.message_id
         request_id = str(message_id)
         async for chain in generator:
-            # 处理音频流（Live Mode）
+            # 处理音频流(Live Mode)
             if chain.type == "audio_chunk":
-                # 音频流数据，直接发送
+                # 音频流数据,直接发送
                 audio_b64 = ""
                 text = None
 

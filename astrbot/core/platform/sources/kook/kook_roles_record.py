@@ -78,32 +78,32 @@ class KookRolesRecord:
             ) as resp:
                 if resp.status != 200:
                     logger.error(
-                        f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息失败，状态码: {resp.status} , {await resp.text()}'
+                        f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息失败，状态码: {resp.status} , {await resp.text()}',
                     )
-                    return
+                    return None
                 try:
                     resp_content = KookUserViewResponse.from_dict(await resp.json())
                 except pydantic.ValidationError as e:
                     logger.error(
-                        f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息失败, 响应数据格式错误: \n{e}'
+                        f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息失败, 响应数据格式错误: \n{e}',
                     )
                     logger.error(f"[KOOK] 响应内容: {await resp.text()}")
-                    return
+                    return None
 
                 if not resp_content.success():
                     logger.error(
-                        f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息失败: {resp_content.model_dump_json()}'
+                        f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息失败: {resp_content.model_dump_json()}',
                     )
-                    return
+                    return None
 
                 logger.info(f'[KOOK] 获取机器人在频道"{guild_id}"的角色id成功')
                 return set(resp_content.data.roles)
 
         except Exception as e:
             logger.error(
-                f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息时请求异常: {e}'
+                f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息时请求异常: {e}',
             )
-            return
+            return None
 
     async def has_role_in_channel(self, role_id: int, guild_id: int) -> bool:
         if (cache := self._roles_cache.get(guild_id)) is not None:
@@ -114,7 +114,8 @@ class KookRolesRecord:
 
         new_future: asyncio.Future[set[int] | None] = asyncio.Future()
         actual_future: asyncio.Future[set[int] | None] = self._pending_tasks.setdefault(
-            guild_id, new_future
+            guild_id,
+            new_future,
         )
 
         if actual_future is not new_future:
@@ -157,7 +158,7 @@ class KookRolesRecord:
         except Exception as e:
             new_future.set_result(None)
             logger.error(
-                f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息时发生异常: {e}'
+                f'[KOOK] 获取机器人在频道"{guild_id}"的角色id信息时发生异常: {e}',
             )
             return False
         finally:

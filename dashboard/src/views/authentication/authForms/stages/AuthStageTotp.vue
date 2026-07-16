@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { useModuleI18n } from '@/i18n/composables';
+import { useModuleI18n } from "@/i18n/composables";
 
-const { tm: t } = useModuleI18n('features/auth');
+const { tm: t } = useModuleI18n("features/auth");
 
 const props = defineProps<{
   username: string;
@@ -11,15 +11,15 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:code', value: string): void;
-  (e: 'update:trustDevice', value: boolean): void;
-  (e: 'submit'): void;
-  (e: 'back'): void;
-  (e: 'useRecovery'): void;
+  (e: "update:code", value: string): void;
+  (e: "update:trustDevice", value: boolean): void;
+  (e: "submit"): void;
+  (e: "back"): void;
+  (e: "useRecovery"): void;
 }>();
 
 function onSubmit() {
-  emit('submit');
+  emit("submit");
 }
 </script>
 

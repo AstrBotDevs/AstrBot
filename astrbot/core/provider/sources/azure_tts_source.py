@@ -12,11 +12,10 @@ from httpx import AsyncClient, Timeout
 
 from astrbot import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.provider.entities import ProviderType
+from astrbot.core.provider.provider import TTSProvider
+from astrbot.core.provider.register import register_provider_adapter
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-
-from ..entities import ProviderType
-from ..provider import TTSProvider
-from ..register import register_provider_adapter
 
 TEMP_DIR = Path(get_astrbot_temp_path()) / "azure_tts"
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -41,13 +40,14 @@ class OTTSProvider:
     def client(self) -> AsyncClient:
         if self._client is None:
             raise RuntimeError(
-                "Client not initialized. Please use 'async with' context."
+                "Client not initialized. Please use 'async with' context.",
             )
         return self._client
 
     async def __aenter__(self):
         self._client = AsyncClient(
-            timeout=self.timeout, proxy=self.proxy if self.proxy else None
+            timeout=self.timeout,
+            proxy=self.proxy or None,
         )
         return self
 
@@ -124,8 +124,8 @@ class AzureNativeProvider(TTSProvider):
             f"https://{self.region}.tts.speech.microsoft.com/cognitiveservices/v1"
         )
         self._client: AsyncClient | None = None
-        self.token = None
-        self.token_expire = 0
+        self.token: str | None = None
+        self.token_expire: float = 0.0
         self.voice_params = {
             "voice": provider_config.get("azure_tts_voice", "zh-CN-YunxiaNeural"),
             "style": provider_config.get("azure_tts_style", "cheerful"),
@@ -141,7 +141,7 @@ class AzureNativeProvider(TTSProvider):
     def client(self) -> AsyncClient:
         if self._client is None:
             raise RuntimeError(
-                "Client not initialized. Please use 'async with' context."
+                "Client not initialized. Please use 'async with' context.",
             )
         return self._client
 
@@ -152,7 +152,7 @@ class AzureNativeProvider(TTSProvider):
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": "riff-48khz-16bit-mono-pcm",
             },
-            proxy=self.proxy if self.proxy else None,
+            proxy=self.proxy or None,
         )
         return self
 
@@ -213,14 +213,16 @@ class AzureTTSProvider(TTSProvider):
         self.provider = self._parse_provider(key_value, provider_config)
 
     def _parse_provider(
-        self, key_value: str, config: dict
+        self,
+        key_value: str,
+        config: dict,
     ) -> OTTSProvider | AzureNativeProvider:
         if key_value.lower().startswith("other["):
             json_str = ""
             try:
                 match = re.match(r"other\[(.*)\]", key_value, re.DOTALL)
                 if not match:
-                    raise ValueError("无效的other[...]格式，应形如 other[{...}]")
+                    raise ValueError("无效的other[...]格式,应形如 other[{...}]")
                 json_str = match.group(1).strip()
                 otts_config = json.loads(json_str)
                 required = {"OTTS_SKEY", "OTTS_URL", "OTTS_AUTH_TIME"}
@@ -229,7 +231,7 @@ class AzureTTSProvider(TTSProvider):
                 return OTTSProvider(otts_config)
             except json.JSONDecodeError as e:
                 error_msg = (
-                    f"JSON解析失败，请检查格式（错误位置：行 {e.lineno} 列 {e.colno}）\n"
+                    f"JSON解析失败,请检查格式(错误位置:行 {e.lineno} 列 {e.colno})\n"
                     f"错误详情: {e.msg}\n"
                     f"错误上下文: {json_str[max(0, e.pos - 30) : e.pos + 30]}"
                 )
@@ -238,7 +240,7 @@ class AzureTTSProvider(TTSProvider):
                 raise ValueError(f"配置错误: 缺少必要参数 {e}") from e
         if re.fullmatch(AZURE_TTS_SUBSCRIPTION_KEY_PATTERN, key_value):
             return AzureNativeProvider(config, self.provider_settings)
-        raise ValueError("订阅密钥格式无效，应为32位或84位字母数字或other[...]格式")
+        raise ValueError("订阅密钥格式无效,应为32位或84位字母数字或other[...]格式")
 
     async def get_audio(self, text: str) -> str:
         if isinstance(self.provider, OTTSProvider):

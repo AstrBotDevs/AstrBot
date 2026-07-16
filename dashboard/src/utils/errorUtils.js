@@ -28,11 +28,8 @@ export const resolveErrorMessage = (err, fallbackMessage = "") => {
 
   const fromResponse =
     pickResponseMessage(err?.response?.data) ||
-    (typeof err?.response?.statusText === "string"
-      ? err.response.statusText.trim()
-      : "");
-  const fromError =
-    typeof err?.message === "string" ? err.message.trim() : "";
+    (typeof err?.response?.statusText === "string" ? err.response.statusText.trim() : "");
+  const fromError = typeof err?.message === "string" ? err.message.trim() : "";
 
   let fromString = "";
   if (typeof err?.toString === "function") {

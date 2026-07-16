@@ -6,6 +6,7 @@ import os
 import re
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -43,6 +44,29 @@ def sanitize_upload_filename(filename: str | None) -> str:
     if name in ("", ".", ".."):
         return f"{uuid.uuid4()!s}"
     return name
+
+
+@asynccontextmanager
+async def track_conversation(convs: dict, conv_id: str):
+    convs[conv_id] = True
+    try:
+        yield
+    finally:
+        convs.pop(conv_id, None)
+
+
+async def poll_webchat_stream_result(back_queue, username: str):
+    try:
+        result = await asyncio.wait_for(back_queue.get(), timeout=1)
+    except TimeoutError:
+        return None, False
+    except asyncio.CancelledError:
+        logger.debug(f"[WebChat] 用户 {username} 断开聊天长连接。")
+        return None, True
+    except Exception as e:
+        logger.error(f"WebChat stream error: {e}")
+        return None, False
+    return result, False
 
 
 def normalize_reasoning_message_parts(
@@ -846,7 +870,7 @@ class ChatService:
                 while True:
                     try:
                         item = await asyncio.wait_for(subscriber.get(), timeout=1)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         yield SSE_HEARTBEAT
                         continue
                     if item is None:

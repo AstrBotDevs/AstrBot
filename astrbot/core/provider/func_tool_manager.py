@@ -204,7 +204,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                         return True, ""
                     return False, f"HTTP {response.status}: {response.reason}"
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return False, f"连接超时: {timeout}秒"
     except Exception as e:
         return False, f"{e!s}"
@@ -753,7 +753,7 @@ class FunctionToolManager:
 
         try:
             await asyncio.wait_for(connect_done.wait(), timeout=timeout)
-        except (asyncio.TimeoutError, asyncio.CancelledError) as e:
+        except (TimeoutError, asyncio.CancelledError) as e:
             lifecycle_task.cancel()
             await asyncio.gather(lifecycle_task, return_exceptions=True)
             async with self._runtime_lock:
@@ -795,7 +795,7 @@ class FunctionToolManager:
                 asyncio.gather(*lifecycle_tasks, return_exceptions=True),
                 timeout=timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pending_names = [
                 runtime.name
                 for runtime in runtimes

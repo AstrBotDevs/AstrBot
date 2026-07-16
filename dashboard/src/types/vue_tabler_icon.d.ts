@@ -1,5 +1,6 @@
-import { VNodeChild } from 'vue';
-declare module '@vue/runtime-dom' {
+import { VNodeChild } from "vue";
+
+declare module "@vue/runtime-dom" {
   export interface HTMLAttributes {
     $children?: VNodeChild;
   }

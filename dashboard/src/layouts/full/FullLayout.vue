@@ -1,15 +1,17 @@
 <script setup lang="ts">
+import { computed, onMounted, ref, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
-import { ref, onMounted, computed, watch } from "vue";
-import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
-import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
-import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import Chat from "@/components/chat/Chat.vue";
+// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
+import MigrationDialog from "@/components/shared/MigrationDialog.vue";
+import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
+import { useI18n } from "@/i18n/composables";
+import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useRouterLoadingStore } from "@/stores/routerLoading";
-import { useCommonStore } from "@/stores/common";
-import { statsApi } from "@/api/v1";
-import { useI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
+import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
+import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
 
 const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
 
@@ -18,19 +20,14 @@ const commonStore = useCommonStore();
 const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
-const isCurrentChatRoute = computed(
-  () => route.path === "/chat" || route.path.startsWith("/chat/"),
-);
-const isPluginPageRoute = computed(
-  () => route.path.startsWith("/plugin-page/"),
-);
-const isFullScreenRoute = computed(
-  () => isCurrentChatRoute.value || isPluginPageRoute.value,
-);
+const isCurrentChatRoute = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
+const isPluginPageRoute = computed(() => route.path.startsWith("/plugin-page/"));
+const isFullScreenRoute = computed(() => isCurrentChatRoute.value || isPluginPageRoute.value);
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
 const showSidebar = computed(() => !isCurrentChatRoute.value);
 
+const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
 const showFirstNoticeDialog = ref(false);
 
 watch(isCurrentChatRoute, (isChatRoute) => {
@@ -39,13 +36,37 @@ watch(isCurrentChatRoute, (isChatRoute) => {
   }
 });
 
+const checkMigration = async (): Promise<boolean> => {
+  try {
+    const response = await axios.get("/api/stat/version");
+    if (response.data.status === "ok") {
+      commonStore.setAstrBotVersion(response.data.data?.version, response.data.data?.dashboard_version);
+    }
+    if (response.data.status === "ok" && response.data.data.need_migration) {
+      if (migrationDialog.value && typeof migrationDialog.value.open === "function") {
+        const result = await migrationDialog.value.open();
+        if (result.success) {
+          console.log("Migration completed successfully:", result.message);
+          window.location.reload();
+        }
+      }
+      return true;
+    }
+  } catch (error) {
+    console.error("Failed to check migration status:", error);
+  }
+  return false;
+};
+
 const maybeShowFirstNotice = async () => {
   if (localStorage.getItem(FIRST_NOTICE_SEEN_KEY) === "1") {
     return;
   }
 
   try {
-    const response = await statsApi.firstNotice(locale.value);
+    const response = await axios.get("/api/stat/first-notice", {
+      params: { locale: locale.value },
+    });
     if (response.data.status !== "ok") {
       return;
     }
@@ -71,18 +92,10 @@ const onFirstNoticeDialogUpdate = (visible: boolean) => {
 
 onMounted(() => {
   setTimeout(async () => {
-    try {
-      const response = await statsApi.version();
-      if (response.data.status === "ok") {
-        commonStore.setAstrBotVersion(
-          response.data.data?.version,
-          response.data.data?.dashboard_version,
-        );
-      }
-    } catch (error) {
-      console.error("Failed to load version info:", error);
+    const migrationPending = await checkMigration();
+    if (!migrationPending) {
+      await maybeShowFirstNotice();
     }
-    await maybeShowFirstNotice();
   }, 1000);
 });
 </script>
@@ -145,6 +158,7 @@ onMounted(() => {
         </v-container>
       </v-main>
 
+      <MigrationDialog ref="migrationDialog" />
       <ReadmeDialog
         :show="showFirstNoticeDialog"
         mode="first-notice"

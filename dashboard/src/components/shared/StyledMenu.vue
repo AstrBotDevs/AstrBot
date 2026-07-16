@@ -19,16 +19,19 @@
 
 <script setup lang="ts">
 defineOptions({
-  inheritAttrs: false
-})
+  inheritAttrs: false,
+});
 
-withDefaults(defineProps<{
-  closeOnContentClick?: boolean
-  noBorder?: boolean
-}>(), {
-  closeOnContentClick: true,
-  noBorder: false
-})
+withDefaults(
+  defineProps<{
+    closeOnContentClick?: boolean;
+    noBorder?: boolean;
+  }>(),
+  {
+    closeOnContentClick: true,
+    noBorder: false,
+  },
+);
 </script>
 
 <style>

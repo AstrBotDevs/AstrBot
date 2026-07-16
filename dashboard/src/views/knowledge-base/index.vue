@@ -36,21 +36,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { useModuleI18n } from "@/i18n/composables";
 
-const { tm: t } = useModuleI18n('features/knowledge-base/index')
-const route = useRoute()
-const router = useRouter()
-const detailTitle = ref('')
+const { tm: t } = useModuleI18n("features/knowledge-base/index");
+const route = useRoute();
+const router = useRouter();
+const detailTitle = ref("");
 
-const isDetailRoute = computed(() => route.name === 'NativeKBDetail')
-const displayDetailTitle = computed(() => detailTitle.value || String(route.params.kbId || ''))
+const isDetailRoute = computed(() => route.name === "NativeKBDetail");
+const displayDetailTitle = computed(() => detailTitle.value || String(route.params.kbId || ""));
 
 const goToList = () => {
-  router.push({ name: 'NativeKBList' })
-}
+  router.push({ name: "NativeKBList" });
+};
 </script>
 
 <style scoped>
@@ -61,6 +61,14 @@ const goToList = () => {
   width: 100%;
   height: 100%;
   position: relative;
+}
+
+/* 页面切换动画 */
+.kb-fade-enter-active,
+.kb-fade-leave-active {
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
 }
 
 .page-header {

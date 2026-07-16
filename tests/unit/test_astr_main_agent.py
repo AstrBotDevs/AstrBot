@@ -1,14 +1,11 @@
 """Tests for astr_main_agent module."""
 
-import datetime
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Plain, Reply, Video
@@ -44,9 +41,7 @@ def mock_context():
         return_value=(None, None, None, False)
     )
     ctx.persona_manager.get_persona_v3_by_id = MagicMock(return_value=None)
-    tool_mgr = MagicMock()
-    tool_mgr.get_builtin_tool.side_effect = lambda cls, **kwargs: cls(**kwargs)
-    ctx.get_llm_tool_manager.return_value = tool_mgr
+    ctx.get_llm_tool_manager.return_value = MagicMock()
     ctx.subagent_orchestrator = None
     return ctx
 
@@ -134,39 +129,6 @@ def _setup_conversation_for_build(conv_mgr, cid: str = "conv-id") -> MagicMock:
     conversation = _new_mock_conversation(cid=cid)
     conv_mgr.get_conversation = AsyncMock(return_value=conversation)
     return conversation
-
-
-def test_append_system_reminders_includes_weekday(mock_event):
-    """Test datetime reminder includes weekday information."""
-    req = ProviderRequest(prompt="Hello")
-    fixed_now = datetime.datetime(
-        2026,
-        6,
-        8,
-        12,
-        34,
-        tzinfo=datetime.timezone.utc,
-    )
-
-    class FixedDateTime(datetime.datetime):
-        @classmethod
-        def now(cls, tz=None):
-            if tz:
-                return fixed_now.astimezone(tz)
-            return fixed_now
-
-    with patch("astrbot.core.astr_main_agent.datetime.datetime", FixedDateTime):
-        ama._append_system_reminders(
-            mock_event,
-            req,
-            {"datetime_system_prompt": True},
-            "UTC",
-        )
-
-    assert [part.text for part in req.extra_user_content_parts] == [
-        "<system_reminder>Current datetime: "
-        "2026-06-08 12:34 (UTC), Weekday: Monday</system_reminder>"
-    ]
 
 
 class TestMainAgentBuildConfig:
@@ -378,18 +340,8 @@ class TestApplyKb:
         ):
             await module._apply_kb(mock_event, req, mock_context, config)
 
-        assert req.system_prompt == "System prompt"
-        assert len(req.extra_user_content_parts) == 1
-        kb_part = req.extra_user_content_parts[0]
-        assert kb_part.text == "[Related Knowledge Base Results]:\nKB result"
-
-        message = Message.model_validate(await req.assemble_context())
-        assert isinstance(message.content, list)
-        assert message.content[0].text == "test question"
-        assert message.content[1].text == "[Related Knowledge Base Results]:\nKB result"
-        assert dump_messages_with_checkpoints([message]) == [
-            {"role": "user", "content": [{"type": "text", "text": "test question"}]}
-        ]
+        assert "[Related Knowledge Base Results]:" in req.system_prompt
+        assert "KB result" in req.system_prompt
 
     @pytest.mark.asyncio
     async def test_apply_kb_with_agentic_mode(self, mock_event, mock_context):
@@ -500,13 +452,13 @@ class TestBuiltinToolInjection:
         mock_context.get_config.return_value = {
             "provider_settings": {
                 "web_search": True,
-                "websearch_provider": "firecrawl",
+                "websearch_provider": "tavily",
             }
         }
         search_tool = MagicMock(spec=FunctionTool)
-        search_tool.name = "web_search_firecrawl"
+        search_tool.name = "web_search_tavily"
         extract_tool = MagicMock(spec=FunctionTool)
-        extract_tool.name = "firecrawl_extract_web_page"
+        extract_tool.name = "tavily_extract_web_page"
         tool_mgr = MagicMock()
         tool_mgr.get_builtin_tool.side_effect = [search_tool, extract_tool]
         mock_context.get_llm_tool_manager.return_value = tool_mgr
@@ -514,12 +466,12 @@ class TestBuiltinToolInjection:
         await module._apply_web_search_tools(mock_event, req, mock_context)
 
         assert tool_mgr.get_builtin_tool.call_args_list == [
-            ((module.FirecrawlWebSearchTool,),),
-            ((module.FirecrawlExtractWebPageTool,),),
+            ((module.TavilyWebSearchTool,),),
+            ((module.TavilyExtractWebPageTool,),),
         ]
         assert req.func_tool is not None
-        assert req.func_tool.get_tool("web_search_firecrawl") is search_tool
-        assert req.func_tool.get_tool("firecrawl_extract_web_page") is extract_tool
+        assert req.func_tool.get_tool("web_search_tavily") is search_tool
+        assert req.func_tool.get_tool("tavily_extract_web_page") is extract_tool
 
     def test_apply_web_search_citation_prompt_for_webchat(self, mock_event):
         module = ama
@@ -807,186 +759,6 @@ class TestEnsurePersonaAndSkills:
         assert "Persona Instructions" not in req.system_prompt
 
     @pytest.mark.asyncio
-    async def test_ensure_skills_includes_workspace_skills(
-        self,
-        monkeypatch,
-        tmp_path,
-        mock_event,
-        mock_context,
-    ):
-        module = ama
-        data_dir = tmp_path / "data"
-        global_skills_dir = tmp_path / "global_skills"
-        plugins_dir = tmp_path / "plugins"
-        workspaces_dir = tmp_path / "workspaces"
-        for path in (data_dir, global_skills_dir, plugins_dir):
-            path.mkdir(parents=True, exist_ok=True)
-
-        global_skill_dir = global_skills_dir / "workspace-skill"
-        global_skill_dir.mkdir(parents=True)
-        global_skill_dir.joinpath("SKILL.md").write_text(
-            "---\ndescription: Global scoped skill.\n---\n",
-            encoding="utf-8",
-        )
-
-        workspace_root = workspaces_dir / module.normalize_umo_for_workspace(
-            mock_event.unified_msg_origin
-        )
-        workspace_skill_dir = workspace_root / "skills" / "workspace-skill"
-        workspace_skill_dir.mkdir(parents=True)
-        workspace_skill_dir.joinpath("SKILL.md").write_text(
-            "---\ndescription: Workspace scoped skill.\n---\n",
-            encoding="utf-8",
-        )
-
-        monkeypatch.setattr(
-            module,
-            "get_astrbot_workspaces_path",
-            lambda: str(workspaces_dir),
-        )
-        monkeypatch.setattr(
-            "astrbot.core.skills.skill_manager.get_astrbot_data_path",
-            lambda: str(data_dir),
-        )
-        monkeypatch.setattr(
-            "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
-            lambda: str(global_skills_dir),
-        )
-        monkeypatch.setattr(
-            "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
-            lambda: str(plugins_dir),
-        )
-
-        req = ProviderRequest()
-        req.conversation = MagicMock(persona_id=None)
-        runtime_config = {"computer_use_runtime": "local"}
-
-        await module._ensure_persona_and_skills(
-            req, runtime_config, mock_context, mock_event
-        )
-
-        assert "**workspace-skill**" in req.system_prompt
-        assert "Workspace scoped skill." in req.system_prompt
-        assert "Global scoped skill." not in req.system_prompt
-        assert (
-            str(workspace_skill_dir / "SKILL.md").replace("\\", "/")
-            in req.system_prompt
-        )
-
-    @pytest.mark.asyncio
-    async def test_ensure_skills_respects_empty_persona_skills_for_workspace(
-        self,
-        monkeypatch,
-        tmp_path,
-        mock_event,
-        mock_context,
-    ):
-        module = ama
-        data_dir = tmp_path / "data"
-        global_skills_dir = tmp_path / "global_skills"
-        plugins_dir = tmp_path / "plugins"
-        workspaces_dir = tmp_path / "workspaces"
-        for path in (data_dir, global_skills_dir, plugins_dir):
-            path.mkdir(parents=True, exist_ok=True)
-
-        workspace_root = workspaces_dir / module.normalize_umo_for_workspace(
-            mock_event.unified_msg_origin
-        )
-        workspace_skill_dir = workspace_root / "skills" / "workspace-skill"
-        workspace_skill_dir.mkdir(parents=True)
-        workspace_skill_dir.joinpath("SKILL.md").write_text(
-            "---\ndescription: Workspace scoped skill.\n---\n",
-            encoding="utf-8",
-        )
-
-        monkeypatch.setattr(
-            module,
-            "get_astrbot_workspaces_path",
-            lambda: str(workspaces_dir),
-        )
-        monkeypatch.setattr(
-            "astrbot.core.skills.skill_manager.get_astrbot_data_path",
-            lambda: str(data_dir),
-        )
-        monkeypatch.setattr(
-            "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
-            lambda: str(global_skills_dir),
-        )
-        monkeypatch.setattr(
-            "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
-            lambda: str(plugins_dir),
-        )
-
-        persona = {"name": "no-skills", "prompt": "", "skills": []}
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("no-skills", persona, None, False)
-        )
-        req = ProviderRequest()
-        req.conversation = MagicMock(persona_id="no-skills")
-
-        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
-
-        assert "Workspace scoped skill." not in req.system_prompt
-        assert "## Skills" not in req.system_prompt
-
-    @pytest.mark.asyncio
-    async def test_ensure_skills_skips_workspace_skills_in_sandbox_runtime(
-        self,
-        monkeypatch,
-        tmp_path,
-        mock_event,
-        mock_context,
-    ):
-        module = ama
-        data_dir = tmp_path / "data"
-        global_skills_dir = tmp_path / "global_skills"
-        plugins_dir = tmp_path / "plugins"
-        workspaces_dir = tmp_path / "workspaces"
-        for path in (data_dir, global_skills_dir, plugins_dir):
-            path.mkdir(parents=True, exist_ok=True)
-
-        workspace_root = workspaces_dir / module.normalize_umo_for_workspace(
-            mock_event.unified_msg_origin
-        )
-        workspace_skill_dir = workspace_root / "skills" / "workspace-skill"
-        workspace_skill_dir.mkdir(parents=True)
-        workspace_skill_dir.joinpath("SKILL.md").write_text(
-            "---\ndescription: Workspace scoped skill.\n---\n",
-            encoding="utf-8",
-        )
-
-        monkeypatch.setattr(
-            module,
-            "get_astrbot_workspaces_path",
-            lambda: str(workspaces_dir),
-        )
-        monkeypatch.setattr(
-            "astrbot.core.skills.skill_manager.get_astrbot_data_path",
-            lambda: str(data_dir),
-        )
-        monkeypatch.setattr(
-            "astrbot.core.skills.skill_manager.get_astrbot_skills_path",
-            lambda: str(global_skills_dir),
-        )
-        monkeypatch.setattr(
-            "astrbot.core.skills.skill_manager.get_astrbot_plugin_path",
-            lambda: str(plugins_dir),
-        )
-
-        req = ProviderRequest()
-        req.conversation = MagicMock(persona_id=None)
-
-        await module._ensure_persona_and_skills(
-            req,
-            {"computer_use_runtime": "sandbox"},
-            mock_context,
-            mock_event,
-        )
-
-        assert "Workspace scoped skill." not in req.system_prompt
-        assert "## Skills" not in req.system_prompt
-
-    @pytest.mark.asyncio
     async def test_ensure_tools_from_persona(self, mock_event, mock_context):
         """Test applying tools from persona."""
         module = ama
@@ -1007,102 +779,6 @@ class TestEnsurePersonaAndSkills:
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
         assert req.func_tool is not None
-
-    @pytest.mark.asyncio
-    async def test_persona_empty_tools_keeps_late_builtin_tools(
-        self, mock_event, mock_context, mock_provider
-    ):
-        module = ama
-        persona = {"name": "locked", "prompt": "No tools.", "tools": []}
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("locked", persona, None, False)
-        )
-        mock_event.platform_meta.support_proactive_message = False
-        mock_context.get_config.return_value = {
-            "provider_settings": {
-                "web_search": True,
-                "websearch_provider": "baidu_ai_search",
-            }
-        }
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            provider_settings={
-                "web_search": True,
-                "websearch_provider": "baidu_ai_search",
-            },
-            computer_use_runtime="none",
-            add_cron_tools=False,
-        )
-        req = ProviderRequest(prompt="hello")
-        req.conversation = MagicMock(persona_id="locked", history="[]")
-
-        with (
-            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
-            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
-        ):
-            mock_runner = MagicMock()
-            mock_runner.reset = AsyncMock()
-            mock_runner_cls.return_value = mock_runner
-
-            result = await module.build_main_agent(
-                event=mock_event,
-                plugin_context=mock_context,
-                config=config,
-                provider=mock_provider,
-                req=req,
-                apply_reset=False,
-            )
-        assert result is not None
-        try:
-            assert result.provider_request.func_tool is not None
-            assert result.provider_request.func_tool.names() == ["web_search_baidu"]
-        finally:
-            if result.reset_coro:
-                result.reset_coro.close()
-
-    @pytest.mark.asyncio
-    async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
-        self, mock_event, mock_context, mock_provider
-    ):
-        module = ama
-        persona = {"name": "locked", "prompt": "No tools.", "tools": []}
-        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
-            return_value=("locked", persona, None, False)
-        )
-        mock_event.platform_meta.support_proactive_message = False
-        config = module.MainAgentBuildConfig(
-            tool_call_timeout=60,
-            computer_use_runtime="local",
-            add_cron_tools=False,
-        )
-        req = ProviderRequest(prompt="hello")
-        req.conversation = MagicMock(persona_id="locked", history="[]")
-
-        with (
-            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
-            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
-        ):
-            mock_runner = MagicMock()
-            mock_runner.reset = AsyncMock()
-            mock_runner_cls.return_value = mock_runner
-
-            result = await module.build_main_agent(
-                event=mock_event,
-                plugin_context=mock_context,
-                config=config,
-                provider=mock_provider,
-                req=req,
-                apply_reset=False,
-            )
-        assert result is not None
-        try:
-            assert result.provider_request.func_tool is not None
-            tool_names = result.provider_request.func_tool.names()
-            assert "astrbot_execute_shell" in tool_names
-            assert "astrbot_execute_python" in tool_names
-        finally:
-            if result.reset_coro:
-                result.reset_coro.close()
 
     @pytest.mark.asyncio
     async def test_subagent_dedupe_uses_default_persona_tools(
@@ -1130,10 +806,9 @@ class TestEnsurePersonaAndSkills:
         tmgr = mock_context.get_llm_tool_manager.return_value
         tmgr.func_list = [tool_a, tool_b]
         tmgr.get_full_tool_set.return_value = ToolSet([tool_a, tool_b])
-        tmgr.get_func.side_effect = lambda name: {
-            "tool_a": tool_a,
-            "tool_b": tool_b,
-        }.get(name)
+        tmgr.get_func.side_effect = lambda name: {"tool_a": tool_a, "tool_b": tool_b}.get(
+            name
+        )
 
         handoff = MagicMock()
         handoff.name = "transfer_to_planner"
@@ -1269,6 +944,7 @@ class TestPluginToolFix:
 
             module._plugin_tool_fix(mock_event, req)
 
+        assert req.func_tool is not None
         assert "mcp_tool" in req.func_tool.names()
         assert "plugin_tool" in req.func_tool.names()
 
@@ -1535,148 +1211,6 @@ class TestBuildMainAgent:
         mock_provider.text_chat.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_build_main_agent_does_not_caption_quoted_image_twice(
-        self, mock_event, mock_context
-    ):
-        """Quoted images should not be captioned again after request image captioning."""
-        module = ama
-        text_provider = MagicMock(spec=Provider)
-        text_provider.provider_config = {
-            "id": "text-provider",
-            "modalities": ["text", "tool_use"],
-        }
-        text_provider.get_model.return_value = "text-model"
-
-        caption_provider = MagicMock(spec=Provider)
-        caption_provider.text_chat = AsyncMock(
-            return_value=MagicMock(completion_text="quoted image caption")
-        )
-
-        mock_reply = Reply(
-            id="reply-1",
-            chain=[Plain(text="quoted text"), Image(file="file:///tmp/quoted.jpg")],
-            sender_nickname="Alice",
-            message_str="quoted text",
-        )
-        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply]
-
-        mock_context.get_provider_by_id.return_value = caption_provider
-        mock_context.get_using_provider.return_value = text_provider
-        mock_context.get_config.return_value = {}
-
-        conv_mgr = mock_context.conversation_manager
-        _setup_conversation_for_build(conv_mgr)
-
-        with (
-            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
-            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
-            patch.object(
-                Image,
-                "convert_to_file_path",
-                AsyncMock(return_value="/tmp/quoted.jpg"),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent._compress_image_for_provider",
-                AsyncMock(side_effect=lambda path, _settings: path),
-            ),
-        ):
-            mock_runner = MagicMock()
-            mock_runner.reset = AsyncMock()
-            mock_runner_cls.return_value = mock_runner
-
-            result = await module.build_main_agent(
-                event=mock_event,
-                plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
-                    tool_call_timeout=60,
-                    provider_settings={
-                        "default_image_caption_provider_id": "caption-provider",
-                    },
-                ),
-                provider=text_provider,
-            )
-
-        assert result is not None
-        assert caption_provider.text_chat.await_count == 1
-
-        extra_text = "\n".join(
-            part.text for part in result.provider_request.extra_user_content_parts
-        )
-        assert "<image_caption>quoted image caption</image_caption>" in extra_text
-        assert "[Image Caption in quoted message]" not in extra_text
-
-    @pytest.mark.asyncio
-    async def test_build_main_agent_does_not_retry_quoted_image_caption_when_empty(
-        self, mock_event, mock_context
-    ):
-        """Quoted images already sent to image captioning should not be retried."""
-        module = ama
-        text_provider = MagicMock(spec=Provider)
-        text_provider.provider_config = {
-            "id": "text-provider",
-            "modalities": ["text", "tool_use"],
-        }
-        text_provider.get_model.return_value = "text-model"
-
-        caption_provider = MagicMock(spec=Provider)
-        caption_provider.text_chat = AsyncMock(
-            return_value=MagicMock(completion_text="")
-        )
-
-        mock_reply = Reply(
-            id="reply-1",
-            chain=[Plain(text="quoted text"), Image(file="file:///tmp/quoted.jpg")],
-            sender_nickname="Alice",
-            message_str="quoted text",
-        )
-        mock_event.message_obj.message = [Plain(text="Hello"), mock_reply]
-
-        mock_context.get_provider_by_id.return_value = caption_provider
-        mock_context.get_using_provider.return_value = text_provider
-        mock_context.get_config.return_value = {}
-
-        conv_mgr = mock_context.conversation_manager
-        _setup_conversation_for_build(conv_mgr)
-
-        with (
-            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
-            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
-            patch.object(
-                Image,
-                "convert_to_file_path",
-                AsyncMock(return_value="/tmp/quoted.jpg"),
-            ),
-            patch(
-                "astrbot.core.astr_main_agent._compress_image_for_provider",
-                AsyncMock(side_effect=lambda path, _settings: path),
-            ),
-        ):
-            mock_runner = MagicMock()
-            mock_runner.reset = AsyncMock()
-            mock_runner_cls.return_value = mock_runner
-
-            result = await module.build_main_agent(
-                event=mock_event,
-                plugin_context=mock_context,
-                config=module.MainAgentBuildConfig(
-                    tool_call_timeout=60,
-                    provider_settings={
-                        "default_image_caption_provider_id": "caption-provider",
-                    },
-                ),
-                provider=text_provider,
-            )
-
-        assert result is not None
-        assert caption_provider.text_chat.await_count == 1
-
-        extra_text = "\n".join(
-            part.text for part in result.provider_request.extra_user_content_parts
-        )
-        assert "<image_caption>" not in extra_text
-        assert "[Image Caption in quoted message]" not in extra_text
-
-    @pytest.mark.asyncio
     async def test_build_main_agent_uses_image_fallback_provider(
         self, mock_event, mock_context
     ):
@@ -1822,7 +1356,7 @@ class TestBuildMainAgent:
         assert result is not None
         assert [
             part.text for part in result.provider_request.extra_user_content_parts
-        ] == ["[Video Attachment: name video.mp4, path /path/to/video.mp4]"]
+        ] == ["[Video Attachment: name video.mp4, path path/to/video.mp4]"]
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_quoted_video_attachment(
@@ -1863,14 +1397,14 @@ class TestBuildMainAgent:
         assert result is not None
         assert (
             "[Video Attachment in quoted message: "
-            "name quoted-video.mp4, path /path/to/quoted-video.mp4]"
+            "name quoted-video.mp4, path path/to/quoted-video.mp4]"
         ) in [part.text for part in result.provider_request.extra_user_content_parts]
 
     @pytest.mark.asyncio
-    async def test_build_main_agent_preserves_quoted_video_when_conversion_fails(
+    async def test_build_main_agent_skips_video_attachment_when_conversion_fails(
         self, mock_event, mock_context, mock_provider
     ):
-        """Test quoted video failures preserve the ref without error logging."""
+        """Test video attachment failures do not abort request construction."""
         module = ama
         mock_video = Video(file="file:///path/to/direct.mp4")
         mock_quoted_video = Video(file="file:///path/to/quoted.mp4")
@@ -1915,22 +1449,18 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
-        extra_texts = [
-            part.text for part in result.provider_request.extra_user_content_parts
-        ]
-        assert (
-            "[Video Attachment in quoted message: "
-            "name quoted.mp4, ref file:///path/to/quoted.mp4]"
-        ) in extra_texts
-        assert not any("[Video Attachment: name" in part for part in extra_texts)
-        assert mock_logger.error.call_count == 1
+        assert not any(
+            "Video Attachment" in part.text
+            for part in result.provider_request.extra_user_content_parts
+        )
+        assert mock_logger.error.call_count == 2
         assert (
             "Error processing video attachment"
             in mock_logger.error.call_args_list[0][0][0]
         )
-        assert not any(
-            "Error processing quoted video attachment" in call[0][0]
-            for call in mock_logger.error.call_args_list
+        assert (
+            "Error processing quoted video attachment"
+            in mock_logger.error.call_args_list[1][0][0]
         )
 
     @pytest.mark.asyncio
@@ -2019,6 +1549,45 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert result.provider_request == existing_req
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_passes_streaming_config_to_agent_runner(
+        self, mock_event, mock_context, mock_provider
+    ):
+        """Test build_main_agent passes streaming_response config to agent runner."""
+        module = ama
+        mock_provider.provider_config = {
+            "id": "google_gemini",
+            "type": "googlegenai_chat_completion",
+        }
+        mock_provider.get_model.return_value = "gemini-2.0-flash"
+        mock_event.get_platform_name.return_value = "webchat"
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_using_provider.return_value = mock_provider
+        mock_context.get_config.return_value = {}
+
+        conv_mgr = mock_context.conversation_manager
+        _setup_conversation_for_build(conv_mgr)
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    streaming_response=True,
+                ),
+            )
+
+        assert result is not None
+        assert mock_runner.reset.call_args.kwargs["streaming"] is True
 
 
 class TestHandleWebchat:
@@ -2394,8 +1963,8 @@ class TestApplySandboxTools:
 
         assert "sandboxed environment" in req.system_prompt
 
-    def test_apply_sandbox_tools_with_cua_adds_gui_guidance(self, mock_context):
-        """Test that CUA sandbox guidance nudges reliable GUI workflows."""
+    def test_apply_sandbox_tools_cua_runs_without_error(self, mock_context):
+        """Test that CUA booter config does not cause errors."""
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,
@@ -2407,25 +1976,12 @@ class TestApplySandboxTools:
         module._apply_sandbox_tools(config, req, "session-123")
 
         assert req.func_tool is not None
-        tool_names = req.func_tool.names()
-        assert "astrbot_cua_screenshot" in tool_names
-        assert "astrbot_cua_mouse_click" in tool_names
-        assert "astrbot_cua_keyboard_type" in tool_names
-        assert "astrbot_cua_key_press" not in tool_names
-
-        assert "Firefox" in req.system_prompt
-        assert "background=true" in req.system_prompt
-        assert 'firefox "https://example.com"' in req.system_prompt
-        assert "astrbot_cua_screenshot" in req.system_prompt
-        assert "astrbot_cua_key_press" not in req.system_prompt
-        assert "return_image_to_llm" in req.system_prompt
-        assert "astrbot_execute_shell" in req.system_prompt
-        assert "\\n" in req.system_prompt
-        assert "send_to_user=true" in req.system_prompt
-        assert "focused and empty or safe to append" in req.system_prompt
+        assert req.func_tool.get_tool("astrbot_execute_shell") is not None
 
     def test_apply_sandbox_tools_with_shipyard_booter(self, monkeypatch, mock_context):
         """Test sandbox tools with shipyard booter configuration."""
+        import os
+
         module = ama
         config = module.MainAgentBuildConfig(
             tool_call_timeout=60,

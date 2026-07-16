@@ -5,10 +5,14 @@ import type { LoginData, LoginError, LoginResponse, LogoutError, LogoutResponse,
 
 export const client = createClient(createConfig());
 
+type OpenApiClientOptions<TData, ThrowOnError extends boolean = false> = OptionsLegacyParser<TData, ThrowOnError> & {
+    client?: ReturnType<typeof createClient>;
+};
+
 /**
  * Login to the dashboard API
  */
-export const login = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<LoginData, ThrowOnError>) => {
+export const login = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<LoginData, ThrowOnError>) => {
     return (options?.client ?? client).post<LoginResponse, LoginError, ThrowOnError>({
         ...options,
         url: '/api/v1/auth/login'
@@ -18,7 +22,7 @@ export const login = <ThrowOnError extends boolean = false>(options: OptionsLega
 /**
  * Logout from the dashboard API
  */
-export const logout = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const logout = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).post<LogoutResponse, LogoutError, ThrowOnError>({
         ...options,
         url: '/api/v1/auth/logout'
@@ -28,7 +32,7 @@ export const logout = <ThrowOnError extends boolean = false>(options?: OptionsLe
 /**
  * Get first-run setup status
  */
-export const getAuthSetupStatus = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getAuthSetupStatus = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetAuthSetupStatusResponse, GetAuthSetupStatusError, ThrowOnError>({
         ...options,
         url: '/api/v1/auth/setup-status'
@@ -38,7 +42,7 @@ export const getAuthSetupStatus = <ThrowOnError extends boolean = false>(options
 /**
  * Complete first-run dashboard account setup
  */
-export const setupAuth = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetupAuthData, ThrowOnError>) => {
+export const setupAuth = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetupAuthData, ThrowOnError>) => {
     return (options?.client ?? client).post<SetupAuthResponse, SetupAuthError, ThrowOnError>({
         ...options,
         url: '/api/v1/auth/setup'
@@ -48,7 +52,7 @@ export const setupAuth = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Start or refresh TOTP setup
  */
-export const setupTotp = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<SetupTotpData, ThrowOnError>) => {
+export const setupTotp = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<SetupTotpData, ThrowOnError>) => {
     return (options?.client ?? client).post<SetupTotpResponse, SetupTotpError, ThrowOnError>({
         ...options,
         url: '/api/v1/auth/totp/setup'
@@ -58,7 +62,7 @@ export const setupTotp = <ThrowOnError extends boolean = false>(options?: Option
 /**
  * Generate or rotate TOTP recovery codes
  */
-export const recoverTotp = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const recoverTotp = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).post<RecoverTotpResponse, RecoverTotpError, ThrowOnError>({
         ...options,
         url: '/api/v1/auth/totp/recovery'
@@ -68,7 +72,7 @@ export const recoverTotp = <ThrowOnError extends boolean = false>(options?: Opti
 /**
  * Update dashboard account credentials
  */
-export const updateAuthAccount = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateAuthAccountData, ThrowOnError>) => {
+export const updateAuthAccount = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateAuthAccountData, ThrowOnError>) => {
     return (options?.client ?? client).patch<UpdateAuthAccountResponse, UpdateAuthAccountError, ThrowOnError>({
         ...options,
         url: '/api/v1/auth/account'
@@ -78,7 +82,7 @@ export const updateAuthAccount = <ThrowOnError extends boolean = false>(options:
 /**
  * List OpenAPI keys
  */
-export const listApiKeys = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listApiKeys = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListApiKeysResponse, ListApiKeysError, ThrowOnError>({
         ...options,
         url: '/api/v1/api-keys'
@@ -88,7 +92,7 @@ export const listApiKeys = <ThrowOnError extends boolean = false>(options?: Opti
 /**
  * Create an OpenAPI key
  */
-export const createApiKey = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateApiKeyData, ThrowOnError>) => {
+export const createApiKey = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateApiKeyData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateApiKeyResponse, CreateApiKeyError, ThrowOnError>({
         ...options,
         url: '/api/v1/api-keys'
@@ -98,7 +102,7 @@ export const createApiKey = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Revoke an OpenAPI key
  */
-export const revokeApiKey = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<RevokeApiKeyData, ThrowOnError>) => {
+export const revokeApiKey = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<RevokeApiKeyData, ThrowOnError>) => {
     return (options?.client ?? client).post<RevokeApiKeyResponse, RevokeApiKeyError, ThrowOnError>({
         ...options,
         url: '/api/v1/api-keys/{key_id}/revoke'
@@ -108,7 +112,7 @@ export const revokeApiKey = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Delete an OpenAPI key
  */
-export const deleteApiKey = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteApiKeyData, ThrowOnError>) => {
+export const deleteApiKey = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteApiKeyData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteApiKeyResponse, DeleteApiKeyError, ThrowOnError>({
         ...options,
         url: '/api/v1/api-keys/{key_id}'
@@ -118,7 +122,7 @@ export const deleteApiKey = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Get the system configuration schema
  */
-export const getSystemConfigSchema = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getSystemConfigSchema = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetSystemConfigSchemaResponse, GetSystemConfigSchemaError, ThrowOnError>({
         ...options,
         url: '/api/v1/system-config/schema'
@@ -128,7 +132,7 @@ export const getSystemConfigSchema = <ThrowOnError extends boolean = false>(opti
 /**
  * Get the system configuration
  */
-export const getSystemConfig = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getSystemConfig = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetSystemConfigResponse, GetSystemConfigError, ThrowOnError>({
         ...options,
         url: '/api/v1/system-config'
@@ -138,7 +142,7 @@ export const getSystemConfig = <ThrowOnError extends boolean = false>(options?: 
 /**
  * Replace the system configuration
  */
-export const updateSystemConfig = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateSystemConfigData, ThrowOnError>) => {
+export const updateSystemConfig = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateSystemConfigData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateSystemConfigResponse, UpdateSystemConfigError, ThrowOnError>({
         ...options,
         url: '/api/v1/system-config'
@@ -148,7 +152,7 @@ export const updateSystemConfig = <ThrowOnError extends boolean = false>(options
 /**
  * Get runtime-enriched system configuration metadata
  */
-export const getSystemConfigRuntime = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getSystemConfigRuntime = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetSystemConfigRuntimeResponse, GetSystemConfigRuntimeError, ThrowOnError>({
         ...options,
         url: '/api/v1/system-config/runtime'
@@ -158,7 +162,7 @@ export const getSystemConfigRuntime = <ThrowOnError extends boolean = false>(opt
 /**
  * Get the configuration profile schema
  */
-export const getConfigProfileSchema = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getConfigProfileSchema = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetConfigProfileSchemaResponse, GetConfigProfileSchemaError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-profiles/schema'
@@ -168,7 +172,7 @@ export const getConfigProfileSchema = <ThrowOnError extends boolean = false>(opt
 /**
  * List configuration profiles
  */
-export const listConfigProfiles = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listConfigProfiles = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListConfigProfilesResponse, ListConfigProfilesError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-profiles'
@@ -178,7 +182,7 @@ export const listConfigProfiles = <ThrowOnError extends boolean = false>(options
 /**
  * Create a configuration profile
  */
-export const createConfigProfile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateConfigProfileData, ThrowOnError>) => {
+export const createConfigProfile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateConfigProfileData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateConfigProfileResponse, CreateConfigProfileError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-profiles'
@@ -188,7 +192,7 @@ export const createConfigProfile = <ThrowOnError extends boolean = false>(option
 /**
  * Get a configuration profile
  */
-export const getConfigProfile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetConfigProfileData, ThrowOnError>) => {
+export const getConfigProfile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetConfigProfileData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetConfigProfileResponse, GetConfigProfileError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-profiles/{config_id}'
@@ -198,7 +202,7 @@ export const getConfigProfile = <ThrowOnError extends boolean = false>(options: 
 /**
  * Replace a configuration profile
  */
-export const updateConfigProfileContent = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateConfigProfileContentData, ThrowOnError>) => {
+export const updateConfigProfileContent = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateConfigProfileContentData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateConfigProfileContentResponse, UpdateConfigProfileContentError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-profiles/{config_id}'
@@ -208,7 +212,7 @@ export const updateConfigProfileContent = <ThrowOnError extends boolean = false>
 /**
  * Rename a configuration profile
  */
-export const renameConfigProfile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<RenameConfigProfileData, ThrowOnError>) => {
+export const renameConfigProfile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<RenameConfigProfileData, ThrowOnError>) => {
     return (options?.client ?? client).patch<RenameConfigProfileResponse, RenameConfigProfileError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-profiles/{config_id}'
@@ -218,7 +222,7 @@ export const renameConfigProfile = <ThrowOnError extends boolean = false>(option
 /**
  * Delete a configuration profile
  */
-export const deleteConfigProfile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteConfigProfileData, ThrowOnError>) => {
+export const deleteConfigProfile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteConfigProfileData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteConfigProfileResponse, DeleteConfigProfileError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-profiles/{config_id}'
@@ -228,7 +232,7 @@ export const deleteConfigProfile = <ThrowOnError extends boolean = false>(option
 /**
  * List UMO to configuration profile bindings
  */
-export const listConfigRoutes = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listConfigRoutes = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListConfigRoutesResponse, ListConfigRoutesError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-routes'
@@ -238,7 +242,7 @@ export const listConfigRoutes = <ThrowOnError extends boolean = false>(options?:
 /**
  * Replace all UMO to configuration profile bindings
  */
-export const replaceConfigRoutes = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ReplaceConfigRoutesData, ThrowOnError>) => {
+export const replaceConfigRoutes = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ReplaceConfigRoutesData, ThrowOnError>) => {
     return (options?.client ?? client).put<ReplaceConfigRoutesResponse, ReplaceConfigRoutesError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-routes'
@@ -248,7 +252,7 @@ export const replaceConfigRoutes = <ThrowOnError extends boolean = false>(option
 /**
  * Bind a UMO to a configuration profile
  */
-export const upsertConfigRoute = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpsertConfigRouteData, ThrowOnError>) => {
+export const upsertConfigRoute = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpsertConfigRouteData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpsertConfigRouteResponse, UpsertConfigRouteError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-routes/{umo}'
@@ -258,7 +262,7 @@ export const upsertConfigRoute = <ThrowOnError extends boolean = false>(options:
 /**
  * Remove a UMO configuration profile binding
  */
-export const deleteConfigRoute = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteConfigRouteData, ThrowOnError>) => {
+export const deleteConfigRoute = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteConfigRouteData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteConfigRouteResponse, DeleteConfigRouteError, ThrowOnError>({
         ...options,
         url: '/api/v1/config-routes/{umo}'
@@ -268,7 +272,7 @@ export const deleteConfigRoute = <ThrowOnError extends boolean = false>(options:
 /**
  * List configurable bot types and their schemas
  */
-export const listBotTypes = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listBotTypes = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListBotTypesResponse, ListBotTypesError, ThrowOnError>({
         ...options,
         url: '/api/v1/bot-types'
@@ -278,7 +282,7 @@ export const listBotTypes = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * Run a bot type registration flow action
  */
-export const registerBotType = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<RegisterBotTypeData, ThrowOnError>) => {
+export const registerBotType = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<RegisterBotTypeData, ThrowOnError>) => {
     return (options?.client ?? client).post<RegisterBotTypeResponse, RegisterBotTypeError, ThrowOnError>({
         ...options,
         url: '/api/v1/bot-types/{bot_type}/registration'
@@ -288,7 +292,7 @@ export const registerBotType = <ThrowOnError extends boolean = false>(options: O
 /**
  * List created bots and their configurations
  */
-export const listBots = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListBotsData, ThrowOnError>) => {
+export const listBots = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListBotsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListBotsResponse, ListBotsError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots'
@@ -298,7 +302,7 @@ export const listBots = <ThrowOnError extends boolean = false>(options?: Options
 /**
  * Create a bot from configuration
  */
-export const createBot = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateBotData, ThrowOnError>) => {
+export const createBot = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateBotData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateBotResponse, CreateBotError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots'
@@ -308,7 +312,7 @@ export const createBot = <ThrowOnError extends boolean = false>(options: Options
 /**
  * List runtime status for all bots
  */
-export const listBotStats = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listBotStats = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListBotStatsResponse, ListBotStatsError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/stats'
@@ -318,7 +322,7 @@ export const listBotStats = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * Get a bot configuration by query ID
  */
-export const getBotById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetBotByIdData, ThrowOnError>) => {
+export const getBotById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetBotByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetBotByIdResponse, GetBotByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/by-id'
@@ -328,7 +332,7 @@ export const getBotById = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Replace a bot configuration by body ID
  */
-export const updateBotById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateBotByIdData, ThrowOnError>) => {
+export const updateBotById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateBotByIdData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateBotByIdResponse, UpdateBotByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/by-id'
@@ -338,7 +342,7 @@ export const updateBotById = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Delete a bot by query ID
  */
-export const deleteBotById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteBotByIdData, ThrowOnError>) => {
+export const deleteBotById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteBotByIdData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteBotByIdResponse, DeleteBotByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/by-id'
@@ -348,7 +352,7 @@ export const deleteBotById = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Enable or disable a bot by body ID
  */
-export const setBotEnabledById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetBotEnabledByIdData, ThrowOnError>) => {
+export const setBotEnabledById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetBotEnabledByIdData, ThrowOnError>) => {
     return (options?.client ?? client).patch<SetBotEnabledByIdResponse, SetBotEnabledByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/enabled'
@@ -358,7 +362,7 @@ export const setBotEnabledById = <ThrowOnError extends boolean = false>(options:
 /**
  * Test a bot registration or connection by body ID
  */
-export const testBotById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<TestBotByIdData, ThrowOnError>) => {
+export const testBotById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<TestBotByIdData, ThrowOnError>) => {
     return (options?.client ?? client).post<TestBotByIdResponse, TestBotByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/test'
@@ -368,7 +372,7 @@ export const testBotById = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Get a bot configuration
  */
-export const getBot = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetBotData, ThrowOnError>) => {
+export const getBot = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetBotData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetBotResponse, GetBotError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/{bot_id}'
@@ -378,7 +382,7 @@ export const getBot = <ThrowOnError extends boolean = false>(options: OptionsLeg
 /**
  * Replace a bot configuration
  */
-export const updateBot = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateBotData, ThrowOnError>) => {
+export const updateBot = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateBotData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateBotResponse, UpdateBotError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/{bot_id}'
@@ -388,7 +392,7 @@ export const updateBot = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Delete a bot
  */
-export const deleteBot = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteBotData, ThrowOnError>) => {
+export const deleteBot = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteBotData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteBotResponse, DeleteBotError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/{bot_id}'
@@ -398,7 +402,7 @@ export const deleteBot = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Enable or disable a bot
  */
-export const setBotEnabled = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetBotEnabledData, ThrowOnError>) => {
+export const setBotEnabled = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetBotEnabledData, ThrowOnError>) => {
     return (options?.client ?? client).patch<SetBotEnabledResponse, SetBotEnabledError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/{bot_id}/enabled'
@@ -408,7 +412,7 @@ export const setBotEnabled = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Test a bot registration or connection
  */
-export const testBot = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<TestBotData, ThrowOnError>) => {
+export const testBot = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<TestBotData, ThrowOnError>) => {
     return (options?.client ?? client).post<TestBotResponse, TestBotError, ThrowOnError>({
         ...options,
         url: '/api/v1/bots/{bot_id}/test'
@@ -418,7 +422,7 @@ export const testBot = <ThrowOnError extends boolean = false>(options: OptionsLe
 /**
  * Get the overall provider configuration schema
  */
-export const getProviderSchema = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getProviderSchema = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetProviderSchemaResponse, GetProviderSchemaError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/schema'
@@ -428,7 +432,7 @@ export const getProviderSchema = <ThrowOnError extends boolean = false>(options?
 /**
  * List provider sources
  */
-export const listProviderSources = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listProviderSources = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListProviderSourcesResponse, ListProviderSourcesError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources'
@@ -438,7 +442,7 @@ export const listProviderSources = <ThrowOnError extends boolean = false>(option
 /**
  * Create a provider source
  */
-export const createProviderSource = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateProviderSourceData, ThrowOnError>) => {
+export const createProviderSource = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateProviderSourceData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateProviderSourceResponse, CreateProviderSourceError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources'
@@ -448,7 +452,7 @@ export const createProviderSource = <ThrowOnError extends boolean = false>(optio
 /**
  * Get a provider source by query ID
  */
-export const getProviderSourceById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetProviderSourceByIdData, ThrowOnError>) => {
+export const getProviderSourceById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetProviderSourceByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetProviderSourceByIdResponse, GetProviderSourceByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/by-id'
@@ -458,7 +462,7 @@ export const getProviderSourceById = <ThrowOnError extends boolean = false>(opti
 /**
  * Update a provider source by body ID
  */
-export const upsertProviderSourceById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpsertProviderSourceByIdData, ThrowOnError>) => {
+export const upsertProviderSourceById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpsertProviderSourceByIdData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpsertProviderSourceByIdResponse, UpsertProviderSourceByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/by-id'
@@ -468,7 +472,7 @@ export const upsertProviderSourceById = <ThrowOnError extends boolean = false>(o
 /**
  * Delete a provider source by query ID
  */
-export const deleteProviderSourceById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteProviderSourceByIdData, ThrowOnError>) => {
+export const deleteProviderSourceById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteProviderSourceByIdData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteProviderSourceByIdResponse, DeleteProviderSourceByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/by-id'
@@ -478,7 +482,7 @@ export const deleteProviderSourceById = <ThrowOnError extends boolean = false>(o
 /**
  * List models available from a provider source by query ID
  */
-export const listProviderSourceModelsById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListProviderSourceModelsByIdData, ThrowOnError>) => {
+export const listProviderSourceModelsById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListProviderSourceModelsByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListProviderSourceModelsByIdResponse, ListProviderSourceModelsByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/models'
@@ -488,7 +492,7 @@ export const listProviderSourceModelsById = <ThrowOnError extends boolean = fals
 /**
  * List providers under a provider source by query ID
  */
-export const listProvidersBySourceId = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListProvidersBySourceIdData, ThrowOnError>) => {
+export const listProvidersBySourceId = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListProvidersBySourceIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListProvidersBySourceIdResponse, ListProvidersBySourceIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/providers'
@@ -498,7 +502,7 @@ export const listProvidersBySourceId = <ThrowOnError extends boolean = false>(op
 /**
  * Create a provider under a provider source by body ID
  */
-export const createProviderInSourceById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateProviderInSourceByIdData, ThrowOnError>) => {
+export const createProviderInSourceById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateProviderInSourceByIdData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateProviderInSourceByIdResponse, CreateProviderInSourceByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/providers'
@@ -508,7 +512,7 @@ export const createProviderInSourceById = <ThrowOnError extends boolean = false>
 /**
  * Get a provider source
  */
-export const getProviderSource = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetProviderSourceData, ThrowOnError>) => {
+export const getProviderSource = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetProviderSourceData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetProviderSourceResponse, GetProviderSourceError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/{source_id}'
@@ -518,7 +522,7 @@ export const getProviderSource = <ThrowOnError extends boolean = false>(options:
 /**
  * Update a provider source or create it if missing
  */
-export const upsertProviderSource = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpsertProviderSourceData, ThrowOnError>) => {
+export const upsertProviderSource = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpsertProviderSourceData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpsertProviderSourceResponse, UpsertProviderSourceError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/{source_id}'
@@ -528,7 +532,7 @@ export const upsertProviderSource = <ThrowOnError extends boolean = false>(optio
 /**
  * Delete a provider source and providers that reference it
  */
-export const deleteProviderSource = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteProviderSourceData, ThrowOnError>) => {
+export const deleteProviderSource = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteProviderSourceData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteProviderSourceResponse, DeleteProviderSourceError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/{source_id}'
@@ -538,7 +542,7 @@ export const deleteProviderSource = <ThrowOnError extends boolean = false>(optio
 /**
  * List models available from a provider source
  */
-export const listProviderSourceModels = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListProviderSourceModelsData, ThrowOnError>) => {
+export const listProviderSourceModels = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListProviderSourceModelsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListProviderSourceModelsResponse, ListProviderSourceModelsError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/{source_id}/models'
@@ -548,7 +552,7 @@ export const listProviderSourceModels = <ThrowOnError extends boolean = false>(o
 /**
  * List providers under a provider source
  */
-export const listProvidersBySource = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListProvidersBySourceData, ThrowOnError>) => {
+export const listProvidersBySource = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListProvidersBySourceData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListProvidersBySourceResponse, ListProvidersBySourceError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/{source_id}/providers'
@@ -558,7 +562,7 @@ export const listProvidersBySource = <ThrowOnError extends boolean = false>(opti
 /**
  * Create a provider under a provider source
  */
-export const createProviderInSource = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateProviderInSourceData, ThrowOnError>) => {
+export const createProviderInSource = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateProviderInSourceData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateProviderInSourceResponse, CreateProviderInSourceError, ThrowOnError>({
         ...options,
         url: '/api/v1/provider-sources/{source_id}/providers'
@@ -568,7 +572,7 @@ export const createProviderInSource = <ThrowOnError extends boolean = false>(opt
 /**
  * List providers by capability or source
  */
-export const listProviders = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListProvidersData, ThrowOnError>) => {
+export const listProviders = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListProvidersData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListProvidersResponse, ListProvidersError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers'
@@ -578,7 +582,7 @@ export const listProviders = <ThrowOnError extends boolean = false>(options?: Op
 /**
  * Create a standalone provider
  */
-export const createProvider = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateProviderData, ThrowOnError>) => {
+export const createProvider = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateProviderData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateProviderResponse, CreateProviderError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers'
@@ -588,7 +592,7 @@ export const createProvider = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Get a provider configuration by query ID
  */
-export const getProviderById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetProviderByIdData, ThrowOnError>) => {
+export const getProviderById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetProviderByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetProviderByIdResponse, GetProviderByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/by-id'
@@ -598,7 +602,7 @@ export const getProviderById = <ThrowOnError extends boolean = false>(options: O
 /**
  * Replace a provider configuration by body ID
  */
-export const updateProviderById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateProviderByIdData, ThrowOnError>) => {
+export const updateProviderById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateProviderByIdData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateProviderByIdResponse, UpdateProviderByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/by-id'
@@ -608,7 +612,7 @@ export const updateProviderById = <ThrowOnError extends boolean = false>(options
 /**
  * Delete a provider by query ID
  */
-export const deleteProviderById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteProviderByIdData, ThrowOnError>) => {
+export const deleteProviderById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteProviderByIdData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteProviderByIdResponse, DeleteProviderByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/by-id'
@@ -618,7 +622,7 @@ export const deleteProviderById = <ThrowOnError extends boolean = false>(options
 /**
  * Enable or disable a provider by body ID
  */
-export const setProviderEnabledById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetProviderEnabledByIdData, ThrowOnError>) => {
+export const setProviderEnabledById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetProviderEnabledByIdData, ThrowOnError>) => {
     return (options?.client ?? client).patch<SetProviderEnabledByIdResponse, SetProviderEnabledByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/enabled'
@@ -628,7 +632,7 @@ export const setProviderEnabledById = <ThrowOnError extends boolean = false>(opt
 /**
  * Test a provider by body ID
  */
-export const testProviderById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<TestProviderByIdData, ThrowOnError>) => {
+export const testProviderById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<TestProviderByIdData, ThrowOnError>) => {
     return (options?.client ?? client).post<TestProviderByIdResponse, TestProviderByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/test'
@@ -638,7 +642,7 @@ export const testProviderById = <ThrowOnError extends boolean = false>(options: 
 /**
  * Probe embedding dimension for a provider by body ID
  */
-export const getProviderEmbeddingDimensionById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetProviderEmbeddingDimensionByIdData, ThrowOnError>) => {
+export const getProviderEmbeddingDimensionById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetProviderEmbeddingDimensionByIdData, ThrowOnError>) => {
     return (options?.client ?? client).post<GetProviderEmbeddingDimensionByIdResponse, GetProviderEmbeddingDimensionByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/embedding-dimension'
@@ -648,7 +652,7 @@ export const getProviderEmbeddingDimensionById = <ThrowOnError extends boolean =
 /**
  * Get a provider configuration
  */
-export const getProvider = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetProviderData, ThrowOnError>) => {
+export const getProvider = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetProviderData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetProviderResponse, GetProviderError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/{provider_id}'
@@ -658,7 +662,7 @@ export const getProvider = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Replace a provider configuration
  */
-export const updateProvider = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateProviderData, ThrowOnError>) => {
+export const updateProvider = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateProviderData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateProviderResponse, UpdateProviderError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/{provider_id}'
@@ -668,7 +672,7 @@ export const updateProvider = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Delete a provider
  */
-export const deleteProvider = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteProviderData, ThrowOnError>) => {
+export const deleteProvider = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteProviderData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteProviderResponse, DeleteProviderError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/{provider_id}'
@@ -678,7 +682,7 @@ export const deleteProvider = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Enable or disable a provider
  */
-export const setProviderEnabled = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetProviderEnabledData, ThrowOnError>) => {
+export const setProviderEnabled = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetProviderEnabledData, ThrowOnError>) => {
     return (options?.client ?? client).patch<SetProviderEnabledResponse, SetProviderEnabledError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/{provider_id}/enabled'
@@ -688,7 +692,7 @@ export const setProviderEnabled = <ThrowOnError extends boolean = false>(options
 /**
  * Test a provider
  */
-export const testProvider = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<TestProviderData, ThrowOnError>) => {
+export const testProvider = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<TestProviderData, ThrowOnError>) => {
     return (options?.client ?? client).post<TestProviderResponse, TestProviderError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/{provider_id}/test'
@@ -698,7 +702,7 @@ export const testProvider = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Probe embedding dimension for a provider
  */
-export const getProviderEmbeddingDimension = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetProviderEmbeddingDimensionData, ThrowOnError>) => {
+export const getProviderEmbeddingDimension = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetProviderEmbeddingDimensionData, ThrowOnError>) => {
     return (options?.client ?? client).post<GetProviderEmbeddingDimensionResponse, GetProviderEmbeddingDimensionError, ThrowOnError>({
         ...options,
         url: '/api/v1/providers/{provider_id}/embedding-dimension'
@@ -708,7 +712,7 @@ export const getProviderEmbeddingDimension = <ThrowOnError extends boolean = fal
 /**
  * Send a webchat message
  */
-export const sendChatMessage = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SendChatMessageData, ThrowOnError>) => {
+export const sendChatMessage = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SendChatMessageData, ThrowOnError>) => {
     return (options?.client ?? client).post<SendChatMessageResponse, SendChatMessageError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat'
@@ -718,7 +722,7 @@ export const sendChatMessage = <ThrowOnError extends boolean = false>(options: O
 /**
  * Open a streaming chat WebSocket
  */
-export const openChatWebSocket = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<OpenChatWebSocketData, ThrowOnError>) => {
+export const openChatWebSocket = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<OpenChatWebSocketData, ThrowOnError>) => {
     return (options?.client ?? client).get<void, unknown, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/ws'
@@ -728,7 +732,7 @@ export const openChatWebSocket = <ThrowOnError extends boolean = false>(options?
 /**
  * Open the live voice chat WebSocket
  */
-export const openLiveChatWebSocket = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<OpenLiveChatWebSocketData, ThrowOnError>) => {
+export const openLiveChatWebSocket = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<OpenLiveChatWebSocketData, ThrowOnError>) => {
     return (options?.client ?? client).get<void, unknown, ThrowOnError>({
         ...options,
         url: '/api/v1/live-chat/ws'
@@ -738,7 +742,7 @@ export const openLiveChatWebSocket = <ThrowOnError extends boolean = false>(opti
 /**
  * Open the unified live/chat WebSocket
  */
-export const openUnifiedChatWebSocket = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<OpenUnifiedChatWebSocketData, ThrowOnError>) => {
+export const openUnifiedChatWebSocket = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<OpenUnifiedChatWebSocketData, ThrowOnError>) => {
     return (options?.client ?? client).get<void, unknown, ThrowOnError>({
         ...options,
         url: '/api/v1/unified-chat/ws'
@@ -748,7 +752,7 @@ export const openUnifiedChatWebSocket = <ThrowOnError extends boolean = false>(o
 /**
  * List webchat sessions
  */
-export const listChatSessions = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListChatSessionsData, ThrowOnError>) => {
+export const listChatSessions = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListChatSessionsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListChatSessionsResponse, ListChatSessionsError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/sessions'
@@ -758,7 +762,7 @@ export const listChatSessions = <ThrowOnError extends boolean = false>(options?:
 /**
  * Create a webchat session
  */
-export const createChatSession = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<CreateChatSessionData, ThrowOnError>) => {
+export const createChatSession = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<CreateChatSessionData, ThrowOnError>) => {
     return (options?.client ?? client).get<CreateChatSessionResponse, CreateChatSessionError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/sessions/new'
@@ -768,7 +772,7 @@ export const createChatSession = <ThrowOnError extends boolean = false>(options?
 /**
  * Delete multiple webchat sessions
  */
-export const batchDeleteChatSessions = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<BatchDeleteChatSessionsData, ThrowOnError>) => {
+export const batchDeleteChatSessions = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<BatchDeleteChatSessionsData, ThrowOnError>) => {
     return (options?.client ?? client).post<BatchDeleteChatSessionsResponse, BatchDeleteChatSessionsError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/sessions/batch-delete'
@@ -778,7 +782,7 @@ export const batchDeleteChatSessions = <ThrowOnError extends boolean = false>(op
 /**
  * Get a webchat session and its messages
  */
-export const getChatSession = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetChatSessionData, ThrowOnError>) => {
+export const getChatSession = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetChatSessionData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetChatSessionResponse, GetChatSessionError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/sessions/{session_id}'
@@ -788,7 +792,7 @@ export const getChatSession = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Update a webchat session
  */
-export const updateChatSession = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateChatSessionData, ThrowOnError>) => {
+export const updateChatSession = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateChatSessionData, ThrowOnError>) => {
     return (options?.client ?? client).patch<UpdateChatSessionResponse, UpdateChatSessionError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/sessions/{session_id}'
@@ -798,7 +802,7 @@ export const updateChatSession = <ThrowOnError extends boolean = false>(options:
 /**
  * Delete a webchat session
  */
-export const deleteChatSession = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteChatSessionData, ThrowOnError>) => {
+export const deleteChatSession = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteChatSessionData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteChatSessionResponse, DeleteChatSessionError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/sessions/{session_id}'
@@ -808,7 +812,7 @@ export const deleteChatSession = <ThrowOnError extends boolean = false>(options:
 /**
  * Stop active webchat work for a session
  */
-export const stopChatSession = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<StopChatSessionData, ThrowOnError>) => {
+export const stopChatSession = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<StopChatSessionData, ThrowOnError>) => {
     return (options?.client ?? client).post<StopChatSessionResponse, StopChatSessionError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/sessions/{session_id}/stop'
@@ -818,7 +822,7 @@ export const stopChatSession = <ThrowOnError extends boolean = false>(options: O
 /**
  * Resume an active webchat run as an SSE stream
  */
-export const resumeChatRun = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ResumeChatRunData, ThrowOnError>) => {
+export const resumeChatRun = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ResumeChatRunData, ThrowOnError>) => {
     return (options?.client ?? client).get<ResumeChatRunResponse, ResumeChatRunError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/runs/{run_id}/stream'
@@ -828,7 +832,7 @@ export const resumeChatRun = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Update the latest user message in a webchat session
  */
-export const updateChatMessage = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateChatMessageData, ThrowOnError>) => {
+export const updateChatMessage = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateChatMessageData, ThrowOnError>) => {
     return (options?.client ?? client).patch<UpdateChatMessageResponse, UpdateChatMessageError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/sessions/{session_id}/messages/{message_id}'
@@ -838,7 +842,7 @@ export const updateChatMessage = <ThrowOnError extends boolean = false>(options:
 /**
  * Regenerate a bot message in a webchat session
  */
-export const regenerateChatMessage = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<RegenerateChatMessageData, ThrowOnError>) => {
+export const regenerateChatMessage = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<RegenerateChatMessageData, ThrowOnError>) => {
     return (options?.client ?? client).post<RegenerateChatMessageResponse, RegenerateChatMessageError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/sessions/{session_id}/messages/{message_id}/regenerate'
@@ -848,7 +852,7 @@ export const regenerateChatMessage = <ThrowOnError extends boolean = false>(opti
 /**
  * List chat-selectable configuration profiles
  */
-export const listChatConfigs = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listChatConfigs = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListChatConfigsResponse, ListChatConfigsError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/configs'
@@ -858,7 +862,7 @@ export const listChatConfigs = <ThrowOnError extends boolean = false>(options?: 
 /**
  * Create or reuse a side thread from a webchat message
  */
-export const createChatThread = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateChatThreadData, ThrowOnError>) => {
+export const createChatThread = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateChatThreadData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateChatThreadResponse, CreateChatThreadError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/threads'
@@ -868,7 +872,7 @@ export const createChatThread = <ThrowOnError extends boolean = false>(options: 
 /**
  * Get a webchat side thread
  */
-export const getChatThread = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetChatThreadData, ThrowOnError>) => {
+export const getChatThread = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetChatThreadData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetChatThreadResponse, GetChatThreadError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/threads/{thread_id}'
@@ -878,7 +882,7 @@ export const getChatThread = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Delete a webchat side thread
  */
-export const deleteChatThread = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteChatThreadData, ThrowOnError>) => {
+export const deleteChatThread = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteChatThreadData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteChatThreadResponse, DeleteChatThreadError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/threads/{thread_id}'
@@ -888,7 +892,7 @@ export const deleteChatThread = <ThrowOnError extends boolean = false>(options: 
 /**
  * Send a message inside a webchat side thread
  */
-export const sendChatThreadMessage = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SendChatThreadMessageData, ThrowOnError>) => {
+export const sendChatThreadMessage = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SendChatThreadMessageData, ThrowOnError>) => {
     return (options?.client ?? client).post<SendChatThreadMessageResponse, SendChatThreadMessageError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/threads/{thread_id}/messages'
@@ -898,7 +902,7 @@ export const sendChatThreadMessage = <ThrowOnError extends boolean = false>(opti
 /**
  * List ChatUI projects
  */
-export const listChatProjects = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listChatProjects = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListChatProjectsResponse, ListChatProjectsError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/projects'
@@ -908,7 +912,7 @@ export const listChatProjects = <ThrowOnError extends boolean = false>(options?:
 /**
  * Create a ChatUI project
  */
-export const createChatProject = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateChatProjectData, ThrowOnError>) => {
+export const createChatProject = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateChatProjectData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateChatProjectResponse, CreateChatProjectError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/projects'
@@ -918,7 +922,7 @@ export const createChatProject = <ThrowOnError extends boolean = false>(options:
 /**
  * Get a ChatUI project
  */
-export const getChatProject = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetChatProjectData, ThrowOnError>) => {
+export const getChatProject = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetChatProjectData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetChatProjectResponse, GetChatProjectError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/projects/{project_id}'
@@ -928,7 +932,7 @@ export const getChatProject = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Update a ChatUI project
  */
-export const updateChatProject = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateChatProjectData, ThrowOnError>) => {
+export const updateChatProject = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateChatProjectData, ThrowOnError>) => {
     return (options?.client ?? client).patch<UpdateChatProjectResponse, UpdateChatProjectError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/projects/{project_id}'
@@ -938,7 +942,7 @@ export const updateChatProject = <ThrowOnError extends boolean = false>(options:
 /**
  * Delete a ChatUI project
  */
-export const deleteChatProject = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteChatProjectData, ThrowOnError>) => {
+export const deleteChatProject = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteChatProjectData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteChatProjectResponse, DeleteChatProjectError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/projects/{project_id}'
@@ -948,7 +952,7 @@ export const deleteChatProject = <ThrowOnError extends boolean = false>(options:
 /**
  * List sessions in a ChatUI project
  */
-export const listChatProjectSessions = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListChatProjectSessionsData, ThrowOnError>) => {
+export const listChatProjectSessions = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListChatProjectSessionsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListChatProjectSessionsResponse, ListChatProjectSessionsError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/projects/{project_id}/sessions'
@@ -958,7 +962,7 @@ export const listChatProjectSessions = <ThrowOnError extends boolean = false>(op
 /**
  * Add a session to a ChatUI project
  */
-export const addChatProjectSession = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<AddChatProjectSessionData, ThrowOnError>) => {
+export const addChatProjectSession = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<AddChatProjectSessionData, ThrowOnError>) => {
     return (options?.client ?? client).post<AddChatProjectSessionResponse, AddChatProjectSessionError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/projects/{project_id}/sessions/{session_id}'
@@ -968,7 +972,7 @@ export const addChatProjectSession = <ThrowOnError extends boolean = false>(opti
 /**
  * Remove a session from its ChatUI project
  */
-export const removeChatProjectSession = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<RemoveChatProjectSessionData, ThrowOnError>) => {
+export const removeChatProjectSession = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<RemoveChatProjectSessionData, ThrowOnError>) => {
     return (options?.client ?? client).delete<RemoveChatProjectSessionResponse, RemoveChatProjectSessionError, ThrowOnError>({
         ...options,
         url: '/api/v1/chat/projects/sessions/{session_id}'
@@ -978,7 +982,7 @@ export const removeChatProjectSession = <ThrowOnError extends boolean = false>(o
 /**
  * Send a message to a UMO
  */
-export const sendImMessage = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SendImMessageData, ThrowOnError>) => {
+export const sendImMessage = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SendImMessageData, ThrowOnError>) => {
     return (options?.client ?? client).post<SendImMessageResponse, SendImMessageError, ThrowOnError>({
         ...options,
         url: '/api/v1/im/messages'
@@ -988,7 +992,7 @@ export const sendImMessage = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * List active IM bot IDs
  */
-export const listImBots = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listImBots = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListImBotsResponse, ListImBotsError, ThrowOnError>({
         ...options,
         url: '/api/v1/im/bots'
@@ -998,7 +1002,7 @@ export const listImBots = <ThrowOnError extends boolean = false>(options?: Optio
 /**
  * Upload a file
  */
-export const uploadFile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UploadFileData, ThrowOnError>) => {
+export const uploadFile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UploadFileData, ThrowOnError>) => {
     return (options?.client ?? client).post<UploadFileResponse, UploadFileError, ThrowOnError>({
         ...options,
         ...formDataBodySerializer,
@@ -1013,7 +1017,7 @@ export const uploadFile = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Upload a file
  */
-export const uploadOpenApiFile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UploadOpenApiFileData, ThrowOnError>) => {
+export const uploadOpenApiFile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UploadOpenApiFileData, ThrowOnError>) => {
     return (options?.client ?? client).post<UploadOpenApiFileResponse, UploadOpenApiFileError, ThrowOnError>({
         ...options,
         ...formDataBodySerializer,
@@ -1028,7 +1032,7 @@ export const uploadOpenApiFile = <ThrowOnError extends boolean = false>(options:
 /**
  * Download an uploaded file by attachment ID
  */
-export const downloadOpenApiFile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DownloadOpenApiFileData, ThrowOnError>) => {
+export const downloadOpenApiFile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DownloadOpenApiFileData, ThrowOnError>) => {
     return (options?.client ?? client).get<DownloadOpenApiFileResponse, DownloadOpenApiFileError, ThrowOnError>({
         ...options,
         url: '/api/v1/file'
@@ -1038,7 +1042,7 @@ export const downloadOpenApiFile = <ThrowOnError extends boolean = false>(option
 /**
  * Get an uploaded file by stored filename
  */
-export const getFileByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetFileByNameData, ThrowOnError>) => {
+export const getFileByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetFileByNameData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetFileByNameResponse, GetFileByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/files/content'
@@ -1048,7 +1052,7 @@ export const getFileByName = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Get a tokenized public file
  */
-export const getTokenFile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetTokenFileData, ThrowOnError>) => {
+export const getTokenFile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetTokenFileData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetTokenFileResponse, GetTokenFileError, ThrowOnError>({
         ...options,
         url: '/api/v1/files/tokens/{file_token}'
@@ -1058,7 +1062,7 @@ export const getTokenFile = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Get attachment metadata
  */
-export const getAttachment = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetAttachmentData, ThrowOnError>) => {
+export const getAttachment = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetAttachmentData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetAttachmentResponse, GetAttachmentError, ThrowOnError>({
         ...options,
         url: '/api/v1/files/{attachment_id}'
@@ -1068,7 +1072,7 @@ export const getAttachment = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Delete an attachment
  */
-export const deleteAttachment = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteAttachmentData, ThrowOnError>) => {
+export const deleteAttachment = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteAttachmentData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteAttachmentResponse, DeleteAttachmentError, ThrowOnError>({
         ...options,
         url: '/api/v1/files/{attachment_id}'
@@ -1078,7 +1082,7 @@ export const deleteAttachment = <ThrowOnError extends boolean = false>(options: 
 /**
  * Download attachment content
  */
-export const downloadAttachment = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DownloadAttachmentData, ThrowOnError>) => {
+export const downloadAttachment = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DownloadAttachmentData, ThrowOnError>) => {
     return (options?.client ?? client).get<DownloadAttachmentResponse, DownloadAttachmentError, ThrowOnError>({
         ...options,
         url: '/api/v1/files/{attachment_id}/content'
@@ -1088,7 +1092,7 @@ export const downloadAttachment = <ThrowOnError extends boolean = false>(options
 /**
  * List installed plugins
  */
-export const listPlugins = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListPluginsData, ThrowOnError>) => {
+export const listPlugins = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListPluginsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListPluginsResponse, ListPluginsError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins'
@@ -1098,7 +1102,7 @@ export const listPlugins = <ThrowOnError extends boolean = false>(options?: Opti
 /**
  * Get plugin details by query ID
  */
-export const getPluginById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginByIdData, ThrowOnError>) => {
+export const getPluginById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginByIdResponse, GetPluginByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/by-id'
@@ -1108,7 +1112,7 @@ export const getPluginById = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Uninstall a plugin by query ID
  */
-export const uninstallPluginById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UninstallPluginByIdData, ThrowOnError>) => {
+export const uninstallPluginById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UninstallPluginByIdData, ThrowOnError>) => {
     return (options?.client ?? client).delete<UninstallPluginByIdResponse, UninstallPluginByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/by-id'
@@ -1118,7 +1122,7 @@ export const uninstallPluginById = <ThrowOnError extends boolean = false>(option
 /**
  * Get plugin configuration by query ID
  */
-export const getPluginConfigById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginConfigByIdData, ThrowOnError>) => {
+export const getPluginConfigById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginConfigByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginConfigByIdResponse, GetPluginConfigByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/config'
@@ -1128,7 +1132,7 @@ export const getPluginConfigById = <ThrowOnError extends boolean = false>(option
 /**
  * Save plugin configuration by body ID
  */
-export const updatePluginConfigById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdatePluginConfigByIdData, ThrowOnError>) => {
+export const updatePluginConfigById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdatePluginConfigByIdData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdatePluginConfigByIdResponse, UpdatePluginConfigByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/config'
@@ -1138,7 +1142,7 @@ export const updatePluginConfigById = <ThrowOnError extends boolean = false>(opt
 /**
  * Get plugin configuration schema by query ID
  */
-export const getPluginConfigSchemaById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginConfigSchemaByIdData, ThrowOnError>) => {
+export const getPluginConfigSchemaById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginConfigSchemaByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginConfigSchemaByIdResponse, GetPluginConfigSchemaByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/config/schema'
@@ -1148,7 +1152,7 @@ export const getPluginConfigSchemaById = <ThrowOnError extends boolean = false>(
 /**
  * List uploaded files for a plugin file configuration item by query ID
  */
-export const listPluginConfigFilesById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListPluginConfigFilesByIdData, ThrowOnError>) => {
+export const listPluginConfigFilesById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListPluginConfigFilesByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListPluginConfigFilesByIdResponse, ListPluginConfigFilesByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/config-files'
@@ -1158,7 +1162,7 @@ export const listPluginConfigFilesById = <ThrowOnError extends boolean = false>(
 /**
  * Upload files for a plugin file configuration item by query ID
  */
-export const uploadPluginConfigFilesById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UploadPluginConfigFilesByIdData, ThrowOnError>) => {
+export const uploadPluginConfigFilesById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UploadPluginConfigFilesByIdData, ThrowOnError>) => {
     return (options?.client ?? client).post<UploadPluginConfigFilesByIdResponse, UploadPluginConfigFilesByIdError, ThrowOnError>({
         ...options,
         ...formDataBodySerializer,
@@ -1173,7 +1177,7 @@ export const uploadPluginConfigFilesById = <ThrowOnError extends boolean = false
 /**
  * Delete a plugin file configuration upload by query ID
  */
-export const deletePluginConfigFileById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeletePluginConfigFileByIdData, ThrowOnError>) => {
+export const deletePluginConfigFileById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeletePluginConfigFileByIdData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeletePluginConfigFileByIdResponse, DeletePluginConfigFileByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/config-files'
@@ -1183,7 +1187,7 @@ export const deletePluginConfigFileById = <ThrowOnError extends boolean = false>
 /**
  * Get plugin README content by query ID
  */
-export const getPluginReadmeById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginReadmeByIdData, ThrowOnError>) => {
+export const getPluginReadmeById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginReadmeByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginReadmeByIdResponse, GetPluginReadmeByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/readme'
@@ -1193,7 +1197,7 @@ export const getPluginReadmeById = <ThrowOnError extends boolean = false>(option
 /**
  * Get plugin CHANGELOG content by query ID
  */
-export const getPluginChangelogById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginChangelogByIdData, ThrowOnError>) => {
+export const getPluginChangelogById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginChangelogByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginChangelogByIdResponse, GetPluginChangelogByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/changelog'
@@ -1203,7 +1207,7 @@ export const getPluginChangelogById = <ThrowOnError extends boolean = false>(opt
 /**
  * Reload a plugin by body ID
  */
-export const reloadPluginById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ReloadPluginByIdData, ThrowOnError>) => {
+export const reloadPluginById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ReloadPluginByIdData, ThrowOnError>) => {
     return (options?.client ?? client).post<ReloadPluginByIdResponse, ReloadPluginByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/reload'
@@ -1213,7 +1217,7 @@ export const reloadPluginById = <ThrowOnError extends boolean = false>(options: 
 /**
  * Enable or disable a plugin by body ID
  */
-export const setPluginEnabledById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetPluginEnabledByIdData, ThrowOnError>) => {
+export const setPluginEnabledById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetPluginEnabledByIdData, ThrowOnError>) => {
     return (options?.client ?? client).patch<SetPluginEnabledByIdResponse, SetPluginEnabledByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/enabled'
@@ -1223,7 +1227,7 @@ export const setPluginEnabledById = <ThrowOnError extends boolean = false>(optio
 /**
  * List plugin pages by query ID
  */
-export const listPluginPagesById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListPluginPagesByIdData, ThrowOnError>) => {
+export const listPluginPagesById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListPluginPagesByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListPluginPagesByIdResponse, ListPluginPagesByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/pages'
@@ -1233,7 +1237,7 @@ export const listPluginPagesById = <ThrowOnError extends boolean = false>(option
 /**
  * Get plugin page entry HTML by query ID
  */
-export const getPluginPageById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginPageByIdData, ThrowOnError>) => {
+export const getPluginPageById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginPageByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginPageByIdResponse, GetPluginPageByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/page'
@@ -1243,7 +1247,7 @@ export const getPluginPageById = <ThrowOnError extends boolean = false>(options:
 /**
  * Get a plugin page asset by query ID
  */
-export const getPluginPageAssetById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginPageAssetByIdData, ThrowOnError>) => {
+export const getPluginPageAssetById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginPageAssetByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginPageAssetByIdResponse, GetPluginPageAssetByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/page/assets'
@@ -1253,7 +1257,7 @@ export const getPluginPageAssetById = <ThrowOnError extends boolean = false>(opt
 /**
  * Get plugin details
  */
-export const getPlugin = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginData, ThrowOnError>) => {
+export const getPlugin = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginResponse, GetPluginError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}'
@@ -1263,7 +1267,7 @@ export const getPlugin = <ThrowOnError extends boolean = false>(options: Options
 /**
  * Uninstall a plugin
  */
-export const uninstallPlugin = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UninstallPluginData, ThrowOnError>) => {
+export const uninstallPlugin = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UninstallPluginData, ThrowOnError>) => {
     return (options?.client ?? client).delete<UninstallPluginResponse, UninstallPluginError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}'
@@ -1273,7 +1277,7 @@ export const uninstallPlugin = <ThrowOnError extends boolean = false>(options: O
 /**
  * Get plugin configuration
  */
-export const getPluginConfig = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginConfigData, ThrowOnError>) => {
+export const getPluginConfig = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginConfigData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginConfigResponse, GetPluginConfigError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/config'
@@ -1283,7 +1287,7 @@ export const getPluginConfig = <ThrowOnError extends boolean = false>(options: O
 /**
  * Save plugin configuration
  */
-export const updatePluginConfig = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdatePluginConfigData, ThrowOnError>) => {
+export const updatePluginConfig = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdatePluginConfigData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdatePluginConfigResponse, UpdatePluginConfigError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/config'
@@ -1293,7 +1297,7 @@ export const updatePluginConfig = <ThrowOnError extends boolean = false>(options
 /**
  * Get plugin configuration schema
  */
-export const getPluginConfigSchema = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginConfigSchemaData, ThrowOnError>) => {
+export const getPluginConfigSchema = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginConfigSchemaData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginConfigSchemaResponse, GetPluginConfigSchemaError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/config/schema'
@@ -1303,7 +1307,7 @@ export const getPluginConfigSchema = <ThrowOnError extends boolean = false>(opti
 /**
  * List uploaded files for a plugin file configuration item
  */
-export const listPluginConfigFiles = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListPluginConfigFilesData, ThrowOnError>) => {
+export const listPluginConfigFiles = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListPluginConfigFilesData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListPluginConfigFilesResponse, ListPluginConfigFilesError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/config-files/{config_key}'
@@ -1313,7 +1317,7 @@ export const listPluginConfigFiles = <ThrowOnError extends boolean = false>(opti
 /**
  * Upload files for a plugin file configuration item
  */
-export const uploadPluginConfigFiles = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UploadPluginConfigFilesData, ThrowOnError>) => {
+export const uploadPluginConfigFiles = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UploadPluginConfigFilesData, ThrowOnError>) => {
     return (options?.client ?? client).post<UploadPluginConfigFilesResponse, UploadPluginConfigFilesError, ThrowOnError>({
         ...options,
         ...formDataBodySerializer,
@@ -1328,7 +1332,7 @@ export const uploadPluginConfigFiles = <ThrowOnError extends boolean = false>(op
 /**
  * Delete a plugin file configuration upload
  */
-export const deletePluginConfigFile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeletePluginConfigFileData, ThrowOnError>) => {
+export const deletePluginConfigFile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeletePluginConfigFileData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeletePluginConfigFileResponse, DeletePluginConfigFileError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/config-files'
@@ -1338,7 +1342,7 @@ export const deletePluginConfigFile = <ThrowOnError extends boolean = false>(opt
 /**
  * Get plugin README content
  */
-export const getPluginReadme = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginReadmeData, ThrowOnError>) => {
+export const getPluginReadme = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginReadmeData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginReadmeResponse, GetPluginReadmeError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/readme'
@@ -1348,7 +1352,7 @@ export const getPluginReadme = <ThrowOnError extends boolean = false>(options: O
 /**
  * Get plugin CHANGELOG content
  */
-export const getPluginChangelog = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginChangelogData, ThrowOnError>) => {
+export const getPluginChangelog = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginChangelogData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginChangelogResponse, GetPluginChangelogError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/changelog'
@@ -1358,7 +1362,7 @@ export const getPluginChangelog = <ThrowOnError extends boolean = false>(options
 /**
  * Reload a plugin
  */
-export const reloadPlugin = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ReloadPluginData, ThrowOnError>) => {
+export const reloadPlugin = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ReloadPluginData, ThrowOnError>) => {
     return (options?.client ?? client).post<ReloadPluginResponse, ReloadPluginError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/reload'
@@ -1368,7 +1372,7 @@ export const reloadPlugin = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Bind an installed plugin to a marketplace source
  */
-export const bindPluginSource = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<BindPluginSourceData, ThrowOnError>) => {
+export const bindPluginSource = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<BindPluginSourceData, ThrowOnError>) => {
     return (options?.client ?? client).post<BindPluginSourceResponse, BindPluginSourceError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/source'
@@ -1378,7 +1382,7 @@ export const bindPluginSource = <ThrowOnError extends boolean = false>(options: 
 /**
  * Enable or disable a plugin
  */
-export const setPluginEnabled = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetPluginEnabledData, ThrowOnError>) => {
+export const setPluginEnabled = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetPluginEnabledData, ThrowOnError>) => {
     return (options?.client ?? client).patch<SetPluginEnabledResponse, SetPluginEnabledError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/enabled'
@@ -1388,7 +1392,7 @@ export const setPluginEnabled = <ThrowOnError extends boolean = false>(options: 
 /**
  * Update or reinstall a plugin
  */
-export const updatePlugin = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdatePluginData, ThrowOnError>) => {
+export const updatePlugin = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdatePluginData, ThrowOnError>) => {
     return (options?.client ?? client).post<UpdatePluginResponse, UpdatePluginError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/update'
@@ -1398,7 +1402,7 @@ export const updatePlugin = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Update multiple plugins
  */
-export const updatePlugins = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdatePluginsData, ThrowOnError>) => {
+export const updatePlugins = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdatePluginsData, ThrowOnError>) => {
     return (options?.client ?? client).post<UpdatePluginsResponse, UpdatePluginsError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/update'
@@ -1408,7 +1412,7 @@ export const updatePlugins = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Check whether a plugin version constraint is supported
  */
-export const checkPluginVersionSupport = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CheckPluginVersionSupportData, ThrowOnError>) => {
+export const checkPluginVersionSupport = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CheckPluginVersionSupportData, ThrowOnError>) => {
     return (options?.client ?? client).post<CheckPluginVersionSupportResponse, CheckPluginVersionSupportError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/version-support/check'
@@ -1418,7 +1422,7 @@ export const checkPluginVersionSupport = <ThrowOnError extends boolean = false>(
 /**
  * Validate a GitHub plugin repository before installation
  */
-export const validatePluginRepo = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ValidatePluginRepoData, ThrowOnError>) => {
+export const validatePluginRepo = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ValidatePluginRepoData, ThrowOnError>) => {
     return (options?.client ?? client).post<ValidatePluginRepoResponse, ValidatePluginRepoError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/validate/repo'
@@ -1428,7 +1432,7 @@ export const validatePluginRepo = <ThrowOnError extends boolean = false>(options
 /**
  * List failed plugins and errors
  */
-export const listFailedPlugins = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listFailedPlugins = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListFailedPluginsResponse, ListFailedPluginsError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/failed'
@@ -1438,7 +1442,7 @@ export const listFailedPlugins = <ThrowOnError extends boolean = false>(options?
 /**
  * Uninstall a failed plugin
  */
-export const uninstallFailedPlugin = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UninstallFailedPluginData, ThrowOnError>) => {
+export const uninstallFailedPlugin = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UninstallFailedPluginData, ThrowOnError>) => {
     return (options?.client ?? client).delete<UninstallFailedPluginResponse, UninstallFailedPluginError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/failed/{plugin_id}'
@@ -1448,7 +1452,7 @@ export const uninstallFailedPlugin = <ThrowOnError extends boolean = false>(opti
 /**
  * Reload a failed plugin
  */
-export const reloadFailedPlugin = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ReloadFailedPluginData, ThrowOnError>) => {
+export const reloadFailedPlugin = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ReloadFailedPluginData, ThrowOnError>) => {
     return (options?.client ?? client).post<ReloadFailedPluginResponse, ReloadFailedPluginError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/failed/{plugin_id}/reload'
@@ -1458,7 +1462,7 @@ export const reloadFailedPlugin = <ThrowOnError extends boolean = false>(options
 /**
  * Install a plugin from GitHub
  */
-export const installPluginFromGithub = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<InstallPluginFromGithubData, ThrowOnError>) => {
+export const installPluginFromGithub = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<InstallPluginFromGithubData, ThrowOnError>) => {
     return (options?.client ?? client).post<InstallPluginFromGithubResponse, InstallPluginFromGithubError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/install/github'
@@ -1468,7 +1472,7 @@ export const installPluginFromGithub = <ThrowOnError extends boolean = false>(op
 /**
  * Install a plugin from a downloadable ZIP URL
  */
-export const installPluginFromUrl = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<InstallPluginFromUrlData, ThrowOnError>) => {
+export const installPluginFromUrl = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<InstallPluginFromUrlData, ThrowOnError>) => {
     return (options?.client ?? client).post<InstallPluginFromUrlResponse, InstallPluginFromUrlError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/install/url'
@@ -1478,7 +1482,7 @@ export const installPluginFromUrl = <ThrowOnError extends boolean = false>(optio
 /**
  * Install a plugin from an uploaded ZIP file
  */
-export const installPluginFromUpload = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<InstallPluginFromUploadData, ThrowOnError>) => {
+export const installPluginFromUpload = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<InstallPluginFromUploadData, ThrowOnError>) => {
     return (options?.client ?? client).post<InstallPluginFromUploadResponse, InstallPluginFromUploadError, ThrowOnError>({
         ...options,
         ...formDataBodySerializer,
@@ -1493,7 +1497,7 @@ export const installPluginFromUpload = <ThrowOnError extends boolean = false>(op
 /**
  * List plugin marketplace entries
  */
-export const listPluginMarket = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListPluginMarketData, ThrowOnError>) => {
+export const listPluginMarket = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListPluginMarketData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListPluginMarketResponse, ListPluginMarketError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/market'
@@ -1503,7 +1507,7 @@ export const listPluginMarket = <ThrowOnError extends boolean = false>(options?:
 /**
  * List plugin marketplace categories
  */
-export const listPluginMarketCategories = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listPluginMarketCategories = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListPluginMarketCategoriesResponse, ListPluginMarketCategoriesError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/market/categories'
@@ -1513,7 +1517,7 @@ export const listPluginMarketCategories = <ThrowOnError extends boolean = false>
 /**
  * List plugin sources
  */
-export const listPluginSources = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listPluginSources = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListPluginSourcesResponse, ListPluginSourcesError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugin-sources'
@@ -1523,7 +1527,7 @@ export const listPluginSources = <ThrowOnError extends boolean = false>(options?
 /**
  * Add a plugin source
  */
-export const createPluginSource = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreatePluginSourceData, ThrowOnError>) => {
+export const createPluginSource = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreatePluginSourceData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreatePluginSourceResponse, CreatePluginSourceError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugin-sources'
@@ -1533,7 +1537,7 @@ export const createPluginSource = <ThrowOnError extends boolean = false>(options
 /**
  * Replace plugin sources
  */
-export const replacePluginSources = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ReplacePluginSourcesData, ThrowOnError>) => {
+export const replacePluginSources = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ReplacePluginSourcesData, ThrowOnError>) => {
     return (options?.client ?? client).put<ReplacePluginSourcesResponse, ReplacePluginSourcesError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugin-sources'
@@ -1543,7 +1547,7 @@ export const replacePluginSources = <ThrowOnError extends boolean = false>(optio
 /**
  * Delete a plugin source
  */
-export const deletePluginSource = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeletePluginSourceData, ThrowOnError>) => {
+export const deletePluginSource = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeletePluginSourceData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeletePluginSourceResponse, DeletePluginSourceError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugin-sources/{source_id}'
@@ -1553,7 +1557,7 @@ export const deletePluginSource = <ThrowOnError extends boolean = false>(options
 /**
  * Delete a plugin source by query ID
  */
-export const deletePluginSourceById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeletePluginSourceByIdData, ThrowOnError>) => {
+export const deletePluginSourceById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeletePluginSourceByIdData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeletePluginSourceByIdResponse, DeletePluginSourceByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugin-sources/by-id'
@@ -1563,7 +1567,7 @@ export const deletePluginSourceById = <ThrowOnError extends boolean = false>(opt
 /**
  * List plugin pages
  */
-export const listPluginPages = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListPluginPagesData, ThrowOnError>) => {
+export const listPluginPages = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListPluginPagesData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListPluginPagesResponse, ListPluginPagesError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/pages'
@@ -1573,7 +1577,7 @@ export const listPluginPages = <ThrowOnError extends boolean = false>(options: O
 /**
  * Get plugin page entry HTML
  */
-export const getPluginPage = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginPageData, ThrowOnError>) => {
+export const getPluginPage = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginPageData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginPageResponse, GetPluginPageError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/pages/{page_name}'
@@ -1583,7 +1587,7 @@ export const getPluginPage = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Get a plugin page asset
  */
-export const getPluginPageAsset = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginPageAssetData, ThrowOnError>) => {
+export const getPluginPageAsset = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginPageAssetData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginPageAssetResponse, GetPluginPageAssetError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/{plugin_id}/pages/{page_name}/assets/{asset_path}'
@@ -1593,7 +1597,7 @@ export const getPluginPageAsset = <ThrowOnError extends boolean = false>(options
 /**
  * Get the plugin page bridge SDK
  */
-export const getPluginPageBridgeSdk = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getPluginPageBridgeSdk = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginPageBridgeSdkResponse, GetPluginPageBridgeSdkError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/page-bridge-sdk.js'
@@ -1603,7 +1607,7 @@ export const getPluginPageBridgeSdk = <ThrowOnError extends boolean = false>(opt
 /**
  * Proxy a plugin extension GET route
  */
-export const getPluginExtensionRoute = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginExtensionRouteData, ThrowOnError>) => {
+export const getPluginExtensionRoute = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPluginExtensionRouteData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPluginExtensionRouteResponse, GetPluginExtensionRouteError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/extensions/{plugin_path}'
@@ -1613,7 +1617,7 @@ export const getPluginExtensionRoute = <ThrowOnError extends boolean = false>(op
 /**
  * Proxy a plugin extension POST route
  */
-export const postPluginExtensionRoute = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<PostPluginExtensionRouteData, ThrowOnError>) => {
+export const postPluginExtensionRoute = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<PostPluginExtensionRouteData, ThrowOnError>) => {
     return (options?.client ?? client).post<PostPluginExtensionRouteResponse, PostPluginExtensionRouteError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/extensions/{plugin_path}'
@@ -1623,7 +1627,7 @@ export const postPluginExtensionRoute = <ThrowOnError extends boolean = false>(o
 /**
  * Proxy a plugin extension PUT route
  */
-export const putPluginExtensionRoute = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<PutPluginExtensionRouteData, ThrowOnError>) => {
+export const putPluginExtensionRoute = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<PutPluginExtensionRouteData, ThrowOnError>) => {
     return (options?.client ?? client).put<PutPluginExtensionRouteResponse, PutPluginExtensionRouteError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/extensions/{plugin_path}'
@@ -1633,7 +1637,7 @@ export const putPluginExtensionRoute = <ThrowOnError extends boolean = false>(op
 /**
  * Proxy a plugin extension PATCH route
  */
-export const patchPluginExtensionRoute = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<PatchPluginExtensionRouteData, ThrowOnError>) => {
+export const patchPluginExtensionRoute = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<PatchPluginExtensionRouteData, ThrowOnError>) => {
     return (options?.client ?? client).patch<PatchPluginExtensionRouteResponse, PatchPluginExtensionRouteError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/extensions/{plugin_path}'
@@ -1643,7 +1647,7 @@ export const patchPluginExtensionRoute = <ThrowOnError extends boolean = false>(
 /**
  * Proxy a plugin extension DELETE route
  */
-export const deletePluginExtensionRoute = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeletePluginExtensionRouteData, ThrowOnError>) => {
+export const deletePluginExtensionRoute = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeletePluginExtensionRouteData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeletePluginExtensionRouteResponse, DeletePluginExtensionRouteError, ThrowOnError>({
         ...options,
         url: '/api/v1/plugins/extensions/{plugin_path}'
@@ -1653,7 +1657,7 @@ export const deletePluginExtensionRoute = <ThrowOnError extends boolean = false>
 /**
  * List plugin commands
  */
-export const listCommands = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListCommandsData, ThrowOnError>) => {
+export const listCommands = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListCommandsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListCommandsResponse, ListCommandsError, ThrowOnError>({
         ...options,
         url: '/api/v1/commands'
@@ -1663,7 +1667,7 @@ export const listCommands = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * Update command enabled state, alias, or permission group
  */
-export const updateCommand = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateCommandData, ThrowOnError>) => {
+export const updateCommand = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateCommandData, ThrowOnError>) => {
     return (options?.client ?? client).patch<UpdateCommandResponse, UpdateCommandError, ThrowOnError>({
         ...options,
         url: '/api/v1/commands/{command_id}'
@@ -1673,7 +1677,7 @@ export const updateCommand = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * List command conflicts
  */
-export const listCommandConflicts = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listCommandConflicts = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListCommandConflictsResponse, ListCommandConflictsError, ThrowOnError>({
         ...options,
         url: '/api/v1/commands/conflicts'
@@ -1683,7 +1687,7 @@ export const listCommandConflicts = <ThrowOnError extends boolean = false>(optio
 /**
  * List LLM tools
  */
-export const listTools = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListToolsData, ThrowOnError>) => {
+export const listTools = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListToolsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListToolsResponse, ListToolsError, ThrowOnError>({
         ...options,
         url: '/api/v1/tools'
@@ -1693,7 +1697,7 @@ export const listTools = <ThrowOnError extends boolean = false>(options?: Option
 /**
  * Enable or disable an LLM tool
  */
-export const setToolEnabled = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetToolEnabledData, ThrowOnError>) => {
+export const setToolEnabled = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetToolEnabledData, ThrowOnError>) => {
     return (options?.client ?? client).patch<SetToolEnabledResponse, SetToolEnabledError, ThrowOnError>({
         ...options,
         url: '/api/v1/tools/{tool_id}/enabled'
@@ -1703,7 +1707,7 @@ export const setToolEnabled = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Update an LLM tool permission
  */
-export const setToolPermission = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetToolPermissionData, ThrowOnError>) => {
+export const setToolPermission = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetToolPermissionData, ThrowOnError>) => {
     return (options?.client ?? client).patch<SetToolPermissionResponse, SetToolPermissionError, ThrowOnError>({
         ...options,
         url: '/api/v1/tools/{tool_id}/permission'
@@ -1713,7 +1717,7 @@ export const setToolPermission = <ThrowOnError extends boolean = false>(options:
 /**
  * List MCP servers
  */
-export const listMcpServers = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listMcpServers = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListMcpServersResponse, ListMcpServersError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/servers'
@@ -1723,7 +1727,7 @@ export const listMcpServers = <ThrowOnError extends boolean = false>(options?: O
 /**
  * Add an MCP server
  */
-export const createMcpServer = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateMcpServerData, ThrowOnError>) => {
+export const createMcpServer = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateMcpServerData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateMcpServerResponse, CreateMcpServerError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/servers'
@@ -1733,7 +1737,7 @@ export const createMcpServer = <ThrowOnError extends boolean = false>(options: O
 /**
  * Update an MCP server by body name
  */
-export const updateMcpServerByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateMcpServerByNameData, ThrowOnError>) => {
+export const updateMcpServerByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateMcpServerByNameData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateMcpServerByNameResponse, UpdateMcpServerByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/servers/by-name'
@@ -1743,7 +1747,7 @@ export const updateMcpServerByName = <ThrowOnError extends boolean = false>(opti
 /**
  * Delete an MCP server by query name
  */
-export const deleteMcpServerByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteMcpServerByNameData, ThrowOnError>) => {
+export const deleteMcpServerByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteMcpServerByNameData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteMcpServerByNameResponse, DeleteMcpServerByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/servers/by-name'
@@ -1753,7 +1757,7 @@ export const deleteMcpServerByName = <ThrowOnError extends boolean = false>(opti
 /**
  * Enable or disable an MCP server by body name
  */
-export const setMcpServerEnabledByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetMcpServerEnabledByNameData, ThrowOnError>) => {
+export const setMcpServerEnabledByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetMcpServerEnabledByNameData, ThrowOnError>) => {
     return (options?.client ?? client).patch<SetMcpServerEnabledByNameResponse, SetMcpServerEnabledByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/servers/enabled'
@@ -1763,7 +1767,7 @@ export const setMcpServerEnabledByName = <ThrowOnError extends boolean = false>(
 /**
  * Test an MCP server connection by body name
  */
-export const testMcpServerByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<TestMcpServerByNameData, ThrowOnError>) => {
+export const testMcpServerByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<TestMcpServerByNameData, ThrowOnError>) => {
     return (options?.client ?? client).post<TestMcpServerByNameResponse, TestMcpServerByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/servers/test'
@@ -1773,7 +1777,7 @@ export const testMcpServerByName = <ThrowOnError extends boolean = false>(option
 /**
  * Update an MCP server
  */
-export const updateMcpServer = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateMcpServerData, ThrowOnError>) => {
+export const updateMcpServer = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateMcpServerData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateMcpServerResponse, UpdateMcpServerError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/servers/{server_name}'
@@ -1783,7 +1787,7 @@ export const updateMcpServer = <ThrowOnError extends boolean = false>(options: O
 /**
  * Delete an MCP server
  */
-export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteMcpServerData, ThrowOnError>) => {
+export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteMcpServerData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteMcpServerResponse, DeleteMcpServerError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/servers/{server_name}'
@@ -1793,7 +1797,7 @@ export const deleteMcpServer = <ThrowOnError extends boolean = false>(options: O
 /**
  * Enable or disable an MCP server
  */
-export const setMcpServerEnabled = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetMcpServerEnabledData, ThrowOnError>) => {
+export const setMcpServerEnabled = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetMcpServerEnabledData, ThrowOnError>) => {
     return (options?.client ?? client).patch<SetMcpServerEnabledResponse, SetMcpServerEnabledError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/servers/{server_name}/enabled'
@@ -1803,7 +1807,7 @@ export const setMcpServerEnabled = <ThrowOnError extends boolean = false>(option
 /**
  * Test an MCP server connection
  */
-export const testMcpServer = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<TestMcpServerData, ThrowOnError>) => {
+export const testMcpServer = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<TestMcpServerData, ThrowOnError>) => {
     return (options?.client ?? client).post<TestMcpServerResponse, TestMcpServerError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/servers/{server_name}/test'
@@ -1813,7 +1817,7 @@ export const testMcpServer = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Sync MCP servers from ModelScope
  */
-export const syncModelScopeMcpServers = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<SyncModelScopeMcpServersData, ThrowOnError>) => {
+export const syncModelScopeMcpServers = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<SyncModelScopeMcpServersData, ThrowOnError>) => {
     return (options?.client ?? client).post<SyncModelScopeMcpServersResponse, SyncModelScopeMcpServersError, ThrowOnError>({
         ...options,
         url: '/api/v1/mcp/providers/modelscope/sync'
@@ -1823,7 +1827,7 @@ export const syncModelScopeMcpServers = <ThrowOnError extends boolean = false>(o
 /**
  * List skills
  */
-export const listSkills = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListSkillsData, ThrowOnError>) => {
+export const listSkills = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListSkillsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListSkillsResponse, ListSkillsError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills'
@@ -1833,7 +1837,7 @@ export const listSkills = <ThrowOnError extends boolean = false>(options?: Optio
 /**
  * Upload or import a skill archive
  */
-export const uploadSkill = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UploadSkillData, ThrowOnError>) => {
+export const uploadSkill = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UploadSkillData, ThrowOnError>) => {
     return (options?.client ?? client).post<UploadSkillResponse, UploadSkillError, ThrowOnError>({
         ...options,
         ...formDataBodySerializer,
@@ -1848,7 +1852,7 @@ export const uploadSkill = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Upload multiple skill archives
  */
-export const uploadSkillsBatch = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UploadSkillsBatchData, ThrowOnError>) => {
+export const uploadSkillsBatch = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UploadSkillsBatchData, ThrowOnError>) => {
     return (options?.client ?? client).post<UploadSkillsBatchResponse, UploadSkillsBatchError, ThrowOnError>({
         ...options,
         ...formDataBodySerializer,
@@ -1863,7 +1867,7 @@ export const uploadSkillsBatch = <ThrowOnError extends boolean = false>(options:
 /**
  * Update skill metadata or enabled state by body name
  */
-export const updateSkillByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateSkillByNameData, ThrowOnError>) => {
+export const updateSkillByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateSkillByNameData, ThrowOnError>) => {
     return (options?.client ?? client).patch<UpdateSkillByNameResponse, UpdateSkillByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/by-name'
@@ -1873,7 +1877,7 @@ export const updateSkillByName = <ThrowOnError extends boolean = false>(options:
 /**
  * Delete a skill by query name
  */
-export const deleteSkillByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteSkillByNameData, ThrowOnError>) => {
+export const deleteSkillByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteSkillByNameData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteSkillByNameResponse, DeleteSkillByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/by-name'
@@ -1883,7 +1887,7 @@ export const deleteSkillByName = <ThrowOnError extends boolean = false>(options:
 /**
  * Download a skill archive by query name
  */
-export const downloadSkillByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DownloadSkillByNameData, ThrowOnError>) => {
+export const downloadSkillByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DownloadSkillByNameData, ThrowOnError>) => {
     return (options?.client ?? client).get<DownloadSkillByNameResponse, DownloadSkillByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/archive'
@@ -1893,7 +1897,7 @@ export const downloadSkillByName = <ThrowOnError extends boolean = false>(option
 /**
  * List files in a skill by query name
  */
-export const listSkillFilesByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListSkillFilesByNameData, ThrowOnError>) => {
+export const listSkillFilesByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListSkillFilesByNameData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListSkillFilesByNameResponse, ListSkillFilesByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/files'
@@ -1903,7 +1907,7 @@ export const listSkillFilesByName = <ThrowOnError extends boolean = false>(optio
 /**
  * Get skill file content by query name and path
  */
-export const getSkillFileByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetSkillFileByNameData, ThrowOnError>) => {
+export const getSkillFileByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetSkillFileByNameData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetSkillFileByNameResponse, GetSkillFileByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/file'
@@ -1913,7 +1917,7 @@ export const getSkillFileByName = <ThrowOnError extends boolean = false>(options
 /**
  * Update skill file content by body name and path
  */
-export const updateSkillFileByName = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateSkillFileByNameData, ThrowOnError>) => {
+export const updateSkillFileByName = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateSkillFileByNameData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateSkillFileByNameResponse, UpdateSkillFileByNameError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/file'
@@ -1923,7 +1927,7 @@ export const updateSkillFileByName = <ThrowOnError extends boolean = false>(opti
 /**
  * Update skill metadata or enabled state
  */
-export const updateSkill = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateSkillData, ThrowOnError>) => {
+export const updateSkill = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateSkillData, ThrowOnError>) => {
     return (options?.client ?? client).patch<UpdateSkillResponse, UpdateSkillError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/{skill_name}'
@@ -1933,7 +1937,7 @@ export const updateSkill = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Delete a skill
  */
-export const deleteSkill = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteSkillData, ThrowOnError>) => {
+export const deleteSkill = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteSkillData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteSkillResponse, DeleteSkillError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/{skill_name}'
@@ -1943,7 +1947,7 @@ export const deleteSkill = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Download a skill archive
  */
-export const downloadSkill = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DownloadSkillData, ThrowOnError>) => {
+export const downloadSkill = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DownloadSkillData, ThrowOnError>) => {
     return (options?.client ?? client).get<DownloadSkillResponse, DownloadSkillError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/{skill_name}/archive'
@@ -1953,7 +1957,7 @@ export const downloadSkill = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * List files in a skill
  */
-export const listSkillFiles = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListSkillFilesData, ThrowOnError>) => {
+export const listSkillFiles = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListSkillFilesData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListSkillFilesResponse, ListSkillFilesError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/{skill_name}/files'
@@ -1963,7 +1967,7 @@ export const listSkillFiles = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Get skill file content
  */
-export const getSkillFile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetSkillFileData, ThrowOnError>) => {
+export const getSkillFile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetSkillFileData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetSkillFileResponse, GetSkillFileError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/{skill_name}/files/{file_path}'
@@ -1973,7 +1977,7 @@ export const getSkillFile = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Update skill file content
  */
-export const updateSkillFile = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateSkillFileData, ThrowOnError>) => {
+export const updateSkillFile = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateSkillFileData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateSkillFileResponse, UpdateSkillFileError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/{skill_name}/files/{file_path}'
@@ -1983,7 +1987,7 @@ export const updateSkillFile = <ThrowOnError extends boolean = false>(options: O
 /**
  * List Shipyard Neo skill candidates
  */
-export const listNeoSkillCandidates = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListNeoSkillCandidatesData, ThrowOnError>) => {
+export const listNeoSkillCandidates = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListNeoSkillCandidatesData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListNeoSkillCandidatesResponse, ListNeoSkillCandidatesError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/neo/candidates'
@@ -1993,7 +1997,7 @@ export const listNeoSkillCandidates = <ThrowOnError extends boolean = false>(opt
 /**
  * List Shipyard Neo skill releases
  */
-export const listNeoSkillReleases = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListNeoSkillReleasesData, ThrowOnError>) => {
+export const listNeoSkillReleases = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListNeoSkillReleasesData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListNeoSkillReleasesResponse, ListNeoSkillReleasesError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/neo/releases'
@@ -2003,7 +2007,7 @@ export const listNeoSkillReleases = <ThrowOnError extends boolean = false>(optio
 /**
  * Get a Shipyard Neo skill payload
  */
-export const getNeoSkillPayload = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetNeoSkillPayloadData, ThrowOnError>) => {
+export const getNeoSkillPayload = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetNeoSkillPayloadData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetNeoSkillPayloadResponse, GetNeoSkillPayloadError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/neo/payload'
@@ -2013,7 +2017,7 @@ export const getNeoSkillPayload = <ThrowOnError extends boolean = false>(options
 /**
  * Evaluate a Shipyard Neo skill candidate
  */
-export const evaluateNeoSkillCandidate = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<EvaluateNeoSkillCandidateData, ThrowOnError>) => {
+export const evaluateNeoSkillCandidate = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<EvaluateNeoSkillCandidateData, ThrowOnError>) => {
     return (options?.client ?? client).post<EvaluateNeoSkillCandidateResponse, EvaluateNeoSkillCandidateError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/neo/evaluate'
@@ -2023,7 +2027,7 @@ export const evaluateNeoSkillCandidate = <ThrowOnError extends boolean = false>(
 /**
  * Promote a Shipyard Neo skill candidate
  */
-export const promoteNeoSkillCandidate = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<PromoteNeoSkillCandidateData, ThrowOnError>) => {
+export const promoteNeoSkillCandidate = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<PromoteNeoSkillCandidateData, ThrowOnError>) => {
     return (options?.client ?? client).post<PromoteNeoSkillCandidateResponse, PromoteNeoSkillCandidateError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/neo/promote'
@@ -2033,7 +2037,7 @@ export const promoteNeoSkillCandidate = <ThrowOnError extends boolean = false>(o
 /**
  * Roll back a Shipyard Neo skill release
  */
-export const rollbackNeoSkillRelease = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<RollbackNeoSkillReleaseData, ThrowOnError>) => {
+export const rollbackNeoSkillRelease = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<RollbackNeoSkillReleaseData, ThrowOnError>) => {
     return (options?.client ?? client).post<RollbackNeoSkillReleaseResponse, RollbackNeoSkillReleaseError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/neo/rollback'
@@ -2043,7 +2047,7 @@ export const rollbackNeoSkillRelease = <ThrowOnError extends boolean = false>(op
 /**
  * Sync a Shipyard Neo skill release
  */
-export const syncNeoSkillRelease = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SyncNeoSkillReleaseData, ThrowOnError>) => {
+export const syncNeoSkillRelease = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SyncNeoSkillReleaseData, ThrowOnError>) => {
     return (options?.client ?? client).post<SyncNeoSkillReleaseResponse, SyncNeoSkillReleaseError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/neo/sync'
@@ -2053,7 +2057,7 @@ export const syncNeoSkillRelease = <ThrowOnError extends boolean = false>(option
 /**
  * Delete a Shipyard Neo skill candidate
  */
-export const deleteNeoSkillCandidate = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteNeoSkillCandidateData, ThrowOnError>) => {
+export const deleteNeoSkillCandidate = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteNeoSkillCandidateData, ThrowOnError>) => {
     return (options?.client ?? client).post<DeleteNeoSkillCandidateResponse, DeleteNeoSkillCandidateError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/neo/candidates/delete'
@@ -2063,7 +2067,7 @@ export const deleteNeoSkillCandidate = <ThrowOnError extends boolean = false>(op
 /**
  * Delete a Shipyard Neo skill release
  */
-export const deleteNeoSkillRelease = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteNeoSkillReleaseData, ThrowOnError>) => {
+export const deleteNeoSkillRelease = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteNeoSkillReleaseData, ThrowOnError>) => {
     return (options?.client ?? client).post<DeleteNeoSkillReleaseResponse, DeleteNeoSkillReleaseError, ThrowOnError>({
         ...options,
         url: '/api/v1/skills/neo/releases/delete'
@@ -2073,7 +2077,7 @@ export const deleteNeoSkillRelease = <ThrowOnError extends boolean = false>(opti
 /**
  * List knowledge bases
  */
-export const listKnowledgeBases = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListKnowledgeBasesData, ThrowOnError>) => {
+export const listKnowledgeBases = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListKnowledgeBasesData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListKnowledgeBasesResponse, ListKnowledgeBasesError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases'
@@ -2083,7 +2087,7 @@ export const listKnowledgeBases = <ThrowOnError extends boolean = false>(options
 /**
  * Create a knowledge base
  */
-export const createKnowledgeBase = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateKnowledgeBaseData, ThrowOnError>) => {
+export const createKnowledgeBase = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateKnowledgeBaseData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateKnowledgeBaseResponse, CreateKnowledgeBaseError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases'
@@ -2093,7 +2097,7 @@ export const createKnowledgeBase = <ThrowOnError extends boolean = false>(option
 /**
  * Get a knowledge base
  */
-export const getKnowledgeBase = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetKnowledgeBaseData, ThrowOnError>) => {
+export const getKnowledgeBase = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetKnowledgeBaseData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetKnowledgeBaseResponse, GetKnowledgeBaseError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}'
@@ -2103,7 +2107,7 @@ export const getKnowledgeBase = <ThrowOnError extends boolean = false>(options: 
 /**
  * Update a knowledge base
  */
-export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateKnowledgeBaseData, ThrowOnError>) => {
+export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateKnowledgeBaseData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateKnowledgeBaseResponse, UpdateKnowledgeBaseError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}'
@@ -2113,7 +2117,7 @@ export const updateKnowledgeBase = <ThrowOnError extends boolean = false>(option
 /**
  * Delete a knowledge base
  */
-export const deleteKnowledgeBase = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteKnowledgeBaseData, ThrowOnError>) => {
+export const deleteKnowledgeBase = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteKnowledgeBaseData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteKnowledgeBaseResponse, DeleteKnowledgeBaseError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}'
@@ -2123,7 +2127,7 @@ export const deleteKnowledgeBase = <ThrowOnError extends boolean = false>(option
 /**
  * Get knowledge base stats
  */
-export const getKnowledgeBaseStats = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetKnowledgeBaseStatsData, ThrowOnError>) => {
+export const getKnowledgeBaseStats = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetKnowledgeBaseStatsData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetKnowledgeBaseStatsResponse, GetKnowledgeBaseStatsError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}/stats'
@@ -2133,7 +2137,7 @@ export const getKnowledgeBaseStats = <ThrowOnError extends boolean = false>(opti
 /**
  * List knowledge base documents
  */
-export const listKnowledgeDocuments = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListKnowledgeDocumentsData, ThrowOnError>) => {
+export const listKnowledgeDocuments = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListKnowledgeDocumentsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListKnowledgeDocumentsResponse, ListKnowledgeDocumentsError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}/documents'
@@ -2143,7 +2147,7 @@ export const listKnowledgeDocuments = <ThrowOnError extends boolean = false>(opt
 /**
  * Upload a document to a knowledge base
  */
-export const uploadKnowledgeDocument = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UploadKnowledgeDocumentData, ThrowOnError>) => {
+export const uploadKnowledgeDocument = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UploadKnowledgeDocumentData, ThrowOnError>) => {
     return (options?.client ?? client).post<UploadKnowledgeDocumentResponse, UploadKnowledgeDocumentError, ThrowOnError>({
         ...options,
         ...formDataBodySerializer,
@@ -2158,7 +2162,7 @@ export const uploadKnowledgeDocument = <ThrowOnError extends boolean = false>(op
 /**
  * Import documents already available on the server
  */
-export const importKnowledgeDocuments = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ImportKnowledgeDocumentsData, ThrowOnError>) => {
+export const importKnowledgeDocuments = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ImportKnowledgeDocumentsData, ThrowOnError>) => {
     return (options?.client ?? client).post<ImportKnowledgeDocumentsResponse, ImportKnowledgeDocumentsError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}/documents/import'
@@ -2168,7 +2172,7 @@ export const importKnowledgeDocuments = <ThrowOnError extends boolean = false>(o
 /**
  * Import a document from URL
  */
-export const importKnowledgeDocumentFromUrl = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ImportKnowledgeDocumentFromUrlData, ThrowOnError>) => {
+export const importKnowledgeDocumentFromUrl = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ImportKnowledgeDocumentFromUrlData, ThrowOnError>) => {
     return (options?.client ?? client).post<ImportKnowledgeDocumentFromUrlResponse, ImportKnowledgeDocumentFromUrlError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}/documents/import-url'
@@ -2178,7 +2182,7 @@ export const importKnowledgeDocumentFromUrl = <ThrowOnError extends boolean = fa
 /**
  * Get a knowledge base document
  */
-export const getKnowledgeDocument = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetKnowledgeDocumentData, ThrowOnError>) => {
+export const getKnowledgeDocument = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetKnowledgeDocumentData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetKnowledgeDocumentResponse, GetKnowledgeDocumentError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}/documents/{document_id}'
@@ -2188,7 +2192,7 @@ export const getKnowledgeDocument = <ThrowOnError extends boolean = false>(optio
 /**
  * Delete a knowledge base document
  */
-export const deleteKnowledgeDocument = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteKnowledgeDocumentData, ThrowOnError>) => {
+export const deleteKnowledgeDocument = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteKnowledgeDocumentData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteKnowledgeDocumentResponse, DeleteKnowledgeDocumentError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}/documents/{document_id}'
@@ -2198,7 +2202,7 @@ export const deleteKnowledgeDocument = <ThrowOnError extends boolean = false>(op
 /**
  * List document chunks
  */
-export const listKnowledgeChunks = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ListKnowledgeChunksData, ThrowOnError>) => {
+export const listKnowledgeChunks = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ListKnowledgeChunksData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListKnowledgeChunksResponse, ListKnowledgeChunksError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}/chunks'
@@ -2208,7 +2212,7 @@ export const listKnowledgeChunks = <ThrowOnError extends boolean = false>(option
 /**
  * Delete a document chunk
  */
-export const deleteKnowledgeChunk = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteKnowledgeChunkData, ThrowOnError>) => {
+export const deleteKnowledgeChunk = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteKnowledgeChunkData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteKnowledgeChunkResponse, DeleteKnowledgeChunkError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}/chunks/{chunk_id}'
@@ -2218,7 +2222,7 @@ export const deleteKnowledgeChunk = <ThrowOnError extends boolean = false>(optio
 /**
  * Retrieve knowledge base chunks
  */
-export const retrieveKnowledgeBase = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<RetrieveKnowledgeBaseData, ThrowOnError>) => {
+export const retrieveKnowledgeBase = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<RetrieveKnowledgeBaseData, ThrowOnError>) => {
     return (options?.client ?? client).post<RetrieveKnowledgeBaseResponse, RetrieveKnowledgeBaseError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/{kb_id}/retrieve'
@@ -2228,7 +2232,7 @@ export const retrieveKnowledgeBase = <ThrowOnError extends boolean = false>(opti
 /**
  * Get knowledge base import task progress
  */
-export const getKnowledgeTask = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetKnowledgeTaskData, ThrowOnError>) => {
+export const getKnowledgeTask = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetKnowledgeTaskData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetKnowledgeTaskResponse, GetKnowledgeTaskError, ThrowOnError>({
         ...options,
         url: '/api/v1/knowledge-bases/tasks/{task_id}'
@@ -2238,7 +2242,7 @@ export const getKnowledgeTask = <ThrowOnError extends boolean = false>(options: 
 /**
  * Get persona folder tree
  */
-export const getPersonaTree = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getPersonaTree = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPersonaTreeResponse, GetPersonaTreeError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas/tree'
@@ -2248,7 +2252,7 @@ export const getPersonaTree = <ThrowOnError extends boolean = false>(options?: O
 /**
  * List personas
  */
-export const listPersonas = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListPersonasData, ThrowOnError>) => {
+export const listPersonas = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListPersonasData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListPersonasResponse, ListPersonasError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas'
@@ -2258,7 +2262,7 @@ export const listPersonas = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * Create a persona
  */
-export const createPersona = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreatePersonaData, ThrowOnError>) => {
+export const createPersona = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreatePersonaData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreatePersonaResponse, CreatePersonaError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas'
@@ -2268,7 +2272,7 @@ export const createPersona = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Get a persona by query ID
  */
-export const getPersonaById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPersonaByIdData, ThrowOnError>) => {
+export const getPersonaById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPersonaByIdData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPersonaByIdResponse, GetPersonaByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas/by-id'
@@ -2278,7 +2282,7 @@ export const getPersonaById = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Update a persona by body ID
  */
-export const updatePersonaById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdatePersonaByIdData, ThrowOnError>) => {
+export const updatePersonaById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdatePersonaByIdData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdatePersonaByIdResponse, UpdatePersonaByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas/by-id'
@@ -2288,7 +2292,7 @@ export const updatePersonaById = <ThrowOnError extends boolean = false>(options:
 /**
  * Delete a persona by query ID
  */
-export const deletePersonaById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeletePersonaByIdData, ThrowOnError>) => {
+export const deletePersonaById = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeletePersonaByIdData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeletePersonaByIdResponse, DeletePersonaByIdError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas/by-id'
@@ -2298,7 +2302,7 @@ export const deletePersonaById = <ThrowOnError extends boolean = false>(options:
 /**
  * Get a persona
  */
-export const getPersona = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPersonaData, ThrowOnError>) => {
+export const getPersona = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetPersonaData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPersonaResponse, GetPersonaError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas/{persona_id}'
@@ -2308,7 +2312,7 @@ export const getPersona = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Update a persona
  */
-export const updatePersona = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdatePersonaData, ThrowOnError>) => {
+export const updatePersona = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdatePersonaData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdatePersonaResponse, UpdatePersonaError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas/{persona_id}'
@@ -2318,7 +2322,7 @@ export const updatePersona = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Delete a persona
  */
-export const deletePersona = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeletePersonaData, ThrowOnError>) => {
+export const deletePersona = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeletePersonaData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeletePersonaResponse, DeletePersonaError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas/{persona_id}'
@@ -2328,7 +2332,7 @@ export const deletePersona = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * List persona folders
  */
-export const listPersonaFolders = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListPersonaFoldersData, ThrowOnError>) => {
+export const listPersonaFolders = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListPersonaFoldersData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListPersonaFoldersResponse, ListPersonaFoldersError, ThrowOnError>({
         ...options,
         url: '/api/v1/persona-folders'
@@ -2338,7 +2342,7 @@ export const listPersonaFolders = <ThrowOnError extends boolean = false>(options
 /**
  * Create a persona folder
  */
-export const createPersonaFolder = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreatePersonaFolderData, ThrowOnError>) => {
+export const createPersonaFolder = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreatePersonaFolderData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreatePersonaFolderResponse, CreatePersonaFolderError, ThrowOnError>({
         ...options,
         url: '/api/v1/persona-folders'
@@ -2348,7 +2352,7 @@ export const createPersonaFolder = <ThrowOnError extends boolean = false>(option
 /**
  * Update a persona folder
  */
-export const updatePersonaFolder = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdatePersonaFolderData, ThrowOnError>) => {
+export const updatePersonaFolder = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdatePersonaFolderData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdatePersonaFolderResponse, UpdatePersonaFolderError, ThrowOnError>({
         ...options,
         url: '/api/v1/persona-folders/{folder_id}'
@@ -2358,7 +2362,7 @@ export const updatePersonaFolder = <ThrowOnError extends boolean = false>(option
 /**
  * Delete a persona folder
  */
-export const deletePersonaFolder = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeletePersonaFolderData, ThrowOnError>) => {
+export const deletePersonaFolder = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeletePersonaFolderData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeletePersonaFolderResponse, DeletePersonaFolderError, ThrowOnError>({
         ...options,
         url: '/api/v1/persona-folders/{folder_id}'
@@ -2368,7 +2372,7 @@ export const deletePersonaFolder = <ThrowOnError extends boolean = false>(option
 /**
  * Move a persona or folder
  */
-export const movePersonaItem = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<MovePersonaItemData, ThrowOnError>) => {
+export const movePersonaItem = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<MovePersonaItemData, ThrowOnError>) => {
     return (options?.client ?? client).post<MovePersonaItemResponse, MovePersonaItemError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas/move'
@@ -2378,7 +2382,7 @@ export const movePersonaItem = <ThrowOnError extends boolean = false>(options: O
 /**
  * Reorder personas or folders
  */
-export const reorderPersonaItems = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ReorderPersonaItemsData, ThrowOnError>) => {
+export const reorderPersonaItems = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ReorderPersonaItemsData, ThrowOnError>) => {
     return (options?.client ?? client).post<ReorderPersonaItemsResponse, ReorderPersonaItemsError, ThrowOnError>({
         ...options,
         url: '/api/v1/personas/reorder'
@@ -2388,7 +2392,7 @@ export const reorderPersonaItems = <ThrowOnError extends boolean = false>(option
 /**
  * List active UMOs and session status
  */
-export const listSessions = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListSessionsData, ThrowOnError>) => {
+export const listSessions = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListSessionsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListSessionsResponse, ListSessionsError, ThrowOnError>({
         ...options,
         url: '/api/v1/sessions'
@@ -2398,7 +2402,7 @@ export const listSessions = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * List active and known UMOs
  */
-export const listActiveUmos = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listActiveUmos = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListActiveUmosResponse, ListActiveUmosError, ThrowOnError>({
         ...options,
         url: '/api/v1/sessions/active-umos'
@@ -2408,7 +2412,7 @@ export const listActiveUmos = <ThrowOnError extends boolean = false>(options?: O
 /**
  * List session rules
  */
-export const listSessionRules = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListSessionRulesData, ThrowOnError>) => {
+export const listSessionRules = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListSessionRulesData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListSessionRulesResponse, ListSessionRulesError, ThrowOnError>({
         ...options,
         url: '/api/v1/sessions/rules'
@@ -2418,7 +2422,7 @@ export const listSessionRules = <ThrowOnError extends boolean = false>(options?:
 /**
  * Update or create a session rule
  */
-export const upsertSessionRule = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpsertSessionRuleData, ThrowOnError>) => {
+export const upsertSessionRule = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpsertSessionRuleData, ThrowOnError>) => {
     return (options?.client ?? client).post<UpsertSessionRuleResponse, UpsertSessionRuleError, ThrowOnError>({
         ...options,
         url: '/api/v1/sessions/rules'
@@ -2428,7 +2432,7 @@ export const upsertSessionRule = <ThrowOnError extends boolean = false>(options:
 /**
  * Delete one or more session rules
  */
-export const deleteSessionRules = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteSessionRulesData, ThrowOnError>) => {
+export const deleteSessionRules = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteSessionRulesData, ThrowOnError>) => {
     return (options?.client ?? client).post<DeleteSessionRulesResponse, DeleteSessionRulesError, ThrowOnError>({
         ...options,
         url: '/api/v1/sessions/rules/delete'
@@ -2438,7 +2442,7 @@ export const deleteSessionRules = <ThrowOnError extends boolean = false>(options
 /**
  * Batch update session provider selection
  */
-export const batchUpdateSessionProvider = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<BatchUpdateSessionProviderData, ThrowOnError>) => {
+export const batchUpdateSessionProvider = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<BatchUpdateSessionProviderData, ThrowOnError>) => {
     return (options?.client ?? client).patch<BatchUpdateSessionProviderResponse, BatchUpdateSessionProviderError, ThrowOnError>({
         ...options,
         url: '/api/v1/sessions/provider'
@@ -2448,7 +2452,7 @@ export const batchUpdateSessionProvider = <ThrowOnError extends boolean = false>
 /**
  * Batch update session service settings
  */
-export const batchUpdateSessionService = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<BatchUpdateSessionServiceData, ThrowOnError>) => {
+export const batchUpdateSessionService = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<BatchUpdateSessionServiceData, ThrowOnError>) => {
     return (options?.client ?? client).patch<BatchUpdateSessionServiceResponse, BatchUpdateSessionServiceError, ThrowOnError>({
         ...options,
         url: '/api/v1/sessions/service'
@@ -2458,7 +2462,7 @@ export const batchUpdateSessionService = <ThrowOnError extends boolean = false>(
 /**
  * List session groups
  */
-export const listSessionGroups = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listSessionGroups = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListSessionGroupsResponse, ListSessionGroupsError, ThrowOnError>({
         ...options,
         url: '/api/v1/session-groups'
@@ -2468,7 +2472,7 @@ export const listSessionGroups = <ThrowOnError extends boolean = false>(options?
 /**
  * Create a session group
  */
-export const createSessionGroup = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateSessionGroupData, ThrowOnError>) => {
+export const createSessionGroup = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateSessionGroupData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateSessionGroupResponse, CreateSessionGroupError, ThrowOnError>({
         ...options,
         url: '/api/v1/session-groups'
@@ -2478,7 +2482,7 @@ export const createSessionGroup = <ThrowOnError extends boolean = false>(options
 /**
  * Update a session group
  */
-export const updateSessionGroup = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateSessionGroupData, ThrowOnError>) => {
+export const updateSessionGroup = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateSessionGroupData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateSessionGroupResponse, UpdateSessionGroupError, ThrowOnError>({
         ...options,
         url: '/api/v1/session-groups/{group_id}'
@@ -2488,7 +2492,7 @@ export const updateSessionGroup = <ThrowOnError extends boolean = false>(options
 /**
  * Delete a session group
  */
-export const deleteSessionGroup = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteSessionGroupData, ThrowOnError>) => {
+export const deleteSessionGroup = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteSessionGroupData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteSessionGroupResponse, DeleteSessionGroupError, ThrowOnError>({
         ...options,
         url: '/api/v1/session-groups/{group_id}'
@@ -2498,7 +2502,7 @@ export const deleteSessionGroup = <ThrowOnError extends boolean = false>(options
 /**
  * List conversation history data
  */
-export const listConversations = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListConversationsData, ThrowOnError>) => {
+export const listConversations = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListConversationsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListConversationsResponse, ListConversationsError, ThrowOnError>({
         ...options,
         url: '/api/v1/conversations'
@@ -2508,7 +2512,7 @@ export const listConversations = <ThrowOnError extends boolean = false>(options?
 /**
  * Delete multiple conversations
  */
-export const batchDeleteConversations = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<BatchDeleteConversationsData, ThrowOnError>) => {
+export const batchDeleteConversations = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<BatchDeleteConversationsData, ThrowOnError>) => {
     return (options?.client ?? client).post<BatchDeleteConversationsResponse, BatchDeleteConversationsError, ThrowOnError>({
         ...options,
         url: '/api/v1/conversations/batch-delete'
@@ -2518,7 +2522,7 @@ export const batchDeleteConversations = <ThrowOnError extends boolean = false>(o
 /**
  * Get conversation details and messages
  */
-export const getConversation = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetConversationData, ThrowOnError>) => {
+export const getConversation = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetConversationData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetConversationResponse, GetConversationError, ThrowOnError>({
         ...options,
         url: '/api/v1/conversations/{conversation_id}'
@@ -2528,7 +2532,7 @@ export const getConversation = <ThrowOnError extends boolean = false>(options: O
 /**
  * Update conversation metadata
  */
-export const updateConversation = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateConversationData, ThrowOnError>) => {
+export const updateConversation = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateConversationData, ThrowOnError>) => {
     return (options?.client ?? client).patch<UpdateConversationResponse, UpdateConversationError, ThrowOnError>({
         ...options,
         url: '/api/v1/conversations/{conversation_id}'
@@ -2538,7 +2542,7 @@ export const updateConversation = <ThrowOnError extends boolean = false>(options
 /**
  * Delete a conversation
  */
-export const deleteConversation = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteConversationData, ThrowOnError>) => {
+export const deleteConversation = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteConversationData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteConversationResponse, DeleteConversationError, ThrowOnError>({
         ...options,
         url: '/api/v1/conversations/{conversation_id}'
@@ -2548,7 +2552,7 @@ export const deleteConversation = <ThrowOnError extends boolean = false>(options
 /**
  * Replace conversation message history
  */
-export const replaceConversationMessages = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ReplaceConversationMessagesData, ThrowOnError>) => {
+export const replaceConversationMessages = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ReplaceConversationMessagesData, ThrowOnError>) => {
     return (options?.client ?? client).put<ReplaceConversationMessagesResponse, ReplaceConversationMessagesError, ThrowOnError>({
         ...options,
         url: '/api/v1/conversations/{conversation_id}/messages'
@@ -2558,7 +2562,7 @@ export const replaceConversationMessages = <ThrowOnError extends boolean = false
 /**
  * Export conversations
  */
-export const exportConversations = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ExportConversationsData, ThrowOnError>) => {
+export const exportConversations = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ExportConversationsData, ThrowOnError>) => {
     return (options?.client ?? client).post<ExportConversationsResponse, ExportConversationsError, ThrowOnError>({
         ...options,
         url: '/api/v1/conversations/export'
@@ -2568,7 +2572,7 @@ export const exportConversations = <ThrowOnError extends boolean = false>(option
 /**
  * Get runtime statistics
  */
-export const getStats = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<GetStatsData, ThrowOnError>) => {
+export const getStats = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<GetStatsData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetStatsResponse, GetStatsError, ThrowOnError>({
         ...options,
         url: '/api/v1/stats'
@@ -2578,7 +2582,7 @@ export const getStats = <ThrowOnError extends boolean = false>(options?: Options
 /**
  * Get provider token usage statistics
  */
-export const getProviderTokenStats = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<GetProviderTokenStatsData, ThrowOnError>) => {
+export const getProviderTokenStats = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<GetProviderTokenStatsData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetProviderTokenStatsResponse, GetProviderTokenStatsError, ThrowOnError>({
         ...options,
         url: '/api/v1/stats/provider-tokens'
@@ -2588,7 +2592,7 @@ export const getProviderTokenStats = <ThrowOnError extends boolean = false>(opti
 /**
  * Get AstrBot version
  */
-export const getVersion = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getVersion = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetVersionResponse, GetVersionError, ThrowOnError>({
         ...options,
         url: '/api/v1/stats/version'
@@ -2598,7 +2602,7 @@ export const getVersion = <ThrowOnError extends boolean = false>(options?: Optio
 /**
  * Get public WebUI and AstrBot versions
  */
-export const getPublicVersions = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getPublicVersions = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetPublicVersionsResponse, GetPublicVersionsError, ThrowOnError>({
         ...options,
         url: '/api/v1/stats/versions'
@@ -2608,7 +2612,7 @@ export const getPublicVersions = <ThrowOnError extends boolean = false>(options?
 /**
  * Get first-run dashboard notice content
  */
-export const getFirstNotice = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<GetFirstNoticeData, ThrowOnError>) => {
+export const getFirstNotice = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<GetFirstNoticeData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetFirstNoticeResponse, GetFirstNoticeError, ThrowOnError>({
         ...options,
         url: '/api/v1/stats/first-notice'
@@ -2618,7 +2622,7 @@ export const getFirstNotice = <ThrowOnError extends boolean = false>(options?: O
 /**
  * Test a GitHub proxy endpoint
  */
-export const testGhproxyConnection = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<TestGhproxyConnectionData, ThrowOnError>) => {
+export const testGhproxyConnection = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<TestGhproxyConnectionData, ThrowOnError>) => {
     return (options?.client ?? client).post<TestGhproxyConnectionResponse, TestGhproxyConnectionError, ThrowOnError>({
         ...options,
         url: '/api/v1/stats/ghproxy/test'
@@ -2628,7 +2632,7 @@ export const testGhproxyConnection = <ThrowOnError extends boolean = false>(opti
 /**
  * List available changelog versions
  */
-export const listChangelogVersions = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listChangelogVersions = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListChangelogVersionsResponse, ListChangelogVersionsError, ThrowOnError>({
         ...options,
         url: '/api/v1/changelogs'
@@ -2638,7 +2642,7 @@ export const listChangelogVersions = <ThrowOnError extends boolean = false>(opti
 /**
  * Get changelog content for a version
  */
-export const getChangelog = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetChangelogData, ThrowOnError>) => {
+export const getChangelog = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetChangelogData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetChangelogResponse, GetChangelogError, ThrowOnError>({
         ...options,
         url: '/api/v1/changelogs/{version}'
@@ -2648,7 +2652,7 @@ export const getChangelog = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Get runtime start time
  */
-export const getStartTime = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getStartTime = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetStartTimeResponse, GetStartTimeError, ThrowOnError>({
         ...options,
         url: '/api/v1/stats/start-time'
@@ -2658,7 +2662,7 @@ export const getStartTime = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * Get storage status
  */
-export const getStorageStatus = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getStorageStatus = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetStorageStatusResponse, GetStorageStatusError, ThrowOnError>({
         ...options,
         url: '/api/v1/stats/storage'
@@ -2668,7 +2672,7 @@ export const getStorageStatus = <ThrowOnError extends boolean = false>(options?:
 /**
  * Clean storage
  */
-export const cleanupStorage = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<CleanupStorageData, ThrowOnError>) => {
+export const cleanupStorage = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<CleanupStorageData, ThrowOnError>) => {
     return (options?.client ?? client).post<CleanupStorageResponse, CleanupStorageError, ThrowOnError>({
         ...options,
         url: '/api/v1/stats/storage/cleanup'
@@ -2678,7 +2682,7 @@ export const cleanupStorage = <ThrowOnError extends boolean = false>(options?: O
 /**
  * Restart AstrBot core
  */
-export const restartCore = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const restartCore = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).post<RestartCoreResponse, RestartCoreError, ThrowOnError>({
         ...options,
         url: '/api/v1/system/restart'
@@ -2688,7 +2692,7 @@ export const restartCore = <ThrowOnError extends boolean = false>(options?: Opti
 /**
  * List backups
  */
-export const listBackups = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListBackupsData, ThrowOnError>) => {
+export const listBackups = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListBackupsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListBackupsResponse, ListBackupsError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups'
@@ -2698,7 +2702,7 @@ export const listBackups = <ThrowOnError extends boolean = false>(options?: Opti
 /**
  * Export a backup
  */
-export const createBackup = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<CreateBackupData, ThrowOnError>) => {
+export const createBackup = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<CreateBackupData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateBackupResponse, CreateBackupError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups'
@@ -2708,7 +2712,7 @@ export const createBackup = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * Upload a backup file
  */
-export const uploadBackup = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UploadBackupData, ThrowOnError>) => {
+export const uploadBackup = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UploadBackupData, ThrowOnError>) => {
     return (options?.client ?? client).post<UploadBackupResponse, UploadBackupError, ThrowOnError>({
         ...options,
         ...formDataBodySerializer,
@@ -2723,7 +2727,7 @@ export const uploadBackup = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Initialize chunked backup upload
  */
-export const initBackupUpload = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<InitBackupUploadData, ThrowOnError>) => {
+export const initBackupUpload = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<InitBackupUploadData, ThrowOnError>) => {
     return (options?.client ?? client).post<InitBackupUploadResponse, InitBackupUploadError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups/upload/init'
@@ -2733,7 +2737,7 @@ export const initBackupUpload = <ThrowOnError extends boolean = false>(options: 
 /**
  * Upload a backup chunk
  */
-export const uploadBackupChunk = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UploadBackupChunkData, ThrowOnError>) => {
+export const uploadBackupChunk = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UploadBackupChunkData, ThrowOnError>) => {
     return (options?.client ?? client).post<UploadBackupChunkResponse, UploadBackupChunkError, ThrowOnError>({
         ...options,
         ...formDataBodySerializer,
@@ -2748,7 +2752,7 @@ export const uploadBackupChunk = <ThrowOnError extends boolean = false>(options:
 /**
  * Complete chunked backup upload
  */
-export const completeBackupUpload = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CompleteBackupUploadData, ThrowOnError>) => {
+export const completeBackupUpload = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CompleteBackupUploadData, ThrowOnError>) => {
     return (options?.client ?? client).post<CompleteBackupUploadResponse, CompleteBackupUploadError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups/upload/complete'
@@ -2758,7 +2762,7 @@ export const completeBackupUpload = <ThrowOnError extends boolean = false>(optio
 /**
  * Abort chunked backup upload
  */
-export const abortBackupUpload = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<AbortBackupUploadData, ThrowOnError>) => {
+export const abortBackupUpload = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<AbortBackupUploadData, ThrowOnError>) => {
     return (options?.client ?? client).post<AbortBackupUploadResponse, AbortBackupUploadError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups/upload/abort'
@@ -2768,7 +2772,7 @@ export const abortBackupUpload = <ThrowOnError extends boolean = false>(options:
 /**
  * Get backup task progress
  */
-export const getBackupProgress = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetBackupProgressData, ThrowOnError>) => {
+export const getBackupProgress = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetBackupProgressData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetBackupProgressResponse, GetBackupProgressError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups/tasks/{task_id}'
@@ -2778,7 +2782,7 @@ export const getBackupProgress = <ThrowOnError extends boolean = false>(options:
 /**
  * Download a backup
  */
-export const downloadBackup = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DownloadBackupData, ThrowOnError>) => {
+export const downloadBackup = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DownloadBackupData, ThrowOnError>) => {
     return (options?.client ?? client).get<DownloadBackupResponse, DownloadBackupError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups/{filename}'
@@ -2788,7 +2792,7 @@ export const downloadBackup = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Rename a backup
  */
-export const renameBackup = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<RenameBackupData, ThrowOnError>) => {
+export const renameBackup = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<RenameBackupData, ThrowOnError>) => {
     return (options?.client ?? client).patch<RenameBackupResponse, RenameBackupError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups/{filename}'
@@ -2798,7 +2802,7 @@ export const renameBackup = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Delete a backup
  */
-export const deleteBackup = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteBackupData, ThrowOnError>) => {
+export const deleteBackup = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteBackupData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteBackupResponse, DeleteBackupError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups/{filename}'
@@ -2808,7 +2812,7 @@ export const deleteBackup = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Check a backup before import
  */
-export const checkBackup = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CheckBackupData, ThrowOnError>) => {
+export const checkBackup = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CheckBackupData, ThrowOnError>) => {
     return (options?.client ?? client).post<CheckBackupResponse, CheckBackupError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups/{filename}/check'
@@ -2818,7 +2822,7 @@ export const checkBackup = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Import a backup
  */
-export const importBackup = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ImportBackupData, ThrowOnError>) => {
+export const importBackup = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ImportBackupData, ThrowOnError>) => {
     return (options?.client ?? client).post<ImportBackupResponse, ImportBackupError, ThrowOnError>({
         ...options,
         url: '/api/v1/backups/{filename}/import'
@@ -2828,7 +2832,7 @@ export const importBackup = <ThrowOnError extends boolean = false>(options: Opti
 /**
  * Check for updates
  */
-export const checkUpdate = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const checkUpdate = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<CheckUpdateResponse, CheckUpdateError, ThrowOnError>({
         ...options,
         url: '/api/v1/updates/check'
@@ -2838,7 +2842,7 @@ export const checkUpdate = <ThrowOnError extends boolean = false>(options?: Opti
 /**
  * List releases
  */
-export const listReleases = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListReleasesData, ThrowOnError>) => {
+export const listReleases = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListReleasesData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListReleasesResponse, ListReleasesError, ThrowOnError>({
         ...options,
         url: '/api/v1/updates/releases'
@@ -2848,7 +2852,7 @@ export const listReleases = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * Update AstrBot core
  */
-export const updateCore = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<UpdateCoreData, ThrowOnError>) => {
+export const updateCore = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<UpdateCoreData, ThrowOnError>) => {
     return (options?.client ?? client).post<UpdateCoreResponse, UpdateCoreError, ThrowOnError>({
         ...options,
         url: '/api/v1/updates/core'
@@ -2858,7 +2862,7 @@ export const updateCore = <ThrowOnError extends boolean = false>(options?: Optio
 /**
  * Update dashboard assets
  */
-export const updateDashboard = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<UpdateDashboardData, ThrowOnError>) => {
+export const updateDashboard = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<UpdateDashboardData, ThrowOnError>) => {
     return (options?.client ?? client).post<UpdateDashboardResponse, UpdateDashboardError, ThrowOnError>({
         ...options,
         url: '/api/v1/updates/dashboard'
@@ -2868,7 +2872,7 @@ export const updateDashboard = <ThrowOnError extends boolean = false>(options?: 
 /**
  * Get update progress
  */
-export const getUpdateProgress = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetUpdateProgressData, ThrowOnError>) => {
+export const getUpdateProgress = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetUpdateProgressData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetUpdateProgressResponse, GetUpdateProgressError, ThrowOnError>({
         ...options,
         url: '/api/v1/updates/progress/{task_id}'
@@ -2878,7 +2882,7 @@ export const getUpdateProgress = <ThrowOnError extends boolean = false>(options:
 /**
  * Install a Python package
  */
-export const installPipPackage = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<InstallPipPackageData, ThrowOnError>) => {
+export const installPipPackage = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<InstallPipPackageData, ThrowOnError>) => {
     return (options?.client ?? client).post<InstallPipPackageResponse, InstallPipPackageError, ThrowOnError>({
         ...options,
         url: '/api/v1/pip/install'
@@ -2888,7 +2892,7 @@ export const installPipPackage = <ThrowOnError extends boolean = false>(options:
 /**
  * List cron jobs
  */
-export const listCronJobs = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<ListCronJobsData, ThrowOnError>) => {
+export const listCronJobs = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<ListCronJobsData, ThrowOnError>) => {
     return (options?.client ?? client).get<ListCronJobsResponse, ListCronJobsError, ThrowOnError>({
         ...options,
         url: '/api/v1/cron/jobs'
@@ -2898,7 +2902,7 @@ export const listCronJobs = <ThrowOnError extends boolean = false>(options?: Opt
 /**
  * Create a cron job
  */
-export const createCronJob = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateCronJobData, ThrowOnError>) => {
+export const createCronJob = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateCronJobData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateCronJobResponse, CreateCronJobError, ThrowOnError>({
         ...options,
         url: '/api/v1/cron/jobs'
@@ -2908,7 +2912,7 @@ export const createCronJob = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Update a cron job
  */
-export const updateCronJob = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateCronJobData, ThrowOnError>) => {
+export const updateCronJob = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateCronJobData, ThrowOnError>) => {
     return (options?.client ?? client).patch<UpdateCronJobResponse, UpdateCronJobError, ThrowOnError>({
         ...options,
         url: '/api/v1/cron/jobs/{job_id}'
@@ -2918,7 +2922,7 @@ export const updateCronJob = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Delete a cron job
  */
-export const deleteCronJob = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteCronJobData, ThrowOnError>) => {
+export const deleteCronJob = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteCronJobData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteCronJobResponse, DeleteCronJobError, ThrowOnError>({
         ...options,
         url: '/api/v1/cron/jobs/{job_id}'
@@ -2928,7 +2932,7 @@ export const deleteCronJob = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Run a cron job immediately
  */
-export const runCronJob = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<RunCronJobData, ThrowOnError>) => {
+export const runCronJob = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<RunCronJobData, ThrowOnError>) => {
     return (options?.client ?? client).post<RunCronJobResponse, RunCronJobError, ThrowOnError>({
         ...options,
         url: '/api/v1/cron/jobs/{job_id}/run'
@@ -2938,7 +2942,7 @@ export const runCronJob = <ThrowOnError extends boolean = false>(options: Option
 /**
  * Stream live logs
  */
-export const streamLiveLogs = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const streamLiveLogs = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<StreamLiveLogsResponse, StreamLiveLogsError, ThrowOnError>({
         ...options,
         url: '/api/v1/logs/live'
@@ -2948,7 +2952,7 @@ export const streamLiveLogs = <ThrowOnError extends boolean = false>(options?: O
 /**
  * Get log history
  */
-export const getLogHistory = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getLogHistory = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetLogHistoryResponse, GetLogHistoryError, ThrowOnError>({
         ...options,
         url: '/api/v1/logs/history'
@@ -2958,7 +2962,7 @@ export const getLogHistory = <ThrowOnError extends boolean = false>(options?: Op
 /**
  * Get trace settings
  */
-export const getTraceSettings = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getTraceSettings = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetTraceSettingsResponse, GetTraceSettingsError, ThrowOnError>({
         ...options,
         url: '/api/v1/trace/settings'
@@ -2968,7 +2972,7 @@ export const getTraceSettings = <ThrowOnError extends boolean = false>(options?:
 /**
  * Update trace settings
  */
-export const updateTraceSettings = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateTraceSettingsData, ThrowOnError>) => {
+export const updateTraceSettings = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateTraceSettingsData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateTraceSettingsResponse, UpdateTraceSettingsError, ThrowOnError>({
         ...options,
         url: '/api/v1/trace/settings'
@@ -2978,7 +2982,7 @@ export const updateTraceSettings = <ThrowOnError extends boolean = false>(option
 /**
  * List text-to-image templates
  */
-export const listT2iTemplates = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listT2iTemplates = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListT2iTemplatesResponse, ListT2iTemplatesError, ThrowOnError>({
         ...options,
         url: '/api/v1/t2i/templates'
@@ -2988,7 +2992,7 @@ export const listT2iTemplates = <ThrowOnError extends boolean = false>(options?:
 /**
  * Create a text-to-image template
  */
-export const createT2iTemplate = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<CreateT2iTemplateData, ThrowOnError>) => {
+export const createT2iTemplate = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<CreateT2iTemplateData, ThrowOnError>) => {
     return (options?.client ?? client).post<CreateT2iTemplateResponse, CreateT2iTemplateError, ThrowOnError>({
         ...options,
         url: '/api/v1/t2i/templates'
@@ -2998,7 +3002,7 @@ export const createT2iTemplate = <ThrowOnError extends boolean = false>(options:
 /**
  * Get active text-to-image template
  */
-export const getActiveT2iTemplate = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getActiveT2iTemplate = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetActiveT2iTemplateResponse, GetActiveT2iTemplateError, ThrowOnError>({
         ...options,
         url: '/api/v1/t2i/templates/active'
@@ -3008,7 +3012,7 @@ export const getActiveT2iTemplate = <ThrowOnError extends boolean = false>(optio
 /**
  * Set active text-to-image template
  */
-export const setActiveT2iTemplate = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<SetActiveT2iTemplateData, ThrowOnError>) => {
+export const setActiveT2iTemplate = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<SetActiveT2iTemplateData, ThrowOnError>) => {
     return (options?.client ?? client).put<SetActiveT2iTemplateResponse, SetActiveT2iTemplateError, ThrowOnError>({
         ...options,
         url: '/api/v1/t2i/templates/active'
@@ -3018,7 +3022,7 @@ export const setActiveT2iTemplate = <ThrowOnError extends boolean = false>(optio
 /**
  * Reset the default text-to-image template
  */
-export const resetDefaultT2iTemplate = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const resetDefaultT2iTemplate = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).post<ResetDefaultT2iTemplateResponse, ResetDefaultT2iTemplateError, ThrowOnError>({
         ...options,
         url: '/api/v1/t2i/templates/default/reset'
@@ -3028,7 +3032,7 @@ export const resetDefaultT2iTemplate = <ThrowOnError extends boolean = false>(op
 /**
  * Get a text-to-image template
  */
-export const getT2iTemplate = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetT2iTemplateData, ThrowOnError>) => {
+export const getT2iTemplate = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<GetT2iTemplateData, ThrowOnError>) => {
     return (options?.client ?? client).get<GetT2iTemplateResponse, GetT2iTemplateError, ThrowOnError>({
         ...options,
         url: '/api/v1/t2i/templates/{name}'
@@ -3038,7 +3042,7 @@ export const getT2iTemplate = <ThrowOnError extends boolean = false>(options: Op
 /**
  * Update a text-to-image template
  */
-export const updateT2iTemplate = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateT2iTemplateData, ThrowOnError>) => {
+export const updateT2iTemplate = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateT2iTemplateData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateT2iTemplateResponse, UpdateT2iTemplateError, ThrowOnError>({
         ...options,
         url: '/api/v1/t2i/templates/{name}'
@@ -3048,7 +3052,7 @@ export const updateT2iTemplate = <ThrowOnError extends boolean = false>(options:
 /**
  * Delete a text-to-image template
  */
-export const deleteT2iTemplate = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<DeleteT2iTemplateData, ThrowOnError>) => {
+export const deleteT2iTemplate = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<DeleteT2iTemplateData, ThrowOnError>) => {
     return (options?.client ?? client).delete<DeleteT2iTemplateResponse, DeleteT2iTemplateError, ThrowOnError>({
         ...options,
         url: '/api/v1/t2i/templates/{name}'
@@ -3058,7 +3062,7 @@ export const deleteT2iTemplate = <ThrowOnError extends boolean = false>(options:
 /**
  * Get subagent orchestrator configuration
  */
-export const getSubagentConfig = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const getSubagentConfig = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<GetSubagentConfigResponse, GetSubagentConfigError, ThrowOnError>({
         ...options,
         url: '/api/v1/subagents/config'
@@ -3068,7 +3072,7 @@ export const getSubagentConfig = <ThrowOnError extends boolean = false>(options?
 /**
  * Update subagent orchestrator configuration
  */
-export const updateSubagentConfig = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<UpdateSubagentConfigData, ThrowOnError>) => {
+export const updateSubagentConfig = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<UpdateSubagentConfigData, ThrowOnError>) => {
     return (options?.client ?? client).put<UpdateSubagentConfigResponse, UpdateSubagentConfigError, ThrowOnError>({
         ...options,
         url: '/api/v1/subagents/config'
@@ -3078,7 +3082,7 @@ export const updateSubagentConfig = <ThrowOnError extends boolean = false>(optio
 /**
  * List tools available to subagents
  */
-export const listSubagentAvailableTools = <ThrowOnError extends boolean = false>(options?: OptionsLegacyParser<unknown, ThrowOnError>) => {
+export const listSubagentAvailableTools = <ThrowOnError extends boolean = false>(options?: OpenApiClientOptions<unknown, ThrowOnError>) => {
     return (options?.client ?? client).get<ListSubagentAvailableToolsResponse, ListSubagentAvailableToolsError, ThrowOnError>({
         ...options,
         url: '/api/v1/subagents/available-tools'
@@ -3088,7 +3092,7 @@ export const listSubagentAvailableTools = <ThrowOnError extends boolean = false>
 /**
  * Verify a platform webhook
  */
-export const verifyPlatformWebhook = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<VerifyPlatformWebhookData, ThrowOnError>) => {
+export const verifyPlatformWebhook = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<VerifyPlatformWebhookData, ThrowOnError>) => {
     return (options?.client ?? client).get<VerifyPlatformWebhookResponse, VerifyPlatformWebhookError, ThrowOnError>({
         ...options,
         url: '/api/v1/webhooks/platforms/{webhook_uuid}'
@@ -3098,7 +3102,7 @@ export const verifyPlatformWebhook = <ThrowOnError extends boolean = false>(opti
 /**
  * Receive a platform webhook
  */
-export const receivePlatformWebhook = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<ReceivePlatformWebhookData, ThrowOnError>) => {
+export const receivePlatformWebhook = <ThrowOnError extends boolean = false>(options: OpenApiClientOptions<ReceivePlatformWebhookData, ThrowOnError>) => {
     return (options?.client ?? client).post<ReceivePlatformWebhookResponse, ReceivePlatformWebhookError, ThrowOnError>({
         ...options,
         url: '/api/v1/webhooks/platforms/{webhook_uuid}'

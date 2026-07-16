@@ -52,32 +52,32 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import QrCodeViewer from './QrCodeViewer.vue'
-import { useModuleI18n } from '@/i18n/composables'
+import { computed } from "vue";
+import { useModuleI18n } from "@/i18n/composables";
+import QrCodeViewer from "./QrCodeViewer.vue";
 
 const props = defineProps({
   modelValue: {
     type: Boolean,
-    default: false
+    default: false,
   },
   configRoot: {
     type: Object,
-    default: null
-  }
-})
+    default: null,
+  },
+});
 
-const emit = defineEmits(['update:modelValue', 'rotate', 'rotate-recovery'])
-const { tm } = useModuleI18n('features/config-metadata')
+const emit = defineEmits(["update:modelValue", "rotate", "rotate-recovery"]);
+const { tm } = useModuleI18n("features/config-metadata");
 
-const totpSecret = computed(() => props.configRoot?.dashboard?.totp?.secret || '')
+const totpSecret = computed(() => props.configRoot?.dashboard?.totp?.secret || "");
 
 const totpProvisioningUri = computed(() => {
-  if (!totpSecret.value) return ''
-  const label = encodeURIComponent(props.configRoot?.dashboard?.username || 'AstrBot')
-  const issuer = encodeURIComponent('AstrBot')
-  return `otpauth://totp/${label}?secret=${encodeURIComponent(totpSecret.value)}&issuer=${issuer}`
-})
+  if (!totpSecret.value) return "";
+  const label = encodeURIComponent(props.configRoot?.dashboard?.username || "AstrBot");
+  const issuer = encodeURIComponent("AstrBot");
+  return `otpauth://totp/${label}?secret=${encodeURIComponent(totpSecret.value)}&issuer=${issuer}`;
+});
 </script>
 
 <style scoped>
