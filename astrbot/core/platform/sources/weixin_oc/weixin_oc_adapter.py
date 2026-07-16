@@ -585,7 +585,7 @@ class WeixinOCAdapter(Platform):
             break
 
         self._sync_client_state()
-        astrbot_config.save_config()
+        await asyncio.to_thread(astrbot_config.save_config)
         self._context_tokens_dirty = False
 
     def _is_login_session_valid(
