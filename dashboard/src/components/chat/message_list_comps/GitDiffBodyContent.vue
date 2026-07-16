@@ -28,11 +28,13 @@ const { tm } = useModuleI18n("features/chat");
 
 // ── Group / section data model ────────────────────────────────────
 
-/** Top-level "section" rendered in the body. Two flavors:
- *    - kind='stage'  : a staged/unstaged partition (only in `all` scope)
- *    - kind='dir'    : a top-level-directory grouping (all other scopes)
- *  Sections are flat — there's no nesting in the current design.
- *  Each section has its own label, file list, and collapse state. */
+/** Top-level "section" rendered in the body. Each section groups
+ *  files by their top-level directory (the first path segment, or
+ *  "<root>" for repo-root files). Sections are flat - there is no
+ *  nesting in the current design. Each section has its own label,
+ *  file list, and collapse state. The `badgeKind` field drives a
+ *  small colored dot whose hue reflects the active scope (staged /
+ *  unstaged / neutral) rather than a per-section classification. */
 interface DiffSection {
   id: string;
   label: string;

@@ -329,7 +329,7 @@
       "title": "工作区浏览",
       "viewMode": {
         "files": "工作区",
-        "diff": "Git 改动"
+        "diff": "Git 变更"
       },
       "breadcrumbRoot": "项目根",
       "loading": "加载中…",

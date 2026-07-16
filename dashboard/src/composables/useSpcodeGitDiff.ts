@@ -63,10 +63,6 @@ export function useSpcodeGitDiff(
     try {
       const worktree = toValue(worktreeRef);
       const scope = toValue(scopeRef);
-      // console.info("[spcode-git-diff] request", {
-      //   url: "spcode/git-diff",
-      //   params: { umo, scope, worktree: worktree ?? null },
-      // });
       const resp = await pluginExtensionApi.get<SpcodeGitDiffRawResponse>(
         "spcode/git-diff",
         {
@@ -81,14 +77,6 @@ export function useSpcodeGitDiff(
       if (!isMounted) return;
       const data = resp.data?.data;
       if (!data) throw new Error("empty response data");
-      console.info("[spcode-git-diff] response", {
-        requestedScope: scope,
-        echoedScope: data.scope ?? "(absent)",
-        filesChanged: data.files_changed?.length ?? 0,
-        firstPaths: (data.files_changed ?? [])
-          .slice(0, 3)
-          .map((f) => f.path),
-      });
       const snapshot = parseSpcodeGitDiff(data);
       // Drift detection: if the server echoed a different scope than
       // the user just selected, log it and let the next poll realign

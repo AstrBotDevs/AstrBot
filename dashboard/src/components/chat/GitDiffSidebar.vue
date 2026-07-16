@@ -1406,7 +1406,7 @@ async function onCreateSubmit(params: WorktreeAddParams): Promise<void> {
   if (result.ok) {
     // spec §7.4: 自动切到新 worktree + 切到 Files 视图
     const newWt = result.snapshot.worktrees.find(
-      (w) => w.path === result.snapshot.worktrees[0]?.path,
+      (w) => w.path === params.path,
     );
     if (newWt) {
       selectedWorktree.value = newWt.isMain ? null : newWt.path;
@@ -1515,14 +1515,20 @@ async function loadDirtyFor(wt: SpcodeGitWorktree): Promise<void> {
   const umo = spcodeStatus.status.value.umo;
   if (!umo) return;
   try {
-    // Backend body is { status, data: { files_changed } }; axios unwraps
-    // to ApiEnvelope<T> (see @/api/v1.ts), so resp.data is the envelope
-    // and we read resp.data.data.files_changed.
-    const resp = await pluginExtensionApi.get<{ files_changed?: number }>(
+    // Backend body is { status, data: { files, summary: { total } } };
+    // axios unwraps to ApiEnvelope<T> (see @/api/v1.ts), so resp.data
+    // is the envelope and we read resp.data.data.summary.total for the
+    // authoritative dirty file count.
+    const resp = await pluginExtensionApi.get<{
+      files?: Array<unknown>;
+      summary?: { total?: number };
+    }>(
       "spcode/git-status",
       { params: { umo, worktree: wt.path } },
     );
-    dirtyCount.value = resp.data?.data?.files_changed ?? 0;
+    const data = resp.data?.data;
+    dirtyCount.value =
+      data?.summary?.total ?? data?.files?.length ?? 0;
   } catch {
     dirtyCount.value = null; // 不阻塞 UI
   }
@@ -1771,6 +1777,10 @@ function onOpenFile(path: string): void {
   viewMode.value = "files";
   fileBrowserCurrentPath.value = parent;
   fileBrowserPreviewPath.value = absolute;
+  // Clear any pending search-result scroll target so the file does not
+  // jump to a stale line from a prior search click. Mirrors
+  // onFileBrowserNavigate which does the same on manual navigation.
+  fileSearchScrollToLine.value = null;
 }
 
 function onCancelRestore(): void {
