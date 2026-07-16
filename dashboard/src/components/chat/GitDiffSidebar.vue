@@ -1078,15 +1078,17 @@ watch(
 // the sidebar opens, stop when it closes. 30s cadence keeps the
 // "not a Git project" state in sync with external `git init` operations
 // (e.g. an agent creating a repository on disk while the user is
-// staring at the sidebar). Mirroring the worktree composable's pattern
-// keeps both polls from accidentally drifting.
+// One-shot check: the prompt is driven by "is the loaded directory a
+// Git repo?", which doesn't change while the user is staring at the
+// sidebar. Re-probing every 30s would just waste a round-trip. The
+// umo/directory watcher inside the composable handles the only case
+// where the answer can change without re-opening the sidebar: the
+// user issuing a `/project load` while it's open.
 watch(
   () => props.modelValue,
   (open) => {
     if (open) {
-      gitRepoProbe.startPolling(30_000);
-    } else {
-      gitRepoProbe.stopPolling();
+      void gitRepoProbe.refresh();
     }
   },
   { immediate: true },

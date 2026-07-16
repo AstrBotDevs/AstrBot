@@ -193,35 +193,6 @@ describe("useSpcodeGitRepoProbe", () => {
     unmount();
   });
 
-  it("startPolling() fires refresh() immediately, not after the first interval tick", async () => {
-    // Regression guard: setInterval-only scheduling leaves the probe in
-    // 'idle' for the full interval, which keeps the GitDiffSidebar's
-    // view-mode tabs (and the repo-init prompt for non-Git projects)
-    // hidden for 30s. startPolling must do an immediate refresh.
-    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_NOT_A_REPO));
-    const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
-    // 60s interval — long enough that no interval tick fires during
-    // this test even on real timers.
-    result.startPolling(60_000);
-    // The mock is invoked synchronously inside refresh() before any
-    // await, so we can assert on the call count without awaiting.
-    expect(getMock).toHaveBeenCalledTimes(1);
-    expect(getMock).toHaveBeenCalledWith(
-      "spcode/git-branches",
-      expect.objectContaining({ params: { umo: "session:test" } }),
-    );
-    // The first refresh's state transition (loading → not_a_git_repo)
-    // requires a couple of microtask flushes; waitFor polls the
-    // reactive ref until the assertion holds.
-    await vi.waitFor(() =>
-      expect(result.state.value).toEqual({
-        kind: "not_a_git_repo",
-        directory: "D:/tmp/foo",
-      }),
-    );
-    unmount();
-  });
-
   it("gitInit() is single-flight: a second call aborts the first", async () => {
     let resolveFirst!: (v: unknown) => void;
     postMock.mockImplementationOnce(

@@ -29,13 +29,10 @@ export type GitInitResult =
 export interface UseSpcodeGitRepoProbe {
   state: Ref<GitRepoProbeState>;
   refresh: () => Promise<void>;
-  startPolling: (intervalMs?: number) => void;
-  stopPolling: () => void;
   gitInit: (params: GitInitParams) => Promise<GitInitResult>;
   dispose: () => void;
 }
 
-const DEFAULT_POLL_MS = 30_000;
 const ETAG_KEY_PREFIX = "astrbot.spcode.gitRepoProbe.etag";
 const SNAPSHOT_KEY_PREFIX = "astrbot.spcode.gitRepoProbe.snapshot";
 
@@ -45,7 +42,6 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
   const spcodeStatus = useSpcodeProjectStatus();
   let abortController: AbortController | null = null;
   let initAbort: AbortController | null = null;
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
   let isMounted = true;
 
   function cacheKey(umo: string, worktree: string | null | undefined): string {
@@ -174,28 +170,6 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
     }
   }
 
-  function startPolling(intervalMs: number = DEFAULT_POLL_MS): void {
-    if (pollTimer) return;
-    // Fire the first probe synchronously instead of waiting for the
-    // first interval tick. Rationale: the GitDiffSidebar's
-    // view-mode tabs are gated on `isGitRepo || showNotGitRepoChip`,
-    // so while `state.kind === "idle"` the tabs are hidden and the
-    // user has no UI affordance to trigger a re-probe. If a non-Git
-    // project is opened with the sidebar already up, waiting 30s
-    // for the first tick leaves the prompt invisible for the entire
-    // wait. Polling cadence is preserved thereafter.
-    void refresh();
-    pollTimer = setInterval(() => {
-      void refresh();
-    }, intervalMs);
-  }
-  function stopPolling(): void {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-    }
-  }
-
   async function gitInit(params: GitInitParams): Promise<GitInitResult> {
     if (!isMounted) return { ok: false, reason: "aborted" };
     const umo = spcodeStatus.status.value.umo;
@@ -241,7 +215,6 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
 
   function dispose(): void {
     isMounted = false;
-    stopPolling();
     abortController?.abort();
     abortController = null;
     initAbort?.abort();
@@ -259,7 +232,7 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
     },
   );
 
-  return { state, refresh, startPolling, stopPolling, gitInit, dispose };
+  return { state, refresh, gitInit, dispose };
 }
 
 function parseGitInitResponse(raw: unknown): GitInitResult {
