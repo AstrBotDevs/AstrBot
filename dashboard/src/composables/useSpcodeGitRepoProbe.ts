@@ -122,7 +122,14 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
         return;
       }
 
-      const newEtag = (resp.headers?.get?.("etag") ?? null) as string | null;
+      // AxiosResponse.headers is a wide union (RawAxiosRequestHeaders |
+      // AxiosHeaders | string | number | ...). Narrow at runtime: only
+      // the AxiosHeaders variant has a `.get()` method, so the optional
+      // chain `?.get?.()` is the safest access.
+      const headers = resp.headers as
+        | { get?: (name: string) => string | null }
+        | undefined;
+      const newEtag = headers?.get?.("etag") ?? null;
       if (newEtag) {
         writeCachedEtag(key, newEtag);
       }

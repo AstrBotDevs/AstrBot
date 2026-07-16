@@ -38,6 +38,8 @@ import {
   type WorktreeLockParams,
 } from "@/composables/useSpcodeWorktrees";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
+import { useSpcodeGitRepoProbe } from "@/composables/useSpcodeGitRepoProbe";
+import GitRepoInitPrompt from "@/components/chat/message_list_comps/GitRepoInitPrompt.vue";
 import {
   useSpcodeFileRestore,
   type RestoreResult,
@@ -294,6 +296,10 @@ if (_persistedWorktree !== null && _persistedWorktree !== "null") {
 }
 
 const worktreesComposable = useSpcodeWorktrees();
+// Spec 2026-07-16: "is this a Git repo?" probe + init mutation. Used by
+// the GitRepoInitPrompt slot in the template to surface a one-click
+// `git init` flow when the loaded directory has no .git/.
+const gitRepoProbe = useSpcodeGitRepoProbe();
 const worktreeList = computed(() => {
   const s = worktreesComposable.state.value;
   if (s.kind !== "ok") return [];
@@ -928,6 +934,26 @@ const RESTORE_REASON_I18N_KEYS: Record<
 const isProjectLoaded = computed(
   () => spcodeStatus.status.value.loaded === true,
 );
+
+// Spec 2026-07-16: derived state for the GitRepoInitPrompt slot. All four
+// refs/booleans are colocated so the template-binding code in Task 5
+// stays compact and obvious.
+const isGitRepo = computed(() => gitRepoProbe.state.value.kind === "ok");
+const isRepoInitSubmitting = ref(false);
+const repoInitLastError = ref<{ reason: string; stderr?: string } | null>(null);
+const repoPromptDismissed = ref(false);
+const showRepoInitPrompt = computed(
+  () =>
+    isProjectLoaded.value
+    && gitRepoProbe.state.value.kind === "not_a_git_repo"
+    && !repoPromptDismissed.value,
+);
+const showNotGitRepoChip = computed(
+  () =>
+    isProjectLoaded.value
+    && gitRepoProbe.state.value.kind === "not_a_git_repo"
+    && repoPromptDismissed.value,
+);
 // True while a scope-switch request is in flight. Drives the per-pill
 // spinner and the disabled state on the *other* two pills, so the
 // user can't queue up a second switch before the first resolves.
@@ -989,6 +1015,10 @@ async function onManualRefresh(): Promise<void> {
 // Spec §3.3: useSpcodeWorktrees does NOT depend on umo.
 onMounted(() => {
   void worktreesComposable.refresh();
+  // Spec 2026-07-16: initial probe on mount. The composable internally
+  // watches `umo`/`directory` and re-probes on project switch, so a
+  // single refresh() on mount is enough.
+  void gitRepoProbe.refresh();
   // Listen on capture phase so we fire BEFORE any inner click handler
   // that might preventDefault / stopPropagation. mousedown is the
   // natural event for outside-click detection (mirrors what Vuetify
@@ -1039,6 +1069,24 @@ watch(
       worktreesComposable.startPolling(30_000);
     } else {
       worktreesComposable.stopPolling();
+    }
+  },
+  { immediate: true },
+);
+
+// Spec 2026-07-16: same lifecycle as the worktree polling — start when
+// the sidebar opens, stop when it closes. 30s cadence keeps the
+// "not a Git project" state in sync with external `git init` operations
+// (e.g. an agent creating a repository on disk while the user is
+// staring at the sidebar). Mirroring the worktree composable's pattern
+// keeps both polls from accidentally drifting.
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) {
+      gitRepoProbe.startPolling(30_000);
+    } else {
+      gitRepoProbe.stopPolling();
     }
   },
   { immediate: true },
@@ -1304,6 +1352,10 @@ watch(
 // watcher) so project switches — which also reset selectedWorktree
 // via the directory watcher above — do NOT clobber scope.
 function onWorktreeChange(path: string | null): void {
+  // Spec 2026-07-16: switching worktrees is a new "did the user already
+  // dismiss the prompt?" boundary. Reset so a different non-Git
+  // worktree re-presents the init flow.
+  repoPromptDismissed.value = false;
   selectedWorktree.value = path;
   selectedScope.value = DEFAULT_SCOPE;
   pendingScope.value = null;
@@ -2225,6 +2277,36 @@ function onCancelCommit(): void {
   commitLastError.value = null;
 }
 
+// Spec 2026-07-16: handlers for the GitRepoInitPrompt slot. The prompt
+// is a single one-shot interaction (confirm or cancel), so neither
+// handler takes any meaningful arguments beyond the existing
+// composable state.
+async function onRepoInitConfirm(): Promise<void> {
+  if (!projectRoot.value) return;
+  repoInitLastError.value = null;
+  isRepoInitSubmitting.value = true;
+  const result = await gitRepoProbe.gitInit({ path: projectRoot.value });
+  isRepoInitSubmitting.value = false;
+  if (result.ok) {
+    // Success path: the composable has already transitioned state to
+    // `ok` and cleared its cache, so the prompt will unmount itself
+    // via the `showRepoInitPrompt` computed. Reset the dismiss flag
+    // so re-probing the same project (rare) re-shows the prompt if
+    // the user manually nukes .git/ again.
+    repoPromptDismissed.value = false;
+    return;
+  }
+  repoInitLastError.value = {
+    reason: result.reason,
+    ...(result.stderr !== undefined ? { stderr: result.stderr } : {}),
+  };
+}
+
+function onRepoInitCancel(): void {
+  repoPromptDismissed.value = true;
+  repoInitLastError.value = null;
+}
+
 async function onConfirmCommit(payload: { message: string }): Promise<void> {
   const umo = spcodeStatus.status.value.umo;
   const worktree = selectedWorktree.value;
@@ -2358,6 +2440,9 @@ onBeforeUnmount(() => {
   fileRestore.dispose();
   fileDiscardHunk.dispose();
   worktreesComposable.dispose();
+  // Spec 2026-07-16: abort in-flight probe + init + clear polling
+  // interval. Mirrors the worktree composable's dispose pattern.
+  gitRepoProbe.dispose();
   gitStage.dispose();
   gitUnstage.dispose();
   gitCommit.dispose();
