@@ -503,6 +503,10 @@ class ProviderManager:
                 from .sources.nvidia_rerank_source import (
                     NvidiaRerankProvider as NvidiaRerankProvider,
                 )
+            case "tei_rerank":
+                from .sources.tei_rerank_source import (
+                    TEIRerankProvider as TEIRerankProvider,
+                )
 
     def get_merged_provider_config(self, provider_config: dict) -> dict:
         """获取 provider 配置和 provider_source 配置合并后的结果
