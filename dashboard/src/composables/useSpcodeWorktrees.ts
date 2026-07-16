@@ -159,16 +159,12 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
   async function refresh(): Promise<void> {
     if (!isMounted) return
 
-    const umo = spcodeStatus.status.value.umo
-    if (!umo) {
-      const prev = state.value.kind === 'ok' ? state.value.snapshot : undefined
-      state.value = {
-        kind: 'error',
-        reason: 'no_project_loaded',
-        previousSnapshot: prev,
-      }
-      return
-    }
+    // umo is optional: the backend's /spcode/git-worktrees endpoint
+    // falls back to the most-recently-loaded project when umo is null.
+    // Sending umo=null avoids the timing gap where setLoaded() has
+    // already flipped `loaded=true` (showing the "查看工作区" button)
+    // but the authoritative umo hasn't arrived yet via onStreamEnd.
+    const umo = spcodeStatus.status.value.umo ?? null
 
     abortController?.abort()
     abortController = new AbortController()
@@ -221,10 +217,12 @@ export function useSpcodeWorktrees(): UseSpcodeWorktrees {
     () => spcodeStatus.status.value.directory,
     (newDir, oldDir) => {
       if (!isMounted) return
-      // Skip the very first assignment (handled by the umo watcher) and
-      // skip empty transitions. Only re-fetch when the directory actually
-      // changes from one non-null value to another.
-      if (newDir && newDir !== oldDir && spcodeStatus.status.value.umo) {
+      // Re-fetch when the directory changes. We no longer require umo
+      // to be non-null: refresh() sends umo=null and the backend falls
+      // back to the most-recently-loaded project. This covers the
+      // /project load timing gap (setLoaded sets directory before umo
+      // arrives via onStreamEnd).
+      if (newDir && newDir !== oldDir) {
         void refresh()
       }
     },

@@ -2946,18 +2946,11 @@ function toggleTheme() {
   gap: 28px;
 }
 
-/*
- * Bottom padding = 142px (was 116). Grows by 26px to clear the stacked
- * spcode status chips (project + codegraph) above the input container
- * so the last message's meta row (copy / token-usage / ref buttons) is
- * never covered by the input area.
- */
 .messages-panel {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 0 142px;
-  scroll-padding-bottom: 142px;
+  padding: 24px 0 0;
 }
 
 .conversation-stack.is-empty .messages-panel {
@@ -2965,7 +2958,6 @@ function toggleTheme() {
   min-height: auto;
   overflow: visible;
   padding: 0;
-  scroll-padding-bottom: 0;
 }
 
 .messages-list-shell {
@@ -3021,47 +3013,14 @@ function toggleTheme() {
 
 .composer-shell {
   position: relative;
-  z-index: 3;
-  isolation: isolate;
   background: transparent;
   padding: 0 0 18px;
-}
-
-.conversation-stack:not(.is-empty) .composer-shell {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  pointer-events: none;
-}
-
-.conversation-stack:not(.is-empty) .composer-shell::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  top: 32px;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  pointer-events: none;
-  background: var(--chat-page-bg);
 }
 
 .composer-shell :deep(.input-area),
 .project-composer-shell :deep(.input-area) {
   padding-top: 0;
   border-top: 0;
-}
-
-.conversation-stack:not(.is-empty) .composer-shell :deep(.input-area) {
-  position: relative;
-  z-index: 1;
-  pointer-events: none;
-  background: transparent;
-}
-
-.conversation-stack:not(.is-empty) .composer-shell :deep(.input-container) {
-  pointer-events: auto;
 }
 
 .conversation-stack.is-empty .composer-shell {
@@ -3098,15 +3057,12 @@ kbd {
     height: calc(100vh - 50px) !important;
   }
 
-  /* See desktop `.messages-panel` comment for the +26px chip-stack delta. */
   .messages-panel {
-    padding: 18px 0 118px;
-    scroll-padding-bottom: 118px;
+    padding: 18px 0 0;
   }
 
   .conversation-stack.is-empty .messages-panel {
     padding: 0;
-    scroll-padding-bottom: 0;
   }
 
   .messages-list-shell {

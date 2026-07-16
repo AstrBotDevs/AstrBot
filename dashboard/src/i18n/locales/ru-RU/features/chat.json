@@ -404,7 +404,9 @@
         "label": "Рабочие деревья",
         "ariaLabel": "Выберите worktree для просмотра diff",
         "mainBadge": "главный",
-        "detachedBadge": "отсоединён"
+        "detachedBadge": "отсоединён",
+        "prunableBadge": "повреждён",
+        "prunableTooltip": "Это рабочее дерево повреждено (его каталог мог быть удалён). Выполните \"git worktree prune\" для очистки."
       },
       "scopeBar": {
         "ariaLabel": "Выберите область diff"

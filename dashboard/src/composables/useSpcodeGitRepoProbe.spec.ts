@@ -1,4 +1,4 @@
-// Author: elecvoid243, 2026-07-16
+// Author: elecvoid243, 2026-07-16 (updated 2026-07-16 for git-repo-check)
 //
 // Tests exercise the composable against the **actual** wire shape
 // produced by the spcode plugin:
@@ -9,10 +9,10 @@
 //
 // <inner> is what `_make_envelope` produces: it never emits a `success`
 // field; success is conveyed by `reason: null`, and endpoint-specific
-// fields (`current`, `initial_branch`, etc.) live at the top level of
-// the INNER payload. Mocks below wrap their fixtures in the outer
-// envelope so the composable's `resp.data?.data` unwrap is exercised
-// rather than bypassed.
+// fields (`is_git_repo`, `git_available`, `directory`, etc.) live at the
+// top level of the INNER payload. Mocks below wrap their fixtures in
+// the outer envelope so the composable's `resp.data?.data` unwrap is
+// exercised rather than bypassed.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick } from "vue";
@@ -64,34 +64,28 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// Real backend wire shape for `GET /spcode/git-branches` success:
-// no `success` field, `current` (not `default`) at the top level.
-const GIT_BRANCHES_OK = {
+// Real backend wire shape for `GET /spcode/git-repo-check` success
+// (is a Git repo).
+const GIT_REPO_CHECK_OK = {
+  is_git_repo: true,
+  git_available: true,
+  directory: "D:/tmp",
   reason: null,
   stderr: "",
-  elapsed_ms: 1,
-  branches: [],
-  current: "main",
-  detached: false,
-  total: 0,
+  elapsed_ms: 12.34,
 };
 
-// Real backend wire shape for `GET /spcode/git-branches` not_a_git_repo.
-const GIT_BRANCHES_NOT_A_REPO = {
+// Real backend wire shape for `GET /spcode/git-repo-check` non-git.
+const GIT_REPO_CHECK_NOT_A_REPO = {
+  is_git_repo: false,
+  git_available: true,
+  directory: "D:/tmp/foo",
   reason: "not_a_git_repo",
   stderr: "fatal: not a git repository",
-  elapsed_ms: 5,
-  directory: "D:/tmp/foo",
-  umo: "session:test",
-  worktree: "D:/tmp/foo",
+  elapsed_ms: 15.67,
 };
 
 // Real backend wire shape for `POST /spcode/git-init` success.
-// v2.17.1 added the `force` echo field to the success response; we
-// keep it in the fixture so future assertions on the wire shape stay
-// honest. The composable's parseGitInitResponse ignores it (it only
-// reads `reason`/`stderr`/`initial_branch`), so existing tests are
-// unaffected.
 const GIT_INIT_OK = {
   reason: null,
   stderr: "",
@@ -107,24 +101,35 @@ const GIT_INIT_OK = {
 };
 
 // Wrap a fixture in the OpenAPI envelope `{ status: "ok", data: <inner> }`
-// exactly as the spcode plugin emits it on the wire. Every 200-OK mock
-// below must use this; the composable unwraps via `resp.data?.data` and
-// would otherwise see the outer envelope and fail every parse.
+// exactly as the spcode plugin emits it on the wire.
 function okEnvelope<T>(inner: T): { data: { status: "ok"; data: T } } {
   return { data: { status: "ok" as const, data: inner } };
 }
 
 describe("useSpcodeGitRepoProbe", () => {
   it("refresh() against a Git repo transitions state to 'ok'", async () => {
-    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_OK));
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_REPO_CHECK_OK));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     await result.refresh();
-    expect(result.state.value).toEqual({ kind: "ok", defaultBranch: "main" });
+    expect(result.state.value).toEqual({ kind: "ok", directory: "D:/tmp" });
+    unmount();
+  });
+
+  it("refresh() sends path param (not umo) to git-repo-check", async () => {
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_REPO_CHECK_OK));
+    const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
+    await result.refresh();
+    expect(getMock).toHaveBeenCalledWith(
+      "spcode/git-repo-check",
+      expect.objectContaining({
+        params: { path: "D:/tmp" },
+      }),
+    );
     unmount();
   });
 
   it("refresh() against a non-Git directory transitions state to 'not_a_git_repo'", async () => {
-    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_NOT_A_REPO));
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_REPO_CHECK_NOT_A_REPO));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     await result.refresh();
     expect(result.state.value).toEqual({
@@ -134,55 +139,28 @@ describe("useSpcodeGitRepoProbe", () => {
     unmount();
   });
 
-  it("refresh() with cached ETag sends If-None-Match and restores cached state on 304", async () => {
-    localStorage.setItem(
-      "astrbot.spcode.gitRepoProbe.etag.session:test.",
-      '"abc123"',
-    );
-    localStorage.setItem(
-      "astrbot.spcode.gitRepoProbe.snapshot.session:test.",
-      JSON.stringify({ defaultBranch: "main" }),
-    );
-    getMock.mockResolvedValueOnce({ status: 304, data: null });
+  it("refresh() with no directory transitions state to 'idle'", async () => {
+    statusRef.value = { umo: "session:test", directory: null };
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     await result.refresh();
-    expect(getMock).toHaveBeenCalledWith(
-      "spcode/git-branches",
-      expect.objectContaining({
-        params: { umo: "session:test" },
-        // `validateStatus` must allow 304 so axios doesn't throw.
-        validateStatus: expect.any(Function),
-        headers: expect.objectContaining({ "If-None-Match": '"abc123"' }),
-      }),
-    );
-    // 304 must be accepted by validateStatus, not surfaced as an error.
-    expect(result.state.value).toEqual({ kind: "ok", defaultBranch: "main" });
+    expect(result.state.value).toEqual({ kind: "idle" });
+    expect(getMock).not.toHaveBeenCalled();
     unmount();
   });
 
-  it("gitInit() success invalidates the ETag and re-probes to 'ok'", async () => {
-    localStorage.setItem(
-      "astrbot.spcode.gitRepoProbe.etag.session:test.",
-      '"stale"',
-    );
+  it("gitInit() success re-probes to 'ok'", async () => {
     postMock.mockResolvedValueOnce(okEnvelope(GIT_INIT_OK));
-    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_OK));
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_REPO_CHECK_OK));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     const r = await result.gitInit({ path: "D:/tmp" });
     expect(r).toEqual({ ok: true, defaultBranch: "main" });
-    expect(localStorage.getItem("astrbot.spcode.gitRepoProbe.etag.session:test.")).toBeNull();
-    expect(result.state.value).toEqual({ kind: "ok", defaultBranch: "main" });
+    expect(result.state.value).toEqual({ kind: "ok", directory: "D:/tmp" });
     unmount();
   });
 
   it("gitInit({ force: true }) forwards force in the request body (v2.17.1)", async () => {
-    // Regression guard: the GitDiffSidebar prompt now always passes
-    // force=true (the loaded project directory already exists, so
-    // "init" means "convert"). If the composable ever drops the
-    // field from the POST body, the backend would reject non-empty
-    // dirs with `directory_not_empty` and the prompt UX would break.
     postMock.mockResolvedValueOnce(okEnvelope(GIT_INIT_OK));
-    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_OK));
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_REPO_CHECK_OK));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     await result.gitInit({ path: "D:/tmp", force: true });
     expect(postMock).toHaveBeenCalledWith(
@@ -194,11 +172,8 @@ describe("useSpcodeGitRepoProbe", () => {
   });
 
   it("gitInit() defaults force to false in the request body when omitted", async () => {
-    // Symmetry guard: callers that don't opt into force must not
-    // accidentally send force=true (which would skip the backend's
-    // non-empty safety net for genuine "create new empty repo" use).
     postMock.mockResolvedValueOnce(okEnvelope(GIT_INIT_OK));
-    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_OK));
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_REPO_CHECK_OK));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     await result.gitInit({ path: "D:/tmp" });
     expect(postMock).toHaveBeenCalledWith(
@@ -239,6 +214,7 @@ describe("useSpcodeGitRepoProbe", () => {
       () => new Promise((res) => { resolveFirst = res; }),
     );
     postMock.mockResolvedValueOnce(okEnvelope(GIT_INIT_OK));
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_REPO_CHECK_OK));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     const first = result.gitInit({ path: "D:/tmp" });
     // Let the first call settle into the awaited postMock.

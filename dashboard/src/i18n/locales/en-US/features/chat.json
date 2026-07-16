@@ -416,7 +416,9 @@
         "label": "Worktrees",
         "ariaLabel": "Select worktree to view diff",
         "mainBadge": "main",
-        "detachedBadge": "detached"
+        "detachedBadge": "detached",
+        "prunableBadge": "prunable",
+        "prunableTooltip": "This worktree is prunable (its directory may have been deleted). Run \"git worktree prune\" to clean up."
       },
       "worktreeMgmt": {
         "addButton": "New worktree",

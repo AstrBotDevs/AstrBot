@@ -416,7 +416,9 @@
         "label": "工作树",
         "ariaLabel": "选择 worktree 查看 diff",
         "mainBadge": "主",
-        "detachedBadge": "游离"
+        "detachedBadge": "游离",
+        "prunableBadge": "损坏",
+        "prunableTooltip": "此 worktree 已损坏（其目录可能已被删除）。请执行 \"git worktree prune\" 清理。"
       },
       "worktreeMgmt": {
         "addButton": "新建 worktree",

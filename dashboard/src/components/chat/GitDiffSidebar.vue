@@ -305,7 +305,7 @@ const worktreeList = computed(() => {
   if (s.kind !== "ok") return [];
   return s.snapshot.worktrees;
 });
-const hasMultipleWorktrees = computed(() => worktreeList.value.length > 1);
+const hasMultipleWorktrees = computed(() => worktreeList.value.length > 0);
 // Path of the main worktree (used as the "active" comparison when
 // selectedWorktree is null). Lets the main tab stay highlighted.
 const mainWorktreePath = computed(
@@ -1163,7 +1163,6 @@ watch(
       }
       composable.stopPolling();
       gitStatus.stopPolling();
-      gitLog.stopPolling();
     } else {
       composable.stopPolling();
       gitStatus.stopPolling();
@@ -2805,14 +2804,25 @@ const currentRoot = computed<string | null>(() => {
               {
                 'git-diff-sidebar-tab--active':
                   (selectedWorktree ?? mainWorktreePath) === wt.path,
+                'git-diff-sidebar-tab--prunable': wt.prunable,
               },
             ]"
-            :title="wt.path"
+            :title="
+              wt.prunable
+                ? tm('spcodeProjectLoad.diffSidebar.worktreeTabs.prunableTooltip')
+                : wt.path
+            "
             @click="onWorktreeChange(wt.isMain ? null : wt.path)"
             @contextmenu.prevent="(e) => openContextMenu(e, wt)"
           >
             <v-icon v-if="wt.isMain" size="12" class="git-diff-sidebar-tab-icon"
               >mdi-home</v-icon
+            >
+            <v-icon
+              v-else-if="wt.prunable"
+              size="12"
+              class="git-diff-sidebar-tab-icon git-diff-sidebar-tab-icon--prunable"
+              >mdi-alert</v-icon
             >
             <v-icon
               v-else-if="wt.locked"
@@ -2828,7 +2838,10 @@ const currentRoot = computed<string | null>(() => {
                   : wt.headSha.slice(0, 7))
               }}
             </span>
-            <span v-if="!wt.branch" class="git-diff-sidebar-tab-badge">{{
+            <span v-if="wt.prunable" class="git-diff-sidebar-tab-badge git-diff-sidebar-tab-badge--prunable">{{
+              tm("spcodeProjectLoad.diffSidebar.worktreeTabs.prunableBadge")
+            }}</span>
+            <span v-else-if="!wt.branch" class="git-diff-sidebar-tab-badge">{{
               tm("spcodeProjectLoad.diffSidebar.worktreeTabs.detachedBadge")
             }}</span>
           </button>
@@ -3927,6 +3940,17 @@ const currentRoot = computed<string | null>(() => {
   background: rgba(var(--v-theme-on-surface), 0.08);
   color: rgba(var(--v-theme-on-surface), 0.6);
   flex-shrink: 0;
+}
+.git-diff-sidebar-tab--prunable {
+  border-color: rgba(255, 152, 0, 0.4);
+  background: rgba(255, 152, 0, 0.08);
+}
+.git-diff-sidebar-tab-icon--prunable {
+  color: rgb(255, 152, 0);
+}
+.git-diff-sidebar-tab-badge--prunable {
+  background: rgba(255, 152, 0, 0.15);
+  color: rgb(255, 152, 0);
 }
 
 @media (max-width: 760px) {
