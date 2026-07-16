@@ -170,6 +170,15 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
 
   function startPolling(intervalMs: number = DEFAULT_POLL_MS): void {
     if (pollTimer) return;
+    // Fire the first probe synchronously instead of waiting for the
+    // first interval tick. Rationale: the GitDiffSidebar's
+    // view-mode tabs are gated on `isGitRepo || showNotGitRepoChip`,
+    // so while `state.kind === "idle"` the tabs are hidden and the
+    // user has no UI affordance to trigger a re-probe. If a non-Git
+    // project is opened with the sidebar already up, waiting 30s
+    // for the first tick leaves the prompt invisible for the entire
+    // wait. Polling cadence is preserved thereafter.
+    void refresh();
     pollTimer = setInterval(() => {
       void refresh();
     }, intervalMs);
