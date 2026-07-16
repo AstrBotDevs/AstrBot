@@ -1062,10 +1062,15 @@ onMounted(() => {
 // (which is the common case in this dashboard — the sidebar is
 // always mounted, just sometimes closed). For the "starts closed
 // then opens" path, modelValue flipping true starts the timer.
+//
+// isGitRepo is part of the gate: a non-Git project has no worktrees
+// to list, so polling 30s for it is pure waste. The watcher below
+// (`isGitRepo` race-catch) tears down any timer that already started
+// when the probe lands on `not_a_git_repo`.
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) {
+    if (open && isGitRepo.value) {
       worktreesComposable.startPolling(30_000);
     } else {
       worktreesComposable.stopPolling();
@@ -1074,16 +1079,13 @@ watch(
   { immediate: true },
 );
 
-// Spec 2026-07-16: same lifecycle as the worktree polling — start when
-// the sidebar opens, stop when it closes. 30s cadence keeps the
-// "not a Git project" state in sync with external `git init` operations
-// (e.g. an agent creating a repository on disk while the user is
-// One-shot check: the prompt is driven by "is the loaded directory a
-// Git repo?", which doesn't change while the user is staring at the
-// sidebar. Re-probing every 30s would just waste a round-trip. The
-// umo/directory watcher inside the composable handles the only case
-// where the answer can change without re-opening the sidebar: the
-// user issuing a `/project load` while it's open.
+// Spec 2026-07-16: one-shot check on open. The prompt is driven by
+// "is the loaded directory a Git repo?", which doesn't change while
+// the user is staring at the sidebar. Re-probing every 30s would just
+// waste a round-trip. The umo/directory watcher inside the composable
+// handles the only case where the answer can change without
+// re-opening the sidebar: the user issuing a `/project load` while
+// it's open.
 watch(
   () => props.modelValue,
   (open) => {
@@ -1094,18 +1096,33 @@ watch(
   { immediate: true },
 );
 
-// Spec: polling starts ONLY when the sidebar is open AND the user is
-// viewing the Git Diff tab. The Files ("workspace") tab never polls —
-// there's no diff data to refresh, and pulling it would be wasted
-// network/CPU. History tab has its own 10s polling on useSpcodeGitLog.
-// We track both inputs in a single watcher so the polling lifecycle
-// has one source of truth.
+// Race-catch: modelValue→true fires startPolling synchronously, but
+// the probe's `not_a_git_repo` resolution lands in a later microtask.
+// Without this, a 30s worktree timer would already be ticking by the
+// time the probe returns. Teardown all four composables together so
+// the gate has a single source of truth.
+watch(isGitRepo, (isRepo) => {
+  if (isRepo) return;
+  worktreesComposable.stopPolling();
+  composable.stopPolling();
+  gitStatus.stopPolling();
+  gitLog.stopPolling();
+});
+
+// Spec: polling starts ONLY when the sidebar is open, the user is on
+// the Git Diff / History tab, AND the project is actually a Git repo.
+// The Files ("workspace") tab never polls — there's no diff data to
+// refresh, and pulling it would be wasted network/CPU. Non-Git
+// projects never poll at all (no worktrees, no diff, no history) —
+// the catch-all `else` branch keeps all three composables stopped.
+// We track all three inputs in a single watcher so the polling
+// lifecycle has one source of truth.
 watch(
-  [() => props.modelValue, viewMode],
-  async ([open, mode]) => {
+  [() => props.modelValue, viewMode, isGitRepo],
+  async ([open, mode, isRepo]) => {
     const isDiff = mode === "diff";
     const isHistory = mode === "history";
-    if (open && isDiff) {
+    if (open && isDiff && isRepo) {
       isFetching.value = true;
       try {
         // Fetch diff + status in parallel. The git-status call is
@@ -1119,17 +1136,21 @@ watch(
         isFetching.value = false;
       }
       // Re-check conditions after await: the user may have switched
-      // tabs or closed the sidebar during the refresh. Starting
-      // polling here without re-checking would leak a timer after
-      // a tab switch (e.g. diff → files) or after the sidebar closes.
-      if (props.modelValue && viewMode.value === "diff") {
+      // tabs, closed the sidebar, or the probe may have flipped to
+      // `not_a_git_repo` during the refresh. Starting polling here
+      // without re-checking would leak a timer in any of those cases.
+      if (
+        props.modelValue
+        && viewMode.value === "diff"
+        && isGitRepo.value
+      ) {
         composable.startPolling(10_000);
         // git-status polling rides on the same cadence so the
         // "new files" section stays in sync with diff changes.
         gitStatus.startPolling(10_000);
       }
       gitLog.stopPolling();
-    } else if (open && isHistory) {
+    } else if (open && isHistory && isRepo) {
       // History view polls gitLog instead of gitDiff.
       isFetching.value = true;
       try {
@@ -1137,7 +1158,7 @@ watch(
       } finally {
         isFetching.value = false;
       }
-      if (props.modelValue && viewMode.value === "history") {
+      if (props.modelValue && viewMode.value === "history" && isGitRepo.value) {
         gitLog.startPolling(10_000);
       }
       composable.stopPolling();
