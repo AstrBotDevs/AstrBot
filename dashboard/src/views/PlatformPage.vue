@@ -136,32 +136,6 @@
         </v-row>
       </div>
 
-      <!-- 日志部分 -->
-      <v-card elevation="0" class="mt-4 mb-10">
-        <v-card-title class="d-flex align-center py-3 px-4">
-          <v-icon class="me-2"> mdi-console-line </v-icon>
-          <span class="text-h4">{{ tm("logs.title") }}</span>
-          <v-spacer />
-          <v-btn
-            variant="text"
-            color="primary"
-            @click="showConsole = !showConsole"
-          >
-            {{ showConsole ? tm("logs.collapse") : tm("logs.expand") }}
-            <v-icon>{{
-              showConsole ? "mdi-chevron-up" : "mdi-chevron-down"
-            }}</v-icon>
-          </v-btn>
-        </v-card-title>
-
-        <v-expand-transition>
-          <v-card-text v-if="showConsole" class="pa-0">
-            <ConsoleDisplayer
-              style="background-color: #1e1e1e; height: 300px; border-radius: 0"
-            />
-          </v-card-text>
-        </v-expand-transition>
-      </v-card>
     </v-container>
 
     <!-- 添加平台适配器对话框 -->
@@ -345,7 +319,7 @@
     <v-snackbar
       v-model="save_message_snack"
       :timeout="3000"
-      elevation="24"
+      elevation="6"
       :color="save_message_success"
       location="top"
     >
@@ -357,7 +331,6 @@
 <script lang="ts">
 import AddNewPlatform from "@/components/platform/AddNewPlatform.vue";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
-import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import ItemCard from "@/components/shared/ItemCard.vue";
 import QrCodeViewer from "@/components/shared/QrCodeViewer.vue";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
@@ -372,7 +345,6 @@ export default {
   components: {
     AstrBotConfig,
     WaitingForRestart,
-    ConsoleDisplayer,
     ItemCard,
     AddNewPlatform,
     QrCodeViewer,
@@ -401,8 +373,6 @@ export default {
       save_message_snack: false,
       save_message: "",
       save_message_success: "success",
-
-      showConsole: localStorage.getItem("platformPage_showConsole") === "true",
 
       showWebhookDialog: false,
       currentWebhookUuid: "",
@@ -437,10 +407,6 @@ export default {
   },
 
   watch: {
-    showConsole(newValue) {
-      localStorage.setItem("platformPage_showConsole", newValue.toString());
-    },
-
     showIdConflictDialog(newValue) {
       if (!newValue && this.idConflictResolve) {
         this.idConflictResolve(false);

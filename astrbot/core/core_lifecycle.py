@@ -36,6 +36,9 @@ from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.utils.event_loop_diagnostics import (
+    create_event_loop_diagnostic_tasks,
+)
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
 from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
@@ -605,6 +608,7 @@ class AstrBotCoreLifecycle:
                 self.temp_dir_cleaner.run(),
                 name="temp_dir_cleaner",
             )
+        diagnostic_tasks = create_event_loop_diagnostic_tasks()
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
@@ -614,6 +618,7 @@ class AstrBotCoreLifecycle:
         tasks_ = []
         if event_bus_task:
             tasks_.append(event_bus_task)
+        tasks_.extend(diagnostic_tasks)
         tasks_.extend(extra_tasks or [])
         if cron_task:
             tasks_.append(cron_task)

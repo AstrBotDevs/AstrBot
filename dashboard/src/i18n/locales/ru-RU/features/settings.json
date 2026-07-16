@@ -1,4 +1,23 @@
 {
+  "sections": {
+    "resources": {
+      "title": "О программе"
+    }
+  },
+  "resources": {
+    "changelog": {
+      "subtitle": "Просмотреть изменения в текущей и предыдущих версиях."
+    },
+    "documentation": {
+      "subtitle": "Открыть официальную документацию AstrBot."
+    },
+    "faq": {
+      "subtitle": "Прочитать ответы на частые вопросы и советы по устранению неполадок."
+    },
+    "github": {
+      "subtitle": "Открыть репозиторий AstrBot на GitHub."
+    }
+  },
   "network": {
     "title": "Сеть",
     "githubProxy": {

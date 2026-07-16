@@ -765,11 +765,25 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 continue
             llm_resp_result = llm_response
 
-            if not llm_response.is_chunk and llm_response.usage:
-                # only count the token usage of the final response for computation purpose
+            # Chunk responses have already continued above. A missing usage report
+            # means the latest context occupancy is unknown.
+            self.stats.current_context_tokens = 0
+            if llm_response.usage:
+                # Keep cumulative usage for billing and expose the latest request
+                # input separately for context-window occupancy displays.
                 self.stats.token_usage += llm_response.usage
+                self.stats.current_context_tokens = llm_response.usage.input
                 if self.req.conversation:
                     self.req.conversation.token_usage = llm_response.usage.total
+            yield AgentResponse(
+                type="agent_stats",
+                data=AgentResponseData(
+                    chain=MessageChain(
+                        type="agent_stats",
+                        chain=[Json(data=self.stats.to_dict())],
+                    )
+                ),
+            )
             break  # got final response
 
         if not llm_resp_result:

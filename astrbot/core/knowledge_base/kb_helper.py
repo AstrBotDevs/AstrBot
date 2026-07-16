@@ -244,12 +244,20 @@ class KBHelper:
                 - current: 当前进度
                 - total: 总数
 
+        Multi-store writes cannot share a transaction. Failures before metadata
+        commit best-effort roll back written chunks/vectors/media. After
+        metadata is committed, only report stats-refresh errors and keep the
+        document.
         """
         await self._ensure_vec_db()
         doc_id = str(uuid.uuid4())
         media_paths: list[Path] = []
         saved_file_path: Path | None = None
         file_size = 0
+        # Only roll back chunks/vectors/media when metadata has not been
+        # committed yet. After commit (e.g. stats refresh failure) the document
+        # is already user-visible and must not be fully undone.
+        metadata_committed = False
 
         try:
             chunks_text: list[str] = []
@@ -276,10 +284,31 @@ class KBHelper:
                 if progress_callback:
                     await progress_callback("parsing", 0, 100)
 
-                parser = await select_parser(f".{file_type}")
-                parse_result = await parser.parse(file_content, file_name)
+                try:
+                    parser = await select_parser(f".{file_type}")
+                    parse_result = await parser.parse(file_content, file_name)
+                except KnowledgeBaseUploadError:
+                    raise
+                except Exception as exc:
+                    raise KnowledgeBaseUploadError(
+                        stage="parsing",
+                        user_message=(
+                            "文档解析失败：无法读取或解析上传文件。"
+                            "请确认文件格式受支持且文件内容未损坏。"
+                        ),
+                        details={"file_name": file_name},
+                    ) from exc
                 text_content = parse_result.text
                 media_items = parse_result.media
+                if not text_content or not text_content.strip():
+                    raise KnowledgeBaseUploadError(
+                        stage="parsing",
+                        user_message=(
+                            "文档解析失败：未能从文件中提取可索引文本。"
+                            "该文件可能是扫描件、纯图片 PDF，或格式暂不受支持。"
+                        ),
+                        details={"file_name": file_name},
+                    )
 
                 if progress_callback:
                     await progress_callback("parsing", 100, 100)
@@ -364,14 +393,27 @@ class KBHelper:
                 if progress_callback:
                     await progress_callback("embedding", current, total)
 
-            await self._get_vec_db().insert_batch(
-                contents=contents,
-                metadatas=metadatas,
-                batch_size=batch_size,
-                tasks_limit=tasks_limit,
-                max_retries=max_retries,
-                progress_callback=embedding_progress_callback,
-            )
+            try:
+                await self._get_vec_db().insert_batch(
+                    contents=contents,
+                    metadatas=metadatas,
+                    batch_size=batch_size,
+                    tasks_limit=tasks_limit,
+                    max_retries=max_retries,
+                    progress_callback=embedding_progress_callback,
+                )
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                raise KnowledgeBaseUploadError(
+                    stage="storage",
+                    user_message=("存储失败：文本块已生成，但写入知识库索引时出错。"),
+                    details={
+                        "file_name": file_name,
+                        "doc_id": doc_id,
+                        "cause": str(exc),
+                    },
+                ) from exc
 
             # 保存文档的元数据
             doc = KBDocument(
@@ -384,38 +426,142 @@ class KBHelper:
                 chunk_count=len(chunks_text),
                 media_count=len(saved_media),
             )
-            async with self.kb_db.get_db() as session:
-                async with session.begin():
-                    session.add(doc)
-                    for media in saved_media:
-                        session.add(media)
-
-                await session.refresh(doc)
+            try:
+                async with self.kb_db.get_db() as session:
+                    async with session.begin():
+                        session.add(doc)
+                        for media in saved_media:
+                            session.add(media)
+                        await session.commit()
+                    # Mark committed immediately after commit succeeds. A later
+                    # refresh failure must not trigger full upload rollback.
+                    metadata_committed = True
+                    await session.refresh(doc)
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                if metadata_committed:
+                    raise KnowledgeBaseUploadError(
+                        stage="metadata",
+                        user_message=(
+                            "元数据更新失败：文档已上传，但文档记录刷新失败。"
+                        ),
+                        details={"file_name": file_name, "doc_id": doc_id},
+                    ) from exc
+                raise KnowledgeBaseUploadError(
+                    stage="metadata",
+                    user_message=(
+                        "元数据保存失败：文本块已写入知识库，但文档记录保存失败。"
+                    ),
+                    details={"file_name": file_name, "doc_id": doc_id},
+                ) from exc
 
             vec_db = self._get_vec_db()
-            await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
-            await self.refresh_kb()
-            await self.refresh_document(doc_id)
+            try:
+                await self.kb_db.update_kb_stats(kb_id=self.kb.kb_id, vec_db=vec_db)
+                await self.refresh_kb()
+                await self.refresh_document(doc_id)
+            except KnowledgeBaseUploadError:
+                raise
+            except Exception as exc:
+                raise KnowledgeBaseUploadError(
+                    stage="metadata",
+                    user_message=(
+                        "元数据更新失败：文档已上传，但知识库统计信息刷新失败。"
+                    ),
+                    details={"file_name": file_name, "doc_id": doc_id},
+                ) from exc
             return doc
         except Exception as e:
-            logger.error(f"上传文档失败: {e}")
+            if isinstance(e, KnowledgeBaseUploadError):
+                logger.warning(f"上传文档失败: {e}", extra={"details": e.details})
+            else:
+                logger.error(f"上传文档失败: {e}", exc_info=True)
 
-            if saved_file_path and saved_file_path.exists():
-                try:
-                    saved_file_path.unlink()
-                except Exception as file_error:
-                    logger.warning(
-                        f"清理原始文档文件失败 {saved_file_path}: {file_error}",
-                    )
-
-            for media_path in media_paths:
-                try:
-                    if media_path.exists():
-                        media_path.unlink()
-                except Exception as me:
-                    logger.warning(f"清理多媒体文件失败 {media_path}: {me}")
+            if not metadata_committed:
+                if saved_file_path and saved_file_path.exists():
+                    try:
+                        saved_file_path.unlink()
+                    except Exception as file_error:
+                        logger.warning(
+                            f"清理原始文档文件失败 {saved_file_path}: {file_error}",
+                        )
+                await self._cleanup_failed_upload(
+                    doc_id=doc_id,
+                    media_paths=media_paths,
+                )
 
             raise
+
+    async def _cleanup_failed_upload(
+        self,
+        doc_id: str,
+        media_paths: list[Path],
+    ) -> None:
+        """Best-effort compensating cleanup after a failed upload.
+
+        Multi-store writes (media files, chunk/FTS rows, FAISS vectors, KB
+        metadata) cannot share a single transaction. On failure before the KB
+        document row is committed, remove any partial state keyed by ``doc_id``.
+
+        Cleanup order intentionally differs from user-facing document deletion:
+        chunk/vector data is removed first, then residual KB metadata rows.
+        This avoids the "metadata gone, orphans remain" window that
+        ``delete_document_by_id`` can leave when vector deletion fails.
+
+        Args:
+            doc_id: Pre-generated document id used for this upload attempt.
+            media_paths: Media files written to disk during this attempt.
+        """
+        from sqlalchemy import delete
+        from sqlmodel import col
+
+        # 1) chunks + vectors first (most common orphan after partial insert)
+        vec_db = getattr(self, "vec_db", None)
+        if vec_db is not None:
+            try:
+                await vec_db.delete_documents(
+                    metadata_filters={"kb_doc_id": doc_id},
+                )
+            except Exception as ve:
+                logger.warning(
+                    f"Failed to roll back chunks/vectors for failed upload "
+                    f"(doc_id={doc_id}): {ve}",
+                )
+
+        # 2) residual KBDocument / KBMedia rows only (normally none yet)
+        try:
+            async with self.kb_db.get_db() as session, session.begin():
+                await session.execute(
+                    delete(KBMedia).where(col(KBMedia.doc_id) == doc_id),
+                )
+                await session.execute(
+                    delete(KBDocument).where(col(KBDocument.doc_id) == doc_id),
+                )
+        except Exception as exc:
+            logger.warning(
+                f"Failed to roll back document metadata for failed upload "
+                f"(doc_id={doc_id}): {exc}",
+            )
+
+        # 3) media files on disk
+        for media_path in media_paths:
+            try:
+                if media_path.exists():
+                    media_path.unlink()
+            except Exception as me:
+                logger.warning(f"Failed to clean up media file {media_path}: {me}")
+
+        # 4) empty media directory for this doc
+        try:
+            media_dir = self.kb_medias_dir / doc_id
+            if media_dir.exists() and media_dir.is_dir():
+                media_dir.rmdir()
+        except Exception as de:
+            logger.warning(
+                f"Failed to remove media directory after failed upload "
+                f"(doc_id={doc_id}): {de}",
+            )
 
     async def list_documents(
         self,

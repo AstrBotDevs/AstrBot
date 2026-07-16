@@ -442,7 +442,7 @@ defineExpose({
 }
 
 .provider-menu-item.v-list-item--active {
-  background: #f2f2f2;
+  background: rgba(var(--v-theme-primary), 0.08);
   color: rgb(var(--v-theme-on-surface));
 }
 
@@ -515,10 +515,6 @@ defineExpose({
   color: rgba(var(--v-theme-on-surface), 0.5);
   font-size: 12px;
   text-align: center;
-}
-
-:global(.v-theme--dark) .provider-menu-item.v-list-item--active {
-  background: rgba(255, 255, 255, 0.1);
 }
 
 @media (max-width: 768px) {

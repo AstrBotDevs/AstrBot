@@ -449,7 +449,7 @@
     <v-snackbar
       v-model="showMessage"
       :timeout="3000"
-      elevation="24"
+      elevation="6"
       :color="messageType"
       location="top"
     >
@@ -461,6 +461,7 @@
 <script lang="ts">
 import { mapActions, mapState } from "pinia";
 import { defineComponent } from "vue";
+import { personaApi } from "@/api/v1";
 import type { Folder, FolderTreeNode } from "@/components/folder/types";
 import PersonaForm from "@/components/shared/PersonaForm.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
@@ -715,6 +716,12 @@ export default defineComponent({
 
     // 导出人格数据
     async handleExportPersona(persona: Persona) {
+      const confirmed = await askForConfirmationDialog(
+        this.tm("messages.exportConfirm"),
+        this.confirmDialog,
+      );
+      if (!confirmed) return;
+
       try {
         // 转换为新格式
         const exportData = {
@@ -827,22 +834,59 @@ export default defineComponent({
                 }
               }
             }
+          } else if (data.system_prompt) {
+            importData = {
+              persona_id: data.persona_id || "imported_persona",
+              system_prompt: data.system_prompt,
+              begin_dialogs: Array.isArray(data.begin_dialogs)
+                ? data.begin_dialogs
+                : [],
+            };
+          } else {
+            throw new Error(this.tm("messages.importFormatError"));
           }
 
           // 验证必需字段
-          if (!importData.persona_id || !importData.system_prompt) {
-            throw new Error(this.tm("persona.messages.importMissingFields"));
+          if (!importData.system_prompt) {
+            throw new Error(this.tm("messages.importMissingPrompt"));
           }
 
-          // 检查ID是否已存在
-          const existingPersonas = this.currentPersonas.map((p) => p.persona_id);
-          if (existingPersonas.includes(importData.persona_id)) {
-            throw new Error(this.tm("messages.importExists", { id: importData.persona_id }));
+          const listResponse = await personaApi.list();
+          const existingIds =
+            listResponse.data.status === "ok"
+              ? (listResponse.data.data || []).map(
+                  (item: Persona) => item.persona_id,
+                )
+              : [];
+          const originalId = importData.persona_id;
+          let renamed = false;
+          if (existingIds.includes(importData.persona_id)) {
+            renamed = true;
+            let counter = 0;
+            do {
+              counter += 1;
+              importData.persona_id =
+                counter === 1
+                  ? `${originalId}_imported`
+                  : `${originalId}_imported_${counter - 1}`;
+            } while (existingIds.includes(importData.persona_id));
           }
 
           // 执行导入
-          await this.importPersona(importData);
-          this.showSuccess(this.tm("persona.messages.importSuccess"));
+          await personaApi.create({
+            ...importData,
+            tools: null,
+            skills: null,
+            folder_id: this.currentFolderId,
+          });
+          await this.refreshCurrentFolder();
+          this.showSuccess(
+            renamed
+              ? this.tm("messages.importIdExists", {
+                  id: importData.persona_id,
+                })
+              : this.tm("messages.importSuccess"),
+          );
         } catch (error: any) {
           console.error(this.tm("persona.messages.importFailed"), error);
 

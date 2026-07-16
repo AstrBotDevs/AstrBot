@@ -380,7 +380,7 @@
     <v-snackbar
       v-model="save_message_snack"
       :timeout="3000"
-      elevation="24"
+      elevation="6"
       :color="save_message_success"
       location="top"
     >

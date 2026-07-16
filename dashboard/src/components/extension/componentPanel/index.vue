@@ -345,7 +345,7 @@ watch(viewMode, async (mode) => {
   <v-snackbar
     v-model="snackbar.show"
     :timeout="2000"
-    elevation="24"
+    elevation="6"
     :color="snackbar.color"
   >
     {{ snackbar.message }}

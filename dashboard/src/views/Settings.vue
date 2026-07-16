@@ -343,23 +343,52 @@
         </v-row>
       </v-card-text>
     </v-card>
+
+    <!-- Resources / About Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-information-outline</v-icon>
+        {{ tm("sections.resources.title") }}
+      </v-card-title>
+      <v-card-text>
+        <v-list bg-color="transparent" lines="two">
+          <v-list-item
+            v-for="item in resourceItems"
+            :key="item.key"
+            :prepend-icon="item.icon"
+            :append-icon="
+              item.key === 'changelog'
+                ? 'mdi-chevron-right'
+                : 'mdi-open-in-new'
+            "
+            rounded="lg"
+            @click="item.action"
+          >
+            <v-list-item-title>{{ item.title }}</v-list-item-title>
+            <v-list-item-subtitle>{{ item.subtitle }}</v-list-item-subtitle>
+          </v-list-item>
+        </v-list>
+      </v-card-text>
+    </v-card>
   </div>
 
   <WaitingForRestart ref="wfr" />
   <MigrationDialog ref="migrationDialog" />
   <BackupDialog ref="backupDialog" />
+  <ChangelogDialog v-model="changelogDialog" />
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useTheme } from "vuetify";
 import BackupDialog from "@/components/shared/BackupDialog.vue";
+import ChangelogDialog from "@/components/shared/ChangelogDialog.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import SidebarCustomizer from "@/components/shared/SidebarCustomizer.vue";
 import StorageCleanupPanel from "@/components/shared/StorageCleanupPanel.vue";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
-import { useModuleI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { useToastStore } from "@/stores/toast";
 import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
@@ -389,6 +418,7 @@ interface BackupDialogHandle {
 }
 
 const { tm } = useModuleI18n("features/settings");
+const { locale, t } = useI18n();
 const toastStore = useToastStore();
 const theme = useTheme();
 const customizer = useCustomizerStore();
@@ -543,6 +573,7 @@ const resetThemeColors = () => {
 const wfr = ref<WfrHandle | null>(null);
 const migrationDialog = ref<MigrationDialogHandle | null>(null);
 const backupDialog = ref<BackupDialogHandle | null>(null);
+const changelogDialog = ref(false);
 const apiKeys = ref<ApiKey[]>([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref("");
@@ -563,6 +594,51 @@ const availableScopes = [
   { value: "file", label: "file" },
   { value: "im", label: "im" },
 ];
+
+const openExternalLink = (url: string) => {
+  window.open(url, "_blank", "noopener,noreferrer");
+};
+
+const openFaqLink = () => {
+  openExternalLink(
+    locale.value === "en-US"
+      ? "https://docs.astrbot.app/en/faq.html"
+      : "https://docs.astrbot.app/faq.html",
+  );
+};
+
+const resourceItems = computed(() => [
+  {
+    key: "changelog",
+    title: t("core.navigation.changelog"),
+    subtitle: tm("resources.changelog.subtitle"),
+    icon: "mdi-note-text-outline",
+    action: () => {
+      changelogDialog.value = true;
+    },
+  },
+  {
+    key: "documentation",
+    title: t("core.navigation.documentation"),
+    subtitle: tm("resources.documentation.subtitle"),
+    icon: "mdi-book-open-variant",
+    action: () => openExternalLink("https://docs.astrbot.app"),
+  },
+  {
+    key: "faq",
+    title: t("core.navigation.faq"),
+    subtitle: tm("resources.faq.subtitle"),
+    icon: "mdi-frequently-asked-questions",
+    action: openFaqLink,
+  },
+  {
+    key: "github",
+    title: t("core.navigation.github"),
+    subtitle: tm("resources.github.subtitle"),
+    icon: "mdi-github",
+    action: () => openExternalLink("https://github.com/AstrBotDevs/AstrBot"),
+  },
+]);
 
 const showToast = (message: string, color: "success" | "error" | "warning" = "success") => {
   toastStore.add({

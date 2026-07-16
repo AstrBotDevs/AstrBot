@@ -598,7 +598,7 @@
     <!-- 消息提示 -->
     <v-snackbar
       :timeout="3000"
-      elevation="24"
+      elevation="6"
       :color="messageType"
       v-model="showMessage"
       location="top"

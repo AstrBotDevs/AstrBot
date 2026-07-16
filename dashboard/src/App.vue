@@ -12,9 +12,18 @@
     :location="snackbarLocation"
     close-on-back
   >
-    {{ toastStore.current.message }}
+    <div class="app-snackbar-message">
+      <v-icon v-if="toastIcon" :icon="toastIcon" size="24" />
+      <span>{{ toastStore.current.message }}</span>
+    </div>
     <template v-if="toastStore.current.closable" #actions>
-      <v-btn variant="text" @click="snackbarShow = false"> 关闭 </v-btn>
+      <v-btn
+        icon="mdi-close"
+        variant="text"
+        size="small"
+        aria-label="Close notification"
+        @click="snackbarShow = false"
+      />
     </template>
   </v-snackbar>
 </template>
@@ -55,6 +64,17 @@ const snackbarShow = computed({
 
 const snackbarLocation = computed<SnackAnchor | undefined>(
   () => toastStore.current?.location as SnackAnchor | undefined,
+);
+
+const toastIcon = computed(
+  () =>
+    ({
+      success: "mdi-check-circle-outline",
+      error: "mdi-alert-circle-outline",
+      warning: "mdi-alert-outline",
+      info: "mdi-information-outline",
+      primary: "mdi-information-outline",
+    })[toastStore.current?.color ?? ""] ?? "",
 );
 
 onMounted(() => {

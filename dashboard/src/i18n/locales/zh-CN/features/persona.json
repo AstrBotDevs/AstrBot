@@ -12,7 +12,8 @@
     "move": "移动",
     "clone": "克隆",
     "addDialogPair": "添加对话对",
-    "import": "导入"
+    "import": "导入人格",
+    "export": "导出"
   },
   "labels": {
     "presetDialogs": "预设对话 ({count} 对)",
@@ -86,7 +87,15 @@
     "deleteConfirm": "确定要删除人格 \"{id}\" 吗？此操作不可撤销。",
     "deleteSuccess": "删除成功",
     "deleteError": "删除失败",
-    "importExists": "人格 ID {id} 已存在"
+    "importExists": "人格 ID {id} 已存在",
+    "exportConfirm": "导出仅包含系统提示词和预设对话，不包含工具和 Skills 配置。是否继续导出？",
+    "exportSuccess": "导出成功",
+    "exportError": "导出失败：{error}",
+    "importSuccess": "人格导入成功，请手动配置工具和 Skills",
+    "importError": "导入失败：{error}",
+    "importFormatError": "文件格式错误，请选择有效的人格导出文件",
+    "importMissingPrompt": "文件内容不完整，缺少系统提示词",
+    "importIdExists": "人格名称已存在，已重命名为 \"{id}\""
   },
   "persona": {
     "personasTitle": "人格",

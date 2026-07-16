@@ -1,5 +1,7 @@
 import axios from "axios";
 import { computed, onBeforeUnmount, type Ref, reactive, ref } from "vue";
+import { fetchWithAuth } from "@/api/http";
+import { resolveApiUrl } from "@/utils/request";
 
 export type TransportMode = "sse" | "websocket";
 
@@ -68,12 +70,22 @@ export interface ChatSessionProject {
   emoji?: string;
 }
 
+interface ActiveChatRun {
+  run_id: string;
+  session_id: string;
+  llm_checkpoint_id?: string | null;
+  status?: string;
+  revision?: number;
+  content?: ChatContent;
+}
+
 interface ActiveConnection {
   sessionId: string;
   messageId: string;
   transport: TransportMode;
   abort?: AbortController;
   ws?: WebSocket;
+  botRecord?: ChatRecord;
 }
 
 interface SendMessageStreamOptions {
@@ -203,9 +215,13 @@ export function useMessages(options: UseMessagesOptions) {
     await Promise.all(tasks);
   }
 
-  async function loadSessionMessages(sessionId: string) {
+  async function loadSessionMessages(
+    sessionId: string,
+    resumeRuns = true,
+    showLoading = true,
+  ) {
     if (!sessionId) return;
-    loadingMessages.value = true;
+    if (showLoading) loadingMessages.value = true;
     try {
       const response = await axios.get("/api/chat/get_session", {
         params: { session_id: sessionId },
@@ -218,12 +234,45 @@ export function useMessages(options: UseMessagesOptions) {
       messagesBySession[sessionId] = records;
       sessionProjects[sessionId] = normalizeSessionProject(payload.project);
       loadedSessions[sessionId] = true;
+      if (resumeRuns && Array.isArray(payload.active_runs)) {
+        await restoreNextActiveRun(sessionId, payload.active_runs);
+      }
     } catch (error) {
       console.error("Failed to load session messages:", error);
       messagesBySession[sessionId] = messagesBySession[sessionId] || [];
     } finally {
-      loadingMessages.value = false;
+      if (showLoading) loadingMessages.value = false;
     }
+  }
+
+  async function restoreNextActiveRun(
+    sessionId: string,
+    activeRuns: ActiveChatRun[],
+  ) {
+    const run = activeRuns[0];
+    if (!run?.run_id || activeConnections[sessionId]) return;
+
+    const checkpointId = run.llm_checkpoint_id || null;
+    const records = (messagesBySession[sessionId] || []).filter((record) => {
+      return !(
+        checkpointId &&
+        record.llm_checkpoint_id === checkpointId &&
+        messageContent(record).type === "bot"
+      );
+    });
+    const botRecord = normalizeHistoryRecord({
+      id: `active-run-${run.run_id}`,
+      content: run.content || { type: "bot", message: [] },
+      llm_checkpoint_id: checkpointId,
+      created_at: new Date().toISOString(),
+    });
+    botRecord.content.isLoading = botRecord.content.message.length === 0;
+    records.push(botRecord);
+    messagesBySession[sessionId] = records;
+    const restoredRecords = messagesBySession[sessionId];
+    const reactiveBotRecord = restoredRecords[restoredRecords.length - 1];
+    await resolveRecordMedia([reactiveBotRecord]);
+    startResumeStream(sessionId, run.run_id, reactiveBotRecord);
   }
 
   function createLocalExchange({ sessionId, messageId, parts }: CreateLocalExchangeOptions) {
@@ -532,6 +581,90 @@ export function useMessages(options: UseMessagesOptions) {
       });
   }
 
+  function startResumeStream(
+    sessionId: string,
+    runId: string,
+    botRecord: ChatRecord,
+  ) {
+    const abort = new AbortController();
+    activeConnections[sessionId] = {
+      sessionId,
+      messageId: runId,
+      transport: "sse",
+      abort,
+      botRecord,
+    };
+
+    void (async () => {
+      let receivedEnd = false;
+      let lastError: unknown = null;
+
+      for (
+        let attempt = 0;
+        attempt < 5 && !abort.signal.aborted;
+        attempt += 1
+      ) {
+        let retryable = true;
+        try {
+          const response = await fetchWithAuth(
+            resolveApiUrl(
+              `/api/v1/chat/runs/${encodeURIComponent(runId)}/stream`,
+            ),
+            {
+              headers: { Accept: "text/event-stream" },
+              signal: abort.signal,
+            },
+          );
+          const contentType = response.headers.get("content-type") || "";
+          if (
+            !response.ok ||
+            !response.body ||
+            !contentType.includes("text/event-stream")
+          ) {
+            retryable = response.status >= 500;
+            throw new Error(`Resume stream failed: ${response.status}`);
+          }
+
+          await readSseStream(response.body, (payload) => {
+            processStreamPayload(botRecord, payload);
+            options.onStreamUpdate?.(sessionId);
+            const payloadType = payload?.type || payload?.t;
+            if (payloadType === "end") receivedEnd = true;
+          });
+          if (receivedEnd) break;
+          lastError = new Error("Resume stream closed before completion.");
+        } catch (error) {
+          if (abort.signal.aborted) return;
+          lastError = error;
+        }
+
+        if (!retryable || attempt === 4 || abort.signal.aborted) break;
+        await new Promise<void>((resolve) => {
+          const timeout = window.setTimeout(resolve, 250 * 2 ** attempt);
+          abort.signal.addEventListener(
+            "abort",
+            () => {
+              window.clearTimeout(timeout);
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      }
+
+      if (!receivedEnd && lastError && !abort.signal.aborted) {
+        console.error("Resume chat stream failed:", lastError);
+      }
+
+      const ownsConnection = activeConnections[sessionId]?.abort === abort;
+      if (ownsConnection) delete activeConnections[sessionId];
+      if (!abort.signal.aborted && ownsConnection) {
+        await loadSessionMessages(sessionId, true, false);
+        await options.onSessionsChanged?.();
+      }
+    })();
+  }
+
   function startWebSocketStream(
     sessionId: string,
     messageId: string,
@@ -595,6 +728,21 @@ export function useMessages(options: UseMessagesOptions) {
     const data = normalized?.data ?? "";
 
     if (msgType === "session_id" || msgType === "session_bound") return;
+    if (msgType === "run_snapshot") {
+      const snapshot = data && typeof data === "object" ? data : {};
+      const snapshotRecord = normalizeHistoryRecord({
+        id: `active-run-${snapshot.run_id || "unknown"}`,
+        content: snapshot.content || { type: "bot", message: [] },
+        llm_checkpoint_id: snapshot.llm_checkpoint_id || null,
+      });
+      snapshotRecord.content.isLoading =
+        snapshot.status === "running" &&
+        snapshotRecord.content.message.length === 0;
+      botRecord.content = snapshotRecord.content;
+      botRecord.llm_checkpoint_id = snapshotRecord.llm_checkpoint_id;
+      void resolveRecordMedia([botRecord]);
+      return;
+    }
     if (msgType === "user_message_saved") {
       if (userRecord) {
         userRecord.id = data?.id || userRecord.id;

@@ -962,7 +962,7 @@
       <v-snackbar
         v-model="snackbar"
         :timeout="3000"
-        elevation="24"
+        elevation="6"
         :color="snackbarColor"
         location="top"
       >

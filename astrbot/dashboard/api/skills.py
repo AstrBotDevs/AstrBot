@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from astrbot.core import logger
@@ -94,10 +94,14 @@ async def _download_skill(service: SkillsService, name: str):
     try:
         return _archive_response(service.prepare_skill_archive(name))
     except SkillsServiceError as exc:
-        return error(str(exc))
+        message = str(exc)
+        raise HTTPException(status_code=exc.status_code, detail=message) from exc
     except Exception as exc:
         logger.error(str(exc), exc_info=True)
-        return error(str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to prepare skill archive",
+        ) from exc
 
 
 @router.get("/skills")

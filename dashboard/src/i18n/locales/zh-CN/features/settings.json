@@ -1,4 +1,23 @@
 {
+  "sections": {
+    "resources": {
+      "title": "关于"
+    }
+  },
+  "resources": {
+    "changelog": {
+      "subtitle": "查看当前版本和历史版本的变更。"
+    },
+    "documentation": {
+      "subtitle": "打开 AstrBot 官方文档。"
+    },
+    "faq": {
+      "subtitle": "查看常见问题和故障排查说明。"
+    },
+    "github": {
+      "subtitle": "访问 AstrBot GitHub 仓库。"
+    }
+  },
   "network": {
     "title": "网络",
     "proxy": {
