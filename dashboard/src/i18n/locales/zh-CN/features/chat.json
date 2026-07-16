@@ -726,6 +726,26 @@
           "not_a_git_repo": "不是 git 仓库",
           "network_error": "网络错误"
         }
+      },
+      "repoInit": {
+        "title": "初始化 Git 仓库",
+        "body": "当前路径 {directory} 下未检测到 .git/ 目录,无法读取工作区改动。",
+        "hint": "将创建默认分支 {defaultBranch} 的空仓库(现有文件保持不变)。",
+        "cancel": "稍后",
+        "confirm": "初始化仓库",
+        "submitting": "正在创建仓库…",
+        "dismissedChip": "此项目不是 Git 仓库",
+        "reopenPrompt": "初始化",
+        "errors": {
+          "init_failed": "初始化失败:{stderr}",
+          "directory_not_empty": "目录非空,无法初始化",
+          "permission_denied": "权限被拒绝,无法初始化",
+          "git_not_available": "未检测到 git 可执行文件",
+          "no_project_loaded": "项目未载入",
+          "aborted": "操作已取消",
+          "network": "网络连接失败",
+          "unknown": "初始化失败({reason})"
+        }
       }
     },
     "planModeChip": {

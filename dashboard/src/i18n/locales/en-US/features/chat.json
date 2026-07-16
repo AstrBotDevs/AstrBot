@@ -726,6 +726,26 @@
           "not_a_git_repo": "Not a git repository",
           "network_error": "Network error"
         }
+      },
+      "repoInit": {
+        "title": "Initialize a Git repository",
+        "body": "No .git/ directory was found at {directory}; the workspace changes cannot be read.",
+        "hint": "Creates an empty repository with the default branch {defaultBranch}; existing files are preserved.",
+        "cancel": "Later",
+        "confirm": "Initialize repository",
+        "submitting": "Creating repository…",
+        "dismissedChip": "This project is not a Git repository",
+        "reopenPrompt": "Initialize",
+        "errors": {
+          "init_failed": "Initialization failed: {stderr}",
+          "directory_not_empty": "Directory is not empty and cannot be initialized",
+          "permission_denied": "Permission denied; cannot initialize",
+          "git_not_available": "No git executable was detected",
+          "no_project_loaded": "No project is loaded",
+          "aborted": "Operation was canceled",
+          "network": "Network connection failed",
+          "unknown": "Initialization failed ({reason})"
+        }
       }
     },
     "planModeChip": {

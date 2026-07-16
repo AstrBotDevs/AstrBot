@@ -14,8 +14,10 @@ const emit = defineEmits<{
 }>();
 const { tm } = useModuleI18n("features/chat");
 
-const errorKey = (reason: string): string =>
-  `spcodeProjectLoad.diffSidebar.repoInit.errors.${reason}`;
+// Spec 2026-07-16: keep keys under `spcodeProjectLoad.diffSidebar.repoInit`
+// to match the convention used everywhere else in GitDiffSidebar
+// (worktreeMgmt, restore, discardHunk, gitWorkflow, etc.).
+const K = "spcodeProjectLoad.diffSidebar.repoInit";
 
 function onKeyDown(e: KeyboardEvent): void {
   if (e.key === "Escape" && !props.isSubmitting) emit("cancel");
@@ -27,7 +29,7 @@ function onKeyDown(e: KeyboardEvent): void {
     class="git-repo-init-prompt"
     role="dialog"
     aria-modal="false"
-    :aria-label="tm('diffSidebar.repoInit.title')"
+    :aria-label="tm(`${K}.title`)"
     tabindex="-1"
     @keydown="onKeyDown"
   >
@@ -35,18 +37,18 @@ function onKeyDown(e: KeyboardEvent): void {
       >mdi-information-outline</v-icon
     >
     <h2 class="git-repo-init-prompt-title">
-      {{ tm("diffSidebar.repoInit.title") }}
+      {{ tm(`${K}.title`) }}
     </h2>
     <p class="git-repo-init-prompt-body">
       {{
-        tm("diffSidebar.repoInit.body", {
+        tm(`${K}.body`, {
           directory: props.directory,
         })
       }}
     </p>
     <p class="git-repo-init-prompt-hint">
       {{
-        tm("diffSidebar.repoInit.hint", {
+        tm(`${K}.hint`, {
           defaultBranch: "main",
         })
       }}
@@ -61,10 +63,10 @@ function onKeyDown(e: KeyboardEvent): void {
       <span>
         {{
           props.lastError.stderr
-            ? tm("diffSidebar.repoInit.errors.init_failed", {
+            ? tm(`${K}.errors.init_failed`, {
                 stderr: props.lastError.stderr,
               })
-            : tm(errorKey(props.lastError.reason))
+            : tm(`${K}.errors.${props.lastError.reason}`)
         }}
       </span>
     </div>
@@ -77,7 +79,7 @@ function onKeyDown(e: KeyboardEvent): void {
         :disabled="props.isSubmitting"
         @click="emit('cancel')"
       >
-        {{ tm("diffSidebar.repoInit.cancel") }}
+        {{ tm(`${K}.cancel`) }}
       </button>
       <button
         type="button"
@@ -95,8 +97,8 @@ function onKeyDown(e: KeyboardEvent): void {
         />
         {{
           props.isSubmitting
-            ? tm("diffSidebar.repoInit.submitting")
-            : tm("diffSidebar.repoInit.confirm")
+            ? tm(`${K}.submitting`)
+            : tm(`${K}.confirm`)
         }}
       </button>
     </div>
