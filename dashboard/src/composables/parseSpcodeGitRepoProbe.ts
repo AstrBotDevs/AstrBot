@@ -9,14 +9,15 @@
 // The full branch list is intentionally NOT extracted here; that will
 // be owned by a future branch-management composable.
 //
-// Wire shape (after axios auto-unwraps the outer `data` key):
+// Wire shape (the INNER payload after the composable has unwrapped the
+// OpenAPI envelope via `resp.data?.data`):
 //   { reason: string | null, stderr: string, elapsed_ms: number,
 //     current?: string, default?: string, branches?: unknown[], ... }
 // The backend's `_make_envelope` factory never emits an explicit
 // `success` field; success is conveyed solely by `reason: null`.
 // `directory` and `current` are the relevant endpoint-specific fields.
-// This file is called with the value of `resp.data`, so it must NOT
-// expect a nested `data` key.
+// This file is called with the value of `resp.data.data`, so it must
+// NOT expect a nested `data` key inside what it receives.
 
 export type GitRepoProbeParseResult =
   | { kind: "ok"; defaultBranch: string | null }

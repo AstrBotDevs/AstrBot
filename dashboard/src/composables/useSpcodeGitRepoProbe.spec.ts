@@ -1,11 +1,18 @@
 // Author: elecvoid243, 2026-07-16
 //
 // Tests exercise the composable against the **actual** wire shape
-// produced by the spcode plugin's `_make_envelope` factory (after
-// axios auto-unwraps the outer `data` key). The factory never emits
-// a `success` field; success is conveyed by `reason: null`, and
-// endpoint-specific fields (`current`, `initial_branch`, etc.) live
-// at the top level of the response.
+// produced by the spcode plugin:
+//
+//   HTTP body       = { status: "ok", data: <inner> }
+//   `resp.data`     = { status: "ok", data: <inner> }     ← OpenAPI envelope
+//   `resp.data.data` = <inner>                            ← parsed by parser
+//
+// <inner> is what `_make_envelope` produces: it never emits a `success`
+// field; success is conveyed by `reason: null`, and endpoint-specific
+// fields (`current`, `initial_branch`, etc.) live at the top level of
+// the INNER payload. Mocks below wrap their fixtures in the outer
+// envelope so the composable's `resp.data?.data` unwrap is exercised
+// rather than bypassed.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h, nextTick } from "vue";
@@ -93,9 +100,17 @@ const GIT_INIT_OK = {
   worktree: "",
 };
 
+// Wrap a fixture in the OpenAPI envelope `{ status: "ok", data: <inner> }`
+// exactly as the spcode plugin emits it on the wire. Every 200-OK mock
+// below must use this; the composable unwraps via `resp.data?.data` and
+// would otherwise see the outer envelope and fail every parse.
+function okEnvelope<T>(inner: T): { data: { status: "ok"; data: T } } {
+  return { data: { status: "ok" as const, data: inner } };
+}
+
 describe("useSpcodeGitRepoProbe", () => {
   it("refresh() against a Git repo transitions state to 'ok'", async () => {
-    getMock.mockResolvedValueOnce({ data: GIT_BRANCHES_OK });
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_OK));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     await result.refresh();
     expect(result.state.value).toEqual({ kind: "ok", defaultBranch: "main" });
@@ -103,7 +118,7 @@ describe("useSpcodeGitRepoProbe", () => {
   });
 
   it("refresh() against a non-Git directory transitions state to 'not_a_git_repo'", async () => {
-    getMock.mockResolvedValueOnce({ data: GIT_BRANCHES_NOT_A_REPO });
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_NOT_A_REPO));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     await result.refresh();
     expect(result.state.value).toEqual({
@@ -144,8 +159,8 @@ describe("useSpcodeGitRepoProbe", () => {
       "astrbot.spcode.gitRepoProbe.etag.session:test.",
       '"stale"',
     );
-    postMock.mockResolvedValueOnce({ data: GIT_INIT_OK });
-    getMock.mockResolvedValueOnce({ data: GIT_BRANCHES_OK });
+    postMock.mockResolvedValueOnce(okEnvelope(GIT_INIT_OK));
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_OK));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     const r = await result.gitInit({ path: "D:/tmp" });
     expect(r).toEqual({ ok: true, defaultBranch: "main" });
@@ -155,15 +170,15 @@ describe("useSpcodeGitRepoProbe", () => {
   });
 
   it("gitInit() failure returns { ok: false, reason, stderr } and state stays 'not_a_git_repo'", async () => {
-    postMock.mockResolvedValueOnce({
-      data: {
+    postMock.mockResolvedValueOnce(
+      okEnvelope({
         reason: "directory_not_empty",
         stderr: "fatal: directory not empty",
         elapsed_ms: 5,
         initialized: false,
         path: "D:/tmp",
-      },
-    });
+      }),
+    );
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     const r = await result.gitInit({ path: "D:/tmp" });
     expect(r).toEqual({
@@ -183,7 +198,7 @@ describe("useSpcodeGitRepoProbe", () => {
     // 'idle' for the full interval, which keeps the GitDiffSidebar's
     // view-mode tabs (and the repo-init prompt for non-Git projects)
     // hidden for 30s. startPolling must do an immediate refresh.
-    getMock.mockResolvedValueOnce({ data: GIT_BRANCHES_NOT_A_REPO });
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_NOT_A_REPO));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     // 60s interval — long enough that no interval tick fires during
     // this test even on real timers.
@@ -212,7 +227,7 @@ describe("useSpcodeGitRepoProbe", () => {
     postMock.mockImplementationOnce(
       () => new Promise((res) => { resolveFirst = res; }),
     );
-    postMock.mockResolvedValueOnce({ data: GIT_INIT_OK });
+    postMock.mockResolvedValueOnce(okEnvelope(GIT_INIT_OK));
     const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
     const first = result.gitInit({ path: "D:/tmp" });
     // Let the first call settle into the awaited postMock.

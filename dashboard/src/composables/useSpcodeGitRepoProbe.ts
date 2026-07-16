@@ -138,9 +138,15 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
       if (newEtag) {
         writeCachedEtag(key, newEtag);
       }
-      const parsed: GitRepoProbeParseResult = parseSpcodeGitRepoProbe(
-        (resp as { data?: unknown }).data,
-      );
+      // The OpenAPI client (configured with `throwOnError: true`) returns
+      // the raw AxiosResponse — its `.data` is the JSON body the plugin
+      // sent, which is `{ status, data: T }` for our endpoints. Unwrap
+      // `.data.data` to hand the parser the inner payload. This matches
+      // the convention used by every other composable in this codebase
+      // (useSpcodeGitDiff, useSpcodeGitStatus, useSpcodeFileBrowser, …).
+      const inner = (resp as { data?: { data?: unknown } }).data?.data;
+      const parsed: GitRepoProbeParseResult =
+        parseSpcodeGitRepoProbe(inner);
       applyParsed(parsed, key);
     } catch (err) {
       if (!isMounted) return;
@@ -207,7 +213,11 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
       if (!isMounted || initAbort.signal.aborted) {
         return { ok: false, reason: "aborted" };
       }
-      const envelope = (resp as { data?: unknown }).data;
+      // Unwrap the OpenAPI envelope (see same comment in refresh()).
+      // Without this, parseGitInitResponse sees `{status: "ok", data: …}`
+      // and never matches `reason === null` because `reason` lives one
+      // level deeper inside `data`.
+      const envelope = (resp as { data?: { data?: unknown } }).data?.data;
       const result = parseGitInitResponse(envelope);
       if (!result.ok) {
         // Failure: the directory is still not a Git repo. Restore the
@@ -253,11 +263,13 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
 }
 
 function parseGitInitResponse(raw: unknown): GitInitResult {
-  // The backend's `_make_envelope` never emits a `success` field;
-  // success is conveyed solely by `reason: null` at the top level of
-  // the response (axios auto-unwrapped). Endpoint-specific fields such
-  // as `initial_branch` also live at the top level, not under a nested
-  // `data` key.
+  // `raw` here is the INNER payload of the OpenAPI envelope
+  // `{ status, data: T }`, after the composable has unwrapped via
+  // `resp.data?.data`. The backend's `_make_envelope` never emits a
+  // `success` field; success is conveyed solely by `reason: null` at
+  // the top level of this inner payload. Endpoint-specific fields
+  // such as `initial_branch` also live at the top level of THIS inner
+  // object, not under another nested `data` key.
   if (typeof raw !== "object" || raw === null) {
     return { ok: false, reason: "unknown" };
   }
