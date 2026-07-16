@@ -2674,6 +2674,7 @@ const currentRoot = computed<string | null>(() => {
            a 31st i18n key — the visible button text already conveys
            the purpose for sighted users. -->
         <div
+          v-if="isGitRepo || showNotGitRepoChip"
           class="git-diff-sidebar-view-tabs"
           role="tablist"
           aria-label="Switch view"
@@ -2744,7 +2745,7 @@ const currentRoot = computed<string | null>(() => {
 
         <!-- Worktree tabs (visible in BOTH views, spec 2026-06-20 §5.3) -->
         <div
-          v-if="hasMultipleWorktrees"
+          v-if="hasMultipleWorktrees && (isGitRepo || showNotGitRepoChip)"
           class="git-diff-sidebar-tabs"
           role="tablist"
           :aria-label="
@@ -2944,6 +2945,38 @@ const currentRoot = computed<string | null>(() => {
             }}
           </div>
         </template>
+
+        <!-- Spec 2026-07-16: GitRepoInitPrompt + dismissed chip slot. The
+             prompt occupies the full body area when shown; the chip
+             floats above the body in dismissed mode so Files view
+             (which does not need Git) stays usable. -->
+        <GitRepoInitPrompt
+          v-if="showRepoInitPrompt"
+          :directory="
+            gitRepoProbe.state.value.kind === 'not_a_git_repo'
+              ? gitRepoProbe.state.value.directory
+              : ''
+          "
+          :is-submitting="isRepoInitSubmitting"
+          :last-error="repoInitLastError"
+          @confirm="onRepoInitConfirm"
+          @cancel="onRepoInitCancel"
+        />
+        <div
+          v-else-if="showNotGitRepoChip"
+          class="git-diff-sidebar-repo-chip"
+          role="status"
+        >
+          <v-icon size="14">mdi-information-outline</v-icon>
+          <span>{{ tm("spcodeProjectLoad.diffSidebar.repoInit.dismissedChip") }}</span>
+          <button
+            type="button"
+            class="git-diff-sidebar-repo-chip-action"
+            @click="repoPromptDismissed = false"
+          >
+            {{ tm("spcodeProjectLoad.diffSidebar.repoInit.reopenPrompt") }}
+          </button>
+        </div>
 
         <!-- Body: Files / Diff / History -->
         <div class="git-diff-sidebar-body">
@@ -4029,5 +4062,28 @@ const currentRoot = computed<string | null>(() => {
 .git-diff-sidebar-search-input:focus {
   border-color: rgb(var(--v-theme-primary));
   box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.16);
+}
+
+/* Spec 2026-07-16: dismissed "not a Git project" chip. Floats above
+   the body so the Files view (which does not need Git) remains
+   usable. Matches the path-strip and view-tab strip's neutral
+   surface treatment. */
+.git-diff-sidebar-repo-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  font-size: 12px;
+}
+.git-diff-sidebar-repo-chip-action {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: rgb(var(--v-theme-primary));
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
 }
 </style>
