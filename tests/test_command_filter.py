@@ -35,3 +35,14 @@ def test_command_filter_normal_argument_unaffected():
     ok, params = _run_filter("search", {"find"}, "search cat photo")
     assert ok
     assert params == {"query": "cat photo"}
+
+
+def test_command_filter_prefers_longest_overlapping_command_name():
+    # When a command name and one of its aliases share a prefix ("show" vs
+    # "show all"), the most specific one must win regardless of the set's
+    # iteration order, so only the longer name is stripped and the rest is the
+    # argument. Without the longest-first ordering, "show" would match first and
+    # leak "all" into the argument.
+    ok, params = _run_filter("show", {"show all"}, "show all photos")
+    assert ok
+    assert params == {"query": "photos"}
