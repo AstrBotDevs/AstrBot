@@ -73,47 +73,59 @@
                   class="provider-model-subtitle d-flex align-center ga-1"
                 >
                   <span>{{ entry.provider.model }}</span>
-                  <v-icon
-                    v-if="supportsImageInput(entry.metadata)"
-                    size="14"
-                    color="grey"
+                  <v-tooltip
+                    v-for="item in capabilityBadges(entry)"
+                    :key="item.key"
+                    location="top"
+                    max-width="320"
                   >
-                    mdi-eye-outline
-                  </v-icon>
-                  <v-icon
-                    v-if="supportsAudioInput(entry.metadata)"
-                    size="14"
-                    color="grey"
+                    <template #activator="{ props: badgeTooltipProps }">
+                      <span
+                        v-bind="badgeTooltipProps"
+                        class="provider-model-badge"
+                        :class="{
+                          'provider-model-badge--disabled': !item.enabled,
+                        }"
+                        @click.stop
+                      >
+                        <v-icon size="14">{{ item.icon }}</v-icon>
+                      </span>
+                    </template>
+                    <span>{{ item.tooltip }}</span>
+                  </v-tooltip>
+                  <v-tooltip
+                    v-if="formatContextLimit(entry.metadata)"
+                    location="top"
+                    max-width="320"
                   >
-                    mdi-music-note-outline
-                  </v-icon>
-                  <v-icon
-                    v-if="supportsToolCall(entry.metadata)"
-                    size="14"
-                    color="grey"
-                  >
-                    mdi-wrench
-                  </v-icon>
-                  <v-icon
-                    v-if="supportsReasoning(entry.metadata)"
-                    size="14"
-                    color="grey"
-                  >
-                    mdi-brain
-                  </v-icon>
-                  <span v-if="formatContextLimit(entry.metadata)">
-                    {{ formatContextLimit(entry.metadata) }}
-                  </span>
+                    <template #activator="{ props: contextTooltipProps }">
+                      <span
+                        v-bind="contextTooltipProps"
+                        class="provider-model-context-badge"
+                        @click.stop
+                      >
+                        {{ formatContextLimit(entry.metadata) }}
+                      </span>
+                    </template>
+                    <span>
+                      {{
+                        tm("models.metadata.context", {
+                          tokens: formatContextLimit(entry.metadata),
+                        })
+                      }}
+                    </span>
+                  </v-tooltip>
                 </v-list-item-subtitle>
                 <template #append>
                   <div class="d-flex align-center ga-1" @click.stop>
                     <v-switch
-                      v-model="entry.provider.enable"
+                      :model-value="entry.provider.enable"
                       density="compact"
                       inset
                       hide-details
                       color="primary"
                       class="mr-1"
+                      :disabled="isProviderSaving(entry.provider.id)"
                       @update:modelValue="
                         emit('toggle-provider-enable', entry.provider, $event)
                       "
@@ -125,7 +137,10 @@
                           icon="mdi-connection"
                           size="small"
                           variant="text"
-                          :disabled="!entry.provider.enable"
+                          :disabled="
+                            !entry.provider.enable ||
+                            isProviderSaving(entry.provider.id)
+                          "
                           :loading="isProviderTesting(entry.provider.id)"
                           v-bind="props"
                           @click.stop="emit('test-provider', entry.provider)"
@@ -184,37 +199,45 @@
 
                 >
                   <span>{{ entry.model }}</span>
-                  <v-icon
-                    v-if="supportsImageInput(entry.metadata)"
-                    size="14"
-                    color="grey"
+                  <v-tooltip
+                    v-for="item in capabilityBadges(entry)"
+                    :key="item.key"
+                    location="top"
+                    max-width="320"
                   >
-                    mdi-eye-outline
-                  </v-icon>
-                  <v-icon
-                    v-if="supportsAudioInput(entry.metadata)"
-                    size="14"
-                    color="grey"
+                    <template #activator="{ props: badgeTooltipProps }">
+                      <span
+                        v-bind="badgeTooltipProps"
+                        class="provider-model-badge"
+                        @click.stop
+                      >
+                        <v-icon size="14">{{ item.icon }}</v-icon>
+                      </span>
+                    </template>
+                    <span>{{ item.tooltip }}</span>
+                  </v-tooltip>
+                  <v-tooltip
+                    v-if="formatContextLimit(entry.metadata)"
+                    location="top"
+                    max-width="320"
                   >
-                    mdi-music-note-outline
-                  </v-icon>
-                  <v-icon
-                    v-if="supportsToolCall(entry.metadata)"
-                    size="14"
-                    color="grey"
-                  >
-                    mdi-wrench
-                  </v-icon>
-                  <v-icon
-                    v-if="supportsReasoning(entry.metadata)"
-                    size="14"
-                    color="grey"
-                  >
-                    mdi-brain
-                  </v-icon>
-                  <span v-if="formatContextLimit(entry.metadata)">
-                    {{ formatContextLimit(entry.metadata) }}
-                  </span>
+                    <template #activator="{ props: contextTooltipProps }">
+                      <span
+                        v-bind="contextTooltipProps"
+                        class="provider-model-context-badge"
+                        @click.stop
+                      >
+                        {{ formatContextLimit(entry.metadata) }}
+                      </span>
+                    </template>
+                    <span>
+                      {{
+                        tm("models.metadata.context", {
+                          tokens: formatContextLimit(entry.metadata),
+                        })
+                      }}
+                    </span>
+                  </v-tooltip>
                 </v-list-item-subtitle>
                 <template #append>
                   <v-btn
@@ -248,6 +271,7 @@
 <script setup>
 import { computed } from "vue";
 import { normalizeTextInput } from "@/utils/inputValue";
+import { providerCapabilityBadges } from "@/utils/providerMetadata";
 
 const props = defineProps({
   entries: {
@@ -294,6 +318,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  savingProviders: {
+    type: Array,
+    default: () => [],
+  },
   tm: {
     type: Function,
     required: true,
@@ -316,7 +344,44 @@ const modelSearchProxy = computed({
   set: (val) => emit("update:modelSearch", normalizeTextInput(val)),
 });
 
-const isProviderTesting = (providerId) => props.testingProviders.includes(providerId);
+const capabilityLabels = {
+  image: () => props.tm("models.metadata.image"),
+  audio: () => props.tm("models.metadata.audio"),
+  tool_use: () => props.tm("models.metadata.toolUse"),
+  reasoning: () => props.tm("models.metadata.reasoning"),
+};
+
+const capabilityBadges = (entry) => {
+  const isConfigured = entry?.type === "configured";
+  const metadata = entry?.hasModelMetadata ? entry.metadata : null;
+  const provider = isConfigured
+    ? entry.provider
+    : {
+        modalities: [
+          props.supportsImageInput(metadata) && "image",
+          props.supportsAudioInput(metadata) && "audio",
+          props.supportsToolCall(metadata) && "tool_use",
+        ].filter(Boolean),
+        reasoning: props.supportsReasoning(metadata),
+      };
+  const badges = providerCapabilityBadges(provider, metadata, props.tm);
+
+  if (isConfigured) {
+    return badges;
+  }
+
+  return badges.map((item) => ({
+    ...item,
+    tooltip: props.tm("models.metadata.available", {
+      capability: capabilityLabels[item.key]?.() || item.key,
+    }),
+  }));
+};
+
+const isProviderTesting = (providerId) =>
+  props.testingProviders.includes(providerId);
+const isProviderSaving = (providerId) =>
+  props.savingProviders.includes(providerId);
 </script>
 
 <style scoped>
@@ -396,6 +461,29 @@ const isProviderTesting = (providerId) => props.testingProviders.includes(provid
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
+}
+
+.provider-model-badge {
+  display: inline-flex;
+  align-items: center;
+  color: rgba(var(--v-theme-on-surface), 0.72);
+}
+
+.provider-model-badge--disabled {
+  color: rgba(var(--v-theme-on-surface), 0.34);
+}
+
+.provider-model-context-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 16px;
 }
 
 .cursor-pointer {

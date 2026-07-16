@@ -30,7 +30,7 @@
   <!-- Plugin Set Selection Dialog -->
   <v-dialog v-model="dialog" max-width="700px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6" style="font-weight: normal">
         {{ tm("pluginSetSelector.dialogTitle") }}
       </v-card-title>
 
@@ -108,7 +108,7 @@
         <v-btn variant="text" @click="cancelSelection">
           {{ tm("pluginSetSelector.cancelSelection") }}
         </v-btn>
-        <v-btn color="primary" @click="confirmSelection">
+        <v-btn color="primary" variant="tonal" @click="confirmSelection">
           {{ tm("pluginSetSelector.confirmSelection") }}
         </v-btn>
       </v-card-actions>

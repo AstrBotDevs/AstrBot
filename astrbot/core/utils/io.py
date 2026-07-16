@@ -168,6 +168,23 @@ async def _emit_download_progress(progress_callback, payload: dict) -> None:
         await result
 
 
+class DownloadFileHTTPError(RuntimeError):
+    """Raised when a file download returns an unsuccessful HTTP status."""
+
+
+def _raise_for_download_status(resp, url: str) -> None:
+    if resp.status == 200:
+        return
+    logger.error(
+        "Failed to download file from %s. HTTP status code: %s",
+        url,
+        resp.status,
+    )
+    raise DownloadFileHTTPError(
+        f"Failed to download file from {url}. HTTP status code: {resp.status}"
+    )
+
+
 async def download_file(
     url: str,
     path: str,
@@ -189,10 +206,7 @@ async def download_file(
                 url,
                 timeout=aiohttp.ClientTimeout(total=1800),
             ) as resp:
-                if resp.status != 200:
-                    logger.error(
-                        f"Failed to download file from {url}. HTTP status code: {resp.status}",
-                    )
+                _raise_for_download_status(resp, url)
                 total_size = int(resp.headers.get("content-length", 0))
                 downloaded_size = 0
                 start_time = time.time()
@@ -271,6 +285,7 @@ async def download_file(
                 timeout=aiohttp.ClientTimeout(total=120),
             ) as resp,
         ):
+            _raise_for_download_status(resp, url)
             total_size = int(resp.headers.get("content-length", 0))
             downloaded_size = 0
             start_time = time.time()
@@ -457,12 +472,14 @@ async def download_dashboard(
     version: str | None = None,
     proxy: str | None = None,
     progress_callback=None,
+    extract: bool = True,
 ) -> None:
     """下载管理面板文件"""
     if path is None:
         zip_path = anyio.Path(get_astrbot_data_path()) / "dashboard.zip"
     else:
         zip_path = anyio.Path(path)
+    await zip_path.parent.mkdir(parents=True, exist_ok=True)
 
     if latest or len(str(version)) != 40:
         ver_name = "latest" if latest else version
@@ -477,6 +494,10 @@ async def download_dashboard(
                 show_progress=True,
                 progress_callback=progress_callback,
             )
+            if not zipfile.is_zipfile(zip_path):
+                raise RuntimeError(
+                    "Downloaded dashboard package is not a valid ZIP file"
+                )
         except BaseException as _:
             if latest:
                 # Resolve latest release tag from GitHub API to construct correct asset URL
@@ -517,10 +538,21 @@ async def download_dashboard(
             show_progress=True,
             progress_callback=progress_callback,
         )
-    extract_dashboard(zip_path, extract_path)
+    if not zipfile.is_zipfile(zip_path):
+        raise RuntimeError("Downloaded dashboard package is not a valid ZIP file")
+    if extract:
+        extract_dashboard(zip_path, extract_path)
 
 
 def extract_dashboard(zip_path: str | Path, extract_path: str | Path) -> None:
     """Extract a downloaded dashboard archive."""
+    extract_root = Path(extract_path).resolve()
+    ensure_dir(extract_root)
     with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(extract_path)
+        for member in z.infolist():
+            target_path = (extract_root / member.filename).resolve()
+            if not target_path.is_relative_to(extract_root):
+                raise ValueError(
+                    f"Unsafe dashboard archive path: {member.filename}",
+                )
+            z.extract(member, extract_root)

@@ -28,10 +28,14 @@ from tenacity import (
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
-from astrbot.api.platform import AstrBotMessage, PlatformMetadata
+from astrbot.api.platform import AstrBotMessage, Group, PlatformMetadata
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_image_by_url, file_to_base64
 from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
+
+
+class APIReturnNoneError(Exception):
+    pass
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -52,21 +56,24 @@ def _patch_qq_botpy_formdata() -> None:
 
 _patch_qq_botpy_formdata()
 
-# Retry decorator for QQ Official API transient errors (HTTP 500/504)
-_qqofficial_retry = retry(
-    retry=retry_if_exception_type(
-        (
-            botpy.errors.ServerError,
-            botpy.errors.SequenceNumberError,
-            OSError,
-            asyncio.TimeoutError,
+
+def _qqofficial_retry(max_attempts: int = 5):
+    """Retry decorator for QQ Official API transient errors (HTTP 500/504)"""
+    return retry(
+        retry=retry_if_exception_type(
+            (
+                botpy.errors.ServerError,
+                botpy.errors.SequenceNumberError,
+                OSError,
+                asyncio.TimeoutError,
+                APIReturnNoneError,
+            )
         ),
-    ),
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=2, min=2, max=30),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-    reraise=True,
-)
+        stop=stop_after_attempt(max_attempts),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
 
 
 class QQOfficialMessageEvent(AstrMessageEvent):
@@ -88,6 +95,24 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.bot = bot
         self.send_buffer = None
+
+    async def send_typing(self) -> None:
+        """QQ Official does not expose a typing-state API."""
+
+    async def stop_typing(self) -> None:
+        """QQ Official does not expose a typing-state API."""
+
+    async def _pre_send(self) -> None:
+        """Compatibility hook retained for the platform event contract."""
+
+    async def get_group(
+        self,
+        group_id: str | None = None,
+        **kwargs: Any,
+    ) -> Group | None:
+        """QQ Official does not currently expose group metadata lookup."""
+        _ = group_id, kwargs
+        return None
 
     async def send(self, message: MessageChain) -> None:
         self.send_buffer = message
@@ -433,21 +458,35 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "file_type": file_type,
             "srv_send_msg": False,
         }
-        result = None
-        if "openid" in kwargs:
-            payload["openid"] = kwargs["openid"]
-            route = Route("POST", "/v2/users/{openid}/files", openid=kwargs["openid"])
+
+        @_qqofficial_retry()
+        async def _do_upload():
+            if "openid" in kwargs:
+                payload["openid"] = kwargs["openid"]
+                route = Route(
+                    "POST", "/v2/users/{openid}/files", openid=kwargs["openid"]
+                )
+            elif "group_openid" in kwargs:
+                payload["group_openid"] = kwargs["group_openid"]
+                route = Route(
+                    "POST",
+                    "/v2/groups/{group_openid}/files",
+                    group_openid=kwargs["group_openid"],
+                )
+            else:
+                raise ValueError("Invalid upload parameters")
+
             result = await self.bot.api._http.request(route, json=payload)
-        elif "group_openid" in kwargs:
-            payload["group_openid"] = kwargs["group_openid"]
-            route = Route(
-                "POST",
-                "/v2/groups/{group_openid}/files",
-                group_openid=kwargs["group_openid"],
-            )
-            result = await self.bot.api._http.request(route, json=payload)
-        else:
-            raise ValueError("Invalid upload parameters")
+            if result is None:
+                err_msg = "上传图片API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        try:
+            result = await _do_upload()
+        except APIReturnNoneError:
+            logger.warning(f"上传图片API返回None，共尝试5次后放弃: {payload}")
+            raise
         if not isinstance(result, dict):
             raise RuntimeError(
                 f"Failed to upload image, response is not dict: {result}",
@@ -489,8 +528,17 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             )
         else:
             return None
-        try:
+
+        @_qqofficial_retry()
+        async def _do_upload():
             result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "上传文件API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        try:
+            result = await _do_upload()
             if result:
                 if not isinstance(result, dict):
                     logger.error(f"上传文件响应格式错误: {result}")
@@ -500,6 +548,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_info=result["file_info"],
                     ttl=result.get("ttl", 0),
                 )
+        except APIReturnNoneError:
+            logger.warning(f"上传文件API返回None，共尝试5次后放弃: {file_source}")
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
             logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
@@ -530,10 +580,26 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 stream_data.pop("id", None)
             payload["stream"] = stream_data
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
-        result = await self.bot.api._http.request(route, json=payload)
-        if result is None:
-            logger.warning("[QQOfficial] post_c2c_message: API 返回 None,跳过本次发送")
+
+        retry_times = 3
+
+        @_qqofficial_retry(retry_times)
+        async def _do_request():
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "发送消息API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        result = None
+        try:
+            result = await _do_request()
+        except APIReturnNoneError:
+            logger.warning(
+                f"[QQOfficial] post_c2c_message: 发送消息失败，API 返回 None，共尝试{retry_times}次后放弃"
+            )
             return None
+
         if not isinstance(result, dict):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None

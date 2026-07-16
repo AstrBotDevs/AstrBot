@@ -1,7 +1,9 @@
 <template>
   <v-dialog v-model="dialog" max-width="500px" persistent>
     <v-card>
-      <v-card-title class="text-h5"> 配置 Tavily API Key </v-card-title>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+        配置 Tavily API Key
+      </v-card-title>
       <v-card-text>
         <p class="mb-4 text-body-2 text-medium-emphasis">
           为了使用基于网页的知识库功能，需要提供 Tavily API Key。您可以从
@@ -25,7 +27,7 @@
         </v-btn>
         <v-btn
           color="primary"
-          variant="elevated"
+          variant="tonal"
           :loading="saving"
           @click="saveKey"
         >

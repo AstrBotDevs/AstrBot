@@ -159,7 +159,7 @@
     <!-- 创建知识库对话框 -->
     <v-dialog v-model="showCreateDialog" max-width="500px">
       <v-card>
-        <v-card-title class="text-h4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ tm("createDialog.title") }}
         </v-card-title>
         <v-card-text>
@@ -217,7 +217,7 @@
           <v-btn color="error" variant="text" @click="showCreateDialog = false">
             {{ tm("createDialog.cancel") }}
           </v-btn>
-          <v-btn color="primary" variant="text" @click="submitCreateForm">
+          <v-btn color="primary" variant="tonal" @click="submitCreateForm">
             {{ tm("createDialog.create") }}
           </v-btn>
         </v-card-actions>
@@ -227,7 +227,7 @@
     <!-- 表情选择器对话框 -->
     <v-dialog v-model="showEmojiPicker" max-width="400px">
       <v-card>
-        <v-card-title class="text-h6">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ tm("emojiPicker.title") }}
         </v-card-title>
         <v-card-text>
@@ -269,7 +269,7 @@
     <!-- 知识库内容管理对话框 -->
     <v-dialog v-model="showContentDialog" max-width="1000px">
       <v-card>
-        <v-card-title class="d-flex align-center">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <div class="me-2 emoji-sm">
             {{ currentKB.emoji || "🙂" }}
           </div>
@@ -278,7 +278,7 @@
             {{ tm("contentDialog.title") }}</span
           >
           <v-spacer />
-          <v-btn variant="plain" icon @click="showContentDialog = false">
+          <v-btn variant="text" icon @click="showContentDialog = false">
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </v-card-title>
@@ -454,7 +454,7 @@
                     <div class="text-center mt-4">
                       <v-btn
                         color="primary"
-                        variant="elevated"
+                        variant="tonal"
                         :loading="uploading"
                         :disabled="!selectedFile"
                         @click="uploadFile"
@@ -614,7 +614,7 @@
                   <div class="text-center">
                     <v-btn
                       color="primary"
-                      variant="elevated"
+                      variant="tonal"
                       :loading="importing"
                       :disabled="!importUrl"
                       @click="startImportFromUrl"
@@ -717,7 +717,7 @@
     <!-- 删除知识库确认对话框 -->
     <v-dialog v-model="showDeleteDialog" max-width="400px">
       <v-card>
-        <v-card-title class="text-h5">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ tm("deleteDialog.title") }}
         </v-card-title>
         <v-card-text>
@@ -743,7 +743,7 @@
           </v-btn>
           <v-btn
             color="error"
-            variant="text"
+            variant="tonal"
             :loading="deleting"
             @click="deleteKnowledgeBase"
           >

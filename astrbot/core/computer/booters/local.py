@@ -96,6 +96,39 @@ def _decode_bytes_with_fallback(
     return output.decode("utf-8", errors="replace")
 
 
+async def _terminate_shell_process_tree(session: PersistentShellSession) -> None:
+    """Terminate the persistent shell and its children after a timeout."""
+    proc = session._proc
+    if proc is None or proc.returncode is not None:
+        return
+
+    taskkill_succeeded = False
+    if sys.platform == "win32":
+        try:
+            taskkill_result = await asyncio.to_thread(
+                subprocess.run,
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+            taskkill_succeeded = taskkill_result.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            taskkill_succeeded = False
+
+    if not taskkill_succeeded:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=5)
+    except (TimeoutError, ProcessLookupError):
+        pass
+
+
 @dataclass
 class LocalShellComponent(ShellComponent):
     async def exec(
@@ -113,13 +146,22 @@ class LocalShellComponent(ShellComponent):
 
         key = session_id or "default"
         session = PersistentShellSession.get_or_create(key)
-        return await session.exec(
+        execution = session.exec(
             command,
             cwd=cwd,
             env=env,
-            timeout=timeout,
+            timeout=None if timeout is not None and not background else timeout,
             background=background,
         )
+        if background or timeout is None:
+            return await execution
+
+        try:
+            return await asyncio.wait_for(execution, timeout=timeout)
+        except TimeoutError:
+            await _terminate_shell_process_tree(session)
+            await PersistentShellSession.cleanup(key)
+            raise
 
     @staticmethod
     async def shutdown_all() -> None:

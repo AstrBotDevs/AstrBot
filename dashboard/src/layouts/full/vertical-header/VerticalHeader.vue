@@ -2,8 +2,10 @@
 import { md5 } from "js-md5";
 import { enableKatex, enableMermaid, MarkdownRender } from "markstream-vue";
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue";
+import ProviderModelMenu from "@/components/chat/ProviderModelMenu.vue";
 import Logo from "@/components/shared/Logo.vue";
 import { useAuthStore } from "@/stores/auth";
+import { useChatHeaderStore } from "@/stores/chatHeader";
 import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
 import axios from "@/utils/request";
@@ -11,7 +13,7 @@ import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
 import { useRoute } from "vue-router";
-import { useTheme } from "vuetify";
+import { useDisplay, useTheme } from "vuetify";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useI18n, useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
@@ -24,7 +26,9 @@ enableMermaid();
 
 const customizer = useCustomizerStore();
 const commonStore = useCommonStore();
+const chatHeader = useChatHeaderStore();
 const theme = useTheme();
+const { lgAndUp } = useDisplay();
 const { t } = useI18n();
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
@@ -102,6 +106,31 @@ const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
 const isChatPath = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
+const isDarkTheme = computed(
+  () => theme.global.current.value.dark || customizer.isDarkTheme,
+);
+const chatHeaderStyle = computed(() => {
+  if (!isChatPath.value) return undefined;
+  const sidebarWidth = lgAndUp.value
+    ? customizer.chatSidebarCollapsed
+      ? 56
+      : 280
+    : 0;
+  return {
+    left: `${sidebarWidth}px`,
+    width: `calc(100% - ${sidebarWidth}px)`,
+  };
+});
+const chatHeaderSubtitleText = computed(() => {
+  const title = chatHeader.title.trim();
+  const subtitle = chatHeader.subtitle.trim();
+  if (title && subtitle) return `${subtitle}/${title}`;
+  return title || subtitle;
+});
+
+function toggleChatSidebarFromHeader() {
+  customizer.TOGGLE_CHAT_SIDEBAR();
+}
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
   if (typeof window === "undefined") {
     return null;
@@ -185,6 +214,10 @@ const usernameRules = computed(() => [
 const showPassword = ref(false);
 const showNewPassword = ref(false);
 const showConfirmPassword = ref(false);
+const currentPasswordInput = ref();
+const newPasswordInput = ref();
+const confirmPasswordInput = ref();
+const newUsernameInput = ref();
 
 // 账户修改状态
 const accountEditStatus = ref({
@@ -671,6 +704,11 @@ function handleLogoClick() {
   }
 }
 
+function handleLogout() {
+  mainMenuOpen.value = false;
+  useAuthStore().logout();
+}
+
 getVersion();
 checkUpdate();
 initPasswordWarningFromStorage();
@@ -771,13 +809,6 @@ const currentMode = computed({
   },
 });
 
-const viewMode = computed({
-  get: () => customizer.viewMode,
-  set: (value: "bot" | "chat") => {
-    customizer.SET_VIEW_MODE(value);
-  },
-});
-
 // Merry Christmas! 🎄
 const isChristmas = computed(() => {
   const today = new Date();
@@ -813,7 +844,19 @@ onMounted(async () => {
 
 
 <template>
-  <v-app-bar elevation="0" :priority="0" height="70" class="px-0" app>
+  <v-app-bar
+    elevation="0"
+    :priority="0"
+    :height="isChatPath ? 50 : 70"
+    class="px-0 top-header"
+    :class="{
+      'chat-mode-header': isChatPath,
+      'chat-mode-header--dark': isChatPath && isDarkTheme,
+    }"
+    :absolute="isChatPath"
+    :style="chatHeaderStyle"
+    app
+  >
     <div class="fill-height d-flex align-center w-100 px-4">
       <!-- 桌面端标题栏拖拽区域 -->
       <div
@@ -832,7 +875,7 @@ onMounted(async () => {
       <div class="d-flex align-center">
         <!-- 桌面端 menu 按钮 - 仅在 bot 模式下显示 -->
         <v-btn
-          v-if="customizer.viewMode === 'bot'"
+          v-if="!isChatPath"
           class="hidden-md-and-down mr-3"
           icon
           rounded="sm"
@@ -843,7 +886,7 @@ onMounted(async () => {
         </v-btn>
         <!-- 移动端 menu 按钮 - 仅在 bot 模式下显示 -->
         <v-btn
-          v-if="customizer.viewMode === 'bot'"
+          v-if="!isChatPath"
           class="hidden-lg-and-up mr-3"
           icon
           rounded="sm"
@@ -855,11 +898,9 @@ onMounted(async () => {
       </div>
 
       <div
+        v-if="!isChatPath"
         class="logo-container"
-        :class="{
-          'mobile-logo': $vuetify.display.xs,
-          'chat-mode-logo': customizer.viewMode === 'chat' || isChatPath,
-        }"
+        :class="{ 'mobile-logo': $vuetify.display.xs }"
         @click="handleLogoClick"
       >
         <span class="logo-text Outfit"
@@ -872,13 +913,32 @@ onMounted(async () => {
               class="xmas-hat"
             /> </span
         ></span>
-        <span
-          v-if="customizer.viewMode === 'chat'"
-          class="logo-text logo-text-light Outfit"
-          style="color: grey"
-          >ChatUI</span
-        >
         <span class="version-text hidden-xs">{{ botCurrVersion }}</span>
+      </div>
+
+      <v-btn
+        v-if="isChatPath && $vuetify.display.smAndDown"
+        class="chat-mobile-sidebar-toggle"
+        icon
+        size="small"
+        rounded="lg"
+        variant="text"
+        @click.stop="toggleChatSidebarFromHeader"
+      >
+        <v-icon size="20">
+          {{
+            customizer.chatSidebarOpen
+              ? "mdi-chevron-left"
+              : "mdi-chevron-right"
+          }}
+        </v-icon>
+      </v-btn>
+
+      <div v-if="isChatPath" class="chat-header-context">
+        <ProviderModelMenu variant="header" />
+        <div v-if="chatHeaderSubtitleText" class="chat-header-subtitle">
+          {{ chatHeaderSubtitleText }}
+        </div>
       </div>
 
       <v-spacer />
@@ -886,7 +946,7 @@ onMounted(async () => {
       <!-- Bot/Chat 模式切换按钮 - 手机端隐藏，移入 ... 菜单 -->
       <div class="hidden-sm-and-down mr-4">
         <v-btn-toggle
-          v-model="viewMode"
+          v-model="currentMode"
           color="primary"
           rounded="xl"
           group
@@ -899,7 +959,7 @@ onMounted(async () => {
 
       <div class="mr-3">
         <v-chip
-          v-if="hasNewVersion"
+          v-if="hasNewVersion && !isChatPath"
           color="error"
           variant="flat"
           size="small"
@@ -930,7 +990,7 @@ onMounted(async () => {
         <template v-if="$vuetify.display.xs">
           <div class="mobile-mode-toggle-wrapper">
             <v-btn-toggle
-              v-model="viewMode"
+              v-model="currentMode"
               mandatory
               variant="outlined"
               density="compact"
@@ -1094,13 +1154,14 @@ onMounted(async () => {
       :fullscreen="$vuetify.display.xs"
     >
       <v-card>
-        <v-card-title class="mobile-card-title">
-          <span class="text-h3 pa-4">{{
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 mobile-card-title">
+          <span>{{
             t("core.header.updateDialog.title")
           }}</span>
           <v-btn
             v-if="$vuetify.display.xs"
             icon
+            variant="text"
             @click="updateStatusDialog = false"
           >
             <v-icon>mdi-close</v-icon>
@@ -1401,7 +1462,7 @@ onMounted(async () => {
     <!-- Release Notes Modal -->
     <v-dialog v-model="releaseNotesDialog" max-width="800">
       <v-card>
-        <v-card-title class="text-h3 pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ t("core.header.updateDialog.releaseNotes.title") }}:
           {{ selectedReleaseTag }}
         </v-card-title>
@@ -1429,7 +1490,7 @@ onMounted(async () => {
 
     <v-dialog v-model="desktopUpdateDialog" max-width="460">
       <v-card>
-        <v-card-title class="text-h3 pa-4 pl-6 pb-0">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ t("core.header.updateDialog.desktopApp.title") }}
         </v-card-title>
         <v-card-text>
@@ -1471,7 +1532,7 @@ onMounted(async () => {
           </v-btn>
           <v-btn
             color="primary"
-            variant="flat"
+            variant="tonal"
             @click="confirmDesktopUpdate"
             :loading="desktopUpdateInstalling"
             :disabled="
@@ -1540,6 +1601,7 @@ onMounted(async () => {
 
           <v-form v-model="formValid" @submit.prevent="accountEdit">
             <v-text-field
+              ref="currentPasswordInput"
               v-model="password"
               :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
               :type="showPassword ? 'text' : 'password'"
@@ -1548,12 +1610,14 @@ onMounted(async () => {
               required
               clearable
               @click:append-inner="showPassword = !showPassword"
+              @keydown.tab.exact.prevent="newPasswordInput?.focus()"
               prepend-inner-icon="mdi-lock-outline"
               hide-details="auto"
               class="mb-4"
             ></v-text-field>
 
             <v-text-field
+              ref="newPasswordInput"
               v-model="newPassword"
               :append-inner-icon="showNewPassword ? 'mdi-eye-off' : 'mdi-eye'"
               :type="showNewPassword ? 'text' : 'password'"
@@ -1562,6 +1626,8 @@ onMounted(async () => {
               variant="outlined"
               clearable
               @click:append-inner="showNewPassword = !showNewPassword"
+              @keydown.tab.shift.prevent="currentPasswordInput?.focus()"
+              @keydown.tab.exact.prevent="confirmPasswordInput?.focus()"
               prepend-inner-icon="mdi-lock-plus-outline"
               :hint="t('core.header.accountDialog.form.passwordHint')"
               persistent-hint
@@ -1569,6 +1635,7 @@ onMounted(async () => {
             ></v-text-field>
 
             <v-text-field
+              ref="confirmPasswordInput"
               v-model="confirmPassword"
               :append-inner-icon="
                 showConfirmPassword ? 'mdi-eye-off' : 'mdi-eye'
@@ -1579,6 +1646,8 @@ onMounted(async () => {
               variant="outlined"
               clearable
               @click:append-inner="showConfirmPassword = !showConfirmPassword"
+              @keydown.tab.shift.prevent="newPasswordInput?.focus()"
+              @keydown.tab.exact.prevent="newUsernameInput?.focus()"
               prepend-inner-icon="mdi-lock-check-outline"
               :hint="t('core.header.accountDialog.form.confirmPasswordHint')"
               persistent-hint
@@ -1586,11 +1655,13 @@ onMounted(async () => {
             ></v-text-field>
 
             <v-text-field
+              ref="newUsernameInput"
               v-model="newUsername"
               :rules="usernameRules"
               :label="t('core.header.accountDialog.form.newUsername')"
               variant="outlined"
               clearable
+              @keydown.tab.shift.prevent="confirmPasswordInput?.focus()"
               prepend-inner-icon="mdi-account-edit-outline"
               :hint="t('core.header.accountDialog.form.usernameHint')"
               persistent-hint
@@ -1616,6 +1687,7 @@ onMounted(async () => {
           </v-btn>
           <v-btn
             color="primary"
+            variant="tonal"
             @click="accountEdit"
             :loading="accountEditStatus.loading"
             :disabled="!formValid"

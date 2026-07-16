@@ -1,6 +1,10 @@
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { normalizeTextInput } from "@/utils/inputValue";
+import type {
+  ProviderMetadataSource,
+  ProviderModelMetadata,
+} from "@/utils/providerMetadata";
 import { getProviderIcon } from "@/utils/providerUtils";
 import axios from "@/utils/request";
 
@@ -159,11 +163,15 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   });
 
   const mergedModelEntries = computed(() => {
-    const configuredEntries = (sourceProviders.value || []).map((provider: any) => ({
-      type: "configured",
-      provider,
-      metadata: getModelMetadata(provider.model),
-    }));
+    const configuredEntries = (sourceProviders.value || []).map((provider: any) => {
+      const metadata = getModelMetadata(provider.model);
+      return {
+        type: "configured",
+        provider,
+        metadata: metadata || buildMetadataFromProvider(provider),
+        hasModelMetadata: Boolean(metadata),
+      };
+    });
 
     const availableEntries = (sortedAvailableModels.value || [])
       .filter((item: any) => {
@@ -176,6 +184,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           type: "available",
           model: name,
           metadata: typeof item === "object" ? item?.metadata : getModelMetadata(name),
+          hasModelMetadata: Boolean(
+            typeof item === "object" ? item?.metadata : getModelMetadata(name),
+          ),
         };
       });
 
@@ -312,6 +323,26 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   function getModelMetadata(modelName?: string) {
     if (!modelName) return null;
     return modelMetadata.value?.[modelName] || null;
+  }
+
+  function buildMetadataFromProvider(
+    provider: ProviderMetadataSource,
+  ): ProviderModelMetadata {
+    const inputs = Array.isArray(provider.modalities)
+      ? provider.modalities.filter(
+          (modality): modality is string => typeof modality === "string",
+        )
+      : [];
+    const context = Number(provider.max_context_tokens || 0);
+
+    return {
+      modalities: { input: inputs },
+      tool_call: inputs.includes("tool_use"),
+      reasoning: Boolean(provider.reasoning),
+      ...(Number.isFinite(context) && context > 0
+        ? { limit: { context } }
+        : {}),
+    };
   }
 
   function supportsImageInput(meta: any) {
@@ -673,6 +704,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           providerTemplates.value = configSchema.value.provider.config_template;
         }
         providerSources.value = response.data.data.provider_sources || [];
+        modelMetadata.value = (response.data.data.model_metadata || {}) as Record<string, any>;
         providers.value = response.data.data.providers || [];
       }
     } catch (error) {

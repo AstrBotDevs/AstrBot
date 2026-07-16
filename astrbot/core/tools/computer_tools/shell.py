@@ -14,7 +14,7 @@ from astrbot.core.computer.computer_client import get_booter
 from astrbot.core.tools.computer_tools.util import (
     check_admin_permission,
     is_local_runtime,
-    workspace_root,
+    workspace_root_for_context,
 )
 from astrbot.core.tools.registry import builtin_tool
 from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
@@ -22,6 +22,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 _COMPUTER_RUNTIME_TOOL_CONFIG = {
     "provider_settings.computer_use_runtime": ("local", "sandbox"),
 }
+
+_LOCAL_SHELL_WORKSPACES: dict[str, str] = {}
 
 
 def _quote_redirect_path(path: str, *, local_runtime: bool) -> str:
@@ -104,18 +106,18 @@ class ExecuteShellTool(FunctionTool):
             context.context.event.unified_msg_origin,
         )
         try:
-            # Ensure the workspace directory exists (useful for file operations)
-            if is_local_runtime(context):
-                workspace_root(
-                    context.context.event.unified_msg_origin,
-                ).mkdir(parents=True, exist_ok=True)
+            local_runtime = is_local_runtime(context)
+            current_workspace: str | None = None
+            if local_runtime:
+                current_workspace_root = await workspace_root_for_context(context)
+                current_workspace_root.mkdir(parents=True, exist_ok=True)
+                current_workspace = str(current_workspace_root)
 
             env = dict(env or {})
             effective_background = background and not _is_self_detached_command(command)
 
             stdout_file: str | None = None
             if effective_background:
-                local_runtime = is_local_runtime(context)
                 stdout_file = _build_background_output_path(
                     local_runtime=local_runtime,
                 )
@@ -131,16 +133,21 @@ class ExecuteShellTool(FunctionTool):
                 "env": env,
                 "timeout": timeout or 300,
             }
-            # Don't pass cwd for local runtime — the persistent shell
-            # session maintains its own working directory across calls.
-            if is_local_runtime(context):
-                exec_kwargs["session_id"] = context.context.event.unified_msg_origin
+            if local_runtime:
+                session_id = context.context.event.unified_msg_origin
+                exec_kwargs["session_id"] = session_id
+                if _LOCAL_SHELL_WORKSPACES.get(session_id) != current_workspace:
+                    exec_kwargs["cwd"] = current_workspace
             else:
                 exec_kwargs["cwd"] = (
                     None  # remote runtime; cwd is managed by the sandbox
                 )
 
             result = await sb.shell.exec(**exec_kwargs)
+            if local_runtime and current_workspace is not None:
+                _LOCAL_SHELL_WORKSPACES[context.context.event.unified_msg_origin] = (
+                    current_workspace
+                )
             if stdout_file:
                 result["stdout"] = (
                     f"Command is running in the background. stdout/stderr is being "
@@ -148,6 +155,11 @@ class ExecuteShellTool(FunctionTool):
                 )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
+            if is_local_runtime(context):
+                _LOCAL_SHELL_WORKSPACES.pop(
+                    context.context.event.unified_msg_origin,
+                    None,
+                )
             detail = str(e) or type(e).__name__
             return f"Error executing command: {detail}"
 

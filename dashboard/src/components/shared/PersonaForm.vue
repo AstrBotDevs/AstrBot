@@ -8,7 +8,7 @@
       class="persona-form-card"
       :class="{ 'persona-form-card-mobile': $vuetify.display.smAndDown }"
     >
-      <v-card-title class="persona-form-title text-h2 px-6 pt-6 pl-6">
+      <v-card-title class="persona-form-title text-h3 pa-4 pb-0 pl-6">
         {{
           editingPersona ? tm("dialog.edit.title") : tm("dialog.create.title")
         }}
@@ -489,7 +489,7 @@
                     </div>
 
                     <v-btn
-                      variant="outlined"
+                      variant="tonal"
                       prepend-icon="mdi-plus"
                       block
                       @click="addDialogPair"
@@ -519,7 +519,7 @@
         </v-btn>
         <v-btn
           color="primary"
-          variant="flat"
+          variant="tonal"
           :loading="saving"
           :disabled="!formValid"
           @click="savePersona"
@@ -1053,10 +1053,6 @@ export default {
   overflow-y: auto;
 }
 
-.persona-form-title {
-  line-height: 1.3;
-}
-
 .persona-form-actions {
   position: sticky;
   bottom: 0;
@@ -1100,11 +1096,6 @@ export default {
   .persona-basic-col,
   .persona-panels-col {
     padding-top: 0 !important;
-  }
-
-  .persona-form-title {
-    font-size: 1.15rem !important;
-    padding: 12px 16px !important;
   }
 
   .selected-config-area {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 import PinnedPluginItem from "@/components/extension/PinnedPluginItem.vue";
 import PluginSortControl from "@/components/extension/PluginSortControl.vue";
@@ -41,6 +42,11 @@ const {
   updateExtension,
   viewChangelog,
   dialog,
+  sourceBindingDialog,
+  selectedSourceBindingCandidate,
+  openPluginSourceBindingDialog,
+  closePluginSourceBindingDialog,
+  confirmPluginSourceBinding,
   sortedPlugins,
   installedSortItems,
   installedSortUsesOrder,
@@ -48,6 +54,36 @@ const {
   toggleShowReserved,
   showUpdateAllConfirm,
 } = props.state;
+
+const router = useRouter();
+
+interface PluginPageEntry {
+  name: string;
+  pages: string[];
+}
+
+const isPluginPageEntry = (extension: unknown): extension is PluginPageEntry => {
+  if (!extension || typeof extension !== "object") return false;
+  const candidate = extension as Record<string, unknown>;
+  return (
+    typeof candidate.name === "string" &&
+    Array.isArray(candidate.pages) &&
+    candidate.pages.every((page) => typeof page === "string")
+  );
+};
+
+const openPluginWebui = (extension: unknown) => {
+  if (!isPluginPageEntry(extension) || !extension.pages.length) {
+    return;
+  }
+  router.push({
+    name: "PluginPage",
+    params: {
+      pluginName: extension.name,
+      pageName: extension.pages[0],
+    },
+  });
+};
 
 // 置顶插件（保存在 localStorage）
 const PINNED_KEY = "astrbot.pinnedExtensions";
@@ -634,6 +670,29 @@ const pinnedPlugins = computed(() => {
 
                 <v-list-item
                   class="styled-menu-item"
+                  prepend-icon="mdi-source-branch"
+                  :disabled="!item.repo && !item.install_source?.repo"
+                  @click="openPluginSourceBindingDialog(item)"
+                >
+                  <v-list-item-title>{{
+                    tm("card.actions.changeSource")
+                  }}</v-list-item-title>
+                </v-list-item>
+
+                <v-list-item
+                  v-if="Array.isArray(item.pages) && item.pages.length"
+                  class="styled-menu-item"
+                  prepend-icon="mdi-monitor-dashboard"
+                  :disabled="!item.activated"
+                  @click="openPluginWebui(item)"
+                >
+                  <v-list-item-title>{{
+                    tm("buttons.openWebui")
+                  }}</v-list-item-title>
+                </v-list-item>
+
+                <v-list-item
+                  class="styled-menu-item"
                   prepend-icon="mdi-delete"
                   :disabled="item.reserved"
                   @click="uninstallExtension(item.name)"
@@ -688,7 +747,7 @@ const pinnedPlugins = computed(() => {
         >
           <ExtensionCard
             :extension="extension"
-            :pinned="isPinned(extension.name)"
+            :is-pinned="isPinned(extension.name)"
             class="rounded-lg"
             style="background-color: rgb(var(--v-theme-mcpCardBg))"
             @toggle-pin="() => togglePin(extension)"
@@ -702,11 +761,133 @@ const pinnedPlugins = computed(() => {
             @view-handlers="showPluginInfo(extension)"
             @view-readme="viewReadme(extension)"
             @view-changelog="viewChangelog(extension)"
+            @open-webui="openPluginWebui(extension)"
+            @change-source="openPluginSourceBindingDialog(extension)"
           />
         </v-col>
       </v-row>
     </div>
   </v-fade-transition>
+
+  <v-dialog v-model="sourceBindingDialog.show" max-width="680">
+    <v-card>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+        {{
+          sourceBindingDialog.pendingUpdate
+            ? tm("dialogs.sourceBinding.selectTitle")
+            : tm("dialogs.sourceBinding.title")
+        }}
+      </v-card-title>
+      <v-card-text>
+        <div
+          v-if="sourceBindingDialog.extension"
+          class="text-body-2 text-medium-emphasis mb-3"
+        >
+          {{
+            sourceBindingDialog.extension.display_name ||
+            sourceBindingDialog.extension.name
+          }}
+        </div>
+
+        <v-progress-linear
+          v-if="sourceBindingDialog.loading"
+          color="primary"
+          indeterminate
+        />
+
+        <v-alert
+          v-else-if="sourceBindingDialog.candidates.length === 0"
+          type="info"
+          variant="tonal"
+          density="comfortable"
+        >
+          {{ tm("dialogs.sourceBinding.noCandidates") }}
+        </v-alert>
+
+        <v-radio-group
+          v-else
+          v-model="sourceBindingDialog.selectedKey"
+          hide-details
+        >
+          <v-radio
+            v-for="candidate in sourceBindingDialog.candidates"
+            :key="candidate.key"
+            :value="candidate.key"
+            color="primary"
+          >
+            <template #label>
+              <div class="py-2">
+                <div class="font-weight-medium">
+                  {{ candidate.registry_name }}
+                </div>
+              </div>
+            </template>
+          </v-radio>
+        </v-radio-group>
+
+        <div
+          v-if="selectedSourceBindingCandidate"
+          class="text-caption text-medium-emphasis mt-2"
+        >
+          <div>
+            {{ tm("dialogs.sourceBinding.installDestination") }}:
+            {{
+              selectedSourceBindingCandidate.download_url ||
+              selectedSourceBindingCandidate.repo
+            }}
+          </div>
+          <div class="d-flex align-center" style="gap: 4px">
+            <span>{{ tm("table.headers.version") }}:</span>
+            <v-progress-circular
+              v-if="selectedSourceBindingCandidate.validation_status === 'loading'"
+              indeterminate
+              size="14"
+              width="1"
+              color="primary"
+            />
+            <span v-else>
+              {{ selectedSourceBindingCandidate.version || tm("status.unknown") }}
+            </span>
+          </div>
+        </div>
+
+        <v-alert
+          v-if="selectedSourceBindingCandidate?.validation_status === 'error'"
+          type="error"
+          variant="tonal"
+          density="compact"
+          class="mt-3"
+        >
+          {{ selectedSourceBindingCandidate.validation_message }}
+        </v-alert>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="closePluginSourceBindingDialog">
+          {{ tm("buttons.cancel") }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="tonal"
+          :loading="sourceBindingDialog.saving"
+          :disabled="
+            sourceBindingDialog.loading ||
+            sourceBindingDialog.candidates.length === 0 ||
+            !sourceBindingDialog.selectedKey ||
+            (selectedSourceBindingCandidate?.install_method === 'github' &&
+              selectedSourceBindingCandidate?.validation_status !== 'valid')
+          "
+          @click="confirmPluginSourceBinding"
+        >
+          {{
+            sourceBindingDialog.pendingUpdate
+              ? tm("dialogs.sourceBinding.confirmAndContinue")
+              : tm("dialogs.sourceBinding.confirm")
+          }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 
   <v-tooltip :text="tm('market.installPlugin')" location="left">
     <template #activator="{ props }">

@@ -111,9 +111,10 @@ export default {
 <style scoped>
 .refs-sidebar {
   width: 360px;
-  height: 100%;
-  background-color: var(--v-theme-surface);
-  border-left: 1px solid var(--v-theme-border);
+  height: calc(100% - var(--chat-panel-top-offset, 0px));
+  margin-top: var(--chat-panel-top-offset, 0px);
+  background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
+  border-left: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.16));
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -246,5 +247,17 @@ export default {
 
 .ref-item:hover .ref-item-arrow {
   opacity: 1;
+}
+
+@media (max-width: 760px) {
+  .refs-sidebar {
+    position: fixed;
+    inset: 0;
+    z-index: 1300;
+    width: 100vw;
+    height: 100dvh;
+    margin-top: 0;
+    border-left: 0;
+  }
 }
 </style>

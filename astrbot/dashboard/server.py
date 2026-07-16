@@ -24,6 +24,7 @@ from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.io import (
     get_bundled_dashboard_dist_path,
+    get_dashboard_dist_version,
     get_local_ip_addresses,
     should_use_bundled_dashboard_dist,
 )
@@ -133,7 +134,7 @@ def _expand_env_placeholders(value: str, field_name: str) -> str:
     import re
 
     pattern = re.compile(
-        r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*)?\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))"
+        r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?::-(?P<default>[^}]*))?\}|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))"
     )
 
     def _replace(match: re.Match[str]) -> str:
@@ -262,22 +263,42 @@ class AstrBotDashboard:
         else:
             user_dist = os.path.join(get_astrbot_data_path(), "dist")
             bundled_dist = get_bundled_dashboard_dist_path()
-            if os.path.exists(user_dist) and not should_use_bundled_dashboard_dist(
-                user_dist,
-                VERSION,
+            user_index = Path(user_dist) / "index.html"
+            user_version = get_dashboard_dist_version(user_dist)
+            if (
+                os.path.exists(user_dist)
+                and user_index.is_file()
+                and not should_use_bundled_dashboard_dist(user_dist, VERSION)
             ):
                 self.data_path = os.path.abspath(user_dist)
             elif bundled_dist.exists():
                 self.data_path = str(bundled_dist)
                 logger.info("Using bundled dashboard dist: %s", self.data_path)
+            elif os.path.exists(user_dist) and user_index.is_file():
+                logger.warning(
+                    "Using existing data/dist as a fallback even though WebUI "
+                    "version mismatches core: %s, expected v%s. Some dashboard "
+                    "features may not work until the matching WebUI is available.",
+                    user_version,
+                    VERSION,
+                )
+                self.data_path = os.path.abspath(user_dist)
+            elif os.path.exists(user_dist):
+                logger.warning(
+                    "Ignoring data/dist because WebUI files are incomplete for core v%s.",
+                    VERSION,
+                )
+                self.data_path = None
             else:
                 self.data_path = os.path.abspath(user_dist)
 
-        if self.enable_webui and not (Path(self.data_path) / "index.html").exists():
+        if self.enable_webui and (
+            self.data_path is None or not (Path(self.data_path) / "index.html").exists()
+        ):
             logger.warning(
                 "前端未内置或未初始化 (index.html missing in %s), "
                 "回退到仅启动后端. 请访问在线面板: dash.astrbot.men",
-                self.data_path,
+                self.data_path or "disabled incomplete data/dist",
             )
             self.enable_webui = False
             self._webui_fallback = True
@@ -299,6 +320,7 @@ class AstrBotDashboard:
             "/api/auth/logout",
             "/api/auth/setup-status",
             "/api/auth/setup",
+            "/api/stat/versions",
         }
         allowed_endpoint_prefixes = [
             "/api/file",
@@ -313,34 +335,64 @@ class AstrBotDashboard:
             return None
 
         is_plugin_page_path = PluginPageAuth.is_protected_path(path)
-        token = self._extract_dashboard_jwt(current_request)
-        if not token and is_plugin_page_path:
-            token = PluginPageAuth.extract_asset_token(current_request.query_params)
-        if not token:
+        dashboard_token = self._extract_dashboard_jwt(current_request)
+        asset_token = (
+            PluginPageAuth.extract_asset_token(current_request.query_params)
+            if is_plugin_page_path
+            else None
+        )
+        token_candidates = []
+        if dashboard_token:
+            token_candidates.append(dashboard_token)
+        if asset_token and asset_token != dashboard_token:
+            token_candidates.append(asset_token)
+        if not token_candidates:
             r = JSONResponse(error("未授权"))
             r.status_code = 401
             return r
+
+        token_errors: list[str] = []
+        for token in token_candidates:
+            payload, token_error = self._validate_dashboard_token(token, path)
+            if payload is not None:
+                current_request.state.dashboard_g.username = cast(
+                    str, payload["username"]
+                )
+                return None
+            token_errors.append(token_error)
+
+        error_message = (
+            "Token 过期"
+            if token_errors and all(item == "Token 过期" for item in token_errors)
+            else "Token 无效"
+        )
+        r = JSONResponse(error(error_message))
+        r.status_code = 401
+        return r
+
+    def _validate_dashboard_token(
+        self,
+        token: str,
+        path: str,
+    ) -> tuple[dict[str, Any] | None, str]:
         try:
             payload = jwt.decode(token, self._jwt_secret, algorithms=["HS256"])
-            if PluginPageAuth.is_asset_token(
-                payload
-            ) and not PluginPageAuth.is_scope_valid(payload, path):
-                r = JSONResponse(error("Token 无效"))
-                r.status_code = 401
-                return r
-
-            username = payload.get("username")
-            if not isinstance(username, str) or not username.strip():
-                raise jwt.InvalidTokenError("missing username in token payload")
-            current_request.state.dashboard_g.username = username
         except jwt.ExpiredSignatureError:
-            r = JSONResponse(error("Token 过期"))
-            r.status_code = 401
-            return r
+            return None, "Token 过期"
         except jwt.InvalidTokenError:
-            r = JSONResponse(error("Token 无效"))
-            r.status_code = 401
-            return r
+            return None, "Token 无效"
+
+        if PluginPageAuth.is_asset_token(payload) and not PluginPageAuth.is_scope_valid(
+            payload,
+            path,
+        ):
+            return None, "Token 无效"
+
+        username = payload.get("username")
+        if not isinstance(username, str) or not username.strip():
+            return None, "Token 无效"
+
+        return payload, ""
 
     async def _apply_auth_rate_limit(
         self,

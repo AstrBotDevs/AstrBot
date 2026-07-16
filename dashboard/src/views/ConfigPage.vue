@@ -150,7 +150,7 @@
     <div class="editor-reactor-container">
       <v-card class="editor-glass-card">
         <v-toolbar class="editor-toolbar" elevation="0">
-          <v-btn icon @click="codeEditorDialog = false">
+          <v-btn icon variant="text" @click="codeEditorDialog = false">
             <v-icon>mdi-close</v-icon>
           </v-btn>
           <v-toolbar-title>{{ tm("codeEditor.title") }}</v-toolbar-title>
@@ -159,6 +159,7 @@
             <v-btn
               style="margin-left: 16px"
               size="small"
+              variant="text"
               @click="configToString()"
             >
               {{ tm("editor.revertCode") }}
@@ -167,6 +168,7 @@
               v-if="config_data_has_changed"
               style="margin-left: 16px"
               size="small"
+              variant="tonal"
               @click="applyStrConfig()"
             >
               {{ tm("editor.applyConfig") }}
@@ -191,8 +193,10 @@
   <!-- Config Management Dialog -->
   <v-dialog v-model="configManageDialog" max-width="800px">
     <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
-        <span class="text-h4">{{ tm("configManagement.title") }}</span>
+      <v-card-title
+        class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between"
+      >
+        <span>{{ tm("configManagement.title") }}</span>
         <v-btn
           icon="mdi-close"
           variant="text"
@@ -273,6 +277,7 @@
             </v-btn>
             <v-btn
               color="primary"
+              variant="tonal"
               :disabled="isConfigFormSaveDisabled"
               @click="saveConfigForm"
             >

@@ -142,7 +142,7 @@ Stars are plugins in `astrbot/builtin_stars/`:
    ruff check .
    ```
 
-4. **Comments** - Use English for all comments and docstrings
+4. **Comments and logs** - Use English for all comments, docstrings, and log messages
 
 5. **Imports** - Use absolute imports via `astrbot.` prefix
 
@@ -230,6 +230,10 @@ chore: maintenance tasks
 5. When modifying frontend/dashboard code, use the project's custom request module `@/utils/request` for HTTP calls
 6. For fetch or SSE URLs, use `resolveApiUrl('/api/your-path')` so the configured `VITE_API_BASE` and dev proxy rules are respected
 7. Do not import the plain `axios` package directly in dashboard source files
+8. When backend API routes, request/response schemas, or OpenAPI definitions change, regenerate the frontend API client with `cd dashboard && pnpm generate:api`
+9. Keep `[project].version` in `pyproject.toml` and `__version__` in `astrbot/__init__.py` in sync; `VERSION` in `astrbot/core/config/default.py` must derive from `astrbot.__version__` rather than hardcoding a separate value
+10. For WebUI dialogs, use `text-h3 pa-4 pb-0 pl-6` as the base title class and use `variant="text"` or `variant="tonal"` for dialog buttons
+11. Consider Windows, macOS, and Linux behavior on both Arm64 and x86 architectures, and preserve compatibility with Python 3.12+
 
 ## Common Tasks
 

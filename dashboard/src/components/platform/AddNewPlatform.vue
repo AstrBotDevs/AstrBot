@@ -5,13 +5,16 @@
     max-height="90%"
     @after-enter="prepareData"
   >
-    <v-card
-      :title="
-        updatingMode
-          ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm('dialog.adapter')}`
-          : tm('dialog.addPlatform')
-      "
-    >
+    <v-card>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+        {{
+          updatingMode
+            ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm(
+                'dialog.adapter',
+              )}`
+            : tm('dialog.addPlatform')
+        }}
+      </v-card-title>
       <v-card-text
         ref="dialogScrollContainer"
         class="pa-4 ml-2 add-platform-body"
@@ -84,7 +87,21 @@
                       <v-radio value="manual" :label="tm('registrationAction.mode.larkManual')"></v-radio>
                     </v-radio-group>
 
-                    <div v-if="larkCreationMode === 'scan'" class="registration-inline mt-3">
+                    <div
+                      v-if="larkCreationMode === 'scan'"
+                      class="registration-inline mt-3"
+                    >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="larkCreationMode === 'scan'"
@@ -122,7 +139,21 @@
                       <v-radio value="manual" :label="tm('registrationAction.mode.manual')"></v-radio>
                     </v-radio-group>
 
-                    <div v-if="dingtalkCreationMode === 'scan'" class="registration-inline mt-3">
+                    <div
+                      v-if="dingtalkCreationMode === 'scan'"
+                      class="registration-inline mt-3"
+                    >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
                       <PlatformRegistrationAction
                         :platform-config="selectedPlatformConfig"
                         :active="dingtalkCreationMode === 'scan'"
@@ -146,7 +177,87 @@
                     </div>
                   </div>
 
-                  <div v-else-if="isWeixinOcPlatform" class="weixin-oc-registration-inline mt-4">
+                  <div v-else-if="isQqOfficialPlatform">
+                    <div class="creation-mode-title mt-4 mb-1">
+                      {{ tm("registrationAction.mode.title") }}
+                    </div>
+                    <v-radio-group
+                      v-model="qqOfficialCreationMode"
+                      class="creation-mode-group"
+                      hide-details
+                    >
+                      <v-radio
+                        value="scan"
+                        :label="tm('registrationAction.mode.scan')"
+                      ></v-radio>
+                      <v-radio
+                        value="manual"
+                        :label="tm('registrationAction.mode.manual')"
+                      ></v-radio>
+                    </v-radio-group>
+
+                    <div
+                      v-if="qqOfficialCreationMode === 'scan'"
+                      class="registration-inline mt-3"
+                    >
+                      <v-text-field
+                        :model-value="selectedPlatformConfig.id || ''"
+                        :label="tm('registrationAction.platformIdLabel')"
+                        :error="Boolean(scanPlatformIdError)"
+                        :error-messages="scanPlatformIdError"
+                        variant="outlined"
+                        density="compact"
+                        hide-details="auto"
+                        class="registration-platform-id-field"
+                        @update:model-value="setScanPlatformId"
+                      />
+                      <PlatformRegistrationAction
+                        :platform-config="selectedPlatformConfig"
+                        :active="qqOfficialCreationMode === 'scan'"
+                        @created="handlePlatformRegistrationCreated"
+                        @success="showSuccess"
+                        @error="showError"
+                      />
+                    </div>
+
+                    <div
+                      v-else-if="qqOfficialCreationMode === 'manual'"
+                      class="mt-2"
+                    >
+                      <div class="platform-action-row">
+                        <v-btn
+                          color="info"
+                          variant="tonal"
+                          @click="openTutorial"
+                          class="mt-2"
+                        >
+                          <v-icon start>mdi-book-open-variant</v-icon>
+                          {{ tm("dialog.viewTutorial") }}
+                        </v-btn>
+                      </div>
+                      <AstrBotConfig
+                        :iterable="selectedPlatformConfig"
+                        :metadata="metadata['platform_group']?.metadata"
+                        metadataKey="platform"
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    v-else-if="isWeixinOcPlatform"
+                    class="registration-inline mt-4"
+                  >
+                    <v-text-field
+                      :model-value="selectedPlatformConfig.id || ''"
+                      :label="tm('registrationAction.platformIdLabel')"
+                      :error="Boolean(scanPlatformIdError)"
+                      :error-messages="scanPlatformIdError"
+                      variant="outlined"
+                      density="compact"
+                      hide-details="auto"
+                      class="registration-platform-id-field"
+                      @update:model-value="setScanPlatformId"
+                    />
                     <PlatformRegistrationAction
                       :platform-config="selectedPlatformConfig"
                       :active="isWeixinOcPlatform"
@@ -227,7 +338,7 @@
               </div>
               <div>
                 <v-btn
-                  variant="plain"
+                  variant="text"
                   icon
                   class="mt-2"
                   @click="toggleConfigSection"
@@ -573,13 +684,14 @@
 
       <v-card-actions>
         <v-spacer />
-        <v-btn text @click="closeDialog">
+        <v-btn variant="text" @click="closeDialog">
           {{ tm("dialog.cancel") }}
         </v-btn>
         <v-btn
           v-if="!updatingMode"
           :disabled="!canSave"
           color="primary"
+          variant="tonal"
           :loading="loading"
           @click="newPlatform"
         >
@@ -589,6 +701,7 @@
           v-else
           :disabled="!selectedAbConfId"
           color="primary"
+          variant="tonal"
           :loading="loading"
           @click="newPlatform"
         >
@@ -601,8 +714,8 @@
   <!-- ID冲突确认对话框 -->
   <v-dialog v-model="showIdConflictDialog" max-width="450" persistent>
     <v-card>
-      <v-card-title class="text-h6 bg-warning d-flex align-center">
-        <v-icon start class="me-2"> mdi-alert-circle-outline </v-icon>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+        <v-icon start class="me-2">mdi-alert-circle-outline</v-icon>
         {{ tm("dialog.idConflict.title") }}
       </v-card-title>
       <v-card-text class="py-4 text-body-1 text-medium-emphasis">
@@ -624,7 +737,7 @@
   <!-- 安全警告对话框 -->
   <v-dialog v-model="showOneBotEmptyTokenWarnDialog" max-width="600" persistent>
     <v-card>
-      <v-card-title>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm("dialog.securityWarning.title") }}
       </v-card-title>
       <v-card-text class="py-4">
@@ -641,12 +754,14 @@
         <v-spacer />
         <v-btn
           color="error"
+          variant="tonal"
           @click="handleOneBotEmptyTokenWarningDismiss(true)"
         >
           {{ tm("createDialog.warningContinue") }}
         </v-btn>
         <v-btn
           color="primary"
+          variant="text"
           @click="handleOneBotEmptyTokenWarningDismiss(false)"
         >
           {{ tm("createDialog.warningEditAgain") }}
@@ -776,6 +891,8 @@ export default {
       selectedPlatformConfig: null as Record<string, unknown> | null,
       larkCreationMode: "",
       dingtalkCreationMode: "",
+      qqOfficialCreationMode: "",
+      scanPlatformIdCustomized: false,
 
       aBConfigRadioVal: "0",
       selectedAbConfId: null as string | null,
@@ -958,6 +1075,21 @@ export default {
     isDingtalkPlatform(): boolean {
       return this.selectedPlatformConfig?.type === "dingtalk";
     },
+    isQqOfficialPlatform(): boolean {
+      return ["qq_official", "qq_official_webhook"].includes(
+        String(this.selectedPlatformConfig?.type || ""),
+      );
+    },
+    scanPlatformIdError(): string {
+      const platformId = String(this.selectedPlatformConfig?.id || "");
+      if (!platformId) {
+        return this.tm("registrationAction.platformIdRequired");
+      }
+      if (!this.isPlatformIdValid(platformId)) {
+        return this.tm("registrationAction.platformIdInvalid");
+      }
+      return "";
+    },
   },
   watch: {
     selectedPlatformType(newType: string | null) {
@@ -968,10 +1100,14 @@ export default {
         >;
         this.larkCreationMode = "";
         this.dingtalkCreationMode = "";
+        this.qqOfficialCreationMode = "";
+        this.scanPlatformIdCustomized = false;
       } else {
         this.selectedPlatformConfig = null;
         this.larkCreationMode = "";
         this.dingtalkCreationMode = "";
+        this.qqOfficialCreationMode = "";
+        this.scanPlatformIdCustomized = false;
       }
     },
     selectedAbConfId(newConfigId: string | null) {
@@ -1079,6 +1215,8 @@ export default {
       this.selectedPlatformConfig = null;
       this.larkCreationMode = "";
       this.dingtalkCreationMode = "";
+      this.qqOfficialCreationMode = "";
+      this.scanPlatformIdCustomized = false;
 
       this.aBConfigRadioVal = "0";
       this.selectedAbConfId = "default";
@@ -1371,6 +1509,14 @@ export default {
       this.$emit("show-toast", { message, type: "error" } as ToastPayload);
     },
 
+    setScanPlatformId(value: unknown): void {
+      if (!this.selectedPlatformConfig) {
+        return;
+      }
+      this.scanPlatformIdCustomized = true;
+      this.selectedPlatformConfig.id = String(value || "");
+    },
+
     buildRandomPlatformIdSuffix(): string {
       const letters = "abcdefghijklmnopqrstuvwxyz";
       let suffix = "_";
@@ -1384,9 +1530,11 @@ export default {
       if (!this.selectedPlatformConfig || !data) {
         return;
       }
-      const rawId = this.selectedPlatformConfig.id as string | undefined;
-      const currentId = String(rawId || "").trim();
-      const platformType = this.selectedPlatformConfig.type as string | undefined;
+      if (this.scanPlatformIdCustomized) {
+        return;
+      }
+      const currentId = String(this.selectedPlatformConfig.id || "").trim();
+      const platformType = String(this.selectedPlatformConfig.type || "");
       if (!currentId) {
         return;
       }
@@ -1844,9 +1992,15 @@ export default {
 
 .registration-inline {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
   width: 320px;
+  gap: 8px;
+}
+
+.registration-platform-id-field {
+  width: 300px;
 }
 
 @media (max-width: 700px) {

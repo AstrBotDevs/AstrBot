@@ -10,6 +10,14 @@
       <p v-if="project?.description" class="project-header-description">
         {{ project.description }}
       </p>
+      <div
+        v-if="workspaceSummary"
+        class="project-workspace-summary"
+        :title="workspaceSummary"
+      >
+        <v-icon icon="mdi-folder-cog-outline" size="15" />
+        <span>{{ workspaceSummary }}</span>
+      </div>
     </div>
 
     <div class="project-input-slot">
@@ -38,6 +46,7 @@
                 size="x-small"
                 variant="text"
                 class="edit-session-btn"
+                :title="tm('conversation.editDisplayName')"
                 @click.stop="
                   $emit(
                     'editSessionTitle',
@@ -52,6 +61,7 @@
                 variant="text"
                 class="delete-session-btn"
                 color="error"
+                :title="tm('actions.deleteChat')"
                 @click.stop="handleDeleteSession(session)"
               />
             </div>
@@ -71,6 +81,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import type { Project } from "@/components/chat/ProjectList.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
@@ -86,7 +97,7 @@ interface Props {
   sessions: Session[];
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const emit = defineEmits<{
   selectSession: [sessionId: string];
@@ -95,15 +106,29 @@ const emit = defineEmits<{
 }>();
 
 const { tm } = useModuleI18n("features/chat");
-
 const confirmDialog = useConfirmDialog();
+
+const workspaceSummary = computed(() => {
+  const project = props.project;
+  if (!project) return "";
+
+  const workspaceType = project.workspace_type || "session";
+  if (workspaceType === "session") {
+    return tm("project.workspace.session");
+  }
+
+  const path = project.resolved_workspace_path || project.workspace_path || "";
+  const label = tm(`project.workspace.${workspaceType}`);
+  return path ? `${label} · ${path}` : label;
+});
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleString();
 }
 
 async function handleDeleteSession(session: Session) {
-  const sessionTitle = session.display_name || tm("conversation.newConversation");
+  const sessionTitle =
+    session.display_name || tm("conversation.newConversation");
   const message = tm("conversation.confirmDelete", { name: sessionTitle });
   if (await askForConfirmation(message, confirmDialog)) {
     emit("deleteSession", session.session_id);
@@ -148,6 +173,24 @@ async function handleDeleteSession(session: Session) {
   font-size: 14px;
   color: var(--v-theme-secondaryText);
   margin: 0;
+}
+
+.project-workspace-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
+  margin-top: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.52);
+  font-size: 12px;
+}
+
+.project-workspace-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-input-slot {

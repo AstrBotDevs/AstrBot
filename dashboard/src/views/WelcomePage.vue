@@ -223,7 +223,7 @@
 
       <v-dialog v-model="showComputerAccessHelpDialog" max-width="640">
         <v-card>
-          <v-card-title class="text-h3 font-weight-bold pa-4">
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">
             {{ tm("onboard.step3HelpTitle") }}
           </v-card-title>
           <v-card-text>

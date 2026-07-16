@@ -13,7 +13,9 @@
     </template>
 
     <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
+      <v-card-title
+        class="text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between"
+      >
         <span>{{ tm("t2iTemplateEditor.dialogTitle") }}</span>
         <v-spacer />
         <div class="d-flex align-center gap-2" style="width: 60%">
@@ -204,16 +206,23 @@
     <!-- 确认重置对话框 -->
     <v-dialog v-model="resetDialog" max-width="400px">
       <v-card>
-        <v-card-title>{{ tm("t2iTemplateEditor.confirmReset") }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
+          tm("t2iTemplateEditor.confirmReset")
+        }}</v-card-title>
         <v-card-text>
           {{ tm("t2iTemplateEditor.confirmResetMessage") }}
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="resetDialog = false">
+          <v-btn variant="text" @click="resetDialog = false">
             {{ t("core.common.cancel") }}
           </v-btn>
-          <v-btn color="warning" :loading="resetLoading" @click="confirmReset">
+          <v-btn
+            color="warning"
+            variant="tonal"
+            :loading="resetLoading"
+            @click="confirmReset"
+          >
             {{ tm("t2iTemplateEditor.confirmResetButton") }}
           </v-btn>
         </v-card-actions>
@@ -223,7 +232,9 @@
     <!-- 删除确认对话框 -->
     <v-dialog v-model="deleteDialog" max-width="400px">
       <v-card>
-        <v-card-title>{{ tm("t2iTemplateEditor.confirmDelete") }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
+          tm("t2iTemplateEditor.confirmDelete")
+        }}</v-card-title>
         <v-card-text>
           {{
             tm("t2iTemplateEditor.confirmDeleteMessage", {
@@ -233,10 +244,15 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="deleteDialog = false">
+          <v-btn variant="text" @click="deleteDialog = false">
             {{ t("core.common.cancel") }}
           </v-btn>
-          <v-btn color="error" :loading="saveLoading" @click="confirmDelete">
+          <v-btn
+            color="error"
+            variant="tonal"
+            :loading="saveLoading"
+            @click="confirmDelete"
+          >
             {{ tm("t2iTemplateEditor.confirmDeleteButton") }}
           </v-btn>
         </v-card-actions>
@@ -246,7 +262,9 @@
     <!-- 保存并应用确认对话框 -->
     <v-dialog v-model="applyAndCloseDialog" max-width="500px">
       <v-card>
-        <v-card-title>{{ tm("t2iTemplateEditor.confirmAction") }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
+          tm("t2iTemplateEditor.confirmAction")
+        }}</v-card-title>
         <v-card-text>
           {{
             tm("t2iTemplateEditor.confirmApplyMessage", {
@@ -256,11 +274,12 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="applyAndCloseDialog = false">
+          <v-btn variant="text" @click="applyAndCloseDialog = false">
             {{ t("core.common.cancel") }}
           </v-btn>
           <v-btn
             color="primary"
+            variant="tonal"
             :loading="saveLoading"
             @click="confirmApplyAndClose"
           >

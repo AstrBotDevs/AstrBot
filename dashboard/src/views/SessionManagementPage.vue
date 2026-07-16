@@ -378,7 +378,7 @@
         @after-enter="loadAvailableUmos"
       >
         <v-card>
-          <v-card-title class="py-3 px-4">
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">
             {{
               groupDialogMode === "create"
                 ? tm("groups.create")
@@ -551,7 +551,7 @@
       <v-dialog v-model="addRuleDialog" max-width="600">
         <v-card>
           <v-card-title
-            class="py-3 px-4"
+            class="text-h3 pa-4 pb-0 pl-6 d-flex align-center"
             style="display: flex; align-items: center"
           >
             <span>{{ tm("addRule.title") }}</span>
@@ -597,7 +597,7 @@
       <!-- 规则编辑对话框 -->
       <v-dialog v-model="ruleDialog" max-width="550" scrollable>
         <v-card v-if="selectedUmo" class="d-flex flex-column" height="600">
-          <v-card-title class="py-3 px-6 d-flex align-center border-b">
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center border-b">
             <span>{{ tm("ruleEditor.title") }}</span>
             <v-chip
               size="x-small"
@@ -893,7 +893,7 @@
       <!-- 确认删除对话框 -->
       <v-dialog v-model="deleteDialog" max-width="400">
         <v-card>
-          <v-card-title class="text-h6">{{
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
             tm("deleteConfirm.title")
           }}</v-card-title>
           <v-card-text>
@@ -920,7 +920,7 @@
       <!-- 批量删除确认对话框 -->
       <v-dialog v-model="batchDeleteDialog" max-width="500">
         <v-card>
-          <v-card-title class="text-h6">{{
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
             tm("batchDeleteConfirm.title")
           }}</v-card-title>
           <v-card-text>
@@ -972,7 +972,7 @@
       <!-- 快速编辑备注名对话框 -->
       <v-dialog v-model="quickEditNameDialog" max-width="400">
         <v-card>
-          <v-card-title class="py-3 px-4">{{
+          <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
             tm("quickEditName.title")
           }}</v-card-title>
           <v-card-text class="pa-4">

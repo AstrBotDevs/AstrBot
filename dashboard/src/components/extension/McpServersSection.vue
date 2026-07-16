@@ -50,7 +50,7 @@
                 </template>
                 <template v-slot:default="{ isActive }">
                   <v-card style="padding: 16px;">
-                    <v-card-title class="d-flex align-center">
+                    <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
                       <span>{{ tm('mcpServers.status.availableTools') }}</span>
                     </v-card-title>
                     <v-card-text>
@@ -166,7 +166,7 @@
     <!-- 添加/编辑 MCP 服务器对话框 -->
     <v-dialog v-model="showMcpServerDialog" max-width="750px">
       <v-card>
-        <v-card-title class="pa-4 pl-6">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           <v-icon class="me-2">
             {{ isEditMode ? "mdi-pencil" : "mdi-plus" }}
           </v-icon>
@@ -273,6 +273,7 @@
           </v-btn>
           <v-btn
             color="primary"
+            variant="tonal"
             :loading="loading"
             :disabled="!isServerFormValid"
             @click="saveServer"
@@ -286,7 +287,7 @@
     <!-- 同步 MCP 服务器对话框 -->
     <v-dialog v-model="showSyncMcpServerDialog" max-width="500px" persistent>
       <v-card>
-        <v-card-title class="bg-primary text-white py-3">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           <span>同步外部平台 MCP 服务器</span>
         </v-card-title>
 
@@ -364,6 +365,7 @@
           </v-btn>
           <v-btn
             color="primary"
+            variant="tonal"
             :loading="loading"
             :disabled="loading"
             @click="syncMcpServers"

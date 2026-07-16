@@ -6,7 +6,7 @@
     @keydown.esc="handleCancel"
   >
     <v-card>
-      <v-card-title class="text-h5">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm("dialogs.uninstall.title") }}
       </v-card-title>
 
@@ -75,7 +75,7 @@
         <v-btn color="grey" variant="text" @click="handleCancel">
           {{ t("core.common.cancel") }}
         </v-btn>
-        <v-btn color="error" variant="elevated" @click="handleConfirm">
+        <v-btn color="error" variant="tonal" @click="handleConfirm">
           {{ t("core.common.confirm") }}
         </v-btn>
       </v-card-actions>

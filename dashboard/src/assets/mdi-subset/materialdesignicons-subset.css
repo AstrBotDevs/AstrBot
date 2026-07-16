@@ -408,10 +408,6 @@
   content: "\F0209";
 }
 
-.mdi-eye-outline::before {
-  content: "\F06D0";
-}
-
 .mdi-eyedropper::before {
   content: "\F020A";
 }
@@ -452,6 +448,14 @@
   content: "\F021C";
 }
 
+.mdi-file-image::before {
+  content: "\F021F";
+}
+
+.mdi-file-music-outline::before {
+  content: "\F0E2A";
+}
+
 .mdi-file-outline::before {
   content: "\F0224";
 }
@@ -476,6 +480,10 @@
   content: "\F0A4D";
 }
 
+.mdi-file-video-outline::before {
+  content: "\F0E2C";
+}
+
 .mdi-file-word-box::before {
   content: "\F022D";
 }
@@ -490,6 +498,10 @@
 
 .mdi-folder::before {
   content: "\F024B";
+}
+
+.mdi-folder-cog-outline::before {
+  content: "\F1080";
 }
 
 .mdi-folder-move::before {
@@ -580,6 +592,10 @@
   content: "\F0EFE";
 }
 
+.mdi-image-outline::before {
+  content: "\F0976";
+}
+
 .mdi-import::before {
   content: "\F02FA";
 }
@@ -620,32 +636,12 @@
   content: "\F0318";
 }
 
-.mdi-language-css3::before {
-  content: "\F031C";
-}
-
-.mdi-language-html5::before {
-  content: "\F031D";
-}
-
-.mdi-language-javascript::before {
-  content: "\F031E";
-}
-
 .mdi-language-markdown::before {
   content: "\F0354";
 }
 
 .mdi-language-markdown-outline::before {
   content: "\F0F5B";
-}
-
-.mdi-language-python::before {
-  content: "\F0320";
-}
-
-.mdi-language-typescript::before {
-  content: "\F06E6";
 }
 
 .mdi-layers-outline::before {
@@ -1022,6 +1018,10 @@
 
 .mdi-subdirectory-arrow-right::before {
   content: "\F060D";
+}
+
+.mdi-svg::before {
+  content: "\F0721";
 }
 
 .mdi-sync::before {

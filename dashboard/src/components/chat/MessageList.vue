@@ -60,105 +60,67 @@
 
               <!-- 图片附件 -->
               <div
-                v-else-if="part.type === 'image' && part.embedded_url"
+                v-else-if="part.type === 'image' && partUrl(part)"
                 class="image-attachments"
               >
                 <div class="image-attachment">
                   <img
-                    :src="part.embedded_url"
+                    :src="partUrl(part)"
                     class="attached-image"
-                    @click="openImagePreview(part.embedded_url)"
+                    @click="openImagePreview(partUrl(part))"
                   />
                 </div>
               </div>
 
               <!-- 音频附件 -->
-              <div
-                v-else-if="part.type === 'record' && part.embedded_url"
-                class="audio-attachment"
-              >
-                <audio controls class="audio-player">
-                  <source :src="part.embedded_url" type="audio/wav" />
-                  {{ t("messages.errors.browser.audioNotSupported") }}
-                </audio>
-              </div>
+              <audio
+                v-else-if="part.type === 'record' && partUrl(part)"
+                controls
+                class="audio-player"
+                :src="partUrl(part)"
+              />
+
+              <video
+                v-else-if="part.type === 'video' && partUrl(part)"
+                controls
+                class="video-part"
+                :src="partUrl(part)"
+              />
 
               <!-- 文件附件 -->
               <div
-                v-else-if="part.type === 'file' && part.embedded_file"
-                class="file-attachments"
+                v-else-if="part.type === 'file'"
+                class="file-part"
+                :style="{
+                  '--attachment-color': attachmentPresentation(part).color,
+                }"
               >
-                <div class="file-attachment">
-                  <a
-                    v-if="part.embedded_file.url"
-                    :href="part.embedded_file.url"
-                    :download="part.embedded_file.filename"
-                    class="file-link"
-                    :class="{ 'is-dark': isDark }"
-                    :style="
-                      isDark
-                        ? {
-                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                            borderColor: 'rgba(255, 255, 255, 0.1)',
-                            color: 'var(--v-theme-secondary)',
-                          }
-                        : {}
-                    "
-                  >
-                    <v-icon
-                      size="small"
-                      class="file-icon"
-                      :style="
-                        isDark ? { color: 'var(--v-theme-secondary)' } : {}
-                      "
-                      >mdi-file-document-outline</v-icon
-                    >
-                    <span class="file-name">{{
-                      part.embedded_file.filename
-                    }}</span>
-                  </a>
-                  <a
-                    v-else
-                    class="file-link file-link-download"
-                    :class="{ 'is-dark': isDark }"
-                    :style="
-                      isDark
-                        ? {
-                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                            borderColor: 'rgba(255, 255, 255, 0.1)',
-                            color: 'var(--v-theme-secondary)',
-                          }
-                        : {}
-                    "
-                    @click="downloadFile(part.embedded_file)"
-                  >
-                    <v-icon
-                      size="small"
-                      class="file-icon"
-                      :style="
-                        isDark ? { color: 'var(--v-theme-secondary)' } : {}
-                      "
-                      >mdi-file-document-outline</v-icon
-                    >
-                    <span class="file-name">{{
-                      part.embedded_file.filename
-                    }}</span>
-                    <v-icon
-                      v-if="
-                        downloadingFiles.has(
-                          part.embedded_file.attachment_id || '',
-                        )
-                      "
-                      size="small"
-                      class="download-icon"
-                      >mdi-loading mdi-spin</v-icon
-                    >
-
-                    <v-icon v-else size="small" class="download-icon"
-                      >mdi-download</v-icon
-                    >
-                  </a>
+                <v-icon
+                  class="file-part-icon"
+                  :icon="attachmentPresentation(part).icon"
+                  size="24"
+                />
+                <div class="file-part-meta">
+                  <span class="file-part-name">{{ attachmentName(part) }}</span>
+                  <span class="file-part-kind">
+                    {{ attachmentPresentation(part).label }}
+                  </span>
                 </div>
+                <v-btn
+                  class="file-part-action"
+                  icon="mdi-download"
+                  size="x-small"
+                  variant="text"
+                  :loading="
+                    downloadingFiles.has(
+                      part.attachment_id ||
+                        part.stored_filename ||
+                        part.filename ||
+                        '',
+                    )
+                  "
+                  @click="downloadPart(part)"
+                />
               </div>
             </template>
           </div>
@@ -363,6 +325,10 @@
 import { enableKatex, enableMermaid, MarkdownCodeBlockNode, setCustomComponents } from "markstream-vue";
 import type { PropType } from "vue";
 import { defineComponent } from "vue";
+import {
+  attachmentName,
+  attachmentPresentation,
+} from "@/components/chat/attachmentPresentation";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
@@ -423,6 +389,8 @@ export default defineComponent({
       t,
       tm,
       toast,
+      attachmentName,
+      attachmentPresentation,
     };
   },
   data() {
@@ -655,6 +623,42 @@ export default defineComponent({
     // Check if reasoning is expanded
     isReasoningExpanded(messageIndex: number): boolean {
       return this.expandedReasoning.has(messageIndex);
+    },
+
+    partUrl(part: MessagePart): string {
+      if (part.embedded_url) return part.embedded_url;
+      if (part.embedded_file?.url) return part.embedded_file.url;
+      if (part.attachment_id) {
+        return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+      }
+      const lookupFilename = part.stored_filename || part.filename;
+      if (lookupFilename) {
+        return `/api/chat/get_file?filename=${encodeURIComponent(lookupFilename)}`;
+      }
+      return "";
+    },
+
+    async downloadPart(part: MessagePart): Promise<void> {
+      const key = part.attachment_id || part.stored_filename || part.filename || "";
+      const url = this.partUrl(part);
+      if (!key || !url) return;
+
+      this.downloadingFiles.add(key);
+      this.downloadingFiles = new Set(this.downloadingFiles);
+      try {
+        const response = await axios.get(url, { responseType: "blob" });
+        const objectUrl = URL.createObjectURL(response.data);
+        const anchor = document.createElement("a");
+        anchor.href = objectUrl;
+        anchor.download = attachmentName(part);
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 100);
+      } catch (error) {
+        console.error("Download attachment failed:", error);
+      } finally {
+        this.downloadingFiles.delete(key);
+        this.downloadingFiles = new Set(this.downloadingFiles);
+      }
     },
 
     // 下载文件
@@ -1528,6 +1532,71 @@ export default defineComponent({
 .file-link.is-dark:hover {
   background-color: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.video-part {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  margin-top: 8px;
+  border-radius: 8px;
+}
+
+.file-part {
+  --attachment-color: #607d8b;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: min(420px, 100%);
+  margin-top: 8px;
+  padding: 9px 8px 9px 10px;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 13%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 58%
+  );
+}
+
+.file-part-icon,
+.file-part-kind {
+  color: var(--attachment-color);
+}
+
+.file-part-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.file-part-name,
+.file-part-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-part-name {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.file-part-kind {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+}
+
+.file-part-action {
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.72;
+}
+
+.file-part:hover .file-part-action {
+  opacity: 1;
 }
 
 /* 动画类 */

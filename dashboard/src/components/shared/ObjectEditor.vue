@@ -35,7 +35,7 @@
   <!-- Key-Value Management Dialog -->
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6" style="font-weight: normal">
         {{ resolveDialogTitle }}
       </v-card-title>
 
@@ -279,7 +279,7 @@
         <v-btn variant="text" @click="cancelDialog">
           {{ t("core.common.cancel") }}
         </v-btn>
-        <v-btn color="primary" @click="confirmDialog">
+        <v-btn color="primary" variant="tonal" @click="confirmDialog">
           {{ t("core.common.confirm") }}
         </v-btn>
       </v-card-actions>

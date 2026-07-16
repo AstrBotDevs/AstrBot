@@ -1,16 +1,16 @@
 <template>
   <v-dialog v-model="isOpen" max-width="400">
     <v-card>
-      <v-card-title class="text-h6">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ title }}
       </v-card-title>
       <v-card-text>{{ message }}</v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn color="gray" @click="handleCancel">
+        <v-btn color="gray" variant="text" @click="handleCancel">
           {{ t("core.common.dialog.cancelButton") }}
         </v-btn>
-        <v-btn color="red" @click="handleConfirm">
+        <v-btn color="red" variant="tonal" @click="handleConfirm">
           {{ t("core.common.dialog.confirmButton") }}
         </v-btn>
       </v-card-actions>

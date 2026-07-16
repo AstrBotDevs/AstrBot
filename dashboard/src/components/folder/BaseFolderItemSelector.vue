@@ -22,10 +22,7 @@
       :min-width="isCompactLayout ? undefined : '800px'"
     >
       <v-card class="selector-dialog-card">
-        <v-card-title
-          class="dialog-title d-flex align-center"
-          :class="isCompactLayout ? 'py-3 px-4' : 'py-4 px-5'"
-        >
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <v-icon class="mr-3" color="primary"> mdi-account-circle </v-icon>
           <span>{{ labels.dialogTitle || "选择项目" }}</span>
         </v-card-title>
@@ -329,6 +326,7 @@
 
           <v-btn
             color="primary"
+            variant="tonal"
             :disabled="!selectedItemId"
             @click="confirmSelection"
           >

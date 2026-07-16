@@ -48,7 +48,7 @@
   <!-- List Management Dialog -->
   <v-dialog v-model="dialog" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ dialogTitle || t("core.common.list.editTitle") }}
       </v-card-title>
 
@@ -115,7 +115,7 @@
               <div class="d-flex">
                 <v-btn
                   v-if="editIndex === index"
-                  variant="plain"
+                  variant="text"
                   color="success"
                   icon
                   size="small"
@@ -124,7 +124,7 @@
                   <v-icon>mdi-check</v-icon>
                 </v-btn>
                 <v-btn
-                  variant="plain"
+                  variant="text"
                   :color="editIndex === index ? 'error' : 'default'"
                   icon
                   size="small"
@@ -154,7 +154,7 @@
         <v-btn variant="text" @click="cancelDialog">
           {{ t("core.common.cancel") }}
         </v-btn>
-        <v-btn color="primary" @click="confirmDialog">
+        <v-btn color="primary" variant="tonal" @click="confirmDialog">
           {{ t("core.common.confirm") }}
         </v-btn>
       </v-card-actions>
@@ -164,7 +164,7 @@
   <!-- Batch Import Dialog -->
   <v-dialog v-model="showBatchImport" max-width="600px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ t("core.common.list.batchImportTitle") }}
       </v-card-title>
 
@@ -185,7 +185,7 @@
         <v-btn variant="text" @click="cancelBatchImport">
           {{ t("core.common.cancel") }}
         </v-btn>
-        <v-btn color="primary" @click="confirmBatchImport">
+        <v-btn color="primary" variant="tonal" @click="confirmBatchImport">
           {{
             t("core.common.list.batchImportButton", {
               count: batchImportPreviewCount,

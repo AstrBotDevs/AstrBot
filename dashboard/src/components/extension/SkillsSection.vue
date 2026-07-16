@@ -384,9 +384,9 @@
 
     <v-dialog v-model="uploadDialog" max-width="880px" :persistent="uploading">
       <v-card class="skills-upload-dialog">
-        <v-card-title class="skills-upload-dialog__header px-6 pt-6 pb-2">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 skills-upload-dialog__header">
           <div class="skills-upload-dialog__heading">
-            <div class="text-h4 font-weight-medium">
+            <div>
               {{ tm("skills.uploadDialogTitle") }}
             </div>
           </div>
@@ -579,7 +579,7 @@
           </v-btn>
           <v-btn
             class="skills-upload-dialog__action-btn"
-            variant="flat"
+            variant="tonal"
             color="primary"
             :loading="uploading"
             :disabled="!hasUploadableItems"
@@ -593,13 +593,13 @@
 
     <v-dialog v-model="deleteDialog" max-width="400px">
       <v-card>
-        <v-card-title>{{ tm("skills.deleteTitle") }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm("skills.deleteTitle") }}</v-card-title>
         <v-card-text>{{ tm("skills.deleteMessage") }}</v-card-text>
         <v-card-actions class="d-flex justify-end">
-          <v-btn variant="text" @click="deleteDialog = false">
-            {{ tm("skills.cancel") }}
-          </v-btn>
-          <v-btn color="error" :loading="deleting" @click="deleteSkill">
+        <v-btn variant="text" @click="deleteDialog = false">
+          {{ tm("skills.cancel") }}
+        </v-btn>
+        <v-btn color="error" variant="tonal" :loading="deleting" @click="deleteSkill">
             {{ t("core.common.itemCard.delete") }}
           </v-btn>
         </v-card-actions>
@@ -612,9 +612,9 @@
       :persistent="editorDialog.saving"
     >
       <v-card class="skill-editor-dialog">
-        <v-card-title class="skill-editor-dialog__header">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 skill-editor-dialog__header">
           <div>
-            <div class="text-h3 font-weight-bold">
+            <div>
               {{ editorDialog.skillName }}
             </div>
           </div>
@@ -727,7 +727,7 @@
           </v-btn>
           <v-btn
             color="primary"
-            variant="flat"
+            variant="tonal"
             :loading="editorDialog.saving"
             :disabled="
               !editorDialog.filePath ||
@@ -744,7 +744,7 @@
 
     <v-dialog v-model="payloadDialog.show" max-width="820px">
       <v-card>
-        <v-card-title>{{ tm("skills.neoPayloadTitle") }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm("skills.neoPayloadTitle") }}</v-card-title>
         <v-card-text>
           <pre class="payload-preview">{{ payloadDialog.content }}</pre>
         </v-card-text>
@@ -1893,7 +1893,6 @@ export default {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 22px 14px;
 }
 
 .skill-editor-dialog__body {

@@ -447,6 +447,10 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
     """Title of the project"""
     description: str | None = Field(default=None, max_length=1000)
     """Description of the project"""
+    workspace_type: str = Field(default="session", nullable=False, max_length=32)
+    """Workspace mode: session, project, or custom"""
+    workspace_path: str | None = Field(default=None, max_length=1024)
+    """Custom workspace path"""
 
     __table_args__ = (
         UniqueConstraint(

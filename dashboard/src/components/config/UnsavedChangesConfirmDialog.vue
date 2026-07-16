@@ -2,7 +2,7 @@
   <v-dialog v-model="isOpen" max-width="480" persistent>
     <v-card>
       <v-card-title
-        class="dialog-title d-flex align-center justify-space-between"
+        class="dialog-title text-h3 pa-4 pb-0 pl-6 d-flex align-center justify-space-between"
       >
         <span>{{ title }}</span>
         <v-btn icon="mdi-close" variant="text" @click="handleClose" />
@@ -19,10 +19,10 @@
       </v-card-text>
       <v-card-actions>
         <v-spacer />
-        <v-btn color="gray" @click="handleCancel">
+        <v-btn color="gray" variant="text" @click="handleCancel">
           {{ t("core.common.dialog.cancelButton") }}
         </v-btn>
-        <v-btn color="red" class="confirm-button" @click="handleConfirm">
+        <v-btn color="red" variant="tonal" class="confirm-button" @click="handleConfirm">
           {{ t("core.common.dialog.confirmButton") }}
         </v-btn>
       </v-card-actions>

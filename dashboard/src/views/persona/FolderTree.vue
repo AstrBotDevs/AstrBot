@@ -29,7 +29,9 @@
     <!-- 重命名对话框 -->
     <v-dialog v-model="renameDialog.show" max-width="400px" persistent>
       <v-card>
-        <v-card-title>{{ tm("folder.renameDialog.title") }}</v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{
+          tm("folder.renameDialog.title")
+        }}</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="renameDialog.name"
@@ -48,7 +50,7 @@
           </v-btn>
           <v-btn
             color="primary"
-            variant="flat"
+            variant="tonal"
             :loading="renameDialog.loading"
             :disabled="!renameDialog.name"
             @click="submitRename"
@@ -62,7 +64,7 @@
     <!-- 删除确认对话框 -->
     <v-dialog v-model="deleteDialog.show" max-width="450px">
       <v-card>
-        <v-card-title class="text-error">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           <v-icon class="mr-2" color="error"> mdi-alert </v-icon>
           {{ tm("folder.deleteDialog.title") }}
         </v-card-title>
@@ -86,7 +88,7 @@
           </v-btn>
           <v-btn
             color="error"
-            variant="flat"
+            variant="tonal"
             :loading="deleteDialog.loading"
             @click="submitDelete"
           >

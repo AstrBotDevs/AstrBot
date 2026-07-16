@@ -9,8 +9,8 @@
     <div
       class="input-container"
       :style="{
-        width: '85%',
-        maxWidth: '900px',
+        width: 'var(--chat-content-width, 76%)',
+        maxWidth: 'var(--chat-content-max-width, 760px)',
         margin: '0 auto',
         border: isDark ? 'none' : '1px solid #e0e0e0',
         borderRadius: '24px',
@@ -55,7 +55,7 @@
         @compositioncancel="handleCompositionEnd"
         @blur="clearCompositionState()"
         :disabled="disabled"
-        placeholder="Ask AstrBot..."
+        :placeholder="tm('input.placeholder')"
         class="chat-textarea"
         autocomplete="off"
         autocorrect="off"
@@ -155,7 +155,7 @@
 
           <!-- Provider/Model Selector Menu -->
           <ProviderModelMenu
-            v-if="showProviderSelector"
+            v-if="providerSelectorVisible"
             ref="providerModelMenuRef"
           />
         </div>
@@ -182,6 +182,27 @@
             class="mr-1"
             width="1.5"
           />
+          <v-tooltip
+            v-if="tokenUsageVisible"
+            location="top"
+            max-width="320"
+          >
+            <template #activator="{ props: tokenTooltipProps }">
+              <span
+                v-bind="tokenTooltipProps"
+                class="token-usage-indicator"
+                :style="{ '--token-usage-color': tokenUsageColor }"
+              >
+                <v-progress-circular
+                  :model-value="tokenUsagePercent"
+                  size="24"
+                  width="2.5"
+                  class="token-usage-progress"
+                />
+              </span>
+            </template>
+            <span>{{ props.tokenUsage?.tooltip }}</span>
+          </v-tooltip>
           <!-- <v-btn @click="$emit('openLiveMode')"
                         icon
                         variant="text"
@@ -259,11 +280,9 @@
         />
       </div>
 
-      <div v-if="stagedAudioUrl" class="audio-preview">
-        <v-chip color="primary" variant="tonal" class="audio-chip">
-          <v-icon start icon="mdi-microphone" size="small"></v-icon>
-          {{ tm("voice.recording") }}
-        </v-chip>
+      <div v-if="stagedAudioUrl" class="attachment-card audio-preview">
+        <v-icon icon="mdi-microphone" size="24" />
+        <span class="attachment-name">{{ tm("voice.recording") }}</span>
         <v-btn
           @click="$emit('removeAudio')"
           class="remove-attachment-btn"
@@ -277,12 +296,14 @@
       <div
         v-for="(file, index) in stagedFiles"
         :key="'file-' + index"
-        class="file-preview"
+        class="attachment-card file-preview"
+        :style="{ '--attachment-color': filePresentation(file).color }"
       >
-        <v-chip color="primary" variant="tonal" class="file-chip">
-          <v-icon start icon="mdi-file-document-outline" size="small"></v-icon>
-          <span class="file-name-preview">{{ file.original_name }}</span>
-        </v-chip>
+        <span class="attachment-icon">
+          <v-icon :icon="filePresentation(file).icon" size="24" />
+          <span class="attachment-ext">{{ filePresentation(file).label }}</span>
+        </span>
+        <span class="attachment-name">{{ file.original_name }}</span>
         <v-btn
           @click="$emit('removeFile', index)"
           class="remove-attachment-btn"
@@ -304,6 +325,7 @@ import type { Session } from "@/composables/useSessions";
 import { useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { isComposingEnter } from "@/utils/imeInput.mjs";
+import { attachmentPresentation } from "./attachmentPresentation";
 import ConfigSelector from "./ConfigSelector.vue";
 // biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import ProviderModelMenu from "./ProviderModelMenu.vue";
@@ -321,6 +343,13 @@ interface ReplyInfo {
   selectedText?: string;
 }
 
+interface TokenUsageInfo {
+  used: number;
+  limit: number;
+  percent: number;
+  tooltip: string;
+}
+
 interface Props {
   prompt: string;
   stagedImagesUrl: string[];
@@ -335,6 +364,8 @@ interface Props {
   configId?: string | null;
   replyTo?: ReplyInfo | null;
   sendShortcut?: "enter" | "shift_enter";
+  showProviderSelector?: boolean;
+  tokenUsage?: TokenUsageInfo | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -344,6 +375,8 @@ const props = withDefaults(defineProps<Props>(), {
   stagedFiles: () => [],
   replyTo: null,
   sendShortcut: "shift_enter",
+  showProviderSelector: true,
+  tokenUsage: null,
 });
 
 const emit = defineEmits<{
@@ -368,7 +401,7 @@ const isDark = computed(() => useCustomizerStore().uiTheme === "PurpleThemeDark"
 const inputField = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const providerModelMenuRef = ref<InstanceType<typeof ProviderModelMenu> | null>(null);
-const showProviderSelector = ref(true);
+const providerSelectorAvailable = ref(true);
 const isReplyClosing = ref(false);
 const isComposing = ref(false);
 const lastCompositionEndAt = ref<number | null>(null);
@@ -392,40 +425,36 @@ const canSend = computed(() => {
   );
 });
 
-const fileTypeStyles: Record<string, { color: string; icon: string; label: string }> = {
-  pdf: { color: "#d32f2f", icon: "mdi-file-pdf-box", label: "PDF" },
-  txt: { color: "#1976d2", icon: "mdi-file-document-outline", label: "TXT" },
-  md: { color: "#1976d2", icon: "mdi-language-markdown-outline", label: "MD" },
-  doc: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOC" },
-  docx: { color: "#2b579a", icon: "mdi-file-word-box", label: "DOCX" },
-  xls: { color: "#217346", icon: "mdi-file-excel-box", label: "XLS" },
-  xlsx: { color: "#217346", icon: "mdi-file-excel-box", label: "XLSX" },
-  csv: { color: "#217346", icon: "mdi-file-delimited-outline", label: "CSV" },
-  zip: { color: "#7b5e00", icon: "mdi-folder-zip-outline", label: "ZIP" },
-  py: { color: "#3776ab", icon: "mdi-language-python", label: "PY" },
-  js: { color: "#b8860b", icon: "mdi-language-javascript", label: "JS" },
-  ts: { color: "#3178c6", icon: "mdi-language-typescript", label: "TS" },
-  html: { color: "#e34c26", icon: "mdi-language-html5", label: "HTML" },
-  css: { color: "#264de4", icon: "mdi-language-css3", label: "CSS" },
-  json: { color: "#6a1b9a", icon: "mdi-code-json", label: "JSON" },
-};
-
-function fileExtension(file: StagedFileInfo) {
-  const name = file.original_name || file.filename || "";
-  const extension = name.split(".").pop()?.toLowerCase() || "";
-  return extension === name.toLowerCase() ? "" : extension;
-}
-
 function filePresentation(file: StagedFileInfo) {
-  const extension = fileExtension(file);
-  return (
-    fileTypeStyles[extension] || {
-      color: "#607d8b",
-      icon: "mdi-file-document-outline",
-      label: extension ? extension.slice(0, 4).toUpperCase() : "FILE",
-    }
-  );
+  return attachmentPresentation(file);
 }
+
+const providerSelectorVisible = computed(
+  () => props.showProviderSelector && providerSelectorAvailable.value,
+);
+
+const tokenUsageVisible = computed(() => {
+  const usage = props.tokenUsage;
+  return Boolean(
+    usage &&
+      Number.isFinite(usage.used) &&
+      Number.isFinite(usage.limit) &&
+      usage.used > 0 &&
+      usage.limit > 0,
+  );
+});
+
+const tokenUsagePercent = computed(() => {
+  const percent = props.tokenUsage?.percent || 0;
+  if (!Number.isFinite(percent)) return 0;
+  return Math.min(100, Math.max(0, percent));
+});
+
+const tokenUsageColor = computed(() =>
+  isDark.value
+    ? "rgba(var(--v-theme-on-surface), 0.82)"
+    : "rgba(var(--v-theme-on-surface), 0.72)",
+);
 
 // Ctrl+B 长按录音相关
 const ctrlKeyDown = ref(false);
@@ -584,11 +613,11 @@ function handleRecordClick() {
 function handleConfigChange(payload: { configId: string; agentRunnerType: string }) {
   const runnerType = (payload.agentRunnerType || "").toLowerCase();
   const isInternal = runnerType === "internal" || runnerType === "local";
-  showProviderSelector.value = isInternal;
+  providerSelectorAvailable.value = isInternal;
 }
 
 function getCurrentSelection() {
-  if (!showProviderSelector.value) {
+  if (!providerSelectorVisible.value) {
     return null;
   }
   return providerModelMenuRef.value?.getCurrentSelection();
@@ -860,18 +889,52 @@ defineExpose({
   display: inline-flex;
 }
 
+.attachment-card {
+  --attachment-color: #607d8b;
+  min-width: 150px;
+  max-width: 240px;
+  height: 60px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  color: var(--attachment-color);
+}
+
+.attachment-icon {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.attachment-ext {
+  max-width: 42px;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .preview-image {
   width: 60px;
   height: 60px;
   object-fit: cover;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.audio-chip,
-.file-chip {
-  height: 36px;
-  border-radius: 18px;
 }
 
 .file-name-preview {
@@ -891,6 +954,20 @@ defineExpose({
 
 .remove-attachment-btn:hover {
   opacity: 1;
+}
+
+.token-usage-indicator {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--token-usage-color);
+}
+
+.token-usage-progress {
+  color: inherit;
 }
 
 .fade-in {

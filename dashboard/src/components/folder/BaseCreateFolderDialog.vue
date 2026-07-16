@@ -1,7 +1,7 @@
 <template>
   <v-dialog v-model="showDialog" max-width="450px">
     <v-card>
-      <v-card-title>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         <v-icon class="mr-2"> mdi-folder-plus </v-icon>
         {{ labels.title }}
       </v-card-title>
@@ -34,7 +34,7 @@
         </v-btn>
         <v-btn
           color="primary"
-          variant="flat"
+          variant="tonal"
           :loading="loading"
           :disabled="!formValid"
           @click="submitForm"

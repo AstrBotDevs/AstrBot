@@ -1,7 +1,7 @@
 <template>
   <v-dialog v-model="isOpen" persistent max-width="700" scrollable>
     <v-card>
-      <v-card-title class="d-flex align-center">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
         <v-icon class="mr-2"> mdi-backup-restore </v-icon>
         {{ t("features.settings.backup.dialog.title") }}
       </v-card-title>
@@ -44,6 +44,7 @@
               </v-alert>
               <v-btn
                 color="primary"
+                variant="tonal"
                 size="large"
                 :loading="exportStatus === 'processing'"
                 @click="startExport"
@@ -95,6 +96,7 @@
               </p>
               <v-btn
                 color="primary"
+                variant="tonal"
                 class="mr-2"
                 @click="downloadBackup(exportResult?.filename)"
               >
@@ -116,7 +118,7 @@
               <v-alert type="error" variant="tonal" class="mb-4">
                 {{ exportError }}
               </v-alert>
-              <v-btn color="primary" @click="resetExport">
+              <v-btn color="primary" variant="tonal" @click="resetExport">
                 {{ t("features.settings.backup.export.retry") }}
               </v-btn>
             </div>
@@ -145,6 +147,7 @@
               <div class="d-flex justify-center">
                 <v-btn
                   color="primary"
+                  variant="tonal"
                   size="large"
                   :disabled="!importFile"
                   :loading="importStatus === 'uploading'"
@@ -314,7 +317,7 @@
               >
                 <v-btn
                   color="grey-darken-1"
-                  variant="outlined"
+                  variant="text"
                   size="large"
                   @click="resetImport"
                 >
@@ -325,7 +328,7 @@
                   v-if="checkResult?.can_import"
                   color="error"
                   size="large"
-                  variant="flat"
+                  variant="tonal"
                   @click="confirmImport"
                 >
                   <v-icon class="mr-2"> mdi-alert </v-icon>
@@ -375,7 +378,12 @@
               <v-alert type="info" variant="tonal" class="mb-4">
                 {{ t("features.settings.backup.import.restartRequired") }}
               </v-alert>
-              <v-btn color="primary" class="mr-2" @click="restartAstrBot">
+              <v-btn
+                color="primary"
+                variant="tonal"
+                class="mr-2"
+                @click="restartAstrBot"
+              >
                 <v-icon class="mr-2"> mdi-restart </v-icon>
                 {{ t("features.settings.backup.import.restartNow") }}
               </v-btn>
@@ -394,7 +402,7 @@
               <v-alert type="error" variant="tonal" class="mb-4">
                 {{ importError }}
               </v-alert>
-              <v-btn color="primary" @click="resetImport">
+              <v-btn color="primary" variant="tonal" @click="resetImport">
                 {{ t("features.settings.backup.import.retry") }}
               </v-btn>
             </div>
@@ -518,7 +526,7 @@
   <!-- 重命名对话框 -->
   <v-dialog v-model="renameDialogOpen" max-width="450" persistent>
     <v-card>
-      <v-card-title>
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         <v-icon class="mr-2"> mdi-pencil </v-icon>
         {{ t("features.settings.backup.list.renameTitle") }}
       </v-card-title>
@@ -548,7 +556,7 @@
         </v-btn>
         <v-btn
           color="primary"
-          variant="flat"
+          variant="tonal"
           :loading="renameLoading"
           :disabled="!renameNewName || !!renameError"
           @click="confirmRename"

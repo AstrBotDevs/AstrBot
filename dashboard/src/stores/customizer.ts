@@ -15,6 +15,7 @@ export const useCustomizerStore = defineStore("customizer", {
     inputBg: config.inputBg,
     viewMode: (localStorage.getItem("viewMode") as "bot" | "chat") || "bot", // 'bot' 或 'chat'
     chatSidebarOpen: false, // chat mode mobile sidebar state
+    chatSidebarCollapsed: false, // chat mode desktop sidebar state
     autoSwitchTheme: localStorage.getItem("autoSwitchTheme") === "true", // 自动同步主题
   }),
 
@@ -67,6 +68,9 @@ export const useCustomizerStore = defineStore("customizer", {
     },
     SET_CHAT_SIDEBAR(payload: boolean) {
       this.chatSidebarOpen = payload;
+    },
+    SET_CHAT_SIDEBAR_COLLAPSED(payload: boolean) {
+      this.chatSidebarCollapsed = payload;
     },
   },
 });

@@ -75,6 +75,12 @@ class StarMetadata:
     pages: list[dict] = field(default_factory=list)
     """插件注册的 Pages 元数据。"""
 
+    @property
+    def plugin_id(self) -> str:
+        p_name = (self.name or "unknown").lower().replace("/", "_")
+        p_author = (self.author or "unknown").lower().replace("/", "_")
+        return f"{p_author}/{p_name}"
+
     def __str__(self) -> str:
         return f"Plugin {self.name} ({self.version}) by {self.author}: {self.desc}"
 

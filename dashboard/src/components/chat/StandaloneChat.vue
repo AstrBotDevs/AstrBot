@@ -9,7 +9,7 @@
             ref="messageList"
             :messages="messages"
             :is-dark="isDark"
-            :is-streaming="isStreaming || isConvRunning"
+            :is-streaming="isStreaming"
             @openImagePreview="openImagePreview"
           />
           <div v-else class="welcome-container fade-in">
@@ -28,8 +28,9 @@
             v-model:prompt="prompt"
             :staged-images-url="stagedImagesUrl"
             :staged-audio-url="stagedAudioUrl"
+            :staged-files="stagedNonImageFiles"
             :disabled="isStreaming"
-            :is-running="isStreaming || isConvRunning"
+            :is-running="isStreaming"
             :enable-streaming="enableStreaming"
             :is-recording="isRecording"
             :session-id="currSessionId || null"
@@ -40,6 +41,7 @@
             @toggleStreaming="toggleStreaming"
             @removeImage="removeImage"
             @removeAudio="removeAudio"
+            @removeFile="removeFile"
             @startRecording="handleStartRecording"
             @stopRecording="handleStopRecording"
             @pasteImage="handlePaste"
@@ -75,9 +77,9 @@ import ChatInput from "@/components/chat/ChatInput.vue";
 // biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import MessageList from "@/components/chat/MessageList.vue";
 import { useMediaHandling } from "@/composables/useMediaHandling";
-import { useMessages } from "@/composables/useMessages";
+import { type MessagePart, useMessages } from "@/composables/useMessages";
 import { useRecording } from "@/composables/useRecording";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { useI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { buildWebchatUmoDetails } from "@/utils/chatConfigBinding";
 import axios from "@/utils/request";
@@ -136,39 +138,37 @@ async function newSession() {
   }
 }
 
-function updateSessionTitle(sessionId: string, title: string) {
-  // 独立模式不需要更新会话标题
-}
-
-function getSessions() {
-  // 独立模式不需要加载会话列表
-}
-
 const {
   stagedImagesUrl,
   stagedAudioUrl,
   stagedFiles,
-  getMediaFile,
+  stagedNonImageFiles,
   processAndUploadImage,
+  processAndUploadFile,
   handlePaste,
   removeImage,
   removeAudio,
+  removeFile,
   clearStaged,
   cleanupMediaCache,
 } = useMediaHandling();
 
 const { isRecording, startRecording: startRec, stopRecording: stopRec } = useRecording();
 
+const enableStreaming = ref(true);
 const {
-  messages,
-  isStreaming,
-  isConvRunning,
-  enableStreaming,
-  getSessionMessages: getSessionMsg,
-  sendMessage: sendMsg,
-  stopMessage: stopMsg,
-  toggleStreaming,
-} = useMessages(currSessionId, getMediaFile, updateSessionTitle, getSessions);
+  activeMessages: messages,
+  isSessionRunning,
+  createLocalExchange,
+  sendMessageStream,
+  stopSession,
+} = useMessages({
+  currentSessionId: currSessionId,
+  onStreamUpdate: () => scrollToBottom(),
+});
+const isStreaming = computed(() =>
+  currSessionId.value ? isSessionRunning(currSessionId.value) : false,
+);
 
 // 组件引用
 const messageList = ref<InstanceType<typeof MessageList> | null>(null);
@@ -189,18 +189,22 @@ async function handleStartRecording() {
 }
 
 async function handleStopRecording() {
-  const audioFilename = await stopRec();
-  stagedAudioUrl.value = audioFilename;
+  const audioFile = await stopRec();
+  await processAndUploadFile(audioFile);
 }
 
 async function handleFileSelect(files: FileList) {
   for (const file of Array.from(files)) {
-    await processAndUploadImage(file);
+    if (file.type.startsWith("image/")) {
+      await processAndUploadImage(file);
+    } else {
+      await processAndUploadFile(file);
+    }
   }
 }
 
 async function handleSendMessage() {
-  if (!prompt.value.trim() && stagedFiles.value.length === 0 && !stagedAudioUrl.value) {
+  if (!prompt.value.trim() && stagedFiles.value.length === 0) {
     return;
   }
 
@@ -209,14 +213,14 @@ async function handleSendMessage() {
       await newSession();
     }
 
-    const promptToSend = prompt.value.trim();
-    const audioNameToSend = stagedAudioUrl.value;
-    const filesToSend = stagedFiles.value.map((f) => ({
-      attachment_id: f.attachment_id,
-      url: f.url,
-      original_name: f.original_name,
-      type: f.type,
-    }));
+    const sessionId = currSessionId.value;
+    const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    const parts = buildOutgoingParts(prompt.value.trim());
+    const { userRecord, botRecord } = createLocalExchange({
+      sessionId,
+      messageId,
+      parts,
+    });
 
     // 清空输入和附件
     prompt.value = "";
@@ -227,12 +231,18 @@ async function handleSendMessage() {
     const selectedProviderId = selection?.providerId || "";
     const selectedModelName = selection?.modelName || "";
 
-    await sendMsg(promptToSend, filesToSend, audioNameToSend, selectedProviderId, selectedModelName);
-
-    // 滚动到底部
-    nextTick(() => {
-      messageList.value?.scrollToBottom();
+    sendMessageStream({
+      sessionId,
+      messageId,
+      parts,
+      transport: "sse",
+      enableStreaming: enableStreaming.value,
+      selectedProvider: selectedProviderId,
+      selectedModel: selectedModelName,
+      userRecord,
+      botRecord,
     });
+    scrollToBottom();
   } catch (err) {
     console.error("Failed to send message:", err);
     showError(t("features.chat.errors.sendMessageFailed"));
@@ -242,7 +252,30 @@ async function handleSendMessage() {
 }
 
 async function handleStopMessage() {
-  await stopMsg();
+  await stopSession(currSessionId.value);
+}
+
+function buildOutgoingParts(text: string): MessagePart[] {
+  const parts: MessagePart[] = text ? [{ type: "plain", text }] : [];
+  stagedFiles.value.forEach((file) => {
+    parts.push({
+      type: file.type,
+      attachment_id: file.attachment_id,
+      filename: file.original_name || file.filename,
+      embedded_url: file.url,
+    });
+  });
+  return parts;
+}
+
+function toggleStreaming() {
+  enableStreaming.value = !enableStreaming.value;
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    messageList.value?.scrollToBottom();
+  });
 }
 
 onMounted(async () => {

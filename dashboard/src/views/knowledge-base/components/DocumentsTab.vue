@@ -24,12 +24,15 @@
 
     <!-- 文档列表 -->
     <v-card variant="outlined">
-      <v-data-table
+      <v-data-table-server
         :headers="headers"
         :items="documents"
         :loading="loading"
-        :search="searchQuery"
-        :items-per-page="10"
+        :items-per-page="pageSize"
+        :page="page"
+        :items-length="total"
+        @update:page="onPageChange"
+        @update:items-per-page="onItemsPerPageChange"
       >
         <template #item.doc_name="{ item }">
           <div class="d-flex align-center gap-2">
@@ -94,7 +97,7 @@
             </p>
           </div>
         </template>
-      </v-data-table>
+      </v-data-table-server>
     </v-card>
 
     <!-- 上传对话框 -->
@@ -105,8 +108,8 @@
       @after-enter="initUploadSettings"
     >
       <v-card>
-        <v-card-title class="pa-4 d-flex align-center">
-          <span class="text-h5">{{ t("upload.title") }}</span>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
+          <span>{{ t("upload.title") }}</span>
           <v-spacer />
           <v-btn icon="mdi-close" variant="text" @click="closeUploadDialog" />
         </v-card-title>
@@ -140,7 +143,6 @@
                 <p class="text-caption text-medium-emphasis">最多可上传 10 个文件</p>
                 <input ref="fileInput" type="file" multiple hidden accept=".txt,.md,.markdown,.rst,.adoc,.pdf,.docx,.epub,.xls,.xlsx"
                   @change="handleFileSelect" />
-              </div>
               </div>
 
               <div v-if="selectedFiles.length > 0" class="mt-4">
@@ -211,7 +213,7 @@
                     </span>
                     <v-btn
                       size="small"
-                      variant="flat"
+                      variant="tonal"
                       @click="showTavilyDialog = true"
                     >
                       配置
@@ -353,7 +355,7 @@
           </v-btn>
           <v-btn
             color="primary"
-            variant="elevated"
+            variant="tonal"
             :loading="uploading"
             :disabled="isUploadDisabled"
             @click="startUpload"
@@ -367,10 +369,9 @@
     <!-- 删除确认对话框 -->
     <v-dialog v-model="showDeleteDialog" max-width="450px">
       <v-card>
-        <v-card-title class="pa-4 text-h6">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ t("documents.delete") }}
         </v-card-title>
-        <v-divider />
         <v-card-text class="pa-6">
           <p>
             {{
@@ -385,10 +386,10 @@
         </v-card-text>
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="showDeleteDialog = false"> 取消 </v-btn>
+          <v-btn variant="text" @click="showDeleteDialog = false">取消</v-btn>
           <v-btn
             color="error"
-            variant="elevated"
+            variant="tonal"
             :loading="deleting"
             @click="deleteDocument"
           >
@@ -409,7 +410,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useModuleI18n } from "@/i18n/composables";
 import axios from "@/utils/request";
@@ -430,6 +431,9 @@ const loading = ref(false);
 const uploading = ref(false);
 const deleting = ref(false);
 const documents = ref<any[]>([]);
+const page = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
 const searchQuery = ref("");
 const showUploadDialog = ref(false);
 const showDeleteDialog = ref(false);
@@ -520,10 +524,17 @@ const loadDocuments = async () => {
   loading.value = true;
   try {
     const response = await axios.get("/api/kb/document/list", {
-      params: { kb_id: props.kbId },
+      params: {
+        kb_id: props.kbId,
+        page: page.value,
+        page_size: pageSize.value,
+        search: searchQuery.value.trim() || undefined,
+      },
     });
     if (response.data.status === "ok") {
-      documents.value = response.data.data.items || [];
+      const data = response.data.data;
+      documents.value = data.items || [];
+      total.value = data.total || 0;
     }
   } catch (error) {
     console.error("Failed to load documents:", error);
@@ -531,6 +542,17 @@ const loadDocuments = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+const onPageChange = (newPage: number) => {
+  page.value = newPage;
+  loadDocuments();
+};
+
+const onItemsPerPageChange = (newSize: number) => {
+  pageSize.value = newSize;
+  page.value = 1;
+  loadDocuments();
 };
 
 // 文件选择
@@ -870,6 +892,9 @@ const deleteDocument = async () => {
     if (response.data.status === "ok") {
       showSnackbar(t("documents.deleteSuccess"));
       showDeleteDialog.value = false;
+      if (documents.value.length === 1 && page.value > 1) {
+        page.value -= 1;
+      }
       await loadDocuments();
       emit("refresh");
     } else {
@@ -971,6 +996,11 @@ const onTavilyKeySet = () => {
   showSnackbar("Tavily API Key 配置成功", "success");
   checkTavilyConfig();
 };
+
+watch(searchQuery, () => {
+  page.value = 1;
+  loadDocuments();
+});
 
 onMounted(() => {
   loadDocuments();

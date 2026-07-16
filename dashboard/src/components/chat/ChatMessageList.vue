@@ -24,6 +24,63 @@
 
         <div class="message-stack">
           <div
+            v-if="isUserMessage(msg) && userAttachmentParts(msg).length"
+            class="sent-attachments"
+            :class="{ 'images-only': hasImageOnlyAttachments(msg) }"
+          >
+            <template
+              v-for="(part, attachmentIndex) in userAttachmentParts(msg)"
+              :key="`${msgIndex}-attachment-${attachmentIndex}-${part.type}`"
+            >
+              <button
+                v-if="part.type === 'image'"
+                class="sent-attachment-card sent-image-card"
+                type="button"
+                @click="openImage(partUrl(part))"
+              >
+                <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+              </button>
+
+              <div v-else class="sent-attachment-card sent-file-card">
+                <div
+                  class="sent-attachment-icon"
+                  :style="{
+                    '--attachment-color': attachmentPresentation(part).color,
+                  }"
+                >
+                  <v-icon
+                    class="sent-attachment-icon-symbol"
+                    :icon="attachmentPresentation(part).icon"
+                    size="24"
+                  />
+                  <span class="sent-attachment-ext">
+                    {{ attachmentPresentation(part).label }}
+                  </span>
+                </div>
+                <span class="sent-attachment-name">
+                  {{ attachmentName(part) }}
+                </span>
+                <v-btn
+                  v-if="part.type === 'file'"
+                  icon="mdi-download"
+                  size="x-small"
+                  variant="text"
+                  :loading="
+                    downloadingFiles.has(
+                      part.attachment_id ||
+                        part.stored_filename ||
+                        part.filename ||
+                        '',
+                    )
+                  "
+                  @click="downloadPart(part)"
+                />
+              </div>
+            </template>
+          </div>
+
+          <div
+            v-if="shouldShowMessageBubble(msg)"
             class="message-bubble"
             :class="{ user: isUserMessage(msg), bot: !isUserMessage(msg) }"
             @mouseup="handleMouseUp($event, msg)"
@@ -81,7 +138,7 @@
               />
 
               <template
-                v-for="(part, partIndex) in messageParts(msg)"
+                v-for="(part, partIndex) in displayedMessageParts(msg)"
                 :key="`${msgIndex}-${partIndex}-${part.type}`"
               >
                 <button
@@ -314,7 +371,6 @@
 </template>
 
 <script setup lang="ts">
-import axios from "axios";
 import { setCustomComponents } from "markstream-vue";
 import { computed, nextTick, reactive, ref } from "vue";
 import "markstream-vue/index.css";
@@ -331,8 +387,18 @@ import RegenerateMenu, { type RegenerateModelSelection } from "@/components/chat
 import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
-import type { ChatContent, ChatRecord, ChatThread, MessagePart } from "@/composables/useMessages";
+import {
+  attachmentName,
+  attachmentPresentation,
+} from "@/components/chat/attachmentPresentation";
+import type {
+  ChatContent,
+  ChatRecord,
+  ChatThread,
+  MessagePart,
+} from "@/composables/useMessages";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
+import axios from "@/utils/request";
 
 const props = withDefaults(
   defineProps<{
@@ -405,6 +471,32 @@ function messageParts(message: ChatRecord): MessagePart[] {
   if (Array.isArray(parts)) return parts;
   if (typeof parts === "string") return [{ type: "plain", text: parts }];
   return [];
+}
+
+function userAttachmentParts(message: ChatRecord) {
+  return messageParts(message).filter((part) =>
+    ["image", "record", "video", "file"].includes(part.type),
+  );
+}
+
+function bubbleParts(message: ChatRecord) {
+  if (!isUserMessage(message)) return messageParts(message);
+  return messageParts(message).filter(
+    (part) => !["image", "record", "video", "file"].includes(part.type),
+  );
+}
+
+function displayedMessageParts(message: ChatRecord) {
+  return isUserMessage(message) ? bubbleParts(message) : messageParts(message);
+}
+
+function hasImageOnlyAttachments(message: ChatRecord) {
+  const parts = userAttachmentParts(message);
+  return parts.length > 0 && parts.every((part) => part.type === "image");
+}
+
+function shouldShowMessageBubble(message: ChatRecord) {
+  return !isUserMessage(message) || bubbleParts(message).length > 0;
 }
 
 function isMessageStreaming(message: ChatRecord, messageIndex: number) {
@@ -481,8 +573,9 @@ function partUrl(part: MessagePart) {
   if (part.attachment_id) {
     return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
   }
-  if (part.filename) {
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  const lookupFilename = part.stored_filename || part.filename;
+  if (lookupFilename) {
+    return `/api/chat/get_file?filename=${encodeURIComponent(lookupFilename)}`;
   }
   return "";
 }
@@ -598,7 +691,7 @@ async function copyMessage(message: ChatRecord) {
 }
 
 async function downloadPart(part: MessagePart) {
-  const key = part.attachment_id || part.filename || "";
+  const key = part.attachment_id || part.stored_filename || part.filename || "";
   if (!key) return;
   downloadingFiles.value = new Set(downloadingFiles.value).add(key);
   try {
@@ -711,6 +804,107 @@ function formatDuration(seconds: number) {
   max-width: 60%;
 }
 
+.sent-attachments {
+  display: flex;
+  max-width: 100%;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 2px 2px 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.sent-attachment-card {
+  --attachment-color: #607d8b;
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  height: 60px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.sent-image-card {
+  width: 64px;
+  padding: 0;
+  border: 0;
+  cursor: zoom-in;
+}
+
+.sent-image-card img {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.sent-attachments.images-only {
+  max-width: min(420px, 100%);
+}
+
+.sent-attachments.images-only .sent-image-card {
+  width: 180px;
+  height: 180px;
+}
+
+.sent-attachments.images-only .sent-image-card img {
+  object-fit: cover;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
+.sent-file-card {
+  width: 236px;
+  padding: 8px 10px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 14%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 62%
+  );
+}
+
+.sent-attachment-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  min-width: 36px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  color: var(--attachment-color);
+}
+
+.sent-attachment-icon-symbol {
+  color: var(--attachment-color);
+}
+
+.sent-attachment-ext {
+  max-width: 58px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 12px;
+  color: var(--attachment-color);
+}
+
+.sent-attachment-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 18px;
+}
 .bot-avatar {
   margin-top: 2px;
   color: rgb(var(--v-theme-primary));
@@ -859,21 +1053,61 @@ function formatDuration(seconds: number) {
 }
 
 .file-part {
-  display: flex;
+  --attachment-color: #607d8b;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: min(420px, 100%);
   margin-top: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--chat-border);
+  padding: 9px 8px 9px 10px;
+  border: 0;
   border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 13%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 58%
+  );
 }
 
-.file-part span {
+.file-part-icon {
+  color: var(--attachment-color);
+}
+
+.file-part-meta {
   min-width: 0;
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.file-part-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.file-part-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--attachment-color);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+}
+
+.file-part-action {
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.72;
+}
+
+.file-part:hover .file-part-action {
+  opacity: 1;
 }
 
 .tool-call-block {

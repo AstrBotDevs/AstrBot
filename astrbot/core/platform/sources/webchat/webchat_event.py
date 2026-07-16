@@ -4,7 +4,7 @@ import json
 import os
 import shutil
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
@@ -122,12 +122,19 @@ class WebChatMessageEvent(AstrMessageEvent):
             elif isinstance(comp, File):
                 # save file to local
                 file_path = await comp.get_file()
-                original_name = comp.name or os.path.basename(file_path)
+                raw_original_name = comp.name or os.path.basename(file_path)
+                original_name = (
+                    PurePosixPath(str(raw_original_name).replace("\\", "/"))
+                    .name.replace("\x00", "")
+                    .strip()
+                )
+                if original_name in {"", ".", ".."}:
+                    original_name = os.path.basename(file_path) or "file"
                 ext = os.path.splitext(original_name)[1] or ""
                 filename = f"{uuid.uuid4()!s}{ext}"
                 dest_path = os.path.join(attachments_dir, filename)
                 shutil.copy2(file_path, dest_path)
-                data = f"[FILE]{filename}"
+                data = f"[FILE]{filename}|{original_name}"
                 await web_chat_back_queue.put(
                     {
                         "type": "file",
