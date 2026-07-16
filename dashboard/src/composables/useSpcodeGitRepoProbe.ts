@@ -104,9 +104,14 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
     abortController = new AbortController();
     state.value = { kind: "loading" };
     try {
+      // Axios treats 304 as an error by default (`validateStatus` accepts
+      // 2xx only). ETag-driven 304 is a normal cache hit for the probe
+      // endpoint, so we widen the accepted range to include 304 and let
+      // the 304 path below handle it explicitly.
       const resp = await pluginExtensionApi.get<unknown>("spcode/git-branches", {
         params: { umo },
         signal: abortController.signal,
+        validateStatus: (s) => (s >= 200 && s < 300) || s === 304,
         ...(cachedEtag ? { headers: { "If-None-Match": cachedEtag } } : {}),
       });
       if (!isMounted) return;
@@ -239,18 +244,22 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
 }
 
 function parseGitInitResponse(raw: unknown): GitInitResult {
+  // The backend's `_make_envelope` never emits a `success` field;
+  // success is conveyed solely by `reason: null` at the top level of
+  // the response (axios auto-unwrapped). Endpoint-specific fields such
+  // as `initial_branch` also live at the top level, not under a nested
+  // `data` key.
   if (typeof raw !== "object" || raw === null) {
     return { ok: false, reason: "unknown" };
   }
   const env = raw as Record<string, unknown>;
-  if (env.success === true) {
-    const data = env.data as Record<string, unknown> | undefined;
+  const reason = typeof env.reason === "string" ? env.reason : null;
+  const stderr = typeof env.stderr === "string" ? env.stderr : undefined;
+  if (reason === null) {
     const initialBranch =
-      data && typeof data.initial_branch === "string" ? data.initial_branch : "main";
+      typeof env.initial_branch === "string" ? env.initial_branch : "main";
     return { ok: true, defaultBranch: initialBranch };
   }
-  const reason = typeof env.reason === "string" ? env.reason : "unknown";
-  const stderr = typeof env.stderr === "string" ? env.stderr : undefined;
   return {
     ok: false,
     reason,
