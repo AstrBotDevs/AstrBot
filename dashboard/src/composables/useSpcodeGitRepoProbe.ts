@@ -20,6 +20,16 @@ export type GitRepoProbeState =
 
 export interface GitInitParams {
   path: string;
+  /**
+   * v2.17.1: when true, the backend skips the "non-empty directory"
+   * check and runs `git init` in-place, turning an existing project
+   * directory into a Git-managed repo. Defaults to false at the
+   * transport layer so the same composable still works for the
+   * "create a brand-new empty repo" case if it ever needs to.
+   * Callers that target a loaded spcode project should pass `true`:
+   * the directory already exists, so "init" really means "convert".
+   */
+  force?: boolean;
 }
 
 export type GitInitResult =
@@ -181,7 +191,12 @@ export function useSpcodeGitRepoProbe(): UseSpcodeGitRepoProbe {
     try {
       const resp = await pluginExtensionApi.post<unknown>(
         "spcode/git-init",
-        { path: params.path, initial_branch: "main", bare: false },
+        {
+          path: params.path,
+          initial_branch: "main",
+          bare: false,
+          force: params.force ?? false,
+        },
         { signal: initAbort.signal, params: { umo } },
       );
       if (!isMounted || initAbort.signal.aborted) {

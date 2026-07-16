@@ -2308,7 +2308,18 @@ async function onRepoInitConfirm(): Promise<void> {
   if (!projectRoot.value) return;
   repoInitLastError.value = null;
   isRepoInitSubmitting.value = true;
-  const result = await gitRepoProbe.gitInit({ path: projectRoot.value });
+  // v2.17.1: `force: true` skips the backend's "non-empty directory"
+  // guard. Rationale: by the time this prompt is visible, the project
+  // has already been loaded into Astrbot - the directory *definitely*
+  // exists and almost certainly already has files in it. So "init"
+  // here really means "convert this existing project into a
+  // Git-managed project", which is exactly the semantics `force=true`
+  // unlocks (existing files become untracked, nothing is deleted).
+  // Refs: docs/api/v2.17.1-git-init-force-frontend-notice.md §4.
+  const result = await gitRepoProbe.gitInit({
+    path: projectRoot.value,
+    force: true,
+  });
   isRepoInitSubmitting.value = false;
   if (result.ok) {
     // Success path: the composable has already transitioned state to

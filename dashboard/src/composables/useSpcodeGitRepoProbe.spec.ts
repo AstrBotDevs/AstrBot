@@ -87,6 +87,11 @@ const GIT_BRANCHES_NOT_A_REPO = {
 };
 
 // Real backend wire shape for `POST /spcode/git-init` success.
+// v2.17.1 added the `force` echo field to the success response; we
+// keep it in the fixture so future assertions on the wire shape stay
+// honest. The composable's parseGitInitResponse ignores it (it only
+// reads `reason`/`stderr`/`initial_branch`), so existing tests are
+// unaffected.
 const GIT_INIT_OK = {
   reason: null,
   stderr: "",
@@ -95,6 +100,7 @@ const GIT_INIT_OK = {
   path: "D:/tmp",
   initial_branch: "main",
   bare: false,
+  force: false,
   git_dir: "D:/tmp/.git",
   umo: "session:test",
   worktree: "",
@@ -166,6 +172,40 @@ describe("useSpcodeGitRepoProbe", () => {
     expect(r).toEqual({ ok: true, defaultBranch: "main" });
     expect(localStorage.getItem("astrbot.spcode.gitRepoProbe.etag.session:test.")).toBeNull();
     expect(result.state.value).toEqual({ kind: "ok", defaultBranch: "main" });
+    unmount();
+  });
+
+  it("gitInit({ force: true }) forwards force in the request body (v2.17.1)", async () => {
+    // Regression guard: the GitDiffSidebar prompt now always passes
+    // force=true (the loaded project directory already exists, so
+    // "init" means "convert"). If the composable ever drops the
+    // field from the POST body, the backend would reject non-empty
+    // dirs with `directory_not_empty` and the prompt UX would break.
+    postMock.mockResolvedValueOnce(okEnvelope(GIT_INIT_OK));
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_OK));
+    const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
+    await result.gitInit({ path: "D:/tmp", force: true });
+    expect(postMock).toHaveBeenCalledWith(
+      "spcode/git-init",
+      expect.objectContaining({ force: true }),
+      expect.any(Object),
+    );
+    unmount();
+  });
+
+  it("gitInit() defaults force to false in the request body when omitted", async () => {
+    // Symmetry guard: callers that don't opt into force must not
+    // accidentally send force=true (which would skip the backend's
+    // non-empty safety net for genuine "create new empty repo" use).
+    postMock.mockResolvedValueOnce(okEnvelope(GIT_INIT_OK));
+    getMock.mockResolvedValueOnce(okEnvelope(GIT_BRANCHES_OK));
+    const { result, unmount } = withSetup(() => useSpcodeGitRepoProbe());
+    await result.gitInit({ path: "D:/tmp" });
+    expect(postMock).toHaveBeenCalledWith(
+      "spcode/git-init",
+      expect.objectContaining({ force: false }),
+      expect.any(Object),
+    );
     unmount();
   });
 
