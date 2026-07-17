@@ -33,7 +33,6 @@ import type { UseSpcodeGitShow } from "@/composables/useSpcodeGitShow";
 import { useModuleI18n } from "@/i18n/composables";
 
 import DocumentPathBar from "./DocumentPathBar.vue";
-import DocumentViewModeTab from "./DocumentViewModeTab.vue";
 import FileBrowserCodeView from "./FileBrowserCodeView.vue";
 import SearchPanel from "./SearchPanel.vue";
 import FileCommentEditor from "./FileCommentEditor.vue";
@@ -478,6 +477,15 @@ const copyButtonText = ref<string>(
   tm("spcodeProjectLoad.fileBrowser.preview.copy"),
 );
 const copyButtonState = ref<"idle" | "success" | "error">("idle");
+/** 2026-07-17 toolbar-style-unify: v-btn color for the transient
+ *  copy feedback (mirrors FileBrowserFilePreview.copyButtonColor). */
+const copyButtonColor = computed<string>(() =>
+  copyButtonState.value === "success"
+    ? "success"
+    : copyButtonState.value === "error"
+      ? "error"
+      : "primary",
+);
 let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Copy is only meaningful when there is raw text on screen: a doc
@@ -1356,42 +1364,56 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="document-manager__view-toolbar">
-                <DocumentViewModeTab
-                  v-model="viewMode"
-                  :has-revision="!!selectedRevision"
-                />
-                <!-- 2026-07-17 btn-overlap fix: the edit button moved
-                     from an absolute-positioned float (which collided
-                     with the copy button) into this toolbar row, next
-                     to copy — same layout as the workspace meta
-                     header ([编辑][复制]). margin-left:auto on the
-                     edit button pushes the pair to the right edge. -->
-                <button
-                  type="button"
-                  class="document-manager__edit-btn"
-                  @click="onStartEdit"
+                <!-- 2026-07-17 toolbar-style-unify: the three-segment
+                     DocumentViewModeTab (原文|渲染|本次改动) was
+                     replaced by the workspace-style single icon
+                     toggle so both md toolbars read identically.
+                     The "本次改动" (diff) mode is now entered only
+                     from the history sidebar; the toggle hides
+                     while in diff mode (exit via the banner /
+                     sidebar). -->
+                <v-btn
+                  v-if="viewMode !== 'diff'"
+                  size="x-small"
+                  variant="text"
+                  color="primary"
+                  :prepend-icon="
+                    viewMode === 'rendered'
+                      ? 'mdi-language-markdown-outline'
+                      : 'mdi-code-tags'
+                  "
+                  :aria-pressed="viewMode === 'rendered'"
+                  @click="viewMode = viewMode === 'rendered' ? 'raw' : 'rendered'"
                 >
-                  <v-icon size="14">mdi-pencil-outline</v-icon>
-                  {{ tm("spcodeProjectLoad.documentManager.editor.edit") }}
-                </button>
-                <!-- 2026-07-17 docs-copy-btn: copy the raw content,
-                     mirroring the workspace FileBrowserFilePreview
-                     affordance. -->
-                <button
-                  v-if="canCopyContent"
-                  type="button"
-                  class="document-manager__copy-btn"
-                  :class="{
-                    'document-manager__copy-btn--success':
-                      copyButtonState === 'success',
-                    'document-manager__copy-btn--error':
-                      copyButtonState === 'error',
-                  }"
-                  @click="onCopyContent"
-                >
-                  <v-icon size="14">mdi-content-copy</v-icon>
-                  {{ copyButtonText }}
-                </button>
+                  {{
+                    tm(
+                      viewMode === 'rendered'
+                        ? "spcodeProjectLoad.documentManager.viewMode.rendered"
+                        : "spcodeProjectLoad.documentManager.viewMode.raw",
+                    )
+                  }}
+                </v-btn>
+                <div class="document-manager__view-toolbar-actions">
+                  <v-btn
+                    size="x-small"
+                    variant="text"
+                    color="primary"
+                    prepend-icon="mdi-pencil-outline"
+                    @click="onStartEdit"
+                  >
+                    {{ tm("spcodeProjectLoad.fileBrowser.editor.edit") }}
+                  </v-btn>
+                  <v-btn
+                    v-if="canCopyContent"
+                    size="x-small"
+                    variant="text"
+                    :color="copyButtonColor"
+                    prepend-icon="mdi-content-copy"
+                    @click="onCopyContent"
+                  >
+                    {{ copyButtonText }}
+                  </v-btn>
+                </div>
               </div>
               <div
                 v-if="viewMode === 'rendered'"
@@ -1731,31 +1753,21 @@ onBeforeUnmount(() => {
   color: rgb(var(--v-theme-error));
   background: rgba(var(--v-theme-error), 0.08);
 }
-.document-manager__edit-btn {
-  /* 2026-07-17 btn-overlap fix: inline flex item in the view-toolbar
-     row (was absolute top-right, which collided with the copy
-     button). margin-left:auto pushes the edit+copy pair right. */
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11.5px;
-  padding: 3px 8px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
-  background: var(--v-theme-surface, transparent);
-  border-radius: 4px;
-  color: rgba(var(--v-theme-on-surface), 0.75);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.document-manager__edit-btn:hover {
-  border-color: rgba(var(--v-theme-primary), 0.4);
-  color: rgb(var(--v-theme-primary));
-}
 .document-manager__view-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* 2026-07-17 toolbar-style-unify: the edit/copy pair lives in this
+   wrapper; margin-left:auto pushes it to the right edge (same
+   layout as the workspace meta header). The buttons themselves are
+   stock v-btns now — the old custom .document-manager__edit-btn /
+   __copy-btn styles were removed with the segmented tab. */
+.document-manager__view-toolbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 /* 2026-07-17 docs-search: search toolbar (toggle + input). Visual
    spec mirrors .git-diff-sidebar-files-toolbar so both search UIs
@@ -1794,36 +1806,6 @@ onBeforeUnmount(() => {
 .document-manager__search-input:focus {
   border-color: rgb(var(--v-theme-primary));
   box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.16);
-}
-/* 2026-07-17 docs-copy-btn: copy raw content button in the view
-   toolbar. Visual spec mirrors .document-manager__edit-btn;
-   success/error modifiers tint the transient feedback state. */
-.document-manager__copy-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11.5px;
-  padding: 3px 8px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
-  background: var(--v-theme-surface, transparent);
-  border-radius: 4px;
-  color: rgba(var(--v-theme-on-surface), 0.75);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.document-manager__copy-btn:hover {
-  border-color: rgba(var(--v-theme-primary), 0.4);
-  color: rgb(var(--v-theme-primary));
-}
-.document-manager__copy-btn--success,
-.document-manager__copy-btn--success:hover {
-  border-color: rgba(var(--v-theme-success), 0.5);
-  color: rgb(var(--v-theme-success));
-}
-.document-manager__copy-btn--error,
-.document-manager__copy-btn--error:hover {
-  border-color: rgba(var(--v-theme-error), 0.5);
-  color: rgb(var(--v-theme-error));
 }
 /* 2026-07-17 docs-presets: quick-path chips on the path-bar row.
    Pill-shaped (radius 10px) to read as shortcuts, not actions;
