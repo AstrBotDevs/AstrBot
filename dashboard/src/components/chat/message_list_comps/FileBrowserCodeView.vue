@@ -1,30 +1,54 @@
 <!-- Author: elecvoid243, 2026-06-21
-     Spec: docs/superpowers/specs/2026-06-21-file-browser-inline-comments-design.md §4.2 -->
+     Spec: docs/superpowers/specs/2026-06-21-file-browser-inline-comments-design.md §4.2
+     2026-07-17 selection-comment: drag-select to open an action
+     menu (copy / comment). Implemented as a self-contained
+     selection listener + line mapper; the parent owns the
+     editor-open logic. -->
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import type { FileComment } from "@/composables/useFileComments";
+import {
+  commentCoversLine,
+  type FileComment,
+} from "@/composables/useFileComments";
+import SelectionActionMenu from "./SelectionActionMenu.vue";
 
-const props = defineProps<{
-  highlightedHtml: string;
-  filePath: string;
-  comments: FileComment[];
-  activeEditLine: number | null;
-  activeEditCommentId: string | null;
-  isDark: boolean;
-  /**
-   * 2026-07-02 sidebar-search: 1-based line number to center in the
-   * code view after a search-result click. null / 0 = no scroll.
-   * The watcher re-fires the scroll on (scrollToLine, filePath,
-   * highlightedHtml) changes, so it also runs correctly when the
-   * file content finishes loading after the click.
-   */
-  scrollToLine?: number | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    highlightedHtml: string;
+    filePath: string;
+    comments: FileComment[];
+    activeEditLine: number | null;
+    activeEditCommentId: string | null;
+    isDark: boolean;
+    /**
+     * 2026-07-02 sidebar-search: 1-based line number to center in the
+     * code view after a search-result click. null / 0 = no scroll.
+     */
+    scrollToLine?: number | null;
+    /**
+     * 2026-07-17 selection-comment: when false, the selection menu
+     * shows only the "copy" item (no comment). Defaults to true.
+     * Historical-raw views pass false because their line numbers
+     * refer to a stale blob and shouldn't accept comments.
+     */
+    selectionCommentable?: boolean;
+  }>(),
+  {
+    scrollToLine: null,
+    selectionCommentable: true,
+  },
+);
 
 const emit = defineEmits<{
   (e: "request-add", line: number): void;
   (e: "request-edit", commentId: string): void;
+  (e: "request-add-range", payload: {
+    startLine: number;
+    endLine: number;
+    selection: string;
+  }): void;
+  (e: "copy-selection", text: string): void;
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -41,14 +65,18 @@ const lineCount = computed<number>(() => {
 const codeContentRef = ref<HTMLElement | null>(null);
 const hoveredLine = ref<number | null>(null);
 
+// 2026-07-17 selection-comment: gutter coverage now considers
+// range comments (commentCoversLine walks [line, endLine] for
+// comments with endLine > line). Single-line comments are just
+// [n, n] — handled uniformly.
 function hasComment(line: number): boolean {
-  return props.comments.some((c) => c.line === line);
+  return props.comments.some((c) => commentCoversLine(c, line));
 }
 function commentText(line: number): string {
-  return props.comments.find((c) => c.line === line)?.text ?? "";
+  return props.comments.find((c) => commentCoversLine(c, line))?.text ?? "";
 }
 function commentIdFor(line: number): string | null {
-  return props.comments.find((c) => c.line === line)?.id ?? null;
+  return props.comments.find((c) => commentCoversLine(c, line))?.id ?? null;
 }
 
 function onMouseMove(e: MouseEvent): void {
@@ -70,6 +98,143 @@ function onMouseMove(e: MouseEvent): void {
 function onMouseLeave(): void {
   hoveredLine.value = null;
 }
+
+// ── 2026-07-17 selection-comment ────────────────────────────────
+// Drag-select inside the code content opens a small fixed-position
+// menu (copy / comment) anchored at the mouse-up point. The parent
+// owns editor-open and clipboard logic; this component is only
+// responsible for the line-mapping math and the menu lifecycle.
+
+interface RangeSnapshot {
+  x: number;
+  y: number;
+  startLine: number;
+  endLine: number;
+  selection: string;
+}
+
+const menuState = ref<RangeSnapshot | null>(null);
+
+function closeMenu(): void {
+  menuState.value = null;
+}
+
+/** Walk up from `node` to the nearest `.line` ancestor and return
+ *  its 0-based index among sibling `.line` elements inside the
+ *  Shiki container. Returns null if no `.line` ancestor is found
+ *  (e.g. the selection starts in the gutter or line-number column). */
+function lineElToIndex(node: Node | null): number | null {
+  let n: Node | null = node;
+  while (n instanceof Node && !(n instanceof HTMLElement)) {
+    n = n.parentNode;
+  }
+  while (n instanceof HTMLElement && !n.classList.contains("line")) {
+    n = n.parentElement;
+  }
+  if (!(n instanceof HTMLElement)) return null;
+  if (!codeContentRef.value) return null;
+  const all = codeContentRef.value.querySelectorAll<HTMLElement>(".line");
+  return Array.from(all).indexOf(n);
+}
+
+function onContentMouseUp(e: MouseEvent): void {
+  // Ignore mouse-ups inside the gutter or line-number column —
+  // those aren't part of the commentable code area, and a stray
+  // selection that started in the gutter would otherwise force us
+  // to bail (lineElToIndex returns null). Better to skip upfront.
+  if (
+    e.target instanceof HTMLElement &&
+    (e.target.closest(".code-gutter") ||
+      e.target.closest(".line-numbers"))
+  ) {
+    return;
+  }
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) {
+    closeMenu();
+    return;
+  }
+  if (!sel.anchorNode || !sel.focusNode) return;
+  if (!codeContentRef.value || !codeContentRef.value.contains(sel.anchorNode)) {
+    closeMenu();
+    return;
+  }
+  const aIdx = lineElToIndex(sel.anchorNode);
+  const fIdx = lineElToIndex(sel.focusNode);
+  if (aIdx === null || fIdx === null) {
+    closeMenu();
+    return;
+  }
+  const startLine = Math.min(aIdx, fIdx) + 1;
+  const endLine = Math.max(aIdx, fIdx) + 1;
+  const text = sel.toString();
+  if (!text.trim()) {
+    closeMenu();
+    return;
+  }
+  menuState.value = {
+    x: e.clientX,
+    y: e.clientY,
+    startLine,
+    endLine,
+    selection: text,
+  };
+}
+
+/** Collapse outside the menu (a click anywhere else) closes it.
+ *  Named so `onBeforeUnmount` can remove it (avoiding a listener
+ *  leak across remounts of the same component instance). */
+function onDocMouseDown(e: MouseEvent): void {
+  if (!menuState.value) return;
+  const t = e.target;
+  if (t instanceof HTMLElement && t.closest(".selection-action-menu")) return;
+  closeMenu();
+}
+
+/** selectionchange fires on every selection tweak. When the
+ *  selection collapses (e.g. the user clicks blank space), close
+ *  the menu on the next microtask so the click that collapsed it
+ *  can finish propagating without us reopening. */
+function onSelectionChange(): void {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) {
+    queueMicrotask(closeMenu);
+  }
+}
+
+function onMenuCopy(): void {
+  if (menuState.value) emit("copy-selection", menuState.value.selection);
+}
+
+function onMenuComment(): void {
+  if (!menuState.value) return;
+  emit("request-add-range", {
+    startLine: menuState.value.startLine,
+    endLine: menuState.value.endLine,
+    selection: menuState.value.selection,
+  });
+  closeMenu();
+}
+
+if (typeof window !== "undefined") {
+  document.addEventListener("mousedown", onDocMouseDown);
+  document.addEventListener("selectionchange", onSelectionChange);
+}
+
+onBeforeUnmount(() => {
+  if (typeof window !== "undefined") {
+    document.removeEventListener("mousedown", onDocMouseDown);
+    document.removeEventListener("selectionchange", onSelectionChange);
+  }
+  closeMenu();
+});
+
+// Hide the menu when the file's Shiki output changes (the .line
+// indices would be stale) or the file itself switches.
+watch(
+  () => [props.highlightedHtml, props.filePath],
+  () => closeMenu(),
+);
 
 // 2026-07-02 sidebar-search: center the requested line in the
 // code-view scroll container when a search result is clicked.
@@ -120,6 +285,7 @@ watch(
     :class="{ dark: isDark }"
     @mousemove="onMouseMove"
     @mouseleave="onMouseLeave"
+    @scroll="closeMenu"
   >
     <div class="code-gutter">
       <div v-for="line in lineCount" :key="line" class="gutter-cell">
@@ -154,7 +320,25 @@ watch(
         {{ line }}
       </div>
     </div>
-    <pre ref="codeContentRef" class="code-content" v-html="highlightedHtml" />
+    <pre
+      ref="codeContentRef"
+      class="code-content"
+      v-html="highlightedHtml"
+      @mouseup="onContentMouseUp"
+    />
+    <!-- 2026-07-17 selection-comment: action menu opens at the
+         mouse-up position when the user drags across one or more
+         .line spans. Position is fixed (viewport-anchored), so
+         scroll-close above keeps it from getting stranded. -->
+    <SelectionActionMenu
+      v-if="menuState"
+      :x="menuState.x"
+      :y="menuState.y"
+      :show-comment="props.selectionCommentable"
+      @copy="onMenuCopy"
+      @comment="onMenuComment"
+      @close="closeMenu"
+    />
   </div>
 </template>
 
