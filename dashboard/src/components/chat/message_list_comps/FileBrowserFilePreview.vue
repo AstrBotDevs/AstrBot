@@ -634,6 +634,13 @@ function onRenderedCopy(): void {
   renderedMenu.value = null;
 }
 
+// 2026-07-17 selection-comment: toggling 原文/渲染 swaps the DOM
+// under the menu (the selection itself is gone), so drop any open
+// copy-menu instead of leaving it floating at stale coordinates.
+watch(mdViewMode, () => {
+  renderedMenu.value = null;
+});
+
 function onRequestEdit(commentId: string): void {
   const existing = fileComments.findCommentById(commentId);
   if (!existing) return;

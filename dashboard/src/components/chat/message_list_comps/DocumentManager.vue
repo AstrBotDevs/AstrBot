@@ -956,6 +956,13 @@ function onRenderedCopy(): void {
   renderedMenu.value = null;
 }
 
+// 2026-07-17 selection-comment: a view-mode switch swaps the DOM
+// under the menu (the selection itself is gone), so drop any open
+// copy-menu instead of leaving it floating at stale coordinates.
+watch(viewMode, () => {
+  renderedMenu.value = null;
+});
+
 function onRequestEditComment(commentId: string): void {
   const c = fileComments.findCommentById(commentId);
   if (!c) return;
@@ -1462,21 +1469,25 @@ onBeforeUnmount(() => {
                   @cancel="closeCommentEditor"
                   @delete="onDeleteComment"
                 />
-                <!-- 2026-07-17 selection-comment: copy-only menu for
-                     the rendered container above (fixed position). -->
-                <SelectionActionMenu
-                  v-if="renderedMenu"
-                  :x="renderedMenu.x"
-                  :y="renderedMenu.y"
-                  :show-comment="false"
-                  @copy="onRenderedCopy"
-                  @close="renderedMenu = null"
-                />
               </div>
               <DiffPreview
                 v-else
                 :content="diffPatch ?? ''"
                 :is-dark="isDark"
+              />
+              <!-- 2026-07-17 selection-comment: copy-only menu for the
+                   rendered container. MUST be a sibling of the
+                   rendered/raw/diff branches, NOT inside the raw
+                   branch — mounting it inside `viewMode === 'raw'`
+                   made the menu invisible in rendered mode and pop
+                   up stale on switching back (bug report 2026-07-17). -->
+              <SelectionActionMenu
+                v-if="renderedMenu"
+                :x="renderedMenu.x"
+                :y="renderedMenu.y"
+                :show-comment="false"
+                @copy="onRenderedCopy"
+                @close="renderedMenu = null"
               />
               <!--
                 2026-07-14: the "查看评论列表" button (and its
