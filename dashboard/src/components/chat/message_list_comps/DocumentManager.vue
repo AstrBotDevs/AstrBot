@@ -168,6 +168,24 @@ const fileContent = computed<string>(() => {
   return "";
 });
 
+/** 2026-07-17 meta-row-parity: meta (name/size/mtime/encoding) of
+ *  the selected doc, sourced from the shared file-browser snapshot
+ *  — null while loading or for non-file states. Mirrors the
+ *  workspace preview's `.preview-file-meta` data. */
+const docMeta = computed(() =>
+  fileState.value.kind === "file" ? fileState.value.snapshot.meta : null,
+);
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+function formatMtime(mtime: number | null): string {
+  if (!mtime) return "—";
+  return new Date(mtime * 1000).toLocaleString();
+}
+
 // Historical blob content
 const historicalFileState = computed(() => {
   if (!selectedDoc.value || !selectedRevision.value) {
@@ -1364,36 +1382,70 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="document-manager__view-toolbar">
-                <!-- 2026-07-17 toolbar-style-unify: the three-segment
-                     DocumentViewModeTab (原文|渲染|本次改动) was
-                     replaced by the workspace-style single icon
-                     toggle so both md toolbars read identically.
-                     The "本次改动" (diff) mode is now entered only
-                     from the history sidebar; the toggle hides
-                     while in diff mode (exit via the banner /
-                     sidebar). -->
-                <v-btn
-                  v-if="viewMode !== 'diff'"
-                  size="x-small"
-                  variant="text"
-                  color="primary"
-                  :prepend-icon="
-                    viewMode === 'rendered'
-                      ? 'mdi-language-markdown-outline'
-                      : 'mdi-code-tags'
-                  "
-                  :aria-pressed="viewMode === 'rendered'"
-                  @click="viewMode = viewMode === 'rendered' ? 'raw' : 'rendered'"
-                >
-                  {{
-                    tm(
-                      viewMode === 'rendered'
-                        ? "spcodeProjectLoad.documentManager.viewMode.rendered"
-                        : "spcodeProjectLoad.documentManager.viewMode.raw",
-                    )
-                  }}
-                </v-btn>
+                <!-- 2026-07-17 meta-row-parity: file name / encoding /
+                     size / mtime ahead of the action buttons — same
+                     meta header as the workspace preview
+                     (.preview-file-meta). The meta describes the
+                     current working copy even when a historical
+                     revision is viewed (workspace behaves the same;
+                     the banner above flags the revision). -->
+                <template v-if="docMeta">
+                  <span
+                    class="document-manager__doc-name"
+                    :title="docMeta.path"
+                    >{{ docMeta.name }}</span
+                  >
+                  <span
+                    v-if="docMeta.encoding && docMeta.encoding !== 'utf-8'"
+                    class="document-manager__doc-encoding"
+                    :title="
+                      tm(
+                        'spcodeProjectLoad.fileBrowser.preview.encodingLabel',
+                        { encoding: docMeta.encoding },
+                      )
+                    "
+                  >
+                    {{ docMeta.encoding }}
+                  </span>
+                  <span class="document-manager__doc-size">{{
+                    formatBytes(docMeta.size)
+                  }}</span>
+                  <span class="document-manager__doc-mtime">{{
+                    formatMtime(docMeta.mtime)
+                  }}</span>
+                </template>
                 <div class="document-manager__view-toolbar-actions">
+                  <!-- 2026-07-17 toolbar-style-unify: the three-segment
+                       DocumentViewModeTab (原文|渲染|本次改动) was
+                       replaced by the workspace-style single icon
+                       toggle so both md toolbars read identically.
+                       The "本次改动" (diff) mode is now entered only
+                       from the history sidebar; the toggle hides
+                       while in diff mode (exit via the banner /
+                       sidebar). -->
+                  <v-btn
+                    v-if="viewMode !== 'diff'"
+                    size="x-small"
+                    variant="text"
+                    color="primary"
+                    :prepend-icon="
+                      viewMode === 'rendered'
+                        ? 'mdi-language-markdown-outline'
+                        : 'mdi-code-tags'
+                    "
+                    :aria-pressed="viewMode === 'rendered'"
+                    @click="
+                      viewMode = viewMode === 'rendered' ? 'raw' : 'rendered'
+                    "
+                  >
+                    {{
+                      tm(
+                        viewMode === 'rendered'
+                          ? "spcodeProjectLoad.documentManager.viewMode.rendered"
+                          : "spcodeProjectLoad.documentManager.viewMode.raw",
+                      )
+                    }}
+                  </v-btn>
                   <v-btn
                     size="x-small"
                     variant="text"
@@ -1756,18 +1808,53 @@ onBeforeUnmount(() => {
 .document-manager__view-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  /* 2026-07-17 meta-row-parity: the toolbar row doubles as the
+     meta header (name/size/mtime + actions), so it takes the
+     workspace .preview-file-meta visual spec. */
+  padding: 6px 14px;
+  font-size: 11.5px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  background: rgba(var(--v-theme-surface), 0.4);
 }
-/* 2026-07-17 toolbar-style-unify: the edit/copy pair lives in this
-   wrapper; margin-left:auto pushes it to the right edge (same
-   layout as the workspace meta header). The buttons themselves are
-   stock v-btns now — the old custom .document-manager__edit-btn /
-   __copy-btn styles were removed with the segmented tab. */
+.document-manager__doc-name {
+  font-family: ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.document-manager__doc-size,
+.document-manager__doc-mtime {
+  font-variant-numeric: tabular-nums;
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  flex-shrink: 0;
+}
+.document-manager__doc-encoding {
+  font-family: ui-monospace, monospace;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  cursor: help;
+  user-select: none;
+  flex-shrink: 0;
+}
+/* 2026-07-17 toolbar-style-unify: the toggle/edit/copy trio lives
+   in this wrapper; margin-left:auto pushes it to the right edge
+   (same layout as the workspace meta header). The buttons
+   themselves are stock v-btns now — the old custom
+   .document-manager__edit-btn / __copy-btn styles were removed
+   with the segmented tab. */
 .document-manager__view-toolbar-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 /* 2026-07-17 docs-search: search toolbar (toggle + input). Visual
    spec mirrors .git-diff-sidebar-files-toolbar so both search UIs
