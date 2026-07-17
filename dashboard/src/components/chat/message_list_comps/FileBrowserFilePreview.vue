@@ -371,7 +371,13 @@ watch(
 // overlay that reuses the preview's Shiki pipeline for highlighting.
 const fileWrite = useSpcodeFileWrite(computed(() => props.worktree ?? null));
 const editMode = ref(false);
-const editBuffer = ref("");
+// 2026-07-18 latency rework: the per-keystroke buffer lives INSIDE
+// ShikiEditor (uncontrolled textarea) — this component only holds the
+// session baseline + transition-level dirtiness, so keystrokes never
+// re-render the whole preview pane.
+const editInitialContent = ref("");
+const editorRef = ref<InstanceType<typeof ShikiEditor> | null>(null);
+const isEditDirty = ref(false);
 const saveError = ref<string | null>(null);
 
 /** The save endpoint rejects content > 2 MB (backend
@@ -386,6 +392,10 @@ const currentContent = computed<string>(() =>
     : "",
 );
 
+function onEditDirtyChange(dirty: boolean): void {
+  isEditDirty.value = dirty;
+}
+
 const canEdit = computed<boolean>(() => {
   if (props.state.kind !== "file") return false;
   // Historical revisions are read-only.
@@ -397,10 +407,6 @@ const canEdit = computed<boolean>(() => {
   if (!props.fileRelativePath) return false;
   return new TextEncoder().encode(snap.content).length <= MAX_EDIT_BYTES;
 });
-
-const isEditDirty = computed<boolean>(
-  () => editMode.value && editBuffer.value !== currentContent.value,
-);
 
 /** Non-plain-UTF-8 files (GBK, UTF-8-BOM, ...) are re-encoded as
  *  UTF-8 on save (the backend write is fixed UTF-8), so surface that
@@ -417,7 +423,10 @@ const encodingNotice = computed<string | null>(() => {
 });
 
 function onStartEdit(): void {
-  editBuffer.value = currentContent.value;
+  // Freeze the loaded content as the editing session's baseline —
+  // same "no mid-edit clobber" semantics as the old editBuffer init.
+  editInitialContent.value = currentContent.value;
+  isEditDirty.value = false;
   saveError.value = null;
   editMode.value = true;
 }
@@ -426,7 +435,7 @@ async function onSaveEdit(): Promise<void> {
   if (!isEditDirty.value || fileWrite.isSaving.value) return;
   const r = await fileWrite.save({
     path: props.fileRelativePath ?? "",
-    content: editBuffer.value,
+    content: editorRef.value?.getValue() ?? "",
   });
   if (r.ok) {
     editMode.value = false;
@@ -995,9 +1004,11 @@ function onDeleteComment(commentId: string): void {
               </v-btn>
             </div>
             <ShikiEditor
-              v-model="editBuffer"
+              ref="editorRef"
+              :model-value="editInitialContent"
               :file-path="state.snapshot.meta.path"
               class="preview-editor-body"
+              @dirty-change="onEditDirtyChange"
             />
           </div>
 
