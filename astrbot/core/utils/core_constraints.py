@@ -6,6 +6,7 @@ import os
 from collections.abc import Iterator
 
 from packaging.requirements import Requirement
+from packaging.version import InvalidVersion, Version
 
 from astrbot.core.utils.requirements_utils import (
     canonicalize_distribution_name,
@@ -82,12 +83,20 @@ def _get_core_constraints(core_dist_name: str | None) -> tuple[str, ...]:
             if name in installed:
                 ver = installed[name]
                 try:
-                    next_major = int(str(ver).split(".")[0]) + 1
-                except (ValueError, TypeError):
+                    parsed_version = Version(ver)
+                except InvalidVersion:
                     constraints.append(f"{name}=={ver}")
                 else:
                     # Allow compatible upgrades but block next major version
-                    constraints.append(f"{name}>={ver},<{next_major}")
+                    next_major = parsed_version.major + 1
+                    upper_bound = (
+                        f"{parsed_version.epoch}!{next_major}"
+                        if parsed_version.epoch
+                        else str(next_major)
+                    )
+                    constraints.append(
+                        f"{name}>={parsed_version.public},<{upper_bound}"
+                    )
         except Exception:
             continue
 
