@@ -159,9 +159,7 @@ class KnowledgeBaseManager:
             return False
 
         await kb_helper.delete_vec_db()
-        async with self.kb_db.get_db() as session:
-            await session.delete(kb_helper.kb)
-            await session.commit()
+        await self.kb_db.delete_kb_by_id(kb_id)
 
         self.kb_insts.pop(kb_id, None)
         return True
