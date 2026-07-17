@@ -53,7 +53,7 @@ The feature must:
 - on failure, show an inline error line inside the dialog (styled consistently with the existing stderr block), mapped from the backend ReasonCode;
 - disable the button while a generation or a commit is in flight, when there are no staged files, or when `umo` is missing;
 - abort the in-flight btw request when the dialog is cancelled (btw is side-effect-free, so closing is never blocked);
-- persist the chosen language to `localStorage` key `spcode:commit-msg-lang` (initial default: `"zh"` when the UI locale is zh-CN, else `"en"`);
+- persist the chosen language to `localStorage` key `astrbot.spcode.gitDiffSidebar.commitMsgLang` (initial default: `"zh"` when the UI locale is zh-CN, else `"en"`);
 - keep every existing behavior of the dialog (char counter, staged list, stderr block, Ctrl+Enter, cancel-while-committing guard) untouched.
 
 The feature must **not**:
@@ -156,7 +156,7 @@ worktree: string | null;   // selected worktree (null = primary), forwarded to g
 
 **New state:**
 
-- `msgLanguage: Ref<"zh" | "en">` — initialized from `localStorage["spcode:commit-msg-lang"]`, falling back to `"zh"` when the UI locale is zh-CN else `"en"`; every change is written back to `localStorage` immediately.
+- `msgLanguage: Ref<"zh" | "en">` — initialized from `localStorage["astrbot.spcode.gitDiffSidebar.commitMsgLang"]` (repo namespace convention, mirroring the sidebar's `STORAGE_KEYS`), falling back to `"zh"` when the UI locale is zh-CN else `"en"`; every change is written back to `localStorage` immediately.
 - `generateErrorKey: Ref<string | null>` — i18n key suffix of the last generate failure (`no_provider` | `empty_response` | `llm_error` | `network` | `diff_fetch_failed` | `unknown`), cleared on each new attempt and on dialog open (together with the existing `message` reset watch).
 - `useSpcodeBtw()` instance; `onBeforeUnmount(() => btw.dispose())` added to the existing unmount hook chain.
 
