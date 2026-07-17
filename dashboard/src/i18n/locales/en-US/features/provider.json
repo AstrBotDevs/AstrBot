@@ -20,8 +20,8 @@
       "typed": "No {type} type service providers available, click Add Provider to add one"
     },
     "description": {
-      "openai": "Supports all OpenAI API compatible providers.",
-      "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API compatibility layer.",
+      "openai": "Supports all OpenAI API-style providers.",
+      "kimi_code": "Dedicated Kimi CodingPlan / Kimi Code integration using a custom Anthropic API adapter.",
       "default": ""
     }
   },
@@ -146,6 +146,17 @@
     "manualModelRequired": "Please enter a model ID",
     "manualModelExists": "Model already exists",
     "configure": "Configure",
+    "testButton": "Test model",
+    "metadata": {
+      "image": "Image input",
+      "audio": "Audio input",
+      "toolUse": "Tool use",
+      "reasoning": "Reasoning",
+      "context": "{tokens} context window",
+      "available": "Model metadata supports {capability}",
+      "enabled": "{capability} enabled",
+      "supportedDisabled": "Model metadata supports {capability}, but it is not enabled in this provider's modalities."
+    },
     "tooltips": {
       "providerId": "Provider ID",
       "modelId": "Model ID"

@@ -85,9 +85,27 @@
                         :src="partUrl(part)"
                       />
 
-                      <div v-else-if="part.type === 'file'" class="file-part">
-                        <v-icon size="20">mdi-file-document-outline</v-icon>
-                        <span>{{ part.filename || "file" }}</span>
+                      <div
+                        v-else-if="part.type === 'file'"
+                        class="file-part"
+                        :style="{
+                          '--attachment-color':
+                            attachmentPresentation(part).color,
+                        }"
+                      >
+                        <v-icon
+                          class="file-part-icon"
+                          :icon="attachmentPresentation(part).icon"
+                          size="24"
+                        />
+                        <div class="file-part-meta">
+                          <span class="file-part-name">
+                            {{ attachmentName(part) }}
+                          </span>
+                          <span class="file-part-kind">
+                            {{ attachmentPresentation(part).label }}
+                          </span>
+                        </div>
                       </div>
 
                       <div
@@ -183,7 +201,7 @@ import {
   reactive,
   ref,
 } from "vue";
-import axios from "axios";
+import { chatApi, configRouteApi, fileApi } from "@/api/v1";
 import { setCustomComponents } from "markstream-vue";
 import "markstream-vue/index.css";
 import ChatInput from "@/components/chat/ChatInput.vue";
@@ -194,6 +212,10 @@ import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import {
+  attachmentName,
+  attachmentPresentation,
+} from "@/components/chat/attachmentPresentation";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
   displayParts as displayMessageParts,
@@ -286,7 +308,7 @@ async function ensureSession() {
   if (currSessionId.value) return currSessionId.value;
   initializing.value = true;
   try {
-    const response = await axios.get("/api/chat/new_session");
+    const response = await chatApi.createSession();
     const session = response.data?.data as Session;
     currSessionId.value = session.session_id;
     currentSession.value = session;
@@ -300,10 +322,7 @@ async function ensureSession() {
 async function bindConfigToSession(sessionId: string) {
   const confId = props.configId || "default";
   const umo = buildWebchatUmoDetails(sessionId, false).umo;
-  await axios.post("/api/config/umo_abconf_route/update", {
-    umo,
-    conf_id: confId,
-  });
+  await configRouteApi.upsert(umo, { config_id: confId });
 }
 
 async function sendCurrentMessage() {
@@ -413,12 +432,9 @@ function messageRefs(message: ChatRecord) {
 function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
-  if (part.attachment_id)
-    return `/api/chat/get_attachment?attachment_id=${encodeURIComponent(
-      part.attachment_id,
-    )}`;
-  if (part.filename)
-    return `/api/chat/get_file?filename=${encodeURIComponent(part.filename)}`;
+  if (part.attachment_id) return fileApi.contentUrl(part.attachment_id);
+  const lookupFilename = part.stored_filename || part.filename;
+  if (lookupFilename) return fileApi.byNameUrl(lookupFilename);
   return "";
 }
 
@@ -498,6 +514,7 @@ function closeImage() {
 }
 
 .welcome-title {
+  font-family: "Outfit", "Noto Sans", sans-serif;
   font-size: 24px;
   font-weight: 700;
 }
@@ -506,6 +523,7 @@ function closeImage() {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  font-weight: 410;
 }
 
 .message-row {
@@ -580,10 +598,51 @@ function closeImage() {
 }
 
 .file-part {
-  display: flex;
+  --attachment-color: #607d8b;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: min(420px, 100%);
   margin-top: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 13%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 58%
+  );
+}
+
+.file-part-icon {
+  color: var(--attachment-color);
+}
+
+.file-part-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.file-part-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.file-part-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--attachment-color);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
 }
 
 .tool-call-block {

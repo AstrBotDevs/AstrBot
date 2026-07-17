@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from quart import Quart
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
@@ -13,10 +12,11 @@ from astrbot.core.knowledge_base.kb_helper import KBHelper
 from astrbot.core.knowledge_base.models import KBDocument
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
-    hash_legacy_dashboard_password,
+    hash_md5_dashboard_password,
 )
-from astrbot.dashboard.routes.knowledge_base import KnowledgeBaseRoute
+from astrbot.dashboard.asgi_runtime import FastAPIAppAdapter
 from astrbot.dashboard.server import AstrBotDashboard
+from astrbot.dashboard.services.knowledge_base_service import KnowledgeBaseService
 
 _TEST_DASHBOARD_PASSWORD = "AstrbotTest123"
 
@@ -63,7 +63,7 @@ async def core_lifecycle_td(tmp_path_factory):
             hash_dashboard_password(dashboard_password)
         )
         core_lifecycle.astrbot_config["dashboard"]["password"] = (
-            hash_legacy_dashboard_password(dashboard_password)
+            hash_md5_dashboard_password(dashboard_password)
         )
     object.__setattr__(
         core_lifecycle,
@@ -84,7 +84,7 @@ async def core_lifecycle_td(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def app(core_lifecycle_td: AstrBotCoreLifecycle):
-    """Creates a Quart app instance for testing."""
+    """Creates a FastAPIAppAdapter app instance for testing."""
     shutdown_event = asyncio.Event()
     server = AstrBotDashboard(core_lifecycle_td, core_lifecycle_td.db, shutdown_event)
     return server.app
@@ -101,7 +101,9 @@ def _resolve_dashboard_password(core_lifecycle_td: AstrBotCoreLifecycle) -> str:
 
 
 @pytest_asyncio.fixture(scope="module")
-async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecycle):
+async def authenticated_header(
+    app: FastAPIAppAdapter, core_lifecycle_td: AstrBotCoreLifecycle
+):
     """Handles login and returns an authenticated header."""
     test_client = app.test_client()
     response = await test_client.post(
@@ -119,7 +121,9 @@ async def authenticated_header(app: Quart, core_lifecycle_td: AstrBotCoreLifecyc
 
 @pytest.mark.asyncio
 async def test_import_documents(
-    app: Quart, authenticated_header: dict, core_lifecycle_td: AstrBotCoreLifecycle
+    app: FastAPIAppAdapter,
+    authenticated_header: dict,
+    core_lifecycle_td: AstrBotCoreLifecycle,
 ):
     """Tests the import documents functionality."""
     test_client = app.test_client()
@@ -198,12 +202,12 @@ async def test_import_documents_returns_friendly_failure_message(
         details={"expected_contents": 2, "actual_vectors": 1},
     )
 
-    route = KnowledgeBaseRoute.__new__(KnowledgeBaseRoute)
-    route.upload_progress = {}
-    route.upload_tasks = {}
+    service = KnowledgeBaseService.__new__(KnowledgeBaseService)
+    service.upload_progress = {}
+    service.upload_tasks = {}
 
-    await KnowledgeBaseRoute._background_import_task(
-        route,
+    await KnowledgeBaseService.background_import_task(
+        service,
         task_id="task-1",
         kb_helper=kb_helper,
         documents=[{"file_name": "broken.txt", "chunks": ["chunk1", "chunk2"]}],
@@ -212,8 +216,8 @@ async def test_import_documents_returns_friendly_failure_message(
         max_retries=3,
     )
 
-    assert route.upload_tasks["task-1"]["status"] == "completed"
-    result = route.upload_tasks["task-1"]["result"]
+    assert service.upload_tasks["task-1"]["status"] == "completed"
+    result = service.upload_tasks["task-1"]["result"]
     assert result["success_count"] == 0
     assert result["failed_count"] == 1
     assert result["failed"][0]["file_name"] == "broken.txt"
@@ -227,7 +231,9 @@ async def test_import_documents_returns_friendly_failure_message(
 
 
 @pytest.mark.asyncio
-async def test_import_documents_invalid_input(app: Quart, authenticated_header: dict):
+async def test_import_documents_invalid_input(
+    app: FastAPIAppAdapter, authenticated_header: dict
+):
     """Tests import documents with invalid input."""
     test_client = app.test_client()
 
@@ -287,3 +293,67 @@ async def test_import_documents_invalid_input(app: Quart, authenticated_header: 
     data = await response.get_json()
     assert data["status"] == "error"
     assert "chunks 必须是非空字符串列表" in data["message"]
+
+
+def _make_service_with_mock_kb_helper():
+    """Create a KnowledgeBaseService whose kb_manager returns a mock kb_helper.
+
+    Returns:
+        Tuple of (service, kb_helper).
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    kb_helper = AsyncMock()
+    kb_helper.list_documents = AsyncMock()
+    kb_helper.count_documents = AsyncMock()
+
+    kb_manager = MagicMock()
+    kb_manager.get_kb = AsyncMock(return_value=kb_helper)
+
+    service = KnowledgeBaseService.__new__(KnowledgeBaseService)
+    service.core_lifecycle = MagicMock()
+    service.core_lifecycle.kb_manager = kb_manager
+    service.upload_progress = {}
+    service.upload_tasks = {}
+    return service, kb_helper
+
+
+@pytest.mark.asyncio
+async def test_list_documents_clamps_page_and_page_size_below_one():
+    """page and page_size below 1 are clamped to 1 before calling kb_helper."""
+    service, kb_helper = _make_service_with_mock_kb_helper()
+    kb_helper.list_documents.return_value = []
+    kb_helper.count_documents.return_value = 0
+
+    await service.list_documents(kb_id="kb1", page=0, page_size=-5)
+
+    kb_helper.list_documents.assert_awaited_once_with(offset=0, limit=1, search=None)
+
+
+@pytest.mark.asyncio
+async def test_list_documents_trims_search_and_turns_empty_to_none():
+    """search is stripped; whitespace-only search becomes None."""
+    service, kb_helper = _make_service_with_mock_kb_helper()
+    kb_helper.list_documents.return_value = []
+    kb_helper.count_documents.return_value = 0
+
+    await service.list_documents(kb_id="kb1", page=1, page_size=10, search="   ")
+
+    kb_helper.list_documents.assert_awaited_once_with(
+        offset=0, limit=10, search=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_documents_total_comes_from_count_documents():
+    """total uses count_documents(search=normalized_search), not stale kb.doc_count."""
+    service, kb_helper = _make_service_with_mock_kb_helper()
+    kb_helper.list_documents.return_value = []
+    kb_helper.count_documents.return_value = 42
+
+    result = await service.list_documents(
+        kb_id="kb1", page=1, page_size=10, search="  foo  ",
+    )
+
+    assert result["total"] == 42
+    kb_helper.count_documents.assert_awaited_once_with(search="foo")

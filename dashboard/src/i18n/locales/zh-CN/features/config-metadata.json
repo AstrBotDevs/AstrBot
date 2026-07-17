@@ -45,6 +45,10 @@
           "description": "回退对话模型列表",
           "hint": "主对话模型请求失败时，按顺序切换到这些对话模型。"
         },
+        "request_max_retries": {
+          "description": "请求最大重试次数",
+          "hint": "单次模型请求遇到可重试错误时的最大尝试次数。"
+        },
         "default_image_caption_provider_id": {
           "description": "默认图片转述模型",
           "hint": "留空代表不使用,可用于非多模态模型"
@@ -137,6 +141,10 @@
         },
         "web_search_link": {
           "description": "显示来源引用"
+        },
+        "websearch_exa_key": {
+          "description": "Exa API Key",
+          "hint": "可添加多个 Key 进行轮询。获取 Key: https://dashboard.exa.ai"
         }
       }
     },
@@ -267,9 +275,9 @@
           "description": "上下文压缩提示词",
           "hint": "如果为空则使用默认提示词。"
         },
-        "llm_compress_keep_recent": {
-          "description": "压缩时保留最近对话轮数",
-          "hint": "始终保留的最近 N 轮对话。"
+        "llm_compress_keep_recent_ratio": {
+          "description": "压缩时保留最近上下文比例",
+          "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
         },
         "llm_compress_provider_id": {
           "description": "用于上下文压缩的模型提供商 ID",
@@ -615,7 +623,7 @@
       },
       "unified_webhook_mode": {
         "description": "统一 Webhook 模式",
-        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/platform/webhook/{webhook_uuid}。"
+        "hint": "Webhook 模式下使用 AstrBot 统一 Webhook 入口，无需单独开启端口。回调地址为 /api/v1/webhooks/platforms/{webhook_uuid}。"
       },
       "webhook_uuid": {
         "description": "Webhook UUID",
@@ -787,7 +795,7 @@
       },
       "disable_builtin_commands": {
         "description": "禁用自带指令",
-        "hint": "禁用所有 AstrBot 自带指令,如 help, provider, model 等"
+        "hint": "禁用所有 AstrBot 自带指令,如 help, sid, new 等"
       }
     },
     "whitelist": {
@@ -1580,17 +1588,33 @@
         "description": "超时时间",
         "hint": "超时时间，单位为秒。"
       },
-      "mimo-stt-system-prompt": {
-        "description": "系统提示词",
-        "hint": "用于指导 MiMo STT 转录行为的 system prompt。"
-      },
-      "mimo-stt-user-prompt": {
-        "description": "用户提示词",
-        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。"
-      },
       "openai-tts-voice": {
         "description": "voice",
         "hint": "OpenAI TTS 的声音。OpenAI 默认支持：'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'"
+      },
+      "elevenlabs-tts-voice-id": {
+        "description": "音色 ID",
+        "hint": "ElevenLabs 音色 ID。可在 https://elevenlabs.io/app/voice-library 浏览并复制音色 ID。默认 'JBFqnCBsd6RMkjVDRZzb'（George）。"
+      },
+      "elevenlabs-tts-output-format": {
+        "description": "输出格式",
+        "hint": "音频输出格式，例如 'mp3_44100_128'、'mp3_22050_32'、'wav_44100'、'opus_48000_128'。不支持裸 PCM/u-law/a-law 格式。默认 'mp3_44100_128'。"
+      },
+      "elevenlabs-tts-stability": {
+        "description": "稳定性",
+        "hint": "音色稳定性，范围 [0, 1]。值越高越稳定，越低越富有表现力。留空则使用服务端默认值。"
+      },
+      "elevenlabs-tts-similarity-boost": {
+        "description": "相似度增强",
+        "hint": "输出与原始音色的接近程度，范围 [0, 1]。留空则使用服务端默认值。"
+      },
+      "elevenlabs-tts-style": {
+        "description": "风格夸张度",
+        "hint": "音色风格的夸张程度，范围 [0, 1]。值越高延迟越大。留空则使用服务端默认值。"
+      },
+      "elevenlabs-tts-use-speaker-boost": {
+        "description": "说话人增强",
+        "hint": "增强与原始说话人的相似度，可能略微增加延迟。"
       },
       "mimo-tts-voice": {
         "description": "音色",

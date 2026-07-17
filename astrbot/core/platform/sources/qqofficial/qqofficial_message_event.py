@@ -3,7 +3,6 @@ import base64
 import logging
 import os
 import random
-import uuid
 from typing import cast
 
 import aiofiles
@@ -28,9 +27,11 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_image_by_url, file_to_base64
-from astrbot.core.utils.tencent_record_helper import wav_to_tencent_silk
+from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
+
+
+class APIReturnNoneError(Exception):
+    pass
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -52,20 +53,32 @@ def _patch_qq_botpy_formdata() -> None:
 
 _patch_qq_botpy_formdata()
 
-# Retry decorator for QQ Official API transient errors (HTTP 500/504)
-_qqofficial_retry = retry(
-    retry=retry_if_exception_type(
-        (
-            botpy.errors.ServerError,
-            botpy.errors.SequenceNumberError,
-            OSError,
-            asyncio.TimeoutError,
-        )
-    ),
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=2, min=2, max=30),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-    reraise=True,
+
+def _qqofficial_retry(max_attempts: int = 5):
+    """Retry decorator for QQ Official API transient errors (HTTP 500/504)"""
+    return retry(
+        retry=retry_if_exception_type(
+            (
+                botpy.errors.ServerError,
+                botpy.errors.SequenceNumberError,
+                OSError,
+                asyncio.TimeoutError,
+                APIReturnNoneError,
+            )
+        ),
+        stop=stop_after_attempt(max_attempts),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+
+
+_QQOFFICIAL_SEND_API_ERRORS = (
+    botpy.errors.ForbiddenError,
+    botpy.errors.MethodNotAllowedError,
+    botpy.errors.NotFoundError,
+    botpy.errors.SequenceNumberError,
+    botpy.errors.ServerError,
 )
 
 
@@ -260,6 +273,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             file_source,
             file_name,
         ) = await QQOfficialMessageEvent._parse_to_qqofficial(message_to_send)
+        if record_file_path:
+            self.track_temporary_local_file(record_file_path)
 
         # C2C 流式仅用于文本分片，富媒体时降级为普通发送，避免平台侧流式校验报错。
         if stream and (
@@ -483,7 +498,22 @@ class QQOfficialMessageEvent(AstrMessageEvent):
     ):
         try:
             return await send_func(payload)
-        except botpy.errors.ServerError as err:
+        except _QQOFFICIAL_SEND_API_ERRORS as err:
+            logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
+            if payload.get("msg_id"):
+                fallback_payload = payload.copy()
+                fallback_payload.pop("msg_id", None)
+                try:
+                    ret = await send_func(fallback_payload)
+                    logger.info("[QQOfficial] 使用主动发送接口发送成功。")
+                    return ret
+                except _QQOFFICIAL_SEND_API_ERRORS as fallback_err:
+                    err = fallback_err
+                    payload = fallback_payload
+
+            if not isinstance(err, botpy.errors.ServerError):
+                raise
+
             # QQ 流式 markdown 分片校验：内容必须以换行结尾。
             # 某些边界场景服务端仍可能判定失败，这里做一次修正重试。
             if stream and self.STREAM_MARKDOWN_NEWLINE_ERROR in str(err):
@@ -537,14 +567,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "srv_send_msg": False,
         }
 
-        @_qqofficial_retry
+        @_qqofficial_retry()
         async def _do_upload():
             if "openid" in kwargs:
                 payload["openid"] = kwargs["openid"]
                 route = Route(
                     "POST", "/v2/users/{openid}/files", openid=kwargs["openid"]
                 )
-                return await self.bot.api._http.request(route, json=payload)
             elif "group_openid" in kwargs:
                 payload["group_openid"] = kwargs["group_openid"]
                 route = Route(
@@ -552,11 +581,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     "/v2/groups/{group_openid}/files",
                     group_openid=kwargs["group_openid"],
                 )
-                return await self.bot.api._http.request(route, json=payload)
             else:
                 raise ValueError("Invalid upload parameters")
 
-        result = await _do_upload()
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "上传图片API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        try:
+            result = await _do_upload()
+        except APIReturnNoneError:
+            logger.warning(f"上传图片API返回None，共尝试5次后放弃: {payload}")
+            raise
 
         if not isinstance(result, dict):
             raise RuntimeError(
@@ -608,9 +646,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         else:
             return None
 
-        @_qqofficial_retry
+        @_qqofficial_retry()
         async def _do_upload():
-            return await self.bot.api._http.request(route, json=payload)
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "上传文件API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
 
         try:
             result = await _do_upload()
@@ -625,6 +667,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_info=result["file_info"],
                     ttl=result.get("ttl", 0),
                 )
+        except APIReturnNoneError:
+            logger.warning(f"上传文件API返回None，共尝试5次后放弃: {file_source}")
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
             logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
@@ -647,9 +691,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         markdown: message.MarkdownPayload | None = None,
         keyboard: message.Keyboard | None = None,
         stream: dict | None = None,
-    ) -> message.Message:
+    ) -> message.Message | None:
         payload = locals()
         payload.pop("self", None)
+        if payload.get("msg_id") is None:
+            payload.pop("msg_id", None)
         # QQ API does not accept stream.id=None; remove it when not yet assigned
         if "stream" in payload and payload["stream"] is not None:
             stream_data = dict(payload["stream"])
@@ -657,11 +703,26 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 stream_data.pop("id", None)
             payload["stream"] = stream_data
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
-        result = await self.bot.api._http.request(route, json=payload)
 
-        if result is None:
-            logger.warning("[QQOfficial] post_c2c_message: API 返回 None，跳过本次发送")
+        retry_times = 3
+
+        @_qqofficial_retry(retry_times)
+        async def _do_request():
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "发送消息API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        result = None
+        try:
+            result = await _do_request()
+        except APIReturnNoneError:
+            logger.warning(
+                f"[QQOfficial] post_c2c_message: 发送消息失败，API 返回 None，共尝试{retry_times}次后放弃"
+            )
             return None
+
         if not isinstance(result, dict):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None
@@ -681,53 +742,46 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             if isinstance(i, Plain):
                 plain_text += i.text
             elif isinstance(i, Image) and not image_base64:
-                if i.file and i.file.startswith("file:///"):
-                    image_base64 = file_to_base64(i.file[8:])
-                    image_file_path = i.file[8:]
-                elif i.file and i.file.startswith("http"):
-                    image_file_path = await download_image_by_url(i.file)
-                    image_base64 = file_to_base64(image_file_path)
-                elif i.file and i.file.startswith("base64://"):
-                    image_base64 = i.file
-                elif i.file:
-                    image_base64 = file_to_base64(i.file)
-                else:
+                if not i.file:
                     raise ValueError("Unsupported image file format")
-                image_base64 = image_base64.removeprefix("base64://")
-            elif isinstance(i, Record):
-                if i.file:
-                    record_wav_path = await i.convert_to_file_path()  # wav 路径
-                    temp_dir = get_astrbot_temp_path()
-                    record_tecent_silk_path = os.path.join(
-                        temp_dir,
-                        f"qqofficial_{uuid.uuid4()}.silk",
-                    )
+                image_is_local = is_file_uri(i.file)
+                if not image_is_local:
                     try:
-                        duration = await wav_to_tencent_silk(
-                            record_wav_path,
-                            record_tecent_silk_path,
+                        image_is_local = os.path.exists(i.file)
+                    except OSError:
+                        image_is_local = False
+                resolver = MediaResolver(i.file, media_type="image")
+                if image_is_local:
+                    async with resolver.as_path() as resolved:
+                        image_file_path = str(resolved.path.resolve())
+                        image_base64 = resolved.to_base64()
+                else:
+                    image_base64 = await resolver.to_base64()
+            elif isinstance(i, Record):
+                record_ref = i.url or i.file
+                if record_ref:
+                    try:
+                        record_file_path = await MediaResolver(
+                            record_ref,
+                            media_type="audio",
+                            default_suffix=".wav",
+                        ).to_path(
+                            target_format="tencent_silk",
                         )
-                        if duration > 0:
-                            record_file_path = record_tecent_silk_path
-                        else:
-                            record_file_path = None
-                            logger.error("转换音频格式时出错：音频时长不大于0")
                     except Exception as e:
                         logger.error(f"处理语音时出错: {e}")
                         record_file_path = None
             elif isinstance(i, Video) and not video_file_source:
-                if i.file.startswith("file:///"):
-                    video_file_source = i.file[8:]
+                if is_file_uri(i.file):
+                    video_file_source = file_uri_to_path(i.file)
                 else:
                     video_file_source = i.file
             elif isinstance(i, File) and not file_source:
                 file_name = i.name
                 if i.file_:
                     file_path = i.file_
-                    if file_path.startswith("file:///"):
-                        file_path = file_path[8:]
-                    elif file_path.startswith("file://"):
-                        file_path = file_path[7:]
+                    if is_file_uri(file_path):
+                        file_path = file_uri_to_path(file_path)
                     file_source = file_path
                 elif i.url:
                     file_source = i.url

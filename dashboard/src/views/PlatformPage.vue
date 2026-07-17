@@ -120,7 +120,7 @@
     <!-- Webhook URL 对话框 -->
     <v-dialog v-model="showWebhookDialog" max-width="600">
       <v-card>
-        <v-card-title class="d-flex align-center pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <v-icon class="me-2" color="primary">mdi-webhook</v-icon>
           {{ tm('webhookDialog.title') }}
         </v-card-title>
@@ -156,7 +156,7 @@
 
     <v-dialog v-model="showQrDialog" max-width="480">
       <v-card>
-        <v-card-title class="d-flex align-center pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <v-icon class="me-2">mdi-qrcode</v-icon>
           {{ tm('platformQr.title') }}
         </v-card-title>
@@ -181,7 +181,7 @@
     <!-- 错误详情对话框 -->
     <v-dialog v-model="showErrorDialog" max-width="700">
       <v-card>
-        <v-card-title class="d-flex align-center pa-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
           <v-icon class="me-2" color="error">mdi-alert-circle</v-icon>
           {{ tm('errorDialog.title') }}
         </v-card-title>
@@ -220,7 +220,7 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar :timeout="3000" elevation="24" :color="save_message_success" v-model="save_message_snack"
+    <v-snackbar :timeout="3000" elevation="6" :color="save_message_success" v-model="save_message_snack"
       location="top">
       {{ save_message }}
     </v-snackbar>
@@ -228,7 +228,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { botApi, fileApi, systemConfigApi } from '@/api/v1';
 import AstrBotConfig from '@/components/shared/AstrBotConfig.vue';
 import WaitingForRestart from '@/components/shared/WaitingForRestart.vue';
 import ConsoleDisplayer from '@/components/shared/ConsoleDisplayer.vue';
@@ -350,13 +350,13 @@ export default {
       const template = this.metadata['platform_group']?.metadata?.platform?.config_template?.[platform_id];
       if (template && template.logo_token) {
           // 通过文件服务访问插件提供的 logo
-        return `/api/file/${template.logo_token}`;
+        return fileApi.tokenUrl(template.logo_token);
       }
       return getPlatformIcon(platform_id);
     },
 
     getConfig() {
-      axios.get('/api/config/get').then((res) => {
+      systemConfigApi.runtime().then((res) => {
         this.config_data = res.data.data.config;
         this.fetched = true
         this.metadata = res.data.data.metadata;
@@ -372,7 +372,7 @@ export default {
     },
 
     async getPlatformStats() {
-      await axios.get('/api/platform/stats').then((res) => {
+      await botApi.stats().then((res) => {
         if (res.data.status === 'ok') {
           // 将数组转换为以 id 为 key 的对象，方便查找
           const stats = {};
@@ -549,7 +549,7 @@ export default {
         return;
       }
 
-      axios.post('/api/config/platform/delete', { id: platform.id }).then((res) => {
+      botApi.delete(platform.id).then((res) => {
         this.getConfig();
         this.showSuccess(res.data.message || this.messages.deleteSuccess);
       }).catch((err) => {
@@ -560,10 +560,7 @@ export default {
     platformStatusChange(platform) {
       platform.enable = !platform.enable; // 切换状态
 
-      axios.post('/api/config/platform/update', {
-        id: platform.id,
-        config: platform
-      }).then((res) => {
+      botApi.setEnabled(platform.id, { enabled: platform.enable }).then((res) => {
         this.getConfig();
         this.showSuccess(res.data.message || this.messages.statusUpdateSuccess);
       }).catch((err) => {
@@ -598,9 +595,9 @@ export default {
         callbackBase = "http(s)://<your-domain-or-ip>";
       }
       if (callbackBase) {
-        return `${callbackBase.replace(/\/$/, '')}/api/platform/webhook/${webhookUuid}`;
+        return `${callbackBase.replace(/\/$/, '')}/api/v1/webhooks/platforms/${webhookUuid}`;
       }
-      return `/api/platform/webhook/${webhookUuid}`;
+      return `/api/v1/webhooks/platforms/${webhookUuid}`;
     },
 
     openWebhookDialog(webhookUuid) {

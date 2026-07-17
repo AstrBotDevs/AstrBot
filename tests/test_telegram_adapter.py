@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import astrbot.api.message_components as Comp
+from astrbot.core.platform.register import unregister_platform_adapters_by_module
 from tests.fixtures.helpers import (
     NoopAwaitable,
     create_mock_file,
@@ -44,6 +45,8 @@ def _load_telegram_module(module_name: str):
         return module
 
     with patch.dict(sys.modules, _build_telegram_patched_modules()):
+        if module_name == "astrbot.core.platform.sources.telegram.tg_adapter":
+            unregister_platform_adapters_by_module(module_name)
         sys.modules.pop(module_name, None)
         module = importlib.import_module(module_name)
 
@@ -155,13 +158,18 @@ async def test_telegram_voice_message_creates_record_component(tmp_path):
     wav_path = tmp_path / "voice.oga.wav"
     convert_message_globals = adapter.convert_message.__func__.__globals__
 
-    with patch.dict(
-        convert_message_globals,
-        {
-            "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
-            "download_file": AsyncMock(),
-            "convert_audio_to_wav": AsyncMock(return_value=str(wav_path)),
-        },
+    with (
+        patch.dict(
+            convert_message_globals,
+            {
+                "get_astrbot_temp_path": MagicMock(return_value=str(tmp_path)),
+                "download_file": AsyncMock(),
+            },
+        ),
+        patch(
+            "astrbot.core.utils.media_utils.ensure_wav",
+            AsyncMock(return_value=str(wav_path)),
+        ),
     ):
         result = await adapter.convert_message(update, _build_context())
 

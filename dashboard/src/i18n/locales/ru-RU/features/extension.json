@@ -50,6 +50,7 @@
         "save": "Сохранить",
         "saveAndClose": "Сохранить и закрыть",
         "cancel": "Отмена",
+        "next": "Далее",
         "actions": "Действия",
         "back": "Назад",
         "selectFile": "Выбрать файл",
@@ -67,7 +68,7 @@
         "loading": "Загрузка...",
         "installed": "Установлен",
         "unknown": "Неизвестно",
-        "incompatible": "Несовместимо"
+        "unsupported": "Не поддерживается"
     },
     "tooltips": {
         "enable": "Включить",
@@ -167,6 +168,7 @@
         "sourceUpdated": "Источник обновлен",
         "defaultOfficialSource": "Официальный источник",
         "sourceExists": "Этот источник уже есть в списке",
+        "sourceResolved": "Источник успешно проверен",
         "installPlugin": "Установить плагин",
         "randomPlugins": "🎲 Случайные плагины",
         "sourceSafetyWarning": "Даже при использовании источников по умолчанию мы не можем гарантировать 100% безопасность и стабильность сторонних плагинов. Пожалуйста, будьте внимательны."
@@ -205,7 +207,7 @@
             "deleteConfig": "Удалить файл конфигурации плагина",
             "deleteData": "Удалить сохраненные данные плагина",
             "configHint": "Конфиг находится в data/config",
-            "dataHint": "Данные находятся в data/plugin_data и data/plugins_data"
+            "dataHint": "Данные находятся в data/plugin_data и data/plugins_data, а также KV-данные в базе данных"
         },
         "install": {
             "title": "Установка плагина",
@@ -228,7 +230,7 @@
             "confirm": "Продолжить",
             "cancel": "Отмена"
         },
-        "versionCompatibility": {
+        "versionSupport": {
             "title": "Предупреждение о версии",
             "message": "Требуемая плагином версия AstrBot не совпадает с вашей текущей версией. Вы можете продолжить установку на свой страх и риск.",
             "confirm": "Игнорировать и установить",
@@ -243,6 +245,16 @@
             "title": "Обновить всё",
             "message": "Обновить все плагины ({count} шт.)? Это может занять некоторое время.",
             "confirm": "Подтвердить"
+        },
+        "sourceBinding": {
+            "title": "Сменить источник плагина",
+            "selectTitle": "Выбрать источник установки",
+            "noCandidates": "В настроенных источниках не найдена подходящая запись, и у плагина нет пригодного URL репозитория.",
+            "repoOption": "Использовать URL репозитория",
+            "repoOptionId": "Переустановить из repo",
+            "installDestination": "Место установки",
+            "confirm": "Использовать источник",
+            "confirmAndContinue": "Использовать и продолжить"
         }
     },
     "messages": {
@@ -269,9 +281,20 @@
         "updateAllSuccess": "Все плагины успешно обновлены",
         "updateAllFailed": "Ошибок при обновлении: {failed} из {total}:",
         "noUpdatesAvailable": "Нет плагинов с доступными обновлениями",
-        "fillSourceNameAndUrl": "Пожалуйста, введите имя и адрес источника",
+        "updateDisabled": "У плагина нет пригодного источника установки или URL репозитория, поэтому его нельзя обновить или переустановить",
+        "changeSourceDisabled": "У плагина нет пригодного URL репозитория, поэтому источник нельзя изменить",
+        "fillSourceUrl": "Введите URL источника",
+        "fillSourceName": "Введите имя источника",
+        "resolveSourceFirst": "Сначала проверьте URL источника",
+        "sourceResolveFailed": "Не удалось проверить источник",
         "invalidUrl": "Введите корректный URL",
-        "enterJsonUrl": "Введите URL, возвращающий список плагинов в формате JSON"
+        "invalidGithubRepo": "Введите корректный URL репозитория GitHub",
+        "enterJsonUrl": "Введите URL, возвращающий список плагинов в формате JSON",
+        "missingMarketPluginId": "Эта запись источника не содержит идентификаторов плагина, поэтому его нельзя установить из магазина",
+        "sourceBindSuccess": "Источник плагина обновлен",
+        "validatingPlugin": "Проверка плагина...",
+        "pluginValidateSuccess": "Плагин успешно проверен",
+        "pluginValidateFailed": "Не удалось проверить плагин"
     },
     "upload": {
         "fromFile": "Загрузить файл",
@@ -368,7 +391,7 @@
         "neoPayloadTitle": "Детали Neo Payload",
         "neoPayloadFailed": "Ошибка чтения Payload",
         "runtimeNoneWarning": "Среда выполнения Computer Use не задана. Навыки могут не работать, так как нет активного окружения.",
-        "runtimeHint": "Установите среду выполнения в «local» или «sandbox» в настройках способностей использования компьютера.",
+        "runtimeHint": "Установите среду выполнения в «local» или «sandbox» в настройках способностей использования компьютера. Навыки из рабочей области пока не отображаются на этой странице.",
         "neoRuntimeRequired": "Neo Skills доступны только в среде sandbox с драйвером shipyard_neo.",
         "sourceLocalOnly": "Локальный навык",
         "sourceSandboxOnly": "Предустановленный Sandbox навык",
@@ -396,7 +419,8 @@
             "togglePlugin": "Плагин",
             "viewHandlers": "Действия",
             "updateTo": "Обновить до",
-            "reinstall": "Переустановить"
+            "reinstall": "Переустановить",
+            "changeSource": "Сменить источник"
         },
         "status": {
             "hasUpdate": "Доступно обновление",

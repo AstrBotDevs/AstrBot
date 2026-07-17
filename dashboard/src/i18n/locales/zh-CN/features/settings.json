@@ -1,4 +1,61 @@
 {
+  "page": {
+    "title": "设置"
+  },
+  "sections": {
+    "general": {
+      "title": "常规"
+    },
+    "appearance": {
+      "title": "外观"
+    },
+    "network": {
+      "title": "网络"
+    },
+    "security": {
+      "title": "安全"
+    },
+    "maintenance": {
+      "title": "维护"
+    },
+    "openapi": {
+      "title": "OpenAPI"
+    }
+  },
+  "systemConfig": {
+    "restartRequired": "系统配置已保存。部分配置需要重启 AstrBot 后才会生效。",
+    "groups": {
+      "runtime": {
+        "title": "基础运行",
+        "subtitle": "时区与外部回调地址。"
+      },
+      "network": {
+        "title": "代理与依赖源",
+        "subtitle": "运行时代理、Python 依赖安装参数和 PyPI 源。"
+      },
+      "webuiSecurity": {
+        "title": "WebUI 安全",
+        "subtitle": "HTTPS、代理头、登录限速与 TOTP。"
+      },
+      "logs": {
+        "title": "日志",
+        "subtitle": "控制台日志、文件日志和 Trace 文件日志。"
+      },
+      "tempStorage": {
+        "title": "缓存",
+        "subtitle": "临时目录自动清理阈值。"
+      },
+      "t2iRendering": {
+        "title": "文本转图像",
+        "subtitle": "文本转图像渲染策略、端点和自定义模板。"
+      }
+    },
+    "messages": {
+      "loadFailed": "加载系统配置失败",
+      "saveSuccess": "系统配置已保存",
+      "saveFailed": "保存系统配置失败"
+    }
+  },
   "network": {
     "title": "网络",
     "githubProxy": {
@@ -18,7 +75,7 @@
   },
   "theme": {
     "title": "主题",
-    "subtitle": "自定义主题主色与辅助色。修改后立即生效，并保存在浏览器本地。",
+    "subtitle": "自定义主题主色与辅助色，数据保存在浏览器本地。",
     "customize": {
       "title": "主题颜色",
       "primary": "主色",
@@ -31,12 +88,8 @@
     "restart": {
       "title": "重启",
       "subtitle": "重启 AstrBot",
+      "confirm": "确定要重启 AstrBot 吗？重启期间 WebUI 会短暂不可用。",
       "button": "重启"
-    },
-    "migration": {
-      "title": "数据迁移到 v4.0.0 格式",
-      "subtitle": "如果您遇到数据兼容性问题，可以手动启动数据库迁移助手",
-      "button": "启动迁移助手"
     },
     "backup": {
       "title": "数据备份与恢复",
@@ -47,6 +100,7 @@
       "title": "日志与缓存清理",
       "subtitle": "查看当前日志和缓存占用，并一键清理。",
       "refresh": "刷新占用",
+      "clean": "清理",
       "cleanAll": "全部清理",
       "panel": {
         "title": "清理详情",
@@ -99,8 +153,8 @@
     },
     "export": {
       "title": "创建备份",
-      "description": "将所有数据导出为 ZIP 备份文件，包括数据库、知识库、配置和附件。",
-      "includes": "备份包含：主数据库、知识库（元数据+向量索引+文档）、配置文件、附件文件",
+      "description": "将所有数据导出为 ZIP 备份文件，包括数据库、知识库、配置、附件和 Skills。",
+      "includes": "备份包含：主数据库、知识库（元数据+向量索引+文档）、配置文件、附件文件、Skills",
       "button": "开始导出",
       "processing": "正在导出...",
       "wait": "请稍候，正在打包数据...",
@@ -140,7 +194,7 @@
         "currentVersion": "当前版本",
         "backupTime": "备份时间",
         "matchTitle": "✅ 版本匹配",
-        "matchMessage": "导入将会清空并覆盖现有的所有数据，包括：\n• 主数据库（对话记录、配置等）\n• 知识库数据\n• 插件及插件数据\n• 配置文件\n\n此操作不可撤销！是否确认继续？",
+        "matchMessage": "导入将会清空并覆盖现有的所有数据，包括：\n• 主数据库（对话记录、配置等）\n• 知识库数据\n• 插件及插件数据\n• 配置文件\n• Skills\n\n此操作不可撤销！是否确认继续？",
         "minorDiffTitle": "⚠️ 版本差异警告",
         "minorDiffMessage": "小版本差异通常是兼容的，但可能存在少量数据结构变化。\n导入将会清空并覆盖现有的所有数据！\n\n是否确认继续导入？",
         "majorDiffTitle": "⛔ 无法导入",

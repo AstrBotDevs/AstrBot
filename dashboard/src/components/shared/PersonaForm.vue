@@ -1,7 +1,7 @@
 <template>
     <v-dialog v-model="showDialog" :max-width="$vuetify.display.smAndDown ? undefined : '1200px'" scrollable>
         <v-card class="persona-form-card" :class="{ 'persona-form-card-mobile': $vuetify.display.smAndDown }">
-            <v-card-title class="persona-form-title text-h2 px-6 pt-6 pl-6">
+            <v-card-title class="persona-form-title text-h3 pa-4 pb-0 pl-6">
                 {{ editingPersona ? tm('dialog.edit.title') : tm('dialog.create.title') }}
             </v-card-title>
 
@@ -331,7 +331,7 @@
                                     </v-textarea>
                                 </div>
 
-                                <v-btn variant="outlined" prepend-icon="mdi-plus" @click="addDialogPair" block>
+                                <v-btn variant="tonal" prepend-icon="mdi-plus" @click="addDialogPair" block>
                                     {{ tm('buttons.addDialogPair') }}
                                 </v-btn>
                             </v-expansion-panel-text>
@@ -350,7 +350,7 @@
                 <v-btn color="grey" variant="text" @click="closeDialog">
                     {{ tm('buttons.cancel') }}
                 </v-btn>
-                <v-btn color="primary" variant="flat" @click="savePersona" :loading="saving" :disabled="!formValid">
+                <v-btn color="primary" variant="tonal" @click="savePersona" :loading="saving" :disabled="!formValid">
                     {{ tm('buttons.save') }}
                 </v-btn>
             </v-card-actions>
@@ -359,7 +359,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import { mcpApi, personaApi, skillApi, toolApi } from '@/api/v1';
 import { useModuleI18n } from '@/i18n/composables';
 import {
     askForConfirmation as askForConfirmationDialog,
@@ -416,7 +416,7 @@ export default {
             personaIdRules: [
                 v => !!v || this.tm('validation.required'),
                 v => (v && v.length >= 1) || this.tm('validation.minLength', { min: 1 }),
-                v => !this.existingPersonaIds.includes(v) || this.tm('validation.personaIdExists'),
+                v => this.editingPersona?.persona_id === v || !this.existingPersonaIds.includes(v) || this.tm('validation.personaIdExists'),
             ],
             systemPromptRules: [
                 v => !!v || this.tm('validation.required'),
@@ -565,7 +565,7 @@ export default {
 
         async loadMcpServers() {
             try {
-                const response = await axios.get('/api/tools/mcp/servers');
+                const response = await mcpApi.list();
                 if (response.data.status === 'ok') {
                     this.mcpServers = response.data.data || [];
                 } else {
@@ -580,7 +580,7 @@ export default {
         async loadTools() {
             this.loadingTools = true;
             try {
-                const response = await axios.get('/api/tools/list');
+                const response = await toolApi.list();
                 if (response.data.status === 'ok') {
                     this.availableTools = response.data.data || [];
                 } else {
@@ -597,7 +597,7 @@ export default {
         async loadSkills() {
             this.loadingSkills = true;
             try {
-                const response = await axios.get('/api/skills');
+                const response = await skillApi.list();
                 if (response.data.status === 'ok') {
                     const payload = response.data.data || [];
                     if (Array.isArray(payload)) {
@@ -619,7 +619,7 @@ export default {
 
         async loadExistingPersonaIds() {
             try {
-                const response = await axios.get('/api/persona/list');
+                const response = await personaApi.list();
                 if (response.data.status === 'ok') {
                     this.existingPersonaIds = (response.data.data || []).map(p => p.persona_id);
                 }
@@ -645,8 +645,9 @@ export default {
 
             this.saving = true;
             try {
-                const url = this.editingPersona ? '/api/persona/update' : '/api/persona/create';
-                const response = await axios.post(url, this.personaForm);
+                const response = this.editingPersona
+                    ? await personaApi.update(this.personaForm.persona_id, this.personaForm)
+                    : await personaApi.create(this.personaForm);
 
                 if (response.data.status === 'ok') {
                     this.$emit('saved', response.data.message || this.tm('messages.saveSuccess'));
@@ -674,9 +675,7 @@ export default {
 
             this.saving = true;
             try {
-                const response = await axios.post('/api/persona/delete', {
-                    persona_id: this.editingPersona.persona_id
-                });
+                const response = await personaApi.delete(this.editingPersona.persona_id);
 
                 if (response.data.status === 'ok') {
                     this.$emit('deleted', response.data.message || this.tm('messages.deleteSuccess'));
@@ -884,10 +883,6 @@ export default {
     overflow-y: auto;
 }
 
-.persona-form-title {
-    line-height: 1.3;
-}
-
 .persona-form-actions {
     position: sticky;
     bottom: 0;
@@ -937,11 +932,6 @@ export default {
     .persona-basic-col,
     .persona-panels-col {
         padding-top: 0 !important;
-    }
-
-    .persona-form-title {
-        font-size: 1.15rem !important;
-        padding: 12px 16px !important;
     }
 
     .selected-config-area {

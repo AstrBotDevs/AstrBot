@@ -314,6 +314,29 @@ class PlatformSession(TimestampMixin, SQLModel, table=True):
     )
 
 
+class UmoAlias(TimestampMixin, SQLModel, table=True):
+    """User-facing names for unified message origins."""
+
+    __tablename__: str = "umo_aliases"
+
+    id: int | None = Field(
+        primary_key=True,
+        sa_column_kwargs={"autoincrement": True},
+        default=None,
+    )
+    umo: str = Field(nullable=False, max_length=512, unique=True, index=True)
+    creator_sender_id: str = Field(nullable=False, max_length=255)
+    auto_name: str | None = Field(default=None, max_length=255)
+    user_alias: str | None = Field(default=None, max_length=255)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "umo",
+            name="uix_umo_alias_umo",
+        ),
+    )
+
+
 class Attachment(TimestampMixin, SQLModel, table=True):
     """This class represents attachments for messages in AstrBot.
 
@@ -424,6 +447,10 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
     """Title of the project"""
     description: str | None = Field(default=None, max_length=1000)
     """Description of the project"""
+    workspace_type: str = Field(default="session", nullable=False, max_length=32)
+    """Workspace mode: session, project, or custom"""
+    workspace_path: str | None = Field(default=None, max_length=1024)
+    """Custom workspace path"""
 
     __table_args__ = (
         UniqueConstraint(

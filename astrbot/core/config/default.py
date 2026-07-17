@@ -2,10 +2,12 @@
 
 import os
 
+from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.25.2"
+VERSION = __version__
+
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -101,6 +103,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "default_provider_id": "",
         "fallback_chat_models": [],
+        "request_max_retries": 5,
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
@@ -112,6 +115,7 @@ DEFAULT_CONFIG = {
         "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
         "websearch_firecrawl_key": [],
+        "websearch_exa_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -130,10 +134,10 @@ DEFAULT_CONFIG = {
             "4. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "5. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 10,
+        "llm_compress_keep_recent_ratio": 0.15,
         "llm_compress_provider_id": "",
-        "max_context_length": 50,
-        "dequeue_context_length": 10,
+        "max_context_length": -1,  # 默认不限制
+        "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -328,7 +332,7 @@ CONFIG_METADATA_2 = {
                 "description": "消息平台适配器",
                 "type": "list",
                 "config_template": {
-                    "QQ 官方机器人(WebSocket)": {
+                    "QQ 官方机器人(Websocket, 推荐)": {
                         "id": "default",
                         "type": "qq_official",
                         "enable": True,
@@ -417,7 +421,7 @@ CONFIG_METADATA_2 = {
                         "weixin_oc_bot_type": "3",
                         "weixin_oc_qr_poll_interval": 1,
                         "weixin_oc_long_poll_timeout_ms": 35_000,
-                        "weixin_oc_api_timeout_ms": 15_000,
+                        "weixin_oc_api_timeout_ms": 120_000,
                     },
                     "飞书(Lark)": {
                         "id": "lark",
@@ -1589,9 +1593,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "https://api.xiaomimimo.com/v1",
-                        "model": "mimo-v2-omni",
-                        "mimo-stt-system-prompt": "You are a speech transcription assistant. Transcribe the spoken content from the audio exactly and return only the transcription text.",
-                        "mimo-stt-user-prompt": "Please transcribe the content of the audio and return only the transcription text.",
+                        "model": "mimo-v2.5-asr",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -1805,6 +1807,25 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_model": "gemini-2.5-flash-preview-tts",
                         "gemini_tts_prefix": "",
                         "gemini_tts_voice_name": "Leda",
+                        "proxy": "",
+                    },
+                    "ElevenLabs TTS(API)": {
+                        "hint": "API Key 从 https://elevenlabs.io/app/settings/api-keys 获取。Voice ID 可在 https://elevenlabs.io/app/voice-library 浏览选择。",
+                        "id": "elevenlabs_tts",
+                        "type": "elevenlabs_tts_api",
+                        "provider": "elevenlabs",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.elevenlabs.io/v1",
+                        "model": "eleven_multilingual_v2",
+                        "elevenlabs-tts-voice-id": "JBFqnCBsd6RMkjVDRZzb",
+                        "elevenlabs-tts-output-format": "mp3_44100_128",
+                        "elevenlabs-tts-stability": "",
+                        "elevenlabs-tts-similarity-boost": "",
+                        "elevenlabs-tts-style": "",
+                        "elevenlabs-tts-use-speaker-boost": True,
+                        "timeout": "20",
                         "proxy": "",
                     },
                     "OpenAI Embedding": {
@@ -2582,16 +2603,6 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
                     },
-                    "mimo-stt-system-prompt": {
-                        "description": "系统提示词",
-                        "type": "string",
-                        "hint": "用于指导 MiMo STT 转录行为的 system prompt。",
-                    },
-                    "mimo-stt-user-prompt": {
-                        "description": "用户提示词",
-                        "type": "string",
-                        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。",
-                    },
                     "openai-tts-voice": {
                         "description": "voice",
                         "type": "string",
@@ -2795,6 +2806,9 @@ CONFIG_METADATA_2 = {
                     "fallback_chat_models": {
                         "type": "list",
                         "items": {"type": "string"},
+                    },
+                    "request_max_retries": {
+                        "type": "int",
                     },
                     "wake_prefix": {
                         "type": "string",
@@ -3155,6 +3169,11 @@ CONFIG_METADATA_3 = {
                         "_special": "select_providers",
                         "hint": "主聊天模型请求失败时，按顺序切换到这些模型。",
                     },
+                    "provider_settings.request_max_retries": {
+                        "description": "请求最大重试次数",
+                        "type": "int",
+                        "hint": "单次模型请求遇到可重试错误时的最大尝试次数。",
+                    },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",
                         "type": "string",
@@ -3272,6 +3291,7 @@ CONFIG_METADATA_3 = {
                             "bocha",
                             "brave",
                             "firecrawl",
+                            "exa",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3323,6 +3343,16 @@ CONFIG_METADATA_3 = {
                         "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
                         "condition": {
                             "provider_settings.websearch_provider": "baidu_ai_search",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_exa_key": {
+                        "description": "Exa API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。Get a key at https://dashboard.exa.ai",
+                        "condition": {
+                            "provider_settings.websearch_provider": "exa",
                             "provider_settings.web_search": True,
                         },
                     },
@@ -3588,10 +3618,11 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.llm_compress_keep_recent": {
-                        "description": "压缩时保留最近对话轮数",
-                        "type": "int",
-                        "hint": "始终保留的最近 N 轮对话。",
+                    "provider_settings.llm_compress_keep_recent_ratio": {
+                        "description": "压缩时保留最近上下文比例",
+                        "type": "float",
+                        "slider": {"min": 0, "max": 0.3, "step": 0.01},
+                        "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
                             "provider_settings.agent_runner_type": "local",
@@ -3881,7 +3912,7 @@ CONFIG_METADATA_3 = {
                     "disable_builtin_commands": {
                         "description": "禁用自带指令",
                         "type": "bool",
-                        "hint": "禁用所有 AstrBot 的自带指令，如 help, provider, model 等。",
+                        "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
                     },
                 },
             },

@@ -4,6 +4,7 @@ import pytest
 
 from astrbot.core.provider.sources.openai_embedding_source import (
     OpenAIEmbeddingProvider,
+    _normalize_api_base,
 )
 
 
@@ -102,3 +103,43 @@ async def test_openai_embedding_omits_dimensions_when_dimension_not_configured()
     assert fake_embeddings.calls == [
         {"input": ["hello", "world"], "model": "BAAI/bge-m3"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_openai_embedding_omits_dimensions_for_siliconflow_non_qwen_model():
+    provider = OpenAIEmbeddingProvider(
+        {
+            "id": "siliconflow-embedding",
+            "embedding_api_key": "test-key",
+            "embedding_api_base": "https://api.siliconflow.cn/v1",
+            "embedding_model": "BAAI/bge-m3",
+            "embedding_dimensions": 1024,
+            "embedding_dimensions_as_request_param": True,
+        },
+        {},
+    )
+    fake_embeddings = FakeEmbeddingsClient()
+    provider.client = SimpleNamespace(embeddings=fake_embeddings)
+
+    await provider.get_embedding("hello")
+
+    assert fake_embeddings.calls == [
+        {"input": "hello", "model": "BAAI/bge-m3"},
+    ]
+
+
+def test_openai_embedding_api_base_keeps_version_suffixes():
+    assert (
+        _normalize_api_base("https://ark.cn-beijing.volces.com/api/plan/v3")
+        == "https://ark.cn-beijing.volces.com/api/plan/v3"
+    )
+    assert _normalize_api_base("https://example.test/v4") == "https://example.test/v4"
+
+
+def test_openai_embedding_api_base_adds_default_version():
+    assert _normalize_api_base("https://example.test/openai") == (
+        "https://example.test/openai/v1"
+    )
+    assert _normalize_api_base("https://example.test/v1/embeddings") == (
+        "https://example.test/v1"
+    )

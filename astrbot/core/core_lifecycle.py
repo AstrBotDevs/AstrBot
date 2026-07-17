@@ -35,6 +35,9 @@ from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.utils.event_loop_diagnostics import (
+    create_event_loop_diagnostic_tasks,
+)
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
 from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
@@ -296,13 +299,18 @@ class AstrBotCoreLifecycle:
                 self.temp_dir_cleaner.run(),
                 name="temp_dir_cleaner",
             )
+        diagnostic_tasks = create_event_loop_diagnostic_tasks()
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
         for task in self.star_context._register_tasks:
             extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
 
-        tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])]
+        tasks_ = [
+            event_bus_task,
+            *diagnostic_tasks,
+            *(extra_tasks if extra_tasks else []),
+        ]
         if cron_task:
             tasks_.append(cron_task)
         if temp_dir_cleaner_task:
@@ -390,6 +398,12 @@ class AstrBotCoreLifecycle:
                 pass
             except Exception as e:
                 logger.error(f"任务 {task.get_name()} 发生错误: {e}")
+
+        # 释放数据库引擎连接池
+        try:
+            await self.db.engine.dispose()
+        except Exception as e:
+            logger.warning(f"释放数据库引擎失败: {e}")
 
     async def restart(self) -> None:
         """重启 AstrBot 核心生命周期管理类, 终止各个管理器并重新加载平台实例"""
