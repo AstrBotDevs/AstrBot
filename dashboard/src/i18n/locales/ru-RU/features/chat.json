@@ -346,6 +346,14 @@
         "goToTarget": "Перейти к цели",
         "encodingLabel": "Кодировка: {encoding}"
       },
+      "editor": {
+        "edit": "Изменить",
+        "save": "Сохранить",
+        "cancel": "Отмена",
+        "discardConfirm": "Есть несохранённые изменения. Отменить их?",
+        "saveError": "Не удалось сохранить",
+        "encodingNotice": "Файл в кодировке {encoding}; при сохранении будет преобразован в UTF-8"
+      },
       "comment": {
         "addButton": "Добавить комментарий",
         "addButtonAria": "Добавить комментарий к строке {line}",

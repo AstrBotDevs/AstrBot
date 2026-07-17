@@ -80,15 +80,18 @@ test("parseSpcodeWorktreeUnlock: success returns snapshot with locked=false", ()
   assert.equal(r.snapshot.lockReason, null);
 });
 
-test("failure envelope (cannot_remove_main) still parses", () => {
+test("failure envelope (cannot_remove_main) surfaces as error", () => {
   const r = parseSpcodeWorktreeRemove({
     status: "ok",
     data: { ...baseData, reason: "cannot_remove_main", stderr: "fatal: ..." },
   });
-  // Business failure still parses (mirrors useSpcodeGitDiff convention).
-  assert.equal(r.kind, "ok");
-  assert.equal(r.snapshot.meta.reason, "cannot_remove_main");
-  assert.equal(r.snapshot.meta.stderr, "fatal: ...");
+  // 2026-07-17: updated for 1aa28c097 ("surface backend errors instead
+  // of showing false success") — a non-empty `reason` now yields
+  // kind:"error" (previously this parsed as kind:"ok" with the reason
+  // tucked into the snapshot meta, which the UI rendered as success).
+  assert.equal(r.kind, "error");
+  assert.equal(r.reason, "cannot_remove_main");
+  assert.equal(r.stderr, "fatal: ...");
 });
 
 test("classifyWorktreeReason: known reason returns meta", () => {

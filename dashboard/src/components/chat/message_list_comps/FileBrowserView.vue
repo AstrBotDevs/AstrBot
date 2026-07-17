@@ -94,6 +94,16 @@ const previewComposable = useSpcodeFileBrowser(
   computed(() => props.previewPath ?? ""),
 );
 
+// 2026-07-17 workspace file editor: the preview owns the edit state
+// and exposes confirmLeaveEditing(); every navigation entry point
+// below (tree click / breadcrumb / symlink target / search result /
+// history pick) consults it first so an unsaved edit is never
+// discarded silently.
+const previewRef = ref<{ confirmLeaveEditing: () => boolean } | null>(null);
+function confirmLeaveEditing(): boolean {
+  return previewRef.value?.confirmLeaveEditing() ?? true;
+}
+
 // Breadcrumb path: when previewing a file, show the FILE'S path so
 // the user can see "root / src / file.ts" in the breadcrumb instead
 // of just "root / src". When browsing a directory, show currentPath.
@@ -132,6 +142,7 @@ function parentOf(p: string): string {
 }
 
 function onEntryNavigate(entry: SpcodeFileBrowserEntry): void {
+  if (!confirmLeaveEditing()) return;
   // Dangling symlink: EntryList already filters clicks on these.
   if (entry.type === "directory") {
     emit("navigate", { dirPath: entry.path, previewPath: null });
@@ -146,12 +157,14 @@ function onEntryNavigate(entry: SpcodeFileBrowserEntry): void {
 }
 
 function onBreadcrumbNavigate(path: string): void {
+  if (!confirmLeaveEditing()) return;
   // Clicking a breadcrumb segment always clears the preview — the
   // user is moving up the tree, not asking to keep the file open.
   emit("navigate", { dirPath: path, previewPath: null });
 }
 
 function onPreviewTargetNavigate(resolvedTarget: string): void {
+  if (!confirmLeaveEditing()) return;
   // Symlink "go to target": treat as a file click so the right pane
   // previews it; if the target is actually a directory, the
   // previewComposable will land on a directory state and the user
@@ -160,6 +173,13 @@ function onPreviewTargetNavigate(resolvedTarget: string): void {
     dirPath: parentOf(resolvedTarget),
     previewPath: resolvedTarget,
   });
+}
+
+/** Search-result click: same dirty guard as the other navigation
+ *  entry points before the event bubbles up to the sidebar. */
+function onSearchOpenFile(p: { path: string; line: number }): void {
+  if (!confirmLeaveEditing()) return;
+  emit("open-file", p);
 }
 
 /** Manually re-fetch the workspace contents. Exposed to the parent
@@ -396,6 +416,7 @@ watch(
  *  <DocumentHistoryPanel> and set local state; the lazy watchers
  *  above / the gitFile composable do the actual fetching. */
 function onHistorySelectRevision(sha: string): void {
+  if (!confirmLeaveEditing()) return;
   if (!gitLogPath.value) return;
   selectedRevision.value = sha;
   viewMode.value = "raw";
@@ -404,6 +425,7 @@ function onHistorySelectRevision(sha: string): void {
   void gitFile.fetchRef(gitLogPath.value, sha);
 }
 function onHistoryCompareCurrent(sha: string): void {
+  if (!confirmLeaveEditing()) return;
   if (!gitLogPath.value) return;
   selectedRevision.value = sha;
   viewMode.value = "diff";
@@ -476,7 +498,7 @@ onBeforeUnmount(() => {
       :worktree="props.worktree ?? null"
       :umo="props.umo ?? null"
       @update:model-value="emit('update:searchOpen', $event)"
-      @open-file="emit('open-file', $event)"
+      @open-file="onSearchOpenFile"
     />
     <template v-else>
       <div v-if="!spcodeStatus.status.value.loaded" class="file-browser-empty">
@@ -590,6 +612,7 @@ onBeforeUnmount(() => {
         -->
         <FileBrowserFilePreview
           v-if="previewPath"
+          ref="previewRef"
           class="file-browser-pane-right"
           :state="previewComposable.state.value"
           :is-dark="!!isDark"
@@ -600,8 +623,11 @@ onBeforeUnmount(() => {
           :historical-is-binary="historicalIsBinary"
           :diff-patch="diffPatch"
           :diff-is-binary="diffIsBinary"
+          :file-relative-path="gitLogPath"
+          :worktree="props.worktree ?? null"
           @navigate-target="onPreviewTargetNavigate"
           @retry="() => previewComposable.refresh()"
+          @saved="() => previewComposable.refresh()"
           @back-to-current="onBackToCurrent"
         />
         <div v-else class="file-browser-pane-right file-browser-preview-empty">

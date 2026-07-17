@@ -79,3 +79,64 @@ export function collectMarkdownFenceLanguages(markdownIt, markdown) {
 export function normalizeShikiLanguage(language) {
   return normalizeLanguage(language);
 }
+
+// 2026-07-17 workspace file editor: centralized extension→language map.
+// Extracted from FileBrowserFilePreview.vue (which mirrored
+// ToolResultView.vue) so the read-only preview and the ShikiEditor
+// overlay component share one source of truth.
+const EXT_TO_LANG = {
+  ".py": "python",
+  ".js": "javascript",
+  ".mjs": "javascript",
+  ".cjs": "javascript",
+  ".ts": "typescript",
+  ".tsx": "tsx",
+  ".jsx": "jsx",
+  ".vue": "vue",
+  ".json": "json",
+  ".yaml": "yaml",
+  ".yml": "yaml",
+  ".sh": "bash",
+  ".bash": "bash",
+  ".zsh": "bash",
+  ".css": "css",
+  ".html": "html",
+  ".htm": "html",
+  ".xml": "xml",
+  ".svg": "xml",
+  ".md": "markdown",
+  ".sql": "sql",
+  ".java": "java",
+  ".ini": "ini",
+  ".diff": "diff",
+  ".patch": "diff",
+  ".ps1": "powershell",
+  ".dockerfile": "dockerfile",
+  ".txt": "text",
+  ".c": "c",
+  ".h": "c",
+  ".cpp": "cpp",
+  ".cc": "cpp",
+  ".cxx": "cpp",
+  ".hpp": "cpp",
+  ".c++": "cpp",
+  ".go": "go",
+  ".rs": "rust",
+  // Verilog / SystemVerilog
+  ".v": "verilog",
+  ".vh": "verilog",
+  ".sv": "system-verilog",
+  ".svh": "system-verilog",
+  // MATLAB. `.m` is also the Objective-C extension, but
+  // objective-c is not in the shiki whitelist, so claiming it
+  // here does not collide with anything currently supported.
+  ".m": "matlab",
+  ".matlab": "matlab",
+};
+
+export function detectLanguage(filePath) {
+  const m = String(filePath || "").match(/\.([\w]+)$/i);
+  if (!m) return "text";
+  const key = "." + m[1].toLowerCase();
+  return EXT_TO_LANG[key] || "text";
+}

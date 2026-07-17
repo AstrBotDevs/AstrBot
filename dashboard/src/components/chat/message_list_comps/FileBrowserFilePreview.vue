@@ -13,6 +13,7 @@ import {
 } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import {
+  detectLanguage,
   ensureShikiLanguages,
   renderShikiCode,
   escapeHtml,
@@ -28,6 +29,8 @@ import {
 import FileBrowserCodeView from "./FileBrowserCodeView.vue";
 import FileCommentEditor from "./FileCommentEditor.vue";
 import DiffPreview from "./DiffPreview.vue";
+import ShikiEditor from "./ShikiEditor.vue";
+import { useSpcodeFileWrite } from "@/composables/useSpcodeFileWrite";
 
 /** Mirrors DocumentManager's viewMode union, trimmed to what the
  *  workspace pane actually renders: 'raw' (file content) and 'diff'
@@ -80,6 +83,16 @@ const props = defineProps<{
    * watcher lives.
    */
   scrollToLine?: number | null;
+  /**
+   * 2026-07-17 workspace file editor: repo-relative path of the
+   * previewed file (the same value FileBrowserView feeds to the
+   * history panel as `file-relative`). The file-write endpoint
+   * requires a repo-relative path, so the edit affordance is hidden
+   * when this is empty.
+   */
+  fileRelativePath?: string;
+  /** Current worktree root, forwarded to the file-write endpoint. */
+  worktree?: string | null;
 }>();
 const emit = defineEmits<{
   (e: "navigate-target", resolvedPath: string): void;
@@ -96,6 +109,12 @@ const emit = defineEmits<{
    * is picked.
    */
   (e: "back-to-current"): void;
+  /**
+   * 2026-07-17 workspace file editor: fired after a successful save
+   * so the parent re-fetches the working-copy content (same handler
+   * as `retry`).
+   */
+  (e: "saved"): void;
 }>();
 const { tm } = useModuleI18n("features/chat");
 
@@ -159,67 +178,9 @@ function resolveTargetPath(symlinkPath: string, target: string): string {
   return parentDir + sep + target;
 }
 
-// Mirror of detectLanguage in ToolResultView.vue (line 160-165) to ensure
-// consistent language detection between the tool result view and this preview.
-const EXT_TO_LANG: Record<string, string> = {
-  ".py": "python",
-  ".js": "javascript",
-  ".mjs": "javascript",
-  ".cjs": "javascript",
-  ".ts": "typescript",
-  ".tsx": "tsx",
-  ".jsx": "jsx",
-  ".vue": "vue",
-  ".json": "json",
-  ".yaml": "yaml",
-  ".yml": "yaml",
-  ".sh": "bash",
-  ".bash": "bash",
-  ".zsh": "bash",
-  ".css": "css",
-  ".html": "html",
-  ".htm": "html",
-  ".xml": "xml",
-  ".svg": "xml",
-  ".md": "markdown",
-  ".sql": "sql",
-  ".java": "java",
-  ".ini": "ini",
-  ".diff": "diff",
-  ".patch": "diff",
-  ".ps1": "powershell",
-  ".dockerfile": "dockerfile",
-  ".txt": "text",
-  ".c": "c",
-  ".h": "c",
-  ".cpp": "cpp",
-  ".cc": "cpp",
-  ".cxx": "cpp",
-  ".hpp": "cpp",
-  ".c++": "cpp",
-  ".go": "go",
-  ".rs": "rust",
-  // Verilog / SystemVerilog
-  ".v": "verilog",
-  ".vh": "verilog",
-  ".sv": "system-verilog",
-  ".svh": "system-verilog",
-  // MATLAB. `.m` is also the Objective-C extension, but
-  // objective-c is not in the shiki whitelist, so claiming it
-  // here does not collide with anything currently supported.
-  // `.matlab` is the explicit form for the rare cases where a
-  // file is named without the canonical `.m` (e.g. for clarity
-  // when the project mixes OC-style and matlab tooling).
-  ".m": "matlab",
-  ".matlab": "matlab",
-};
-
-function detectLanguage(filePath: string): string {
-  const m = filePath.match(/\.([\w]+)$/i);
-  if (!m) return "text";
-  const key = "." + m[1].toLowerCase();
-  return EXT_TO_LANG[key] || "text";
-}
+// 2026-07-17: the extension→language map moved to @/utils/shiki
+// (exported as `detectLanguage`) so this preview and the new
+// <ShikiEditor> overlay share one source of truth.
 
 const shikiHighlighter = ref<any>(null);
 const shikiReady = ref(false);
@@ -384,7 +345,127 @@ onBeforeUnmount(() => {
     clearTimeout(copyResetTimer);
     copyResetTimer = null;
   }
+  fileWrite.dispose();
 });
+
+// ── 2026-07-17 workspace file editor ─────────────────────────────
+// Edit mode mirrors DocumentManager's editMode/editBuffer pair, but
+// saves through POST /spcode/file-write (POST /spcode/docs is
+// markdown-only by design). The editor body is <ShikiEditor>, an
+// overlay that reuses the preview's Shiki pipeline for highlighting.
+const fileWrite = useSpcodeFileWrite(computed(() => props.worktree ?? null));
+const editMode = ref(false);
+const editBuffer = ref("");
+const saveError = ref<string | null>(null);
+
+/** The save endpoint rejects content > 2 MB (backend
+ *  MAX_CONTENT_BYTES); hide the edit affordance for such files
+ *  instead of failing on save. */
+const MAX_EDIT_BYTES = 2 * 1024 * 1024;
+
+const currentContent = computed<string>(() =>
+  props.state.kind === "file" &&
+  typeof props.state.snapshot.content === "string"
+    ? props.state.snapshot.content
+    : "",
+);
+
+const canEdit = computed<boolean>(() => {
+  if (props.state.kind !== "file") return false;
+  // Historical revisions are read-only.
+  if (props.selectedRevision) return false;
+  const snap = props.state.snapshot;
+  if (snap.meta.isBinary === true || typeof snap.content !== "string") {
+    return false;
+  }
+  if (!props.fileRelativePath) return false;
+  return new TextEncoder().encode(snap.content).length <= MAX_EDIT_BYTES;
+});
+
+const isEditDirty = computed<boolean>(
+  () => editMode.value && editBuffer.value !== currentContent.value,
+);
+
+/** Non-plain-UTF-8 files (GBK, UTF-8-BOM, ...) are re-encoded as
+ *  UTF-8 on save (the backend write is fixed UTF-8), so surface that
+ *  in the editor toolbar. */
+const encodingNotice = computed<string | null>(() => {
+  if (props.state.kind !== "file") return null;
+  const enc = props.state.snapshot.meta.encoding;
+  if (!enc) return null;
+  const norm = enc.toLowerCase().replace("_", "-");
+  if (norm === "utf-8" || norm === "utf8") return null;
+  return tm("spcodeProjectLoad.fileBrowser.editor.encodingNotice", {
+    encoding: enc,
+  });
+});
+
+function onStartEdit(): void {
+  editBuffer.value = currentContent.value;
+  saveError.value = null;
+  editMode.value = true;
+}
+
+async function onSaveEdit(): Promise<void> {
+  if (!isEditDirty.value || fileWrite.isSaving.value) return;
+  const r = await fileWrite.save({
+    path: props.fileRelativePath ?? "",
+    content: editBuffer.value,
+  });
+  if (r.ok) {
+    editMode.value = false;
+    saveError.value = null;
+    emit("saved");
+  } else {
+    saveError.value = `${tm(
+      "spcodeProjectLoad.fileBrowser.editor.saveError",
+    )}: ${r.reason}`;
+  }
+}
+
+function onCancelEdit(): void {
+  if (isEditDirty.value) {
+    const ok = window.confirm(
+      tm("spcodeProjectLoad.fileBrowser.editor.discardConfirm"),
+    );
+    if (!ok) return;
+  }
+  editMode.value = false;
+  saveError.value = null;
+}
+
+/** Dirty guard consulted by the parent (FileBrowserView) before any
+ *  navigation that would swap the previewed file. Returns true when
+ *  navigation may proceed (not editing / clean / user confirmed the
+ *  discard); false when the user cancelled. */
+function confirmLeaveEditing(): boolean {
+  if (!editMode.value) return true;
+  if (!isEditDirty.value) {
+    editMode.value = false;
+    return true;
+  }
+  const ok = window.confirm(
+    tm("spcodeProjectLoad.fileBrowser.editor.discardConfirm"),
+  );
+  if (ok) editMode.value = false;
+  return ok;
+}
+defineExpose({ confirmLeaveEditing });
+
+// Safety nets: the parent's guards normally veto navigation while
+// editing, but an external previewPath change (e.g. a sidebar-level
+// search click) or a history pick can still swap the view. Exit edit
+// mode in that case — the buffer is per-file and must never leak
+// into another file / revision.
+watch(currentFilePath, () => {
+  if (editMode.value) editMode.value = false;
+});
+watch(
+  () => props.selectedRevision,
+  (rev) => {
+    if (rev && editMode.value) editMode.value = false;
+  },
+);
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -713,10 +794,25 @@ function onDeleteComment(commentId: string): void {
           Diff mode copies nothing (it'd be the entire patch,
           which would be surprising); same as <DocumentManager>.
         -->
+            <!-- 2026-07-17 workspace file editor: enters edit mode
+                 (body swaps to <ShikiEditor>). Hidden while editing,
+                 for history views, binaries, oversized files, and
+                 when no repo-relative path is available. -->
+            <v-btn
+              v-if="canEdit && !editMode"
+              size="x-small"
+              variant="text"
+              color="primary"
+              prepend-icon="mdi-pencil-outline"
+              @click="onStartEdit"
+            >
+              {{ tm("spcodeProjectLoad.fileBrowser.editor.edit") }}
+            </v-btn>
             <v-btn
               v-if="
-                (state.snapshot.content && !isHistoricalDiff) ||
-                (isHistoricalRaw && (props.historicalContent ?? ''))
+                !editMode &&
+                ((state.snapshot.content && !isHistoricalDiff) ||
+                  (isHistoricalRaw && (props.historicalContent ?? '')))
               "
               size="x-small"
               variant="text"
@@ -771,8 +867,46 @@ function onDeleteComment(commentId: string): void {
         `commentable` is intentionally false — comments key on
         current-file line numbers, which don't match diff lines.
       -->
+          <!-- 2026-07-17 workspace file editor: edit mode swaps the
+               whole body for the overlay editor + a compact toolbar.
+               Rendered before every read-only branch so it wins over
+               the current-file code view. -->
+          <div v-if="editMode" class="preview-editor">
+            <div class="preview-editor-toolbar">
+              <span class="preview-editor-notice">{{
+                encodingNotice ?? ""
+              }}</span>
+              <span v-if="saveError" class="preview-editor-error">{{
+                saveError
+              }}</span>
+              <v-btn
+                size="x-small"
+                variant="text"
+                :disabled="fileWrite.isSaving.value"
+                @click="onCancelEdit"
+              >
+                {{ tm("spcodeProjectLoad.fileBrowser.editor.cancel") }}
+              </v-btn>
+              <v-btn
+                size="x-small"
+                variant="flat"
+                color="primary"
+                :disabled="!isEditDirty || fileWrite.isSaving.value"
+                :loading="fileWrite.isSaving.value"
+                @click="onSaveEdit"
+              >
+                {{ tm("spcodeProjectLoad.fileBrowser.editor.save") }}
+              </v-btn>
+            </div>
+            <ShikiEditor
+              v-model="editBuffer"
+              :file-path="state.snapshot.meta.path"
+              class="preview-editor-body"
+            />
+          </div>
+
           <DiffPreview
-            v-if="isHistoricalDiff"
+            v-else-if="isHistoricalDiff"
             :content="props.diffPatch ?? ''"
             :file-path="state.snapshot.meta.path"
             :summary="
@@ -1079,5 +1213,41 @@ function onDeleteComment(commentId: string): void {
 .file-browser-preview.is-mobile .comment-editor-input {
   flex: 1;
   resize: none;
+}
+
+/* 2026-07-17 workspace file editor: edit-mode layout. The toolbar
+   stays fixed at the top; <ShikiEditor> fills the remaining height
+   and scrolls internally (same contract as .code-view). */
+.preview-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.preview-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  flex-shrink: 0;
+}
+.preview-editor-notice {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-editor-error {
+  font-size: 12px;
+  color: rgb(var(--v-theme-error));
+  white-space: nowrap;
+}
+.preview-editor-body {
+  flex: 1;
+  min-height: 0;
 }
 </style>

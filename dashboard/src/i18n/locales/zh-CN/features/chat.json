@@ -357,6 +357,14 @@
         "goToTarget": "前往目标",
         "encodingLabel": "编码: {encoding}"
       },
+      "editor": {
+        "edit": "编辑",
+        "save": "保存",
+        "cancel": "取消",
+        "discardConfirm": "有未保存的修改，确定要放弃吗？",
+        "saveError": "保存失败",
+        "encodingNotice": "该文件为 {encoding} 编码，保存后将转为 UTF-8"
+      },
       "comment": {
         "addButton": "添加评论",
         "addButtonAria": "为第 {line} 行添加评论",

@@ -357,6 +357,14 @@
         "goToTarget": "Go to target",
         "encodingLabel": "Encoding: {encoding}"
       },
+      "editor": {
+        "edit": "Edit",
+        "save": "Save",
+        "cancel": "Cancel",
+        "discardConfirm": "You have unsaved changes. Discard them?",
+        "saveError": "Save failed",
+        "encodingNotice": "This file is {encoding}-encoded; it will be saved as UTF-8"
+      },
       "comment": {
         "addButton": "Add comment",
         "addButtonAria": "Add comment on line {line}",
