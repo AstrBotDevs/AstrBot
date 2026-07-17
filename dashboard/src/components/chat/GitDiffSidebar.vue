@@ -3516,6 +3516,8 @@ const currentRoot = computed<string | null>(() => {
           :staged-files="Array.from(stagedFiles)"
           :is-committing="gitCommit.isCommitting.value"
           :last-error="commitLastError ?? undefined"
+          :umo="spcodeStatus.status.value.umo"
+          :worktree="selectedWorktree"
           @confirm="onConfirmCommit"
           @cancel="onCancelCommit"
         />
