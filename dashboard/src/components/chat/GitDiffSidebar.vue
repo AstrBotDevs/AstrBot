@@ -50,6 +50,8 @@ import { useSpcodeGitStage } from "@/composables/useSpcodeGitStage";
 import { useSpcodeGitUnstage } from "@/composables/useSpcodeGitUnstage";
 import { useSpcodeGitCommit } from "@/composables/useSpcodeGitCommit";
 import { useSpcodeGitRevert } from "@/composables/useSpcodeGitRevert";
+import { useSpcodeFileWrite } from "@/composables/useSpcodeFileWrite";
+import GitIgnoreEditor from "@/components/chat/message_list_comps/GitIgnoreEditor.vue";
 import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
 import { useSpcodeGitShow } from "@/composables/useSpcodeGitShow";
 import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
@@ -510,6 +512,110 @@ const gitLog = useSpcodeGitLog(selectedWorktree);
 // 2026-07-17 git-revert: History-view per-commit revert. The sidebar
 // owns the confirm dialog + the write call (mirroring stage/commit).
 const gitRevert = useSpcodeGitRevert();
+
+// ── .gitignore editor overlay (2026-07-17) ───────────────────────
+// Spec: docs/superpowers/specs/2026-07-17-gitignore-editor-design.md
+// The sidebar owns load/save orchestration; GitIgnoreEditor is a
+// purely presentational overlay (v-model in, save/cancel/retry out).
+const gitIgnoreEditorOpen = ref(false);
+const gitIgnoreBuffer = ref("");
+const gitIgnoreLoadedContent = ref("");
+const gitIgnoreIsNewFile = ref(false);
+const gitIgnoreLoadError = ref<string | null>(null);
+const gitIgnoreSaveError = ref<string | null>(null);
+const gitIgnoreFileWrite = useSpcodeFileWrite(selectedWorktree);
+const gitIgnoreIsDirty = computed(
+  () => gitIgnoreBuffer.value !== gitIgnoreLoadedContent.value,
+);
+// Repo-root .gitignore as an absolute path for the read endpoint
+// (file-browser takes absolute paths; trailing slashes stripped).
+const gitIgnoreAbsPath = computed(
+  () => `${(currentRoot.value ?? "").replace(/\/+$/, "")}/.gitignore`,
+);
+const GITIGNORE_I18N_PREFIX =
+  "spcodeProjectLoad.diffSidebar.gitWorkflow.gitignore";
+
+async function loadGitIgnore(): Promise<void> {
+  gitIgnoreLoadError.value = null;
+  try {
+    const resp = await pluginExtensionApi.get<unknown>(
+      "spcode/file-browser",
+      { params: { path: gitIgnoreAbsPath.value } },
+    );
+    const data = (
+      resp.data as {
+        data?: {
+          type?: string | null;
+          content?: unknown;
+          reason?: string | null;
+        };
+      }
+    )?.data;
+    if (data?.type === "file" && typeof data.content === "string") {
+      gitIgnoreBuffer.value = data.content;
+      gitIgnoreLoadedContent.value = data.content;
+      gitIgnoreIsNewFile.value = false;
+      return;
+    }
+    // type === null + reason path_not_found → the repo simply has no
+    // .gitignore yet: empty buffer + "will be created" hint.
+    if (data?.reason === "path_not_found") {
+      gitIgnoreBuffer.value = "";
+      gitIgnoreLoadedContent.value = "";
+      gitIgnoreIsNewFile.value = true;
+      return;
+    }
+    gitIgnoreLoadError.value = tm(`${GITIGNORE_I18N_PREFIX}.loadError`, {
+      reason: data?.reason ?? "unknown",
+    });
+  } catch (err) {
+    const anyErr = err as { code?: string; message?: string };
+    gitIgnoreLoadError.value = tm(`${GITIGNORE_I18N_PREFIX}.loadError`, {
+      reason:
+        anyErr.code === "ERR_NETWORK" || /network/i.test(anyErr.message ?? "")
+          ? "network"
+          : "unknown",
+    });
+  }
+}
+
+function onOpenGitIgnoreEditor(): void {
+  gitIgnoreSaveError.value = null;
+  gitIgnoreEditorOpen.value = true;
+  void loadGitIgnore();
+}
+
+function onGitIgnoreCancel(): void {
+  gitIgnoreEditorOpen.value = false;
+}
+
+async function onGitIgnoreSave(): Promise<void> {
+  if (!gitIgnoreIsDirty.value || gitIgnoreFileWrite.isSaving.value) return;
+  gitIgnoreSaveError.value = null;
+  const r = await gitIgnoreFileWrite.save({
+    // Repo-relative path — the backend resolves it against the
+    // worktree passed by the composable.
+    path: ".gitignore",
+    content: gitIgnoreBuffer.value,
+  });
+  if (r.ok) {
+    gitIgnoreEditorOpen.value = false;
+    showSnackbar(tm(`${GITIGNORE_I18N_PREFIX}.saveSuccess`), "success");
+    // .gitignore changes which untracked files appear — refresh the
+    // status + diff views in parallel.
+    void Promise.all([gitStatus.refresh(), composable.refresh()]);
+    return;
+  }
+  if (r.reason === "aborted") return;
+  gitIgnoreSaveError.value = tm(`${GITIGNORE_I18N_PREFIX}.saveError`, {
+    reason: r.reason,
+  });
+}
+
+// The buffer belongs to the old worktree after a switch — close.
+watch(selectedWorktree, () => {
+  gitIgnoreEditorOpen.value = false;
+});
 // git-show: per-commit file list (spec 2026-06-25). One composable
 // instance shared by every expanded commit in GitLogView; the
 // composable maintains a per-SHA cache internally, so re-expanding
@@ -2620,6 +2726,7 @@ onBeforeUnmount(() => {
   gitUnstage.dispose();
   gitCommit.dispose();
   gitRevert.dispose();
+  gitIgnoreFileWrite.dispose();
   gitLog.dispose();
   // git-show composable holds per-SHA caches + inflight AbortControllers.
   // dispose() aborts in-flight requests and drops the maps; safe to
@@ -2763,6 +2870,26 @@ const currentRoot = computed<string | null>(() => {
                three view modes (not just diff). -->
           </div>
           <div class="git-diff-sidebar-actions">
+            <!-- 2026-07-17 gitignore-editor: entry only meaningful in
+                 the diff view (stage/diff workflow context). -->
+            <v-tooltip
+              v-if="viewMode === 'diff'"
+              location="bottom"
+              :open-delay="200"
+            >
+              <template #activator="{ props: tipProps }">
+                <v-btn
+                  v-bind="tipProps"
+                  icon
+                  size="small"
+                  variant="text"
+                  @click="onOpenGitIgnoreEditor"
+                >
+                  <v-icon size="18">mdi-file-cancel-outline</v-icon>
+                </v-btn>
+              </template>
+              {{ tm(`${GITIGNORE_I18N_PREFIX}.openTooltip`) }}
+            </v-tooltip>
             <!-- UI #5: refresh button dropped the `tonal` background and
                dropped to `variant="text"` + `size="small"` so the header
                reads as a lightweight toolbar instead of three chunky
@@ -3714,6 +3841,22 @@ const currentRoot = computed<string | null>(() => {
           @cancel="onCancelCommit"
         />
 
+        <!-- 2026-07-17 gitignore-editor: full-sidebar overlay. Mounted
+             as a direct child of the root so position:absolute inset:0
+             covers header + body + commit bar alike. -->
+        <GitIgnoreEditor
+          v-if="gitIgnoreEditorOpen"
+          v-model="gitIgnoreBuffer"
+          :is-new-file="gitIgnoreIsNewFile"
+          :is-dirty="gitIgnoreIsDirty"
+          :is-saving="gitIgnoreFileWrite.isSaving.value"
+          :save-error="gitIgnoreSaveError"
+          :load-error="gitIgnoreLoadError"
+          @save="onGitIgnoreSave"
+          @cancel="onGitIgnoreCancel"
+          @retry="loadGitIgnore"
+        />
+
         <!-- Spec §6.4: result snackbar (扩展:支持 stderr <pre> 块)。 -->
         <v-snackbar
           v-model="snackbar.show"
@@ -3743,6 +3886,8 @@ const currentRoot = computed<string | null>(() => {
   color: rgba(var(--v-theme-on-surface), 0.55);
 }
 .git-diff-sidebar {
+  /* Anchors the .gitignore-editor overlay's absolute inset:0. */
+  position: relative;
   width: 420px;
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);

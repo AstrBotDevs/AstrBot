@@ -641,6 +641,18 @@
           "success": "已提交 {sha}",
           "failureHint": "提交失败，请修改 message 或修复错误后重试"
         },
+        "gitignore": {
+          "openTooltip": "编辑 .gitignore",
+          "newFileHint": "仓库还没有 .gitignore，保存后将新建",
+          "unsavedTitle": "有未保存的改动",
+          "save": "保存",
+          "cancel": "取消",
+          "confirmDiscard": "确认放弃改动？",
+          "retry": "重试",
+          "saveSuccess": ".gitignore 已保存",
+          "loadError": "读取 .gitignore 失败（{reason}）",
+          "saveError": "保存 .gitignore 失败（{reason}）"
+        },
         "history": {
           "tab": "Git 历史",
           "tabAria": "切换到历史视图",
