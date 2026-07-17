@@ -275,6 +275,53 @@ function createFileComments() {
     return comment;
   }
 
+  /**
+   * 2026-07-17 selection-comment: add a range comment anchored to
+   * [startLine, endLine] inclusive. Mirrors `addComment`'s gating
+   * (requires the file's content to be cached so context lines can
+   * be extracted) and validation (non-empty text, integer lines ≥1,
+   * endLine ≥ startLine). Returns null on bad input so callers can
+   * surface a meaningful error without crashing — same convention
+   * as the single-line API.
+   */
+  function addSelectionComment(input: {
+    filePath: string;
+    startLine: number;
+    endLine: number;
+    selection: string;
+    text: string;
+  }): FileComment | null {
+    const content = contentCache[input.filePath];
+    if (content === undefined) return null;
+    if (!input.filePath) return null;
+    if (!Number.isInteger(input.startLine) || input.startLine < 1) return null;
+    if (!Number.isInteger(input.endLine) || input.endLine < input.startLine) {
+      return null;
+    }
+    if (input.text.trim() === "") return null;
+    const ctx = extractRangeLineContext(
+      content,
+      input.startLine,
+      input.endLine,
+      input.selection,
+    );
+    const comment: FileComment = {
+      id: newId(),
+      filePath: input.filePath,
+      line: input.startLine,
+      endLine: input.endLine,
+      selection: input.selection,
+      lineContent: ctx.lineContent,
+      contextBefore: ctx.contextBefore,
+      contextAfter: ctx.contextAfter,
+      text: input.text,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    (comments[input.filePath] ??= []).push(comment);
+    return comment;
+  }
+
   function updateComment(id: string, newText: string): void {
     for (const list of Object.values(comments)) {
       const c = list.find((c) => c.id === id);
@@ -616,6 +663,7 @@ function createFileComments() {
     registerFileContent,
     addComment,
     addCommentWithContext,
+    addSelectionComment,
     updateComment,
     deleteComment,
     findCommentById,
