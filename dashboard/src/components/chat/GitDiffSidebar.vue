@@ -513,20 +513,22 @@ const gitLog = useSpcodeGitLog(selectedWorktree);
 // owns the confirm dialog + the write call (mirroring stage/commit).
 const gitRevert = useSpcodeGitRevert();
 
-// ── .gitignore editor overlay (2026-07-17) ───────────────────────
+// ── .gitignore editor overlay (2026-07-17, latency rework 2026-07-18) ─
 // Spec: docs/superpowers/specs/2026-07-17-gitignore-editor-design.md
 // The sidebar owns load/save orchestration; GitIgnoreEditor is a
-// purely presentational overlay (v-model in, save/cancel/retry out).
+// purely presentational overlay (initial-content in, save(out) out).
+// 2026-07-18: the editing buffer lives INSIDE the editor — per
+// keystroke state no longer reaches the sidebar, so this 4600-line
+// component is no longer in the typing render path.
 const gitIgnoreEditorOpen = ref(false);
-const gitIgnoreBuffer = ref("");
+// On-disk content loaded by loadGitIgnore (the dirty baseline passed
+// to the editor as `initial-content`). Persists across the editing
+// session; updated only on a fresh load (open / retry).
 const gitIgnoreLoadedContent = ref("");
 const gitIgnoreIsNewFile = ref(false);
 const gitIgnoreLoadError = ref<string | null>(null);
 const gitIgnoreSaveError = ref<string | null>(null);
 const gitIgnoreFileWrite = useSpcodeFileWrite(selectedWorktree);
-const gitIgnoreIsDirty = computed(
-  () => gitIgnoreBuffer.value !== gitIgnoreLoadedContent.value,
-);
 // Repo-root .gitignore as an absolute path for the read endpoint
 // (file-browser takes absolute paths; trailing slashes stripped).
 const gitIgnoreAbsPath = computed(
@@ -552,15 +554,13 @@ async function loadGitIgnore(): Promise<void> {
       }
     )?.data;
     if (data?.type === "file" && typeof data.content === "string") {
-      gitIgnoreBuffer.value = data.content;
       gitIgnoreLoadedContent.value = data.content;
       gitIgnoreIsNewFile.value = false;
       return;
     }
     // type === null + reason path_not_found → the repo simply has no
-    // .gitignore yet: empty buffer + "will be created" hint.
+    // .gitignore yet: empty baseline + "will be created" hint.
     if (data?.reason === "path_not_found") {
-      gitIgnoreBuffer.value = "";
       gitIgnoreLoadedContent.value = "";
       gitIgnoreIsNewFile.value = true;
       return;
@@ -589,14 +589,14 @@ function onGitIgnoreCancel(): void {
   gitIgnoreEditorOpen.value = false;
 }
 
-async function onGitIgnoreSave(): Promise<void> {
-  if (!gitIgnoreIsDirty.value || gitIgnoreFileWrite.isSaving.value) return;
+async function onGitIgnoreSave(content: string): Promise<void> {
+  if (gitIgnoreFileWrite.isSaving.value) return;
   gitIgnoreSaveError.value = null;
   const r = await gitIgnoreFileWrite.save({
     // Repo-relative path — the backend resolves it against the
     // worktree passed by the composable.
     path: ".gitignore",
-    content: gitIgnoreBuffer.value,
+    content,
   });
   if (r.ok) {
     gitIgnoreEditorOpen.value = false;
@@ -3846,9 +3846,8 @@ const currentRoot = computed<string | null>(() => {
              covers header + body + commit bar alike. -->
         <GitIgnoreEditor
           v-if="gitIgnoreEditorOpen"
-          v-model="gitIgnoreBuffer"
+          :initial-content="gitIgnoreLoadedContent"
           :is-new-file="gitIgnoreIsNewFile"
-          :is-dirty="gitIgnoreIsDirty"
           :is-saving="gitIgnoreFileWrite.isSaving.value"
           :save-error="gitIgnoreSaveError"
           :load-error="gitIgnoreLoadError"

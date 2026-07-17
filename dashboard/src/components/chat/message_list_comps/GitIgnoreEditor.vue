@@ -10,13 +10,13 @@ import { useModuleI18n } from "@/i18n/composables";
 import ShikiEditor from "./ShikiEditor.vue";
 
 const props = defineProps<{
-  modelValue: string;
+  /** On-disk content loaded by the parent (the dirty baseline). The
+   *  editing buffer lives INSIDE ShikiEditor (uncontrolled), so
+   *  per-keystroke state never reaches the heavy sidebar. */
+  initialContent: string;
   /** True when the repo has no .gitignore yet — the toolbar shows a
    *  "will be created" hint (not an error). */
   isNewFile: boolean;
-  /** Buffer differs from the on-disk content; drives the two-click
-   *  discard confirmation on Cancel and the Save disabled state. */
-  isDirty: boolean;
   isSaving: boolean;
   /** Save failure text (already localized by the parent); inline bar,
    *  buffer stays intact. */
@@ -25,14 +25,27 @@ const props = defineProps<{
   loadError: string | null;
 }>();
 const emit = defineEmits<{
-  (e: "update:modelValue", v: string): void;
-  (e: "save"): void;
+  (e: "save", content: string): void;
   (e: "cancel"): void;
   (e: "retry"): void;
 }>();
 const { tm } = useModuleI18n("features/chat");
 
 const PREFIX = "spcodeProjectLoad.diffSidebar.gitWorkflow.gitignore";
+
+// Dirtiness arrives on TRANSITIONS only (ShikiEditor dirty-change),
+// so this toolbar re-renders at most twice per editing session —
+// the keystroke path re-renders ShikiEditor alone.
+const editorRef = ref<InstanceType<typeof ShikiEditor> | null>(null);
+const isDirty = ref(false);
+
+function onDirtyChange(dirty: boolean): void {
+  isDirty.value = dirty;
+}
+
+function onSaveClick(): void {
+  emit("save", editorRef.value?.getValue() ?? "");
+}
 
 // Two-click discard: first Cancel click while dirty arms the
 // confirmation (button relabels); a second click within 3s emits.
@@ -41,7 +54,7 @@ const discardArmed = ref(false);
 let disarmTimer: ReturnType<typeof setTimeout> | null = null;
 
 function onCancelClick(): void {
-  if (!props.isDirty || discardArmed.value) {
+  if (!isDirty.value || discardArmed.value) {
     emit("cancel");
     return;
   }
@@ -94,7 +107,7 @@ onBeforeUnmount(() => {
           :loading="isSaving"
           :disabled="!isDirty"
           data-testid="gitignore-save"
-          @click="emit('save')"
+          @click="onSaveClick"
         >
           {{ tm(`${PREFIX}.save`) }}
         </v-btn>
@@ -122,9 +135,10 @@ onBeforeUnmount(() => {
       </div>
       <ShikiEditor
         v-else
-        :model-value="modelValue"
+        ref="editorRef"
+        :model-value="initialContent"
         file-path=".gitignore"
-        @update:model-value="emit('update:modelValue', $event)"
+        @dirty-change="onDirtyChange"
       />
     </div>
   </div>
