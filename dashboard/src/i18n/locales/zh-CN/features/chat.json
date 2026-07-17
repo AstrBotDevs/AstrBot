@@ -600,7 +600,8 @@
             "stageAll": "全部暂存",
             "stageAllAria": "暂存所有未暂存文件",
             "commit": "提交",
-            "commitDisabledHint": "暂存文件后才能提交"
+            "commitDisabledHint": "暂存文件后才能提交",
+            "commitScopeHint": "为避免漏掉未暂存的改动，请切换到「已暂存」页签后再提交"
           },
           "dialog": {
             "title": "提交",

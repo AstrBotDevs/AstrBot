@@ -72,6 +72,32 @@ const bulkLoading = computed(() =>
   isUnstageMode.value ? props.isUnstagingAll : props.isStagingAll,
 );
 
+// 2026-07-17: commit is gated to the "staged" scope. Committing from
+// the unstaged/all scopes made it too easy to leave changes out of
+// the index (user commits, silently missing files they forgot to
+// stage). The button stays visible-but-disabled on other scopes so
+// the workflow stays discoverable; the title hint explains how to
+// re-enable it.
+const isStagedScope = computed(() => props.selectedScope === "staged");
+
+const commitDisabled = computed(
+  () => !isStagedScope.value || props.stagedCount === 0 || props.isCommitting,
+);
+
+const commitHint = computed(() => {
+  if (!isStagedScope.value) {
+    return tm(
+      "spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.commitScopeHint",
+    );
+  }
+  if (props.stagedCount === 0) {
+    return tm(
+      "spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.commitDisabledHint",
+    );
+  }
+  return "";
+});
+
 const bulkColor = computed(() =>
   // Unstage is reversible but still "moves work out of the index";
   // the warning tint visually flags it as an undo-ish action while
@@ -124,14 +150,8 @@ function onBulkClick(): void {
         size="small"
         variant="flat"
         color="primary"
-        :disabled="stagedCount === 0 || isCommitting"
-        :title="
-          stagedCount === 0
-            ? tm(
-                'spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.commitDisabledHint',
-              )
-            : ''
-        "
+        :disabled="commitDisabled"
+        :title="commitHint"
         append-icon="mdi-arrow-right"
         @click="emit('commit')"
       >

@@ -600,7 +600,8 @@
             "stageAll": "Stage all",
             "stageAllAria": "Stage all unstaged files",
             "commit": "Commit",
-            "commitDisabledHint": "Stage files before committing"
+            "commitDisabledHint": "Stage files before committing",
+            "commitScopeHint": "To avoid leaving unstaged changes out of the commit, switch to the Staged tab first"
           },
           "dialog": {
             "title": "Commit",
