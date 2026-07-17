@@ -39,6 +39,21 @@ export interface FileComment {
    * comments leave this undefined.
    */
   diffHunk?: DiffHunkContext;
+  /**
+   * 2026-07-17 selection-comment: 1-based end line for range
+   * comments (the user dragged across multiple lines). Undefined
+   * or === `line` for single-line comments. Consumed by
+   * <FileBrowserCodeView> (gutter coverage) and renderWindow
+   * (LLM-facing `>` marker spans every range line).
+   */
+  endLine?: number;
+  /**
+   * 2026-07-17 selection-comment: verbatim selected text at comment
+   * time. Range comments only. Used as the cache-miss fallback in
+   * renderWindow so the LLM still sees the selection when the live
+   * content cache has no entry.
+   */
+  selection?: string;
 }
 
 /**
@@ -97,6 +112,37 @@ export function extractLineContext(
     lineContent: lines[idx],
     contextBefore: idx > 0 ? lines[idx - 1] : null,
     contextAfter: idx < lines.length - 1 ? lines[idx + 1] : null,
+  };
+}
+
+/** 2026-07-17 selection-comment: True when `line` falls inside the
+ *  comment's range. Single-line comments cover only their `line`;
+ *  range comments cover [line, endLine] inclusive. Used by
+ *  <FileBrowserCodeView> to decide which gutter rows get a comment
+ *  badge. */
+export function commentCoversLine(c: FileComment, line: number): boolean {
+  const end = c.endLine ?? c.line;
+  return c.line <= line && line <= end;
+}
+
+/** 2026-07-17 selection-comment: Line-context for a range comment.
+ *  Mirrors `extractLineContext`'s shape so the editor preview stays
+ *  consistent. `lineContent` is the first line of the frozen
+ *  selection (fingerprint); the surrounding context lines come from
+ *  the live `content` when available. */
+export function extractRangeLineContext(
+  content: string,
+  startLine: number,
+  endLine: number,
+  selection: string,
+): LineContext {
+  const lines = content.split("\n");
+  const firstLineOfSelection = selection.split("\n")[0] ?? "";
+  return {
+    lineContent: firstLineOfSelection,
+    contextBefore: startLine - 2 >= 0 ? lines[startLine - 2] ?? null : null,
+    contextAfter:
+      endLine < lines.length ? lines[endLine] ?? null : null,
   };
 }
 
@@ -369,19 +415,23 @@ function createFileComments() {
         // File-browser comment: merge into the previous window if
         // line-adjacent (within MERGE_DISTANCE of the window's
         // current endLine, see createFileComments for derivation).
+        // 2026-07-17 selection-comment: range comments extend the
+        // window to their endLine (not just the start) so the
+        // proximity check covers the whole range.
+        const cEnd = c.endLine ?? c.line;
         if (
           last &&
           last.kind === "window" &&
           c.line - last.endLine <= MERGE_DISTANCE
         ) {
-          last.endLine = Math.max(last.endLine, c.line);
+          last.endLine = Math.max(last.endLine, cEnd);
           last.comments.push(c);
           continue;
         }
         groups.push({
           kind: "window",
           startLine: c.line,
-          endLine: c.line,
+          endLine: cEnd,
           comments: [c],
         });
       }
@@ -431,14 +481,41 @@ function createFileComments() {
     out.push("");
     out.push(header);
     out.push("````"); // 4-backtick fence (see spec §5.1)
-    const commentedSet = new Set(win.comments.map((c) => c.line));
-    const commentByLine = new Map(win.comments.map((c) => [c.line, c]));
+    // 2026-07-17 selection-comment: range comments cover every line
+    // in [c.line, c.endLine], not just the start. We materialize the
+    // coverage into a Set (for the `>` marker) and a Map (for the
+    // first comment by array order; the spec says overlapping
+    // ranges resolve to the first one). Single-line comments are
+    // just [n, n] — handled uniformly.
+    const commentedSet = new Set<number>();
+    const commentByLine = new Map<number, FileComment>();
+    for (const c of win.comments) {
+      const cEnd = c.endLine ?? c.line;
+      for (let l = c.line; l <= cEnd; l++) {
+        if (!commentedSet.has(l)) {
+          commentedSet.add(l);
+          commentByLine.set(l, c);
+        }
+      }
+    }
 
     for (let line = ctxStart; line <= ctxEnd; line++) {
       const c = commentByLine.get(line);
       let lineContent: string;
       if (c) {
-        lineContent = c.lineContent;
+        // Anchor line. Prefer the live cache so the LLM sees the
+        // current text; fall back to the frozen selection for the
+        // matching offset (range) or the frozen lineContent
+        // (single-line) when the cache has no entry.
+        if (line - 1 < fileLines.length) {
+          lineContent = fileLines[line - 1];
+        } else if (c.selection) {
+          const offset = line - c.line;
+          const selLines = c.selection.split("\n");
+          lineContent = selLines[offset] ?? c.lineContent;
+        } else {
+          lineContent = c.lineContent;
+        }
       } else if (line - 1 < fileLines.length) {
         // 1-based line number → 0-based array index. Sourced from
         // the cached current file content so the LLM sees the
@@ -459,7 +536,10 @@ function createFileComments() {
       const marker = commentedSet.has(line) ? ">" : " ";
       const padded = String(line).padStart(4);
       out.push(`  ${marker} ${padded} │ ${lineContent}`);
-      if (c) {
+      if (c && line === c.line) {
+        // 2026-07-17 selection-comment: emit the "Comment:" block
+        // only under the START line of the comment so a 5-line
+        // range produces one (not five) comment blocks.
         const textLines = c.text.split("\n");
         out.push(`         │ Comment: ${textLines[0]}`);
         for (let i = 1; i < textLines.length; i++) {
