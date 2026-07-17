@@ -41,8 +41,10 @@ import { useDocumentMarkdownHighlight } from "@/composables/useDocumentMarkdownH
 import {
   useFileComments,
   extractLineContext,
+  extractRangeLineContext,
   type LineContext,
 } from "@/composables/useFileComments";
+import SelectionActionMenu from "./SelectionActionMenu.vue";
 import DocumentTreePanel from "./DocumentTreePanel.vue";
 import DocumentEditor from "./DocumentEditor.vue";
 import DocumentHistoryPanel from "./DocumentHistoryPanel.vue";
@@ -219,6 +221,17 @@ const activeEditLine = ref<number | null>(null);
 const activeEditCommentId = ref<string | null>(null);
 const activeEditContext = ref<LineContext | null>(null);
 const editorInitialText = ref<string>("");
+/** 2026-07-17 selection-comment: holds the drag-selected range when
+ *  the editor was opened from a selection (not the gutter "+").
+ *  Echoed back in the save payload for addSelectionComment routing. */
+const activeEditRange = ref<{
+  startLine: number;
+  endLine: number;
+  selection: string;
+} | null>(null);
+/** 2026-07-17 selection-comment: copy-only menu state for the
+ *  rendered-markdown container. */
+const renderedMenu = ref<{ x: number; y: number; text: string } | null>(null);
 
 const rawComments = computed(() =>
   rawFilePath.value ? fileComments.commentsForFile(rawFilePath.value) : [],
@@ -883,8 +896,64 @@ function onRequestAddComment(line: number): void {
   if (!ctx) return;
   activeEditLine.value = line;
   activeEditCommentId.value = null;
+  activeEditRange.value = null;
   activeEditContext.value = ctx;
   editorInitialText.value = "";
+}
+
+/** 2026-07-17 selection-comment: open the editor in range mode from
+ *  a drag-selection. `activeEditContext` is populated via
+ *  extractRangeLineContext so the existing
+ *  `v-if="activeEditLine !== null && activeEditContext"` gate keeps
+ *  working unchanged. */
+function onRequestAddRange(payload: {
+  startLine: number;
+  endLine: number;
+  selection: string;
+}): void {
+  if (!rawFilePath.value || !rawContent.value) return;
+  const ctx = extractRangeLineContext(
+    rawContent.value,
+    payload.startLine,
+    payload.endLine,
+    payload.selection,
+  );
+  activeEditLine.value = payload.startLine;
+  activeEditCommentId.value = null;
+  activeEditRange.value = payload;
+  activeEditContext.value = ctx;
+  editorInitialText.value = "";
+}
+
+function onRequestCopySelection(text: string): void {
+  void copyToClipboard(text);
+}
+
+/** 2026-07-17 selection-comment: rendered-markdown container
+ *  mouseup → copy-only menu (no source-line mapping in rendered
+ *  HTML, so the comment item is hidden). */
+function onRenderedMouseUp(e: MouseEvent): void {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) {
+    renderedMenu.value = null;
+    return;
+  }
+  const root = e.currentTarget as HTMLElement | null;
+  if (!root || !sel.anchorNode || !root.contains(sel.anchorNode)) {
+    renderedMenu.value = null;
+    return;
+  }
+  const text = sel.toString();
+  if (!text.trim()) {
+    renderedMenu.value = null;
+    return;
+  }
+  renderedMenu.value = { x: e.clientX, y: e.clientY, text };
+}
+
+function onRenderedCopy(): void {
+  if (renderedMenu.value) void copyToClipboard(renderedMenu.value.text);
+  renderedMenu.value = null;
 }
 
 function onRequestEditComment(commentId: string): void {
@@ -892,6 +961,16 @@ function onRequestEditComment(commentId: string): void {
   if (!c) return;
   activeEditLine.value = c.line;
   activeEditCommentId.value = c.id;
+  // 2026-07-17 selection-comment: restore range mode when editing
+  // an existing range comment.
+  activeEditRange.value =
+    c.endLine !== undefined && c.endLine > c.line
+      ? {
+          startLine: c.line,
+          endLine: c.endLine,
+          selection: c.selection ?? c.lineContent,
+        }
+      : null;
   activeEditContext.value = {
     lineContent: c.lineContent,
     contextBefore: c.contextBefore,
@@ -904,6 +983,8 @@ function onSaveComment(payload: {
   text: string;
   commentId: string | null;
   line: number;
+  endLine: number | null;
+  selection: string | null;
 }): void {
   if (payload.commentId) {
     fileComments.updateComment(payload.commentId, payload.text);
@@ -911,11 +992,24 @@ function onSaveComment(payload: {
     return;
   }
   if (!rawFilePath.value) return;
-  const created = fileComments.addComment({
-    filePath: rawFilePath.value,
-    line: payload.line,
-    text: payload.text,
-  });
+  // 2026-07-17 selection-comment: the editor echoes the range in
+  // the save payload when it was opened in range mode.
+  const created =
+    payload.endLine !== null &&
+    payload.endLine > payload.line &&
+    payload.selection !== null
+      ? fileComments.addSelectionComment({
+          filePath: rawFilePath.value,
+          startLine: payload.line,
+          endLine: payload.endLine,
+          selection: payload.selection,
+          text: payload.text,
+        })
+      : fileComments.addComment({
+          filePath: rawFilePath.value,
+          line: payload.line,
+          text: payload.text,
+        });
   // created === null means the contentCache was empty (would happen
   // only if the user clicked a line before rawContent arrived).
   // Silently close — same behavior as FileBrowserFilePreview.
@@ -930,6 +1024,7 @@ function onDeleteComment(commentId: string): void {
 function closeCommentEditor(): void {
   activeEditLine.value = null;
   activeEditCommentId.value = null;
+  activeEditRange.value = null;
   activeEditContext.value = null;
 }
 
@@ -1294,6 +1389,7 @@ onBeforeUnmount(() => {
               <div
                 v-if="viewMode === 'rendered'"
                 class="document-manager__rendered"
+                @mouseup="onRenderedMouseUp"
               >
                 <MarkdownView
                   v-if="selectedRevision"
@@ -1324,8 +1420,11 @@ onBeforeUnmount(() => {
                   :active-edit-comment-id="activeEditCommentId"
                   :is-dark="isDark"
                   :scroll-to-line="searchScrollToLine"
+                  :selection-commentable="!selectedRevision"
                   @request-add="onRequestAddComment"
                   @request-edit="onRequestEditComment"
+                  @request-add-range="onRequestAddRange"
+                  @copy-selection="onRequestCopySelection"
                 />
                 <div
                   v-else-if="rawIsBinary"
@@ -1357,9 +1456,21 @@ onBeforeUnmount(() => {
                   :context-before="activeEditContext.contextBefore"
                   :context-after="activeEditContext.contextAfter"
                   :file-path="rawFilePath"
+                  :end-line="activeEditRange?.endLine ?? null"
+                  :selection-content="activeEditRange?.selection ?? null"
                   @save="onSaveComment"
                   @cancel="closeCommentEditor"
                   @delete="onDeleteComment"
+                />
+                <!-- 2026-07-17 selection-comment: copy-only menu for
+                     the rendered container above (fixed position). -->
+                <SelectionActionMenu
+                  v-if="renderedMenu"
+                  :x="renderedMenu.x"
+                  :y="renderedMenu.y"
+                  :show-comment="false"
+                  @copy="onRenderedCopy"
+                  @close="renderedMenu = null"
                 />
               </div>
               <DiffPreview
