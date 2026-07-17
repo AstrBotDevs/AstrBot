@@ -104,23 +104,56 @@ function previewRows(c: FileComment): PreviewRow[] {
   // File-browser window: ±CONTEXT_LINES from contentCache, marked
   // line gets `>`. Same source-of-truth order as formatForLLM's
   // renderWindow (cache first, then ±1 comment-snapshot fallback).
+  // 2026-07-17 selection-comment: range comments mark every line in
+  // [c.line, c.endLine] and fall back to the frozen selection for
+  // anchor rows when the cache has no entry — mirroring the
+  // renderWindow branch added in the same change.
   const fileContent = fileComments.getFileContent(c.filePath);
   const fileLines = fileContent?.split("\n") ?? [];
   const totalLines = fileLines.length;
+  const end = c.endLine ?? c.line;
+  const selectionLines = c.selection?.split("\n") ?? [];
   const ctxStart = Math.max(1, c.line - CONTEXT_LINES);
   const ctxEnd =
     totalLines > 0
-      ? Math.min(totalLines, c.line + CONTEXT_LINES)
-      : c.line + CONTEXT_LINES;
+      ? Math.min(totalLines, end + CONTEXT_LINES)
+      : end + CONTEXT_LINES;
   const rows: PreviewRow[] = [];
   for (let line = ctxStart; line <= ctxEnd; line++) {
+    const isAnchor = line >= c.line && line <= end;
+    let content: string;
+    if (line - 1 < fileLines.length) {
+      content = fileLines[line - 1];
+    } else if (isAnchor && selectionLines.length > 0) {
+      content = selectionLines[line - c.line] ?? c.lineContent;
+    } else if (isAnchor) {
+      content = c.lineContent;
+    } else {
+      content = "";
+    }
     rows.push({
       lineNo: String(line).padStart(4),
-      prefix: line === c.line ? ">" : " ",
-      content: line - 1 < fileLines.length ? fileLines[line - 1] : "",
+      prefix: isAnchor ? ">" : " ",
+      content,
     });
   }
   return rows;
+}
+
+/** 2026-07-17 selection-comment: header label for a comment item.
+ *  Range comments show "Lines start–end"; single-line comments
+ *  keep the existing "Line N" label. */
+function headerLineLabel(c: FileComment): string {
+  if (c.endLine !== undefined && c.endLine > c.line) {
+    return tm("spcodeProjectLoad.fileBrowser.comment.rangeLabel", {
+      start: c.line,
+      end: c.endLine,
+    });
+  }
+  return tm(
+    "spcodeProjectLoad.fileBrowser.comment.previewDialog.lineLabel",
+    { line: c.line },
+  );
 }
 
 const totalCount = computed<number>(() =>
@@ -178,12 +211,7 @@ function close(): void {
           >
             <header class="comments-preview-item-head">
               <span class="comments-preview-line">
-                {{
-                  tm(
-                    "spcodeProjectLoad.fileBrowser.comment.previewDialog.lineLabel",
-                    { line: c.line },
-                  )
-                }}
+                {{ headerLineLabel(c) }}
               </span>
               <code class="comments-preview-snippet">{{ c.lineContent }}</code>
               <v-spacer />
