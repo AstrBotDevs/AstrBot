@@ -612,7 +612,20 @@
             "stderrTitle": "⚠ 错误输出",
             "cancel": "取消",
             "confirm": "提交",
-            "submitShortcutHint": "Ctrl+Enter 提交"
+            "submitShortcutHint": "Ctrl+Enter 提交",
+            "generate": "AI 生成",
+            "generateAria": "用 AI 生成 commit message",
+            "langZh": "中文",
+            "langEn": "EN",
+            "langToggleAria": "生成语言",
+            "generateError": {
+              "no_provider": "AI 服务暂不可用，请稍后再试",
+              "empty_response": "AI 没有返回内容，请重试",
+              "llm_error": "AI 服务异常，请稍后重试",
+              "network": "网络错误，请稍后重试",
+              "diff_fetch_failed": "无法获取暂存区改动，请重试",
+              "unknown": "生成失败，请重试"
+            }
           },
           "success": "已提交 {sha}",
           "failureHint": "提交失败，请修改 message 或修复错误后重试"

@@ -612,7 +612,20 @@
             "stderrTitle": "⚠ Error output",
             "cancel": "Cancel",
             "confirm": "Commit",
-            "submitShortcutHint": "Ctrl+Enter to commit"
+            "submitShortcutHint": "Ctrl+Enter to commit",
+            "generate": "Generate",
+            "generateAria": "Generate commit message with AI",
+            "langZh": "中文",
+            "langEn": "EN",
+            "langToggleAria": "Message language",
+            "generateError": {
+              "no_provider": "AI service unavailable, please try again later",
+              "empty_response": "AI returned nothing, please retry",
+              "llm_error": "AI service error, please retry later",
+              "network": "Network error, please retry later",
+              "diff_fetch_failed": "Failed to load staged changes, please retry",
+              "unknown": "Generation failed, please retry"
+            }
           },
           "success": "Committed {sha}",
           "failureHint": "Commit failed. Please fix the message or errors and retry."
