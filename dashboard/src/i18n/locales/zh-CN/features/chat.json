@@ -370,6 +370,7 @@
         "addButtonAria": "为第 {line} 行添加评论",
         "newTitle": "对第 {line} 行发布评论",
         "editTitle": "编辑第 {line} 行的评论",
+        "rangeLabel": "第 {start}–{end} 行",
         "placeholder": "写下你的评论…",
         "save": "保存",
         "cancel": "取消",

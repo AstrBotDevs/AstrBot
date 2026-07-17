@@ -370,6 +370,7 @@
         "addButtonAria": "Add comment on line {line}",
         "newTitle": "Comment on line {line}",
         "editTitle": "Edit comment on line {line}",
+        "rangeLabel": "Lines {start}–{end}",
         "placeholder": "Write your comment…",
         "save": "Save",
         "cancel": "Cancel",
