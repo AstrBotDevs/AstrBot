@@ -12,6 +12,13 @@ import { useSpcodeGitFile } from "@/composables/useSpcodeGitFile";
 import { useSpcodeDocs } from "@/composables/useSpcodeDocs";
 import { useSpcodeFileBrowser } from "@/composables/useSpcodeFileBrowser";
 import { useSpcodeFileSearch } from "@/composables/useSpcodeFileSearch";
+import { copyToClipboard } from "@/utils/clipboard";
+import { pluginExtensionApi } from "@/api/v1";
+import {
+  parseSpcodeFileBrowser,
+  FileBrowserParseError,
+  type SpcodeFileBrowserRawResponse,
+} from "@/composables/parseSpcodeFileBrowser";
 import {
   loadDocsRoot,
   saveDocsRoot,
@@ -447,6 +454,186 @@ function onKeyDown(e: KeyboardEvent): void {
 }
 onMounted(() => document.addEventListener("keydown", onKeyDown));
 
+// ── Copy content (2026-07-17 docs-copy-btn) ───────────────────────
+// Mirrors FileBrowserFilePreview's copy affordance: copies the raw
+// text (historical blob when a revision is selected, otherwise the
+// working-tree content) and flashes a transient success/fail state
+// on the button for 2s. Diff view is excluded (that body is owned
+// by DiffPreview); edit mode has its own copy button inside
+// DocumentEditor's action bar.
+const copyButtonText = ref<string>(
+  tm("spcodeProjectLoad.fileBrowser.preview.copy"),
+);
+const copyButtonState = ref<"idle" | "success" | "error">("idle");
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Copy is only meaningful when there is raw text on screen: a doc
+ *  selected, not in edit mode (DocumentEditor owns copying there),
+ *  not the diff view, not a binary/empty body. */
+const canCopyContent = computed<boolean>(
+  () =>
+    !!selectedDoc.value &&
+    !editMode.value &&
+    viewMode.value !== "diff" &&
+    !rawIsBinary.value &&
+    !!rawContent.value,
+);
+
+watch([selectedDoc, selectedRevision], () => {
+  // New document / revision → clear leftover feedback so a "已复制"
+  // from the previous target does not leak into the fresh header.
+  copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copy");
+  copyButtonState.value = "idle";
+});
+
+async function onCopyContent(): Promise<void> {
+  const text = rawContent.value;
+  if (!text) return;
+  // Cancel any in-flight reset before scheduling a new one so rapid
+  // double-clicks don't race the old timer mid-feedback.
+  if (copyResetTimer) {
+    clearTimeout(copyResetTimer);
+    copyResetTimer = null;
+  }
+  const ok = await copyToClipboard(text);
+  copyButtonState.value = ok ? "success" : "error";
+  copyButtonText.value = tm(
+    ok
+      ? "spcodeProjectLoad.fileBrowser.preview.copySuccess"
+      : "spcodeProjectLoad.fileBrowser.preview.copyFail",
+  );
+  copyResetTimer = setTimeout(() => {
+    copyButtonText.value = tm("spcodeProjectLoad.fileBrowser.preview.copy");
+    copyButtonState.value = "idle";
+    copyResetTimer = null;
+  }, 2000);
+}
+
+onBeforeUnmount(() => {
+  // Drop a pending reset timer so it can't write to destroyed refs.
+  if (copyResetTimer) {
+    clearTimeout(copyResetTimer);
+    copyResetTimer = null;
+  }
+});
+
+// ── Preset quick paths (2026-07-17 docs-presets) ─────────────────
+// One-click shortcuts rendered next to the DocumentPathBar. Two
+// kinds:
+//   - "dir":  switch docsRoot to the directory (same as typing it
+//             into the path bar — validated + persisted).
+//   - "file": switch docsRoot to the project root (".") AND select
+//             the file so it opens directly.
+// Existence is probed per click via the stateless /spcode/file-browser
+// endpoint (the same one the tree + preview use); a missing target
+// shows a transient notice and does NOT navigate.
+interface DocPreset {
+  label: string;
+  kind: "dir" | "file";
+  /** Project-relative POSIX path (file presets live at the root). */
+  path: string;
+}
+const DOC_PRESETS: readonly DocPreset[] = [
+  { label: "AGENTS.md", kind: "file", path: "AGENTS.md" },
+  { label: "README.md", kind: "file", path: "README.md" },
+  { label: "specs", kind: "dir", path: "docs/superpowers/specs" },
+  { label: "plans", kind: "dir", path: "docs/superpowers/plans" },
+  { label: "changelogs", kind: "dir", path: "changelogs" },
+];
+
+const presetNotice = ref<string | null>(null);
+let presetNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+/** Path of the preset currently being probed; disables that button
+ *  so a slow filesystem doesn't collect duplicate clicks. */
+const presetChecking = ref<string | null>(null);
+
+function showPresetNotice(message: string): void {
+  presetNotice.value = message;
+  if (presetNoticeTimer) clearTimeout(presetNoticeTimer);
+  presetNoticeTimer = setTimeout(() => {
+    presetNotice.value = null;
+    presetNoticeTimer = null;
+  }, 5000);
+}
+
+/** Active-state for the preset chip: dir presets are active when
+ *  they ARE the docs root; file presets when the project root is
+ *  the docs root and the file itself is selected. */
+function isPresetActive(p: DocPreset): boolean {
+  if (p.kind === "dir") return docsRoot.value === p.path;
+  return isProjectRootDocs(docsRoot.value) && selectedDoc.value === p.path;
+}
+
+async function onPresetClick(p: DocPreset): Promise<void> {
+  if (!props.projectRoot || presetChecking.value) return;
+  presetChecking.value = p.path;
+  try {
+    // Probe the same absolute target the tree would list (the
+    // endpoint is stateless and resolves absolute paths).
+    const abs = `${props.projectRoot.replace(/[\\/]+$/, "")}/${p.path}`;
+    const resp = await pluginExtensionApi.get<SpcodeFileBrowserRawResponse>(
+      "spcode/file-browser",
+      { params: { path: abs } },
+    );
+    const data = resp.data?.data;
+    if (!data) {
+      showPresetNotice(
+        tm("spcodeProjectLoad.documentManager.presets.checkFailed", {
+          path: p.path,
+        }),
+      );
+      return;
+    }
+    try {
+      parseSpcodeFileBrowser(data);
+    } catch (err) {
+      const missing =
+        err instanceof FileBrowserParseError &&
+        err.reason === "path_not_found";
+      showPresetNotice(
+        tm(
+          missing
+            ? "spcodeProjectLoad.documentManager.presets.notFound"
+            : "spcodeProjectLoad.documentManager.presets.checkFailed",
+          { path: p.path },
+        ),
+      );
+      return;
+    }
+  } catch {
+    // Network / unexpected failure: never navigate blindly.
+    showPresetNotice(
+      tm("spcodeProjectLoad.documentManager.presets.checkFailed", {
+        path: p.path,
+      }),
+    );
+    return;
+  } finally {
+    presetChecking.value = null;
+  }
+  // Target exists → navigate.
+  if (p.kind === "dir") {
+    onPathChange(p.path); // validates + persists + clears selection
+    return;
+  }
+  // File preset: root the manager at the project root and open the
+  // file directly (mirrors onTreeSelect's state resets).
+  onPathChange(".");
+  selectedDoc.value = p.path;
+  viewMode.value = "rendered";
+  selectedRevision.value = null;
+  editMode.value = false;
+  editBuffer.value = "";
+  saveError.value = null;
+}
+
+onBeforeUnmount(() => {
+  if (presetNoticeTimer) {
+    clearTimeout(presetNoticeTimer);
+    presetNoticeTimer = null;
+  }
+});
+
 /** Body scroll lock while fullscreen is on. Matches the DiffPreview
  *  fullscreen pattern (spec 2026-06-30 §3.4) — saves the user's
  *  scroll position implicitly via `overflow: hidden`. The watcher
@@ -512,10 +699,13 @@ function onPathChange(newPath: string) {
 }
 
 function onTreeNavigate(dirRel: string) {
-  // The breadcrumb's "Project root" segment emits an empty string;
-  // fall back to the default docs root in that case so we don't
-  // accidentally list the entire project.
-  docsRoot.value = dirRel || DEFAULT_DOCS_ROOT;
+  // The breadcrumb's "项目根" segment emits an empty string.
+  // 2026-07-17 breadcrumb-root-fix: navigate to the actual project
+  // root (".") instead of falling back to the default docs/ folder —
+  // users expect "项目根" to show the project root. The tree and the
+  // preview already support a "." docs root (isProjectRootDocs), and
+  // the breadcrumb renders just "项目根" for it.
+  docsRoot.value = dirRel || ".";
   selectedDoc.value = null;
   selectedRevision.value = null;
   editMode.value = false;
@@ -778,12 +968,42 @@ onBeforeUnmount(() => {
   -->
   <Teleport to="body" :disabled="!isFullscreen">
     <div class="document-manager" :class="{ 'is-fullscreen': isFullscreen }">
-      <DocumentPathBar
-        :current-path="docsRoot"
-        :storage-ok="storageOk"
-        :default-path="DEFAULT_DOCS_ROOT"
-        @path-change="onPathChange"
-      />
+      <div class="document-manager__path-row">
+        <DocumentPathBar
+          :current-path="docsRoot"
+          :storage-ok="storageOk"
+          :default-path="DEFAULT_DOCS_ROOT"
+          @path-change="onPathChange"
+        />
+        <!-- 2026-07-17 docs-presets: one-click quick paths. dir
+             presets switch the docs root; file presets root the
+             manager at the project root and open the file directly.
+             A missing target shows a transient notice (below) and
+             does NOT navigate. -->
+        <div
+          class="document-manager__presets"
+          role="group"
+          :aria-label="tm('spcodeProjectLoad.documentManager.presets.label')"
+        >
+          <button
+            v-for="p in DOC_PRESETS"
+            :key="p.path"
+            type="button"
+            class="document-manager__preset-btn"
+            :class="{ 'is-active': isPresetActive(p) }"
+            :disabled="presetChecking === p.path"
+            :title="p.path"
+            @click="onPresetClick(p)"
+          >
+            <v-icon size="12">{{
+              p.kind === "file"
+                ? "mdi-file-document-outline"
+                : "mdi-folder-outline"
+            }}</v-icon>
+            {{ p.label }}
+          </button>
+        </div>
+      </div>
       <div
         v-if="pathMissingNotice"
         class="document-manager__notice document-manager__notice--warn"
@@ -793,6 +1013,14 @@ onBeforeUnmount(() => {
             path: docsRoot,
           })
         }}
+      </div>
+      <!-- 2026-07-17 docs-presets: transient not-found / check-failed
+           notice for preset clicks (auto-clears after 5s). -->
+      <div
+        v-if="presetNotice"
+        class="document-manager__notice document-manager__notice--warn"
+      >
+        {{ presetNotice }}
       </div>
       <div v-if="!isProjectLoaded" class="document-manager__empty">
         <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
@@ -1030,6 +1258,38 @@ onBeforeUnmount(() => {
                   v-model="viewMode"
                   :has-revision="!!selectedRevision"
                 />
+                <!-- 2026-07-17 btn-overlap fix: the edit button moved
+                     from an absolute-positioned float (which collided
+                     with the copy button) into this toolbar row, next
+                     to copy — same layout as the workspace meta
+                     header ([编辑][复制]). margin-left:auto on the
+                     edit button pushes the pair to the right edge. -->
+                <button
+                  type="button"
+                  class="document-manager__edit-btn"
+                  @click="onStartEdit"
+                >
+                  <v-icon size="14">mdi-pencil-outline</v-icon>
+                  {{ tm("spcodeProjectLoad.documentManager.editor.edit") }}
+                </button>
+                <!-- 2026-07-17 docs-copy-btn: copy the raw content,
+                     mirroring the workspace FileBrowserFilePreview
+                     affordance. -->
+                <button
+                  v-if="canCopyContent"
+                  type="button"
+                  class="document-manager__copy-btn"
+                  :class="{
+                    'document-manager__copy-btn--success':
+                      copyButtonState === 'success',
+                    'document-manager__copy-btn--error':
+                      copyButtonState === 'error',
+                  }"
+                  @click="onCopyContent"
+                >
+                  <v-icon size="14">mdi-content-copy</v-icon>
+                  {{ copyButtonText }}
+                </button>
               </div>
               <div
                 v-if="viewMode === 'rendered'"
@@ -1115,15 +1375,12 @@ onBeforeUnmount(() => {
                 comment indicator, which is the canonical entry
                 point. The line-level comment editor on the right
                 pane is unchanged.
+
+                2026-07-17 btn-overlap fix: the edit button moved
+                into the view-toolbar row above (it previously
+                floated absolute top-right and collided with the
+                copy button added the same day).
               -->
-              <button
-                type="button"
-                class="document-manager__edit-btn"
-                @click="onStartEdit"
-              >
-                <v-icon size="14">mdi-pencil-outline</v-icon>
-                {{ tm("spcodeProjectLoad.documentManager.editor.edit") }}
-              </button>
             </template>
           </section>
 
@@ -1353,9 +1610,10 @@ onBeforeUnmount(() => {
   background: rgba(var(--v-theme-error), 0.08);
 }
 .document-manager__edit-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+  /* 2026-07-17 btn-overlap fix: inline flex item in the view-toolbar
+     row (was absolute top-right, which collided with the copy
+     button). margin-left:auto pushes the edit+copy pair right. */
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1366,7 +1624,7 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   color: rgba(var(--v-theme-on-surface), 0.75);
   cursor: pointer;
-  z-index: 1;
+  flex-shrink: 0;
 }
 .document-manager__edit-btn:hover {
   border-color: rgba(var(--v-theme-primary), 0.4);
@@ -1414,6 +1672,80 @@ onBeforeUnmount(() => {
 .document-manager__search-input:focus {
   border-color: rgb(var(--v-theme-primary));
   box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.16);
+}
+/* 2026-07-17 docs-copy-btn: copy raw content button in the view
+   toolbar. Visual spec mirrors .document-manager__edit-btn;
+   success/error modifiers tint the transient feedback state. */
+.document-manager__copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
+  background: var(--v-theme-surface, transparent);
+  border-radius: 4px;
+  color: rgba(var(--v-theme-on-surface), 0.75);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.document-manager__copy-btn:hover {
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  color: rgb(var(--v-theme-primary));
+}
+.document-manager__copy-btn--success,
+.document-manager__copy-btn--success:hover {
+  border-color: rgba(var(--v-theme-success), 0.5);
+  color: rgb(var(--v-theme-success));
+}
+.document-manager__copy-btn--error,
+.document-manager__copy-btn--error:hover {
+  border-color: rgba(var(--v-theme-error), 0.5);
+  color: rgb(var(--v-theme-error));
+}
+/* 2026-07-17 docs-presets: quick-path chips on the path-bar row.
+   Pill-shaped (radius 10px) to read as shortcuts, not actions;
+   the active chip mirrors the "current location" so the row also
+   doubles as a where-am-I indicator. */
+.document-manager__path-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.document-manager__presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 8px 4px 0;
+  min-width: 0;
+}
+.document-manager__preset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
+  border-radius: 10px;
+  background: var(--v-theme-surface, transparent);
+  color: rgba(var(--v-theme-on-surface), 0.75);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.document-manager__preset-btn:hover {
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  color: rgb(var(--v-theme-primary));
+}
+.document-manager__preset-btn.is-active {
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  color: rgb(var(--v-theme-primary));
+}
+.document-manager__preset-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .document-manager__fullscreen-btn {
   background: transparent;

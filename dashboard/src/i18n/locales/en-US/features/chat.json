@@ -796,6 +796,11 @@
         "invalidPath": "Invalid path: must be a project-relative path",
         "storageWarning": "Browser storage is unavailable; settings will not persist after this session"
       },
+      "presets": {
+        "label": "Quick paths",
+        "notFound": "Target not found: {path}",
+        "checkFailed": "Could not access target: {path}"
+      },
       "pane": {
         "collapseTree": "Hide tree",
         "expandTree": "Show tree",

@@ -8,8 +8,6 @@ import {
   onMounted,
   ref,
   watch,
-  type ComputedRef,
-  type Ref,
 } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import {
@@ -30,6 +28,7 @@ import FileBrowserCodeView from "./FileBrowserCodeView.vue";
 import FileCommentEditor from "./FileCommentEditor.vue";
 import DiffPreview from "./DiffPreview.vue";
 import ShikiEditor from "./ShikiEditor.vue";
+import MarkdownView from "@/components/shared/MarkdownView.vue";
 import { useSpcodeFileWrite } from "@/composables/useSpcodeFileWrite";
 
 /** Mirrors DocumentManager's viewMode union, trimmed to what the
@@ -129,30 +128,11 @@ const { tm } = useModuleI18n("features/chat");
 // the noop default here makes this component reusable in isolation
 // (storybook / unit tests) without asserting on the inject.
 
-// Inner fullscreen bridge (spec 2026-07-15 gitdiff-workspace-fullscreen).
-// GitDiffSidebar provides `globalFullscreen` / `innerFullscreen` /
-// `isAnyFullscreen` / `toggleInnerFullscreen`. The button we render in
-// the preview-file meta header calls `toggleInnerFullscreen()`, which
-// in the sidebar enforces the "only one mode on at a time" rule and
-// also turns any active global fullscreen off. The noop defaults keep
-// the component usable in isolation (storybook / unit tests) where
-// the sidebar is not an ancestor.
-const globalFullscreen = inject<Ref<boolean>>(
-  "spcode:globalFullscreen",
-  ref(false),
-);
-const innerFullscreen = inject<Ref<boolean>>(
-  "spcode:innerFullscreen",
-  ref(false),
-);
-const isAnyFullscreen = inject<ComputedRef<boolean>>(
-  "spcode:isAnyFullscreen",
-  computed(() => false),
-);
-const toggleInnerFullscreen = inject<() => void>(
-  "spcode:toggleInnerFullscreen",
-  () => {},
-);
+// 2026-07-17: the inner-fullscreen bridge (spcode:globalFullscreen /
+// innerFullscreen / isAnyFullscreen / toggleInnerFullscreen injects)
+// was removed — the preview-only fullscreen duplicated GitDiffSidebar's
+// sidebar-wide fullscreen button. The preview no longer teleports to
+// <body> and renders no fullscreen control of its own.
 
 /**
  * Resolve a symlink target string (which may be relative) against the
@@ -347,6 +327,41 @@ onBeforeUnmount(() => {
   }
   fileWrite.dispose();
 });
+
+// ── Markdown rendering (2026-07-17 workspace-md-render) ─────────
+// .md/.markdown files can be viewed rendered (reuses the shared
+// <MarkdownView> — the same component the document-manager tab
+// uses for its 渲染 mode) or as the raw Shiki code view. The mode
+// resets to "rendered" on file change, mirroring DocumentManager's
+// onTreeSelect which pins viewMode to rendered.
+const mdViewMode = ref<"raw" | "rendered">("rendered");
+
+const isMarkdownFile = computed<boolean>(() => {
+  if (props.state.kind !== "file") return false;
+  const name = props.state.snapshot.meta.name.toLowerCase();
+  return name.endsWith(".md") || name.endsWith(".markdown");
+});
+
+/** True when the body should render markdown instead of the code
+ *  view. Binary / too-large / loading are excluded by the template
+ *  branches themselves (they win over the rendered branch). */
+const mdRenderActive = computed<boolean>(
+  () => isMarkdownFile.value && mdViewMode.value === "rendered",
+);
+
+/** Meta-header toggle visibility. Hidden in edit mode (the editor
+ *  owns the body) and in historical-diff mode (a unified diff is
+ *  not markdown-renderable). */
+const canToggleMdView = computed<boolean>(
+  () => isMarkdownFile.value && !editMode.value && !isHistoricalDiff.value,
+);
+
+watch(
+  () => (props.state.kind === "file" ? props.state.snapshot.meta.path : null),
+  () => {
+    mdViewMode.value = "rendered";
+  },
+);
 
 // ── 2026-07-17 workspace file editor ─────────────────────────────
 // Edit mode mirrors DocumentManager's editMode/editBuffer pair, but
@@ -677,30 +692,13 @@ function onDeleteComment(commentId: string): void {
     </div>
 
     <!-- 文件 -->
-    <!-- Inner fullscreen (spec 2026-07-15 gitdiff-workspace-fullscreen):
-                 teleport the entire preview-file block to <body> only while
-                 innerFullscreen is on. The wrapper div outside the Teleport
-                 keeps the v-else-if narrowing intact for Vue's template
-                 type-checking (Teleport cannot forward a parent's v-if
-                 narrowing into its children); the inner <div> carries the
-                 `preview-file` class + `is-fullscreen` modifier and is the
-                 actual element the CSS rules target.
-
-               2026-07-15 fix: this wrapper also carries the `preview-file`
-               class itself. Without it the inner `.preview-file` (a flex
-               column with `height: 100%`) has no parent with a defined
-               height to resolve against — `state.kind === 'file'` is the
-               only thing the wrapper contributes for type narrowing, but
-               Vue still needs the wrapper as a normal block in the DOM,
-               and an undefined-height parent collapses every descendant
-               flex chain. Marking the wrapper `preview-file` re-establishes
-               the height chain (.file-browser-preview → wrapper →
-               inner → .code-view with overflow:auto) so long files scroll
-               inside the preview pane instead of clipping against the
-               outer overflow:hidden. -->
+    <!-- 2026-07-17: the inner-fullscreen Teleport wrapper was removed
+         — its role duplicated GitDiffSidebar's sidebar-wide fullscreen
+         button. This single .preview-file div keeps the flex height
+         chain (.file-browser-preview → .preview-file → .code-view with
+         overflow:auto) so long files scroll inside the preview pane
+         instead of clipping against the outer overflow:hidden. -->
         <div v-else-if="state.kind === 'file'" class="preview-file">
-          <Teleport to="body" :disabled="!innerFullscreen">
-            <div class="preview-file" :class="{ 'is-fullscreen': innerFullscreen }">
           <!--
             2026-07-15 workspace-history-banner: when a revision
             is picked, show the same "正在查看历史版本 {sha}" +
@@ -794,6 +792,33 @@ function onDeleteComment(commentId: string): void {
           Diff mode copies nothing (it'd be the entire patch,
           which would be surprising); same as <DocumentManager>.
         -->
+            <!-- 2026-07-17 workspace-md-render: raw ⇄ rendered flip
+                 for markdown files. Shows the CURRENT mode (click to
+                 switch), mirroring the document-manager 原文/渲染
+                 view tabs; reuses its i18n keys. -->
+            <v-btn
+              v-if="canToggleMdView"
+              size="x-small"
+              variant="text"
+              color="primary"
+              :prepend-icon="
+                mdViewMode === 'rendered'
+                  ? 'mdi-language-markdown-outline'
+                  : 'mdi-code-tags'
+              "
+              :aria-pressed="mdViewMode === 'rendered'"
+              @click="
+                mdViewMode = mdViewMode === 'rendered' ? 'raw' : 'rendered'
+              "
+            >
+              {{
+                tm(
+                  mdViewMode === 'rendered'
+                    ? 'spcodeProjectLoad.documentManager.viewMode.rendered'
+                    : 'spcodeProjectLoad.documentManager.viewMode.raw',
+                )
+              }}
+            </v-btn>
             <!-- 2026-07-17 workspace file editor: enters edit mode
                  (body swaps to <ShikiEditor>). Hidden while editing,
                  for history views, binaries, oversized files, and
@@ -822,36 +847,6 @@ function onDeleteComment(commentId: string): void {
             >
               {{ copyButtonText }}
             </v-btn>
-            <!-- Inner fullscreen button (spec 2026-07-15 gitdiff-
-             workspace-fullscreen). Reuses the document manager
-             translations so the icon/aria-label read consistently
-             with the top-bar fullscreen control. `isAnyFullscreen`
-             covers BOTH global and inner modes — clicking the button
-             while global is on cancels global (per the sidebar's
-             toggleInnerFullscreen helper, which enforces mutual
-             exclusion). -->
-            <v-btn
-              size="x-small"
-              variant="text"
-              color="primary"
-              :icon="isAnyFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
-              :aria-pressed="isAnyFullscreen"
-              :aria-label="
-                tm(
-                  isAnyFullscreen
-                    ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
-                    : 'spcodeProjectLoad.documentManager.fullscreen.enter',
-                )
-              "
-              :title="
-                tm(
-                  isAnyFullscreen
-                    ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
-                    : 'spcodeProjectLoad.documentManager.fullscreen.enter',
-                )
-              "
-              @click="toggleInnerFullscreen"
-            />
           </div>
 
           <!--
@@ -937,6 +932,21 @@ function onDeleteComment(commentId: string): void {
               tm("spcodeProjectLoad.fileBrowser.preview.binary")
             }}</span>
           </div>
+          <!-- 2026-07-17 workspace-md-render: historical markdown in
+               rendered mode. Placed before the raw code view so it
+               wins once the blob is loaded; the loading branch below
+               still covers the not-yet-fetched case. -->
+          <div
+            v-else-if="
+              isHistoricalRaw && mdRenderActive && props.historicalContent
+            "
+            class="preview-markdown"
+          >
+            <MarkdownView
+              :source="props.historicalContent ?? ''"
+              :is-dark="isDark"
+            />
+          </div>
           <FileBrowserCodeView
             v-else-if="isHistoricalRaw && highlightedHistoricalHtml"
             :highlighted-html="highlightedHistoricalHtml"
@@ -978,6 +988,18 @@ function onDeleteComment(commentId: string): void {
             }}</span>
           </div>
 
+          <!-- 2026-07-17 workspace-md-render: current-file markdown
+               in rendered mode. Sits after the binary / too-large
+               branches so only real text content reaches it. The
+               raw code view below remains the fallback (and the
+               原文 mode target). -->
+          <div v-else-if="mdRenderActive" class="preview-markdown">
+            <MarkdownView
+              :source="state.snapshot.content ?? ''"
+              :is-dark="isDark"
+            />
+          </div>
+
           <!-- 文本内容(Shiki 高亮) + 行内评论 gutter/编辑器 (legacy: current) -->
           <FileBrowserCodeView
             v-else
@@ -1005,8 +1027,6 @@ function onDeleteComment(commentId: string): void {
             @delete="onDeleteComment"
           />
         </div>
-      </Teleport>
-    </div>
     <v-snackbar
       v-model="snackbar.visible"
       :timeout="4000"
@@ -1058,37 +1078,16 @@ function onDeleteComment(commentId: string): void {
   max-width: 320px;
 }
 
-/* Inner fullscreen (spec 2026-07-15 gitdiff-workspace-fullscreen).
-   Matches the document-manager pattern: when the inner fullscreen
-   button is clicked, the entire preview-file block teleports to
-   <body> and these rules turn it into a fixed fullscreen flex
-   column. The meta header stays at the top; the content area (text
-   code view or binary placeholder) takes the remaining height and
-   scrolls within itself. */
-.preview-file.is-fullscreen {
-  position: fixed;
-  inset: 0;
-  z-index: 1300;
-  display: flex;
-  flex-direction: column;
-  background: rgb(var(--v-theme-surface));
-  color: rgb(var(--v-theme-on-surface));
-  margin: 0;
-}
-.preview-file.is-fullscreen .preview-file-meta {
-  flex-shrink: 0;
-  border-bottom: 1px solid
-    var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
-}
-.preview-file.is-fullscreen :deep(.file-browser-code-view) {
+/* 2026-07-17: the .preview-file.is-fullscreen rules were removed
+   together with the inner-fullscreen feature (see template note). */
+/* 2026-07-17 workspace-md-render: scrollable rendered-markdown body.
+   Mirrors .document-manager__rendered from DocumentManager so the
+   two tabs' 渲染 views read identically. */
+.preview-markdown {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-}
-.preview-file.is-fullscreen .preview-binary {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
+  padding: 12px;
 }
 .preview-file {
   display: flex;

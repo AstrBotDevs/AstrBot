@@ -12,8 +12,6 @@ import {
   computed,
   onMounted,
   nextTick,
-  type Ref,
-  type ComputedRef,
 } from "vue";
 import {
   useSpcodeGitDiff,
@@ -213,45 +211,24 @@ const selectedWorktree = ref<string | null>(null);
 const viewMode = ref<"files" | "diff" | "history" | "docs">(loadViewMode());
 const fileBrowserCurrentPath = ref<string>(loadFileBrowserCurrentPath());
 // ── Fullscreen state ──────────────────────────────────────────────
-// Two non-persisted modes that share a single "cancel" affordance.
-// They are mutually exclusive: at most one can be true at a time.
-//   globalFullscreen: the entire sidebar expands to the viewport;
-//                     survives page switches (e.g. files → diff).
-//   innerFullscreen: only the selected file's preview area expands.
-// Provided to descendants (FileBrowserFilePreview) via string-keyed
-// inject so the inner button can mirror the same cancel semantics.
+// Non-persisted. globalFullscreen expands the entire sidebar to the
+// viewport and survives page switches (e.g. files → diff).
+// 2026-07-17: the innerFullscreen mode (preview-only Teleport inside
+// FileBrowserFilePreview) was removed — its role duplicated this
+// sidebar-wide fullscreen button.
 const globalFullscreen = ref(false);
-const innerFullscreen = ref(false);
-const isAnyFullscreen = computed(
-  () => globalFullscreen.value || innerFullscreen.value,
-);
 
 function toggleGlobalFullscreen(): void {
-  if (isAnyFullscreen.value) {
-    globalFullscreen.value = false;
-    innerFullscreen.value = false;
-    return;
-  }
-  globalFullscreen.value = true;
-}
-
-function toggleInnerFullscreen(): void {
-  if (isAnyFullscreen.value) {
-    globalFullscreen.value = false;
-    innerFullscreen.value = false;
-    return;
-  }
-  innerFullscreen.value = true;
+  globalFullscreen.value = !globalFullscreen.value;
 }
 
 function onFullscreenKeyDown(e: KeyboardEvent): void {
-  if (e.key !== "Escape" || !isAnyFullscreen.value) return;
+  if (e.key !== "Escape" || !globalFullscreen.value) return;
   globalFullscreen.value = false;
-  innerFullscreen.value = false;
 }
 
 watch(
-  isAnyFullscreen,
+  globalFullscreen,
   (v) => {
     document.body.style.overflow = v ? "hidden" : "";
   },
@@ -615,17 +592,10 @@ function focusCommit(sha: string): void {
 const FOCUS_COMMIT_KEY = "spcode:focusCommit";
 provide<(sha: string) => void>(FOCUS_COMMIT_KEY, focusCommit);
 
-// Fullscreen shared keys. String keys keep the import surface in
-// FileBrowserFilePreview trivial. A Symbol would force a shared module
-// just to host the constants for one consumer; not worth it.
-const FULLSCREEN_GLOBAL_KEY = "spcode:globalFullscreen";
-const FULLSCREEN_INNER_KEY = "spcode:innerFullscreen";
-const FULLSCREEN_IS_ANY_KEY = "spcode:isAnyFullscreen";
-const FULLSCREEN_TOGGLE_INNER_KEY = "spcode:toggleInnerFullscreen";
-provide<Ref<boolean>>(FULLSCREEN_GLOBAL_KEY, globalFullscreen);
-provide<Ref<boolean>>(FULLSCREEN_INNER_KEY, innerFullscreen);
-provide<ComputedRef<boolean>>(FULLSCREEN_IS_ANY_KEY, isAnyFullscreen);
-provide<() => void>(FULLSCREEN_TOGGLE_INNER_KEY, toggleInnerFullscreen);
+// 2026-07-17: the fullscreen provide/inject bridge (spcode:globalFullscreen
+// / innerFullscreen / isAnyFullscreen / toggleInnerFullscreen) was
+// removed together with the inner-fullscreen feature — no descendants
+// consume these keys anymore.
 
 // Spec §3.3.3:confirm dialog for "Stage all"。
 const confirmStageAllOpen = ref(false);
@@ -1033,7 +1003,7 @@ onMounted(() => {
   window.addEventListener("keydown", onSearchKeydown);
   // Fullscreen cancel handler: bound to document (not window) in
   // bubble phase so the existing window-level search Escape handler
-  // and component-local Escape handlers run first. The isAnyFullscreen
+  // and component-local Escape handlers run first. The globalFullscreen
   // guard filters out non-fullscreen cases so other Escape shortcuts
   // keep working unchanged.
   document.addEventListener("keydown", onFullscreenKeyDown);
@@ -2653,20 +2623,22 @@ const currentRoot = computed<string | null>(() => {
               {{ tm("spcodeProjectLoad.diffSidebar.refreshTooltip") }}
             </v-tooltip>
             <v-btn
-              :icon="isAnyFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
+              :icon="
+                globalFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'
+              "
               size="small"
               variant="text"
-              :aria-pressed="isAnyFullscreen"
+              :aria-pressed="globalFullscreen"
               :aria-label="
                 tm(
-                  isAnyFullscreen
+                  globalFullscreen
                     ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
                     : 'spcodeProjectLoad.documentManager.fullscreen.enter',
                 )
               "
               :title="
                 tm(
-                  isAnyFullscreen
+                  globalFullscreen
                     ? 'spcodeProjectLoad.documentManager.fullscreen.exit'
                     : 'spcodeProjectLoad.documentManager.fullscreen.enter',
                 )

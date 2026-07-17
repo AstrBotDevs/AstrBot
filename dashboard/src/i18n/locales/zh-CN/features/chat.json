@@ -796,6 +796,11 @@
         "invalidPath": "路径无效:必须是项目内的相对路径",
         "storageWarning": "浏览器存储不可用,本次会话结束后保存将失效"
       },
+      "presets": {
+        "label": "快捷目录",
+        "notFound": "目标不存在:{path}",
+        "checkFailed": "无法访问目标:{path}"
+      },
       "pane": {
         "collapseTree": "隐藏目录",
         "expandTree": "显示目录",
