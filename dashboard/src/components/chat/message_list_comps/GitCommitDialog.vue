@@ -5,8 +5,16 @@
      <v-dialog persistent> pattern of the existing restore dialog so
      the UX is consistent. -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { useModuleI18n } from "@/i18n/composables";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { pluginExtensionApi } from "@/api/v1";
+import {
+  parseSpcodeGitDiff,
+  type SpcodeGitDiffRawResponse,
+  type SpcodeGitDiffSnapshot,
+} from "@/composables/parseSpcodeGitDiff";
+import { buildCommitMessagePrompt } from "@/composables/commitMessagePrompt";
+import { useSpcodeBtw } from "@/composables/useSpcodeBtw";
 
 const { tm } = useModuleI18n("features/chat");
 
@@ -17,6 +25,10 @@ const props = defineProps<{
   /** Last failure reason + stderr; dialog stays open on failure so
    *  the user can edit message and retry (spec §3.3.4). */
   lastError?: { reason: string; stderr: string };
+  /** Current session origin; forwarded to the git-diff and btw calls. */
+  umo: string | null;
+  /** Selected worktree path (null = primary); forwarded to git-diff. */
+  worktree: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -31,15 +43,111 @@ const WARN_MESSAGE = 7000;
 
 const message = ref<string>("");
 
-// Reset message + lastError every time the dialog opens.
+// Reset message + lastError + generate error every time the dialog opens.
 watch(
   () => props.modelValue,
   (open) => {
     if (open) {
       message.value = "";
+      generateErrorKey.value = null;
     }
   },
 );
+
+// ── AI commit-message generation (spec 2026-07-17 §4.3) ────────────
+const { locale } = useI18n();
+const btw = useSpcodeBtw();
+
+// Persisted language for the generated message. Mirrors the sidebar's
+// safeGetItem/safeSetItem convention: never throw, invalid values fall
+// back to the default (zh when the UI locale is zh-CN, else en).
+const COMMIT_MSG_LANG_KEY = "astrbot.spcode.gitDiffSidebar.commitMsgLang";
+type MsgLang = "zh" | "en";
+
+function loadMsgLang(): MsgLang {
+  try {
+    const v = localStorage.getItem(COMMIT_MSG_LANG_KEY);
+    if (v === "zh" || v === "en") return v;
+  } catch {
+    /* localStorage may be unavailable (private mode) — fall through */
+  }
+  return locale.value === "zh-CN" ? "zh" : "en";
+}
+
+const msgLanguage = ref<MsgLang>(loadMsgLang());
+watch(msgLanguage, (v) => {
+  try {
+    localStorage.setItem(COMMIT_MSG_LANG_KEY, v);
+  } catch {
+    /* no-op */
+  }
+});
+
+// i18n key suffix of the last generate failure; null = no error.
+const generateErrorKey = ref<string | null>(null);
+
+// Set by onCancel so a late git-diff/btw resolution never overwrites a
+// closed dialog's state (btw itself is aborted via btw.cancel()).
+let generateAborted = false;
+
+const canGenerate = computed(
+  () =>
+    props.stagedFiles.length > 0 &&
+    !!props.umo &&
+    !props.isCommitting &&
+    !btw.isGenerating.value,
+);
+
+async function onGenerate(): Promise<void> {
+  if (!canGenerate.value || !props.umo) return;
+  generateAborted = false;
+  generateErrorKey.value = null;
+  // 1. Fetch the fresh staged diff — the btw endpoint mounts no LLM
+  //    tools, so the change content must be embedded in the prompt.
+  let snapshot: SpcodeGitDiffSnapshot;
+  try {
+    const resp = await pluginExtensionApi.get<SpcodeGitDiffRawResponse>(
+      "spcode/git-diff",
+      {
+        params: {
+          umo: props.umo,
+          scope: "staged",
+          ...(props.worktree ? { worktree: props.worktree } : {}),
+        },
+      },
+    );
+    const data = resp.data?.data;
+    if (!data) throw new Error("empty git-diff response");
+    snapshot = parseSpcodeGitDiff(data);
+  } catch {
+    if (!generateAborted) generateErrorKey.value = "diff_fetch_failed";
+    return;
+  }
+  if (generateAborted) return;
+  // 2. Build the bilingual prompt and ask btw.
+  const prompt = buildCommitMessagePrompt({
+    language: msgLanguage.value,
+    files: snapshot.files,
+    rawDiff: snapshot.rawDiff,
+  });
+  const result = await btw.ask({ prompt, umo: props.umo });
+  if (result.ok) {
+    message.value = result.reply;
+    return;
+  }
+  if (result.reason === "aborted") return; // dialog cancelled mid-flight
+  generateErrorKey.value =
+    result.reason === "no_provider" ||
+    result.reason === "empty_response" ||
+    result.reason === "llm_error" ||
+    result.reason === "network"
+      ? result.reason
+      : "unknown";
+}
+
+onBeforeUnmount(() => {
+  btw.dispose();
+});
 
 const trimmedLength = computed(() => message.value.trim().length);
 const rawLength = computed(() => message.value.length);
@@ -62,6 +170,10 @@ function onSubmit(): void {
 
 function onCancel(): void {
   if (props.isCommitting) return;
+  // Abort any in-flight generation; unlike commit-in-flight, generation
+  // never blocks closing (btw is side-effect-free).
+  generateAborted = true;
+  btw.cancel();
   emit("cancel");
   emit("update:modelValue", false);
 }
@@ -87,9 +199,39 @@ function onKeydown(e: KeyboardEvent): void {
         {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.title") }}
       </v-card-title>
       <v-card-text>
-        <label class="commit-message-label">
-          {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.messageLabel") }}
-        </label>
+        <div class="commit-message-label-row">
+          <label class="commit-message-label">
+            {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.messageLabel") }}
+          </label>
+          <div class="commit-generate-controls">
+            <v-btn-toggle
+              v-model="msgLanguage"
+              mandatory
+              density="compact"
+              variant="tonal"
+              :aria-label="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.langToggleAria')"
+            >
+              <v-btn value="zh" size="x-small">
+                {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.langZh") }}
+              </v-btn>
+              <v-btn value="en" size="x-small">
+                {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.langEn") }}
+              </v-btn>
+            </v-btn-toggle>
+            <v-btn
+              variant="text"
+              size="small"
+              color="primary"
+              prepend-icon="mdi-auto-fix"
+              :loading="btw.isGenerating.value"
+              :disabled="!canGenerate"
+              :aria-label="tm('spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.generateAria')"
+              @click="onGenerate"
+            >
+              {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.generate") }}
+            </v-btn>
+          </div>
+        </div>
         <textarea
           v-model="message"
           class="commit-message-textarea"
@@ -100,6 +242,9 @@ function onKeydown(e: KeyboardEvent): void {
         />
         <div :class="charCounterClass()">
           {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.charCounter", { count: rawLength }) }}
+        </div>
+        <div v-if="generateErrorKey" class="commit-generate-error">
+          {{ tm(`spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.generateError.${generateErrorKey}`) }}
         </div>
 
         <div class="commit-staged-title">
@@ -157,6 +302,27 @@ function onKeydown(e: KeyboardEvent): void {
   font-weight: 500;
   color: rgba(var(--v-theme-on-surface), 0.8);
   margin-bottom: 4px;
+}
+.commit-message-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.commit-message-label-row .commit-message-label {
+  margin-bottom: 0;
+}
+.commit-generate-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.commit-generate-error {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgb(var(--v-theme-error));
 }
 .commit-message-textarea {
   width: 100%;
