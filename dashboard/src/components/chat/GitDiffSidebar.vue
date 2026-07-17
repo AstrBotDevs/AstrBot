@@ -49,6 +49,7 @@ import {
 import { useSpcodeGitStage } from "@/composables/useSpcodeGitStage";
 import { useSpcodeGitUnstage } from "@/composables/useSpcodeGitUnstage";
 import { useSpcodeGitCommit } from "@/composables/useSpcodeGitCommit";
+import { useSpcodeGitRevert } from "@/composables/useSpcodeGitRevert";
 import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
 import { useSpcodeGitShow } from "@/composables/useSpcodeGitShow";
 import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
@@ -506,6 +507,9 @@ const gitStage = useSpcodeGitStage();
 const gitUnstage = useSpcodeGitUnstage();
 const gitCommit = useSpcodeGitCommit();
 const gitLog = useSpcodeGitLog(selectedWorktree);
+// 2026-07-17 git-revert: History-view per-commit revert. The sidebar
+// owns the confirm dialog + the write call (mirroring stage/commit).
+const gitRevert = useSpcodeGitRevert();
 // git-show: per-commit file list (spec 2026-06-25). One composable
 // instance shared by every expanded commit in GitLogView; the
 // composable maintains a per-SHA cache internally, so re-expanding
@@ -600,6 +604,10 @@ provide<(sha: string) => void>(FOCUS_COMMIT_KEY, focusCommit);
 // Spec §3.3.3:confirm dialog for "Stage all"。
 const confirmStageAllOpen = ref(false);
 const pendingStageAllCount = ref(0);
+// 2026-07-17 git-revert: confirm dialog for the History view's
+// per-commit revert action.
+const revertDialogOpen = ref(false);
+const pendingRevert = ref<{ sha: string; subject: string } | null>(null);
 // Symmetric dialog for "Unstage all" — visible only from the staged
 // scope where the bulk button's label flips to "取消全部暂存".
 const confirmUnstageAllOpen = ref(false);
@@ -900,6 +908,158 @@ const RESTORE_REASON_I18N_KEYS: Record<
     color: "error",
   },
 };
+
+// 2026-07-17 git-revert: reason palette for the History-view revert
+// flow (docs/api/webapi-git-revert-api.md §4). withStderr reasons
+// carry actionable git output (conflict details, hook messages) and
+// are surfaced in the snackbar's <pre> block.
+const REVERT_REASON_I18N_KEYS: Record<
+  string,
+  { key: string; color: "warning" | "error"; withStderr?: boolean }
+> = {
+  invalid_body: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.invalid_body",
+    color: "error",
+  },
+  invalid_param: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.invalid_param",
+    color: "error",
+  },
+  feature_disabled: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.feature_disabled",
+    color: "error",
+  },
+  no_project_loaded: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.no_project_loaded",
+    color: "error",
+  },
+  worktree_invalid: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.worktree_invalid",
+    color: "error",
+  },
+  directory_missing: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.directory_missing",
+    color: "error",
+  },
+  not_a_git_repo: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.not_a_git_repo",
+    color: "error",
+  },
+  git_unavailable: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.git_unavailable",
+    color: "error",
+  },
+  commit_not_found: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.commit_not_found",
+    color: "error",
+  },
+  empty_repository: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.empty_repository",
+    color: "error",
+  },
+  worktree_dirty: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.worktree_dirty",
+    color: "warning",
+  },
+  // REVERT_HEAD intermediate state is left behind on conflict — the
+  // message tells the user to finish/abort manually in a terminal.
+  revert_conflict: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.revert_conflict",
+    color: "warning",
+    withStderr: true,
+  },
+  nothing_to_revert: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.nothing_to_revert",
+    color: "warning",
+  },
+  hook_rejected: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.hook_rejected",
+    color: "error",
+    withStderr: true,
+  },
+  identity_not_set: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.identity_not_set",
+    color: "error",
+  },
+  nothing_to_commit: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.nothing_to_commit",
+    color: "error",
+    withStderr: true,
+  },
+  // Frontend-only code: git refuses merge-commit reverts (no -m
+  // support in the endpoint) → git_error whose stderr mentions
+  // "is a merge". Mapped to a dedicated message below.
+  merge_commit: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.merge_commit",
+    color: "error",
+  },
+  git_error: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.git_error",
+    color: "error",
+    withStderr: true,
+  },
+  network: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.network",
+    color: "error",
+  },
+  unknown: {
+    key: "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertError.reason.unknown",
+    color: "error",
+  },
+};
+
+// ── Revert commit (History view, 2026-07-17) ─────────────────────
+function onLogRevertRequest(commit: { sha: string; subject: string }): void {
+  pendingRevert.value = commit;
+  revertDialogOpen.value = true;
+}
+
+function onCancelRevert(): void {
+  revertDialogOpen.value = false;
+  pendingRevert.value = null;
+}
+
+async function onConfirmRevert(): Promise<void> {
+  const target = pendingRevert.value;
+  if (!target) return;
+  const result = await gitRevert.revert({
+    ref: target.sha,
+    worktree: selectedWorktree.value,
+    umo: spcodeStatus.status.value.umo,
+  });
+  if (result.ok) {
+    revertDialogOpen.value = false;
+    pendingRevert.value = null;
+    showSnackbar(
+      tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertSuccess", {
+        message: result.snapshot.revertMessage,
+      }),
+      "success",
+    );
+    // The endpoint created a new HEAD commit — log / status / diff
+    // caches are stale. Refresh in parallel; the read endpoints'
+    // ETags revalidate server-side so plain refreshes return fresh
+    // data (per the endpoint doc §6).
+    void Promise.all([
+      gitLog.refresh(),
+      gitStatus.refresh(),
+      composable.refresh(),
+    ]);
+    return;
+  }
+  if (result.reason === "aborted") return;
+  // Merge commits land in git_error ("is a merge" in stderr) since
+  // the endpoint passes no -m; remap to the dedicated message.
+  const reason =
+    result.reason === "git_error" && /is a merge/i.test(result.stderr ?? "")
+      ? "merge_commit"
+      : result.reason;
+  const meta =
+    REVERT_REASON_I18N_KEYS[reason] ?? REVERT_REASON_I18N_KEYS.unknown;
+  revertDialogOpen.value = false;
+  pendingRevert.value = null;
+  showSnackbar(tm(meta.key), meta.color, meta.withStderr ? result.stderr : undefined);
+}
 
 const isProjectLoaded = computed(
   () => spcodeStatus.status.value.loaded === true,
@@ -2459,6 +2619,7 @@ onBeforeUnmount(() => {
   gitStage.dispose();
   gitUnstage.dispose();
   gitCommit.dispose();
+  gitRevert.dispose();
   gitLog.dispose();
   // git-show composable holds per-SHA caches + inflight AbortControllers.
   // dispose() aborts in-flight requests and drops the maps; safe to
@@ -3112,6 +3273,7 @@ const currentRoot = computed<string | null>(() => {
             @reset="onLogReset"
             @load-more="onLogLoadMore"
             @refresh="() => gitLog.refresh()"
+            @revert="onLogRevertRequest"
           />
           <!-- 2026-07-11 document-manager:Documents 文档管理 sub-tab body。 -->
           <!--
@@ -3248,6 +3410,64 @@ const currentRoot = computed<string | null>(() => {
                   tm("spcodeProjectLoad.diffSidebar.restore.confirmAction")
                 }}</v-btn
               >
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
+        <!-- 2026-07-17 git-revert: History-view revert confirmation.
+             The endpoint creates a NEW revert commit (no history
+             rewrite) — the hint line spells that out plus the
+             clean-worktree prerequisite. -->
+        <v-dialog v-model="revertDialogOpen" persistent max-width="440">
+          <v-card>
+            <v-card-title class="text-h6">
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertConfirmTitle",
+                )
+              }}
+            </v-card-title>
+            <v-card-text>
+              <div>
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertConfirmMessage",
+                    {
+                      sha: pendingRevert?.sha.slice(0, 7) ?? "",
+                      subject: pendingRevert?.subject ?? "",
+                    },
+                  )
+                }}
+              </div>
+              <div class="git-diff-sidebar__revert-hint">
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertConfirmHint",
+                  )
+                }}
+              </div>
+            </v-card-text>
+            <v-card-actions>
+              <v-spacer />
+              <v-btn variant="text" @click="onCancelRevert">
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertConfirmCancel",
+                  )
+                }}
+              </v-btn>
+              <v-btn
+                variant="flat"
+                color="primary"
+                :loading="gitRevert.isReverting.value"
+                @click="onConfirmRevert"
+              >
+                {{
+                  tm(
+                    "spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertConfirmAction",
+                  )
+                }}
+              </v-btn>
             </v-card-actions>
           </v-card>
         </v-dialog>
@@ -3514,6 +3734,14 @@ const currentRoot = computed<string | null>(() => {
 </template>
 
 <style scoped>
+/* 2026-07-17 git-revert: secondary hint line inside the revert
+   confirmation dialog (explains the new-commit behavior). */
+.git-diff-sidebar__revert-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
 .git-diff-sidebar {
   width: 420px;
   height: calc(100% - var(--chat-panel-top-offset, 0px));

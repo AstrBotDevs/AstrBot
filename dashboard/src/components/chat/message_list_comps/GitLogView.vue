@@ -64,6 +64,11 @@ const emit = defineEmits<{
   (e: "reset", filter: LogFilter): void;
   (e: "loadMore"): void;
   (e: "refresh"): void;
+  // 2026-07-17 git-revert: per-row "回滚" affordance. The sidebar
+  // owns the confirm dialog + the /spcode/git-revert call (all git
+  // writes live at the sidebar level); we only surface which
+  // commit the user picked.
+  (e: "revert", commit: { sha: string; subject: string }): void;
 }>();
 
 // Local filter form state. Emitted on Apply; reset on Reset.
@@ -556,6 +561,30 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
               >−{{ c.shortstat.deletions }}</span
             >
           </span>
+          <!-- 2026-07-17 git-revert: per-row revert action, revealed
+               on row hover (focus-within keeps it reachable by
+               keyboard). Lives in the meta line — NOT inside the
+               header <button> (nested buttons are invalid HTML). -->
+          <button
+            type="button"
+            class="git-log-item-revert"
+            :title="
+              tm(
+                'spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertTitle',
+              )
+            "
+            :aria-label="
+              tm(
+                'spcodeProjectLoad.diffSidebar.gitWorkflow.history.revertAria',
+              )
+            "
+            @click="emit('revert', { sha: c.sha, subject: c.subject })"
+          >
+            <v-icon size="13">mdi-undo-variant</v-icon>
+            {{
+              tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.revert")
+            }}
+          </button>
         </div>
         <div v-if="expanded.has(c.sha) && c.body" class="git-log-item-body">
           <pre class="git-log-item-body-pre">{{ c.body }}</pre>
@@ -904,6 +933,36 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
   color: rgba(var(--v-theme-on-surface), 0.6);
   margin-top: 2px;
   padding-left: 20px;
+}
+/* 2026-07-17 git-revert: per-row revert action in the meta line.
+   Hidden until the row is hovered / the button itself is focused
+   (keyboard reachability), mirroring the file-list hover-action
+   pattern used across the sidebar. */
+.git-log-item-revert {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 1px 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.git-log-item:hover .git-log-item-revert,
+.git-log-item-revert:focus-visible {
+  opacity: 1;
+}
+.git-log-item-revert:hover {
+  color: rgb(var(--v-theme-primary));
+  border-color: rgba(var(--v-theme-primary), 0.4);
 }
 .git-log-item-author {
   color: rgba(var(--v-theme-on-surface), 0.8);
