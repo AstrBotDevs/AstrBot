@@ -31,6 +31,8 @@ import DiffPreview from "./DiffPreview.vue";
 import ShikiEditor from "./ShikiEditor.vue";
 import MarkdownView from "@/components/shared/MarkdownView.vue";
 import { useSpcodeFileWrite } from "@/composables/useSpcodeFileWrite";
+import { useSpcodeFileRename } from "@/composables/useSpcodeFileRename";
+import { useSpcodeFileRemove } from "@/composables/useSpcodeFileRemove";
 
 /** Mirrors DocumentManager's viewMode union, trimmed to what the
  *  workspace pane actually renders: 'raw' (file content) and 'diff'
@@ -115,6 +117,14 @@ const emit = defineEmits<{
    * as `retry`).
    */
   (e: "saved"): void;
+  /**
+   * 2026-07-18 editor toolbar parity: fired after a successful rename
+   * (with the new repo-relative path) so the parent refreshes the file
+   * list and switches the preview to the renamed file; `deleted` is
+   * fired after a successful delete so the parent closes the preview.
+   */
+  (e: "renamed", newPath: string): void;
+  (e: "deleted"): void;
 }>();
 const { tm } = useModuleI18n("features/chat");
 
@@ -327,6 +337,8 @@ onBeforeUnmount(() => {
     copyResetTimer = null;
   }
   fileWrite.dispose();
+  fileRename.dispose();
+  fileRemove.dispose();
 });
 
 // ── Markdown rendering (2026-07-17 workspace-md-render) ─────────
@@ -457,6 +469,94 @@ function onCancelEdit(): void {
   }
   editMode.value = false;
   saveError.value = null;
+}
+
+// ── 2026-07-18 rename / delete (editor toolbar parity) ──────────
+// Same-dir rename + hard delete backed by POST /spcode/file-rename
+// and POST /spcode/file-remove (the docs endpoints are .md-only).
+// Both actions operate on the on-disk file, so a dirty edit buffer
+// would be lost — guard with the same confirm semantics as cancel.
+const fileRename = useSpcodeFileRename(computed(() => props.worktree ?? null));
+const fileRemove = useSpcodeFileRemove(computed(() => props.worktree ?? null));
+const renameOpen = ref(false);
+const renameName = ref("");
+const renameError = ref<string | null>(null);
+const deleteOpen = ref(false);
+const deleteError = ref<string | null>(null);
+
+const currentFileName = computed<string>(() => {
+  const p = props.fileRelativePath ?? "";
+  const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  return idx >= 0 ? p.slice(idx + 1) : p;
+});
+
+/** Dirty guard for destructive actions: returns true when the action
+ *  may proceed (clean buffer, or the user confirmed losing edits). */
+function confirmDiscardForAction(): boolean {
+  if (!isEditDirty.value) return true;
+  return window.confirm(
+    tm("spcodeProjectLoad.fileBrowser.editor.unsavedActionConfirm"),
+  );
+}
+
+function onRenameClick(): void {
+  if (!confirmDiscardForAction()) return;
+  renameName.value = currentFileName.value;
+  renameError.value = null;
+  renameOpen.value = true;
+}
+
+async function onConfirmRename(): Promise<void> {
+  const newName = renameName.value.trim();
+  if (!newName || newName === currentFileName.value) return;
+  if (/[/\\\n\x00]/.test(newName)) {
+    renameError.value = tm(
+      "spcodeProjectLoad.fileBrowser.editor.renameFailed",
+      { reason: "path_unsafe" },
+    );
+    return;
+  }
+  const r = await fileRename.rename({
+    path: props.fileRelativePath ?? "",
+    newName,
+  });
+  if (!r.ok) {
+    renameError.value = tm(
+      "spcodeProjectLoad.fileBrowser.editor.renameFailed",
+      { reason: r.reason },
+    );
+    return;
+  }
+  // Compute the new repo-relative path (same dir, new basename) so the
+  // parent can switch the preview over without a second lookup.
+  const p = props.fileRelativePath ?? "";
+  const idx = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  const newRel = idx >= 0 ? `${p.slice(0, idx + 1)}${newName}` : newName;
+  renameOpen.value = false;
+  editMode.value = false;
+  isEditDirty.value = false;
+  emit("renamed", newRel);
+}
+
+function onDeleteClick(): void {
+  if (!confirmDiscardForAction()) return;
+  deleteError.value = null;
+  deleteOpen.value = true;
+}
+
+async function onConfirmDelete(): Promise<void> {
+  const r = await fileRemove.remove({ path: props.fileRelativePath ?? "" });
+  if (!r.ok) {
+    deleteError.value = tm(
+      "spcodeProjectLoad.fileBrowser.editor.deleteFailed",
+      { reason: r.reason },
+    );
+    return;
+  }
+  deleteOpen.value = false;
+  editMode.value = false;
+  isEditDirty.value = false;
+  emit("deleted");
 }
 
 /** Dirty guard consulted by the parent (FileBrowserView) before any
@@ -987,6 +1087,18 @@ function onDeleteComment(commentId: string): void {
               <v-btn
                 size="x-small"
                 variant="text"
+                color="primary"
+                prepend-icon="mdi-content-save-outline"
+                :disabled="!isEditDirty || fileWrite.isSaving.value"
+                :loading="fileWrite.isSaving.value"
+                @click="onSaveEdit"
+              >
+                {{ tm("spcodeProjectLoad.fileBrowser.editor.save") }}
+              </v-btn>
+              <v-btn
+                size="x-small"
+                variant="text"
+                prepend-icon="mdi-close"
                 :disabled="fileWrite.isSaving.value"
                 @click="onCancelEdit"
               >
@@ -994,13 +1106,23 @@ function onDeleteComment(commentId: string): void {
               </v-btn>
               <v-btn
                 size="x-small"
-                variant="flat"
-                color="primary"
-                :disabled="!isEditDirty || fileWrite.isSaving.value"
-                :loading="fileWrite.isSaving.value"
-                @click="onSaveEdit"
+                variant="text"
+                prepend-icon="mdi-rename-outline"
+                :disabled="fileWrite.isSaving.value"
+                @click="onRenameClick"
               >
-                {{ tm("spcodeProjectLoad.fileBrowser.editor.save") }}
+                {{ tm("spcodeProjectLoad.fileBrowser.editor.rename") }}
+              </v-btn>
+              <v-spacer />
+              <v-btn
+                size="x-small"
+                variant="text"
+                color="error"
+                prepend-icon="mdi-delete-outline"
+                :disabled="fileWrite.isSaving.value"
+                @click="onDeleteClick"
+              >
+                {{ tm("spcodeProjectLoad.fileBrowser.editor.delete") }}
               </v-btn>
             </div>
             <ShikiEditor
@@ -1162,6 +1284,71 @@ function onDeleteComment(commentId: string): void {
             @close="renderedMenu = null"
           />
         </div>
+    <!-- 2026-07-18 editor toolbar parity: rename / delete dialogs.
+         Rename is same-dir only (bare file name); delete is a hard
+         unlink, so the confirm copy carries the cannot-undo warning. -->
+    <v-dialog v-model="renameOpen" max-width="420">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ tm("spcodeProjectLoad.fileBrowser.editor.renameDialogTitle") }}
+        </v-card-title>
+        <v-card-text class="pt-4">
+          <v-text-field
+            v-model="renameName"
+            :label="tm('spcodeProjectLoad.fileBrowser.editor.newNameLabel')"
+            density="comfortable"
+            autofocus
+            :error-messages="renameError ? [renameError] : []"
+            @keyup.enter="onConfirmRename"
+          />
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" @click="renameOpen = false">
+            {{ tm("spcodeProjectLoad.fileBrowser.editor.cancel") }}
+          </v-btn>
+          <v-btn
+            variant="tonal"
+            color="primary"
+            :loading="fileRename.isRenaming.value"
+            @click="onConfirmRename"
+          >
+            {{ tm("spcodeProjectLoad.fileBrowser.editor.renameConfirm") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+    <v-dialog v-model="deleteOpen" max-width="420">
+      <v-card>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+          {{ tm("spcodeProjectLoad.fileBrowser.editor.deleteDialogTitle") }}
+        </v-card-title>
+        <v-card-text class="pt-4">
+          {{
+            tm("spcodeProjectLoad.fileBrowser.editor.deleteConfirmMessage", {
+              name: currentFileName,
+            })
+          }}
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <span v-if="deleteError" class="preview-editor-error pl-4">{{
+            deleteError
+          }}</span>
+          <v-spacer />
+          <v-btn variant="text" @click="deleteOpen = false">
+            {{ tm("spcodeProjectLoad.fileBrowser.editor.cancel") }}
+          </v-btn>
+          <v-btn
+            variant="tonal"
+            color="error"
+            :loading="fileRemove.isRemoving.value"
+            @click="onConfirmDelete"
+          >
+            {{ tm("spcodeProjectLoad.fileBrowser.editor.deleteConfirm") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <v-snackbar
       v-model="snackbar.visible"
       :timeout="4000"

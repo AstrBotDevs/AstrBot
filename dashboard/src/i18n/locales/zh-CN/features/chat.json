@@ -363,7 +363,20 @@
         "cancel": "取消",
         "discardConfirm": "有未保存的修改，确定要放弃吗？",
         "saveError": "保存失败",
-        "encodingNotice": "该文件为 {encoding} 编码，保存后将转为 UTF-8"
+        "encodingNotice": "该文件为 {encoding} 编码，保存后将转为 UTF-8",
+        "rename": "重命名",
+        "renameDialogTitle": "重命名文件",
+        "newNameLabel": "新文件名",
+        "renameConfirm": "重命名",
+        "renameSuccess": "已重命名为 {name}",
+        "renameFailed": "重命名失败：{reason}",
+        "delete": "删除",
+        "deleteDialogTitle": "删除文件",
+        "deleteConfirmMessage": "确定要删除 {name} 吗？此操作不可撤销。",
+        "deleteConfirm": "删除",
+        "deleteSuccess": "已删除 {name}",
+        "deleteFailed": "删除失败：{reason}",
+        "unsavedActionConfirm": "有未保存的修改，继续操作将丢失这些修改。是否继续？"
       },
       "comment": {
         "addButton": "添加评论",

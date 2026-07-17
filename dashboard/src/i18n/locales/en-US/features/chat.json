@@ -363,7 +363,20 @@
         "cancel": "Cancel",
         "discardConfirm": "You have unsaved changes. Discard them?",
         "saveError": "Save failed",
-        "encodingNotice": "This file is {encoding}-encoded; it will be saved as UTF-8"
+        "encodingNotice": "This file is {encoding}-encoded; it will be saved as UTF-8",
+        "rename": "Rename",
+        "renameDialogTitle": "Rename file",
+        "newNameLabel": "New file name",
+        "renameConfirm": "Rename",
+        "renameSuccess": "Renamed to {name}",
+        "renameFailed": "Rename failed: {reason}",
+        "delete": "Delete",
+        "deleteDialogTitle": "Delete file",
+        "deleteConfirmMessage": "Delete {name}? This cannot be undone.",
+        "deleteConfirm": "Delete",
+        "deleteSuccess": "Deleted {name}",
+        "deleteFailed": "Delete failed: {reason}",
+        "unsavedActionConfirm": "You have unsaved changes. Continue and lose them?"
       },
       "comment": {
         "addButton": "Add comment",

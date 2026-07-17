@@ -452,6 +452,21 @@ function onBackToCurrent(): void {
   viewMode.value = "raw";
 }
 
+// 2026-07-18 editor toolbar parity: after a rename/delete from the
+// preview toolbar, reload the directory listing (the old entry is
+// gone) and steer the preview — follow the renamed file, or clear
+// the preview after a delete. Both bubble through the parent's
+// `navigate` contract so currentPath stays untouched.
+function onPreviewRenamed(newPath: string): void {
+  dirComposable.refresh();
+  emit("navigate", { dirPath: props.currentPath, previewPath: newPath });
+}
+
+function onPreviewDeleted(): void {
+  dirComposable.refresh();
+  emit("navigate", { dirPath: props.currentPath, previewPath: null });
+}
+
 onBeforeUnmount(() => {
   // If user is mid-drag on either divider, release cleanly.
   if (isResizing.value) onMouseUp();
@@ -631,6 +646,8 @@ onBeforeUnmount(() => {
           @navigate-target="onPreviewTargetNavigate"
           @retry="() => previewComposable.refresh()"
           @saved="() => previewComposable.refresh()"
+          @renamed="onPreviewRenamed"
+          @deleted="onPreviewDeleted"
           @back-to-current="onBackToCurrent"
         />
         <div v-else class="file-browser-pane-right file-browser-preview-empty">

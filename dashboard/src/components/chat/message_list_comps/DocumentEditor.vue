@@ -68,6 +68,14 @@ function onCopyRaw() {
 }
 
 function onDeleteClick() {
+  // 2026-07-18 toolbar parity: deleting the on-disk file also drops
+  // the dirty buffer — guard with the same confirm as cancel.
+  if (isDirty.value) {
+    const ok = window.confirm(
+      tm("spcodeProjectLoad.documentManager.editor.cancelDirty"),
+    );
+    if (!ok) return;
+  }
   showDeleteConfirm.value = true;
 }
 function onDeleteConfirm() {
@@ -76,6 +84,14 @@ function onDeleteConfirm() {
 }
 
 function onRenameOpen() {
+  // 2026-07-18 toolbar parity: a successful rename swaps the file
+  // under the editor, so a dirty buffer would be lost — confirm first.
+  if (isDirty.value) {
+    const ok = window.confirm(
+      tm("spcodeProjectLoad.documentManager.editor.cancelDirty"),
+    );
+    if (!ok) return;
+  }
   renameDraft.value = props.fileRelative;
   renameError.value = null;
   renameOpen.value = true;

@@ -352,7 +352,20 @@
         "cancel": "Отмена",
         "discardConfirm": "Есть несохранённые изменения. Отменить их?",
         "saveError": "Не удалось сохранить",
-        "encodingNotice": "Файл в кодировке {encoding}; при сохранении будет преобразован в UTF-8"
+        "encodingNotice": "Файл в кодировке {encoding}; при сохранении будет преобразован в UTF-8",
+        "rename": "Переименовать",
+        "renameDialogTitle": "Переименовать файл",
+        "newNameLabel": "Новое имя файла",
+        "renameConfirm": "Переименовать",
+        "renameSuccess": "Переименовано в {name}",
+        "renameFailed": "Ошибка переименования: {reason}",
+        "delete": "Удалить",
+        "deleteDialogTitle": "Удалить файл",
+        "deleteConfirmMessage": "Удалить {name}? Это действие нельзя отменить.",
+        "deleteConfirm": "Удалить",
+        "deleteSuccess": "Удалено: {name}",
+        "deleteFailed": "Ошибка удаления: {reason}",
+        "unsavedActionConfirm": "Есть несохранённые изменения. Продолжить и потерять их?"
       },
       "comment": {
         "addButton": "Добавить комментарий",
