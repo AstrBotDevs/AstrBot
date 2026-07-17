@@ -190,6 +190,10 @@ let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
 // the input's @input handler. Null until the first search() call.
 let _lastUmo: string | null = null;
 let _lastWorktree: string | null = null;
+// 2026-07-17 docs-search: also cache the pathFilter so the debounced
+// re-fire keeps the caller's directory scope (e.g. the docs root when
+// searching from DocumentManager). Undefined = search the whole worktree.
+let _lastPathFilter: string | undefined;
 let _inflight: AbortController | null = null;
 
 // Persist mode changes to localStorage. Mirrors the pattern used by
@@ -222,7 +226,12 @@ watch(_query, (v) => {
     return;
   }
   _debounceTimer = setTimeout(() => {
-    void _search({ umo: _lastUmo, worktree: _lastWorktree, pattern: v });
+    void _search({
+      umo: _lastUmo,
+      worktree: _lastWorktree,
+      pattern: v,
+      pathFilter: _lastPathFilter,
+    });
   }, 300);
 });
 
@@ -264,6 +273,7 @@ async function _search(opts: SearchOptions): Promise<void> {
   // the captured values survive a synchronous abort.
   _lastUmo = opts.umo;
   _lastWorktree = opts.worktree;
+  _lastPathFilter = opts.pathFilter;
   _cancel();
   if (!opts.pattern || !opts.pattern.trim()) {
     _state.value = { kind: "idle" };

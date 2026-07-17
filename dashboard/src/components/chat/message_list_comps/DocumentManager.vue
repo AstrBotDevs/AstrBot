@@ -6,11 +6,12 @@
      endpoints. Reuses the sidebar's existing useSpcodeGitLog and
      useSpcodeGitShow instances (per spec §2 decision #9 + §3.5). -->
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useSpcodeGitFile } from "@/composables/useSpcodeGitFile";
 import { useSpcodeDocs } from "@/composables/useSpcodeDocs";
 import { useSpcodeFileBrowser } from "@/composables/useSpcodeFileBrowser";
+import { useSpcodeFileSearch } from "@/composables/useSpcodeFileSearch";
 import {
   loadDocsRoot,
   saveDocsRoot,
@@ -27,6 +28,7 @@ import { useModuleI18n } from "@/i18n/composables";
 import DocumentPathBar from "./DocumentPathBar.vue";
 import DocumentViewModeTab from "./DocumentViewModeTab.vue";
 import FileBrowserCodeView from "./FileBrowserCodeView.vue";
+import SearchPanel from "./SearchPanel.vue";
 import FileCommentEditor from "./FileCommentEditor.vue";
 import { useDocumentMarkdownHighlight } from "@/composables/useDocumentMarkdownHighlight";
 import {
@@ -298,16 +300,149 @@ function exitFullscreen(): void {
   isFullscreen.value = false;
 }
 
+// ── Docs search (2026-07-17 docs-search) ──────────────────────────
+// Mirrors the workspace Files-view search (GitDiffSidebar toolbar +
+// SearchPanel) but scoped to docsRoot via the backend's path_filter.
+// Reuses the singleton useSpcodeFileSearch: the shared `query` ref
+// drives the 300ms debounce; priming with an empty pattern only
+// records the routing context (umo/worktree/pathFilter) without
+// firing a network request. searchOpen is NOT persisted — each visit
+// starts with the panel closed (matches isFullscreen).
+const searchOpen = ref<boolean>(false);
+const searchInputRef = ref<HTMLInputElement | null>(null);
+/** One-shot scroll target for the raw-view FileBrowserCodeView after
+ *  a content-hit click (1-based line; null = no scroll). Sticky like
+ *  the workspace equivalent — the CodeView watcher guards on value
+ *  changes, not on mount. */
+const searchScrollToLine = ref<number | null>(null);
+const { query: docsSearchQuery, search: docsSearch } = useSpcodeFileSearch();
+
+/** Repo-relative directory scope for the docs search. null when the
+ *  docs root IS the project root: the backend rejects "." as an
+ *  unsafe filter, and an absent filter already means "search the
+ *  whole worktree", which is exactly the project root. Trailing
+ *  slashes are stripped so the prefix-strip in onSearchOpenFile can
+ *  blindly append "/". */
+const searchPathFilter = computed<string | null>(() => {
+  const cleaned = docsRoot.value.replace(/\/+$/, "");
+  return isProjectRootDocs(cleaned) ? null : cleaned;
+});
+
+function primeDocsSearch(): void {
+  void docsSearch({
+    umo: props.umo,
+    worktree: props.worktree,
+    pattern: "",
+    pathFilter: searchPathFilter.value ?? undefined,
+  });
+}
+
+watch(searchOpen, async (open) => {
+  if (open) {
+    // Re-prime in case umo/worktree/docsRoot changed while closed.
+    primeDocsSearch();
+    await nextTick();
+    searchInputRef.value?.focus();
+  } else {
+    docsSearchQuery.value = "";
+  }
+});
+
+// Keep the scope honest when the user edits docsRoot mid-search:
+// re-prime so the next debounced keystroke searches the new root.
+// Existing results stay until the query changes (matches the
+// workspace behaviour on worktree switches).
+watch(docsRoot, () => {
+  if (searchOpen.value) primeDocsSearch();
+});
+
+// :value + @input (not v-model) — the query is shared state owned by
+// the composable singleton; writing it is what drives the search.
+function onSearchInput(e: Event): void {
+  docsSearchQuery.value = (e.target as HTMLInputElement).value;
+}
+
+function onSearchClose(e: KeyboardEvent): void {
+  e.stopPropagation();
+  searchOpen.value = false;
+}
+
+/** Open a search hit in the manager. `path` is repo-relative POSIX
+ *  (the backend searches with path_filter=docsRoot, so every hit is
+ *  inside the docs root); selectedDoc is docsRoot-relative, hence the
+ *  prefix strip. Content hits (line > 0) open in raw view centred on
+ *  the hit line; filename hits mirror onTreeSelect's view resets. */
+async function onSearchOpenFile(p: {
+  path: string;
+  line: number;
+}): Promise<void> {
+  // Same dirty-edit guard as onTreeSelect: switching docs discards
+  // the unsaved buffer, so confirm first. Declining keeps the panel
+  // open so the user can pick a different result.
+  if (editMode.value) {
+    const ok = window.confirm(
+      tm("spcodeProjectLoad.documentManager.editor.cancelDirty"),
+    );
+    if (!ok) return;
+  }
+  const prefix = searchPathFilter.value ? searchPathFilter.value + "/" : "";
+  // Defensive: the backend already scopes results, never trust it.
+  if (prefix && !p.path.startsWith(prefix)) return;
+  const doc = prefix ? p.path.slice(prefix.length) : p.path;
+  if (!doc) return;
+  selectedDoc.value = doc;
+  selectedRevision.value = null;
+  editMode.value = false;
+  editBuffer.value = "";
+  saveError.value = null;
+  searchOpen.value = false;
+  if (p.line > 0) {
+    viewMode.value = "raw";
+    // Two-step assignment: the CodeView watcher is not immediate, so a
+    // null→line transition guarantees it fires even when the same line
+    // is clicked twice, or when the view switch mounts the CodeView
+    // with the highlight already rendered.
+    searchScrollToLine.value = null;
+    await nextTick();
+    searchScrollToLine.value = p.line;
+  } else {
+    viewMode.value = "rendered";
+    searchScrollToLine.value = null;
+  }
+}
+
 /** Esc exits fullscreen (when fullscreen is on). Listener is attached
  *  on mount, detached on unmount. It does NOT preventDefault so other
  *  components can still handle Esc for their own purposes (e.g. close
  *  the comment editor) — we only react when fullscreen is on. The
  *  listener is bound to `document` (not the overlay) so that the
  *  keydown still fires after the root is teleported to <body>; the
- *  `isFullscreen` guard filters out the non-overlay case. */
+ *  `isFullscreen` guard filters out the non-overlay case.
+ *
+ *  2026-07-17 docs-search: the same listener also owns the search
+ *  shortcuts — Cmd/Ctrl+F toggles the panel, Esc closes it when
+ *  focus is outside the toolbar input / panel (the input's own
+ *  keydown.escape.stop handler wins there). Registered here rather
+ *  than in GitDiffSidebar because this component only exists while
+ *  viewMode === "docs", so the two never race. */
 function onKeyDown(e: KeyboardEvent): void {
   if (e.key === "Escape" && isFullscreen.value) {
     exitFullscreen();
+    return;
+  }
+  const isMod = e.metaKey || e.ctrlKey;
+  if (isMod && (e.key === "f" || e.key === "F")) {
+    e.preventDefault();
+    searchOpen.value = !searchOpen.value;
+  } else if (e.key === "Escape" && searchOpen.value) {
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      !target.closest(".search-panel") &&
+      !target.closest(".document-manager__search-input")
+    ) {
+      searchOpen.value = false;
+    }
   }
 }
 onMounted(() => document.addEventListener("keydown", onKeyDown));
@@ -675,6 +810,46 @@ onBeforeUnmount(() => {
         clicking a segment updates docsRoot via the toProjectRel
         conversion in DocumentTreePanel.
       -->
+        <!-- 2026-07-17 docs-search: search toolbar (toggle + input).
+             Sits above the breadcrumb/body so it survives the
+             SearchPanel ↔ body v-if swap below — mirrors the
+             git-diff-sidebar-files-toolbar pattern. The input binds
+             the shared docsSearchQuery ref (:value + @input); the
+             composable owns the 300ms debounce. Esc on the input
+             closes the panel. -->
+        <div
+          class="document-manager__search-toolbar"
+          data-testid="document-manager-search-toolbar"
+        >
+          <v-btn
+            icon
+            size="small"
+            variant="text"
+            :class="[
+              'document-manager__search-toggle',
+              { 'is-active': searchOpen },
+            ]"
+            :title="tm('spcodeProjectLoad.diffSidebar.search.button')"
+            :aria-label="tm('spcodeProjectLoad.diffSidebar.search.button')"
+            @click="searchOpen = !searchOpen"
+          >
+            <v-icon size="16">mdi-magnify</v-icon>
+          </v-btn>
+          <input
+            v-if="searchOpen"
+            ref="searchInputRef"
+            :value="docsSearchQuery"
+            type="text"
+            class="document-manager__search-input"
+            :placeholder="
+              tm('spcodeProjectLoad.diffSidebar.search.placeholder')
+            "
+            spellcheck="false"
+            autocomplete="off"
+            @input="onSearchInput"
+            @keydown.escape.stop="onSearchClose"
+          />
+        </div>
         <FileBrowserBreadcrumb
           v-if="projectRoot"
           class="document-manager__breadcrumb"
@@ -684,7 +859,20 @@ onBeforeUnmount(() => {
           :is-dark="isDark"
           @navigate="onBreadcrumbNavigate"
         />
+        <!-- 2026-07-17 docs-search: SearchPanel replaces the panes
+             body while open (toolbar + breadcrumb stay visible above),
+             mirroring FileBrowserView. path-filter scopes the backend
+             search to the docs root. -->
+        <SearchPanel
+          v-if="searchOpen"
+          v-model="searchOpen"
+          :worktree="worktree"
+          :umo="umo"
+          :path-filter="searchPathFilter"
+          @open-file="onSearchOpenFile"
+        />
         <div
+          v-else
           ref="containerRef"
           class="document-manager__body"
           :class="{
@@ -875,6 +1063,7 @@ onBeforeUnmount(() => {
                   :active-edit-line="activeEditLine"
                   :active-edit-comment-id="activeEditCommentId"
                   :is-dark="isDark"
+                  :scroll-to-line="searchScrollToLine"
                   @request-add="onRequestAddComment"
                   @request-edit="onRequestEditComment"
                 />
@@ -1187,6 +1376,44 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* 2026-07-17 docs-search: search toolbar (toggle + input). Visual
+   spec mirrors .git-diff-sidebar-files-toolbar so both search UIs
+   look identical. */
+.document-manager__search-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  flex-shrink: 0;
+}
+.document-manager__search-toggle.is-active {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+}
+.document-manager__search-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.2));
+  border-radius: 8px;
+  outline: none;
+  background: rgb(var(--v-theme-surface));
+  padding: 5px 10px;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface));
+  font-family: inherit;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    background 0.14s ease;
+}
+.document-manager__search-input::placeholder {
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
+}
+.document-manager__search-input:focus {
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.16);
 }
 .document-manager__fullscreen-btn {
   background: transparent;

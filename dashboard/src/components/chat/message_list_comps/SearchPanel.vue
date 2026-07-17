@@ -36,6 +36,13 @@ const props = defineProps<{
   modelValue: boolean;
   worktree: string | null;
   umo: string | null;
+  /**
+   * 2026-07-17 docs-search: optional repo-relative directory scope
+   * forwarded to the backend as path_filter (e.g. the docs root when
+   * embedded in DocumentManager). Omit/null = search the whole
+   * worktree (existing workspace behaviour).
+   */
+  pathFilter?: string | null;
 }>();
 const emit = defineEmits<{
   "update:modelValue": [v: boolean];
@@ -55,7 +62,12 @@ const { state, mode, search, setMode, close } = useSpcodeFileSearch();
 // the user edits the toolbar input. The pattern argument is empty
 // (the watcher short-circuits empty patterns to idle), so this is
 // a context-priming call only — no network request fires.
-void search({ umo: props.umo, worktree: props.worktree, pattern: "" });
+void search({
+  umo: props.umo,
+  worktree: props.worktree,
+  pattern: "",
+  pathFilter: props.pathFilter ?? undefined,
+});
 
 function onClose(): void {
   // 2026-07-02 toolbar input: clear the shared query + state via the
