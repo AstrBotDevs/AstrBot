@@ -618,6 +618,7 @@
             "langZh": "中文",
             "langEn": "EN",
             "langToggleAria": "Message language",
+            "generating": "Generating — the LLM may take a while to respond, please wait…",
             "generateError": {
               "no_provider": "AI service unavailable, please try again later",
               "empty_response": "AI returned nothing, please retry",

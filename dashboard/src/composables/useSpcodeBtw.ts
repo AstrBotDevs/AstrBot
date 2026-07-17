@@ -43,8 +43,11 @@ interface SpcodeBtwRawData {
   elapsed_ms?: number;
 }
 
-// Endpoint doc §4.2: show a spinner immediately, give up after 30 s.
-const BTW_TIMEOUT_MS = 30_000;
+// LLM latency varies a lot by model and prompt size (a staged diff can
+// be several thousand chars); 30 s proved too tight for slower models.
+// 120 s gives even slow providers room while still surfacing genuine
+// hangs as a `network` error eventually.
+const BTW_TIMEOUT_MS = 120_000;
 
 export function useSpcodeBtw(): UseSpcodeBtw {
   const isGenerating = ref(false);

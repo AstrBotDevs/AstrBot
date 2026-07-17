@@ -262,3 +262,51 @@ Added under `spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog` in all thr
 - `has_context` badge, generation history, multiple candidates, "insert at cursor" mode.
 - Auto-generate on dialog open.
 - Any backend change; any openapi client regeneration; any change to the commit submission path.
+
+---
+
+## Revision 2026-07-17: structured JSON reply + few-shot examples
+
+**Problem:** the original prompt asked for "message text only", but real LLM replies often carry prose preambles, markdown code fences, or commentary — not committable as-is.
+
+**Decision (confirmed with user):** the prompt now demands exactly one JSON object `{"subject": string, "body": string}` and includes two few-shot output examples per language (one with a bullet-list body, one with an empty body). The frontend parses the reply before displaying it.
+
+**Changes relative to the original design:**
+
+1. `commitMessagePrompt.ts`:
+   - Instruction item 5 (zh/en) replaced by the JSON contract + "Output examples (format only)" / "输出示例(仅演示格式)" block; body guidance moved to instruction item 4.
+   - New export `parseCommitMessageReply(text: string): string | null` — strips one wrapping code fence, extracts the first-`{`-to-last-`}` span, `JSON.parse`s it, requires a non-empty string `subject`, and returns `subject` or `subject + "\n\n" + body` (empty/non-string body → subject only). Returns `null` on any failure.
+2. `GitCommitDialog.vue` `onGenerate()` success branch: `message.value = parseCommitMessageReply(result.reply) ?? fenceStrippedTrimmedRawReply` — **fallback decision A (confirmed):** when the model ignores the JSON contract, the cleaned raw reply is still shown for manual editing instead of an error.
+3. Tests: `tests/commitMessagePrompt.test.mjs` extended to 11 tests — prompt assertions now check the JSON contract + few-shot markers; 7 new parser tests (clean/fenced/prose-wrapped JSON, empty/non-string body, missing/empty/non-string subject, array, broken JSON).
+
+**Rejected alternative:** tag-wrapped output (`<commit_message>...`) — regex extraction is simpler but loses field-level validation (subject/body split).
+
+**Format rejected alternative for fallback:** showing a `bad_format` error instead of the raw reply — stricter, but forces retries when a model occasionally ignores the format.
+
+---
+
+## Revision 2026-07-17 (2): relaxed btw timeout + generating hint
+
+**Problem:** btw calls may take tens of seconds on slower models; the original 30 s axios timeout surfaced as a `network` error too early, and the only loading indication was the button spinner — users could mistake a long wait for a hang.
+
+**Changes:**
+
+1. `useSpcodeBtw.ts`: `BTW_TIMEOUT_MS` 30_000 → 120_000.
+2. `GitCommitDialog.vue`: while `btw.isGenerating`, a hint row (14 px indeterminate progress circle + i18n text) renders between the label row and the textarea.
+3. i18n: new key `...commit.dialog.generating` in zh-CN / en-US / ru-RU.
+
+---
+
+## Revision 2026-07-17 (3): robust reply extraction + context-free btw call
+
+**Problem (observed in production):** the btw reply arrived as a long conversational analysis — reasoning about the chat session itself, the answer buried in a mid-text ` ```json ` fence, plus prose brace fragments like `{"subject","body"}` afterwards. The first-`{`-to-last-`}` extraction choked on this shape → parse failure → the whole verbose reply landed in the textarea via the raw fallback.
+
+**Root causes:** (a) the parser's extraction span was too naive for multi-block chatty output; (b) forwarding `umo` carried the whole chat session into the btw call, inviting the model to "discuss" instead of "execute" — the prompt is fully self-contained, so context adds only noise.
+
+**Changes:**
+
+1. `parseCommitMessageReply` rewritten for robustness: strips `<think>…</think>` blocks → candidate haystacks ordered as json-labeled fenced blocks → other fenced blocks → bare text → within each, every balanced `{...}` span (string-literal-aware state machine) is tried until one passes `JSON.parse` + non-empty-string `subject` validation. Invalid prose fragments are skipped naturally.
+2. `GitCommitDialog.vue`: `btw.ask({ prompt })` — `umo` no longer forwarded (context-free one-shot). `props.umo` still gates `canGenerate` and the git-diff fetch.
+3. Tests: 4 new parser cases (chatty reply with json fence + trailing prose; `<think>` leakage; invalid prose brace fragments; json-labeled fence priority) — 15 tests total.
+
+**Trade-off accepted:** dropping `umo` loses session-persona carry-over for this call; judged worthless here because the prompt embeds all needed information, and context demonstrably degraded contract compliance.

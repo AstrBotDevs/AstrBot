@@ -618,6 +618,7 @@
             "langZh": "中文",
             "langEn": "EN",
             "langToggleAria": "生成语言",
+            "generating": "正在生成，LLM 响应可能需要一些时间，请耐心等待…",
             "generateError": {
               "no_provider": "AI 服务暂不可用，请稍后再试",
               "empty_response": "AI 没有返回内容，请重试",

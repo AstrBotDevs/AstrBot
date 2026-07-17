@@ -13,7 +13,10 @@ import {
   type SpcodeGitDiffRawResponse,
   type SpcodeGitDiffSnapshot,
 } from "@/composables/parseSpcodeGitDiff";
-import { buildCommitMessagePrompt } from "@/composables/commitMessagePrompt";
+import {
+  buildCommitMessagePrompt,
+  parseCommitMessageReply,
+} from "@/composables/commitMessagePrompt";
 import { useSpcodeBtw } from "@/composables/useSpcodeBtw";
 
 const { tm } = useModuleI18n("features/chat");
@@ -130,9 +133,21 @@ async function onGenerate(): Promise<void> {
     files: snapshot.files,
     rawDiff: snapshot.rawDiff,
   });
-  const result = await btw.ask({ prompt, umo: props.umo });
+  // Deliberately context-free (no umo): the prompt is fully
+  // self-contained (stats + diff embedded), and session context made
+  // the model answer conversationally about the chat instead of
+  // following the strict JSON contract (observed 2026-07-17).
+  const result = await btw.ask({ prompt });
   if (result.ok) {
-    message.value = result.reply;
+    // Spec revision 2026-07-17: the model is asked for a JSON object;
+    // parse it tolerantly. When the model ignores the contract, fall
+    // back to the fence-stripped raw reply so the user can still edit.
+    message.value =
+      parseCommitMessageReply(result.reply) ??
+      result.reply
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/```\s*$/, "")
+        .trim();
     return;
   }
   if (result.reason === "aborted") return; // dialog cancelled mid-flight
@@ -232,6 +247,12 @@ function onKeydown(e: KeyboardEvent): void {
             </v-btn>
           </div>
         </div>
+        <div v-if="btw.isGenerating.value" class="commit-generating-hint">
+          <v-progress-circular indeterminate size="14" width="2" color="primary" />
+          <span>
+            {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.commit.dialog.generating") }}
+          </span>
+        </div>
         <textarea
           v-model="message"
           class="commit-message-textarea"
@@ -323,6 +344,14 @@ function onKeydown(e: KeyboardEvent): void {
   margin-top: 4px;
   font-size: 12px;
   color: rgb(var(--v-theme-error));
+}
+.commit-generating-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 .commit-message-textarea {
   width: 100%;
