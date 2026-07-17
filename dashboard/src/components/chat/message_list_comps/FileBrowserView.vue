@@ -571,8 +571,11 @@ onBeforeUnmount(() => {
             @navigate="onEntryNavigate"
             @breadcrumb-navigate="onBreadcrumbNavigate"
           />
+          <!-- 2026-07-17: always rendered (previously
+               v-if="previewPath" hid it until a file was selected,
+               which made the collapse affordance undiscoverable
+               on a fresh workspace). -->
           <button
-            v-if="previewPath"
             type="button"
             class="file-browser-collapse-btn"
             :title="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
