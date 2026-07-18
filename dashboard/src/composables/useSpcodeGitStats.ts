@@ -24,7 +24,11 @@ export type GitStatsFetchState =
 
 export interface UseSpcodeGitStats {
   state: Ref<GitStatsFetchState>;
-  refresh: (options?: { forceLoading?: boolean }) => Promise<void>;
+  refresh: (options?: {
+    forceLoading?: boolean;
+    since?: string;
+    until?: string;
+  }) => Promise<void>;
   /** Clear the ETag map (worktree / umo switch). */
   invalidateEtag: () => void;
   dispose: () => void;
@@ -42,11 +46,20 @@ export function useSpcodeGitStats(
   let abortController: AbortController | null = null;
   let isMounted = true;
 
-  function etagKey(umo: string, worktree: string | null): string {
-    return [umo, worktree ?? ""].join("|");
+  function etagKey(
+    umo: string,
+    worktree: string | null,
+    since: string,
+    until: string,
+  ): string {
+    return [umo, worktree ?? "", since, until].join("|");
   }
 
-  async function refresh(options?: { forceLoading?: boolean }): Promise<void> {
+  async function refresh(options?: {
+    forceLoading?: boolean;
+    since?: string;
+    until?: string;
+  }): Promise<void> {
     if (!isMounted) return;
     const umo = spcodeStatus.status.value.umo;
     if (!umo) {
@@ -61,13 +74,17 @@ export function useSpcodeGitStats(
       state.value = { kind: "loading" };
     }
     const worktree = toValue(worktreeRef);
-    const key = etagKey(umo, worktree);
+    const since = options?.since ?? "";
+    const until = options?.until ?? "";
+    const key = etagKey(umo, worktree, since, until);
     const etag = etagMap.get(key);
     try {
       const resp = await pluginExtensionApi.get<unknown>("spcode/git-stats", {
         params: {
           umo,
           ...(worktree ? { worktree } : {}),
+          ...(since ? { since } : {}),
+          ...(until ? { until } : {}),
         },
         headers: etag ? { "If-None-Match": etag } : {},
         // Surface 304 as a valid response (default axios would throw).
