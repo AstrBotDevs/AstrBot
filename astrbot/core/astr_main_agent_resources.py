@@ -25,7 +25,9 @@ SANDBOX_MODE_PROMPT = (
 TOOL_CALL_PROMPT = (
     "When using tools: "
     "never return an empty response; "
-    "briefly explain the purpose before calling a tool; "
+    "give concise progress updates while working and a short final "
+    "summary with changed files, verification, and any caveats; "
+    "run relevant checks when practical, and clearly say when a check was not run."
     "follow the tool schema exactly and do not invent parameters; "
     "after execution, briefly summarize the result for the user; "
     "keep the conversation style consistent."
