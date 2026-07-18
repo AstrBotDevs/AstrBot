@@ -205,8 +205,10 @@ class CommandFilter(HandlerFilter):
         if not ok:
             return False
 
-        # 分割为列表
-        ls = message_str.split(" ")
+        # 分割为列表，同时保护 @昵称(ID) 格式不被空格拆坏
+        # 例如 "@Heaven Whisper(488267082) 64" 应拆为 ["@Heaven Whisper(488267082)", "64"]
+        # 而非 ["@Heaven", "Whisper(488267082)", "64"]
+        ls = re.findall(r"@[^@]+?\(\d+\)|[^\s]+", message_str)
         # 去除空字符串
         ls = [param for param in ls if param]
         params = {}
