@@ -228,6 +228,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         request_max_retries: int | None = None,
         tool_result_overflow_dir: str | None = None,
         read_tool: FunctionTool | None = None,
+        overflow_file_writer: T.Callable[[str, str], T.Awaitable[str]] | None = None,
         **kwargs: T.Any,
     ) -> None:
         self.req = request
@@ -242,6 +243,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.request_max_retries = request_max_retries
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
+        self._overflow_file_writer = overflow_file_writer
         self._tool_result_token_counter = EstimateTokenCounter()
         self.request_context_manager_config = ContextConfig(
             # <=0 disables token-based guarding.
@@ -370,6 +372,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_call_id: str,
         content: str,
     ) -> str:
+        if self._overflow_file_writer is not None:
+            return await self._overflow_file_writer(content, tool_call_id)
+
         if self.tool_result_overflow_dir is None:
             raise ValueError("tool_result_overflow_dir is not configured")
 

@@ -777,3 +777,81 @@ class TestSyncSkillsToSandbox:
         ):
             # Should not raise
             await computer_client._sync_skills_to_sandbox(mock_booter)
+
+    @pytest.mark.asyncio
+    async def test_make_sandbox_overflow_writer(self, monkeypatch):
+        """make_sandbox_overflow_writer returns a callback that writes to the
+        sandbox via booter.fs.write_file with a relative path."""
+        from astrbot.core.computer import computer_client
+
+        write_calls: list[dict] = []
+
+        class _FakeFS:
+            async def write_file(self, path: str, content: str):
+                write_calls.append({"path": path, "content": content})
+
+        class _FakeBooter:
+            fs = _FakeFS()
+
+        async def _fake_get_booter(context, umo):
+            return _FakeBooter()
+
+        monkeypatch.setattr(computer_client, "get_booter", _fake_get_booter)
+
+        writer = computer_client.make_sandbox_overflow_writer(
+            context=object(),  # type: ignore[arg-type]
+            unified_msg_origin="test-umo",
+        )
+
+        result = await writer("overflow content", "tool-call-001")
+
+        # Must return a sandbox-relative path
+        assert result.startswith("astrbot_overflow_"), (
+            f"Expected sandbox-relative path (astrbot_overflow_*), got: {result}"
+        )
+        assert result.endswith(".txt")
+        assert "tool_call_001" in result or "tool-call-001" in result
+
+        # Must have called booter.fs.write_file
+        assert len(write_calls) == 1
+        assert write_calls[0]["path"] == result
+        assert write_calls[0]["content"] == "overflow content"
+
+    @pytest.mark.asyncio
+    async def test_make_sandbox_overflow_writer_sanitizes_tool_call_id(
+        self, monkeypatch,
+    ):
+        """The sandbox overflow writer must sanitize special characters in
+        the tool_call_id for use in a safe filename."""
+        from astrbot.core.computer import computer_client
+
+        write_calls: list[dict] = []
+
+        class _FakeFS:
+            async def write_file(self, path: str, content: str):
+                write_calls.append({"path": path, "content": content})
+
+        class _FakeBooter:
+            fs = _FakeFS()
+
+        async def _fake_get_booter(context, umo):
+            return _FakeBooter()
+
+        monkeypatch.setattr(computer_client, "get_booter", _fake_get_booter)
+
+        writer = computer_client.make_sandbox_overflow_writer(
+            context=object(),  # type: ignore[arg-type]
+            unified_msg_origin="test-umo",
+        )
+
+        # Tool call IDs from various providers may contain special chars
+        result = await writer("data", "chatcmpl-tool_abc:123/456")
+
+        # Path must be a valid relative filename (no directory separators)
+        assert result.startswith("astrbot_overflow_")
+        # Must not contain : or /
+        assert ":" not in result
+        assert "/" not in result
+        # Must still have written via the booter
+        assert len(write_calls) == 1
+        assert write_calls[0]["content"] == "data"
