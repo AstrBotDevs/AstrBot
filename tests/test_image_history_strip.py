@@ -14,8 +14,12 @@ def test_dump_messages_strips_image_parts():
         role="user",
         content=[
             TextPart(text="see this"),
-            ImageURLPart(image_url=ImageURLPart.ImageURL(url="data:image/png;base64,AAAA")),
-            ImageURLPart(image_url=ImageURLPart.ImageURL(url="https://example.com/x.jpg")),
+            ImageURLPart(
+                image_url=ImageURLPart.ImageURL(url="data:image/png;base64,AAAA")
+            ),
+            ImageURLPart(
+                image_url=ImageURLPart.ImageURL(url="https://example.com/x.jpg")
+            ),
         ],
     )
     dumped = dump_messages_with_checkpoints([msg])
@@ -30,8 +34,14 @@ def test_bind_checkpoint_messages_strips_polluted_history():
             "role": "user",
             "content": [
                 {"type": "text", "text": "old"},
-                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,BBB"}},
-                {"type": "image_url", "image_url": {"url": "https://example.com/a.jpg"}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/jpeg;base64,BBB"},
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/a.jpg"},
+                },
             ],
         }
     ]
@@ -46,12 +56,12 @@ def test_finalize_request_image_urls_prefers_local_and_limits():
     out = _finalize_request_image_urls(
         [
             "https://example.com/a",
-            r"C:\\tmp\\a.jpg",
-            "https://example.com/a",
-            r"C:\\tmp\\b.jpg",
+            "C:/tmp/a.jpg",
+            "HTTPS://example.com/a",
+            "C:/tmp/b.jpg",
             "https://example.com/c.jpg",
+            "data:image/png;base64,AAAA",
         ],
         max_total=2,
     )
-    assert len(out) == 2
-    assert all(not u.startswith("http") for u in out)
+    assert out == ["C:/tmp/a.jpg", "C:/tmp/b.jpg"]

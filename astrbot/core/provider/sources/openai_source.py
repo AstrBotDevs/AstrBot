@@ -43,6 +43,8 @@ from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
 from ..register import register_provider_adapter
 from .request_retry import retry_provider_request
 
+IMAGE_UNAVAILABLE_PLACEHOLDER = "[Image unavailable]"
+
 
 @register_provider_adapter(
     "openai_chat_completion",
@@ -275,7 +277,7 @@ class ProviderOpenAIOfficial(Provider):
             if not url:
                 return {
                     "type": "text",
-                    "text": "[Image unavailable]",
+                    "text": IMAGE_UNAVAILABLE_PLACEHOLDER,
                 }
 
             try:
@@ -290,7 +292,7 @@ class ProviderOpenAIOfficial(Provider):
                 )
                 return {
                     "type": "text",
-                    "text": "[Image unavailable]",
+                    "text": IMAGE_UNAVAILABLE_PLACEHOLDER,
                 }
 
             if resolved_part:
@@ -302,7 +304,7 @@ class ProviderOpenAIOfficial(Provider):
             )
             return {
                 "type": "text",
-                "text": "[Image unavailable]",
+                "text": IMAGE_UNAVAILABLE_PLACEHOLDER,
             }
 
         if part.get("type") == "audio_url":

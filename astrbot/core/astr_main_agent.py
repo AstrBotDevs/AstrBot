@@ -14,7 +14,7 @@ from pathlib import Path
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import TextPart
+from astrbot.core.agent.message import TextPart, strip_images_from_history_messages
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
@@ -115,7 +115,6 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_text,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
-from astrbot.core.agent.message import strip_images_from_history_messages
 from astrbot.core.workspace import (
     normalize_umo_for_workspace,
     resolve_workspace_root_for_umo,
@@ -1352,9 +1351,9 @@ def _select_image_chat_provider(
     return provider
 
 
-
 def _is_remote_image_ref(image_ref: str) -> bool:
-    return image_ref.startswith("http://") or image_ref.startswith("https://")
+    lowered = image_ref.lower()
+    return lowered.startswith("http://") or lowered.startswith("https://")
 
 
 def _finalize_request_image_urls(
@@ -1376,9 +1375,10 @@ def _finalize_request_image_urls(
     embedded_refs: list[str] = []
     remote_refs: list[str] = []
     for ref in urls:
+        lowered = ref.lower()
         if _is_remote_image_ref(ref):
             remote_refs.append(ref)
-        elif ref.startswith("data:") or ref.startswith("base64://"):
+        elif lowered.startswith("data:") or lowered.startswith("base64://"):
             embedded_refs.append(ref)
         else:
             local_refs.append(ref)
@@ -1419,7 +1419,9 @@ async def build_main_agent(
                 "provider_request 必须是 ProviderRequest 类型。"
             )
             if req.conversation:
-                req.contexts = strip_images_from_history_messages(json.loads(req.conversation.history))
+                req.contexts = strip_images_from_history_messages(
+                    json.loads(req.conversation.history)
+                )
         else:
             req = ProviderRequest()
             req.prompt = ""
@@ -1552,7 +1554,9 @@ async def build_main_agent(
 
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation
-            req.contexts = strip_images_from_history_messages(json.loads(conversation.history))
+            req.contexts = strip_images_from_history_messages(
+                json.loads(conversation.history)
+            )
             event.set_extra("provider_request", req)
 
     if isinstance(req.contexts, str):
@@ -1568,9 +1572,11 @@ async def build_main_agent(
                 )
             )
         )
+    raw_max_quoted_fallback_images = getattr(config, "max_quoted_fallback_images", 4)
+    max_quoted_fallback_images = max(int(raw_max_quoted_fallback_images or 4), 4)
     req.image_urls = _finalize_request_image_urls(
-        normalize_and_dedupe_strings(req.image_urls),
-        max_total=max(int(getattr(config, "max_quoted_fallback_images", 4) or 4), 4),
+        req.image_urls,
+        max_total=max_quoted_fallback_images,
     )
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
 

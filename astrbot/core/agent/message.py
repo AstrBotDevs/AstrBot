@@ -302,7 +302,6 @@ def get_checkpoint_id(message: Message | dict) -> str | None:
     return None
 
 
-
 _IMAGE_HISTORY_PLACEHOLDER = "[Image]"
 
 
@@ -415,22 +414,14 @@ def dump_messages_with_checkpoints(messages: list[Message]) -> list[dict]:
     for message in messages:
         message_data = message.model_dump()
         if isinstance(message.content, list):
-            persisted_parts: list[Any] = []
-            previous_was_image_placeholder = False
-            for part in message.content:
-                if getattr(part, "_no_save", False):
-                    continue
-                if _is_image_content_part(part):
-                    if previous_was_image_placeholder:
-                        continue
-                    persisted_parts.append(TextPart(text=_IMAGE_HISTORY_PLACEHOLDER))
-                    previous_was_image_placeholder = True
-                    continue
-                previous_was_image_placeholder = False
-                persisted_parts.append(part)
+            # Drop ephemeral parts first, then reuse shared image-stripping rules.
+            filtered_parts = [
+                part for part in message.content if not getattr(part, "_no_save", False)
+            ]
+            stripped_parts = strip_images_from_content_parts(filtered_parts)
             message_data["content"] = [
                 part.model_dump() if isinstance(part, ContentPart) else part
-                for part in persisted_parts
+                for part in stripped_parts
             ]
         dumped.append(message_data)
         if message._checkpoint_after is not None:
