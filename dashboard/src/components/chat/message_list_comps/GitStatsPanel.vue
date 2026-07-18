@@ -449,7 +449,7 @@ function cellTitle(cell: DayCell): string {
         <div class="git-stats-heatmap-wrap">
           <div
             class="git-stats-months"
-            :style="{ gridTemplateColumns: `repeat(${grid.length}, 1fr)` }"
+            :style="{ gridTemplateColumns: `repeat(${grid.length}, 14px)` }"
           >
             <span
               v-for="ml in monthLabels"
@@ -592,25 +592,61 @@ function cellTitle(cell: DayCell): string {
   text-decoration: underline;
   cursor: pointer;
 }
+/* 2026-07-18 heatmap-cell-size: parent for both the month-labels
+   row and the heatmap grid. `overflow-x: auto` shows a
+   horizontal scrollbar when the sidebar is resized below the
+   grid's natural width (e.g. 26 weeks × 14px ≈ 362px on a
+   200px-wide panel) so the cells stay at their design size
+   instead of being squashed into illegible slivers. The
+   children below use `width: max-content` so the wrap shrinks
+   to the content when the panel is wider than the grid,
+   leaving the unused horizontal space empty. */
+.git-stats-heatmap-wrap {
+  overflow-x: auto;
+}
+/* 2026-07-18 heatmap-cell-size: the month-labels row and the
+   heatmap grid below it must share the same column pitch so a
+   "6月" / "7月" label sits directly over the first week-column
+   of June / July (and not somewhere off by a few pixels). The
+   month grid is sized in the template (`:style`) with
+   `repeat(${grid.length}, 14px)` — 14px = cell (12px) + gap
+   (2px), matching the heatmap's auto-sized tracks — and is
+   forced to `width: max-content` here so it shrinks to that
+   sum instead of stretching to the wrap's full width. */
 .git-stats-months {
   display: grid;
   margin-bottom: 2px;
+  width: max-content;
 }
 .git-stats-month-label {
   font-size: 10px;
   opacity: 0.6;
   grid-row: 1;
 }
+/* 2026-07-18 heatmap-cell-size: the previous `width: 100%` +
+   `aspect-ratio: 1` + `grid-template-rows: repeat(7, 1fr)`
+   combo forced every cell to be a square that filled its
+   column, and the column itself stretched to fill the panel.
+   On small ranges (一周 / 一个月 / 三个月) that produced
+   1×7 / 5×7 / 13×7 cells, each one ~150px wide and the whole
+   grid taller than the chat log below it. Switch to fixed
+   12px square cells (GitHub's reference size) and a fixed
+   12px row height so the column-first layout still gives the
+   familiar week-strip look but every cell is identical
+   regardless of how many weeks the range spans. The `width:
+   max-content` on the grid makes the whole strip shrink to
+   its content; if the panel is narrower than the grid, the
+   wrap below adds a horizontal scrollbar. */
 .git-stats-grid {
   display: grid;
-  grid-template-rows: repeat(7, 1fr);
+  grid-template-rows: repeat(7, 12px);
   grid-auto-flow: column;
   gap: 2px;
+  width: max-content;
 }
 .git-stats-cell {
-  width: 100%;
-  aspect-ratio: 1;
-  min-width: 8px;
+  width: 12px;
+  height: 12px;
   border: 0;
   border-radius: 2px;
   background: var(--gs-l0);
@@ -705,8 +741,20 @@ function cellTitle(cell: DayCell): string {
 .git-stats-range-menu {
   padding: 4px 0;
 }
+/* 2026-07-18 heatmap-popup-font: v-list-item-title inherits Vuetify's
+   default 14-16px typography which is much larger than the
+   `改动统计` page's 12px body text. Force 12px on every text node
+   inside the popover so the dropdown matches the rest of the
+   GitStatsPanel header. Vuetify wraps the title in a dedicated
+   class, so we target that explicitly rather than the whole list
+   item. The append slot (e.g. "30d", "90d" day counters) is also
+   re-aligned to 12px for visual consistency. */
+.git-stats-range-presets .v-list-item-title {
+  font-size: 12px;
+  line-height: 1.2;
+}
 .git-stats-range-presets .v-list-item__append {
-  font-size: 11px;
+  font-size: 12px;
   opacity: 0.6;
   font-variant-numeric: tabular-nums;
 }
@@ -717,10 +765,19 @@ function cellTitle(cell: DayCell): string {
   padding: 10px 12px 12px;
 }
 .git-stats-range-custom-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   opacity: 0.7;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+/* 2026-07-18 heatmap-popup-font: the v-text-field inside the
+   popover (since / until date inputs) would also render at 14px
+   by default, looking oversized next to the now-12px labels. Use
+   the same :deep() override the rest of the dashboard applies
+   (see GitLogView's filter field for the canonical pattern). */
+.git-stats-range-custom :deep(.v-field__input),
+.git-stats-range-custom :deep(.v-label) {
+  font-size: 12px;
 }
 </style>
