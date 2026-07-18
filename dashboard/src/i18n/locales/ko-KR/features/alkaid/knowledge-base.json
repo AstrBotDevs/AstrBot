@@ -1,0 +1,155 @@
+{
+  "title": "지식 베이스",
+  "subtitle": "지식 베이스 콘텐츠를 관리하고 조회합니다",
+  "documents": {
+    "title": "문서 목록",
+    "name": "문서 이름",
+    "size": "크기",
+    "uploadTime": "업로드 시간",
+    "status": "상태",
+    "actions": "작업"
+  },
+  "management": {
+    "delete": "삭제",
+    "preview": "미리보기",
+    "download": "다운로드",
+    "reindex": "다시 인덱싱"
+  },
+  "notInstalled": {
+    "title": "지식 베이스 플러그인이 아직 설치되지 않았습니다",
+    "install": "지금 설치"
+  },
+  "empty": {
+    "title": "아직 지식 베이스가 없습니다. 지금 만들어보세요! 🙂",
+    "create": "지식 베이스 생성"
+  },
+  "list": {
+    "title": "지식 베이스 목록",
+    "create": "지식 베이스 생성",
+    "config": "구성",
+    "checkUpdate": "플러그인 업데이트 확인",
+    "updatePlugin": "플러그인을 {version}(으)로 업데이트",
+    "knowledgeCount": "개 지식 항목",
+    "tips": "팁: 채팅 페이지에서 /kb 명령어로 사용법을 알아보세요!"
+  },
+  "createDialog": {
+    "title": "새 지식 베이스 생성",
+    "nameLabel": "지식 베이스 이름",
+    "descriptionLabel": "설명",
+    "descriptionPlaceholder": "지식 베이스에 대한 간단한 설명...",
+    "embeddingModelLabel": "임베딩 모델",
+    "rerankModelLabel": "재정렬 모델",
+    "providerInfo": "공급자 ID: {id} | 임베딩 모델 차원: {dimensions}",
+    "rerankProviderInfo": "공급자 ID: {id}",
+    "tips": "팁: 지식 베이스에 임베딩 모델을 한 번 선택한 후에는 공급자의 모델이나 벡터 차원 정보를 변경하지 마세요. 변경하면 지식 베이스의 검색 정확도가 크게 저하되거나 오류가 발생할 수 있습니다.",
+    "cancel": "취소",
+    "create": "생성"
+  },
+  "emojiPicker": {
+    "title": "이모지 선택",
+    "close": "닫기",
+    "categories": {
+      "emotions": "스마일리 및 감정",
+      "animals": "동물 및 자연",
+      "food": "음식 및 음료",
+      "activities": "활동 및 사물",
+      "travel": "여행 및 장소",
+      "symbols": "기호 및 깃발"
+    }
+  },
+  "contentDialog": {
+    "title": "지식 베이스 관리",
+    "embeddingModel": "임베딩 모델",
+    "vectorDimension": "벡터 차원",
+    "usage": "사용법: 채팅 페이지에서 \"/kb use {name}\"을 입력하세요",
+    "tabs": {
+      "upload": "파일 업로드",
+      "search": "콘텐츠 검색",
+      "fromURL": "URL에서 가져오기"
+    }
+  },
+  "upload": {
+    "title": "지식 베이스에 파일 업로드",
+    "subtitle": "txt, pdf, epub, word, excel 등 다양한 형식을 지원합니다",
+    "dropzone": "파일을 이곳에 끌어다 놓거나 클릭하여 업로드하세요",
+    "chunkSettings": {
+      "title": "청크 설정",
+      "tooltip": "청크 크기는 각 텍스트 블록의 크기를 결정하고, 오버랩 길이는 인접한 텍스트 블록 간의 겹침 정도를 결정합니다.\n청크가 작을수록 더 정밀하지만 개수가 늘어나며, 적절한 오버랩은 검색 정확도를 높일 수 있습니다.",
+      "chunkSizeLabel": "청크 크기",
+      "chunkSizeHint": "각 텍스트 블록의 크기를 지정합니다. 비워두면 기본값이 사용됩니다",
+      "overlapLabel": "오버랩 길이",
+      "overlapHint": "인접한 텍스트 블록 간의 오버랩을 지정합니다. 비워두면 기본값이 사용됩니다"
+    },
+    "upload": "파일 업로드",
+    "uploading": "업로드하는 중..."
+  },
+  "search": {
+    "queryLabel": "지식 베이스 콘텐츠 검색",
+    "queryPlaceholder": "지식 베이스 콘텐츠를 검색할 키워드를 입력하세요...",
+    "resultCountLabel": "결과 개수",
+    "searching": "검색하는 중...",
+    "resultsTitle": "검색 결과",
+    "relevance": "관련도",
+    "noResults": "일치하는 콘텐츠를 찾을 수 없습니다"
+  },
+  "deleteDialog": {
+    "title": "삭제 확인",
+    "confirmText": "지식 베이스 {name}을(를) 삭제하시겠습니까?",
+    "warning": "이 작업은 되돌릴 수 없으며, 지식 베이스의 모든 콘텐츠가 영구적으로 삭제됩니다.",
+    "cancel": "취소",
+    "delete": "삭제"
+  },
+  "messages": {
+    "pluginNotAvailable": "플러그인이 설치되지 않았거나 사용할 수 없습니다",
+    "pluginNotActivated": "astrbot_plugin_knowledge_base 플러그인이 활성화되지 않았습니다. 플러그인 관리 페이지에서 활성화한 후 AstrBot을 재시작해주세요",
+    "checkPluginFailed": "플러그인 확인에 실패했습니다",
+    "installFailed": "설치에 실패했습니다",
+    "installPluginFailed": "플러그인 설치에 실패했습니다",
+    "getKnowledgeBaseListFailed": "지식 베이스 목록을 가져오지 못했습니다",
+    "knowledgeBaseCreated": "지식 베이스가 생성되었습니다",
+    "createFailed": "생성에 실패했습니다",
+    "createKnowledgeBaseFailed": "지식 베이스 생성에 실패했습니다",
+    "pleaseEnterKnowledgeBaseName": "지식 베이스 이름을 입력해주세요",
+    "pleaseSelectFile": "먼저 파일을 선택해주세요",
+    "operationSuccess": "작업 성공: {message}",
+    "uploadFailed": "업로드에 실패했습니다",
+    "fileUploadFailed": "파일 업로드에 실패했습니다",
+    "pleaseEnterSearchContent": "검색할 내용을 입력해주세요",
+    "noMatchingContent": "일치하는 콘텐츠를 찾을 수 없습니다",
+    "searchFailed": "검색에 실패했습니다",
+    "searchKnowledgeBaseFailed": "지식 베이스 검색에 실패했습니다",
+    "deleteTargetNotExists": "삭제 대상이 존재하지 않습니다",
+    "knowledgeBaseDeleted": "지식 베이스가 삭제되었습니다",
+    "deleteFailed": "삭제에 실패했습니다",
+    "deleteKnowledgeBaseFailed": "지식 베이스 삭제에 실패했습니다",
+    "getEmbeddingModelListFailed": "임베딩 모델 목록을 가져오지 못했습니다",
+    "updateAvailable": "새 버전을 사용할 수 있습니다: {current} -> {latest}",
+    "pluginUpToDate": "플러그인이 최신 상태입니다",
+    "pluginNotFoundInMarket": "마켓에서 플러그인을 찾을 수 없습니다",
+    "checkUpdateFailed": "업데이트 확인에 실패했습니다",
+    "updateSuccess": "플러그인이 업데이트되었습니다",
+    "updateFailed": "업데이트에 실패했습니다",
+    "updatePluginFailed": "플러그인 업데이트에 실패했습니다"
+  },
+  "importFromUrl": {
+    "title": "URL에서 가져오기",
+    "urlLabel": "웹페이지 URL",
+    "urlPlaceholder": "지식을 추출할 웹페이지의 URL을 입력하세요",
+    "optionsTitle": "가져오기 옵션",
+    "tooltip": "이 옵션들은 URL 콘텐츠에서 텍스트를 추출하고 처리하는 방식을 제어합니다.\n비워두면 플러그인의 기본 설정이 사용됩니다.\nLLM 텍스트 보정과 요약을 활성화하면 시간이 오래 걸릴 수 있습니다.",
+    "useLlmRepairLabel": "LLM 텍스트 보정 활성화",
+    "useClusteringSummaryLabel": "클러스터링 요약 활성화",
+    "repairLlmProviderIdLabel": "텍스트 보정 모델",
+    "summarizeLlmProviderIdLabel": "요약 모델",
+    "embeddingProviderIdLabel": "임베딩 모델",
+    "chunkSizeLabel": "청크 크기",
+    "chunkOverlapLabel": "청크 오버랩",
+    "startImport": "가져오기 시작",
+    "importing": "가져오는 중...",
+    "importSuccess": "가져오기 성공",
+    "importFailed": "가져오기 실패",
+    "uploadingChunks": "콘텐츠 추출에 성공했습니다. 청크를 업로드하는 중...",
+    "preRequisite": "안내: 이 기능을 사용하기 전에 플러그인 마켓에서 astrbot_plugin_url_2_knowledge_base를 설치하고, 플러그인 문서의 안내에 따라 playwright 설치를 완료해주세요.",
+    "allChunksUploaded": "모든 청크가 업로드되었습니다"
+  }
+}

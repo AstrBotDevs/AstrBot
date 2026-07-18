@@ -1,0 +1,165 @@
+{
+  "title": "공급자",
+  "subtitle": "\"채팅 완성(Chat Completion)\"에서 채팅 모델을 구성할 수 있습니다. 또한 \"에이전트 러너(Agent Runner)\"에는 Dify, Coze, Alibaba Bailian(DashScope) 등 서드파티 서비스와의 연동이 포함됩니다.",
+  "providers": {
+    "title": "서비스 공급자",
+    "settings": "설정",
+    "addProvider": "공급자 추가",
+    "providerType": "공급자 유형",
+    "tabs": {
+      "all": "전체",
+      "chatCompletion": "채팅 완성",
+      "agentRunner": "에이전트 러너",
+      "speechToText": "음성 인식",
+      "textToSpeech": "음성 합성",
+      "embedding": "임베딩",
+      "rerank": "재순위화"
+    },
+    "empty": {
+      "all": "사용 가능한 서비스 공급자가 없습니다. 공급자 추가를 클릭해 추가하세요",
+      "typed": "사용 가능한 {type} 유형의 서비스 공급자가 없습니다. 공급자 추가를 클릭해 추가하세요"
+    },
+    "description": {
+      "openai": "모든 OpenAI API 호환 공급자를 지원합니다.",
+      "kimi_code": "사용자 지정 Anthropic API 어댑터를 사용하는 전용 Kimi CodingPlan / Kimi Code 연동입니다.",
+      "default": ""
+    }
+  },
+  "availability": {
+    "title": "공급자 가용성",
+    "subtitle": "모델 대화 가용성을 테스트하여 판단하며, API 비용이 발생할 수 있습니다",
+    "refresh": "상태 새로고침",
+    "noData": "\"상태 새로고침\" 버튼을 클릭해 서비스 공급자 가용성을 확인하세요",
+    "available": "사용 가능",
+    "unavailable": "사용 불가",
+    "pending": "확인 중...",
+    "errorMessage": "오류 메시지",
+    "test": "테스트"
+  },
+  "logs": {
+    "title": "서비스 로그",
+    "expand": "펼치기",
+    "collapse": "접기"
+  },
+  "dialogs": {
+    "addProvider": {
+      "title": "서비스 공급자",
+      "tabs": {
+        "basic": "기본",
+        "agentRunner": "에이전트 러너",
+        "speechToText": "음성 인식",
+        "textToSpeech": "음성 합성",
+        "embedding": "임베딩",
+        "rerank": "재순위화"
+      },
+      "noTemplates": "이 유형의 공급자 템플릿이 없습니다"
+    },
+    "config": {
+      "addTitle": "추가",
+      "editTitle": "편집",
+      "provider": "서비스 공급자",
+      "cancel": "취소",
+      "save": "저장"
+    },
+    "settings": {
+      "title": "서비스 공급자 설정",
+      "sessionSeparation": {
+        "title": "공급자 세션 분리 사용",
+        "description": "세션마다 텍스트 생성, TTS, STT 등의 서비스 공급자를 독립적으로 선택할 수 있습니다."
+      },
+      "close": "닫기"
+    }
+  },
+  "messages": {
+    "success": {
+      "update": "업데이트되었습니다!",
+      "add": "추가되었습니다!",
+      "delete": "삭제되었습니다!",
+      "statusUpdate": "상태가 업데이트되었습니다!",
+      "sessionSeparation": "세션 분리 설정이 업데이트되었습니다"
+    },
+    "error": {
+      "sessionSeparation": "세션 분리 설정을 가져오지 못했습니다",
+      "fetchStatus": "서비스 공급자 상태를 가져오지 못했습니다",
+      "testError": "{id} 테스트에 실패했습니다: {error}"
+    },
+    "confirm": {
+      "delete": "서비스 공급자 {id}을(를) 삭제하시겠습니까?"
+    }
+  },
+  "providerTypes": {
+    "title": "공급자 유형"
+  },
+  "providerSources": {
+    "title": "공급자 소스",
+    "add": "추가",
+    "delete": "공급자 소스 삭제",
+    "empty": "공급자 소스가 없습니다",
+    "selectHint": "공급자 소스를 선택하세요",
+    "selectCreated": "생성된 공급자 소스 선택",
+    "save": "설정 저장",
+    "saveAndFetchModels": "저장 및 모델 가져오기",
+    "fetchModels": "모델 목록 가져오기",
+    "saveSuccess": "공급자 소스를 저장했습니다",
+    "saveError": "공급자 소스 저장에 실패했습니다",
+    "deleteConfirm": "공급자 소스 {id}을(를) 삭제하시겠습니까? 연결된 모든 모델 구성도 함께 삭제됩니다.",
+    "deleteSuccess": "공급자 소스를 삭제했습니다",
+    "deleteError": "공급자 소스 삭제에 실패했습니다",
+    "enabled": "사용 중",
+    "disabled": "사용 안 함",
+    "advancedConfig": "고급 설정...",
+    "fields": {
+      "name": "이름",
+      "apiKey": "API 키",
+      "baseUrl": "기본 URL"
+    },
+    "hints": {
+      "id": "공급자 소스 ID(공급자 ID 아님)",
+      "key": "인증용 API 키",
+      "apiBase": "사용자 지정 API 엔드포인트 URL",
+      "proxy": "HTTP/HTTPS 프록시 주소(예: http://127.0.0.1:7890). 이 공급자의 API 요청에만 영향을 주며 Docker 내부 네트워킹에는 영향을 주지 않습니다."
+    },
+    "labels": {
+      "proxy": "프록시"
+    }
+  },
+  "models": {
+    "title": "모델",
+    "available": "사용 가능한 모델",
+    "configured": "구성된 모델",
+    "empty": "아직 구성된 모델이 없습니다. 위의 \"모델 가져오기\"를 클릭해 추가하세요.",
+    "noModelsFound": "사용 가능한 모델을 찾을 수 없습니다",
+    "fetchError": "모델을 가져오지 못했습니다",
+    "addSuccess": "모델 {model}을(를) 추가했습니다",
+    "deleteConfirm": "모델 {id}을(를) 삭제하시겠습니까?",
+    "deleteSuccess": "모델을 삭제했습니다",
+    "deleteError": "모델 삭제에 실패했습니다",
+    "testSuccess": "모델 {id} 테스트를 통과했습니다",
+    "testSuccessWithLatency": "모델 {id} 테스트를 통과했습니다. 지연 시간 {latency}ms",
+    "testError": "모델 테스트에 실패했습니다",
+    "searchPlaceholder": "모델 또는 ID 검색",
+    "manualAddButton": "사용자 지정 모델",
+    "manualDialogTitle": "사용자 지정 모델 추가",
+    "manualDialogModelLabel": "모델 ID (예: gpt-4.1-mini)",
+    "manualDialogPreviewLabel": "표시 ID (자동 생성)",
+    "manualDialogPreviewHint": "sourceId/modelId 형태로 생성됩니다",
+    "manualModelRequired": "모델 ID를 입력하세요",
+    "manualModelExists": "이미 존재하는 모델입니다",
+    "configure": "설정",
+    "testButton": "모델 테스트",
+    "metadata": {
+      "image": "이미지 입력",
+      "audio": "오디오 입력",
+      "toolUse": "도구 사용",
+      "reasoning": "추론",
+      "context": "{tokens} 컨텍스트 윈도우",
+      "available": "모델 메타데이터가 {capability}을(를) 지원합니다",
+      "enabled": "{capability} 사용 중",
+      "supportedDisabled": "모델 메타데이터가 {capability}을(를) 지원하지만, 이 공급자의 모달리티에서는 사용하지 않음으로 설정되어 있습니다."
+    },
+    "tooltips": {
+      "providerId": "공급자 ID",
+      "modelId": "모델 ID"
+    }
+  }
+}

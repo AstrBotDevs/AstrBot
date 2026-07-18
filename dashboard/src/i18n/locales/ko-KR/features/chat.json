@@ -1,0 +1,200 @@
+{
+  "title": "채팅해요!",
+  "subtitle": "AI 어시스턴트와 대화하기",
+  "input": {
+    "placeholder": "무엇이든 물어보세요...",
+    "send": "전송",
+    "clear": "지우기",
+    "upload": "파일 업로드",
+    "voice": "음성 입력",
+    "recordingPrompt": "녹음 중입니다. 말씀해 주세요...",
+    "chatPrompt": "채팅해요!",
+    "dropToUpload": "파일을 놓아 업로드",
+    "stopGenerating": "생성 중지"
+  },
+  "message": {
+    "user": "사용자",
+    "assistant": "어시스턴트",
+    "system": "시스템",
+    "error": "오류 메시지",
+    "loading": "생각 중..."
+  },
+  "voice": {
+    "start": "녹음 시작",
+    "stop": "녹음 중지",
+    "recording": "새 녹음",
+    "processing": "처리 중...",
+    "error": "녹음 실패",
+    "listening": "듣는 중...",
+    "speaking": "말하는 중",
+    "startRecording": "음성 입력 시작",
+    "liveMode": "실시간 모드"
+  },
+  "welcome": {
+    "title": "오늘은 무슨 생각을 하고 계신가요?",
+    "subtitle": "당신의 지능형 채팅 어시스턴트",
+    "quickActions": "빠른 작업",
+    "examples": "예시 질문"
+  },
+  "actions": {
+    "copy": "복사",
+    "regenerate": "재생성",
+    "retry": "다시 시도",
+    "retryWithModel": "다른 모델 사용",
+    "noAvailableModels": "사용 가능한 모델 없음",
+    "like": "좋아요",
+    "dislike": "싫어요",
+    "share": "공유",
+    "newChat": "새 채팅",
+    "deleteChat": "이 대화 삭제",
+    "editTitle": "제목 편집",
+    "fullscreen": "전체 화면 모드",
+    "exitFullscreen": "전체 화면 종료",
+    "reply": "답장",
+    "providerConfig": "모델 구성",
+    "toolsUsed": "사용된 도구",
+    "toolCallUsed": "{name} 도구 사용됨",
+    "pythonCodeAnalysis": "Python 코드 분석 사용됨"
+  },
+  "ipython": {
+    "output": "출력"
+  },
+  "toolStatus": {
+    "done": "완료",
+    "running": "실행 중"
+  },
+  "thread": {
+    "title": "스레드",
+    "askInThread": "스레드에서 질문",
+    "count": "스레드 {count}개",
+    "createFailed": "스레드 생성 실패",
+    "delete": "스레드 삭제",
+    "confirmDelete": "이 스레드를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+    "placeholder": "이 발췌 내용에 대해 질문하세요..."
+  },
+  "conversation": {
+    "title": "대화",
+    "newConversation": "새 대화",
+    "noHistory": "대화 기록 없음",
+    "systemStatus": "시스템 상태",
+    "llmService": "LLM 서비스",
+    "speechToText": "음성 인식",
+    "editDisplayName": "세션 이름 편집",
+    "displayName": "세션 이름",
+    "displayNameUpdated": "세션 이름이 업데이트되었습니다",
+    "displayNameUpdateFailed": "세션 이름 업데이트 실패",
+    "confirmDelete": "\"{name}\"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
+  },
+  "modes": {
+    "darkMode": "다크 모드로 전환",
+    "lightMode": "라이트 모드로 전환"
+  },
+  "shortcuts": {
+    "help": "도움말 보기",
+    "voiceRecord": "음성 녹음",
+    "pasteImage": "이미지 붙여넣기",
+    "sendKey": {
+      "title": "전송 단축키",
+      "enterToSend": "Enter로 전송",
+      "shiftEnterToSend": "Shift+Enter로 전송"
+    }
+  },
+  "streaming": {
+    "enabled": "스트리밍 사용",
+    "disabled": "스트리밍 사용 안 함",
+    "on": "스트림",
+    "off": "일반"
+  },
+  "transport": {
+    "title": "전송 모드",
+    "sse": "SSE",
+    "websocket": "WebSocket"
+  },
+  "config": {
+    "title": "구성"
+  },
+  "reasoning": {
+    "thinking": "사고 과정",
+    "summarySeparator": ", ",
+    "thinkSummary": "{count}회 사고함",
+    "toolSummary": "도구 {count}개 사용",
+    "think": "생각 중",
+    "toolUsed": "도구 사용 중"
+  },
+  "reply": {
+    "replyTo": "답장 대상",
+    "notFound": "메시지를 찾을 수 없습니다"
+  },
+  "project": {
+    "title": "프로젝트",
+    "create": "프로젝트 생성",
+    "edit": "프로젝트 편집",
+    "name": "프로젝트 이름",
+    "emoji": "아이콘 (이모지)",
+    "description": "설명 (선택 사항)",
+    "workspace": {
+      "type": "작업 공간",
+      "session": "세션별 작업 공간",
+      "project": "공유 프로젝트 작업 공간",
+      "custom": "사용자 지정 경로",
+      "path": "작업 공간 경로"
+    },
+    "loadingSessions": "대화 불러오는 중...",
+    "noSessions": "이 프로젝트에 대화가 없습니다",
+    "noProjects": "프로젝트 없음",
+    "confirmDelete": "\"{title}\" 프로젝트를 삭제하시겠습니까? 이 프로젝트의 대화는 삭제되지 않습니다."
+  },
+  "time": {
+    "today": "오늘",
+    "yesterday": "어제"
+  },
+  "stats": {
+    "tokens": "토큰",
+    "inputTokens": "입력 (기타)",
+    "outputTokens": "출력 토큰",
+    "cachedTokens": "입력 (캐시됨)",
+    "duration": "소요 시간",
+    "ttft": "첫 토큰까지 걸린 시간"
+  },
+  "tokenUsage": {
+    "tooltip": "{used} / {limit} 토큰 ({percent}%)"
+  },
+  "refs": {
+    "title": "참고 자료",
+    "sources": "출처"
+  },
+  "connection": {
+    "title": "연결 상태 알림",
+    "message": "시스템이 채팅 연결을 다시 설정해야 함을 감지했습니다.",
+    "reasons": "다음과 같은 이유일 수 있습니다:",
+    "reasonWindowResize": "채팅 창 크기 전환 (정상 동작)",
+    "reasonMultipleTabs": "다른 탭에서 채팅 페이지 열기",
+    "reasonNetworkIssue": "일시적인 네트워크 중단",
+    "notice": "참고: 메시지가 정상적으로 전달되도록 시스템은 한 번에 하나의 활성 채팅 연결만 허용합니다. 여러 탭에서 채팅을 사용 중이라면 하나의 페이지만 열어 두세요.",
+    "understand": "확인했습니다",
+    "status": {
+      "reconnecting": "재연결 중...",
+      "reconnected": "채팅 연결이 다시 설정되었습니다",
+      "failed": "연결 실패, 페이지를 새로고침해 주세요"
+    }
+  },
+  "commandSuggestion": {
+    "navigate": "이동",
+    "select": "선택",
+    "close": "닫기"
+  },
+  "errors": {
+    "sendMessageFailed": "메시지 전송 실패, 다시 시도해 주세요",
+    "createSessionFailed": "세션 생성 실패, 페이지를 새로고침해 주세요"
+  },
+  "batch": {
+    "selected": "{count}개 선택됨",
+    "confirmDelete": "대화 {count}개를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+    "selectAll": "전체 선택",
+    "deselectAll": "전체 선택 해제",
+    "delete": "삭제",
+    "exit": "나가기",
+    "partialFailure": "대화 {total}개 중 {failed}개 삭제 실패",
+    "requestFailed": "대화 삭제 실패. 다시 시도해 주세요."
+  }
+}
