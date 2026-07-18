@@ -130,7 +130,6 @@ describe("parseSpcodeGitStats", () => {
   });
 });
 
-
 describe("GitStatsRange helpers", () => {
   it("STATS_PRESETS contains exactly the 5 documented presets in order", () => {
     expect(STATS_PRESETS.map((p) => p.key)).toEqual([
@@ -152,11 +151,26 @@ describe("GitStatsRange helpers", () => {
     expect(since).toBe("2026-01-18");
   });
 
-  it("rangeForPreset('1w') produces since === the preceding Sunday (1-column)", () => {
+  it("rangeForPreset('1w') produces since === today - 6 days (last 7 days)", () => {
+    // 2026-07-19 fix: 1w means "the last 7 days" — not "this week so
+    // far". Anchoring at the preceding Sunday collapses to 1 day on
+    // Sunday and rendered as a 1-cell column with 6 future-dimmed
+    // cells, which looks empty. Anchor 6 days back regardless of the
+    // current weekday so the heatmap always shows 7 actual cells.
     const today = new Date(2026, 1, 18); // Wed Feb 18
     const { since, until } = rangeForPreset("1w", today);
     expect(until).toBe("2026-02-18");
-    expect(since).toBe("2026-02-15"); // the preceding Sunday
+    expect(since).toBe("2026-02-12"); // today - 6 days
+  });
+
+  it("rangeForPreset('1w') covers 7 days even when today is Sunday", () => {
+    // Regression guard for the original bug: on Sunday the old
+    // Sunday-anchored math gave since === until === today (1 day),
+    // so the heatmap rendered 1 cell + 6 future dimmed.
+    const sunday = new Date(2026, 6, 19); // Sun Jul 19 2026
+    const { since, until } = rangeForPreset("1w", sunday);
+    expect(until).toBe("2026-07-19");
+    expect(since).toBe("2026-07-13"); // Mon Jul 13, six days back
   });
 
   it("rangeForPreset always yields since <= until", () => {

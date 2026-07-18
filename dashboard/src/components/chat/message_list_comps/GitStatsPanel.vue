@@ -67,7 +67,10 @@ interface DeltaParts {
 }
 const DELTA_A = "§A§";
 const DELTA_D = "§D§";
-function splitDelta(key: string, params: Record<string, string | number>): DeltaParts {
+function splitDelta(
+  key: string,
+  params: Record<string, string | number>,
+): DeltaParts {
   const s = tm(key, { ...params, additions: DELTA_A, deletions: DELTA_D });
   const [prefix, rest] = s.split(DELTA_A);
   const [mid, suffix] = rest.split(DELTA_D);
@@ -210,8 +213,20 @@ const grid = computed<DayCell[][]>(() => {
     const cfg = STATS_PRESETS.find((p) => p.key === range.preset);
     if (!cfg) return [];
     weeks = cfg.weeks;
-    anchor = new Date(todayStart);
-    anchor.setDate(anchor.getDate() - anchor.getDay());
+    if (range.preset === "1w") {
+      // 2026-07-19 last-7-days fix: a Sunday-anchored 1w collapses to
+      // a 1-day column on Sunday (1 actual cell + 6 future-dimmed).
+      // Mirror rangeForPreset's "last 7 days" semantics by anchoring
+      // 6 days back so the column always spans the last 7 actual days.
+      anchor = new Date(todayStart);
+      anchor.setDate(anchor.getDate() - 6);
+    } else {
+      // 1mo/3mo/6mo/1y keep Sun–Sat columns anchored at today's Sunday
+      // so the rightmost week snaps to today's weekday (matches the
+      // GitHub contribution-graph visual and the 6mo spec).
+      anchor = new Date(todayStart);
+      anchor.setDate(anchor.getDate() - anchor.getDay());
+    }
   } else {
     const sinceDate = parseYmd(range.since);
     const untilDate = parseYmd(range.until);
@@ -334,7 +349,9 @@ function cellTitle(cell: DayCell): string {
         >mdi-chart-box-outline</v-icon
       >
       <span class="git-stats-title">
-        {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.title") }}
+        {{
+          tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.title")
+        }}
       </span>
       <!--
         The pieces from summaryParts already carry the surrounding
@@ -345,7 +362,13 @@ function cellTitle(cell: DayCell): string {
         space under Vue's default whitespace condensation, so the
         dynamic part is kept on a single line.
       -->
-      <span v-if="totals" class="git-stats-summary">{{ summaryParts.prefix }}<span class="gs-add">+{{ totals.additions }}</span>{{ summaryParts.mid }}<span class="gs-del">−{{ totals.deletions }}</span>{{ summaryParts.suffix }}</span>
+      <span v-if="totals" class="git-stats-summary"
+        >{{ summaryParts.prefix
+        }}<span class="gs-add">+{{ totals.additions }}</span
+        >{{ summaryParts.mid
+        }}<span class="gs-del">−{{ totals.deletions }}</span
+        >{{ summaryParts.suffix }}</span
+      >
       <span v-if="truncated" class="git-stats-truncated-badge">
         {{
           tm(
@@ -493,14 +516,18 @@ function cellTitle(cell: DayCell): string {
           }}
         </span>
         <button type="button" class="git-stats-retry" @click="emit('refresh')">
-          {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.retry") }}
+          {{
+            tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.retry")
+          }}
         </button>
       </div>
 
       <!-- empty repository -->
       <div v-else-if="isEmptyRepo" class="git-stats-empty">
         {{
-          tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.emptyRepo")
+          tm(
+            "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.emptyRepo",
+          )
         }}
       </div>
 
@@ -575,7 +602,13 @@ function cellTitle(cell: DayCell): string {
             <span class="git-stats-hot-path">{{ f.path }}</span>
             <!-- Same locale-split + colored-spans composition as the
                  summary row; pieces carry the surrounding spaces. -->
-            <span class="git-stats-hot-value">{{ hotFileParts(f).prefix }}<span class="gs-add">+{{ f.additions }}</span>{{ hotFileParts(f).mid }}<span class="gs-del">−{{ f.deletions }}</span>{{ hotFileParts(f).suffix }}</span>
+            <span class="git-stats-hot-value"
+              >{{ hotFileParts(f).prefix
+              }}<span class="gs-add">+{{ f.additions }}</span
+              >{{ hotFileParts(f).mid
+              }}<span class="gs-del">−{{ f.deletions }}</span
+              >{{ hotFileParts(f).suffix }}</span
+            >
           </button>
         </div>
       </template>

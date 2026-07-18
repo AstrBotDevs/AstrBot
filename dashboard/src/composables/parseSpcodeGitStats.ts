@@ -63,11 +63,11 @@ export const STATS_PRESETS: ReadonlyArray<{
   weeks: number;
   days: number;
 }> = [
-  { key: "1w",  weeks: 1,  days: 7   },
-  { key: "1mo", weeks: 5,  days: 35  },
-  { key: "3mo", weeks: 13, days: 91  },
+  { key: "1w", weeks: 1, days: 7 },
+  { key: "1mo", weeks: 5, days: 35 },
+  { key: "3mo", weeks: 13, days: 91 },
   { key: "6mo", weeks: 26, days: 182 },
-  { key: "1y",  weeks: 52, days: 364 },
+  { key: "1y", weeks: 52, days: 364 },
 ];
 
 function fmtYmd(d: Date): string {
@@ -88,10 +88,24 @@ export function rangeForPreset(
     today.getMonth(),
     today.getDate(),
   );
-  const endSunday = new Date(todayStart);
-  endSunday.setDate(endSunday.getDate() - endSunday.getDay());
-  const sinceDate = new Date(endSunday);
-  sinceDate.setDate(sinceDate.getDate() - (cfg.weeks - 1) * 7);
+  const sinceDate = new Date(todayStart);
+  if (p === "1w") {
+    // 2026-07-19 last-7-days fix: the Sunday-anchored math collapses
+    // to a 1-day range on Sunday (`endSunday === today`, weeks-1 = 0),
+    // so the API returns one day and the heatmap renders one cell +
+    // six future-dimmed cells. "最近一周" should always mean the last
+    // 7 days, so anchor 6 days back regardless of today's weekday.
+    sinceDate.setDate(sinceDate.getDate() - 6);
+  } else {
+    // Multi-week presets keep the Sunday-anchored "this-and-N-previous
+    // weeks" semantic so each column is a Sun–Sat week and the right
+    // edge snaps to today's weekday. The future cells past today are
+    // dimmed, which is fine because 1mo/3mo/6mo/1y still show many
+    // populated columns on Sunday.
+    const endSunday = new Date(todayStart);
+    endSunday.setDate(endSunday.getDate() - endSunday.getDay());
+    sinceDate.setDate(endSunday.getDate() - (cfg.weeks - 1) * 7);
+  }
   return { since: fmtYmd(sinceDate), until: fmtYmd(todayStart) };
 }
 
