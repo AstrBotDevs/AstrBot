@@ -326,7 +326,7 @@ class SequentialToolProvider(MockProvider):
     def __init__(
         self,
         tool_sequence: list[str],
-        tool_args_sequence: list[dict[str, str]] | None = None,
+        tool_args_sequence: list[dict[str, Any]] | None = None,
     ):
         super().__init__()
         self.tool_sequence = tool_sequence
