@@ -161,7 +161,10 @@ Expected: FAIL（模块 `@/utils/codemirrorLanguages` 不存在）。
 // bundle; resolved LanguageSupport instances are cached per key. Unmapped
 // extensions return null -> the editor mounts as plain text (e.g. .gitignore).
 
-import { StreamLanguage, type LanguageSupport } from "@codemirror/language";
+import {
+  LanguageSupport,
+  StreamLanguage,
+} from "@codemirror/language";
 
 export type CmLanguageKey =
   | "python"
@@ -247,8 +250,10 @@ const loaders: Record<CmLanguageKey, () => Promise<LanguageSupport>> = {
   json: async () => (await import("@codemirror/lang-json")).json(),
   yaml: async () => (await import("@codemirror/lang-yaml")).yaml(),
   shell: async () =>
-    StreamLanguage.define(
-      (await import("@codemirror/legacy-modes/mode/shell")).shell,
+    new LanguageSupport(
+      StreamLanguage.define(
+        (await import("@codemirror/legacy-modes/mode/shell")).shell,
+      ),
     ),
   css: async () => (await import("@codemirror/lang-css")).css(),
   html: async () => (await import("@codemirror/lang-html")).html(),
@@ -259,8 +264,10 @@ const loaders: Record<CmLanguageKey, () => Promise<LanguageSupport>> = {
   go: async () => (await import("@codemirror/lang-go")).go(),
   cpp: async () => (await import("@codemirror/lang-cpp")).cpp(),
   diff: async () =>
-    StreamLanguage.define(
-      (await import("@codemirror/legacy-modes/mode/diff")).diff,
+    new LanguageSupport(
+      StreamLanguage.define(
+        (await import("@codemirror/legacy-modes/mode/diff")).diff,
+      ),
     ),
 };
 
@@ -899,4 +906,5 @@ pnpm dev
 
 - **Spec 覆盖**：§3 组件契约 → Task 3；§4 语言映射 → Task 2；§5 主题 → Task 3（useTheme + Compartment）；§6 编辑行为 → Task 3（行号/indentWithTab/history/echo 抑制）+ Task 6 手测；§7 边界 → Task 3（destroyed flag）+ Task 6；§8 错误处理 → Task 2（缓存驱逐）/ Task 3（console.warn + cmFailed + try/catch useTheme）；§10 测试 → 各 Task spec + Task 6 手测清单；§11 改动清单 → Task 1-6 全覆盖。
 - **Placeholder 扫描**：无 TBD/TODO；所有代码步骤含完整代码。
+- **执行偏差记录**：Task 2 实施中发现 `StreamLanguage.define()` 返回 `Language` 而非 `LanguageSupport`，shell/diff loader 已按 CM6 API 修正为 `new LanguageSupport(StreamLanguage.define(...))`（plan 代码已同步）。
 - **类型一致性**：`languageKeyForPath` / `loadLanguage` / `CmLanguageKey`（Task 2 定义 → Task 3 import）；`getValue` / `focus` / `dirty-change`（Task 3 定义 → Task 4/5 调用方 + stub 复刻）；stub 的 props/emits/expose 与真实组件逐一对应。
