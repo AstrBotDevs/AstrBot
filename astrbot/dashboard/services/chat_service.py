@@ -22,6 +22,9 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     strip_message_parts_path_fields,
     webchat_message_parts_have_content,
 )
+from astrbot.core.platform.sources.webchat.request_flags import (
+    resolve_webchat_request_flags,
+)
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.active_event_registry import active_event_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -1091,7 +1094,7 @@ class ChatService:
         session_id = post_data.get("session_id", post_data.get("conversation_id"))
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
-        enable_streaming = post_data.get("enable_streaming", True)
+        flags = resolve_webchat_request_flags(post_data)
         platform_history_id = post_data.get("_platform_history_id") or "webchat"
         thread_selected_text = post_data.get("_thread_selected_text")
 
@@ -1155,7 +1158,7 @@ class ChatService:
                         "message": message_parts,
                         "selected_provider": selected_provider,
                         "selected_model": selected_model,
-                        "enable_streaming": enable_streaming,
+                        "flags": flags,
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
                         "thread_selected_text": thread_selected_text,
@@ -1547,7 +1550,7 @@ class ChatService:
         return {
             "session_id": thread.thread_id,
             "message": data.get("message", []),
-            "enable_streaming": data.get("enable_streaming", True),
+            "flags": resolve_webchat_request_flags(data),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_platform_history_id": "webchat_thread",
@@ -1785,7 +1788,7 @@ class ChatService:
         return {
             "session_id": session_id,
             "message": source_user_record.content.get("message", []),
-            "enable_streaming": data.get("enable_streaming", True),
+            "flags": resolve_webchat_request_flags(data),
             "selected_provider": data.get("selected_provider"),
             "selected_model": data.get("selected_model"),
             "_skip_user_history": True,

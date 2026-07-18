@@ -23,6 +23,9 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     strip_message_parts_path_fields,
     webchat_message_parts_have_content,
 )
+from astrbot.core.platform.sources.webchat.request_flags import (
+    resolve_webchat_request_flags,
+)
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
@@ -516,7 +519,7 @@ class LiveChatService:
         selected_tts_provider = message.get("selected_tts_provider")
         persona_prompt = message.get("persona_prompt")
         show_reasoning = message.get("show_reasoning")
-        enable_streaming = message.get("enable_streaming", True)
+        flags = resolve_webchat_request_flags(message)
 
         if not isinstance(payload, list):
             await self.send_chat_payload(
@@ -568,7 +571,7 @@ class LiveChatService:
                         "selected_tts_provider": selected_tts_provider,
                         "persona_prompt": persona_prompt,
                         "show_reasoning": show_reasoning,
-                        "enable_streaming": enable_streaming,
+                        "flags": flags,
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
                     },

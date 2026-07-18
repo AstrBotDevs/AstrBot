@@ -4,6 +4,14 @@ import { fetchWithAuth } from "@/api/http";
 
 export type TransportMode = "sse" | "websocket";
 
+export function buildChatRequestFlags(enableStreaming = true) {
+  return {
+    enable_inline_genui: true,
+    enable_default_system_prompt: true,
+    enable_streaming: enableStreaming,
+  };
+}
+
 export interface MessagePart {
   type: string;
   text?: string;
@@ -480,6 +488,7 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord: ChatRecord,
     selectedProvider = "",
     selectedModel = "",
+    enableStreaming = true,
   ) {
     if (!sessionId || botRecord.id == null) return;
     const targetMessageId = botRecord.id;
@@ -515,6 +524,7 @@ export function useMessages(options: UseMessagesOptions) {
           body: JSON.stringify({
             selected_provider: selectedProvider,
             selected_model: selectedModel,
+            flags: buildChatRequestFlags(enableStreaming),
           }),
           signal: abort.signal,
         },
@@ -635,7 +645,7 @@ export function useMessages(options: UseMessagesOptions) {
       body: JSON.stringify({
         session_id: sessionId,
         message: parts.map(partToPayload),
-        enable_streaming: enableStreaming,
+        flags: buildChatRequestFlags(enableStreaming),
         selected_provider: selectedProvider,
         selected_model: selectedModel,
         _skip_user_history: skipUserHistory,
@@ -785,7 +795,7 @@ export function useMessages(options: UseMessagesOptions) {
       session_id: sessionId,
       message_id: messageId,
       message: parts.map(partToPayload),
-      enable_streaming: enableStreaming,
+      flags: buildChatRequestFlags(enableStreaming),
       selected_provider: selectedProvider,
       selected_model: selectedModel,
     });

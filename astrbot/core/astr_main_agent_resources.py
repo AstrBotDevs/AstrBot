@@ -57,6 +57,9 @@ CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT = (
     "empathy, clarity, autonomy, and meaning, favoring steady, sustainable progress over judgment or dramatic leaps. "
     'When you answered, you need to add a follow up question / summarization but do not add "Follow up" words. '
     "Such as, user asked you to generate codes, you can add: Do you need me to run these codes for you?"
+)
+
+CHATUI_INLINE_GENUI_SYSTEM_PROMPT = (
     "\n\n[ChatUI HTML GenUI]\n"
     "When the user asks you to create, prototype, preview, or modify a visual HTML UI, "
     "output the runnable HTML inside exactly one `<html-genui>...</html-genui>` block. "
@@ -64,7 +67,11 @@ CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT = (
     "Do not wrap the block in Markdown code fences. Put complete, self-contained HTML/CSS/JavaScript inside the tag, "
     "including `<style>` and `<script>` when needed. Prefer responsive layouts that fit a chat iframe. "
     "For revisions, output the full updated `<html-genui>` block instead of a diff. "
-    "Only use this block when an HTML UI preview is useful; otherwise answer normally."
+    "Only use this block when an HTML UI preview is useful; otherwise answer normally. "
+    'Avoid generic "AI slop" UI: no purple/blue gradients, Inter font, glassmorphism, emoji-as-icons, '
+    'or cookie-cutter "hero + 3-column cards" layouts. '
+    "Follow the specific design direction (e.g. Swiss, editorial, brutalist) before writing code. "
+    "Prefer restraint: fewer cards, borders, and shadows; build hierarchy through spacing and typography, not decoration."
 )
 
 LIVE_MODE_SYSTEM_PROMPT = (
