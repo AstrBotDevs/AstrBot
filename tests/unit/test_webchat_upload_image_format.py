@@ -4,7 +4,10 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image as PILImage
 
-from astrbot.dashboard.services.chat_service import ChatService
+from astrbot.dashboard.services.chat_service import (
+    WEBCHAT_IMAGE_MIME_TYPES,
+    ChatService,
+)
 
 
 @pytest.mark.asyncio
@@ -48,13 +51,7 @@ async def test_webchat_upload_uses_detected_image_type(tmp_path):
 
 @pytest.mark.parametrize(
     ("filename", "expected_mime_type"),
-    [
-        ("photo.jpg", "image/jpeg"),
-        ("photo.jpeg", "image/jpeg"),
-        ("photo.png", "image/png"),
-        ("photo.gif", "image/gif"),
-        ("photo.webp", "image/webp"),
-    ],
+    [(f"photo{ext}", mime_type) for ext, mime_type in WEBCHAT_IMAGE_MIME_TYPES.items()],
 )
 @pytest.mark.asyncio
 async def test_resolve_webchat_file_uses_image_extension_mime_type(
