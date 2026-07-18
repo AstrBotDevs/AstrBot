@@ -2870,26 +2870,9 @@ const currentRoot = computed<string | null>(() => {
                three view modes (not just diff). -->
           </div>
           <div class="git-diff-sidebar-actions">
-            <!-- 2026-07-17 gitignore-editor: entry only meaningful in
-                 the diff view (stage/diff workflow context). -->
-            <v-tooltip
-              v-if="viewMode === 'diff'"
-              location="bottom"
-              :open-delay="200"
-            >
-              <template #activator="{ props: tipProps }">
-                <v-btn
-                  v-bind="tipProps"
-                  icon
-                  size="small"
-                  variant="text"
-                  @click="onOpenGitIgnoreEditor"
-                >
-                  <v-icon size="18">mdi-file-cancel-outline</v-icon>
-                </v-btn>
-              </template>
-              {{ tm(`${GITIGNORE_I18N_PREFIX}.openTooltip`) }}
-            </v-tooltip>
+            <!-- 2026-07-18: the .gitignore entry moved from this header
+                 into GitCommitBar (next to the stage/commit controls)
+                 so users notice it as a Git-management setting. -->
             <!-- UI #5: refresh button dropped the `tonal` background and
                dropped to `variant="text"` + `size="small"` so the header
                reads as a lightweight toolbar instead of three chunky
@@ -3442,6 +3425,7 @@ const currentRoot = computed<string | null>(() => {
           @stage-all="onClickStageAll"
           @unstage-all="onClickUnstageAll"
           @commit="onClickCommit"
+          @open-gitignore="onOpenGitIgnoreEditor"
         />
 
         <!-- Spec §6.3: inline <v-dialog persistent> confirmation.

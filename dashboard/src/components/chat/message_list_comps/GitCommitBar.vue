@@ -33,6 +33,10 @@ const emit = defineEmits<{
   (e: "stage-all"): void;
   (e: "unstage-all"): void;
   (e: "commit"): void;
+  // 2026-07-18: opens the .gitignore overlay editor. Moved here from
+  // the sidebar header — sitting next to the stage/commit workflow
+  // controls makes it discoverable as a Git-management setting.
+  (e: "open-gitignore"): void;
 }>();
 
 // The bulk action flips between stage-all and unstage-all based on
@@ -114,26 +118,42 @@ function onBulkClick(): void {
 
 <template>
   <div class="git-commit-bar" role="region" aria-label="Git commit controls">
-    <span class="git-commit-bar-status">
-      <v-icon size="14" class="git-commit-bar-status-icon"
-        >mdi-information-outline</v-icon
+    <div class="git-commit-bar-left">
+      <span class="git-commit-bar-status">
+        <v-icon size="14" class="git-commit-bar-status-icon"
+          >mdi-information-outline</v-icon
+        >
+        <span v-if="stagedCount > 0">
+          {{
+            tm(
+              "spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.stagedCount",
+              { count: stagedCount },
+            )
+          }}
+        </span>
+        <span v-else class="is-muted">
+          {{
+            tm(
+              "spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.stagedCountZero",
+            )
+          }}
+        </span>
+      </span>
+      <!-- 2026-07-18: .gitignore entry moved from the sidebar header
+           into this bar (user feedback: the header icon went
+           unnoticed). Neutral tonal + text label matches the bar's
+           other buttons while staying visually distinct from the
+           stage/commit workflow actions. Label reuses the existing
+           gitignore.openTooltip i18n string. -->
+      <v-btn
+        size="small"
+        variant="tonal"
+        prepend-icon="mdi-file-cancel-outline"
+        @click="emit('open-gitignore')"
       >
-      <span v-if="stagedCount > 0">
-        {{
-          tm(
-            "spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.stagedCount",
-            { count: stagedCount },
-          )
-        }}
-      </span>
-      <span v-else class="is-muted">
-        {{
-          tm(
-            "spcodeProjectLoad.diffSidebar.gitWorkflow.commit.bar.stagedCountZero",
-          )
-        }}
-      </span>
-    </span>
+        {{ tm("spcodeProjectLoad.diffSidebar.gitignore.openTooltip") }}
+      </v-btn>
+    </div>
     <div class="git-commit-bar-actions">
       <v-btn
         size="small"
@@ -171,6 +191,12 @@ function onBulkClick(): void {
   background: rgb(var(--v-theme-surface));
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
   flex-shrink: 0;
+}
+.git-commit-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 .git-commit-bar-status {
   display: inline-flex;
