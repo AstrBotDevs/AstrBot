@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import pytest
 import yaml
 
 from astrbot.core.star import star_manager as star_manager_module
+from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
 from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
@@ -2283,4 +2285,158 @@ async def test_turn_on_plugin_after_deactivated_reload_reactivates_tools(
     finally:
         llm_tools.func_list = original_func_list
         cast(Any, plugin_manager_pm.context).stars.remove(plugin)
+        _clear_star_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_repeated_deactivated_loads_bind_handlers_once_when_activated(
+    plugin_manager_pm: PluginManager, monkeypatch
+):
+    """Repeated disabled loads keep raw callables and activation binds once."""
+    _clear_star_runtime_state()
+    plugin_name = "demo_plugin"
+    module_path = f"data.plugins.{plugin_name}.main"
+
+    class DemoPlugin:
+        def __init__(self, context):
+            self.context = context
+            self.initialize_count = 0
+
+        async def initialize(self):
+            self.initialize_count += 1
+
+    stale_plugin = DemoPlugin(plugin_manager_pm.context)
+
+    metadata = star_manager_module.StarMetadata(
+        name=plugin_name,
+        author="AstrBot Team",
+        desc="Demo plugin",
+        version="1.0.0",
+        root_dir_name=plugin_name,
+        module_path=module_path,
+        star_cls_type=cast(Any, DemoPlugin),
+        star_cls=cast(Any, stale_plugin),
+        activated=False,
+    )
+    cast(Any, plugin_manager_pm.context).stars.append(metadata)
+    star_manager_module.star_map[module_path] = metadata
+    star_manager_module.star_registry.append(metadata)
+
+    async def raw_event_handler(plugin, event):
+        return plugin, event
+
+    async def raw_tool_handler(plugin, query):
+        return plugin, query
+
+    raw_event_handler.__module__ = module_path
+    raw_tool_handler.__module__ = module_path
+    event_handler = StarHandlerMetadata(
+        event_type=EventType.AdapterMessageEvent,
+        handler_full_name=f"{module_path}_raw_event_handler",
+        handler_name="raw_event_handler",
+        handler_module_path=module_path,
+        handler=functools.partial(raw_event_handler, stale_plugin),
+        event_filters=[],
+    )
+    star_manager_module.star_handlers_registry.append(event_handler)
+
+    plugin_tool = star_manager_module.FunctionTool(
+        name="plugin_search",
+        description="plugin search",
+        parameters={"type": "object", "properties": {}},
+        handler=functools.partial(raw_tool_handler, stale_plugin),
+        handler_module_path=module_path,
+    )
+    llm_tools = cast(Any, star_manager_module.llm_tools)
+    original_func_list = llm_tools.func_list
+    llm_tools.func_list = [plugin_tool]
+    preferences = {
+        "inactivated_plugins": [module_path],
+        "inactivated_llm_tools": [],
+        "alter_cmd": {},
+    }
+
+    async def mock_global_get(key, default=None):
+        return preferences.get(key, default)
+
+    async def mock_global_put(key, value):
+        preferences[key] = value
+
+    async def mock_import_plugin_with_dependency_recovery(
+        path,
+        module_str,
+        root_dir_name,
+        requirements_path,
+        *,
+        reserved=False,
+    ):
+        del module_str, root_dir_name, requirements_path, reserved
+        assert path == module_path
+        return ModuleType(module_path)
+
+    async def mock_sync_command_configs():
+        return None
+
+    monkeypatch.setattr(star_manager_module.sp, "global_get", mock_global_get)
+    monkeypatch.setattr(star_manager_module.sp, "global_put", mock_global_put)
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_get_plugin_modules",
+        lambda: [{"pname": plugin_name, "module": "main"}],
+    )
+    monkeypatch.setattr(
+        plugin_manager_pm,
+        "_import_plugin_with_dependency_recovery",
+        mock_import_plugin_with_dependency_recovery,
+    )
+    monkeypatch.setattr(plugin_manager_pm, "_load_plugin_metadata", lambda **_: None)
+    monkeypatch.setattr(
+        star_manager_module,
+        "sync_command_configs",
+        mock_sync_command_configs,
+    )
+
+    try:
+        for _ in range(2):
+            success, error = await plugin_manager_pm.load(
+                specified_module_path=module_path,
+            )
+            assert success is True
+            assert error is None
+            assert event_handler.handler is raw_event_handler
+            assert plugin_tool.handler is raw_tool_handler
+            assert plugin_tool.active is False
+            assert metadata.star_cls is None
+            assert stale_plugin.initialize_count == 0
+
+        await plugin_manager_pm.turn_on_plugin(plugin_name)
+
+        assert isinstance(event_handler.handler, functools.partial)
+        assert event_handler.handler.func is raw_event_handler
+        assert event_handler.handler.args == (metadata.star_cls,)
+        assert isinstance(plugin_tool.handler, functools.partial)
+        assert plugin_tool.handler.func is raw_tool_handler
+        assert plugin_tool.handler.args == (metadata.star_cls,)
+        assert plugin_tool.active is True
+        assert metadata.star_cls.initialize_count == 1
+        assert await event_handler.handler("event") == (metadata.star_cls, "event")
+        assert await plugin_tool.handler("query") == (metadata.star_cls, "query")
+
+        success, error = await plugin_manager_pm.load(
+            specified_module_path=module_path,
+        )
+        assert success is True
+        assert error is None
+        assert isinstance(event_handler.handler, functools.partial)
+        assert event_handler.handler.func is raw_event_handler
+        assert event_handler.handler.args == (metadata.star_cls,)
+        assert isinstance(plugin_tool.handler, functools.partial)
+        assert plugin_tool.handler.func is raw_tool_handler
+        assert plugin_tool.handler.args == (metadata.star_cls,)
+        assert metadata.star_cls.initialize_count == 1
+        assert await event_handler.handler("event") == (metadata.star_cls, "event")
+        assert await plugin_tool.handler("query") == (metadata.star_cls, "query")
+    finally:
+        llm_tools.func_list = original_func_list
+        cast(Any, plugin_manager_pm.context).stars.remove(metadata)
         _clear_star_runtime_state()

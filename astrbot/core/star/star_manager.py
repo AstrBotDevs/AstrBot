@@ -1207,6 +1207,7 @@ class PluginManager:
                             setattr(metadata.star_cls, "author", p_author)
                             setattr(metadata.star_cls, "plugin_id", plugin_id)
                     else:
+                        metadata.star_cls = None
                         logger.info("Plugin %s is disabled.", metadata.name)
 
                     metadata.module = module
@@ -1217,31 +1218,54 @@ class PluginManager:
                         f"插件 {metadata.name} 的模块路径为空。"
                     )
 
-                    # 绑定 handler
+                    plugin_disabled = metadata.module_path in inactivated_plugins
+
+                    # Restore decorator-registered callables before binding the current
+                    # instance so repeated loads cannot stack stale plugin instances.
                     related_handlers = (
                         star_handlers_registry.get_handlers_by_module_name(
                             metadata.module_path,
                         )
                     )
                     for handler in related_handlers:
-                        handler.handler = functools.partial(
-                            handler.handler,
-                            metadata.star_cls,  # type: ignore
+                        raw_handler = (
+                            handler.handler.func
+                            if isinstance(handler.handler, functools.partial)
+                            else handler.handler
                         )
-                    plugin_disabled = metadata.module_path in inactivated_plugins
+                        handler.handler = raw_handler
+                        if not plugin_disabled and metadata.star_cls is not None:
+                            handler.handler = functools.partial(
+                                raw_handler,
+                                metadata.star_cls,
+                            )
 
-                    # 绑定 llm_tool handler
+                    # Apply the same idempotent binding lifecycle to LLM tools.
                     for func_tool in llm_tools.func_list:
                         for ft in self._iter_concrete_llm_tools(func_tool):
-                            if (
-                                ft.handler
-                                and ft.handler.__module__ == metadata.module_path
-                            ):
-                                ft.handler_module_path = metadata.module_path
-                                ft.handler = functools.partial(
-                                    ft.handler,
-                                    metadata.star_cls,  # type: ignore
+                            if ft.handler and (
+                                getattr(ft.handler, "__module__", None)
+                                == metadata.module_path
+                                or (
+                                    isinstance(ft.handler, functools.partial)
+                                    and ft.handler_module_path == metadata.module_path
                                 )
+                            ):
+                                raw_handler = (
+                                    ft.handler.func
+                                    if isinstance(ft.handler, functools.partial)
+                                    else ft.handler
+                                )
+                                ft.handler_module_path = metadata.module_path
+                                ft.handler = raw_handler
+                                if (
+                                    not plugin_disabled
+                                    and metadata.star_cls is not None
+                                ):
+                                    ft.handler = functools.partial(
+                                        raw_handler,
+                                        metadata.star_cls,
+                                    )
                             if self._is_plugin_llm_tool(ft, metadata.module_path):
                                 ft.active = (
                                     not plugin_disabled
