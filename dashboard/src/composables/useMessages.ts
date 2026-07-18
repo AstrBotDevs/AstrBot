@@ -158,6 +158,7 @@ export function useMessages(options: UseMessagesOptions) {
     {},
   );
   let sessionPollTimer: number | undefined;
+  let isUnmounted = false;
 
   const activeMessages = computed(() =>
     options.currentSessionId.value
@@ -166,8 +167,10 @@ export function useMessages(options: UseMessagesOptions) {
   );
 
   onBeforeUnmount(() => {
+    isUnmounted = true;
     if (sessionPollTimer !== undefined) {
-      window.clearInterval(sessionPollTimer);
+      window.clearTimeout(sessionPollTimer);
+      sessionPollTimer = undefined;
     }
     cleanupConnections();
     for (const promise of attachmentBlobCache.values()) {
@@ -180,15 +183,22 @@ export function useMessages(options: UseMessagesOptions) {
     () => options.currentSessionId.value,
     (sessionId) => {
       if (sessionPollTimer !== undefined) {
-        window.clearInterval(sessionPollTimer);
+        window.clearTimeout(sessionPollTimer);
         sessionPollTimer = undefined;
       }
       if (!sessionId) return;
-      sessionPollTimer = window.setInterval(() => {
+
+      const poll = async () => {
         if (!isSessionRunning(sessionId)) {
-          void loadSessionMessages(sessionId, false, false);
+          await loadSessionMessages(sessionId, false, false);
         }
-      }, 2000);
+
+        if (!isUnmounted && options.currentSessionId.value === sessionId) {
+          sessionPollTimer = window.setTimeout(poll, 2000);
+        }
+      };
+
+      sessionPollTimer = window.setTimeout(poll, 2000);
     },
     { immediate: true },
   );
