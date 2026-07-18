@@ -31,6 +31,7 @@ import type {
   GitShowData,
 } from "@/composables/parseSpcodeGitShow";
 import type { FileStatus } from "@/composables/parseSpcodeGitDiff";
+import type { GitStatsRange } from "@/composables/parseSpcodeGitStats";
 
 const { tm } = useModuleI18n("features/chat");
 // Note (v3.9, 2026-06-25, elecvoid243): FilePatchPanel reads the
@@ -63,6 +64,9 @@ const props = defineProps<{
   gitStats: UseSpcodeGitStats;
   /** Stats-panel collapsed state (persisted by the sidebar). */
   statsOpen: boolean;
+  /** Heatmap time-range window (preset or custom). Owned by the
+   *  sidebar; we forward it down to GitStatsPanel verbatim. */
+  range: GitStatsRange;
 }>();
 
 const emit = defineEmits<{
@@ -81,6 +85,8 @@ const emit = defineEmits<{
   (e: "revert", commit: { sha: string; subject: string }): void;
   /** Stats-panel collapse toggle (v-model:stats-open). */
   (e: "update:statsOpen", v: boolean): void;
+  /** Range popover picked a new value — sidebar owns state + persistence. */
+  (e: "update:range", v: GitStatsRange): void;
 }>();
 
 // isDark for GitStatsPanel — sourced from the customizer store the
@@ -416,7 +422,9 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
       :state="gitStats.state.value"
       :open="statsOpen"
       :is-dark="isDark"
+      :range="range"
       @update:open="(v) => emit('update:statsOpen', v)"
+      @update:range="(v) => emit('update:range', v)"
       @refresh="gitStats.refresh({ forceLoading: true })"
       @filter-date="onStatsFilterDate"
       @filter-path="onStatsFilterPath"
