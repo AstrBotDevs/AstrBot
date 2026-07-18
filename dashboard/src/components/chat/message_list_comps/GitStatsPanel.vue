@@ -8,19 +8,27 @@
   its standard `apply` flow.
 -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import type { GitStatsFetchState } from "@/composables/useSpcodeGitStats";
 import type { GitStatsDay } from "@/composables/parseSpcodeGitStats";
+import {
+  STATS_PRESETS,
+  type GitStatsRange,
+  type GitStatsRangePreset,
+} from "@/composables/parseSpcodeGitStats";
 
 const props = defineProps<{
   state: GitStatsFetchState;
   /** Collapsed/expanded state (persisted by the sidebar). */
   open: boolean;
   isDark?: boolean;
+  /** Time-range window (preset or custom). Owned by GitDiffSidebar. */
+  range: GitStatsRange;
 }>();
 const emit = defineEmits<{
   (e: "update:open", v: boolean): void;
+  (e: "update:range", v: GitStatsRange): void;
   (e: "refresh"): void;
   (e: "filter-date", p: { since: string; until: string }): void;
   (e: "filter-path", path: string): void;
@@ -44,7 +52,54 @@ const totals = computed(() => snapshot.value?.totals ?? null);
 const truncated = computed(() => snapshot.value?.truncated ?? false);
 const maxCommits = computed(() => snapshot.value?.maxCommits ?? 0);
 
-// ── Heatmap grid (26 week-columns × 7 rows, local time) ────────────
+// ── Range control (popover) ────────────────────────────────────────
+const customSince = ref<string>("");
+const customUntil = ref<string>("");
+const todayYmd = computed(() => fmtDate(new Date()));
+const isCustomValid = computed(() => {
+  if (!customSince.value || !customUntil.value) return false;
+  // YYYY-MM-DD is lexically comparable, so this is correct.
+  return customSince.value <= customUntil.value;
+});
+const rangeLabel = computed(() => {
+  if (props.range.kind === "preset") {
+    return tm(
+      `spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.${props.range.preset}`,
+    );
+  }
+  return `${props.range.since} → ${props.range.until}`;
+});
+function isPresetActive(p: GitStatsRangePreset): boolean {
+  return props.range.kind === "preset" && props.range.preset === p;
+}
+function selectPreset(p: GitStatsRangePreset): void {
+  emit("update:range", { kind: "preset", preset: p });
+}
+function applyCustom(): void {
+  if (!isCustomValid.value) return;
+  emit("update:range", {
+    kind: "custom",
+    since: customSince.value,
+    until: customUntil.value,
+  });
+}
+// Pre-fill the date inputs whenever the active range changes so the
+// popover opens with reasonable defaults instead of empty boxes.
+watch(
+  () => props.range,
+  (r) => {
+    if (r.kind === "custom") {
+      customSince.value = r.since;
+      customUntil.value = r.until;
+    } else {
+      customSince.value = "";
+      customUntil.value = "";
+    }
+  },
+  { immediate: true },
+);
+
+// ── Heatmap grid (range-driven; see Task 5 for parameterization) ──
 const WEEKS = 26;
 
 interface DayCell {
@@ -202,6 +257,89 @@ function cellTitle(cell: DayCell): string {
         }}
       </span>
       <span class="git-stats-header-spacer" />
+      <v-menu :close-on-content-click="false" location="bottom end">
+        <template #activator="{ props: tipProps }">
+          <v-btn
+            variant="text"
+            size="x-small"
+            class="git-stats-range-trigger"
+            v-bind="tipProps"
+          >
+            <v-icon size="13" start>mdi-calendar-range</v-icon>
+            <span class="git-stats-range-trigger-label">{{ rangeLabel }}</span>
+            <v-icon size="13" end>mdi-chevron-down</v-icon>
+          </v-btn>
+        </template>
+        <v-card class="git-stats-range-menu" min-width="240">
+          <v-list density="compact" class="git-stats-range-presets">
+            <v-list-item
+              v-for="p in STATS_PRESETS"
+              :key="p.key"
+              :active="isPresetActive(p.key)"
+              @click="selectPreset(p.key)"
+            >
+              <v-list-item-title>{{
+                tm(
+                  `spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.${p.key}`,
+                )
+              }}</v-list-item-title>
+              <template #append>
+                <span class="git-stats-range-days">{{ p.days }}d</span>
+              </template>
+            </v-list-item>
+          </v-list>
+          <v-divider />
+          <div class="git-stats-range-custom">
+            <div class="git-stats-range-custom-title">
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.custom",
+                )
+              }}
+            </div>
+            <v-text-field
+              v-model="customSince"
+              :label="
+                tm(
+                  'spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.since',
+                )
+              "
+              type="date"
+              density="compact"
+              variant="outlined"
+              hide-details
+              :max="customUntil || undefined"
+            />
+            <v-text-field
+              v-model="customUntil"
+              :label="
+                tm(
+                  'spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.until',
+                )
+              "
+              type="date"
+              density="compact"
+              variant="outlined"
+              hide-details
+              :min="customSince || undefined"
+              :max="todayYmd"
+            />
+            <v-btn
+              size="small"
+              variant="tonal"
+              :disabled="!isCustomValid"
+              block
+              @click="applyCustom"
+            >
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.apply",
+                )
+              }}
+            </v-btn>
+          </div>
+        </v-card>
+      </v-menu>
       <v-btn
         icon
         size="x-small"
@@ -511,5 +649,40 @@ function cellTitle(cell: DayCell): string {
   flex: 0 0 auto;
   opacity: 0.7;
   font-variant-numeric: tabular-nums;
+}
+
+.git-stats-range-trigger {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 12px;
+  padding: 0 6px;
+  min-height: 24px;
+}
+.git-stats-range-trigger-label {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-stats-range-menu {
+  padding: 4px 0;
+}
+.git-stats-range-presets .v-list-item__append {
+  font-size: 11px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+.git-stats-range-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+.git-stats-range-custom-title {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 </style>
