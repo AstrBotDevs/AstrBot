@@ -31,7 +31,10 @@ import type {
   GitShowData,
 } from "@/composables/parseSpcodeGitShow";
 import type { FileStatus } from "@/composables/parseSpcodeGitDiff";
-import type { GitStatsRange } from "@/composables/parseSpcodeGitStats";
+import {
+  rangeForPreset,
+  type GitStatsRange,
+} from "@/composables/parseSpcodeGitStats";
 
 const { tm } = useModuleI18n("features/chat");
 // Note (v3.9, 2026-06-25, elecvoid243): FilePatchPanel reads the
@@ -338,6 +341,23 @@ function onStatsFilterPath(path: string): void {
   emit("apply", { ...localFilter.value });
 }
 
+/** Stats-panel refresh button — forward the current range so the
+ *  composable hits the same ETag bucket the watcher already
+ *  populates, instead of falling into `umo|worktree||` and
+ *  replacing range-filtered hot files with whole-repo data.
+ *  2026-07-18 fix(dashboard): previously called
+ *  `gitStats.refresh({ forceLoading: true })` with no since/until
+ *  — see the matching JSDoc on the sidebar's `statsRangeArgs` for
+ *  the ETag-bucket story. */
+function onStatsRefresh(): void {
+  const r = props.range;
+  const args =
+    r.kind === "preset"
+      ? rangeForPreset(r.preset)
+      : { since: r.since, until: r.until };
+  void props.gitStats.refresh({ forceLoading: true, ...args });
+}
+
 // ── File list helpers (spec 2026-06-25 §3.3) ──────────────────────
 
 /** Map a git-show file status to the same FileStatus union used by
@@ -425,7 +445,7 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
       :range="range"
       @update:open="(v) => emit('update:statsOpen', v)"
       @update:range="(v) => emit('update:range', v)"
-      @refresh="gitStats.refresh({ forceLoading: true })"
+      @refresh="onStatsRefresh"
       @filter-date="onStatsFilterDate"
       @filter-path="onStatsFilterPath"
     />

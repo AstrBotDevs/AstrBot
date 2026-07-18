@@ -55,7 +55,10 @@ import GitIgnoreEditor from "@/components/chat/message_list_comps/GitIgnoreEdito
 import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
 import { useSpcodeGitShow } from "@/composables/useSpcodeGitShow";
 import { useSpcodeGitStats } from "@/composables/useSpcodeGitStats";
-import type { GitStatsRange } from "@/composables/parseSpcodeGitStats";
+import {
+  rangeForPreset,
+  type GitStatsRange,
+} from "@/composables/parseSpcodeGitStats";
 import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
 import { useSpcodeFileSearch } from "@/composables/useSpcodeFileSearch";
 import { classifyReason } from "@/composables/parseSpcodeGitWorkflow";
@@ -1488,15 +1491,28 @@ watch(
 
 // 2026-07-18 git-stats heatmap: lazy-fetch the stats snapshot once
 // the panel is (or becomes) visible. Fires on: sidebar open while in
-// history view, switching into history view, panel re-expand, and
-// worktree switch while visible. The composable keys ETag + previous
+// history view, switching into history view, panel re-expand,
+// worktree switch, and RANGE CHANGE (gitStatsRange is a watch
+// source) while visible. The composable keys ETag + previous
 // snapshot by umo|worktree|since|until, so same-key repeats are
-// cheap 304s. The range itself is also a watch source so a range
-// change while visible re-fetches with the new since/until
-// immediately (the params forward path added by useSpcodeGitStats).
-function statsRangeArgs(): { since?: string; until?: string } {
+// cheap 304s.
+//
+// 2026-07-18 fix(dashboard): stop returning `{}` for presets —
+// every preset also resolves to a concrete since/until via
+// rangeForPreset, and forwarding those is what makes hot files
+// (and the day's totals) actually respond to the preset the user
+// picked. The previous behaviour sent `umo|worktree` only, which
+// gave every preset the same ETag key `umo|worktree||` — so
+// switching 1w → 1y → 1w would 304-replay whichever preset's
+// snapshot had been cached first, and the backend never got the
+// chance to refilter hot files. Now each preset gets its own ETag
+// bucket (1w="2026-07-12|2026-07-18", 1y="2025-07-20|2026-07-18",
+// ...) and the backend's since/until filter is the source of
+// truth for the hot-files slice, exactly the same way the heatmap
+// frontend uses the same since/until to anchor its week columns.
+function statsRangeArgs(): { since: string; until: string } {
   const r = gitStatsRange.value;
-  if (r.kind === "preset") return {};
+  if (r.kind === "preset") return rangeForPreset(r.preset);
   return { since: r.since, until: r.until };
 }
 watch(
@@ -2792,9 +2808,17 @@ function onLogApply(filter: LogFilter): void {
 // 2026-07-18 git-stats heatmap: the History-tab manual refresh button
 // re-fetches the log AND the stats panel (ETag-validated; cheap 304s
 // when nothing changed upstream).
+//
+// 2026-07-18 fix(dashboard): forward the current range to
+// `gitStats.refresh()` so a manual refresh on a 1y / custom
+// selection doesn't drop into the no-since/until bucket
+// (`umo|worktree||`) and replace the range-filtered hot files
+// with whole-repo data. The watcher already keeps that bucket
+// fresh on every range change, so we just need the manual
+// refresh to hit the same key.
 function onLogRefresh(): void {
   void gitLog.refresh();
-  void gitStats.refresh();
+  void gitStats.refresh(statsRangeArgs());
 }
 function onLogReset(filter: LogFilter): void {
   // Reset semantics differ from a regular Apply: the URL of the reset
