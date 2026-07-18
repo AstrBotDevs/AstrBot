@@ -13,6 +13,8 @@
      Spec: docs/superpowers/specs/2026-06-25-git-show-design.md. -->
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
+import { useCustomizerStore } from "@/stores/customizer";
 import { useModuleI18n } from "@/i18n/composables";
 import type { LogFetchState, LogFilter } from "@/composables/useSpcodeGitLog";
 import type {
@@ -20,7 +22,9 @@ import type {
   GitShowFetchState,
   GitShowFileFetchState,
 } from "@/composables/useSpcodeGitShow";
+import type { UseSpcodeGitStats } from "@/composables/useSpcodeGitStats";
 import FilePatchPanel from "./FilePatchPanel.vue";
+import GitStatsPanel from "./GitStatsPanel.vue";
 import type {
   GitShowFile,
   GitShowFileStatus,
@@ -53,6 +57,12 @@ const props = defineProps<{
    * highlight.
    */
   focusedCommitSha: string | null;
+  /** Composable handle injected by the sidebar (git-stats heatmap
+   *  feature, 2026-07-18). The panel embedded above the log renders
+   *  from gitStats.state; the sidebar owns lifecycle + refresh. */
+  gitStats: UseSpcodeGitStats;
+  /** Stats-panel collapsed state (persisted by the sidebar). */
+  statsOpen: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -69,7 +79,15 @@ const emit = defineEmits<{
   // writes live at the sidebar level); we only surface which
   // commit the user picked.
   (e: "revert", commit: { sha: string; subject: string }): void;
+  /** Stats-panel collapse toggle (v-model:stats-open). */
+  (e: "update:statsOpen", v: boolean): void;
 }>();
+
+// isDark for GitStatsPanel — sourced from the customizer store the
+// same way FilePatchPanel does (storeToRefs keeps it a reactive Ref;
+// see the v3.9 note above). The panel receives it as a prop so it
+// stays store-free and unit-testable.
+const { isDark } = storeToRefs(useCustomizerStore());
 
 // Local filter form state. Emitted on Apply; reset on Reset.
 const localFilter = ref<LogFilter>({ ref: "HEAD", n: 20 });
@@ -282,6 +300,38 @@ function onReset(): void {
   emit("reset", { ...localFilter.value });
 }
 
+// ── Stats panel filter linkage (git-stats heatmap, 2026-07-18) ────
+
+/** Day-cell click → apply the standard filter flow with the clicked
+ *  day's explicit local-time range (a date-only --until parses as
+ *  midnight in git and would empty a same-day filter). n=200 gives
+ *  headroom for a busy day; ref stays the current filter's ref so a
+ *  branch view does not jump back to HEAD. */
+function onStatsFilterDate(p: { since: string; until: string }): void {
+  localFilter.value = {
+    ...localFilter.value,
+    since: p.since,
+    until: p.until,
+    n: 200,
+  };
+  emit("apply", { ...localFilter.value });
+}
+
+/** Hot-file click → apply the standard filter flow with the path.
+ *  since/until are dropped (dashboard spec §4): the hot-file ranking
+ *  already answers "recent", and keeping a stale date window would
+ *  hide the file's older commits the user is looking for. */
+function onStatsFilterPath(path: string): void {
+  localFilter.value = {
+    ...localFilter.value,
+    path,
+    since: undefined,
+    until: undefined,
+    n: 200,
+  };
+  emit("apply", { ...localFilter.value });
+}
+
 // ── File list helpers (spec 2026-06-25 §3.3) ──────────────────────
 
 /** Map a git-show file status to the same FileStatus union used by
@@ -361,6 +411,17 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
 
 <template>
   <div class="git-log-view">
+    <!-- Git stats panel: embedded at the top of the history view -->
+    <GitStatsPanel
+      :state="gitStats.state.value"
+      :open="statsOpen"
+      :is-dark="isDark"
+      @update:open="(v) => emit('update:statsOpen', v)"
+      @refresh="gitStats.refresh({ forceLoading: true })"
+      @filter-date="onStatsFilterDate"
+      @filter-path="onStatsFilterPath"
+    />
+
     <!-- Truncation banner (spec §6.5.2) -->
     <div v-if="isTruncated" class="git-log-truncated">
       {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.truncated") }}
