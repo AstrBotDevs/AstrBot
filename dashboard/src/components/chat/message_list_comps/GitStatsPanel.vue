@@ -513,7 +513,7 @@ function cellTitle(cell: DayCell): string {
             :style="
               isCompactHeatmap
                 ? { gridTemplateColumns: `repeat(${grid.length}, 14px)` }
-                : { gridTemplateColumns: `repeat(${grid.length}, 1fr)` }
+                : { gridTemplateColumns: `repeat(26, 1fr)` }
             "
           >
             <span
@@ -724,9 +724,16 @@ function cellTitle(cell: DayCell): string {
   grid-template-rows: repeat(7, 1fr);
   grid-auto-flow: column;
   gap: 2px;
+  /* 2026-07-19 heatmap-cell-size: pin the cell width to 1/26 of the
+     panel so every range from 1w up to 6mo renders at the same
+     "6mo" cell size. Shorter ranges leave the right side of the
+     grid empty; longer ranges (1y, custom > 26w) flip into the
+     `.is-compact` 12px variant below. */
+  grid-template-columns: repeat(26, 1fr);
 }
 .git-stats-grid.is-compact {
   grid-template-rows: repeat(7, 12px);
+  grid-template-columns: unset;
   width: max-content;
 }
 .git-stats-cell {
