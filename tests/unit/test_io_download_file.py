@@ -17,7 +17,11 @@ class _FakeResponse:
     def __init__(self, *, status: int, chunks: list[bytes]):
         self.status = status
         self.headers = {"content-length": str(sum(len(chunk) for chunk in chunks))}
+        self._body = b"".join(chunks)
         self.content = _FakeContent(chunks)
+
+    async def read(self) -> bytes:
+        return self._body
 
     async def __aenter__(self):
         return self
@@ -37,6 +41,11 @@ class _FakeSession:
         return False
 
     def get(self, *_args, **_kwargs):
+        if isinstance(self._response, Exception):
+            raise self._response
+        return self._response
+
+    def post(self, *_args, **_kwargs):
         if isinstance(self._response, Exception):
             raise self._response
         return self._response
@@ -105,3 +114,83 @@ async def test_download_file_writes_successful_response(monkeypatch, tmp_path):
     await io.download_file("https://example.test/ok.bin", str(target_path))
 
     assert target_path.read_bytes() == b"hello world"
+
+
+@pytest.mark.parametrize("post", [False, True])
+@pytest.mark.asyncio
+async def test_download_image_by_url_rejects_non_200_response(
+    monkeypatch,
+    tmp_path,
+    post,
+):
+    target_path = tmp_path / "image.jpg"
+    _patch_download_session(
+        monkeypatch,
+        _FakeResponse(status=404, chunks=[b'{"error":"not found"}']),
+    )
+
+    with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 404"):
+        await io.download_image_by_url(
+            "https://example.test/generate",
+            post=post,
+            post_data={"json": False} if post else None,
+            path=str(target_path),
+        )
+
+    assert not target_path.exists()
+
+
+@pytest.mark.parametrize("post", [False, True])
+@pytest.mark.asyncio
+async def test_download_image_by_url_rejects_non_200_response_after_ssl_fallback(
+    monkeypatch,
+    tmp_path,
+    post,
+):
+    class FakeSSLError(Exception):
+        pass
+
+    target_path = tmp_path / "image.jpg"
+    _patch_download_sessions(
+        monkeypatch,
+        [
+            FakeSSLError(),
+            _FakeResponse(status=500, chunks=[b"server error"]),
+        ],
+    )
+    monkeypatch.setattr(io.aiohttp, "ClientConnectorSSLError", FakeSSLError)
+    monkeypatch.setattr(io.aiohttp, "ClientConnectorCertificateError", FakeSSLError)
+
+    with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 500"):
+        await io.download_image_by_url(
+            "https://example.test/generate",
+            post=post,
+            post_data={"json": False} if post else None,
+            path=str(target_path),
+        )
+
+    assert not target_path.exists()
+
+
+@pytest.mark.parametrize("post", [False, True])
+@pytest.mark.asyncio
+async def test_download_image_by_url_writes_successful_response(
+    monkeypatch,
+    tmp_path,
+    post,
+):
+    target_path = tmp_path / "image.jpg"
+    _patch_download_session(
+        monkeypatch,
+        _FakeResponse(status=200, chunks=[b"image bytes"]),
+    )
+
+    result = await io.download_image_by_url(
+        "https://example.test/generate",
+        post=post,
+        post_data={"json": False} if post else None,
+        path=str(target_path),
+    )
+
+    assert result == str(target_path)
+    assert target_path.read_bytes() == b"image bytes"
