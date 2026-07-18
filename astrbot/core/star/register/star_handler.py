@@ -577,7 +577,59 @@ def register_on_llm_tool_respond(**kwargs):
     return decorator
 
 
-def register_llm_tool(name: str | None = None, **kwargs):
+def _normalize_permission_declaration(
+    name: object,
+    permission_type: PermissionType | None,
+    registering_agent: object,
+) -> str | None:
+    """Validate the ``name`` / ``permission_type`` combination passed to
+    ``register_llm_tool`` and map ``permission_type`` to the raw string
+    stored on ``FunctionTool.declared_permission_type``.
+
+    Returns ``None`` when no permission was declared. Raises ``ValueError``
+    on any of the three misuse patterns this feature has to guard against:
+    forgetting ``name=``/``permission_type=`` and passing a ``PermissionType``
+    member positionally (it would otherwise silently bind to ``name``),
+    passing something that isn't a ``PermissionType`` member, or declaring a
+    permission on a tool registered via ``Agent.llm_tool`` (which never goes
+    through the panel-configurable permission system)."""
+    if isinstance(name, PermissionType):
+        raise ValueError(
+            "看起来你把 PermissionType 作为第一个位置参数传给了 name（很可能是忘了写"
+            "name= 或 permission_type=）。正确写法："
+            '@llm_tool(name="xxx", permission_type=filter.PermissionType.ADMIN)。'
+            "如果不需要自定义工具名，直接用 @llm_tool(permission_type=...) 即可"
+            "（permission_type 现在是仅限关键字参数）。",
+        )
+    if permission_type is not None and not isinstance(permission_type, PermissionType):
+        raise ValueError(
+            "permission_type 必须为 astrbot.api.event.filter.PermissionType 的成员（ADMIN / MEMBER）。",
+        )
+    if registering_agent is not None and permission_type is not None:
+        raise ValueError(
+            "通过 Agent.llm_tool 注册的工具不支持 permission_type 声明，因为它们不经过"
+            "面板可配置的工具管理系统（不会被写入 func_list，也不受"
+            "_default_permission / 面板权限覆盖的约束）。请改用"
+            "@filter.llm_tool（不经过 Agent）来声明默认权限，或者在工具内部自行"
+            "实现权限校验。",
+        )
+    if permission_type is None:
+        return None
+    if permission_type == PermissionType.ADMIN:
+        return "admin"
+    # PermissionType.MEMBER (or any non-ADMIN flag) means "no restriction",
+    # which is already the implicit default, but we still record it
+    # explicitly so a dashboard can distinguish "declared member" from
+    # "never declared anything".
+    return "member"
+
+
+def register_llm_tool(
+    name: str | None = None,
+    *,
+    permission_type: PermissionType | None = None,
+    **kwargs,
+):
     """为函数调用（function-calling / tools-use）添加工具。
 
     请务必按照以下格式编写一个工具（包括函数注释，AstrBot 会尝试解析该函数注释）
@@ -609,11 +661,42 @@ def register_llm_tool(name: str | None = None, **kwargs):
     yield
     ```
 
+    权限声明 / Permission declaration:
+        可以通过 ``permission_type`` 参数为该工具声明一个默认权限要求，效果类似于
+        ``@filter.command()`` 配合 ``@filter.permission_type()`` 的用法。这样即便
+        机器人主人从未在 WebUI 面板里手动配置过该工具的权限，工具也会默认拥有这层
+        防护：
+
+        ```
+        @llm_tool(name="restart_server", permission_type=filter.PermissionType.ADMIN)
+        async def restart_server(event: AstrMessageEvent):
+            \'\'\'重启服务器。\'\'\'
+            # 处理逻辑
+        ```
+
+        - 该参数只是一个**默认值**：如果机器人主人之后在 WebUI 面板里手动为该工具
+          设置了权限，面板的设置会覆盖这里声明的默认值。
+        - 不传或传 ``None`` 时行为与之前完全一致（默认所有人可用）。
+        - ``permission_type`` 是仅限关键字参数，必须写成
+          ``permission_type=filter.PermissionType.ADMIN``，不能位置传参。如果你
+          忘了写 ``name=`` 或 ``permission_type=``、直接把 ``PermissionType`` 成员
+          当作第一个位置参数传入（例如错写成
+          ``@llm_tool(filter.PermissionType.ADMIN)``），会抛出 ``ValueError``，
+          而不是被静默当成工具名。
+        - 通过 ``registering_agent``（即 ``Agent.llm_tool``）注册的工具不支持权限
+          声明，因为它们不会被写入 ``func_list``，不经过面板可配置的工具管理系统，
+          也不受 ``_default_permission`` / 面板权限覆盖的约束。同时传入
+          ``registering_agent`` 和 ``permission_type`` 会抛出 ``ValueError``，
+          而不是静默忽略你的权限声明。
+
     """
     name_ = name
-    registering_agent = None
-    if kwargs.get("registering_agent"):
-        registering_agent = kwargs["registering_agent"]
+    registering_agent = kwargs.get("registering_agent")
+    declared_permission = _normalize_permission_declaration(
+        name,
+        permission_type,
+        registering_agent,
+    )
 
     def decorator(
         awaitable: Callable[
@@ -661,7 +744,13 @@ def register_llm_tool(name: str | None = None, **kwargs):
         if not registering_agent:
             doc_desc = docstring.description.strip() if docstring.description else ""
             md = get_handler_or_create(awaitable, EventType.OnCallingFuncToolEvent)
-            llm_tools.add_func(llm_tool_name, args, doc_desc, md.handler)
+            llm_tools.add_func(
+                llm_tool_name,
+                args,
+                doc_desc,
+                md.handler,
+                declared_permission_type=declared_permission,
+            )
         else:
             assert isinstance(registering_agent, RegisteringAgent)
             # print(f"Registering tool {llm_tool_name} for agent", registering_agent._agent.name)
@@ -669,7 +758,13 @@ def register_llm_tool(name: str | None = None, **kwargs):
                 registering_agent._agent.tools = []
 
             desc = docstring.description.strip() if docstring.description else ""
-            tool = llm_tools.spec_to_func(llm_tool_name, args, desc, awaitable)
+            tool = llm_tools.spec_to_func(
+                llm_tool_name,
+                args,
+                desc,
+                awaitable,
+                declared_permission_type=declared_permission,
+            )
             registering_agent._agent.tools.append(tool)
 
         return awaitable

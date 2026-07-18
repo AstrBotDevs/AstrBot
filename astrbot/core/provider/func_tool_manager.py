@@ -344,6 +344,7 @@ class FunctionToolManager:
         func_args: list[dict],
         desc: str,
         handler: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
+        declared_permission_type: str | None = None,
     ) -> FuncTool:
         params = {
             "type": "object",  # hard-coded here
@@ -358,6 +359,7 @@ class FunctionToolManager:
             parameters=params,
             description=desc,
             handler=handler,
+            declared_permission_type=declared_permission_type,
         )
 
     def add_func(
@@ -366,6 +368,7 @@ class FunctionToolManager:
         func_args: list,
         desc: str,
         handler: Callable[..., Awaitable[Any] | AsyncGenerator[Any]],
+        declared_permission_type: str | None = None,
     ) -> None:
         """添加函数调用工具
 
@@ -373,6 +376,9 @@ class FunctionToolManager:
         @param func_args: 函数参数列表，格式为 [{"type": "string", "name": "arg_name", "description": "arg_description"}, ...]
         @param desc: 函数描述
         @param func_obj: 处理函数
+        @param declared_permission_type: 插件作者通过 ``@llm_tool(permission_type=...)``
+            声明的默认权限（``"admin"`` / ``"member"`` / ``None``）。仅在该工具尚未
+            在 WebUI 面板中被显式配置过权限时生效，作为默认值使用。
         """
         # check if the tool has been added before
         self.remove_func(name)
@@ -383,6 +389,7 @@ class FunctionToolManager:
                 func_args=func_args,
                 desc=desc,
                 handler=handler,
+                declared_permission_type=declared_permission_type,
             ),
         )
         logger.info(f"Added llm tool: {name}")
@@ -396,14 +403,9 @@ class FunctionToolManager:
 
     def get_func(self, name) -> FuncTool | None:
         # 优先返回已激活的工具（后加载的覆盖前面的，与 ToolSet.add_tool 保持一致）
-        # 使用 getattr(..., True) 与 ToolSet.add_tool 保持一致：没有 active 属性的工具视为已激活
-        for f in reversed(self.func_list):
-            if f.name == name and getattr(f, "active", True):
-                return f
-        # 退化则拿最后一个同名工具
-        for f in reversed(self.func_list):
-            if f.name == name:
-                return f
+        tool = self._lookup_in_func_list(name)
+        if tool is not None:
+            return tool
         if isinstance(name, str):
             try:
                 builtin_tool = self.get_builtin_tool(name)
@@ -413,6 +415,25 @@ class FunctionToolManager:
                 return builtin_tool
             return builtin_tool
         return None
+
+    def _lookup_in_func_list(self, name) -> FuncTool | None:
+        """Find a tool in ``func_list`` by name, preferring the active copy.
+
+        Shared by :meth:`get_func` and :meth:`_default_permission` so the
+        precedence rule (active copy wins; otherwise fall back to the
+        most-recently-added inactive copy) only lives in one place. Never
+        falls through to builtin tools -- callers that need that do it
+        themselves, since loading builtins is a side effect that not every
+        caller wants (notably ``_default_permission``, which must never
+        trigger builtin-tool loading)."""
+        fallback = None
+        for f in reversed(self.func_list):
+            if f.name == name:
+                if getattr(f, "active", True):
+                    return f
+                if fallback is None:
+                    fallback = f
+        return fallback
 
     def get_builtin_tool(self, tool: str | type[FuncTool]) -> FuncTool:
         ensure_builtin_tools_loaded()
@@ -451,8 +472,20 @@ class FunctionToolManager:
     def _default_permission(self, tool_name: str) -> str:
         """Compute the fallback permission for a non-builtin tool.
 
-        All non-builtin tools default to ``"member"`` (no restriction).
-        Builtin tools are never routed through this method."""
+        If the tool's author declared a default via
+        ``@llm_tool(permission_type=...)``, that value is used. Otherwise
+        non-builtin tools default to ``"member"`` (no restriction).
+        Builtin tools are never routed through this method.
+
+        Uses ``getattr`` rather than direct attribute access: third-party
+        tools registered via ``add_llm_tools()`` are only type-hinted as
+        ``FunctionTool`` but not enforced at runtime, so an older or
+        custom tool object that doesn't inherit ``FunctionTool`` may not
+        carry this attribute at all."""
+        tool = self._lookup_in_func_list(tool_name)
+        declared = getattr(tool, "declared_permission_type", None)
+        if declared in ("admin", "member"):
+            return declared
         return "member"
 
     def _check_tool_permission(
