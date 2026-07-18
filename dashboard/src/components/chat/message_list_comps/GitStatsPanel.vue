@@ -8,19 +8,27 @@
   its standard `apply` flow.
 -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import type { GitStatsFetchState } from "@/composables/useSpcodeGitStats";
 import type { GitStatsDay } from "@/composables/parseSpcodeGitStats";
+import {
+  STATS_PRESETS,
+  type GitStatsRange,
+  type GitStatsRangePreset,
+} from "@/composables/parseSpcodeGitStats";
 
 const props = defineProps<{
   state: GitStatsFetchState;
   /** Collapsed/expanded state (persisted by the sidebar). */
   open: boolean;
   isDark?: boolean;
+  /** Time-range window (preset or custom). Owned by GitDiffSidebar. */
+  range: GitStatsRange;
 }>();
 const emit = defineEmits<{
   (e: "update:open", v: boolean): void;
+  (e: "update:range", v: GitStatsRange): void;
   (e: "refresh"): void;
   (e: "filter-date", p: { since: string; until: string }): void;
   (e: "filter-path", path: string): void;
@@ -88,8 +96,57 @@ function hotFileParts(f: {
   );
 }
 
-// ── Heatmap grid (26 week-columns × 7 rows, local time) ────────────
-const WEEKS = 26;
+// ── Range control (popover) ────────────────────────────────────────
+const customSince = ref<string>("");
+const customUntil = ref<string>("");
+const todayYmd = computed(() => fmtDate(new Date()));
+const isCustomValid = computed(() => {
+  if (!customSince.value || !customUntil.value) return false;
+  // YYYY-MM-DD is lexically comparable, so this is correct.
+  return customSince.value <= customUntil.value;
+});
+const rangeLabel = computed(() => {
+  if (props.range.kind === "preset") {
+    return tm(
+      `spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.${props.range.preset}`,
+    );
+  }
+  return `${props.range.since} → ${props.range.until}`;
+});
+function isPresetActive(p: GitStatsRangePreset): boolean {
+  return props.range.kind === "preset" && props.range.preset === p;
+}
+function selectPreset(p: GitStatsRangePreset): void {
+  emit("update:range", { kind: "preset", preset: p });
+}
+function applyCustom(): void {
+  if (!isCustomValid.value) return;
+  emit("update:range", {
+    kind: "custom",
+    since: customSince.value,
+    until: customUntil.value,
+  });
+}
+// Pre-fill the date inputs whenever the active range changes so the
+// popover opens with reasonable defaults instead of empty boxes.
+watch(
+  () => props.range,
+  (r) => {
+    if (r.kind === "custom") {
+      customSince.value = r.since;
+      customUntil.value = r.until;
+    } else {
+      customSince.value = "";
+      customUntil.value = "";
+    }
+  },
+  { immediate: true },
+);
+
+// ── Heatmap grid is fully range-driven (see grid computed below). ─
+// (WEEKS is gone: the grid width comes from `props.range` via the
+// `weeksForRange` computed below, and the visual density floor is
+// COMPACT_HEATMAP_WEEKS_THRESHOLD further down.)
 
 interface DayCell {
   date: string;
@@ -116,6 +173,21 @@ function fmtDate(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
+/** Parse a strict YYYY-MM-DD string into a local-midnight Date.
+ *  We deliberately use the (year, month-1, day) constructor instead of
+ *  `new Date(s)` so the resulting date is anchored at the user's local
+ *  midnight — `new Date("2025-01-01")` alone would parse as UTC and
+ *  shift by the local TZ offset, throwing off `getDay()` math. */
+function parseYmd(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const d = Number(m[3]);
+  if (mo < 0 || mo > 11) return null;
+  return new Date(y, mo, d);
+}
+
 const grid = computed<DayCell[][]>(() => {
   const byDate = new Map<string, GitStatsDay>();
   for (const d of snapshot.value?.days ?? []) byDate.set(d.date, d);
@@ -125,14 +197,38 @@ const grid = computed<DayCell[][]>(() => {
     today.getMonth(),
     today.getDate(),
   );
-  // Sunday of the current week anchors the LAST column.
-  const endSunday = new Date(todayStart);
-  endSunday.setDate(endSunday.getDate() - endSunday.getDay());
+
+  // Width + anchor derive from props.range:
+  //   preset  → STATS_PRESETS.weeks, anchor at today's Sunday
+  //   custom  → ceil((until - since) / 7) + 1, anchor at until's Sunday
+  let weeks: number;
+  let anchor: Date;
+  // Capture into a local so TypeScript narrows the discriminated union
+  // in both branches (a callback that re-reads `props.range` would not).
+  const range = props.range;
+  if (range.kind === "preset") {
+    const cfg = STATS_PRESETS.find((p) => p.key === range.preset);
+    if (!cfg) return [];
+    weeks = cfg.weeks;
+    anchor = new Date(todayStart);
+    anchor.setDate(anchor.getDate() - anchor.getDay());
+  } else {
+    const sinceDate = parseYmd(range.since);
+    const untilDate = parseYmd(range.until);
+    if (!sinceDate || !untilDate) return [];
+    weeks = Math.max(
+      1,
+      Math.ceil((untilDate.getTime() - sinceDate.getTime()) / 86400000 / 7) + 1,
+    );
+    anchor = new Date(untilDate);
+    anchor.setDate(anchor.getDate() - anchor.getDay());
+  }
+
   const cols: DayCell[][] = [];
-  for (let w = WEEKS - 1; w >= 0; w--) {
+  for (let w = weeks - 1; w >= 0; w--) {
     const col: DayCell[] = [];
     for (let dow = 0; dow < 7; dow++) {
-      const d = new Date(endSunday);
+      const d = new Date(anchor);
       d.setDate(d.getDate() - w * 7 + dow);
       const key = fmtDate(d);
       const stat = byDate.get(key);
@@ -150,6 +246,22 @@ const grid = computed<DayCell[][]>(() => {
   }
   return cols;
 });
+
+/** 2026-07-18 heatmap-cell-size: ranges that span more than 26
+ *  weeks (≈ 6 months) collapse each cell below ~20px on a typical
+ *  ~600px sidebar, which is too cramped to read. Anything 26 weeks
+ *  or under uses the original "fill-the-column" cells (variable
+ *  size: a 1w / 1mo cell is large, a 6mo cell is the
+ *  not-too-big / not-too-small sweet spot the user approved);
+ *  anything strictly larger switches to the fixed 12px squares so
+ *  each cell stays legible and the strip stays a single
+ *  ~100px-tall band regardless of how many years are in view. The
+ *  threshold is the same as the `6mo` preset (26 weeks), so the
+ *  preset boundary and the layout boundary line up exactly. */
+const COMPACT_HEATMAP_WEEKS_THRESHOLD = 26;
+const isCompactHeatmap = computed<boolean>(
+  () => grid.value.length > COMPACT_HEATMAP_WEEKS_THRESHOLD,
+);
 
 /** Month labels above the grid, emitted at each month boundary. Uses
  *  the browser locale via toLocaleDateString (zero i18n keys). */
@@ -243,6 +355,89 @@ function cellTitle(cell: DayCell): string {
         }}
       </span>
       <span class="git-stats-header-spacer" />
+      <v-menu :close-on-content-click="false" location="bottom end">
+        <template #activator="{ props: tipProps }">
+          <v-btn
+            variant="text"
+            size="x-small"
+            class="git-stats-range-trigger"
+            v-bind="tipProps"
+          >
+            <v-icon size="13" start>mdi-calendar-range</v-icon>
+            <span class="git-stats-range-trigger-label">{{ rangeLabel }}</span>
+            <v-icon size="13" end>mdi-chevron-down</v-icon>
+          </v-btn>
+        </template>
+        <v-card class="git-stats-range-menu" min-width="240">
+          <v-list density="compact" class="git-stats-range-presets">
+            <v-list-item
+              v-for="p in STATS_PRESETS"
+              :key="p.key"
+              :active="isPresetActive(p.key)"
+              @click="selectPreset(p.key)"
+            >
+              <v-list-item-title>{{
+                tm(
+                  `spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.${p.key}`,
+                )
+              }}</v-list-item-title>
+              <template #append>
+                <span class="git-stats-range-days">{{ p.days }}d</span>
+              </template>
+            </v-list-item>
+          </v-list>
+          <v-divider />
+          <div class="git-stats-range-custom">
+            <div class="git-stats-range-custom-title">
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.custom",
+                )
+              }}
+            </div>
+            <v-text-field
+              v-model="customSince"
+              :label="
+                tm(
+                  'spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.since',
+                )
+              "
+              type="date"
+              density="compact"
+              variant="outlined"
+              hide-details
+              :max="customUntil || undefined"
+            />
+            <v-text-field
+              v-model="customUntil"
+              :label="
+                tm(
+                  'spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.until',
+                )
+              "
+              type="date"
+              density="compact"
+              variant="outlined"
+              hide-details
+              :min="customSince || undefined"
+              :max="todayYmd"
+            />
+            <v-btn
+              size="small"
+              variant="tonal"
+              :disabled="!isCustomValid"
+              block
+              @click="applyCustom"
+            >
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.range.apply",
+                )
+              }}
+            </v-btn>
+          </div>
+        </v-card>
+      </v-menu>
       <v-btn
         icon
         size="x-small"
@@ -314,7 +509,12 @@ function cellTitle(cell: DayCell): string {
         <div class="git-stats-heatmap-wrap">
           <div
             class="git-stats-months"
-            :style="{ gridTemplateColumns: `repeat(${WEEKS}, 1fr)` }"
+            :class="{ 'is-compact': isCompactHeatmap }"
+            :style="
+              isCompactHeatmap
+                ? { gridTemplateColumns: `repeat(${grid.length}, 14px)` }
+                : { gridTemplateColumns: `repeat(${grid.length}, 1fr)` }
+            "
           >
             <span
               v-for="ml in monthLabels"
@@ -327,6 +527,7 @@ function cellTitle(cell: DayCell): string {
           </div>
           <div
             class="git-stats-grid"
+            :class="{ 'is-compact': isCompactHeatmap }"
             role="grid"
             aria-label="commit activity heatmap"
           >
@@ -336,7 +537,10 @@ function cellTitle(cell: DayCell): string {
                 :key="cell.date"
                 type="button"
                 class="git-stats-cell"
-                :class="[`lv-${cell.level}`, { 'is-future': cell.future }]"
+                :class="[
+                  `lv-${cell.level}`,
+                  { 'is-future': cell.future, 'is-compact': isCompactHeatmap },
+                ]"
                 :title="cellTitle(cell)"
                 :disabled="cell.level === 0 || cell.future"
                 @click="onDayClick(cell)"
@@ -466,9 +670,49 @@ function cellTitle(cell: DayCell): string {
   text-decoration: underline;
   cursor: pointer;
 }
+/* 2026-07-18 heatmap-cell-size: parent for both the month-labels
+   row and the heatmap grid. `overflow-x: auto` shows a
+   horizontal scrollbar when the sidebar is resized below the
+   grid's natural width (e.g. 26 weeks × 14px ≈ 362px on a
+   200px-wide panel) so the cells stay at their design size
+   instead of being squashed into illegible slivers. The
+   children below use `width: max-content` so the wrap shrinks
+   to the content when the panel is wider than the grid,
+   leaving the unused horizontal space empty. */
+.git-stats-heatmap-wrap {
+  overflow-x: auto;
+}
+/* 2026-07-18 heatmap-cell-size: two layout modes, picked by the
+   `is-compact` class that GitStatsPanel toggles on the grids and
+   each cell once `grid.length > 26` (the 6-month preset).
+
+   DEFAULT (no is-compact) — "big" cells for ≤ 6 months:
+   `width: 100%` + `aspect-ratio: 1` makes every cell a square
+   that fills its column, and `grid-template-rows: repeat(7,
+   1fr)` lets the rows size to that square. With ≤ 26 columns
+   the column width = (wrap-width - gaps) / N, so a 1w / 1mo
+   cell is generous and a 6mo cell lands around 18-22px on a
+   typical ~600px sidebar — the size the user described as
+   "just right, not too big or too small." The month-labels row
+   uses `repeat(N, 1fr)` so its columns line up with the
+   heatmap's auto-sized tracks. The grid itself fills the wrap
+   (no `width: max-content`), so the wrap never needs a
+   horizontal scrollbar in this mode.
+
+   COMPACT (is-compact) — "small" cells for > 6 months:
+   `width: 12px; height: 12px` and `grid-template-rows: repeat(7,
+   12px)` make every cell a fixed 12px square. The grid uses
+   `width: max-content` and the month row switches to
+   `repeat(N, 14px)` (12px cell + 2px gap), so both rows shrink
+   to their content and stay pixel-aligned. The wrap keeps its
+   `overflow-x: auto` so a narrow sidebar shows a horizontal
+   scrollbar instead of squashing the cells. */
 .git-stats-months {
   display: grid;
   margin-bottom: 2px;
+}
+.git-stats-months.is-compact {
+  width: max-content;
 }
 .git-stats-month-label {
   font-size: 10px;
@@ -481,6 +725,10 @@ function cellTitle(cell: DayCell): string {
   grid-auto-flow: column;
   gap: 2px;
 }
+.git-stats-grid.is-compact {
+  grid-template-rows: repeat(7, 12px);
+  width: max-content;
+}
 .git-stats-cell {
   width: 100%;
   aspect-ratio: 1;
@@ -490,6 +738,12 @@ function cellTitle(cell: DayCell): string {
   background: var(--gs-l0);
   cursor: pointer;
   padding: 0;
+}
+.git-stats-cell.is-compact {
+  width: 12px;
+  height: 12px;
+  min-width: 0;
+  aspect-ratio: auto;
 }
 .git-stats-cell:disabled {
   cursor: default;
@@ -561,5 +815,61 @@ function cellTitle(cell: DayCell): string {
   flex: 0 0 auto;
   opacity: 0.7;
   font-variant-numeric: tabular-nums;
+}
+
+.git-stats-range-trigger {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 12px;
+  padding: 0 6px;
+  min-height: 24px;
+}
+.git-stats-range-trigger-label {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-stats-range-menu {
+  padding: 4px 0;
+}
+/* 2026-07-18 heatmap-popup-font: v-list-item-title inherits Vuetify's
+   default 14-16px typography which is much larger than the
+   `改动统计` page's 12px body text. Force 12px on every text node
+   inside the popover so the dropdown matches the rest of the
+   GitStatsPanel header. Vuetify wraps the title in a dedicated
+   class, so we target that explicitly rather than the whole list
+   item. The append slot (e.g. "30d", "90d" day counters) is also
+   re-aligned to 12px for visual consistency. */
+.git-stats-range-presets .v-list-item-title {
+  font-size: 12px;
+  line-height: 1.2;
+}
+.git-stats-range-presets .v-list-item__append {
+  font-size: 12px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+.git-stats-range-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+.git-stats-range-custom-title {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* 2026-07-18 heatmap-popup-font: the v-text-field inside the
+   popover (since / until date inputs) would also render at 14px
+   by default, looking oversized next to the now-12px labels. Use
+   the same :deep() override the rest of the dashboard applies
+   (see GitLogView's filter field for the canonical pattern). */
+.git-stats-range-custom :deep(.v-field__input),
+.git-stats-range-custom :deep(.v-label) {
+  font-size: 12px;
 }
 </style>

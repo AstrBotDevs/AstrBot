@@ -51,6 +51,50 @@ export type ParseResult<T> =
   | { kind: "ok"; snapshot: T }
   | { kind: "error"; reason: string };
 
+// ── Range types (2026-07-18: spec §"GitStatsRange type") ────────
+export type GitStatsRangePreset = "1w" | "1mo" | "3mo" | "6mo" | "1y";
+
+export type GitStatsRange =
+  | { kind: "preset"; preset: GitStatsRangePreset }
+  | { kind: "custom"; since: string; until: string };
+
+export const STATS_PRESETS: ReadonlyArray<{
+  key: GitStatsRangePreset;
+  weeks: number;
+  days: number;
+}> = [
+  { key: "1w",  weeks: 1,  days: 7   },
+  { key: "1mo", weeks: 5,  days: 35  },
+  { key: "3mo", weeks: 13, days: 91  },
+  { key: "6mo", weeks: 26, days: 182 },
+  { key: "1y",  weeks: 52, days: 364 },
+];
+
+function fmtYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+export function rangeForPreset(
+  p: GitStatsRangePreset,
+  today: Date = new Date(),
+): { since: string; until: string } {
+  const cfg = STATS_PRESETS.find((x) => x.key === p);
+  if (!cfg) throw new Error(`unknown preset: ${p}`);
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+  const endSunday = new Date(todayStart);
+  endSunday.setDate(endSunday.getDate() - endSunday.getDay());
+  const sinceDate = new Date(endSunday);
+  sinceDate.setDate(sinceDate.getDate() - (cfg.weeks - 1) * 7);
+  return { since: fmtYmd(sinceDate), until: fmtYmd(todayStart) };
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────
 
 function asString(v: unknown, fallback = ""): string {

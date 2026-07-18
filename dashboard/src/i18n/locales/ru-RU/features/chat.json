@@ -666,13 +666,24 @@
             "error": "Не удалось загрузить статистику",
             "retry": "Повторить",
             "emptyRepo": "Коммитов пока нет — статистика появится после первого коммита",
-            "truncatedBadge": "Последние {n}",
+            "truncatedBadge": "Показаны только последние {n} коммитов",
             "hotFiles": "Горячие файлы",
             "hotFileValue": "{commits} коммитов · {additions} / {deletions}",
             "cellTooltip": "{date}: {commits} коммитов · +{additions} / −{deletions}",
             "zeroTooltip": "{date}: нет коммитов",
             "filterAppliedDate": "Показаны коммиты за {date}",
-            "filterAppliedFile": "Показана история {path}"
+            "filterAppliedFile": "Показана история {path}",
+            "range": {
+              "1w": "Последняя неделя",
+              "1mo": "Последний месяц",
+              "3mo": "Последние 3 месяца",
+              "6mo": "Последние 6 месяцев",
+              "1y": "Последний год",
+              "custom": "Произвольный диапазон",
+              "since": "С",
+              "until": "По",
+              "apply": "Применить"
+            }
           }
         },
         "error": {

@@ -55,6 +55,10 @@ import GitIgnoreEditor from "@/components/chat/message_list_comps/GitIgnoreEdito
 import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
 import { useSpcodeGitShow } from "@/composables/useSpcodeGitShow";
 import { useSpcodeGitStats } from "@/composables/useSpcodeGitStats";
+import {
+  rangeForPreset,
+  type GitStatsRange,
+} from "@/composables/parseSpcodeGitStats";
 import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
 import { classifyReason } from "@/composables/parseSpcodeGitWorkflow";
 import { classifyWorktreeReason } from "@/composables/parseSpcodeWorktreeManagement";
@@ -88,6 +92,7 @@ const STORAGE_KEYS = {
   selectedScope: "astrbot.spcode.gitDiffSidebar.selectedScope",
   // 2026-07-18 git-stats heatmap: stats-panel collapsed state.
   gitStatsOpen: "astrbot.spcode.gitDiffSidebar.gitStatsOpen",
+  gitStatsRange: "astrbot.spcode.gitDiffSidebar.gitStatsRange",
 } as const;
 
 function safeGetItem(key: string): string | null {
@@ -129,6 +134,36 @@ function loadSelectedScope(): GitDiffScope {
 // History view.
 function loadGitStatsOpen(): boolean {
   return safeGetItem(STORAGE_KEYS.gitStatsOpen) !== "false";
+}
+
+// 2026-07-18 git-stats heatmap: restore the saved range window from
+// localStorage. Anything we don't recognise falls back to the prior
+// 6-month default (matching the launch behaviour of the feature).
+const VALID_PRESETS = new Set(["1w", "1mo", "3mo", "6mo", "1y"]);
+function loadGitStatsRange(): GitStatsRange {
+  const raw = safeGetItem(STORAGE_KEYS.gitStatsRange);
+  if (!raw) return { kind: "preset", preset: "6mo" };
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") throw 0;
+    const obj = parsed as { kind?: unknown; preset?: unknown; since?: unknown; until?: unknown };
+    if (obj.kind === "preset" && typeof obj.preset === "string" && VALID_PRESETS.has(obj.preset)) {
+      return { kind: "preset", preset: obj.preset as GitStatsRange["kind" extends "preset" ? "preset" : never] } as GitStatsRange;
+    }
+    if (
+      obj.kind === "custom" &&
+      typeof obj.since === "string" &&
+      typeof obj.until === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(obj.since) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(obj.until) &&
+      obj.since <= obj.until
+    ) {
+      return { kind: "custom", since: obj.since, until: obj.until };
+    }
+  } catch {
+    /* fall through */
+  }
+  return { kind: "preset", preset: "6mo" };
 }
 
 // Debounced writer for currentPath (spec §5.1 lines 1273-1280).
@@ -260,6 +295,14 @@ const statsOpen = ref<boolean>(loadGitStatsOpen());
 watch(
   statsOpen,
   (v) => safeSetItem(STORAGE_KEYS.gitStatsOpen, String(v)),
+  { flush: "post" },
+);
+// 2026-07-18 git-stats heatmap: owned by the sidebar, persisted across
+// page reloads, and the source for the range prop passed to GitLogView.
+const gitStatsRange = ref<GitStatsRange>(loadGitStatsRange());
+watch(
+  gitStatsRange,
+  (v) => safeSetItem(STORAGE_KEYS.gitStatsRange, JSON.stringify(v)),
   { flush: "post" },
 );
 
@@ -1303,14 +1346,42 @@ watch(
 
 // 2026-07-18 git-stats heatmap: lazy-fetch the stats snapshot once
 // the panel is (or becomes) visible. Fires on: sidebar open while in
-// history view, switching into history view, panel re-expand, and
-// worktree switch while visible (the composable keys ETag + previous
-// snapshot by umo|worktree, so same-worktree repeats are cheap 304s).
+// history view, switching into history view, panel re-expand,
+// worktree switch, and RANGE CHANGE (gitStatsRange is a watch
+// source) while visible. The composable keys ETag + previous
+// snapshot by umo|worktree|since|until, so same-key repeats are
+// cheap 304s.
+//
+// 2026-07-18 fix(dashboard): stop returning `{}` for presets —
+// every preset also resolves to a concrete since/until via
+// rangeForPreset, and forwarding those is what makes hot files
+// (and the day's totals) actually respond to the preset the user
+// picked. The previous behaviour sent `umo|worktree` only, which
+// gave every preset the same ETag key `umo|worktree||` — so
+// switching 1w → 1y → 1w would 304-replay whichever preset's
+// snapshot had been cached first, and the backend never got the
+// chance to refilter hot files. Now each preset gets its own ETag
+// bucket (1w="2026-07-12|2026-07-18", 1y="2025-07-20|2026-07-18",
+// ...) and the backend's since/until filter is the source of
+// truth for the hot-files slice, exactly the same way the heatmap
+// frontend uses the same since/until to anchor its week columns.
+function statsRangeArgs(): { since: string; until: string } {
+  const r = gitStatsRange.value;
+  if (r.kind === "preset") return rangeForPreset(r.preset);
+  return { since: r.since, until: r.until };
+}
 watch(
-  [() => props.modelValue, viewMode, isGitRepo, statsOpen, selectedWorktree],
+  [
+    () => props.modelValue,
+    viewMode,
+    isGitRepo,
+    statsOpen,
+    selectedWorktree,
+    gitStatsRange,
+  ],
   ([open, mode, isRepo, panelOpen]) => {
     if (open && mode === "history" && isRepo && panelOpen) {
-      void gitStats.refresh();
+      void gitStats.refresh(statsRangeArgs());
     }
   },
   { immediate: true },
@@ -2591,9 +2662,17 @@ function onLogApply(filter: LogFilter): void {
 // 2026-07-18 git-stats heatmap: the History-tab manual refresh button
 // re-fetches the log AND the stats panel (ETag-validated; cheap 304s
 // when nothing changed upstream).
+//
+// 2026-07-18 fix(dashboard): forward the current range to
+// `gitStats.refresh()` so a manual refresh on a 1y / custom
+// selection doesn't drop into the no-since/until bucket
+// (`umo|worktree||`) and replace the range-filtered hot files
+// with whole-repo data. The watcher already keeps that bucket
+// fresh on every range change, so we just need the manual
+// refresh to hit the same key.
 function onLogRefresh(): void {
   void gitLog.refresh();
-  void gitStats.refresh();
+  void gitStats.refresh(statsRangeArgs());
 }
 function onLogReset(filter: LogFilter): void {
   // Reset semantics differ from a regular Apply: the URL of the reset
@@ -3239,6 +3318,8 @@ const currentRoot = computed<string | null>(() => {
             :focused-commit-sha="focusedCommitSha"
             :git-stats="gitStats"
             v-model:stats-open="statsOpen"
+            :range="gitStatsRange"
+            @update:range="(v) => (gitStatsRange = v)"
             @apply="onLogApply"
             @reset="onLogReset"
             @load-more="onLogLoadMore"

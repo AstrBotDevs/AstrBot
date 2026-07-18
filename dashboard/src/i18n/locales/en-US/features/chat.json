@@ -737,13 +737,24 @@
             "error": "Failed to load stats",
             "retry": "Retry",
             "emptyRepo": "No commits yet — stats will appear after the first commit",
-            "truncatedBadge": "Latest {n}",
+            "truncatedBadge": "Only the last {n}",
             "hotFiles": "Hot files",
             "hotFileValue": "{commits} commits · {additions} / {deletions}",
             "cellTooltip": "{date}: {commits} commits · +{additions} / −{deletions}",
             "zeroTooltip": "{date}: no commits",
             "filterAppliedDate": "Showing commits on {date}",
-            "filterAppliedFile": "Showing history of {path}"
+            "filterAppliedFile": "Showing history of {path}",
+            "range": {
+              "1w": "Last week",
+              "1mo": "Last month",
+              "3mo": "Last 3 months",
+              "6mo": "Last 6 months",
+              "1y": "Last year",
+              "custom": "Custom range",
+              "since": "From",
+              "until": "To",
+              "apply": "Apply"
+            }
           }
         },
         "error": {

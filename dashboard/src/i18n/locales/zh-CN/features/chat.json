@@ -770,13 +770,24 @@
             "error": "统计加载失败",
             "retry": "重试",
             "emptyRepo": "还没有提交，提交后将在此显示统计",
-            "truncatedBadge": "最近 {n}",
+            "truncatedBadge": "仅显示最近 {n} 次提交",
             "hotFiles": "热点文件",
             "hotFileValue": "{commits} 次提交 · {additions} / {deletions}",
             "cellTooltip": "{date}：{commits} 次提交 · +{additions} / −{deletions}",
             "zeroTooltip": "{date}：无提交",
             "filterAppliedDate": "已按 {date} 过滤提交",
-            "filterAppliedFile": "已过滤为 {path} 的历史"
+            "filterAppliedFile": "已过滤为 {path} 的历史",
+            "range": {
+              "1w": "最近一周",
+              "1mo": "一个月",
+              "3mo": "三个月",
+              "6mo": "六个月",
+              "1y": "一年",
+              "custom": "自定义范围",
+              "since": "起始",
+              "until": "结束",
+              "apply": "应用"
+            }
           }
         },
         "error": {
