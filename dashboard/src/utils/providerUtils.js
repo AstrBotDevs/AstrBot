@@ -48,6 +48,7 @@ export function getProviderIcon(type) {
     "xinference": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xinference-color.svg",
     "bailian": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/bailian-color.svg",
     "volcengine": 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine-color.svg',
+    'huggingface': 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/huggingface.svg',
   };
   return icons[type] || '';
 }

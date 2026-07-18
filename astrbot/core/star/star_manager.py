@@ -1295,8 +1295,7 @@ class PluginManager:
                     star_registry.append(metadata)
 
                 # 禁用/启用插件
-                if metadata.module_path in inactivated_plugins:
-                    metadata.activated = False
+                metadata.activated = metadata.module_path not in inactivated_plugins
 
                 # Plugin logo path
                 if os.path.exists(logo_path):
@@ -1934,7 +1933,12 @@ class PluginManager:
         for func_tool in self._iter_plugin_llm_tools(plugin.module_path):
             func_tool.active = func_tool.name not in inactivated_llm_tools
 
-        await self.reload(plugin_name)
+        success, error = await self.reload(plugin_name)
+        if not success:
+            raise Exception(error or f"插件 {plugin_name} 启用失败。")
+        current_plugin = self.context.get_registered_star(plugin_name)
+        if current_plugin:
+            current_plugin.activated = True
 
     async def install_plugin_from_file(
         self, zip_file_path: str, ignore_version_check: bool = False

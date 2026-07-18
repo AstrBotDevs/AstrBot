@@ -1,8 +1,11 @@
+import asyncio
+import copy
 import enum
 import json
 import logging
 import os
 import tempfile
+import threading
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
@@ -49,6 +52,10 @@ class AstrBotConfig(dict):
         object.__setattr__(self, "config_path", config_path)
         object.__setattr__(self, "default_config", default_config)
         object.__setattr__(self, "schema", schema)
+        object.__setattr__(self, "_save_state_lock", threading.Lock())
+        object.__setattr__(self, "_save_commit_lock", threading.Lock())
+        object.__setattr__(self, "_save_revision", 0)
+        object.__setattr__(self, "_save_committed_revision", 0)
 
         if schema:
             default_config = self._config_schema_to_default_config(schema)
@@ -225,30 +232,95 @@ class AstrBotConfig(dict):
     def save_config(
         self, replace_config: dict | None = None, *, indent: int = 2
     ) -> None:
-        """将配置写入文件
+        """Persist the current configuration synchronously.
 
-        如果传入 replace_config，则将配置替换为 replace_config
+        Args:
+            replace_config: Values to merge into the configuration before saving.
+            indent: Number of spaces used to indent the JSON output.
         """
-        if replace_config:
-            self.update(replace_config)
+        snapshot, revision = self._prepare_config_snapshot(replace_config)
+        self._write_config_snapshot(snapshot, revision, indent)
+
+    async def save_config_async(
+        self, replace_config: dict | None = None, *, indent: int = 2
+    ) -> bool:
+        """Persist a stable configuration snapshot without blocking the event loop.
+
+        Args:
+            replace_config: Values to merge into the configuration before saving.
+            indent: Number of spaces used to indent the JSON output.
+
+        Returns:
+            Whether this snapshot was committed. A newer committed snapshot supersedes
+            an older snapshot.
+        """
+        snapshot, revision = self._prepare_config_snapshot(replace_config)
+        return await asyncio.to_thread(
+            self._write_config_snapshot,
+            snapshot,
+            revision,
+            indent,
+        )
+
+    def _prepare_config_snapshot(self, replace_config: dict | None) -> tuple[dict, int]:
+        """Create an isolated snapshot and allocate its save revision.
+
+        Args:
+            replace_config: Values to merge into the configuration before snapshotting.
+
+        Returns:
+            The isolated configuration snapshot and its monotonically increasing
+            revision.
+        """
+        with self._save_state_lock:
+            if replace_config:
+                self.update(replace_config)
+            snapshot = copy.deepcopy(dict(self))
+            revision = self._save_revision + 1
+            object.__setattr__(self, "_save_revision", revision)
+        return snapshot, revision
+
+    def _write_config_snapshot(
+        self, snapshot: dict, revision: int, indent: int
+    ) -> bool:
+        """Write and conditionally commit a prepared configuration snapshot.
+
+        Args:
+            snapshot: Isolated configuration data to serialize.
+            revision: Revision allocated when the snapshot was prepared.
+            indent: Number of spaces used to indent the JSON output.
+
+        Returns:
+            Whether the snapshot replaced the current configuration file.
+        """
         directory = os.path.dirname(os.path.abspath(self.config_path)) or "."
         fd, temp_path = tempfile.mkstemp(
             dir=directory,
             prefix=f".{os.path.basename(self.config_path)}.",
             suffix=".tmp",
         )
+        committed = False
         try:
             with os.fdopen(fd, "w", encoding="utf-8-sig") as f:
-                json.dump(self, f, indent=indent, ensure_ascii=False)
+                json.dump(snapshot, f, indent=indent, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(temp_path, self.config_path)
-        except Exception:
-            try:
-                os.unlink(temp_path)
-            except FileNotFoundError:
-                pass
-            raise
+            with self._save_commit_lock:
+                if revision > self._save_committed_revision:
+                    os.replace(temp_path, self.config_path)
+                    object.__setattr__(
+                        self,
+                        "_save_committed_revision",
+                        revision,
+                    )
+                    committed = True
+        finally:
+            if not committed:
+                try:
+                    os.unlink(temp_path)
+                except FileNotFoundError:
+                    pass
+        return committed
 
     def __getattr__(self, item):
         try:

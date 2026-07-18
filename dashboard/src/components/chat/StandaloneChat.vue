@@ -68,7 +68,10 @@
                         type="button"
                         @click="openImage(partUrl(part))"
                       >
-                        <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+                        <img
+                          :src="partUrl(part)"
+                          :alt="part.filename || 'image'"
+                        />
                       </button>
 
                       <audio
@@ -85,9 +88,27 @@
                         :src="partUrl(part)"
                       />
 
-                      <div v-else-if="part.type === 'file'" class="file-part">
-                        <v-icon size="20">mdi-file-document-outline</v-icon>
-                        <span>{{ part.filename || "file" }}</span>
+                      <div
+                        v-else-if="part.type === 'file'"
+                        class="file-part"
+                        :style="{
+                          '--attachment-color':
+                            attachmentPresentation(part).color,
+                        }"
+                      >
+                        <v-icon
+                          class="file-part-icon"
+                          :icon="attachmentPresentation(part).icon"
+                          size="24"
+                        />
+                        <div class="file-part-meta">
+                          <span class="file-part-name">
+                            {{ attachmentName(part) }}
+                          </span>
+                          <span class="file-part-kind">
+                            {{ attachmentPresentation(part).label }}
+                          </span>
+                        </div>
                       </div>
 
                       <div
@@ -126,7 +147,9 @@
                         </template>
                       </div>
 
-                      <pre v-else class="unknown-part">{{ formatJson(part) }}</pre>
+                      <pre v-else class="unknown-part">{{
+                        formatJson(part)
+                      }}</pre>
                     </template>
                   </template>
                 </template>
@@ -183,7 +206,6 @@ import {
   reactive,
   ref,
 } from "vue";
-import axios from "axios";
 import { chatApi, configRouteApi, fileApi } from "@/api/v1";
 import ChatInput from "@/components/chat/ChatInput.vue";
 import {
@@ -195,6 +217,10 @@ import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMe
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
+import {
+  attachmentName,
+  attachmentPresentation,
+} from "@/components/chat/attachmentPresentation";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
   displayParts as displayMessageParts,
@@ -308,7 +334,11 @@ async function sendCurrentMessage() {
   const parts = buildOutgoingParts(text);
   const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   const selection = inputRef.value?.getCurrentSelection();
-  const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
+  const { userRecord, botRecord } = createLocalExchange({
+    sessionId,
+    messageId,
+    parts,
+  });
 
   draft.value = "";
   clearStaged({ revokeUrls: false });
@@ -323,6 +353,7 @@ async function sendCurrentMessage() {
     enableStreaming: enableStreaming.value,
     selectedProvider: selection?.providerId || "",
     selectedModel: selection?.modelName || "",
+    userRecord,
     botRecord,
   });
 }
@@ -409,7 +440,8 @@ function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
   if (part.attachment_id) return fileApi.contentUrl(part.attachment_id);
-  if (part.filename) return fileApi.byNameUrl(part.filename);
+  const lookupFilename = part.stored_filename || part.filename;
+  if (lookupFilename) return fileApi.byNameUrl(lookupFilename);
   return "";
 }
 
@@ -573,10 +605,51 @@ function closeImage() {
 }
 
 .file-part {
-  display: flex;
+  --attachment-color: #607d8b;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: min(420px, 100%);
   margin-top: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 13%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 58%
+  );
+}
+
+.file-part-icon {
+  color: var(--attachment-color);
+}
+
+.file-part-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.file-part-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.file-part-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--attachment-color);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
 }
 
 .tool-call-block {

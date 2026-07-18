@@ -25,9 +25,13 @@ from tenacity import (
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import File, Image, Plain, Record, Video
+from astrbot.api.message_components import At, File, Image, Plain, Record, Video
 from astrbot.api.platform import AstrBotMessage, PlatformMetadata
 from astrbot.core.utils.media_utils import MediaResolver, file_uri_to_path, is_file_uri
+
+
+class APIReturnNoneError(Exception):
+    pass
 
 
 def _patch_qq_botpy_formdata() -> None:
@@ -49,21 +53,25 @@ def _patch_qq_botpy_formdata() -> None:
 
 _patch_qq_botpy_formdata()
 
-# Retry decorator for QQ Official API transient errors (HTTP 500/504)
-_qqofficial_retry = retry(
-    retry=retry_if_exception_type(
-        (
-            botpy.errors.ServerError,
-            botpy.errors.SequenceNumberError,
-            OSError,
-            asyncio.TimeoutError,
-        )
-    ),
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=2, min=2, max=30),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-    reraise=True,
-)
+
+def _qqofficial_retry(max_attempts: int = 5):
+    """Retry decorator for QQ Official API transient errors (HTTP 500/504)"""
+    return retry(
+        retry=retry_if_exception_type(
+            (
+                botpy.errors.ServerError,
+                botpy.errors.SequenceNumberError,
+                OSError,
+                asyncio.TimeoutError,
+                APIReturnNoneError,
+            )
+        ),
+        stop=stop_after_attempt(max_attempts),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+
 
 _QQOFFICIAL_SEND_API_ERRORS = (
     botpy.errors.ForbiddenError,
@@ -189,6 +197,28 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return str(ret_id) if ret_id is not None else None
 
     @staticmethod
+    def _get_mention_id(component: At) -> str | None:
+        qq = getattr(component, "qq", None)
+        if not qq:
+            return None
+        qq_id = str(qq)
+        return qq_id if qq_id != "all" else None
+
+    @classmethod
+    def _has_mention(cls, message: MessageChain) -> bool:
+        return any(
+            isinstance(component, At) and cls._get_mention_id(component) is not None
+            for component in message.chain
+        )
+
+    @staticmethod
+    def _set_media_payload(payload: dict, media: Media, plain_text: str) -> None:
+        payload["media"] = media
+        payload["msg_type"] = 7
+        payload.pop("markdown", None)
+        payload["content"] = plain_text or None
+
+    @staticmethod
     def _split_message_chain_by_media(message: MessageChain) -> list[MessageChain]:
         chunks: list[MessageChain] = []
         current_chain = []
@@ -296,9 +326,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         ):
             plain_text = plain_text + "\n"
 
-        # 根据消息链的 use_markdown_ 标记决定发送模式
+        # QQ only resolves <@openid> mentions in Markdown messages.
+        has_mention = self._has_mention(message_to_send)
         use_md = getattr(self.send_buffer, "use_markdown_", None)
-        if use_md is False:
+        if use_md is False and not has_mention:
             payload: dict = {
                 "content": plain_text,
                 "msg_type": 0,
@@ -328,10 +359,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         self.IMAGE_FILE_TYPE,
                         group_openid=source.group_openid,
                     )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
-                    payload.pop("markdown", None)
-                    payload["content"] = plain_text or None
+                    self._set_media_payload(payload, media, plain_text)
                 if record_file_path:  # group record msg
                     media = await self.upload_group_and_c2c_media(
                         record_file_path,
@@ -339,10 +367,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         group_openid=source.group_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 if video_file_source:
                     media = await self.upload_group_and_c2c_media(
                         video_file_source,
@@ -350,10 +375,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         group_openid=source.group_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 if file_source:
                     media = await self.upload_group_and_c2c_media(
                         file_source,
@@ -362,10 +384,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         group_openid=source.group_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 ret = await self._send_with_markdown_fallback(
                     send_func=lambda retry_payload: self.bot.api.post_group_message(
                         group_openid=source.group_openid,  # type: ignore
@@ -383,10 +402,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         self.IMAGE_FILE_TYPE,
                         openid=source.author.user_openid,
                     )
-                    payload["media"] = media
-                    payload["msg_type"] = 7
-                    payload.pop("markdown", None)
-                    payload["content"] = plain_text or None
+                    self._set_media_payload(payload, media, plain_text)
                 if record_file_path:  # c2c record
                     media = await self.upload_group_and_c2c_media(
                         record_file_path,
@@ -394,10 +410,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         openid=source.author.user_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 if video_file_source:
                     media = await self.upload_group_and_c2c_media(
                         video_file_source,
@@ -405,10 +418,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         openid=source.author.user_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 if file_source:
                     media = await self.upload_group_and_c2c_media(
                         file_source,
@@ -417,10 +427,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                         openid=source.author.user_openid,
                     )
                     if media:
-                        payload["media"] = media
-                        payload["msg_type"] = 7
-                        payload.pop("markdown", None)
-                        payload["content"] = plain_text or None
+                        self._set_media_payload(payload, media, plain_text)
                 if stream:
                     ret = await self._send_with_markdown_fallback(
                         send_func=lambda retry_payload: self.post_c2c_message(
@@ -494,6 +501,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             logger.info("[QQOfficial] 回复消息失败: %s, 尝试使用主动发送接口。", err)
             if payload.get("msg_id"):
                 fallback_payload = payload.copy()
+                fallback_payload.pop("msg_id", None)
                 try:
                     ret = await send_func(fallback_payload)
                     logger.info("[QQOfficial] 使用主动发送接口发送成功。")
@@ -558,14 +566,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             "srv_send_msg": False,
         }
 
-        @_qqofficial_retry
+        @_qqofficial_retry()
         async def _do_upload():
             if "openid" in kwargs:
                 payload["openid"] = kwargs["openid"]
                 route = Route(
                     "POST", "/v2/users/{openid}/files", openid=kwargs["openid"]
                 )
-                return await self.bot.api._http.request(route, json=payload)
             elif "group_openid" in kwargs:
                 payload["group_openid"] = kwargs["group_openid"]
                 route = Route(
@@ -573,11 +580,20 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     "/v2/groups/{group_openid}/files",
                     group_openid=kwargs["group_openid"],
                 )
-                return await self.bot.api._http.request(route, json=payload)
             else:
                 raise ValueError("Invalid upload parameters")
 
-        result = await _do_upload()
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "上传图片API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        try:
+            result = await _do_upload()
+        except APIReturnNoneError:
+            logger.warning(f"上传图片API返回None，共尝试5次后放弃: {payload}")
+            raise
 
         if not isinstance(result, dict):
             raise RuntimeError(
@@ -629,9 +645,13 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         else:
             return None
 
-        @_qqofficial_retry
+        @_qqofficial_retry()
         async def _do_upload():
-            return await self.bot.api._http.request(route, json=payload)
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "上传文件API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
 
         try:
             result = await _do_upload()
@@ -646,6 +666,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_info=result["file_info"],
                     ttl=result.get("ttl", 0),
                 )
+        except APIReturnNoneError:
+            logger.warning(f"上传文件API返回None，共尝试5次后放弃: {file_source}")
         except (botpy.errors.ServerError, botpy.errors.SequenceNumberError):
             logger.error(f"上传媒体文件失败，共尝试5次后放弃: {file_source}")
         except Exception as e:
@@ -680,11 +702,26 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 stream_data.pop("id", None)
             payload["stream"] = stream_data
         route = Route("POST", "/v2/users/{openid}/messages", openid=openid)
-        result = await self.bot.api._http.request(route, json=payload)
 
-        if result is None:
-            logger.warning("[QQOfficial] post_c2c_message: API 返回 None，跳过本次发送")
+        retry_times = 3
+
+        @_qqofficial_retry(retry_times)
+        async def _do_request():
+            result = await self.bot.api._http.request(route, json=payload)
+            if result is None:
+                err_msg = "发送消息API返回None，触发重试"
+                raise APIReturnNoneError(err_msg)
+            return result
+
+        result = None
+        try:
+            result = await _do_request()
+        except APIReturnNoneError:
+            logger.warning(
+                f"[QQOfficial] post_c2c_message: 发送消息失败，API 返回 None，共尝试{retry_times}次后放弃"
+            )
             return None
+
         if not isinstance(result, dict):
             logger.error(f"[QQOfficial] post_c2c_message: 响应不是 dict: {result}")
             return None
@@ -703,6 +740,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         for i in message.chain:
             if isinstance(i, Plain):
                 plain_text += i.text
+            elif isinstance(i, At):
+                qq_id = QQOfficialMessageEvent._get_mention_id(i)
+                if qq_id:
+                    plain_text += f"<@{qq_id}>"
             elif isinstance(i, Image) and not image_base64:
                 if not i.file:
                     raise ValueError("Unsupported image file format")

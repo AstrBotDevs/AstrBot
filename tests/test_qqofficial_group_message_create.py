@@ -10,7 +10,7 @@ import pytest
 from botpy import ConnectionSession
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Plain
+from astrbot.api.message_components import At, Image, Plain, Reply
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
@@ -19,6 +19,9 @@ from astrbot.core.pipeline.respond.stage import RespondStage
 from astrbot.core.pipeline.result_decorate.stage import ResultDecorateStage
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.platform.message_type import MessageType
+from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import (
+    QQOfficialMessageEvent,
+)
 from astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter import (
     QQOfficialPlatformAdapter,
     _ensure_group_message_create_parser,
@@ -38,8 +41,11 @@ def _make_group_payload(
     mentions: list[dict] | None = None,
     member_openid: str = "member-1",
     group_openid: str = "group-1",
+    message_type: int | None = None,
+    msg_elements: list[dict] | None = None,
+    message_reference: dict | None = None,
 ) -> dict:
-    return {
+    data = {
         "id": f"event-{message_id}",
         "d": {
             "id": message_id,
@@ -50,6 +56,13 @@ def _make_group_payload(
             "attachments": [],
         },
     }
+    if message_type is not None:
+        data["d"]["message_type"] = message_type
+    if msg_elements is not None:
+        data["d"]["msg_elements"] = msg_elements
+    if message_reference is not None:
+        data["d"]["message_reference"] = message_reference
+    return data
 
 
 def _dispatch_group_message(payload: dict) -> tuple[str, botpy.message.GroupMessage]:
@@ -109,10 +122,59 @@ async def test_parse_group_message_create_plain_message_has_no_at_component():
 
 
 @pytest.mark.asyncio
-async def test_parse_group_message_create_bot_mention_cleans_plain_text():
+async def test_parse_group_message_create_quoted_context():
     _, message = _dispatch_group_message(
         _make_group_payload(
-            content="<@!bot-123> hello there",
+            content="answer",
+            message_type=103,
+            message_reference={"message_id": "quoted-1"},
+            msg_elements=[
+                {
+                    "content": "quoted text",
+                    "attachments": [
+                        {
+                            "content_type": "image/png",
+                            "filename": "quoted.png",
+                            "url": "img.example.com/quoted.png",
+                        }
+                    ],
+                }
+            ],
+        )
+    )
+
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+
+    assert getattr(message, "message_type") == 103
+    assert getattr(message, "msg_elements")[0]["content"] == "quoted text"
+    reply = abm.message[0]
+    assert isinstance(reply, Reply)
+    assert reply.id == "quoted-1"
+    assert reply.message_str == "quoted text"
+    assert isinstance(reply.chain[0], Plain)
+    assert reply.chain[0].text == "quoted text"
+    assert isinstance(reply.chain[1], Image)
+    assert reply.chain[1].file == "https://img.example.com/quoted.png"
+    assert abm.message_str == "answer"
+    assert [
+        component.text for component in abm.message if isinstance(component, Plain)
+    ][-1] == "answer"
+
+
+@pytest.mark.parametrize(
+    "mention_markup",
+    ["<@bot-123>", "<@!bot-123>", '<qqbot-at-user id="bot-123" />'],
+)
+@pytest.mark.asyncio
+async def test_parse_group_message_create_bot_mention_cleans_plain_text(
+    mention_markup: str,
+):
+    _, message = _dispatch_group_message(
+        _make_group_payload(
+            content=f"{mention_markup} hello there",
             mentions=[{"id": "bot-123", "is_you": True}],
         )
     )
@@ -130,6 +192,28 @@ async def test_parse_group_message_create_bot_mention_cleans_plain_text():
     assert abm.message_str == "hello there"
     assert abm.sender.user_id == "member-1"
     assert abm.group_id == "group-1"
+
+
+@pytest.mark.asyncio
+async def test_parse_to_qqofficial_preserves_at_component_order():
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(
+        MessageChain(chain=[At(qq="member-1"), Plain(" hello"), At(qq="all")])
+    )
+
+    assert parsed[0] == "<@member-1> hello"
+
+
+@pytest.mark.parametrize("qq", [None, ""])
+@pytest.mark.asyncio
+async def test_parse_to_qqofficial_ignores_empty_at_component(qq: str | None):
+    mention = At(qq="placeholder")
+    mention.qq = cast(Any, qq)
+    chain = MessageChain(chain=[mention, Plain("hello")])
+
+    parsed = await QQOfficialMessageEvent._parse_to_qqofficial(chain)
+
+    assert parsed[0] == "hello"
+    assert QQOfficialMessageEvent._has_mention(chain) is False
 
 
 @pytest.mark.asyncio
@@ -252,6 +336,38 @@ async def test_ws_group_send_by_session_with_cached_msg_id_still_omits_msg_id():
     assert kwargs["content"] == "proactive with cache"
     assert "msg_id" not in kwargs
     assert "msg_seq" in kwargs
+
+
+@pytest.mark.asyncio
+async def test_ws_group_send_by_session_with_at_uses_markdown():
+    adapter = QQOfficialPlatformAdapter(
+        {
+            "id": "qq-official-test",
+            "appid": "123",
+            "secret": "secret",
+            "enable_group_c2c": True,
+            "enable_guild_direct_message": False,
+        },
+        {},
+        asyncio.Queue(),
+    )
+    adapter.client.api = SimpleNamespace(
+        post_group_message=AsyncMock(return_value={"id": "sent-at"}),
+        post_message=AsyncMock(),
+    )
+    adapter._session_scene["group-1"] = "group"
+    chain = MessageChain(chain=[At(qq="member-1"), Plain(" hello")])
+    chain.use_markdown(False)
+
+    await adapter.send_by_session(
+        MessageSession("qq_official", MessageType.GROUP_MESSAGE, "group-1"),
+        chain,
+    )
+
+    kwargs = adapter.client.api.post_group_message.await_args.kwargs
+    assert kwargs["msg_type"] == 2
+    assert kwargs["markdown"]["content"] == "<@member-1> hello"
+    assert "content" not in kwargs
 
 
 @pytest.mark.asyncio

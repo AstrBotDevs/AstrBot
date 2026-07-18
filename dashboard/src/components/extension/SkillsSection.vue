@@ -746,7 +746,7 @@
       v-model="snackbar.show"
       :timeout="3500"
       :color="snackbar.color"
-      elevation="24"
+      elevation="6"
     >
       {{ snackbar.message }}
     </v-snackbar>

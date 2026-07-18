@@ -28,6 +28,10 @@
 
                     <!-- 操作按钮组 -->
                     <div class="d-flex ga-2">
+                        <v-btn variant="outlined" prepend-icon="mdi-upload" @click="triggerImport"
+                            rounded="lg">
+                            {{ tm('buttons.import') }}
+                        </v-btn>
                         <v-btn color="primary" variant="tonal" prepend-icon="mdi-plus" @click="openCreatePersonaDialog"
                             rounded="lg">
                             {{ tm('buttons.create') }}
@@ -36,6 +40,8 @@
                             rounded="lg">
                             {{ tm('folder.createButton') }}
                         </v-btn>
+                        <input ref="importFileInput" type="file" accept=".json" style="display: none"
+                            @change="handleImportFile" />
                     </div>
                 </div>
 
@@ -80,7 +86,7 @@
                                 xl="4">
                                 <PersonaCard :persona="persona" @view="viewPersona(persona)"
                                     @edit="editPersona(persona)" @move="openMovePersonaDialog(persona)"
-                                    @delete="confirmDeletePersona(persona)" />
+                                    @delete="confirmDeletePersona(persona)" @export="handlePersonaExport" />
                             </v-col>
                         </v-row>
                     </div>
@@ -257,7 +263,7 @@
         </v-dialog>
 
         <!-- 消息提示 -->
-        <v-snackbar :timeout="3000" elevation="24" :color="messageType" v-model="showMessage" location="top">
+        <v-snackbar :timeout="3000" elevation="6" :color="messageType" v-model="showMessage" location="top">
             {{ message }}
         </v-snackbar>
     </div>
@@ -267,6 +273,7 @@
 import { defineComponent } from 'vue';
 import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { usePersonaStore } from '@/stores/personaStore';
+import { personaApi } from '@/api/v1';
 import { mapState, mapActions } from 'pinia';
 
 import FolderTree from './FolderTree.vue';
@@ -530,6 +537,90 @@ export default defineComponent({
                 this.showError(error.message || this.tm('folder.messages.deleteError'));
             } finally {
                 this.deleteLoading = false;
+            }
+        },
+
+        // 导出/导入操作
+        handlePersonaExport(message: string) {
+            // 根据消息内容判断成功还是失败
+            if (message.includes(this.tm('messages.exportSuccess'))) {
+                this.showSuccess(message);
+            } else {
+                this.showError(message);
+            }
+        },
+
+        triggerImport() {
+            const input = this.$refs.importFileInput as HTMLInputElement;
+            if (input) {
+                input.value = ''; // 清空之前的选择，允许重复导入同一文件
+                input.click();
+            }
+        },
+
+        async handleImportFile(event: Event) {
+            const input = event.target as HTMLInputElement;
+            const file = input.files?.[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                let data: any;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    this.showError(this.tm('messages.importFormatError'));
+                    return;
+                }
+
+                // 校验字段
+                if (!data.system_prompt) {
+                    this.showError(this.tm('messages.importMissingPrompt'));
+                    return;
+                }
+
+                // 检查 persona_id 是否已存在
+                let personaId = data.persona_id || 'imported_persona';
+                const listRes = await personaApi.list();
+                const existingIds = listRes.data.status === 'ok'
+                    ? (listRes.data.data || []).map((p: any) => p.persona_id)
+                    : [];
+
+                let renamed = false;
+                if (existingIds.includes(personaId)) {
+                    personaId = `${personaId}_imported`;
+                    // 如果 _imported 也存在，加数字后缀
+                    let counter = 1;
+                    while (existingIds.includes(personaId)) {
+                        personaId = `${data.persona_id}_imported_${counter}`;
+                        counter++;
+                    }
+                    renamed = true;
+                }
+
+                // 构造新的人格数据
+                const newPersona = {
+                    persona_id: personaId,
+                    system_prompt: data.system_prompt,
+                    begin_dialogs: data.begin_dialogs || [],
+                    tools: null, // 默认使用所有工具
+                    skills: null, // 默认使用所有 Skills
+                    folder_id: this.currentFolderId
+                };
+
+                await personaApi.create(newPersona);
+
+                // 刷新列表
+                await this.refreshCurrentFolder();
+
+                if (renamed) {
+                    this.showSuccess(this.tm('messages.importIdExists', { id: personaId }));
+                } else {
+                    this.showSuccess(this.tm('messages.importSuccess'));
+                }
+            } catch (error: any) {
+                console.error('导入人格失败:', error);
+                this.showError(this.tm('messages.importError', { error: error.message || String(error) }));
             }
         },
 
