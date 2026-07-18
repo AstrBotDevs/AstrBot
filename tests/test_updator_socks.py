@@ -841,11 +841,11 @@ async def test_fetch_release_info_logs_status_code_and_truncated_body_on_http_er
         lambda message: log_messages.append(message),
     )
 
-    with pytest.raises(Exception, match="解析版本信息失败"):
+    with pytest.raises(Exception, match="Failed to parse release information"):
         await RepoZipUpdator().fetch_release_info(url)
 
-    assert any("状态码: 502" in message for message in log_messages)
-    assert any("内容: " in message for message in log_messages)
+    assert any("status 502" in message for message in log_messages)
+    assert any("response: " in message for message in log_messages)
     assert any("...[truncated]" in message for message in log_messages)
 
 

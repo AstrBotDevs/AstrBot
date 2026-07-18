@@ -458,24 +458,26 @@ def _classify_pip_failure(output_lines: list[str]) -> DependencyConflictError | 
     detail = ""
     if context.constraint_lines and context.requested_lines:
         detail = (
-            " 冲突详情: "
+            " Conflict details: "
             f"{_normalize_conflict_detail_line(context.requested_lines[0])} vs "
-            f"{_normalize_conflict_detail_line(context.constraint_lines[0])}。"
+            f"{_normalize_conflict_detail_line(context.constraint_lines[0])}."
         )
     elif len(context.dependency_detail_lines) >= 2:
         detail = (
-            " 冲突详情: "
+            " Conflict details: "
             f"{_normalize_conflict_detail_line(context.dependency_detail_lines[0])} vs "
-            f"{_normalize_conflict_detail_line(context.dependency_detail_lines[1])}。"
+            f"{_normalize_conflict_detail_line(context.dependency_detail_lines[1])}."
         )
 
     if is_core_conflict:
         message = (
-            f"检测到核心依赖版本保护冲突。{detail}插件要求的依赖版本与 AstrBot 核心不兼容，"
-            "为了系统稳定，已阻止该降级行为。请联系插件作者或调整 requirements.txt。"
+            f"A core dependency version protection conflict was detected.{detail} "
+            "The dependency version required by the plugin is incompatible with "
+            "AstrBot Core. The downgrade was blocked to preserve system stability. "
+            "Contact the plugin author or adjust requirements.txt."
         )
     else:
-        message = f"检测到依赖冲突。{detail}"
+        message = f"A dependency conflict was detected.{detail}"
 
     return DependencyConflictError(
         message,
@@ -518,7 +520,10 @@ def _collect_candidate_modules(
             canonical_name = _canonicalize_distribution_name(distribution_name)
             by_name.setdefault(canonical_name, []).append(distribution)
     except Exception as exc:
-        logger.warning("读取 site-packages 元数据失败，使用回退模块名: %s", exc)
+        logger.warning(
+            "Failed to read site-packages metadata; using fallback module names: %s",
+            exc,
+        )
 
     expanded_requirement_names: set[str] = set()
     pending = deque(requirement_names)
@@ -581,8 +586,9 @@ def _ensure_preferred_modules(
 
     if unresolved_modules:
         conflict_message = (
-            "检测到插件依赖与当前运行时发生冲突，无法安全加载该插件。"
-            f"冲突模块: {', '.join(unresolved_modules)}"
+            "A conflict between plugin dependencies and the current runtime was "
+            "detected, so the plugin cannot be loaded safely. "
+            f"Conflicting modules: {', '.join(unresolved_modules)}"
         )
         raise RuntimeError(conflict_message)
 
@@ -995,7 +1001,10 @@ class PipInstaller:
             package_name, requirements_path, mirror
         )
         if not args:
-            logger.info("Pip 包管理器跳过安装：未提供有效的包名或 requirements 文件。")
+            logger.info(
+                "The pip package manager skipped installation because no valid "
+                "package name or requirements file was provided."
+            )
             return
 
         target_site_packages = None
@@ -1020,7 +1029,7 @@ class PipInstaller:
                 args.extend(["-c", constraints_file_path])
 
             logger.info(
-                "Pip 包管理器 argv: %s",
+                "Pip package manager argv: %s",
                 ["pip", *_redact_pip_args_for_logging(args)],
             )
             await self._run_pip_with_classification(args)
@@ -1077,4 +1086,7 @@ class PipInstaller:
     async def _run_pip_with_classification(self, args: list[str]) -> None:
         result_code = await self._run_pip_in_process(args)
         if result_code != 0:
-            raise PipInstallError(f"安装失败，错误码：{result_code}", code=result_code)
+            raise PipInstallError(
+                f"Installation failed with error code {result_code}",
+                code=result_code,
+            )
