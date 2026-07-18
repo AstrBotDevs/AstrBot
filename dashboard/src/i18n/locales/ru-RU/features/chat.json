@@ -653,7 +653,7 @@
           "emptyPatch": "Для этого файла нет diff",
           "stats": {
             "title": "Статистика изменений",
-            "summary": "{commits} коммитов · +{additions} / −{deletions} · {files} файлов",
+            "summary": "{commits} коммитов · {additions} / {deletions} · {files} файлов",
             "refresh": "Обновить статистику",
             "expand": "Развернуть статистику",
             "collapse": "Свернуть статистику",
@@ -663,7 +663,7 @@
             "emptyRepo": "Коммитов пока нет — статистика появится после первого коммита",
             "truncatedBadge": "Последние {n}",
             "hotFiles": "Горячие файлы",
-            "hotFileValue": "{commits} коммитов · +{additions} / −{deletions}",
+            "hotFileValue": "{commits} коммитов · {additions} / {deletions}",
             "cellTooltip": "{date}: {commits} коммитов · +{additions} / −{deletions}",
             "zeroTooltip": "{date}: нет коммитов",
             "filterAppliedDate": "Показаны коммиты за {date}",

@@ -757,7 +757,7 @@
           "emptyPatch": "该文件无可用 diff",
           "stats": {
             "title": "改动统计",
-            "summary": "{commits} 次提交 · +{additions} / −{deletions} · {files} 个文件",
+            "summary": "{commits} 次提交 · {additions} / {deletions} · {files} 个文件",
             "refresh": "刷新统计",
             "expand": "展开统计面板",
             "collapse": "收起统计面板",
@@ -767,7 +767,7 @@
             "emptyRepo": "还没有提交，提交后将在此显示统计",
             "truncatedBadge": "最近 {n}",
             "hotFiles": "热点文件",
-            "hotFileValue": "{commits} 次提交 · +{additions} / −{deletions}",
+            "hotFileValue": "{commits} 次提交 · {additions} / {deletions}",
             "cellTooltip": "{date}：{commits} 次提交 · +{additions} / −{deletions}",
             "zeroTooltip": "{date}：无提交",
             "filterAppliedDate": "已按 {date} 过滤提交",

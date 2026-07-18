@@ -1,4 +1,4 @@
-/* Auto-generated MDI subset – 325 icons */
+/* Auto-generated MDI subset – 328 icons */
 /* Do not edit manually. Run: pnpm run subset-icons */
 
 @font-face {
@@ -170,6 +170,10 @@
 
 .mdi-calendar-plus::before {
   content: "\F00F3";
+}
+
+.mdi-chart-box-outline::before {
+  content: "\F154E";
 }
 
 .mdi-chat::before {
@@ -494,6 +498,10 @@
 
 .mdi-file-alert-outline::before {
   content: "\F0A4C";
+}
+
+.mdi-file-cancel-outline::before {
+  content: "\F0DC7";
 }
 
 .mdi-file-chart::before {
@@ -1242,6 +1250,10 @@
 
 .mdi-tune-variant::before {
   content: "\F1542";
+}
+
+.mdi-undo-variant::before {
+  content: "\F054D";
 }
 
 .mdi-unfold-less-horizontal::before {

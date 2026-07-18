@@ -866,13 +866,22 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
   border-radius: 4px;
 }
 
+/* 2026-07-18 git-log-filter-redesign: collapsed the previous
+   2-column / 4-row layout into a symmetric 3×2 grid. Five filter
+   fields + the actions row fill six equal cells (Ref / 作者 / 路径
+   on row 1, 起始时间 / 数量 / [应用 重置] on row 2). The sidebar is
+   resizable (GitDiffSidebar.sidebarWidth), so 1fr tracks keep the
+   columns equal at any width the user drags to; at the typical
+   ~600–800px panel this yields ~180–250px per cell. The 数量 cell
+   stretches to a full cell on purpose — the compact number input
+   filling the cell keeps the grid strictly symmetric (the approved
+   mockup), and the actions cluster is right-aligned in its cell. */
 .git-log-filter {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px 8px;
-  padding: 4px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  padding-bottom: 8px;
 }
 .git-log-filter-field {
   /* Match the commit subject (.git-log-item-subject) so the filter
@@ -885,13 +894,14 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
 .git-log-filter-field :deep(.v-label) {
   font-size: 12px;
 }
-.git-log-filter-n {
-  max-width: 80px;
-}
+/* Intentionally no max-width / justify-self on .git-log-filter-n:
+   the count field is meant to stretch to fill its 1fr cell so the
+   3×2 grid stays perfectly column-symmetric (matches the redesign
+   mockup the reviewer approved). */
 .git-log-filter-actions {
-  grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 4px;
 }
 
@@ -1245,9 +1255,7 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
   color: inherit;
 }
 
-@media (max-width: 760px) {
-  .git-log-filter {
-    grid-template-columns: 1fr 1fr;
-  }
-}
+/* 2026-07-18: removed the prior (max-width: 760px) override — it
+   duplicated the base 1fr 1fr and didn't account for the resizable
+   sidebar. The auto-fit grid above handles width adaptation. */
 </style>

@@ -44,6 +44,50 @@ const totals = computed(() => snapshot.value?.totals ?? null);
 const truncated = computed(() => snapshot.value?.truncated ?? false);
 const maxCommits = computed(() => snapshot.value?.maxCommits ?? 0);
 
+// ── Colored +/− helpers (2026-07-18) ───────────────────────────────
+// The summary and hotFileValue locale strings embed the numeric
+// counters; we need to render additions in green and deletions in
+// red. Since the project uses a custom i18n (no <i18n-t> slots), we
+// call tm() with sentinel substitutions for the two numbers, then
+// split the result so the static text (e.g. "commits · … / … · files")
+// stays locale-aware while the +/- numbers are rendered as colored
+// spans with an explicit sign.
+interface DeltaParts {
+  prefix: string;
+  mid: string;
+  suffix: string;
+}
+const DELTA_A = "§A§";
+const DELTA_D = "§D§";
+function splitDelta(key: string, params: Record<string, string | number>): DeltaParts {
+  const s = tm(key, { ...params, additions: DELTA_A, deletions: DELTA_D });
+  const [prefix, rest] = s.split(DELTA_A);
+  const [mid, suffix] = rest.split(DELTA_D);
+  return { prefix, mid, suffix };
+}
+const summaryParts = computed<DeltaParts>(() => {
+  if (!totals.value) return { prefix: "", mid: "", suffix: "" };
+  return splitDelta(
+    "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.summary",
+    {
+      commits: totals.value.commits,
+      additions: 0,
+      deletions: 0,
+      files: totals.value.filesChanged,
+    },
+  );
+});
+function hotFileParts(f: {
+  commits: number;
+  additions: number;
+  deletions: number;
+}): DeltaParts {
+  return splitDelta(
+    "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFileValue",
+    { commits: f.commits, additions: 0, deletions: 0 },
+  );
+}
+
 // ── Heatmap grid (26 week-columns × 7 rows, local time) ────────────
 const WEEKS = 26;
 
@@ -180,19 +224,16 @@ function cellTitle(cell: DayCell): string {
       <span class="git-stats-title">
         {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.title") }}
       </span>
-      <span v-if="totals" class="git-stats-summary">
-        {{
-          tm(
-            "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.summary",
-            {
-              commits: totals.commits,
-              additions: totals.additions,
-              deletions: totals.deletions,
-              files: totals.filesChanged,
-            },
-          )
-        }}
-      </span>
+      <!--
+        The pieces from summaryParts already carry the surrounding
+        spaces from the locale string ("5000 次提交 · ", " / ",
+        " · 2637 个文件"), so the colored +/- spans are spliced in
+        with no whitespace between them and the interpolations.
+        Any newline between `}}` and `<span>` would inject an extra
+        space under Vue's default whitespace condensation, so the
+        dynamic part is kept on a single line.
+      -->
+      <span v-if="totals" class="git-stats-summary">{{ summaryParts.prefix }}<span class="gs-add">+{{ totals.additions }}</span>{{ summaryParts.mid }}<span class="gs-del">−{{ totals.deletions }}</span>{{ summaryParts.suffix }}</span>
       <span v-if="truncated" class="git-stats-truncated-badge">
         {{
           tm(
@@ -328,18 +369,9 @@ function cellTitle(cell: DayCell): string {
               />
             </span>
             <span class="git-stats-hot-path">{{ f.path }}</span>
-            <span class="git-stats-hot-value">
-              {{
-                tm(
-                  "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFileValue",
-                  {
-                    commits: f.commits,
-                    additions: f.additions,
-                    deletions: f.deletions,
-                  },
-                )
-              }}
-            </span>
+            <!-- Same locale-split + colored-spans composition as the
+                 summary row; pieces carry the surrounding spaces. -->
+            <span class="git-stats-hot-value">{{ hotFileParts(f).prefix }}<span class="gs-add">+{{ f.additions }}</span>{{ hotFileParts(f).mid }}<span class="gs-del">−{{ f.deletions }}</span>{{ hotFileParts(f).suffix }}</span>
           </button>
         </div>
       </template>
@@ -355,10 +387,17 @@ function cellTitle(cell: DayCell): string {
   --gs-l3: #30a14e;
   --gs-l4: #216e39;
   --gs-bar: rgb(var(--v-theme-primary));
+  /* 2026-07-18: additions/deletions tinting (GitHub diff convention).
+     Light mode = #1a7f37 / #cf222e, dark mode overridden below. */
+  --gs-add: #1a7f37;
+  --gs-del: #cf222e;
   border: 1px solid rgb(var(--v-theme-on-surface), 0.08);
   border-radius: 8px;
   margin-bottom: 8px;
   font-size: 12px;
+  /* Align digit widths across the +/- counters so the numbers read
+     as a tidy column rather than a wobbly row. */
+  font-variant-numeric: tabular-nums;
 }
 .git-stats-panel.is-dark {
   --gs-l0: rgb(255 255 255 / 8%);
@@ -366,6 +405,8 @@ function cellTitle(cell: DayCell): string {
   --gs-l2: #006d32;
   --gs-l3: #26a641;
   --gs-l4: #39d353;
+  --gs-add: #3fb950;
+  --gs-del: #f85149;
 }
 .git-stats-header {
   display: flex;
@@ -380,10 +421,19 @@ function cellTitle(cell: DayCell): string {
   font-weight: 600;
 }
 .git-stats-summary {
-  opacity: 0.75;
+  /* 2026-07-18: switched from `opacity: 0.75` to a muted color so the
+     child .gs-add / .gs-del spans render at full color saturation
+     (opacity on the parent would wash out the green/red too). */
+  color: rgba(var(--v-theme-on-surface), 0.7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.gs-add {
+  color: var(--gs-add);
+}
+.gs-del {
+  color: var(--gs-del);
 }
 .git-stats-truncated-badge {
   font-size: 10px;
