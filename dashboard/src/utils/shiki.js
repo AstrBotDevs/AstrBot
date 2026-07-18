@@ -82,8 +82,10 @@ export function normalizeShikiLanguage(language) {
 
 // 2026-07-17 workspace file editor: centralized extension→language map.
 // Extracted from FileBrowserFilePreview.vue (which mirrored
-// ToolResultView.vue) so the read-only preview and the ShikiEditor
-// overlay component share one source of truth.
+// ToolResultView.vue) so the read-only preview and the tool-result
+// view share one source of truth. (The edit-mode editor moved to
+// CodeMirror 6 on 2026-07-18 and maps extensions separately in
+// @/utils/codemirrorLanguages.)
 const EXT_TO_LANG = {
   ".py": "python",
   ".js": "javascript",
