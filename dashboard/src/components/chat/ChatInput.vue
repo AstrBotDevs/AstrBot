@@ -1011,7 +1011,7 @@ defineExpose({
 
 <style scoped>
 .input-area {
-  padding: 12px 16px 0;
+  padding: 0 16px;
   background-color: transparent;
   position: relative;
   border-top: 1px solid var(--v-theme-border);

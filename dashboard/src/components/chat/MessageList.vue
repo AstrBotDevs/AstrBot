@@ -277,18 +277,18 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from "vue";
 import axios from "axios";
+import {
+  CHAT_MARKDOWN_CUSTOM_TAGS,
+  registerChatMarkdownComponents,
+} from "@/components/chat/chatMarkdownComponents";
 import { fileApi } from "@/api/v1";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import {
   attachmentName,
   attachmentPresentation,
@@ -320,13 +320,10 @@ const props = withDefaults(
   },
 );
 
-setCustomComponents("chat-message", {
-  ref: RefNode,
-  code_block: ThemeAwareMarkdownCodeBlock,
-});
+registerChatMarkdownComponents();
 
 const { tm } = useModuleI18n("features/chat");
-const customMarkdownTags = ["ref"];
+const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
 const downloadingFiles = ref(new Set<string>());
 const messageListRoot = ref<HTMLElement | null>(null);
 const imagePreview = reactive({ visible: false, url: "" });
@@ -636,6 +633,12 @@ function formatDuration(seconds: number) {
 
 .message-stack {
   max-width: min(760px, 82%);
+}
+
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
 }
 
 .from-user .message-stack {

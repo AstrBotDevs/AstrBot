@@ -207,16 +207,16 @@ import {
   ref,
 } from "vue";
 import { chatApi, configRouteApi, fileApi } from "@/api/v1";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
 import ChatInput from "@/components/chat/ChatInput.vue";
+import {
+  CHAT_MARKDOWN_CUSTOM_TAGS,
+  registerChatMarkdownComponents,
+} from "@/components/chat/chatMarkdownComponents";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import {
   attachmentName,
   attachmentPresentation,
@@ -240,10 +240,7 @@ const props = withDefaults(defineProps<{ configId?: string | null }>(), {
   configId: "default",
 });
 
-setCustomComponents("chat-message", {
-  ref: RefNode,
-  code_block: ThemeAwareMarkdownCodeBlock,
-});
+registerChatMarkdownComponents();
 
 const { tm } = useModuleI18n("features/chat");
 const customizer = useCustomizerStore();
@@ -258,7 +255,7 @@ const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const imagePreview = reactive({ visible: false, url: "" });
 
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
-const customMarkdownTags = ["ref"];
+const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
 
 const {
   stagedFiles,
@@ -548,6 +545,12 @@ function closeImage() {
   max-width: 88%;
 }
 
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
+}
+
 .from-user .message-stack {
   max-width: 70%;
 }
@@ -683,22 +686,6 @@ function closeImage() {
   z-index: 1;
   padding-bottom: 10px;
   background: rgb(var(--v-theme-background));
-}
-
-.standalone-composer::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  left: 0;
-  right: 0;
-  top: -32px;
-  height: 32px;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(var(--v-theme-background), 0),
-    rgb(var(--v-theme-background))
-  );
 }
 
 .standalone-composer :deep(.input-area) {

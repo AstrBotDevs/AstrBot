@@ -388,6 +388,42 @@ async def test_legacy_chat_stream_keeps_existing_event_shape(chat_service_instan
 
 
 @pytest.mark.asyncio
+async def test_chat_stream_forwards_normalized_request_flags(chat_service_instance):
+    """Test chat requests pass normalized flags to the WebChat adapter queue."""
+    service = chat_service_instance
+    session_id = "request-flags-session"
+    stream = await service.build_chat_stream(
+        "alice",
+        {
+            "message": "hello",
+            "session_id": session_id,
+            "enable_streaming": False,
+            "flags": {
+                "enable_inline_genui": True,
+                "enable_default_system_prompt": False,
+            },
+        },
+    )
+    run = next(iter(service.chat_runs.values()))
+
+    try:
+        chat_queue = chat_service.webchat_queue_mgr.get_or_create_queue(session_id)
+        _, _, payload = await asyncio.wait_for(chat_queue.get(), timeout=1)
+        assert payload["flags"] == {
+            "enable_inline_genui": True,
+            "enable_default_system_prompt": False,
+            "enable_streaming": False,
+        }
+        assert "enable_streaming" not in payload
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
 async def test_chat_stream_forwards_follow_up_status_by_default(
     chat_service_instance,
 ):

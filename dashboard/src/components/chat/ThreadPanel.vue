@@ -61,6 +61,7 @@ import { fetchWithAuth } from "@/api/http";
 import {
   appendPlain,
   appendReasoningPart,
+  buildChatRequestFlags,
   extractReasoningText,
   finishToolCall,
   hasPlainText,
@@ -160,7 +161,7 @@ async function send() {
       },
       body: JSON.stringify({
         message: [{ type: "plain", text }],
-        enable_streaming: true,
+        flags: buildChatRequestFlags(),
       }),
       signal: abort.signal,
     });

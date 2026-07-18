@@ -420,8 +420,6 @@
 import { computed, nextTick, reactive, ref } from "vue";
 import axios from "axios";
 import { fileApi } from "@/api/v1";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
 import RegenerateMenu, {
   type RegenerateModelSelection,
 } from "@/components/chat/RegenerateMenu.vue";
@@ -431,12 +429,13 @@ import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue"
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
-import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import {
+  CHAT_MARKDOWN_CUSTOM_TAGS,
+  registerChatMarkdownComponents,
+} from "@/components/chat/chatMarkdownComponents";
 import {
   attachmentName,
   attachmentPresentation,
@@ -501,15 +500,11 @@ const emit = defineEmits<{
   openRefs: [refs: unknown];
 }>();
 
-setCustomComponents("chat-message", {
-  ref: RefNode,
-  thread: ThreadNode,
-  code_block: ThemeAwareMarkdownCodeBlock,
-});
+registerChatMarkdownComponents();
 
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
-const customMarkdownTags = ["ref"];
+const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
 const downloadingFiles = ref(new Set<string>());
 const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
@@ -910,6 +905,12 @@ function formatDuration(seconds: number) {
   display: flex;
   flex-direction: column;
   max-width: min(760px, 82%);
+}
+
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
 }
 
 .from-user .message-stack {
