@@ -364,6 +364,7 @@ class ResultDecorateStage(Stage):
                 plain_str = "".join(parts)
                 if plain_str and len(plain_str) > self.t2i_word_threshold:
                     render_start = time.time()
+                    url = None
                     try:
                         url = await html_renderer.render_t2i(
                             plain_str,
@@ -373,7 +374,6 @@ class ResultDecorateStage(Stage):
                         )
                     except BaseException:
                         logger.error("文本转图片失败，使用文本发送。")
-                        return
                     if time.time() - render_start > 3:
                         logger.warning(
                             "文本转图片耗时超过了 3 秒，如果觉得很慢可以在 WebUI 中关闭文本转图片模式。",
@@ -426,3 +426,5 @@ class ResultDecorateStage(Stage):
                 # 引用回复
                 if self.reply_with_quote:
                     result.chain.insert(0, Reply(id=event.message_obj.message_id))
+
+        yield
