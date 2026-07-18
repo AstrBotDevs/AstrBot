@@ -7,11 +7,11 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import ShikiEditor from "./ShikiEditor.vue";
+import CodeMirrorEditor from "./CodeMirrorEditor.vue";
 
 const props = defineProps<{
   /** On-disk content loaded by the parent (the dirty baseline). The
-   *  editing buffer lives INSIDE ShikiEditor (uncontrolled), so
+   *  editing buffer lives INSIDE CodeMirrorEditor (uncontrolled), so
    *  per-keystroke state never reaches the heavy sidebar. */
   initialContent: string;
   /** True when the repo has no .gitignore yet — the toolbar shows a
@@ -33,10 +33,10 @@ const { tm } = useModuleI18n("features/chat");
 
 const PREFIX = "spcodeProjectLoad.diffSidebar.gitWorkflow.gitignore";
 
-// Dirtiness arrives on TRANSITIONS only (ShikiEditor dirty-change),
+// Dirtiness arrives on TRANSITIONS only (CodeMirrorEditor dirty-change),
 // so this toolbar re-renders at most twice per editing session —
-// the keystroke path re-renders ShikiEditor alone.
-const editorRef = ref<InstanceType<typeof ShikiEditor> | null>(null);
+// the keystroke path re-renders CodeMirrorEditor alone.
+const editorRef = ref<InstanceType<typeof CodeMirrorEditor> | null>(null);
 const isDirty = ref(false);
 
 function onDirtyChange(dirty: boolean): void {
@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
           {{ tm(`${PREFIX}.retry`) }}
         </button>
       </div>
-      <ShikiEditor
+      <CodeMirrorEditor
         v-else
         ref="editorRef"
         :model-value="initialContent"

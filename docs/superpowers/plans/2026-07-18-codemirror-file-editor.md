@@ -745,27 +745,30 @@ git commit -m "feat(dashboard): add CodeMirrorEditor file editing component"
 // CodeMirrorEditor stub: mirrors the real component's contract
 // (uncontrolled buffer, transition-only dirty-change, getValue expose)
 // while staying a cheap <textarea> for happy-dom.
-const CodeMirrorEditorStub = defineComponent({
-  props: {
-    modelValue: { type: String, default: "" },
-    filePath: { type: String, default: "" },
-  },
-  emits: ["update:modelValue", "dirty-change"],
-  setup(props, { emit, expose }) {
-    const buffer = ref(props.modelValue);
-    const dirty = computed(() => buffer.value !== props.modelValue);
-    watch(dirty, (d) => emit("dirty-change", d));
-    function onInput(e: Event) {
-      const v = (e.target as HTMLTextAreaElement).value;
-      buffer.value = v;
-      emit("update:modelValue", v);
-    }
-    expose({ getValue: () => buffer.value, focus: () => {} });
-    return { buffer, onInput };
-  },
-  template: '<textarea :value="buffer" @input="onInput" />',
+vi.mock("./CodeMirrorEditor.vue", async () => {
+  const { computed, defineComponent, ref, watch } = await import("vue");
+  const CodeMirrorEditorStub = defineComponent({
+    props: {
+      modelValue: { type: String, default: "" },
+      filePath: { type: String, default: "" },
+    },
+    emits: ["update:modelValue", "dirty-change"],
+    setup(props, { emit, expose }) {
+      const buffer = ref(props.modelValue);
+      const dirty = computed(() => buffer.value !== props.modelValue);
+      watch(dirty, (d) => emit("dirty-change", d));
+      function onInput(e: Event) {
+        const v = (e.target as HTMLTextAreaElement).value;
+        buffer.value = v;
+        emit("update:modelValue", v);
+      }
+      expose({ getValue: () => buffer.value, focus: () => {} });
+      return { buffer, onInput };
+    },
+    template: '<textarea :value="buffer" @input="onInput" />',
+  });
+  return { default: CodeMirrorEditorStub };
 });
-vi.mock("./CodeMirrorEditor.vue", () => ({ default: CodeMirrorEditorStub }));
 ```
 
 同时：文件头注释中 "Uses the real ShikiEditor with the shiki util mocked" 更新为 "Uses a CodeMirrorEditor stub mirroring the real contract"；import 行补 `defineComponent, computed, ref, watch`（来自 "vue"）；`setEditorDirty` 注释里的 "real ShikiEditor" 改为 "stubbed CodeMirrorEditor"。
@@ -906,5 +909,5 @@ pnpm dev
 
 - **Spec 覆盖**：§3 组件契约 → Task 3；§4 语言映射 → Task 2；§5 主题 → Task 3（useTheme + Compartment）；§6 编辑行为 → Task 3（行号/indentWithTab/history/echo 抑制）+ Task 6 手测；§7 边界 → Task 3（destroyed flag）+ Task 6；§8 错误处理 → Task 2（缓存驱逐）/ Task 3（console.warn + cmFailed + try/catch useTheme）；§10 测试 → 各 Task spec + Task 6 手测清单；§11 改动清单 → Task 1-6 全覆盖。
 - **Placeholder 扫描**：无 TBD/TODO；所有代码步骤含完整代码。
-- **执行偏差记录**：Task 2 实施中发现 `StreamLanguage.define()` 返回 `Language` 而非 `LanguageSupport`，shell/diff loader 已按 CM6 API 修正为 `new LanguageSupport(StreamLanguage.define(...))`（plan 代码已同步）。
+- **执行偏差记录**：Task 4 中 stub 须定义在 `vi.mock` async 工厂内部（vi.mock 提升导致顶层 const 处于 TDZ）；plan 代码已同步。Task 2 实施中发现 `StreamLanguage.define()` 返回 `Language` 而非 `LanguageSupport`，shell/diff loader 已按 CM6 API 修正为 `new LanguageSupport(StreamLanguage.define(...))`（plan 代码已同步）。
 - **类型一致性**：`languageKeyForPath` / `loadLanguage` / `CmLanguageKey`（Task 2 定义 → Task 3 import）；`getValue` / `focus` / `dirty-change`（Task 3 定义 → Task 4/5 调用方 + stub 复刻）；stub 的 props/emits/expose 与真实组件逐一对应。
