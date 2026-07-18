@@ -385,3 +385,54 @@ async def test_legacy_chat_stream_keeps_existing_event_shape(chat_service_instan
             run.task.cancel()
             await asyncio.gather(run.task, return_exceptions=True)
         chat_service.webchat_queue_mgr.remove_queues(session_id)
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_forwards_follow_up_status_by_default(
+    chat_service_instance,
+):
+    service = chat_service_instance
+    session_id = "follow-up-status-session"
+    stream = await service.build_chat_stream(
+        "alice",
+        {
+            "message": "hello",
+            "session_id": session_id,
+        },
+    )
+    run = next(iter(service.chat_runs.values()))
+
+    try:
+        assert _decode_sse_event(await anext(stream))["type"] == "session_id"
+        assert _decode_sse_event(await anext(stream))["type"] == "user_message_saved"
+
+        status_payload = {
+            "type": "follow_up_captured",
+            "data": {"target_run_id": "original-run"},
+            "streaming": False,
+            "message_id": run.run_id,
+        }
+        await chat_service.webchat_queue_mgr.put_back_queue(
+            run.run_id,
+            status_payload,
+        )
+        assert _decode_sse_event(await asyncio.wait_for(anext(stream), 1)) == (
+            status_payload
+        )
+
+        await chat_service.webchat_queue_mgr.put_back_queue(
+            run.run_id,
+            {
+                "type": "end",
+                "data": "",
+                "streaming": False,
+                "message_id": run.run_id,
+            },
+        )
+        await asyncio.wait_for(run.task, timeout=1)
+    finally:
+        await stream.aclose()
+        if run.task and not run.task.done():
+            run.task.cancel()
+            await asyncio.gather(run.task, return_exceptions=True)
+        chat_service.webchat_queue_mgr.remove_queues(session_id)
