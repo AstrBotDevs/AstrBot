@@ -1552,6 +1552,6 @@ export function parseJsonSafe(value: unknown) {
   try {
     return JSON.parse(value);
   } catch {
-    return value;
+    return value
   }
 }
