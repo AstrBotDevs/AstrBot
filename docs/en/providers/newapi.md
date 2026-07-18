@@ -29,12 +29,12 @@ Set `API Base URL` to your NewAPI endpoint:
 
 Then paste your API key into `API Key` and click `Save`.
 
-![astrbot-provider-config](https://files.astrbot.app/docs/source/images/newapi/image-2.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/6940533e-157d-4bb3-8716-9fe3a1ca2945" />
 
 ### 3. Apply the Provider
 
 Go to `Configuration`, find the model section, set `Default Chat Model` to the NewAPI-based provider you just created, and click `Save`.
 
-![apply](https://files.astrbot.app/docs/source/images/newapi/image-3.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/b61fe643-ea48-41eb-a862-d4e168e7b378" />
 
 You have now successfully configured NewAPI as an AstrBot model provider.

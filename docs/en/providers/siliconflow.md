@@ -12,4 +12,4 @@ Open the AstrBot WebUI, click `Service Providers` in the left sidebar -> `Add Pr
 
 Paste the `API Key` and `Model Name` you obtained earlier, then click Save to complete the setup. You can click the `Refresh` button under `Service Provider Availability` to verify whether the configuration is successful.
 
-![Configuring Chat Model](https://files.astrbot.app/docs/source/images/siliconflow/image.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/65cefa28-b65a-4569-b871-34c25b5fbac6" />

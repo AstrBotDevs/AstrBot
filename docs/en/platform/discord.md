@@ -4,7 +4,7 @@
 
 Navigate to the messaging platform, click to add a new adapter, find Discord and click to enter the Discord configuration page.
 
-![Click to create bot, select discord type](https://files.astrbot.app/docs/source/images/discord/image.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/dea8c9f6-c870-428d-ab8c-379382d8a761" />
 
 ![Options from top to bottom: 1. Bot name 2. Enable 3. Bot token 4. Discord proxy address 5. Auto-register plugin commands as Discord slash commands 6. discord_guild_id_for_debug 7. Discord activity name](https://files.astrbot.app/docs/source/images/discord/image-3.png)
 > For this tutorial, you only need to configure items 1, 2, 3, and 5

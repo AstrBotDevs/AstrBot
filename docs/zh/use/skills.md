@@ -14,7 +14,7 @@ AstrBot 在 v4.13.0 之后引入了对 Anthropic Skills 的支持，使得用户
 
 进入 AstrBot 管理面板，导航到 `插件` 页面，找到 `Skills`。
 
-![Skills](https://files.astrbot.app/docs/source/images/skills/image.png)
+<img width="1910" height="883" alt="image" src="https://github.com/user-attachments/assets/7fe05519-8eb4-4f7c-a123-df923ce41ae7" />
 
 你可以上传 Skills，上传格式要求如下：
 
