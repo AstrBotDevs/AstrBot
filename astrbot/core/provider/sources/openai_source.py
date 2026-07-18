@@ -273,7 +273,10 @@ class ProviderOpenAIOfficial(Provider):
         if part.get("type") == "image_url":
             url, image_detail = self._extract_image_part_info(part)
             if not url:
-                return part
+                return {
+                    "type": "text",
+                    "text": "[Image unavailable]",
+                }
 
             try:
                 resolved_part = await self._resolve_image_part(
@@ -281,13 +284,26 @@ class ProviderOpenAIOfficial(Provider):
                 )
             except Exception as exc:
                 logger.warning(
-                    "图片 %s 预处理失败，将保留原始内容。错误: %s",
+                    "Image preprocess failed; dropping image content. url=%s err=%s",
                     url,
                     exc,
                 )
-                return part
+                return {
+                    "type": "text",
+                    "text": "[Image unavailable]",
+                }
 
-            return resolved_part or part
+            if resolved_part:
+                return resolved_part
+
+            logger.warning(
+                "Image preprocess returned empty; dropping image content. url=%s",
+                url,
+            )
+            return {
+                "type": "text",
+                "text": "[Image unavailable]",
+            }
 
         if part.get("type") == "audio_url":
             audio_ref = self._extract_audio_part_info(part)

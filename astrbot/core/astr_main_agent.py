@@ -115,6 +115,7 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_text,
 )
 from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.agent.message import strip_images_from_history_messages
 from astrbot.core.workspace import (
     normalize_umo_for_workspace,
     resolve_workspace_root_for_umo,
@@ -1351,6 +1352,43 @@ def _select_image_chat_provider(
     return provider
 
 
+
+def _is_remote_image_ref(image_ref: str) -> bool:
+    return image_ref.startswith("http://") or image_ref.startswith("https://")
+
+
+def _finalize_request_image_urls(
+    image_urls: list[str] | None,
+    *,
+    max_total: int = 4,
+) -> list[str]:
+    """Dedupe and prioritize local image refs over remote URLs.
+
+    Remote CDN links (especially QQ multimedia URLs) expire easily. Keeping them
+    beside already-downloaded local paths causes models to "see" missing/wrong
+    images in later turns.
+    """
+    urls = normalize_and_dedupe_strings(image_urls or [])
+    if not urls:
+        return []
+
+    local_refs: list[str] = []
+    embedded_refs: list[str] = []
+    remote_refs: list[str] = []
+    for ref in urls:
+        if _is_remote_image_ref(ref):
+            remote_refs.append(ref)
+        elif ref.startswith("data:") or ref.startswith("base64://"):
+            embedded_refs.append(ref)
+        else:
+            local_refs.append(ref)
+
+    ordered = local_refs + embedded_refs + remote_refs
+    if max_total > 0:
+        ordered = ordered[:max_total]
+    return ordered
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -1381,7 +1419,7 @@ async def build_main_agent(
                 "provider_request 必须是 ProviderRequest 类型。"
             )
             if req.conversation:
-                req.contexts = json.loads(req.conversation.history)
+                req.contexts = strip_images_from_history_messages(json.loads(req.conversation.history))
         else:
             req = ProviderRequest()
             req.prompt = ""
@@ -1514,7 +1552,7 @@ async def build_main_agent(
 
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation
-            req.contexts = json.loads(conversation.history)
+            req.contexts = strip_images_from_history_messages(json.loads(conversation.history))
             event.set_extra("provider_request", req)
 
     if isinstance(req.contexts, str):
@@ -1530,7 +1568,10 @@ async def build_main_agent(
                 )
             )
         )
-    req.image_urls = normalize_and_dedupe_strings(req.image_urls)
+    req.image_urls = _finalize_request_image_urls(
+        normalize_and_dedupe_strings(req.image_urls),
+        max_total=max(int(getattr(config, "max_quoted_fallback_images", 4) or 4), 4),
+    )
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
 
     if config.file_extract_enabled:
