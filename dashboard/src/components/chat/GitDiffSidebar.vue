@@ -55,6 +55,7 @@ import GitIgnoreEditor from "@/components/chat/message_list_comps/GitIgnoreEdito
 import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
 import { useSpcodeGitShow } from "@/composables/useSpcodeGitShow";
 import { useSpcodeGitStats } from "@/composables/useSpcodeGitStats";
+import type { GitStatsRange } from "@/composables/parseSpcodeGitStats";
 import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
 import { useSpcodeFileSearch } from "@/composables/useSpcodeFileSearch";
 import { classifyReason } from "@/composables/parseSpcodeGitWorkflow";
@@ -91,6 +92,7 @@ const STORAGE_KEYS = {
   searchOpen: "astrbot.spcode.gitDiffSidebar.searchOpen",
   // 2026-07-18 git-stats heatmap: stats-panel collapsed state.
   gitStatsOpen: "astrbot.spcode.gitDiffSidebar.gitStatsOpen",
+  gitStatsRange: "astrbot.spcode.gitDiffSidebar.gitStatsRange",
 } as const;
 
 function safeGetItem(key: string): string | null {
@@ -138,6 +140,36 @@ function loadSearchOpen(): boolean {
 // heatmap is the primary entry point of the History view.
 function loadGitStatsOpen(): boolean {
   return safeGetItem(STORAGE_KEYS.gitStatsOpen) !== "false";
+}
+
+// 2026-07-18 git-stats heatmap: restore the saved range window from
+// localStorage. Anything we don't recognise falls back to the prior
+// 6-month default (matching the launch behaviour of the feature).
+const VALID_PRESETS = new Set(["1w", "1mo", "3mo", "6mo", "1y"]);
+function loadGitStatsRange(): GitStatsRange {
+  const raw = safeGetItem(STORAGE_KEYS.gitStatsRange);
+  if (!raw) return { kind: "preset", preset: "6mo" };
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") throw 0;
+    const obj = parsed as { kind?: unknown; preset?: unknown; since?: unknown; until?: unknown };
+    if (obj.kind === "preset" && typeof obj.preset === "string" && VALID_PRESETS.has(obj.preset)) {
+      return { kind: "preset", preset: obj.preset as GitStatsRange["kind" extends "preset" ? "preset" : never] } as GitStatsRange;
+    }
+    if (
+      obj.kind === "custom" &&
+      typeof obj.since === "string" &&
+      typeof obj.until === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(obj.since) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(obj.until) &&
+      obj.since <= obj.until
+    ) {
+      return { kind: "custom", since: obj.since, until: obj.until };
+    }
+  } catch {
+    /* fall through */
+  }
+  return { kind: "preset", preset: "6mo" };
 }
 
 // Debounced writer for currentPath (spec §5.1 lines 1273-1280).
@@ -278,6 +310,14 @@ const statsOpen = ref<boolean>(loadGitStatsOpen());
 watch(
   statsOpen,
   (v) => safeSetItem(STORAGE_KEYS.gitStatsOpen, String(v)),
+  { flush: "post" },
+);
+// 2026-07-18 git-stats heatmap: owned by the sidebar, persisted across
+// page reloads, and the source for the range prop passed to GitLogView.
+const gitStatsRange = ref<GitStatsRange>(loadGitStatsRange());
+watch(
+  gitStatsRange,
+  (v) => safeSetItem(STORAGE_KEYS.gitStatsRange, JSON.stringify(v)),
   { flush: "post" },
 );
 
@@ -1449,13 +1489,28 @@ watch(
 // 2026-07-18 git-stats heatmap: lazy-fetch the stats snapshot once
 // the panel is (or becomes) visible. Fires on: sidebar open while in
 // history view, switching into history view, panel re-expand, and
-// worktree switch while visible (the composable keys ETag + previous
-// snapshot by umo|worktree, so same-worktree repeats are cheap 304s).
+// worktree switch while visible. The composable keys ETag + previous
+// snapshot by umo|worktree|since|until, so same-key repeats are
+// cheap 304s. The range itself is also a watch source so a range
+// change while visible re-fetches with the new since/until
+// immediately (the params forward path added by useSpcodeGitStats).
+function statsRangeArgs(): { since?: string; until?: string } {
+  const r = gitStatsRange.value;
+  if (r.kind === "preset") return {};
+  return { since: r.since, until: r.until };
+}
 watch(
-  [() => props.modelValue, viewMode, isGitRepo, statsOpen, selectedWorktree],
+  [
+    () => props.modelValue,
+    viewMode,
+    isGitRepo,
+    statsOpen,
+    selectedWorktree,
+    gitStatsRange,
+  ],
   ([open, mode, isRepo, panelOpen]) => {
     if (open && mode === "history" && isRepo && panelOpen) {
-      void gitStats.refresh();
+      void gitStats.refresh(statsRangeArgs());
     }
   },
   { immediate: true },
@@ -3430,6 +3485,8 @@ const currentRoot = computed<string | null>(() => {
             :focused-commit-sha="focusedCommitSha"
             :git-stats="gitStats"
             v-model:stats-open="statsOpen"
+            :range="gitStatsRange"
+            @update:range="(v) => (gitStatsRange = v)"
             @apply="onLogApply"
             @reset="onLogReset"
             @load-more="onLogLoadMore"
