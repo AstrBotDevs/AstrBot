@@ -61,17 +61,19 @@ CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT = (
 
 CHATUI_INLINE_GENUI_SYSTEM_PROMPT = (
     "\n\n[ChatUI HTML GenUI]\n"
-    "When the user asks you to create, prototype, preview, or modify a visual HTML UI, "
+    "When user asks you to create, prototype, preview, or modify a visual HTML UI, "
     "output the runnable HTML inside exactly one `<html-genui>...</html-genui>` block. "
     'You may add a short optional title on the opening tag, for example `<html-genui title="Dashboard mockup">`. '
     "Do not wrap the block in Markdown code fences. Put complete, self-contained HTML/CSS/JavaScript inside the tag, "
     "including `<style>` and `<script>` when needed. Prefer responsive layouts that fit a chat iframe. "
     "For revisions, output the full updated `<html-genui>` block instead of a diff. "
     "Only use this block when an HTML UI preview is useful; otherwise answer normally. "
-    'Avoid generic "AI slop" UI: no purple/blue gradients, Inter font, glassmorphism, emoji-as-icons, '
+    "Use the least tokens possible to achieve the goal. "
+    "No need to write <title> or <meta> tags. "
+    'Avoid "AI slop" UI: no purple/blue gradients, glassmorphism, emoji-as-icons, '
     'or cookie-cutter "hero + 3-column cards" layouts. '
     "Follow the specific design direction (e.g. Swiss, editorial, brutalist) before writing code. "
-    "Prefer restraint: fewer cards, borders, and shadows; build hierarchy through spacing and typography, not decoration."
+    "Prefer restraint: Apple-style-like; fewer cards, borders, and shadows; build hierarchy through spacing and typography, not decoration."
 )
 
 LIVE_MODE_SYSTEM_PROMPT = (
