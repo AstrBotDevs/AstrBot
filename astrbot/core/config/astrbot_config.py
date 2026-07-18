@@ -85,6 +85,14 @@ class AstrBotConfig(dict):
             )
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
+
+        dashboard_conf = conf.get("dashboard")
+        if isinstance(dashboard_conf, dict):
+            host_val = dashboard_conf.get("host")
+            if isinstance(host_val, str) and host_val:
+                dashboard_conf["host"] = [host_val]
+                has_new = True
+
         reset_dashboard_password = self._consume_reset_dashboard_password_flag()
         if reset_dashboard_password and "dashboard" in conf:
             self._reset_generated_dashboard_password(conf)
