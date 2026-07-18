@@ -28,7 +28,7 @@ import FileBrowserCodeView from "./FileBrowserCodeView.vue";
 import FileCommentEditor from "./FileCommentEditor.vue";
 import SelectionActionMenu from "./SelectionActionMenu.vue";
 import DiffPreview from "./DiffPreview.vue";
-import ShikiEditor from "./ShikiEditor.vue";
+import CodeMirrorEditor from "./CodeMirrorEditor.vue";
 import MarkdownView from "@/components/shared/MarkdownView.vue";
 import { useSpcodeFileWrite } from "@/composables/useSpcodeFileWrite";
 import { useSpcodeFileRename } from "@/composables/useSpcodeFileRename";
@@ -170,8 +170,9 @@ function resolveTargetPath(symlinkPath: string, target: string): string {
 }
 
 // 2026-07-17: the extension→language map moved to @/utils/shiki
-// (exported as `detectLanguage`) so this preview and the new
-// <ShikiEditor> overlay share one source of truth.
+// (exported as `detectLanguage`) so this preview and the file editor
+// (CodeMirrorEditor, via @/utils/codemirrorLanguages) each resolve
+// languages from the same extension set.
 
 const shikiHighlighter = ref<any>(null);
 const shikiReady = ref(false);
@@ -379,16 +380,16 @@ watch(
 // ── 2026-07-17 workspace file editor ─────────────────────────────
 // Edit mode mirrors DocumentManager's editMode/editBuffer pair, but
 // saves through POST /spcode/file-write (POST /spcode/docs is
-// markdown-only by design). The editor body is <ShikiEditor>, an
-// overlay that reuses the preview's Shiki pipeline for highlighting.
+// markdown-only by design). The editor body is <CodeMirrorEditor>
+// (CM6; lazy language packs, dark-aware theme).
 const fileWrite = useSpcodeFileWrite(computed(() => props.worktree ?? null));
 const editMode = ref(false);
 // 2026-07-18 latency rework: the per-keystroke buffer lives INSIDE
-// ShikiEditor (uncontrolled textarea) — this component only holds the
-// session baseline + transition-level dirtiness, so keystrokes never
-// re-render the whole preview pane.
+// CodeMirrorEditor — this component only holds the session baseline +
+// transition-level dirtiness, so keystrokes never re-render the whole
+// preview pane.
 const editInitialContent = ref("");
-const editorRef = ref<InstanceType<typeof ShikiEditor> | null>(null);
+const editorRef = ref<InstanceType<typeof CodeMirrorEditor> | null>(null);
 const isEditDirty = ref(false);
 const saveError = ref<string | null>(null);
 
@@ -1030,7 +1031,7 @@ function onDeleteComment(commentId: string): void {
               }}
             </v-btn>
             <!-- 2026-07-17 workspace file editor: enters edit mode
-                 (body swaps to <ShikiEditor>). Hidden while editing,
+                 (body swaps to <CodeMirrorEditor>). Hidden while editing,
                  for history views, binaries, oversized files, and
                  when no repo-relative path is available. -->
             <v-btn
@@ -1125,7 +1126,7 @@ function onDeleteComment(commentId: string): void {
                 {{ tm("spcodeProjectLoad.fileBrowser.editor.delete") }}
               </v-btn>
             </div>
-            <ShikiEditor
+            <CodeMirrorEditor
               ref="editorRef"
               :model-value="editInitialContent"
               :file-path="state.snapshot.meta.path"
@@ -1537,8 +1538,8 @@ function onDeleteComment(commentId: string): void {
 }
 
 /* 2026-07-17 workspace file editor: edit-mode layout. The toolbar
-   stays fixed at the top; <ShikiEditor> fills the remaining height
-   and scrolls internally (same contract as .code-view). */
+   stays fixed at the top; <CodeMirrorEditor> fills the remaining
+   height and scrolls internally (same contract as .code-view). */
 .preview-editor {
   display: flex;
   flex-direction: column;
