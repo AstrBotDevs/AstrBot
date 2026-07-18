@@ -54,6 +54,7 @@ import { useSpcodeFileWrite } from "@/composables/useSpcodeFileWrite";
 import GitIgnoreEditor from "@/components/chat/message_list_comps/GitIgnoreEditor.vue";
 import { useSpcodeGitLog, type LogFilter } from "@/composables/useSpcodeGitLog";
 import { useSpcodeGitShow } from "@/composables/useSpcodeGitShow";
+import { useSpcodeGitStats } from "@/composables/useSpcodeGitStats";
 import { useSpcodeNewFileLineCounts } from "@/composables/useSpcodeNewFileLineCounts";
 import { useSpcodeFileSearch } from "@/composables/useSpcodeFileSearch";
 import { classifyReason } from "@/composables/parseSpcodeGitWorkflow";
@@ -88,6 +89,8 @@ const STORAGE_KEYS = {
   selectedScope: "astrbot.spcode.gitDiffSidebar.selectedScope",
   // 2026-07-02 sidebar-search: search-panel collapsed state.
   searchOpen: "astrbot.spcode.gitDiffSidebar.searchOpen",
+  // 2026-07-18 git-stats heatmap: stats-panel collapsed state.
+  gitStatsOpen: "astrbot.spcode.gitDiffSidebar.gitStatsOpen",
 } as const;
 
 function safeGetItem(key: string): string | null {
@@ -128,6 +131,13 @@ function loadSelectedScope(): GitDiffScope {
 // collapsed (default).
 function loadSearchOpen(): boolean {
   return safeGetItem(STORAGE_KEYS.searchOpen) === "true";
+}
+
+// 2026-07-18 git-stats heatmap: unlike searchOpen, the stats panel
+// defaults to EXPANDED (only the literal "false" collapses) — the
+// heatmap is the primary entry point of the History view.
+function loadGitStatsOpen(): boolean {
+  return safeGetItem(STORAGE_KEYS.gitStatsOpen) !== "false";
 }
 
 // Debounced writer for currentPath (spec §5.1 lines 1273-1280).
@@ -261,6 +271,15 @@ const searchOpen = ref<boolean>(loadSearchOpen());
 watch(searchOpen, (v) => safeSetItem(STORAGE_KEYS.searchOpen, String(v)), {
   flush: "post",
 });
+
+// 2026-07-18 git-stats heatmap: History-tab stats panel toggle,
+// persisted the same way as searchOpen (flush:"post" writer).
+const statsOpen = ref<boolean>(loadGitStatsOpen());
+watch(
+  statsOpen,
+  (v) => safeSetItem(STORAGE_KEYS.gitStatsOpen, String(v)),
+  { flush: "post" },
+);
 
 // Hydrate selectedScope from localStorage (validated; fall back to default).
 const _persistedScope = loadSelectedScope();
@@ -621,6 +640,12 @@ watch(selectedWorktree, () => {
 // composable maintains a per-SHA cache internally, so re-expanding
 // a previously seen commit is an ETag-validated no-op.
 const gitShow = useSpcodeGitShow(selectedWorktree);
+
+// 2026-07-18 git-stats heatmap: whole-repo change stats for the
+// History tab's GitStatsPanel. Single snapshot per umo|worktree
+// (ETag-validated); refresh is lazy — see the dedicated watcher next
+// to the polling watcher below.
+const gitStats = useSpcodeGitStats(selectedWorktree);
 
 // Spec §3.4 决策 #22/#23:切 worktree 保留,切 project / unload 清空。
 const stagedFiles = ref<Set<string>>(new Set<string>());
@@ -1419,6 +1444,21 @@ watch(
       void gitStatus.refresh();
     }
   },
+);
+
+// 2026-07-18 git-stats heatmap: lazy-fetch the stats snapshot once
+// the panel is (or becomes) visible. Fires on: sidebar open while in
+// history view, switching into history view, panel re-expand, and
+// worktree switch while visible (the composable keys ETag + previous
+// snapshot by umo|worktree, so same-worktree repeats are cheap 304s).
+watch(
+  [() => props.modelValue, viewMode, isGitRepo, statsOpen, selectedWorktree],
+  ([open, mode, isRepo, panelOpen]) => {
+    if (open && mode === "history" && isRepo && panelOpen) {
+      void gitStats.refresh();
+    }
+  },
+  { immediate: true },
 );
 
 // ── Merged view (git-diff + git-status new files) ─────────────────
@@ -2694,6 +2734,13 @@ function onLogApply(filter: LogFilter): void {
   // 用 filter 调用 refresh(spec §6.5.1:filter 变化时 key 自动变化,旧 ETag 不复用)
   void gitLog.refresh(filter);
 }
+// 2026-07-18 git-stats heatmap: the History-tab manual refresh button
+// re-fetches the log AND the stats panel (ETag-validated; cheap 304s
+// when nothing changed upstream).
+function onLogRefresh(): void {
+  void gitLog.refresh();
+  void gitStats.refresh();
+}
 function onLogReset(filter: LogFilter): void {
   // Reset semantics differ from a regular Apply: the URL of the reset
   // request is identical to the very first history-tab load (?ref=HEAD&n=20),
@@ -2732,6 +2779,8 @@ onBeforeUnmount(() => {
   // dispose() aborts in-flight requests and drops the maps; safe to
   // call after gitLog.dispose() since the two are independent.
   gitShow.dispose();
+  // git-stats: abort in-flight refresh + clear ETag/snapshot maps.
+  gitStats.dispose();
   if (persistCurrentPathTimer) {
     clearTimeout(persistCurrentPathTimer);
     persistCurrentPathTimer = null;
@@ -3379,10 +3428,12 @@ const currentRoot = computed<string | null>(() => {
             :is-loading="logIsLoading"
             :git-show="gitShow"
             :focused-commit-sha="focusedCommitSha"
+            :git-stats="gitStats"
+            v-model:stats-open="statsOpen"
             @apply="onLogApply"
             @reset="onLogReset"
             @load-more="onLogLoadMore"
-            @refresh="() => gitLog.refresh()"
+            @refresh="onLogRefresh"
             @revert="onLogRevertRequest"
           />
           <!-- 2026-07-11 document-manager:Documents 文档管理 sub-tab body。 -->
