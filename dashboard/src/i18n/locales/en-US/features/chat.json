@@ -10,7 +10,8 @@
     "recordingPrompt": "Recording, please speak...",
     "chatPrompt": "Let's chat!",
     "dropToUpload": "Drop files to upload",
-    "stopGenerating": "Stop generating"
+    "stopGenerating": "Stop generating",
+    "uploadSidebarFailed": "Failed to upload {name} from sidebar"
   },
   "message": {
     "user": "User",
@@ -332,6 +333,10 @@
         "diff": "Git Diff"
       },
       "breadcrumbRoot": "Project root",
+      "fullscreen": {
+        "enter": "Fullscreen file area",
+        "exit": "Exit fullscreen"
+      },
       "loading": "Loading…",
       "empty": "Empty directory",
       "placeholder": "Load a project first",

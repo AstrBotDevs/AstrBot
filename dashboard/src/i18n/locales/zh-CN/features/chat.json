@@ -10,7 +10,8 @@
     "recordingPrompt": "录音中，请说话...",
     "chatPrompt": "聊天吧!",
     "dropToUpload": "松开鼠标上传文件",
-    "stopGenerating": "停止生成"
+    "stopGenerating": "停止生成",
+    "uploadSidebarFailed": "无法从侧边栏上传 {name}"
   },
   "message": {
     "user": "用户",
@@ -332,6 +333,10 @@
         "diff": "Git 变更"
       },
       "breadcrumbRoot": "项目根",
+      "fullscreen": {
+        "enter": "全屏文件区域",
+        "exit": "退出全屏"
+      },
       "loading": "加载中…",
       "empty": "空目录",
       "placeholder": "请先加载项目",

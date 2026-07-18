@@ -364,6 +364,7 @@
             @stop-recording="stopRecording"
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
+            @file-path-drop="handleSidebarFileDrop"
             @clear-reply="replyTarget = null"
             @open-diff-sidebar="openGitDiffSidebar"
           />
@@ -530,6 +531,7 @@
             @stop-recording="stopRecording"
             @paste-image="handlePaste"
             @file-select="handleFilesSelected"
+            @file-path-drop="handleSidebarFileDrop"
             @clear-reply="replyTarget = null"
             @open-diff-sidebar="openGitDiffSidebar"
           />
@@ -755,6 +757,10 @@ const {
   stagedNonImageFiles,
   processAndUploadImage,
   processAndUploadFile,
+  // 2026-07-18 drag-to-chat (elecvoid243): sidebar file-browser drop
+  // upload helper. See processAndUploadFileFromPath docstring in
+  // useMediaHandling.ts for the full pipeline.
+  processAndUploadFileFromPath,
   handlePaste,
   removeImage,
   removeAudio,
@@ -2270,6 +2276,30 @@ async function handleFilesSelected(files: FileList) {
     } else {
       await processAndUploadFile(file);
     }
+  }
+}
+
+// 2026-07-18 drag-to-chat (elecvoid243): handle a file dropped from
+// the sidebar file browser (workspace / document manager) onto the
+// chat input. The chat input forwards `{ path, name }` here; we
+// delegate to `processAndUploadFileFromPath` which fetches the file
+// content via /spcode/file-browser and routes it through the
+// existing `uploadStagedFile` pipeline — so the stagedFiles list,
+// signature dedup, and upload POST all behave identically to the
+// "+ → Upload Files" click path.
+//
+// Errors are surfaced via toast (binary file, too-large file, or
+// file-browser failure). The helper returns `undefined` in all
+// error cases, so we just check the return value.
+async function handleSidebarFileDrop(payload: { path: string; name: string }) {
+  if (!payload?.path || !payload?.name) return;
+  const result = await processAndUploadFileFromPath(payload.path, payload.name);
+  if (!result) {
+    // Helper returns undefined for: binary file, too-large file,
+    // network failure, or non-file response. We surface a single
+    // generic toast — the helper logs the underlying error to
+    // console with the full stack for debugging.
+    toast.error(tm("input.uploadSidebarFailed", { name: payload.name }));
   }
 }
 

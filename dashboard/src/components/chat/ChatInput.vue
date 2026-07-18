@@ -531,6 +531,14 @@ const emit = defineEmits<{
   stopRecording: [];
   pasteImage: [event: ClipboardEvent];
   fileSelect: [files: FileList];
+  // 2026-07-18 drag-to-chat (elecvoid243): emitted when a file from
+  // the sidebar file browser (workspace / document manager) is dropped
+  // onto the chat input. payload carries the absolute server-side
+  // path + the basename the user saw in the list. Parent (Chat.vue)
+  // fetches the content via /spcode/file-browser and re-uses the
+  // existing `uploadStagedFile` pipeline. See
+  // `processAndUploadFileFromPath` in useMediaHandling.ts.
+  filePathDrop: [payload: { path: string; name: string }];
   clearReply: [];
   openLiveMode: [];
   "open-diff-sidebar": [];
@@ -1313,6 +1321,15 @@ function handlePaste(e: ClipboardEvent) {
   emit("pasteImage", e);
 }
 
+// 2026-07-18 drag-to-chat (elecvoid243): custom MIME type used by
+// the sidebar file browser to mark a drag payload as a remote file
+// path. The chat input's drop handler checks for this FIRST so we
+// can route sidebar file drops through `processAndUploadFileFromPath`
+// instead of the native FileList path. Kept as a module-local
+// constant (not exported) because the only consumer is the sidebar
+// file list which lives in the same Vue tree.
+const SIDEBAR_FILE_MIME = "application/x-astrbot-file-path";
+
 function handleDragOver(e: DragEvent) {
   // 清除之前的 leave timeout
   if (dragLeaveTimeout) {
@@ -1320,8 +1337,14 @@ function handleDragOver(e: DragEvent) {
     dragLeaveTimeout = null;
   }
 
-  // 检查是否有文件
-  if (e.dataTransfer?.types.includes("Files")) {
+  // 显示拖拽遮罩的判定：既支持原生文件拖入（"Files"），也支持
+  // sidebar 文件浏览器拖入（自定义 MIME）。两种都是"可以松手
+  // 上传"的信号，所以共用同一个 isDragging overlay。
+  const types = e.dataTransfer?.types;
+  if (
+    types?.includes("Files") ||
+    types?.includes(SIDEBAR_FILE_MIME)
+  ) {
     isDragging.value = true;
   }
 }
@@ -1335,6 +1358,31 @@ function handleDragLeave(e: DragEvent) {
 
 function handleDrop(e: DragEvent) {
   isDragging.value = false;
+
+  // 优先处理 sidebar 文件拖入：自定义 MIME 携带的是远端文件路径,
+  // 父组件需要走 `processAndUploadFileFromPath` (先 fetch content,
+  // 再走和原生上传完全相同的 uploadStagedFile 流程)。如果 dataTransfer
+  // 同时携带 Files（极少见,例如从外部桌面把同一个文件既通过路径也通过
+  // File 拖入），优先信任自定义类型 — 它意味着这是 sidebar 的拖拽,
+  // 走远端路径更可靠(本地 File 可能因为沙箱而不可读)。
+  const sidebarPayload = e.dataTransfer?.getData(SIDEBAR_FILE_MIME);
+  if (sidebarPayload) {
+    try {
+      const parsed = JSON.parse(sidebarPayload) as {
+        path?: unknown;
+        name?: unknown;
+      };
+      if (
+        typeof parsed.path === "string" &&
+        typeof parsed.name === "string"
+      ) {
+        emit("filePathDrop", { path: parsed.path, name: parsed.name });
+        return;
+      }
+    } catch {
+      // JSON 解析失败 → 回退到原生 FileList 流程
+    }
+  }
 
   const files = e.dataTransfer?.files;
   if (files && files.length > 0) {

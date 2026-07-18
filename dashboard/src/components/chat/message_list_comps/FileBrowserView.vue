@@ -4,10 +4,11 @@
      so the left pane keeps showing the parent directory while the right
      pane previews a file inside it. -->
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { useSpcodeProjectStatus } from "@/composables/useSpcodeProjectStatus";
 import { useSpcodeFileBrowser } from "@/composables/useSpcodeFileBrowser";
+import { useSpcodeFileSearch } from "@/composables/useSpcodeFileSearch";
 import type { SpcodeFileBrowserEntry } from "@/composables/parseSpcodeFileBrowser";
 import type { UseSpcodeGitLog } from "@/composables/useSpcodeGitLog";
 import type { UseSpcodeGitShow } from "@/composables/useSpcodeGitShow";
@@ -28,8 +29,6 @@ const props = defineProps<{
   isDark?: boolean;
   /** Current worktree root (parent computes: selectedWorktree ?? mainWorktreePath). null = project not loaded. */
   rootPath: string | null;
-  /** When true, the search panel is mounted at the top of the view and replaces the file tree. */
-  searchOpen?: boolean;
   /**
    * 2026-07-02 sidebar-search: 1-based line number to center in the
    * file preview after a search-result click. null = no scroll.
@@ -78,7 +77,6 @@ const emit = defineEmits<{
     payload: { dirPath: string; previewPath: string | null },
   ): void;
   (e: "open-file", p: { path: string; line: number }): void;
-  (e: "update:searchOpen", v: boolean): void;
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -176,9 +174,15 @@ function onPreviewTargetNavigate(resolvedTarget: string): void {
 }
 
 /** Search-result click: same dirty guard as the other navigation
- *  entry points before the event bubbles up to the sidebar. */
+ *  entry points before the event bubbles up to the sidebar.
+ *  2026-07-18: closing the panel moved in from the sidebar's
+ *  onFileOpen — the SearchPanel REPLACES the file-browser body, so
+ *  it must close to reveal the file the user just picked. Declining
+ *  the dirty-edit confirm keeps the panel open so the user can pick
+ *  a different result (same as DocumentManager). */
 function onSearchOpenFile(p: { path: string; line: number }): void {
   if (!confirmLeaveEditing()) return;
+  searchOpen.value = false;
   emit("open-file", p);
 }
 
@@ -467,7 +471,157 @@ function onPreviewDeleted(): void {
   emit("navigate", { dirPath: props.currentPath, previewPath: null });
 }
 
+// ── Workspace search (2026-07-18 workspace-search-parity) ────────
+// The search toolbar (toggle + inline input) moved IN from
+// GitDiffSidebar so it travels with the file-area fullscreen
+// Teleport — previously the toolbar stayed behind in the sidebar
+// and the fullscreen overlay had no search affordance. Structure
+// mirrors DocumentManager's docs search: the shared `query` ref
+// from the singleton composable is bound to the input via :value +
+// @input (the composable owns the 300ms debounce), and SearchPanel
+// reads the same ref for its results UI.
+//
+// searchOpen is still persisted to localStorage under the same key
+// the sidebar used, so existing users keep their panel state across
+// reloads. (DocumentManager deliberately does NOT persist its panel
+// state; the workspace view has persisted since 2026-07-02 and we
+// keep that behavior rather than regressing it.)
+const SEARCH_OPEN_STORAGE_KEY = "astrbot.spcode.gitDiffSidebar.searchOpen";
+
+/** Load the persisted panel state; any value other than the literal
+ *  "true" (including absent / storage-disabled) starts collapsed. */
+function loadSearchOpen(): boolean {
+  try {
+    return localStorage.getItem(SEARCH_OPEN_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+const searchOpen = ref<boolean>(loadSearchOpen());
+
+const { query: fileSearchQuery, search: fileSearchSearch } =
+  useSpcodeFileSearch();
+const searchInputRef = ref<HTMLInputElement | null>(null);
+
+/** Push the current umo/worktree into the composable so the debounced
+ *  search re-fires with the right routing context after a toolbar
+ *  keystroke. Idempotent (the composable stores the last values) —
+ *  mirrors the priming call in SearchPanel.vue / DocumentManager. */
+function primeFileSearch(): void {
+  void fileSearchSearch({
+    umo: props.umo ?? null,
+    worktree: props.worktree ?? null,
+    pattern: "",
+  });
+}
+primeFileSearch();
+
+/** Single watcher for the panel toggle: persist the state, and on
+ *  open re-prime (umo/worktree may have changed while closed) then
+ *  auto-focus the input; on close clear the shared query (which
+ *  resets the composable's results state to idle). */
+watch(searchOpen, async (open) => {
+  try {
+    localStorage.setItem(SEARCH_OPEN_STORAGE_KEY, String(open));
+  } catch {
+    /* localStorage may be unavailable (private mode) — non-fatal */
+  }
+  if (open) {
+    primeFileSearch();
+    await nextTick();
+    searchInputRef.value?.focus();
+  } else {
+    fileSearchQuery.value = "";
+  }
+});
+
+/** Wire native input events to the shared ref (:value + @input, not
+ *  v-model — the query is singleton state owned by the composable,
+ *  not local to this component). */
+function onSearchInput(e: Event): void {
+  fileSearchQuery.value = (e.target as HTMLInputElement).value;
+}
+
+/** Esc on the input closes the panel. stopPropagation keeps the
+ *  capture-phase onKeyDown fallback below from re-handling the same
+ *  keypress. */
+function onSearchClose(e: KeyboardEvent): void {
+  e.stopPropagation();
+  searchOpen.value = false;
+}
+
+// ── File-area fullscreen (2026-07-18, elecvoid243) ───────────────
+// Teleports the whole view (breadcrumb topbar + tree/preview/history
+// panes) to <body> and pins it `position: fixed; inset: 0`. NOT
+// persisted — each mount starts embedded in the sidebar. Mirrors
+// DocumentManager's overlay pattern (z-index 9999 sits above the
+// sidebar's own global fullscreen at 1300) so the two modes can
+// nest: the file area covers the viewport, Esc peels back one layer
+// at a time.
+const isFullscreen = ref<boolean>(false);
+
+function toggleFullscreen(): void {
+  isFullscreen.value = !isFullscreen.value;
+}
+
+/** Capture-phase document keydown handler (registered on mount).
+ *  Owns three shortcuts, mirroring DocumentManager's onKeyDown:
+ *
+ *  1. Esc exits the file-area fullscreen. Registered in the CAPTURE
+ *     phase so it runs before GitDiffSidebar's global-fullscreen
+ *     Escape handler (bubble phase) — when both fullscreen modes are
+ *     active, Esc only exits this inner overlay. stopPropagation()
+ *     keeps the sidebar's handler from also firing.
+ *  2. Cmd/Ctrl+F toggles the search panel (preventDefault beats the
+ *     browser's native find-in-page). Registered here rather than in
+ *     GitDiffSidebar because this component only exists while
+ *     viewMode === "files", so the shortcut can never race the
+ *     diff/history/docs views (DocumentManager owns its own).
+ *  3. Esc closes the search panel as a FALLBACK when focus is
+ *     outside the panel and the toolbar input — SearchPanel and the
+ *     input each have their own Esc handlers that run first (the
+ *     input's uses .stop), so this branch only fires when focus has
+ *     drifted elsewhere (e.g. the breadcrumb after a result click). */
+function onKeyDown(e: KeyboardEvent): void {
+  if (e.key === "Escape" && isFullscreen.value) {
+    e.stopPropagation();
+    isFullscreen.value = false;
+    return;
+  }
+  const isMod = e.metaKey || e.ctrlKey;
+  if (isMod && (e.key === "f" || e.key === "F")) {
+    e.preventDefault();
+    searchOpen.value = !searchOpen.value;
+  } else if (e.key === "Escape" && searchOpen.value) {
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      !target.closest(".search-panel") &&
+      !target.closest(".file-browser-search-input")
+    ) {
+      searchOpen.value = false;
+    }
+  }
+}
+
+/** Body scroll lock while fullscreen is on (same pattern as
+ *  DocumentManager / DiffPreview): the fixed overlay never scrolls
+ *  with the page, so the underlying <body> is frozen instead. The
+ *  empty-string reset restores the browser default on exit. */
+watch(isFullscreen, (v) => {
+  document.body.style.overflow = v ? "hidden" : "";
+});
+
+onMounted(() => {
+  document.addEventListener("keydown", onKeyDown, true);
+});
+
 onBeforeUnmount(() => {
+  document.removeEventListener("keydown", onKeyDown, true);
+  // Release the scroll lock if the sidebar closes mid-fullscreen.
+  if (isFullscreen.value) {
+    document.body.style.overflow = "";
+  }
   // If user is mid-drag on either divider, release cleanly.
   if (isResizing.value) onMouseUp();
   if (historySplit.isResizing.value) {
@@ -488,241 +642,329 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="file-browser-view">
-    <!-- 2026-07-02: breadcrumb lifted out of the v-if="!searchOpen"
-         block so it stays visible even while the search panel is
-         open. Previously the SearchPanel REPLACED the file browser
-         entirely (including the breadcrumb), so the user had to
-         close the search panel before they could navigate to a
-         different directory. Now the breadcrumb is always rendered
-         at the top of the file browser (when the project is loaded),
-         and the user can click a segment to switch paths without
-         touching the search panel. The SearchPanel and the
-         file-list/preview body remain mutually exclusive below. -->
-    <FileBrowserBreadcrumb
-      v-if="spcodeStatus.status.value.loaded"
-      :current-path="breadcrumbPath"
-      :root-path="rootPath"
-      :preview-path="props.previewPath"
-      :is-dark="!!isDark"
-      @navigate="onBreadcrumbNavigate"
-    />
-    <SearchPanel
-      v-if="props.searchOpen"
-      :model-value="props.searchOpen"
-      :worktree="props.worktree ?? null"
-      :umo="props.umo ?? null"
-      @update:model-value="emit('update:searchOpen', $event)"
-      @open-file="onSearchOpenFile"
-    />
-    <template v-else>
-      <div v-if="!spcodeStatus.status.value.loaded" class="file-browser-empty">
-        <v-icon size="36" color="grey">mdi-folder-open-outline</v-icon>
-        <span class="empty-text">{{
-          tm("spcodeProjectLoad.fileBrowser.placeholder")
-        }}</span>
-      </div>
+  <!--
+    2026-07-18 file-area fullscreen: escape the sidebar by teleporting
+    the root to <body> while fullscreen is on, then position it fixed
+    inset 0 (see .file-browser-view.is-fullscreen). The `:disabled`
+    flag keeps the same component tree in-place when fullscreen is
+    off — Vue 3's Teleport becomes a transparent pass-through, so the
+    sidebar-body layout is untouched on the normal-render path. No
+    duplicated templates, no duplicated refs, no duplicated state.
+    (Pattern mirrors DocumentManager / DiffPreview.)
+  -->
+  <Teleport to="body" :disabled="!isFullscreen">
+    <div class="file-browser-view" :class="{ 'is-fullscreen': isFullscreen }">
+      <!-- 2026-07-18 workspace-search-parity: search toolbar (toggle +
+           inline input) moved IN from GitDiffSidebar so it travels
+           with the fullscreen Teleport — the sidebar's own toolbar
+           used to stay behind, leaving the overlay with no search
+           affordance. Sits ABOVE the breadcrumb topbar (same order
+           the sidebar had, and the same layout DocumentManager uses).
+           The input binds the shared `fileSearchQuery` ref via :value
+           + @input; the composable owns the 300ms debounce. Esc on
+           the input closes the panel (stopPropagation prevents the
+           capture-phase fallback from also firing). Gated on the
+           project being loaded, same as the topbar below. -->
       <div
-        v-else
-        ref="bodyRef"
-        class="file-browser-body"
-        :class="{
-          resizing: isResizing || historySplit.isResizing.value,
-          'left-collapsed': isLeftPaneCollapsed,
-          'history-collapsed': isHistoryCollapsed,
-        }"
+        v-if="spcodeStatus.status.value.loaded"
+        class="file-browser-search-toolbar"
+        data-testid="file-browser-search-toolbar"
       >
-        <!-- Expand handle: only when collapsed. Placed FIRST in DOM
-               order so it sits at the leftmost position in the flex
-               row. Click to restore the left pane at its previous
-               width (leftPanePercent ref is preserved across collapse).
-
-             2026-07-14: the previous incarnation stacked a chevron
-             and a vertical-text label inside a 24px-wide, fully
-             transparent strip. The vertical label forced the button
-             to grow to ~90–255px tall (zh-CN ≈ 90px, en-US ≈ 225px,
-             ru-RU ≈ 255px — see the 2026-07-09 author comment).
-             When the surrounding container was short (e.g. inside
-             the diff-preview fullscreen overlay where the body can
-             be only ~100px tall), the label overflowed the button,
-             rendering on top of the breadcrumb above and making
-             the affordance look like floating text. This rewrite
-             keeps the chevron only and drops the vertical label;
-             the i18n string is still surfaced via the native
-             `title` tooltip on hover / focus, so accessibility is
-             unchanged. A subtle primary-tinted background gives
-             the handle visual chrome so it no longer reads as
-             floating glyphs. -->
-        <button
-          v-if="isLeftPaneCollapsed"
-          type="button"
-          class="file-browser-expand-handle"
-          :title="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
-          :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
-          @click="isLeftPaneCollapsed = false"
+        <v-btn
+          icon
+          size="small"
+          variant="text"
+          :class="['file-browser-search-toggle', { 'is-active': searchOpen }]"
+          :title="tm('spcodeProjectLoad.diffSidebar.search.button')"
+          :aria-label="tm('spcodeProjectLoad.diffSidebar.search.button')"
+          @click="searchOpen = !searchOpen"
         >
-          <v-icon size="16" class="file-browser-expand-handle-icon"
-            >mdi-chevron-double-right</v-icon
-          >
-        </button>
-
-        <!-- Left pane wrapper: holds the entry list AND the collapse
-               button. `position: relative` so the absolutely-positioned
-               collapse button anchors to the pane's top-right. v-show
-               preserves the inline `width` style so collapse ↔ expand
-               animations are smooth. -->
+          <v-icon size="16">mdi-magnify</v-icon>
+        </v-btn>
+        <input
+          v-if="searchOpen"
+          ref="searchInputRef"
+          :value="fileSearchQuery"
+          type="text"
+          class="file-browser-search-input"
+          :placeholder="tm('spcodeProjectLoad.diffSidebar.search.placeholder')"
+          spellcheck="false"
+          autocomplete="off"
+          @input="onSearchInput"
+          @keydown.escape.stop="onSearchClose"
+        />
+      </div>
+      <!-- 2026-07-18: topbar = breadcrumb (flex 1) + the file-area
+           fullscreen toggle pinned to the right edge. The bar's own
+           bottom hairline replaces the breadcrumb's (overridden below)
+           so the divider runs under the button as well. The whole bar
+           is gated on the project being loaded (same condition the
+           breadcrumb used to carry), which also hides the fullscreen
+           affordance when there is nothing to browse. -->
+      <div
+        v-if="spcodeStatus.status.value.loaded"
+        class="file-browser-topbar"
+      >
+        <!-- 2026-07-02: breadcrumb lifted out of the v-if="!searchOpen"
+           block so it stays visible even while the search panel is
+           open. Previously the SearchPanel REPLACED the file browser
+           entirely (including the breadcrumb), so the user had to
+           close the search panel before they could navigate to a
+           different directory. Now the breadcrumb is always rendered
+           at the top of the file browser (when the project is loaded),
+           and the user can click a segment to switch paths without
+           touching the search panel. The SearchPanel and the
+           file-list/preview body remain mutually exclusive below. -->
+        <FileBrowserBreadcrumb
+          class="file-browser-topbar-breadcrumb"
+          :current-path="breadcrumbPath"
+          :root-path="rootPath"
+          :preview-path="props.previewPath"
+          :is-dark="!!isDark"
+          @navigate="onBreadcrumbNavigate"
+        />
+        <!-- File-area fullscreen toggle (2026-07-18). Icon-only v-btn
+             matching the sidebar header chrome; the icon swaps between
+             mdi-fullscreen / mdi-fullscreen-exit with the state. -->
+        <v-btn
+          class="file-browser-fullscreen-btn"
+          :icon="isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
+          size="small"
+          variant="text"
+          :aria-pressed="isFullscreen"
+          :aria-label="
+            tm(
+              isFullscreen
+                ? 'spcodeProjectLoad.fileBrowser.fullscreen.exit'
+                : 'spcodeProjectLoad.fileBrowser.fullscreen.enter',
+            )
+          "
+          :title="
+            tm(
+              isFullscreen
+                ? 'spcodeProjectLoad.fileBrowser.fullscreen.exit'
+                : 'spcodeProjectLoad.fileBrowser.fullscreen.enter',
+            )
+          "
+          @click="toggleFullscreen"
+        />
+      </div>
+      <SearchPanel
+        v-if="searchOpen"
+        v-model="searchOpen"
+        :worktree="props.worktree ?? null"
+        :umo="props.umo ?? null"
+        @open-file="onSearchOpenFile"
+      />
+      <template v-else>
+        <div v-if="!spcodeStatus.status.value.loaded" class="file-browser-empty">
+          <v-icon size="36" color="grey">mdi-folder-open-outline</v-icon>
+          <span class="empty-text">{{
+            tm("spcodeProjectLoad.fileBrowser.placeholder")
+          }}</span>
+        </div>
         <div
-          v-show="!isLeftPaneCollapsed"
-          class="file-browser-pane-left"
-          :style="{ width: leftPanePercent + '%' }"
+          v-else
+          ref="bodyRef"
+          class="file-browser-body"
+          :class="{
+            resizing: isResizing || historySplit.isResizing.value,
+            'left-collapsed': isLeftPaneCollapsed,
+            'history-collapsed': isHistoryCollapsed,
+          }"
         >
-          <FileTreeList
-            :state="dirComposable.state.value"
-            :selected-path="previewPath"
-            :root-path="rootPath"
-            :preview-path="previewPath"
-            :is-dark="!!isDark"
-            :breadcrumb="false"
-            @navigate="onEntryNavigate"
-            @breadcrumb-navigate="onBreadcrumbNavigate"
-          />
-          <!-- 2026-07-17: always rendered (previously
-               v-if="previewPath" hid it until a file was selected,
-               which made the collapse affordance undiscoverable
-               on a fresh workspace). -->
+          <!-- Expand handle: only when collapsed. Placed FIRST in DOM
+                 order so it sits at the leftmost position in the flex
+                 row. Click to restore the left pane at its previous
+                 width (leftPanePercent ref is preserved across collapse).
+
+               2026-07-14: the previous incarnation stacked a chevron
+               and a vertical-text label inside a 24px-wide, fully
+               transparent strip. The vertical label forced the button
+               to grow to ~90–255px tall (zh-CN ≈ 90px, en-US ≈ 225px,
+               ru-RU ≈ 255px — see the 2026-07-09 author comment).
+               When the surrounding container was short (e.g. inside
+               the diff-preview fullscreen overlay where the body can
+               be only ~100px tall), the label overflowed the button,
+               rendering on top of the breadcrumb above and making
+               the affordance look like floating text. This rewrite
+               keeps the chevron only and drops the vertical label;
+               the i18n string is still surfaced via the native
+               `title` tooltip on hover / focus, so accessibility is
+               unchanged. A subtle primary-tinted background gives
+               the handle visual chrome so it no longer reads as
+               floating glyphs. -->
           <button
+            v-if="isLeftPaneCollapsed"
             type="button"
-            class="file-browser-collapse-btn"
-            :title="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
-            :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
-            @click="isLeftPaneCollapsed = true"
+            class="file-browser-expand-handle"
+            :title="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
+            :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.expand')"
+            @click="isLeftPaneCollapsed = false"
           >
-            <v-icon size="14">mdi-chevron-double-left</v-icon>
+            <v-icon size="16" class="file-browser-expand-handle-icon"
+              >mdi-chevron-double-right</v-icon
+            >
+          </button>
+
+          <!-- Left pane wrapper: holds the entry list AND the collapse
+                 button. `position: relative` so the absolutely-positioned
+                 collapse button anchors to the pane's top-right. v-show
+                 preserves the inline `width` style so collapse ↔ expand
+                 animations are smooth. -->
+          <div
+            v-show="!isLeftPaneCollapsed"
+            class="file-browser-pane-left"
+            :style="{ width: leftPanePercent + '%' }"
+          >
+            <FileTreeList
+              :state="dirComposable.state.value"
+              :selected-path="previewPath"
+              :root-path="rootPath"
+              :preview-path="previewPath"
+              :is-dark="!!isDark"
+              :breadcrumb="false"
+              @navigate="onEntryNavigate"
+              @breadcrumb-navigate="onBreadcrumbNavigate"
+            />
+            <!-- 2026-07-17: always rendered (previously
+                 v-if="previewPath" hid it until a file was selected,
+                 which made the collapse affordance undiscoverable
+                 on a fresh workspace). -->
+            <button
+              type="button"
+              class="file-browser-collapse-btn"
+              :title="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
+              :aria-label="tm('spcodeProjectLoad.fileBrowser.pane.collapse')"
+              @click="isLeftPaneCollapsed = true"
+            >
+              <v-icon size="14">mdi-chevron-double-left</v-icon>
+            </button>
+          </div>
+
+          <div
+            v-show="!isLeftPaneCollapsed"
+            class="file-browser-divider"
+            role="separator"
+            aria-orientation="vertical"
+            :aria-valuenow="Math.round(leftPanePercent)"
+            aria-valuemin="15"
+            aria-valuemax="70"
+            @mousedown="startResize"
+          />
+
+          <!-- Right pane: when collapsed, suppress the inline width
+                 (rely on flex: 1 1 auto to fill the remaining space
+                 after the expand handle). Otherwise size to the
+                 complement of leftPanePercent. -->
+          <!--
+            Right pane: 2026-07-15 width is now driven by flex (the
+            middle item in a row of left-pane / preview / history).
+            Earlier revisions calculated `100 - leftPanePercent%` and
+            applied it inline, which broke as soon as a third pane
+            (the per-file history) was added — the history pane
+            would have eaten into the preview width silently. With
+            `flex: 1 1 auto` on `.file-browser-pane-right`, the
+            preview automatically takes whatever space remains after
+            the tree pane and history pane (and their dividers)
+            have claimed theirs.
+          -->
+          <FileBrowserFilePreview
+            v-if="previewPath"
+            ref="previewRef"
+            class="file-browser-pane-right"
+            :state="previewComposable.state.value"
+            :is-dark="!!isDark"
+            :scroll-to-line="props.scrollToLine ?? null"
+            :selected-revision="selectedRevision"
+            :view-mode="viewMode"
+            :historical-content="historicalFileContent"
+            :historical-is-binary="historicalIsBinary"
+            :diff-patch="diffPatch"
+            :diff-is-binary="diffIsBinary"
+            :file-relative-path="gitLogPath"
+            :worktree="props.worktree ?? null"
+            @navigate-target="onPreviewTargetNavigate"
+            @retry="() => previewComposable.refresh()"
+            @saved="() => previewComposable.refresh()"
+            @renamed="onPreviewRenamed"
+            @deleted="onPreviewDeleted"
+            @back-to-current="onBackToCurrent"
+          />
+          <div v-else class="file-browser-pane-right file-browser-preview-empty">
+            <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
+            <span class="preview-hint">
+              {{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}
+            </span>
+          </div>
+
+          <!--
+            2026-07-15 workspace-history-parity: per-file commit list
+            shown on the right edge of the body, mirroring the
+            right-edge pane in <DocumentManager>. Reuses
+            <DocumentHistoryPanel> verbatim and reads from the same
+            `useSpcodeGitLog` instance the History sub-tab uses — so
+            selecting a different file in the preview re-fetches the
+            history for just that file, with no extra wiring.
+
+            Both dividers (tree + history) reuse the .file-browser-divider
+            base styles; the history one opts out of `v-show` when the
+            pane is collapsed via `.history-collapsed` on the parent.
+            Mirrors DocumentManager's `.document-manager__divider--history`
+            pattern (border-left, hover band).
+          -->
+          <div
+            v-show="!isHistoryCollapsed"
+            class="file-browser-divider file-browser-divider--history"
+            role="separator"
+            aria-orientation="vertical"
+            :aria-valuenow="Math.round(historySplit.percent.value)"
+            aria-valuemin="15"
+            aria-valuemax="40"
+            @mousedown="historySplit.startResize"
+          />
+          <div
+            v-show="!isHistoryCollapsed"
+            class="file-browser-history"
+            :style="{ width: historySplit.percent.value + '%' }"
+          >
+            <DocumentHistoryPanel
+              :git-log="gitLog"
+              :file-relative="gitLogPath"
+              :current-revision="selectedRevision"
+              :is-loading="gitLog.state.value.kind === 'loading'"
+              @select-revision="onHistorySelectRevision"
+              @compare-current="onHistoryCompareCurrent"
+              @collapse="isHistoryCollapsed = true"
+            />
+          </div>
+
+          <!--
+            History expand handle: shown only when the history pane
+            is collapsed. Sits at the rightmost flex position so the
+            user can restore the pane at its previous width. Mirrors
+            the left expand handle (same .file-browser-expand-handle
+            base; --history modifier swaps the chevron direction and
+            the border side).
+          -->
+          <button
+            v-if="isHistoryCollapsed"
+            type="button"
+            class="file-browser-expand-handle file-browser-expand-handle--history"
+            :title="tm('spcodeProjectLoad.documentManager.pane.expandHistory')"
+            :aria-label="
+              tm('spcodeProjectLoad.documentManager.pane.expandHistory')
+            "
+            @click="isHistoryCollapsed = false"
+          >
+            <v-icon size="16" class="file-browser-expand-handle-icon"
+              >mdi-chevron-double-left</v-icon
+            >
           </button>
         </div>
-
-        <div
-          v-show="!isLeftPaneCollapsed"
-          class="file-browser-divider"
-          role="separator"
-          aria-orientation="vertical"
-          :aria-valuenow="Math.round(leftPanePercent)"
-          aria-valuemin="15"
-          aria-valuemax="70"
-          @mousedown="startResize"
-        />
-
-        <!-- Right pane: when collapsed, suppress the inline width
-               (rely on flex: 1 1 auto to fill the remaining space
-               after the expand handle). Otherwise size to the
-               complement of leftPanePercent. -->
-        <!--
-          Right pane: 2026-07-15 width is now driven by flex (the
-          middle item in a row of left-pane / preview / history).
-          Earlier revisions calculated `100 - leftPanePercent%` and
-          applied it inline, which broke as soon as a third pane
-          (the per-file history) was added — the history pane
-          would have eaten into the preview width silently. With
-          `flex: 1 1 auto` on `.file-browser-pane-right`, the
-          preview automatically takes whatever space remains after
-          the tree pane and history pane (and their dividers)
-          have claimed theirs.
-        -->
-        <FileBrowserFilePreview
-          v-if="previewPath"
-          ref="previewRef"
-          class="file-browser-pane-right"
-          :state="previewComposable.state.value"
-          :is-dark="!!isDark"
-          :scroll-to-line="props.scrollToLine ?? null"
-          :selected-revision="selectedRevision"
-          :view-mode="viewMode"
-          :historical-content="historicalFileContent"
-          :historical-is-binary="historicalIsBinary"
-          :diff-patch="diffPatch"
-          :diff-is-binary="diffIsBinary"
-          :file-relative-path="gitLogPath"
-          :worktree="props.worktree ?? null"
-          @navigate-target="onPreviewTargetNavigate"
-          @retry="() => previewComposable.refresh()"
-          @saved="() => previewComposable.refresh()"
-          @renamed="onPreviewRenamed"
-          @deleted="onPreviewDeleted"
-          @back-to-current="onBackToCurrent"
-        />
-        <div v-else class="file-browser-pane-right file-browser-preview-empty">
-          <v-icon size="32" color="grey">mdi-folder-open-outline</v-icon>
-          <span class="preview-hint">
-            {{ tm("spcodeProjectLoad.fileBrowser.preview.selectFromLeft") }}
-          </span>
-        </div>
-
-        <!--
-          2026-07-15 workspace-history-parity: per-file commit list
-          shown on the right edge of the body, mirroring the
-          right-edge pane in <DocumentManager>. Reuses
-          <DocumentHistoryPanel> verbatim and reads from the same
-          `useSpcodeGitLog` instance the History sub-tab uses — so
-          selecting a different file in the preview re-fetches the
-          history for just that file, with no extra wiring.
-
-          Both dividers (tree + history) reuse the .file-browser-divider
-          base styles; the history one opts out of `v-show` when the
-          pane is collapsed via `.history-collapsed` on the parent.
-          Mirrors DocumentManager's `.document-manager__divider--history`
-          pattern (border-left, hover band).
-        -->
-        <div
-          v-show="!isHistoryCollapsed"
-          class="file-browser-divider file-browser-divider--history"
-          role="separator"
-          aria-orientation="vertical"
-          :aria-valuenow="Math.round(historySplit.percent.value)"
-          aria-valuemin="15"
-          aria-valuemax="40"
-          @mousedown="historySplit.startResize"
-        />
-        <div
-          v-show="!isHistoryCollapsed"
-          class="file-browser-history"
-          :style="{ width: historySplit.percent.value + '%' }"
-        >
-          <DocumentHistoryPanel
-            :git-log="gitLog"
-            :file-relative="gitLogPath"
-            :current-revision="selectedRevision"
-            :is-loading="gitLog.state.value.kind === 'loading'"
-            @select-revision="onHistorySelectRevision"
-            @compare-current="onHistoryCompareCurrent"
-            @collapse="isHistoryCollapsed = true"
-          />
-        </div>
-
-        <!--
-          History expand handle: shown only when the history pane
-          is collapsed. Sits at the rightmost flex position so the
-          user can restore the pane at its previous width. Mirrors
-          the left expand handle (same .file-browser-expand-handle
-          base; --history modifier swaps the chevron direction and
-          the border side).
-        -->
-        <button
-          v-if="isHistoryCollapsed"
-          type="button"
-          class="file-browser-expand-handle file-browser-expand-handle--history"
-          :title="tm('spcodeProjectLoad.documentManager.pane.expandHistory')"
-          :aria-label="
-            tm('spcodeProjectLoad.documentManager.pane.expandHistory')
-          "
-          @click="isHistoryCollapsed = false"
-        >
-          <v-icon size="16" class="file-browser-expand-handle-icon"
-            >mdi-chevron-double-left</v-icon
-          >
-        </button>
-      </div>
-    </template>
-  </div>
+      </template>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -731,6 +973,90 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+/* 2026-07-18 file-area fullscreen: topbar = breadcrumb (flex 1) +
+   the fullscreen toggle pinned to the right edge. The hairline that
+   used to sit on the breadcrumb itself moves up to the bar so the
+   divider also runs under the button. */
+.file-browser-topbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border-bottom: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.08));
+}
+.file-browser-topbar .file-browser-topbar-breadcrumb {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Two-class specificity so this beats the component's own scoped
+     `.file-browser-breadcrumb { border-bottom }` regardless of
+     stylesheet injection order. */
+  border-bottom: none;
+}
+.file-browser-fullscreen-btn {
+  flex: 0 0 auto;
+  margin-right: 4px;
+}
+/* 2026-07-18 workspace-search-parity: search toolbar (toggle + input).
+   Visual spec mirrors DocumentManager's __search-toolbar (which itself
+   mirrors the sidebar's old files-toolbar) so all three search UIs
+   read identically. */
+.file-browser-search-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  flex-shrink: 0;
+}
+.file-browser-search-toggle.is-active {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+}
+/* Inline search input. flex:1 takes the remaining horizontal space
+   (the toggle button is the only fixed-width sibling). Border, radius,
+   and focus ring align with chat's input fields (radius 8px, primary
+   16% ring). min-width:0 lets the input shrink below its intrinsic
+   content width inside the flex row. */
+.file-browser-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.2));
+  border-radius: 8px;
+  outline: none;
+  background: rgb(var(--v-theme-surface));
+  padding: 5px 10px;
+  font-size: 13px;
+  color: rgb(var(--v-theme-on-surface));
+  font-family: inherit;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    background 0.14s ease;
+}
+.file-browser-search-input::placeholder {
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
+}
+.file-browser-search-input:focus {
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.16);
+}
+/* True viewport fullscreen (2026-07-18). The Teleport wrapper in
+   <template> moves this element to <body> while fullscreen is on;
+   CSS then positions it `fixed; inset: 0` so it covers the entire
+   viewport — not just the .git-diff-sidebar-body that normally
+   hosts the file browser. z-index 9999 matches DocumentManager's
+   overlay and sits above the sidebar's global fullscreen (1300),
+   so the two modes can nest (file area covers the viewport; Esc
+   peels back one layer at a time). The existing inner layout rules
+   (flex-column root, flex-row body) keep working unchanged. */
+.file-browser-view.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  width: 100%;
+  height: 100%;
+  background: rgb(var(--v-theme-background));
 }
 .file-browser-body {
   display: flex;

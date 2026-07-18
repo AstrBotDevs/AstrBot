@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { fileApi } from '@/api/v1';
+import { fileApi, pluginExtensionApi } from '@/api/v1';
 
 export interface StagedFileInfo {
     attachment_id: string;
@@ -8,6 +8,22 @@ export interface StagedFileInfo {
     url: string;  // blob URL for preview
     type: string;  // image, record, file, video
     signature?: string;
+}
+
+/**
+ * 2026-07-18 drag-to-chat (elecvoid243): the inner payload of
+ * GET /spcode/file-browser for a file. pluginExtensionApi.get
+ * returns the response wrapped in `ApiEnvelope<{ status, data }>`,
+ * and we want to type-check the inner `data` shape — same pattern
+ * as `useSpcodeNewFileLineCounts.ts:FileBrowserFilePayload`. We
+ * only model the file-relevant fields; the rest (directory /
+ * symlink snapshots, meta blocks) are ignored.
+ */
+interface FileBrowserFilePayload {
+    type?: string | null;
+    is_binary?: boolean | null;
+    content?: string | null;
+    reason?: string | null;
 }
 
 export function useMediaHandling() {
@@ -88,6 +104,64 @@ export function useMediaHandling() {
 
     async function processAndUploadFile(file: File) {
         return uploadStagedFile(file);
+    }
+
+    /**
+     * 2026-07-18 drag-to-chat (elecvoid243): upload a file by its
+     * server-side path instead of a browser `File` object. Used by
+     * the sidebar file-browser drop flow — the user drags a row
+     * from the workspace / document-manager tree directly onto the
+     * chat input, and the chat input forwards `{ path, name }` to
+     * the parent, which calls this helper.
+     *
+     * Pipeline:
+     *   1. GET /spcode/file-browser?path=<path> — fetch the file
+     *      content. The endpoint is stateless and worktree-scoped
+     *      implicitly via the agent's loaded project, so we don't
+     *      need to pass umo / worktree.
+     *   2. If the response is `is_binary: true` (or `content` is
+     *      null for any reason), short-circuit with `undefined`
+     *      and let the caller show a toast. The "+ → Upload Files"
+     *      button accepts binary files because the user can pick
+     *      them from disk, but our drop flow is text-only (the
+     *      file-browser endpoint never returns binary blobs).
+     *   3. Wrap the content in a `File` and delegate to the
+     *      existing `uploadStagedFile` so signature dedup, blob
+     *      URL, and the upload POST all behave identically to the
+     *      regular click-to-upload path.
+     *
+     * The signature is computed against the wrapped `File` (same
+     * as the click path), so dropping the same file twice via
+     * either entry point is deduped against the same hash bucket.
+     */
+    async function processAndUploadFileFromPath(
+        path: string,
+        name: string,
+    ): Promise<StagedFileInfo | undefined> {
+        if (!path || !name) return undefined;
+        try {
+            const resp = await pluginExtensionApi.get<FileBrowserFilePayload>(
+                'spcode/file-browser',
+                { params: { path } },
+            );
+            const data = resp.data?.data;
+            if (!data || data.type !== 'file' || data.is_binary === true) {
+                return undefined;
+            }
+            if (typeof data.content !== 'string') {
+                return undefined;
+            }
+            // Build a File object from the text content. The MIME
+            // type is left empty so the backend's own type-detection
+            // (used in fileApi.upload) drives the final StagedFileInfo
+            // type field — matching how the regular click-upload path
+            // behaves for files with no extension / unknown MIME.
+            const file = new File([data.content], name, { type: '' });
+            return uploadStagedFile(file);
+        } catch (err) {
+            console.error('Error fetching file from path:', err);
+            return undefined;
+        }
     }
 
     async function handlePaste(event: ClipboardEvent) {
@@ -199,6 +273,9 @@ export function useMediaHandling() {
         getMediaFile,
         processAndUploadImage,
         processAndUploadFile,
+        // 2026-07-18 drag-to-chat (elecvoid243): sidebar file-browser
+        // drop upload. See helper docstring above for the full flow.
+        processAndUploadFileFromPath,
         handlePaste,
         removeImage,
         removeAudio,

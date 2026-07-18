@@ -456,6 +456,13 @@ async function onSearchOpenFile(p: {
  *  keydown still fires after the root is teleported to <body>; the
  *  `isFullscreen` guard filters out the non-overlay case.
  *
+ *  2026-07-18: the listener now runs in the CAPTURE phase and the
+ *  fullscreen branch calls stopPropagation(). GitDiffSidebar's global
+ *  fullscreen Escape handler lives on `document` in the bubble phase,
+ *  so without this an Esc press with BOTH modes active would tear
+ *  down the sidebar-wide fullscreen too — capture + stopPropagation
+ *  makes Esc peel back only this inner overlay.
+ *
  *  2026-07-17 docs-search: the same listener also owns the search
  *  shortcuts — Cmd/Ctrl+F toggles the panel, Esc closes it when
  *  focus is outside the toolbar input / panel (the input's own
@@ -464,6 +471,7 @@ async function onSearchOpenFile(p: {
  *  viewMode === "docs", so the two never race. */
 function onKeyDown(e: KeyboardEvent): void {
   if (e.key === "Escape" && isFullscreen.value) {
+    e.stopPropagation();
     exitFullscreen();
     return;
   }
@@ -482,7 +490,7 @@ function onKeyDown(e: KeyboardEvent): void {
     }
   }
 }
-onMounted(() => document.addEventListener("keydown", onKeyDown));
+onMounted(() => document.addEventListener("keydown", onKeyDown, true));
 
 // ── Copy content (2026-07-17 docs-copy-btn) ───────────────────────
 // Mirrors FileBrowserFilePreview's copy affordance: copies the raw
@@ -1069,7 +1077,7 @@ function closeCommentEditor(): void {
  *  doesn't matter — splitting them would just produce more Vue
  *  lifecycle overhead. */
 onBeforeUnmount(() => {
-  document.removeEventListener("keydown", onKeyDown);
+  document.removeEventListener("keydown", onKeyDown, true);
   if (isFullscreen.value) {
     document.body.style.overflow = "";
   }
@@ -1131,6 +1139,35 @@ onBeforeUnmount(() => {
             {{ p.label }}
           </button>
         </div>
+        <!-- 2026-07-18 file-area fullscreen (elecvoid243): re-add the
+             toggle that drives the long-dormant isFullscreen/Teleport
+             machinery below (the button was dropped in an earlier
+             toolbar rework, leaving the overlay unreachable). Pinned
+             to the right edge of the path row via margin-left:auto;
+             icon-only v-btn matching the sidebar header chrome and
+             the workspace tab's new fullscreen button. -->
+        <v-btn
+          class="document-manager__fullscreen-toggle"
+          :icon="isFullscreen ? 'mdi-fullscreen-exit' : 'mdi-fullscreen'"
+          size="small"
+          variant="text"
+          :aria-pressed="isFullscreen"
+          :aria-label="
+            tm(
+              isFullscreen
+                ? 'spcodeProjectLoad.fileBrowser.fullscreen.exit'
+                : 'spcodeProjectLoad.fileBrowser.fullscreen.enter',
+            )
+          "
+          :title="
+            tm(
+              isFullscreen
+                ? 'spcodeProjectLoad.fileBrowser.fullscreen.exit'
+                : 'spcodeProjectLoad.fileBrowser.fullscreen.enter',
+            )
+          "
+          @click="toggleFullscreen"
+        />
       </div>
       <div
         v-if="pathMissingNotice"
@@ -1938,22 +1975,12 @@ onBeforeUnmount(() => {
   opacity: 0.5;
   cursor: default;
 }
-.document-manager__fullscreen-btn {
-  background: transparent;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 6px;
-  padding: 4px 8px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.7);
-}
-.document-manager__fullscreen-btn[aria-pressed="true"] {
-  background: rgba(var(--v-theme-primary), 0.12);
-  border-color: rgba(var(--v-theme-primary), 0.4);
-  color: rgb(var(--v-theme-primary));
+/* 2026-07-18: pin the re-added fullscreen toggle to the right edge
+   of the path row. Replaces the old labeled __fullscreen-btn styles,
+   which went dead when that button was dropped from the template. */
+.document-manager__fullscreen-toggle {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .document-manager.is-fullscreen {
   /* True viewport fullscreen (spec 2026-07-14 §3.2 + DiffPreview

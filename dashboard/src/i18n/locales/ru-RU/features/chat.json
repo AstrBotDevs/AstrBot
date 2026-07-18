@@ -10,7 +10,8 @@
     "recordingPrompt": "Запись... говорите",
     "chatPrompt": "Давай пообщаемся!",
     "dropToUpload": "Отпустите, чтобы загрузить файл",
-    "stopGenerating": "Остановить генерацию"
+    "stopGenerating": "Остановить генерацию",
+    "uploadSidebarFailed": "Не удалось загрузить {name} из боковой панели"
   },
   "message": {
     "user": "Вы",
@@ -321,6 +322,10 @@
         "diff": "Git Diff"
       },
       "breadcrumbRoot": "Корень проекта",
+      "fullscreen": {
+        "enter": "Файловая область на весь экран",
+        "exit": "Выйти из полноэкранного режима"
+      },
       "loading": "Загрузка…",
       "empty": "Пустая директория",
       "placeholder": "Сначала загрузите проект",

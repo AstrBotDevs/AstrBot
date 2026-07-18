@@ -137,10 +137,12 @@ function countKey(m: SearchMode): string {
 
 <template>
   <div v-if="modelValue" class="search-panel" @keydown="onKeydown">
-    <!-- 2026-07-02 toolbar input: the <input> + close button used to
-         live here. They moved to GitDiffSidebar's files-toolbar so the
-         input is always visible at the top of the sidebar. The mode
-         toggle, status line, and result list stay below. -->
+    <!-- The search <input> + close button used to live here. They now
+         live in the hosting file browser's own search toolbar
+         (FileBrowserView / DocumentManager), so the input is always
+         visible above the panel — and travels with the file-area
+         fullscreen Teleport. The mode toggle, status line, and result
+         list stay below. -->
 
     <div class="search-panel-mode-row">
       <span class="search-panel-mode-label text-caption text-medium-emphasis">

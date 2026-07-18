@@ -223,6 +223,64 @@ onBeforeUnmount(() => {
   resizeObserver?.disconnect();
   resizeObserver = null;
 });
+
+// ── Drag-to-chat (2026-07-18, elecvoid243) ────────────────────────
+// Allows the user to drag a file entry directly onto the chat input
+// to upload it as a message attachment — equivalent to clicking the
+// "+ → Upload Files" button, but with a single gesture.
+//
+// The payload is encoded with a CUSTOM MIME type
+// ("application/x-astrbot-file-path") so the chat input's drop
+// handler can distinguish sidebar files from native OS file drops
+// and route them to the same upload pipeline (`uploadStagedFile`
+// via `useMediaHandling.processAndUploadFileFromPath`).
+//
+// We also set "text/plain" as a fallback because some browsers
+// (and the test in handleDrop) prefer a plain-text payload when
+// the custom type is missing. The chat input treats the custom
+// type as authoritative when both are present.
+//
+// Directories and dangling symlinks are NOT draggable: dropping a
+// directory into the chat input has no well-defined meaning and
+// the file-browser endpoint cannot read a directory's content.
+// Resolved symlinks (entry.type === "file" but the entry was a
+// symlink in the listing) are still draggable — the backend
+// returns the symlink's target as a regular file snapshot.
+
+const SIDEBAR_FILE_MIME = "application/x-astrbot-file-path";
+
+function canDragEntry(entry: SpcodeFileBrowserEntry): boolean {
+  if (entry.type === "file") return true;
+  // Symlink pointing to an existing file: backend returns
+  // type="symlink" with target_exists=true, so we let those
+  // through too — the file-browser endpoint resolves them.
+  if (entry.type === "symlink" && entry.target_exists !== false) return true;
+  return false;
+}
+
+function onEntryDragStart(
+  e: DragEvent,
+  entry: SpcodeFileBrowserEntry,
+): void {
+  if (!canDragEntry(entry)) {
+    e.preventDefault();
+    return;
+  }
+  const payload = JSON.stringify({
+    path: entry.path,
+    name: entry.name,
+    size: entry.size ?? 0,
+  });
+  // Custom type first — this is the one handleDrop checks for.
+  e.dataTransfer?.setData(SIDEBAR_FILE_MIME, payload);
+  // Plain-text fallback so the drag works even in environments
+  // that strip custom MIME types (rare, but cheap insurance).
+  e.dataTransfer?.setData("text/plain", entry.path);
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = "copy";
+    e.dataTransfer.dropEffect = "copy";
+  }
+}
 </script>
 
 <template>
@@ -277,8 +335,11 @@ onBeforeUnmount(() => {
                 'is-dangling':
                   entry.type === 'symlink' && entry.target_exists === false,
                 'is-selected': entry.path === selectedPath,
+                'is-draggable': canDragEntry(entry),
               }"
+              :draggable="canDragEntry(entry)"
               @click="handleClick(entry)"
+              @dragstart="onEntryDragStart($event, entry)"
             >
               <v-icon
                 :icon="TYPE_ICONS[entry.type].icon"
@@ -359,6 +420,19 @@ onBeforeUnmount(() => {
    chat-ui for unselected, non-symlink rows. */
 .file-browser-entry:hover {
   background: rgba(var(--v-theme-on-surface), 0.04);
+}
+/* 2026-07-18: drag-to-chat affordance. Only file / resolved-symlink
+   rows get the grab cursor + a hint icon; directories and dangling
+   symlinks stay `cursor: pointer` (or `not-allowed` for dangling)
+   so the user gets no false "you can drag this" signal. The
+   .is-draggable class is also set in the template so the cursor
+   cue is driven by the same predicate as the actual
+   `draggable="true"` attribute — no risk of drift. */
+.file-browser-entry.is-draggable {
+  cursor: grab;
+}
+.file-browser-entry.is-draggable:active {
+  cursor: grabbing;
 }
 /* Selected entry: the file currently being previewed in the right
    pane. Uses a subtle primary tint so it stays distinct from the
