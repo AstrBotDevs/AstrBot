@@ -208,7 +208,8 @@ class WakingCheckStage(Stage):
                             ),
                         )
                     logger.info(
-                        f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。",
+                        f"User ID {event.get_sender_id()} lacks permission to trigger "
+                        f"{star_map[handler.handler_module_path].name}.",
                     )
                     event.stop_event()
                     return

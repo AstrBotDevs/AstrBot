@@ -263,7 +263,8 @@ def _collect_descriptors(include_sub_commands: bool) -> list[CommandDescriptor]:
             descriptors.append(desc)
         except Exception as e:
             logger.warning(
-                f"解析指令处理函数 {handler.handler_full_name} 失败，跳过该指令。原因: {e!s}"
+                f"Failed to parse command handler {handler.handler_full_name}; "
+                f"skipping the command: {e!s}"
             )
             continue
     return descriptors

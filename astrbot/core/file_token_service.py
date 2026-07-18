@@ -55,7 +55,7 @@ class FileTokenService:
 
             if not os.path.exists(local_path):
                 raise FileNotFoundError(
-                    f"文件不存在: {local_path} (原始输入: {file_path})",
+                    f"File does not exist: {local_path} (original input: {file_path})",
                 )
 
             file_token = str(uuid.uuid4())
@@ -84,9 +84,9 @@ class FileTokenService:
             await self._cleanup_expired_tokens()
 
             if file_token not in self.staged_files:
-                raise KeyError(f"无效或过期的文件 token: {file_token}")
+                raise KeyError(f"Invalid or expired file token: {file_token}")
 
             file_path, _ = self.staged_files.pop(file_token)
             if not os.path.exists(file_path):
-                raise FileNotFoundError(f"文件不存在: {file_path}")
+                raise FileNotFoundError(f"File does not exist: {file_path}")
             return file_path

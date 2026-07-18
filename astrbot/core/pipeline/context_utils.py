@@ -36,7 +36,10 @@ async def call_handler(
     try:
         ready_to_call = handler(event, *args, **kwargs)
     except TypeError:
-        logger.error("处理函数参数不匹配，请检查 handler 的定义。", exc_info=True)
+        logger.error(
+            "Plugin Handler arguments do not match its definition.",
+            exc_info=True,
+        )
 
     if not ready_to_call:
         return
@@ -101,7 +104,8 @@ async def call_event_hook(
 
         if event.is_stopped():
             logger.info(
-                f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
+                f"{star_map[handler.handler_module_path].name} - "
+                f"{handler.handler_name} stopped event propagation.",
             )
             return True
 

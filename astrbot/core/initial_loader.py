@@ -30,7 +30,7 @@ class InitialLoader:
             await core_lifecycle.initialize()
         except Exception as e:
             logger.critical(traceback.format_exc())
-            logger.critical(f"😭 初始化 AstrBot 失败：{e} !!!")
+            logger.critical(f"😭 Failed to initialize AstrBot: {e} !!!")
             return
 
         core_task = core_lifecycle.start()
@@ -53,5 +53,5 @@ class InitialLoader:
         try:
             await task  # 整个AstrBot在这里运行
         except asyncio.CancelledError:
-            logger.info("🌈 正在关闭 AstrBot...")
+            logger.info("🌈 Shutting down AstrBot...")
             await core_lifecycle.stop()
