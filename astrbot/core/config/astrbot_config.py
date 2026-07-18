@@ -55,6 +55,7 @@ class AstrBotConfig(dict):
         object.__setattr__(self, "_save_state_lock", threading.Lock())
         object.__setattr__(self, "_save_commit_lock", threading.Lock())
         object.__setattr__(self, "_save_revision", 0)
+        object.__setattr__(self, "_save_committed_revision", 0)
 
         if schema:
             default_config = self._config_schema_to_default_config(schema)
@@ -231,9 +232,11 @@ class AstrBotConfig(dict):
     def save_config(
         self, replace_config: dict | None = None, *, indent: int = 2
     ) -> None:
-        """将配置写入文件
+        """Persist the current configuration synchronously.
 
-        如果传入 replace_config，则将配置替换为 replace_config
+        Args:
+            replace_config: Values to merge into the configuration before saving.
+            indent: Number of spaces used to indent the JSON output.
         """
         snapshot, revision = self._prepare_config_snapshot(replace_config)
         self._write_config_snapshot(snapshot, revision, indent)
@@ -241,7 +244,16 @@ class AstrBotConfig(dict):
     async def save_config_async(
         self, replace_config: dict | None = None, *, indent: int = 2
     ) -> bool:
-        """Save a stable snapshot asynchronously and report whether it was committed."""
+        """Persist a stable configuration snapshot without blocking the event loop.
+
+        Args:
+            replace_config: Values to merge into the configuration before saving.
+            indent: Number of spaces used to indent the JSON output.
+
+        Returns:
+            Whether this snapshot was committed. A newer committed snapshot supersedes
+            an older snapshot.
+        """
         snapshot, revision = self._prepare_config_snapshot(replace_config)
         return await asyncio.to_thread(
             self._write_config_snapshot,
@@ -251,6 +263,15 @@ class AstrBotConfig(dict):
         )
 
     def _prepare_config_snapshot(self, replace_config: dict | None) -> tuple[dict, int]:
+        """Create an isolated snapshot and allocate its save revision.
+
+        Args:
+            replace_config: Values to merge into the configuration before snapshotting.
+
+        Returns:
+            The isolated configuration snapshot and its monotonically increasing
+            revision.
+        """
         with self._save_state_lock:
             if replace_config:
                 self.update(replace_config)
@@ -262,6 +283,16 @@ class AstrBotConfig(dict):
     def _write_config_snapshot(
         self, snapshot: dict, revision: int, indent: int
     ) -> bool:
+        """Write and conditionally commit a prepared configuration snapshot.
+
+        Args:
+            snapshot: Isolated configuration data to serialize.
+            revision: Revision allocated when the snapshot was prepared.
+            indent: Number of spaces used to indent the JSON output.
+
+        Returns:
+            Whether the snapshot replaced the current configuration file.
+        """
         directory = os.path.dirname(os.path.abspath(self.config_path)) or "."
         fd, temp_path = tempfile.mkstemp(
             dir=directory,
@@ -275,10 +306,13 @@ class AstrBotConfig(dict):
                 f.flush()
                 os.fsync(f.fileno())
             with self._save_commit_lock:
-                with self._save_state_lock:
-                    is_latest_snapshot = revision == self._save_revision
-                if is_latest_snapshot:
+                if revision > self._save_committed_revision:
                     os.replace(temp_path, self.config_path)
+                    object.__setattr__(
+                        self,
+                        "_save_committed_revision",
+                        revision,
+                    )
                     committed = True
         finally:
             if not committed:

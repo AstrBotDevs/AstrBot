@@ -693,6 +693,46 @@ class TestConfigHotReload:
         with open(temp_config_path, encoding="utf-8-sig") as f:
             assert json.load(f)["save_order"] == "newer"
 
+    @pytest.mark.asyncio
+    async def test_save_config_commits_older_snapshot_when_newer_write_fails(
+        self, temp_config_path, minimal_default_config, monkeypatch
+    ):
+        config = AstrBotConfig(
+            config_path=temp_config_path, default_config=minimal_default_config
+        )
+        first_write_started = threading.Event()
+        finish_first_write = threading.Event()
+        fsync_call_count = 0
+        fsync_call_lock = threading.Lock()
+        original_fsync = os.fsync
+
+        def fail_newer_fsync(fd):
+            nonlocal fsync_call_count
+            with fsync_call_lock:
+                fsync_call_count += 1
+                call_number = fsync_call_count
+            if call_number == 1:
+                first_write_started.set()
+                assert finish_first_write.wait(timeout=5)
+                original_fsync(fd)
+                return
+            raise OSError("simulated newer fsync failure")
+
+        monkeypatch.setattr(os, "fsync", fail_newer_fsync)
+        config["save_order"] = "older-valid"
+        older_save = asyncio.create_task(asyncio.to_thread(config.save_config))
+        assert await asyncio.to_thread(first_write_started.wait, 5)
+
+        config["save_order"] = "newer-failed"
+        with pytest.raises(OSError, match="simulated newer fsync failure"):
+            await config.save_config_async()
+
+        finish_first_write.set()
+        await older_save
+
+        with open(temp_config_path, encoding="utf-8-sig") as f:
+            assert json.load(f)["save_order"] == "older-valid"
+
     def test_save_config_with_replace(self, temp_config_path, minimal_default_config):
         """Test saving config with replacement."""
         config = AstrBotConfig(
