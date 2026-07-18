@@ -99,8 +99,7 @@ watch(
   { immediate: true },
 );
 
-// ── Heatmap grid (range-driven; see Task 5 for parameterization) ──
-const WEEKS = 26;
+// ── Heatmap grid is fully range-driven (see grid computed below). ─
 
 interface DayCell {
   date: string;
@@ -127,6 +126,21 @@ function fmtDate(d: Date): string {
   return `${y}-${m}-${dd}`;
 }
 
+/** Parse a strict YYYY-MM-DD string into a local-midnight Date.
+ *  We deliberately use the (year, month-1, day) constructor instead of
+ *  `new Date(s)` so the resulting date is anchored at the user's local
+ *  midnight — `new Date("2025-01-01")` alone would parse as UTC and
+ *  shift by the local TZ offset, throwing off `getDay()` math. */
+function parseYmd(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const d = Number(m[3]);
+  if (mo < 0 || mo > 11) return null;
+  return new Date(y, mo, d);
+}
+
 const grid = computed<DayCell[][]>(() => {
   const byDate = new Map<string, GitStatsDay>();
   for (const d of snapshot.value?.days ?? []) byDate.set(d.date, d);
@@ -136,14 +150,38 @@ const grid = computed<DayCell[][]>(() => {
     today.getMonth(),
     today.getDate(),
   );
-  // Sunday of the current week anchors the LAST column.
-  const endSunday = new Date(todayStart);
-  endSunday.setDate(endSunday.getDate() - endSunday.getDay());
+
+  // Width + anchor derive from props.range:
+  //   preset  → STATS_PRESETS.weeks, anchor at today's Sunday
+  //   custom  → ceil((until - since) / 7) + 1, anchor at until's Sunday
+  let weeks: number;
+  let anchor: Date;
+  // Capture into a local so TypeScript narrows the discriminated union
+  // in both branches (a callback that re-reads `props.range` would not).
+  const range = props.range;
+  if (range.kind === "preset") {
+    const cfg = STATS_PRESETS.find((p) => p.key === range.preset);
+    if (!cfg) return [];
+    weeks = cfg.weeks;
+    anchor = new Date(todayStart);
+    anchor.setDate(anchor.getDate() - anchor.getDay());
+  } else {
+    const sinceDate = parseYmd(range.since);
+    const untilDate = parseYmd(range.until);
+    if (!sinceDate || !untilDate) return [];
+    weeks = Math.max(
+      1,
+      Math.ceil((untilDate.getTime() - sinceDate.getTime()) / 86400000 / 7) + 1,
+    );
+    anchor = new Date(untilDate);
+    anchor.setDate(anchor.getDate() - anchor.getDay());
+  }
+
   const cols: DayCell[][] = [];
-  for (let w = WEEKS - 1; w >= 0; w--) {
+  for (let w = weeks - 1; w >= 0; w--) {
     const col: DayCell[] = [];
     for (let dow = 0; dow < 7; dow++) {
-      const d = new Date(endSunday);
+      const d = new Date(anchor);
       d.setDate(d.getDate() - w * 7 + dow);
       const key = fmtDate(d);
       const stat = byDate.get(key);
@@ -411,7 +449,7 @@ function cellTitle(cell: DayCell): string {
         <div class="git-stats-heatmap-wrap">
           <div
             class="git-stats-months"
-            :style="{ gridTemplateColumns: `repeat(${WEEKS}, 1fr)` }"
+            :style="{ gridTemplateColumns: `repeat(${grid.length}, 1fr)` }"
           >
             <span
               v-for="ml in monthLabels"
