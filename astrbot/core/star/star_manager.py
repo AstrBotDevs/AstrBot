@@ -559,7 +559,7 @@ class PluginManager:
                     continue
 
                 try:
-                    with file_path.open(encoding="utf-8") as f:
+                    with file_path.open(encoding="utf-8-sig") as f:
                         locale_data = json.load(f)
                     if isinstance(locale_data, dict):
                         translations[locale] = locale_data
@@ -574,6 +574,22 @@ class PluginManager:
             logger.warning("读取插件 i18n 目录失败 %s: %s", i18n_dir, exc)
 
         return translations
+
+    @staticmethod
+    def _load_plugin_config_schema(schema_path: str) -> dict:
+        """Load a plugin config schema, accepting an optional UTF-8 BOM."""
+        try:
+            with open(schema_path, encoding="utf-8-sig") as f:
+                return json.load(f)
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                f"插件配置 schema 必须使用 UTF-8 编码: {schema_path}"
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"插件配置 schema 不是有效的 JSON: {schema_path} "
+                f"(line {exc.lineno}, column {exc.colno})"
+            ) from exc
 
     @staticmethod
     def _normalize_plugin_dir_name(plugin_name: str) -> str:
@@ -1111,14 +1127,13 @@ class PluginManager:
                 )
                 if os.path.exists(plugin_schema_path):
                     # 加载插件配置
-                    with open(plugin_schema_path, encoding="utf-8") as f:
-                        plugin_config = AstrBotConfig(
-                            config_path=os.path.join(
-                                self.plugin_config_path,
-                                f"{root_dir_name}_config.json",
-                            ),
-                            schema=json.loads(f.read()),
-                        )
+                    plugin_config = AstrBotConfig(
+                        config_path=os.path.join(
+                            self.plugin_config_path,
+                            f"{root_dir_name}_config.json",
+                        ),
+                        schema=self._load_plugin_config_schema(plugin_schema_path),
+                    )
                 logo_path = os.path.join(plugin_dir_path, self.logo_fname)
 
                 if path in star_map:

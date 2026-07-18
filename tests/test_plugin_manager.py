@@ -20,6 +20,32 @@ TEST_PLUGIN_REPO = "https://github.com/AstrBotDevs/astrbot_plugin_helloworld"
 TEST_PLUGIN_DIR = "helloworld"
 
 
+def test_load_plugin_config_schema_accepts_utf8_bom(tmp_path: Path):
+    schema_path = tmp_path / "_conf_schema.json"
+    schema_path.write_bytes(b'\xef\xbb\xbf{"type": "object"}')
+
+    assert PluginManager._load_plugin_config_schema(str(schema_path)) == {
+        "type": "object"
+    }
+
+
+def test_load_plugin_config_schema_accepts_utf8_without_bom(tmp_path: Path):
+    schema_path = tmp_path / "_conf_schema.json"
+    schema_path.write_text('{"type": "object"}', encoding="utf-8")
+
+    assert PluginManager._load_plugin_config_schema(str(schema_path)) == {
+        "type": "object"
+    }
+
+
+def test_load_plugin_config_schema_reports_invalid_json(tmp_path: Path):
+    schema_path = tmp_path / "_conf_schema.json"
+    schema_path.write_text("{invalid", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="不是有效的 JSON"):
+        PluginManager._load_plugin_config_schema(str(schema_path))
+
+
 class MockStar:
     def __init__(self):
         self.root_dir_name = TEST_PLUGIN_DIR
@@ -59,9 +85,11 @@ def test_load_plugin_i18n_reads_locale_files(tmp_path: Path):
     plugin_path = tmp_path / "plugin"
     i18n_path = plugin_path / ".astrbot-plugin" / "i18n"
     i18n_path.mkdir(parents=True)
-    (i18n_path / "zh-CN.json").write_text(
-        json.dumps({"metadata": {"desc": "中文描述"}}, ensure_ascii=False),
-        encoding="utf-8",
+    (i18n_path / "zh-CN.json").write_bytes(
+        b"\xef\xbb\xbf"
+        + json.dumps({"metadata": {"desc": "中文描述"}}, ensure_ascii=False).encode(
+            "utf-8"
+        ),
     )
     (i18n_path / "en-US.json").write_text(
         json.dumps({"metadata": {"desc": "English description"}}),
