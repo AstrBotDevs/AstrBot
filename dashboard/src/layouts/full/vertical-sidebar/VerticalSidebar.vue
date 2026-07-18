@@ -162,18 +162,6 @@ function startSidebarResize(event) {
     :rail="isRailSidebar"
   >
     <div class="sidebar-container">
-      <div v-if="!isRailSidebar" class="sidebar-brand">
-        <img
-          class="sidebar-brand-logo"
-          src="@/assets/images/plugin_icon.png"
-          alt="AstrBot logo"
-        >
-        <div class="sidebar-brand-copy">
-          <span class="sidebar-brand-title">AstrBot</span>
-          <span class="sidebar-brand-subtitle">WebUI</span>
-        </div>
-      </div>
-
       <v-list :class="['pa-4', 'listitem', 'flex-grow-1', { 'hidden-scrollbar': isRailSidebar }]" v-model:opened="openedItems" :open-strategy="'multiple'">
         <template v-for="(item, i) in sidebarMenu" :key="item.title || item.to || `sidebar-item-${i}`">
           <NavItem :item="item" class="leftPadding" :rail="isRailSidebar" />
@@ -247,7 +235,6 @@ function startSidebarResize(event) {
 .leftSidebar:not(.v-navigation-drawer--rail) .sidebar-footer {
   align-items: stretch;
   padding: 10px 16px 16px !important;
-  border-top: 1px solid rgba(var(--v-theme-borderLight), 0.35);
 }
 
 .leftSidebar:not(.v-navigation-drawer--rail) .sidebar-footer-btn {
@@ -274,44 +261,5 @@ function startSidebarResize(event) {
 .leftSidebar:not(.v-navigation-drawer--rail) .sidebar-footer-btn :deep(.v-btn__content) {
   justify-content: flex-start;
   gap: 8px;
-}
-
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 64px;
-  padding: 14px 18px 10px;
-  border-bottom: 1px solid rgba(var(--v-theme-borderLight), 0.35);
-  flex-shrink: 0;
-}
-
-.sidebar-brand-logo {
-  width: 36px;
-  height: 36px;
-  object-fit: contain;
-  flex: 0 0 auto;
-}
-
-.sidebar-brand-copy {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.1;
-}
-
-.sidebar-brand-title {
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 18px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.sidebar-brand-subtitle {
-  margin-top: 3px;
-  color: rgba(var(--v-theme-on-surface), 0.58);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
 }
 </style>
