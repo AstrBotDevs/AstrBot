@@ -650,7 +650,25 @@
           "loadingPatch": "Загрузка патча…",
           "errorPatch": "Не удалось загрузить патч",
           "binaryFile": "Двоичный файл (нет diff для отображения)",
-          "emptyPatch": "Для этого файла нет diff"
+          "emptyPatch": "Для этого файла нет diff",
+          "stats": {
+            "title": "Статистика изменений",
+            "summary": "{commits} коммитов · +{additions} / −{deletions} · {files} файлов",
+            "refresh": "Обновить статистику",
+            "expand": "Развернуть статистику",
+            "collapse": "Свернуть статистику",
+            "loading": "Загрузка статистики…",
+            "error": "Не удалось загрузить статистику",
+            "retry": "Повторить",
+            "emptyRepo": "Коммитов пока нет — статистика появится после первого коммита",
+            "truncatedBadge": "Последние {n}",
+            "hotFiles": "Горячие файлы",
+            "hotFileValue": "{commits} коммитов · +{additions} / −{deletions}",
+            "cellTooltip": "{date}: {commits} коммитов · +{additions} / −{deletions}",
+            "zeroTooltip": "{date}: нет коммитов",
+            "filterAppliedDate": "Показаны коммиты за {date}",
+            "filterAppliedFile": "Показана история {path}"
+          }
         },
         "error": {
           "reason": {

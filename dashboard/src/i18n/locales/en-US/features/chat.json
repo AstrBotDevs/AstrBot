@@ -721,7 +721,25 @@
           "loadingPatch": "Loading patch…",
           "errorPatch": "Failed to load patch",
           "binaryFile": "Binary file (no diff to display)",
-          "emptyPatch": "No diff available for this file"
+          "emptyPatch": "No diff available for this file",
+          "stats": {
+            "title": "Change stats",
+            "summary": "{commits} commits · +{additions} / −{deletions} · {files} files",
+            "refresh": "Refresh stats",
+            "expand": "Expand stats",
+            "collapse": "Collapse stats",
+            "loading": "Loading stats…",
+            "error": "Failed to load stats",
+            "retry": "Retry",
+            "emptyRepo": "No commits yet — stats will appear after the first commit",
+            "truncatedBadge": "Latest {n}",
+            "hotFiles": "Hot files",
+            "hotFileValue": "{commits} commits · +{additions} / −{deletions}",
+            "cellTooltip": "{date}: {commits} commits · +{additions} / −{deletions}",
+            "zeroTooltip": "{date}: no commits",
+            "filterAppliedDate": "Showing commits on {date}",
+            "filterAppliedFile": "Showing history of {path}"
+          }
         },
         "error": {
           "reason": {
