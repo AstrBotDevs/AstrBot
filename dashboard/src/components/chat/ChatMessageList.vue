@@ -1141,11 +1141,14 @@ function formatDuration(seconds: number) {
 
 .image-part {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   border: 0;
   padding: 0;
   margin-top: 8px;
   background: transparent;
   cursor: zoom-in;
+  text-align: left;
 }
 
 .image-part img {
