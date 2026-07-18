@@ -583,6 +583,18 @@
           "success": "Закоммичено: {sha}",
           "failureHint": "Коммит не удался. Исправьте сообщение или ошибки и повторите."
         },
+        "gitignore": {
+          "openTooltip": "Редактировать .gitignore",
+          "newFileHint": "Файла .gitignore пока нет - он будет создан при сохранении",
+          "unsavedTitle": "Есть несохранённые изменения",
+          "save": "Сохранить",
+          "cancel": "Отмена",
+          "confirmDiscard": "Отменить изменения?",
+          "retry": "Повторить",
+          "saveSuccess": ".gitignore сохранён",
+          "loadError": "Не удалось прочитать .gitignore ({reason})",
+          "saveError": "Не удалось сохранить .gitignore ({reason})"
+        },
         "history": {
           "tab": "История",
           "tabAria": "Переключиться на историю",

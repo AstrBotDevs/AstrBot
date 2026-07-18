@@ -144,14 +144,14 @@ function onBulkClick(): void {
            unnoticed). Neutral tonal + text label matches the bar's
            other buttons while staying visually distinct from the
            stage/commit workflow actions. Label reuses the existing
-           gitignore.openTooltip i18n string. -->
+           gitWorkflow.gitignore.openTooltip i18n string. -->
       <v-btn
         size="small"
         variant="tonal"
         prepend-icon="mdi-file-cancel-outline"
         @click="emit('open-gitignore')"
       >
-        {{ tm("spcodeProjectLoad.diffSidebar.gitignore.openTooltip") }}
+        {{ tm("spcodeProjectLoad.diffSidebar.gitWorkflow.gitignore.openTooltip") }}
       </v-btn>
     </div>
     <div class="git-commit-bar-actions">

@@ -654,6 +654,18 @@
           "success": "Committed {sha}",
           "failureHint": "Commit failed. Please fix the message or errors and retry."
         },
+        "gitignore": {
+          "openTooltip": "Edit .gitignore",
+          "newFileHint": "No .gitignore yet - it will be created on save",
+          "unsavedTitle": "Unsaved changes",
+          "save": "Save",
+          "cancel": "Cancel",
+          "confirmDiscard": "Discard changes?",
+          "retry": "Retry",
+          "saveSuccess": ".gitignore saved",
+          "loadError": "Failed to load .gitignore ({reason})",
+          "saveError": "Failed to save .gitignore ({reason})"
+        },
         "history": {
           "tab": "History",
           "tabAria": "Switch to history view",
