@@ -148,21 +148,23 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     MALFORMED_TOOL_NAME_PLACEHOLDER = "__malformed_tool_name__"
     REPEATED_TOOL_NOTICE_L1_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] By the way, you have executed the same tool "
-        "`{tool_name}` {streak} times consecutively. Double-check whether another "
-        "tool, different arguments, or a summary would move the task forward better."
+        "`{tool_name}` with the same arguments {streak} times consecutively. "
+        "Double-check whether another tool, different arguments, or a summary would "
+        "move the task forward better."
     )
     REPEATED_TOOL_NOTICE_L2_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
-        "`{tool_name}` {streak} times consecutively. Unless this repetition is "
-        "clearly necessary, stop repeating the same action and either switch "
-        "tools, refine parameters, or summarize what is still missing."
+        "`{tool_name}` with the same arguments {streak} times consecutively. "
+        "Unless this repetition is clearly necessary, stop repeating the same action "
+        "and either switch tools, refine parameters, or summarize what is still "
+        "missing."
     )
     REPEATED_TOOL_NOTICE_L3_TEMPLATE = (
         "\n\n[SYSTEM NOTICE] Important: you have executed the same tool "
-        "`{tool_name}` {streak} times consecutively. Repetition is now very "
-        "high. Continue only if each call is clearly producing new information. "
-        "Otherwise, change strategy, adjust arguments, or explain the limitation "
-        "to the user."
+        "`{tool_name}` with the same arguments {streak} times consecutively. "
+        "Repetition is now very high. Continue only if each call is clearly producing "
+        "new information. Otherwise, change strategy, adjust arguments, or explain "
+        "the limitation to the user."
     )
     TOOL_RESULT_OVERFLOW_NOTICE_TEMPLATE = (
         "Truncated tool output preview shown above. "
@@ -281,6 +283,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._pending_follow_ups: list[FollowUpTicket] = []
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
+        self._last_tool_args: dict[str, T.Any] | None = None
         self._same_tool_streak = 0
 
         # These two are used for tool schema mode handling
@@ -662,11 +665,29 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return content
         return f"{content}{notice}"
 
-    def _track_tool_call_streak(self, tool_name: str) -> int:
-        if tool_name == self._last_tool_name:
+    def _track_tool_call_streak(
+        self,
+        tool_name: str,
+        tool_args: dict[str, T.Any] | None,
+    ) -> int:
+        """Track consecutive tool calls with the same name and arguments.
+
+        Args:
+            tool_name: Name of the called tool.
+            tool_args: Arguments passed to the tool.
+
+        Returns:
+            Number of consecutive calls with the same name and arguments.
+        """
+        normalized_args = {} if tool_args is None else tool_args
+        if (
+            tool_name == self._last_tool_name
+            and normalized_args == self._last_tool_args
+        ):
             self._same_tool_streak += 1
         else:
             self._last_tool_name = tool_name
+            self._last_tool_args = copy.deepcopy(normalized_args)
             self._same_tool_streak = 1
         return self._same_tool_streak
 
@@ -1032,7 +1053,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             llm_response.tools_call_ids,
         ):
             tool_result_blocks_start = len(tool_call_result_blocks)
-            tool_call_streak = self._track_tool_call_streak(func_tool_name)
+            tool_call_streak = self._track_tool_call_streak(
+                func_tool_name,
+                func_tool_args,
+            )
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
                     type="tool_call",
