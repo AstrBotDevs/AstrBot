@@ -113,6 +113,16 @@ def save_temp_img(img: Image.Image | bytes) -> str:
     return p
 
 
+async def _save_image_response(resp, url: str, path: str | None) -> str:
+    _raise_for_download_status(resp, url)
+    content = await resp.read()
+    if not path:
+        return save_temp_img(content)
+    with open(path, "wb") as f:
+        f.write(content)
+    return path
+
+
 async def download_image_by_url(
     url: str,
     post: bool = False,
@@ -131,18 +141,10 @@ async def download_image_by_url(
         ) as session:
             if post:
                 async with session.post(url, json=post_data) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
+                    return await _save_image_response(resp, url, path)
             else:
                 async with session.get(url) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
+                    return await _save_image_response(resp, url, path)
     except (aiohttp.ClientConnectorSSLError, aiohttp.ClientConnectorCertificateError):
         # 关闭SSL验证（仅在证书验证失败时作为fallback）
         logger.warning(
@@ -157,18 +159,10 @@ async def download_image_by_url(
         async with aiohttp.ClientSession() as session:
             if post:
                 async with session.post(url, json=post_data, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
+                    return await _save_image_response(resp, url, path)
             else:
                 async with session.get(url, ssl=ssl_context) as resp:
-                    if not path:
-                        return save_temp_img(await resp.read())
-                    with open(path, "wb") as f:
-                        f.write(await resp.read())
-                    return path
+                    return await _save_image_response(resp, url, path)
     except Exception as e:
         raise e
 
