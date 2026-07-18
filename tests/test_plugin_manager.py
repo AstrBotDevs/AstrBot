@@ -1085,7 +1085,7 @@ async def test_ensure_plugin_requirements_logs_requirements_file_install_for_mis
         TEST_PLUGIN_DIR,
     )
 
-    assert any("按 requirements.txt 安装" in line for line in logged_lines)
+    assert any("installing them from requirements.txt" in line for line in logged_lines)
 
 
 @pytest.mark.asyncio
@@ -1779,7 +1779,10 @@ async def test_ensure_plugin_requirements_does_not_mask_install_error_when_clean
             TEST_PLUGIN_DIR,
         )
 
-    assert any("删除临时插件依赖文件失败" in log for log in warning_logs)
+    assert any(
+        "Failed to remove the temporary plugin requirements file" in log
+        for log in warning_logs
+    )
 
 
 # --- Tests for plugin_id KV cleanup logic ---
