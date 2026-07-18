@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import random
@@ -12,8 +13,9 @@ from typing import Any, cast
 import botpy
 import botpy.message
 from botpy import Client
-from botpy.connection import ConnectionState
+from botpy.connection import ConnectionSession, ConnectionState
 from botpy.gateway import BotWebSocket
+from botpy.robot import Robot, Token
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -35,6 +37,16 @@ from .qqofficial_message_event import QQOfficialMessageEvent
 # remove logger handler
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
+
+_RECONNECT_DELAYS_SECONDS = (1, 2, 5, 10, 30, 60)
+_RATE_LIMIT_RECONNECT_DELAY_SECONDS = 60
+_MAX_QUICK_DISCONNECTS = 3
+_QUICK_DISCONNECT_THRESHOLD_SECONDS = 5
+_SESSION_INVALID_CLOSE_CODES = {4006, 4007, 4009}
+
+
+class QQOfficialGatewayUnavailableError(RuntimeError):
+    """Raised when qq-botpy returns unusable gateway metadata."""
 
 
 def _set_raw_message_fields(message: Any, data: dict[str, Any]) -> None:
@@ -164,12 +176,101 @@ class ManagedBotWebSocket(BotWebSocket):
     def __init__(self, session, connection: Any, client: botClient):
         super().__init__(session, connection)
         self._client = client
+        self._heartbeat_interval_seconds: float | None = None
+        self._last_heartbeat_ack_at = 0.0
+
+    async def on_connected(self, ws) -> None:
+        self._client.mark_websocket_connected()
+        await super().on_connected(ws)
+
+    async def on_message(self, ws, message) -> None:
+        event = None
+        try:
+            payload = json.loads(message)
+            event = payload.get("t")
+        except Exception:
+            pass
+
+        await super().on_message(ws, message)
+
+        if event in {"READY", "RESUMED"}:
+            self._client.reset_reconnect_backoff()
+
+    async def _is_system_event(self, message_event, ws):
+        event_op = message_event["op"]
+        if event_op == self.WS_HELLO:
+            interval_ms = (message_event.get("d") or {}).get("heartbeat_interval")
+            if isinstance(interval_ms, int | float) and interval_ms > 0:
+                self._heartbeat_interval_seconds = interval_ms / 1000
+                logger.info(f"[QQOfficial] Gateway heartbeat interval: {interval_ms}ms")
+            return await super()._is_system_event(message_event, ws)
+        if event_op == self.WS_HEARTBEAT_ACK:
+            self._last_heartbeat_ack_at = time.monotonic()
+            return True
+        if event_op == self.WS_RECONNECT:
+            logger.info("[QQOfficial] Gateway requested reconnect.")
+            self._client.schedule_reconnect_delay("server requested reconnect")
+            self._connection.add(self._session)
+            self._can_reconnect = False
+            await ws.close()
+            return True
+        if event_op == self.WS_INVALID_SESSION:
+            can_resume = bool(message_event.get("d"))
+            logger.warning(
+                f"[QQOfficial] Gateway reported invalid session, can_resume={can_resume}."
+            )
+            if not can_resume:
+                self._session["session_id"] = ""
+                self._session["last_seq"] = 0
+            self._client.schedule_reconnect_delay("invalid session", custom_delay=3)
+            self._connection.add(self._session)
+            self._can_reconnect = False
+            await ws.close()
+            return True
+        return await super()._is_system_event(message_event, ws)
+
+    async def _send_heart(self, interval):
+        """Send gateway heartbeat using the interval announced by QQ."""
+
+        heartbeat_interval = self._heartbeat_interval_seconds or interval
+        logger.info(
+            f"[QQOfficial] Heartbeat loop started, interval={heartbeat_interval}s."
+        )
+        while True:
+            payload = {
+                "op": self.WS_HEARTBEAT,
+                "d": self._session["last_seq"],
+            }
+
+            if self._conn is None:
+                logger.debug("[QQOfficial] Websocket is closed, stop heartbeat.")
+                return
+            if self._conn.closed:
+                logger.debug("[QQOfficial] Websocket closed, stop heartbeat.")
+                return
+
+            await self.send_msg(json.dumps(payload))
+            await asyncio.sleep(heartbeat_interval)
 
     async def on_closed(self, close_status_code, close_msg):
         if self._client.is_shutting_down:
             logger.debug("[QQOfficial] Ignore websocket reconnect during shutdown.")
             return
+        rate_limited = close_status_code == 4008
+        if close_status_code in _SESSION_INVALID_CLOSE_CODES or (
+            isinstance(close_status_code, int) and 4900 <= close_status_code <= 4913
+        ):
+            self._can_reconnect = False
+        self._client.schedule_reconnect_delay(
+            f"websocket closed: {close_status_code} {close_msg}",
+            rate_limited=rate_limited,
+        )
         await super().on_closed(close_status_code, close_msg)
+
+    async def on_error(self, exception: BaseException):
+        if not self._client.is_shutting_down:
+            self._client.schedule_reconnect_delay(f"websocket error: {exception}")
+        await super().on_error(exception)
 
     async def close(self) -> None:
         self._can_reconnect = False
@@ -183,6 +284,10 @@ class botClient(Client):
         super().__init__(*args, **kwargs)
         self._shutting_down = False
         self._active_websockets: set[ManagedBotWebSocket] = set()
+        self._next_connect_at = 0.0
+        self._reconnect_attempts = 0
+        self._last_connect_at = 0.0
+        self._quick_disconnect_count = 0
 
     def set_platform(self, platform: QQOfficialPlatformAdapter) -> None:
         self.platform = platform
@@ -190,6 +295,97 @@ class botClient(Client):
     @property
     def is_shutting_down(self) -> bool:
         return self._shutting_down or self.is_closed()
+
+    async def _bot_login(self, token: Token) -> None:
+        logger.info("[QQOfficial] 登录机器人账号中...")
+
+        user = await self.http.login(token)
+        self._ws_ap = await self.api.get_ws_url()
+        session_limit = (
+            self._ws_ap.get("session_start_limit")
+            if isinstance(self._ws_ap, dict)
+            else None
+        )
+        max_concurrency = (
+            session_limit.get("max_concurrency")
+            if isinstance(session_limit, dict)
+            else None
+        )
+        if not isinstance(max_concurrency, int):
+            raise QQOfficialGatewayUnavailableError(
+                "gateway metadata unavailable during qq_official startup"
+            )
+
+        self._connection = ConnectionSession(
+            max_async=max_concurrency,
+            connect=self.bot_connect,
+            dispatch=self.ws_dispatch,
+            loop=self.loop,
+            api=self.api,
+        )
+        self._connection.state.robot = Robot(user)
+
+    def mark_websocket_connected(self) -> None:
+        self._last_connect_at = time.monotonic()
+
+    def reset_reconnect_backoff(self) -> None:
+        if self._reconnect_attempts or self._quick_disconnect_count:
+            logger.info("[QQOfficial] Websocket session resumed, reset backoff.")
+        self._next_connect_at = 0.0
+        self._reconnect_attempts = 0
+        self._quick_disconnect_count = 0
+
+    def schedule_reconnect_delay(
+        self,
+        reason: str,
+        *,
+        custom_delay: float | None = None,
+        rate_limited: bool = False,
+    ) -> None:
+        """Schedule the next websocket connection attempt.
+
+        Args:
+            reason: Human-readable reason for logging.
+            custom_delay: Explicit reconnect delay in seconds.
+            rate_limited: Whether QQ reported gateway rate limiting.
+        """
+
+        if self.is_shutting_down:
+            return
+
+        delay = custom_delay
+        if delay is None and rate_limited:
+            delay = _RATE_LIMIT_RECONNECT_DELAY_SECONDS
+        if delay is None:
+            if self._last_connect_at:
+                duration = time.monotonic() - self._last_connect_at
+                if duration < _QUICK_DISCONNECT_THRESHOLD_SECONDS:
+                    self._quick_disconnect_count += 1
+                else:
+                    self._quick_disconnect_count = 0
+                if self._quick_disconnect_count >= _MAX_QUICK_DISCONNECTS:
+                    delay = _RATE_LIMIT_RECONNECT_DELAY_SECONDS
+                    self._quick_disconnect_count = 0
+                    logger.warning(
+                        "[QQOfficial] Too many quick disconnects; delaying reconnect."
+                    )
+            if delay is None:
+                idx = min(
+                    self._reconnect_attempts,
+                    len(_RECONNECT_DELAYS_SECONDS) - 1,
+                )
+                delay = _RECONNECT_DELAYS_SECONDS[idx]
+                self._reconnect_attempts += 1
+
+        self._next_connect_at = max(self._next_connect_at, time.monotonic() + delay)
+        logger.info(f"[QQOfficial] Reconnect scheduled in {delay}s, reason: {reason}")
+
+    async def wait_for_reconnect_delay(self) -> None:
+        delay = self._next_connect_at - time.monotonic()
+        if delay <= 0:
+            return
+        logger.info(f"[QQOfficial] Waiting {delay:.1f}s before reconnect.")
+        await asyncio.sleep(delay)
 
     # 收到群消息
     async def on_group_at_message_create(
@@ -255,6 +451,9 @@ class botClient(Client):
         self.platform.commit_event(self.platform.create_event(abm))
 
     async def bot_connect(self, session) -> None:
+        await self.wait_for_reconnect_delay()
+        if self.is_shutting_down:
+            return
         logger.info("[QQOfficial] Websocket session starting.")
 
         websocket = ManagedBotWebSocket(session, self._connection, self)
@@ -281,6 +480,8 @@ class botClient(Client):
 
 @register_platform_adapter("qq_official", "QQ 机器人官方 API 适配器")
 class QQOfficialPlatformAdapter(Platform):
+    STARTUP_RETRY_DELAYS_SECONDS = (5, 10, 30, 60)
+
     def __init__(
         self,
         platform_config: dict,
@@ -305,13 +506,9 @@ class QQOfficialPlatformAdapter(Platform):
                 public_guild_messages=True,
                 direct_message=guild_dm,
             )
-        self.client = botClient(
-            intents=self.intents,
-            bot_log=False,
-            timeout=20,
-        )
-
-        self.client.set_platform(self)
+        self._shutdown_event = asyncio.Event()
+        self._startup_retry_attempts = 0
+        self.client = self._create_client()
 
         _ensure_group_message_create_parser()
 
@@ -320,6 +517,67 @@ class QQOfficialPlatformAdapter(Platform):
         self._allow_group_proactive_send = True
 
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
+
+    def _create_client(self) -> botClient:
+        client = botClient(
+            intents=self.intents,
+            bot_log=False,
+            timeout=20,
+        )
+        client.set_platform(self)
+        return client
+
+    @staticmethod
+    def _should_retry_startup_error(error: Exception) -> bool:
+        if isinstance(
+            error,
+            (
+                asyncio.TimeoutError,
+                ConnectionError,
+                OSError,
+                QQOfficialGatewayUnavailableError,
+            ),
+        ):
+            return True
+        if isinstance(error, botpy.errors.ServerError):
+            error_msg = str(error)
+            return any(
+                marker in error_msg
+                for marker in ("100017", "频率限制", "Too many requests")
+            )
+        return False
+
+    def _next_startup_retry_delay(self, error: Exception | None = None) -> int:
+        if isinstance(error, botpy.errors.ServerError):
+            error_msg = str(error)
+            if any(
+                marker in error_msg
+                for marker in ("100017", "频率限制", "Too many requests")
+            ):
+                return _RATE_LIMIT_RECONNECT_DELAY_SECONDS
+
+        idx = min(
+            self._startup_retry_attempts,
+            len(self.STARTUP_RETRY_DELAYS_SECONDS) - 1,
+        )
+        self._startup_retry_attempts += 1
+        return self.STARTUP_RETRY_DELAYS_SECONDS[idx]
+
+    async def _restart_client(self) -> None:
+        try:
+            await self.client.shutdown()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(f"[QQOfficial] Close client failed during recovery: {e}")
+        self.client = self._create_client()
+
+    async def _sleep_until_retry_or_shutdown(self, delay: float) -> bool:
+        try:
+            await asyncio.wait_for(self._shutdown_event.wait(), timeout=delay)
+            return False
+        except asyncio.TimeoutError:
+            return True
 
     async def send_by_session(
         self,
@@ -849,12 +1107,41 @@ class QQOfficialPlatformAdapter(Platform):
             abm.self_id = "qq_official"
         return abm
 
-    def run(self):
-        return self.client.start(appid=self.appid, secret=self.secret)
+    async def run(self) -> None:
+        while not self._shutdown_event.is_set():
+            try:
+                await self.client.start(appid=self.appid, secret=self.secret)
+                self._startup_retry_attempts = 0
+                if self._shutdown_event.is_set():
+                    break
+                logger.warning(
+                    f"[QQOfficial] Client stopped unexpectedly, restarting in "
+                    f"{self.STARTUP_RETRY_DELAYS_SECONDS[0]}s."
+                )
+                await self._restart_client()
+                if not await self._sleep_until_retry_or_shutdown(
+                    self.STARTUP_RETRY_DELAYS_SECONDS[0]
+                ):
+                    break
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                if self._shutdown_event.is_set():
+                    break
+                if not self._should_retry_startup_error(e):
+                    raise
+                delay = self._next_startup_retry_delay(e)
+                logger.warning(
+                    f"[QQOfficial] Startup failed, retrying in {delay}s: {e}"
+                )
+                await self._restart_client()
+                if not await self._sleep_until_retry_or_shutdown(delay):
+                    break
 
     def get_client(self) -> botClient:
         return self.client
 
     async def terminate(self) -> None:
+        self._shutdown_event.set()
         await self.client.shutdown()
         logger.info("QQ 官方机器人接口 适配器已被关闭")
