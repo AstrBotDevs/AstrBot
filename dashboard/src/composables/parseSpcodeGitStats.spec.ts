@@ -4,7 +4,11 @@
 // plugin's GET /spcode/git-stats endpoint (envelope: {status, data}).
 
 import { describe, expect, it } from "vitest";
-import { parseSpcodeGitStats } from "./parseSpcodeGitStats";
+import {
+  parseSpcodeGitStats,
+  rangeForPreset,
+  STATS_PRESETS,
+} from "./parseSpcodeGitStats";
 
 function envelope(data: Record<string, unknown>) {
   return { status: "ok", data };
@@ -123,5 +127,42 @@ describe("parseSpcodeGitStats", () => {
   it("returns error on a non-ok status envelope", () => {
     const r = parseSpcodeGitStats({ status: "error", data: {} });
     expect(r.kind).toBe("error");
+  });
+});
+
+
+describe("GitStatsRange helpers", () => {
+  it("STATS_PRESETS contains exactly the 5 documented presets in order", () => {
+    expect(STATS_PRESETS.map((p) => p.key)).toEqual([
+      "1w",
+      "1mo",
+      "3mo",
+      "6mo",
+      "1y",
+    ]);
+  });
+
+  it("rangeForPreset('6mo') produces 26-week since anchored at today's Sunday", () => {
+    // Fixed today = Wed 2026-07-15 (getDay() === 3)
+    const today = new Date(2026, 6, 15);
+    const { since, until } = rangeForPreset("6mo", today);
+    expect(until).toBe("2026-07-15");
+    // 26 weeks -> since = today.Sunday - 25 weeks
+    // today.Sunday = 2026-07-12, minus 25*7 days = 2026-01-18
+    expect(since).toBe("2026-01-18");
+  });
+
+  it("rangeForPreset('1w') produces since === the preceding Sunday (1-column)", () => {
+    const today = new Date(2026, 1, 18); // Wed Feb 18
+    const { since, until } = rangeForPreset("1w", today);
+    expect(until).toBe("2026-02-18");
+    expect(since).toBe("2026-02-15"); // the preceding Sunday
+  });
+
+  it("rangeForPreset always yields since <= until", () => {
+    for (const p of STATS_PRESETS) {
+      const { since, until } = rangeForPreset(p.key, new Date(2026, 6, 15));
+      expect(since <= until).toBe(true);
+    }
   });
 });
