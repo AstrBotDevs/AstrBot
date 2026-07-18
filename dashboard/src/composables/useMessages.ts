@@ -1,4 +1,11 @@
-import { computed, onBeforeUnmount, reactive, ref, type Ref } from "vue";
+import {
+  computed,
+  onBeforeUnmount,
+  reactive,
+  ref,
+  watch,
+  type Ref,
+} from "vue";
 import { chatApi, fileApi } from "@/api/v1";
 import { fetchWithAuth } from "@/api/http";
 
@@ -150,6 +157,7 @@ export function useMessages(options: UseMessagesOptions) {
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
     {},
   );
+  let sessionPollTimer: number | undefined;
 
   const activeMessages = computed(() =>
     options.currentSessionId.value
@@ -158,12 +166,32 @@ export function useMessages(options: UseMessagesOptions) {
   );
 
   onBeforeUnmount(() => {
+    if (sessionPollTimer !== undefined) {
+      window.clearInterval(sessionPollTimer);
+    }
     cleanupConnections();
     for (const promise of attachmentBlobCache.values()) {
       promise.then((url) => URL.revokeObjectURL(url)).catch(() => {});
     }
     attachmentBlobCache.clear();
   });
+
+  watch(
+    () => options.currentSessionId.value,
+    (sessionId) => {
+      if (sessionPollTimer !== undefined) {
+        window.clearInterval(sessionPollTimer);
+        sessionPollTimer = undefined;
+      }
+      if (!sessionId) return;
+      sessionPollTimer = window.setInterval(() => {
+        if (!isSessionRunning(sessionId)) {
+          void loadSessionMessages(sessionId, false, false);
+        }
+      }, 2000);
+    },
+    { immediate: true },
+  );
 
   function isSessionRunning(sessionId: string) {
     return Object.values(activeConnections).some(
