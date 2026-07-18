@@ -545,6 +545,12 @@ function closeImage() {
   max-width: 88%;
 }
 
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
+}
+
 .from-user .message-stack {
   max-width: 70%;
 }

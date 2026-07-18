@@ -907,6 +907,12 @@ function formatDuration(seconds: number) {
   max-width: min(760px, 82%);
 }
 
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
+}
+
 .from-user .message-stack {
   align-items: flex-end;
   max-width: 60%;
