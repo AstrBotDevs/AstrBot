@@ -25,9 +25,8 @@ SANDBOX_MODE_PROMPT = (
 TOOL_CALL_PROMPT = (
     "When using tools: "
     "never return an empty response; "
-    "briefly explain the purpose before calling a tool; "
+    "briefly explain the purpose when starting a new type of task, but not before every tool call; "
     "follow the tool schema exactly and do not invent parameters; "
-    "after execution, briefly summarize the result for the user; "
     "keep the conversation style consistent."
 )
 
