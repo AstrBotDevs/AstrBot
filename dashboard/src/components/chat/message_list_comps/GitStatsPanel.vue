@@ -200,6 +200,22 @@ const grid = computed<DayCell[][]>(() => {
   return cols;
 });
 
+/** 2026-07-18 heatmap-cell-size: ranges that span more than 26
+ *  weeks (≈ 6 months) collapse each cell below ~20px on a typical
+ *  ~600px sidebar, which is too cramped to read. Anything 26 weeks
+ *  or under uses the original "fill-the-column" cells (variable
+ *  size: a 1w / 1mo cell is large, a 6mo cell is the
+ *  not-too-big / not-too-small sweet spot the user approved);
+ *  anything strictly larger switches to the fixed 12px squares so
+ *  each cell stays legible and the strip stays a single
+ *  ~100px-tall band regardless of how many years are in view. The
+ *  threshold is the same as the `6mo` preset (26 weeks), so the
+ *  preset boundary and the layout boundary line up exactly. */
+const COMPACT_HEATMAP_WEEKS_THRESHOLD = 26;
+const isCompactHeatmap = computed<boolean>(
+  () => grid.value.length > COMPACT_HEATMAP_WEEKS_THRESHOLD,
+);
+
 /** Month labels above the grid, emitted at each month boundary. Uses
  *  the browser locale via toLocaleDateString (zero i18n keys). */
 const monthLabels = computed(() => {
@@ -449,7 +465,12 @@ function cellTitle(cell: DayCell): string {
         <div class="git-stats-heatmap-wrap">
           <div
             class="git-stats-months"
-            :style="{ gridTemplateColumns: `repeat(${grid.length}, 14px)` }"
+            :class="{ 'is-compact': isCompactHeatmap }"
+            :style="
+              isCompactHeatmap
+                ? { gridTemplateColumns: `repeat(${grid.length}, 14px)` }
+                : { gridTemplateColumns: `repeat(${grid.length}, 1fr)` }
+            "
           >
             <span
               v-for="ml in monthLabels"
@@ -462,6 +483,7 @@ function cellTitle(cell: DayCell): string {
           </div>
           <div
             class="git-stats-grid"
+            :class="{ 'is-compact': isCompactHeatmap }"
             role="grid"
             aria-label="commit activity heatmap"
           >
@@ -471,7 +493,10 @@ function cellTitle(cell: DayCell): string {
                 :key="cell.date"
                 type="button"
                 class="git-stats-cell"
-                :class="[`lv-${cell.level}`, { 'is-future': cell.future }]"
+                :class="[
+                  `lv-${cell.level}`,
+                  { 'is-future': cell.future, 'is-compact': isCompactHeatmap },
+                ]"
                 :title="cellTitle(cell)"
                 :disabled="cell.level === 0 || cell.future"
                 @click="onDayClick(cell)"
@@ -604,18 +629,36 @@ function cellTitle(cell: DayCell): string {
 .git-stats-heatmap-wrap {
   overflow-x: auto;
 }
-/* 2026-07-18 heatmap-cell-size: the month-labels row and the
-   heatmap grid below it must share the same column pitch so a
-   "6月" / "7月" label sits directly over the first week-column
-   of June / July (and not somewhere off by a few pixels). The
-   month grid is sized in the template (`:style`) with
-   `repeat(${grid.length}, 14px)` — 14px = cell (12px) + gap
-   (2px), matching the heatmap's auto-sized tracks — and is
-   forced to `width: max-content` here so it shrinks to that
-   sum instead of stretching to the wrap's full width. */
+/* 2026-07-18 heatmap-cell-size: two layout modes, picked by the
+   `is-compact` class that GitStatsPanel toggles on the grids and
+   each cell once `grid.length > 26` (the 6-month preset).
+
+   DEFAULT (no is-compact) — "big" cells for ≤ 6 months:
+   `width: 100%` + `aspect-ratio: 1` makes every cell a square
+   that fills its column, and `grid-template-rows: repeat(7,
+   1fr)` lets the rows size to that square. With ≤ 26 columns
+   the column width = (wrap-width - gaps) / N, so a 1w / 1mo
+   cell is generous and a 6mo cell lands around 18-22px on a
+   typical ~600px sidebar — the size the user described as
+   "just right, not too big or too small." The month-labels row
+   uses `repeat(N, 1fr)` so its columns line up with the
+   heatmap's auto-sized tracks. The grid itself fills the wrap
+   (no `width: max-content`), so the wrap never needs a
+   horizontal scrollbar in this mode.
+
+   COMPACT (is-compact) — "small" cells for > 6 months:
+   `width: 12px; height: 12px` and `grid-template-rows: repeat(7,
+   12px)` make every cell a fixed 12px square. The grid uses
+   `width: max-content` and the month row switches to
+   `repeat(N, 14px)` (12px cell + 2px gap), so both rows shrink
+   to their content and stay pixel-aligned. The wrap keeps its
+   `overflow-x: auto` so a narrow sidebar shows a horizontal
+   scrollbar instead of squashing the cells. */
 .git-stats-months {
   display: grid;
   margin-bottom: 2px;
+}
+.git-stats-months.is-compact {
   width: max-content;
 }
 .git-stats-month-label {
@@ -623,35 +666,31 @@ function cellTitle(cell: DayCell): string {
   opacity: 0.6;
   grid-row: 1;
 }
-/* 2026-07-18 heatmap-cell-size: the previous `width: 100%` +
-   `aspect-ratio: 1` + `grid-template-rows: repeat(7, 1fr)`
-   combo forced every cell to be a square that filled its
-   column, and the column itself stretched to fill the panel.
-   On small ranges (一周 / 一个月 / 三个月) that produced
-   1×7 / 5×7 / 13×7 cells, each one ~150px wide and the whole
-   grid taller than the chat log below it. Switch to fixed
-   12px square cells (GitHub's reference size) and a fixed
-   12px row height so the column-first layout still gives the
-   familiar week-strip look but every cell is identical
-   regardless of how many weeks the range spans. The `width:
-   max-content` on the grid makes the whole strip shrink to
-   its content; if the panel is narrower than the grid, the
-   wrap below adds a horizontal scrollbar. */
 .git-stats-grid {
   display: grid;
-  grid-template-rows: repeat(7, 12px);
+  grid-template-rows: repeat(7, 1fr);
   grid-auto-flow: column;
   gap: 2px;
+}
+.git-stats-grid.is-compact {
+  grid-template-rows: repeat(7, 12px);
   width: max-content;
 }
 .git-stats-cell {
-  width: 12px;
-  height: 12px;
+  width: 100%;
+  aspect-ratio: 1;
+  min-width: 8px;
   border: 0;
   border-radius: 2px;
   background: var(--gs-l0);
   cursor: pointer;
   padding: 0;
+}
+.git-stats-cell.is-compact {
+  width: 12px;
+  height: 12px;
+  min-width: 0;
+  aspect-ratio: auto;
 }
 .git-stats-cell:disabled {
   cursor: default;
