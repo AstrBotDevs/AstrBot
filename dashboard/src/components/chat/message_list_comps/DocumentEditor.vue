@@ -1,14 +1,16 @@
 <!-- Author: elecvoid243, 2026-07-12
      Spec: docs/superpowers/specs/2026-07-11-document-manager-design.md §4.6
-     Edit area with CodeMirror 6 + textarea fallback. Owns the
-     edit buffer, dirty tracking, and the action bar (save /
-     cancel / copy / delete / rename). Rename is real and uses
-     the PATCH /spcode/docs endpoint. -->
+     Edit area + action bar (save / cancel / copy / delete / rename).
+     Owns the edit buffer, dirty tracking. Rename is real and uses
+     the PATCH /spcode/docs endpoint.
+     2026-07-18: edit body swapped from the markdown-only
+     CodemirrorHost to the shared CodeMirrorEditor (markdown syntax
+     highlighting, dark-aware theme, internal textarea fallback). -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
-import CodemirrorHost from "./CodemirrorHost.vue";
+import CodeMirrorEditor from "./CodeMirrorEditor.vue";
 
 const props = defineProps<{
   initialContent: string;
@@ -144,19 +146,16 @@ watch(
 function onCodemirrorUpdate(v: string) {
   buffer.value = v;
 }
-function onCodemirrorError() {
-  useTextarea.value = true;
-}
 </script>
 
 <template>
   <div class="document-editor">
-    <CodemirrorHost
+    <CodeMirrorEditor
       v-if="!useTextarea"
       :model-value="buffer"
-      language="markdown"
+      :file-path="fileRelative"
+      class="document-editor__cm"
       @update:model-value="onCodemirrorUpdate"
-      @error="onCodemirrorError"
     />
     <textarea
       v-else
@@ -266,6 +265,14 @@ function onCodemirrorError() {
   min-height: 0;
   gap: 6px;
   padding: 6px;
+}
+.document-editor__cm {
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--v-theme-surface, transparent);
 }
 .document-editor__textarea {
   flex: 1 1 auto;
