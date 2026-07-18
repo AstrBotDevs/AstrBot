@@ -1244,7 +1244,8 @@ class PluginManager:
                     for func_tool in llm_tools.func_list:
                         for ft in self._iter_concrete_llm_tools(func_tool):
                             if ft.handler and (
-                                ft.handler.__module__ == metadata.module_path
+                                getattr(ft.handler, "__module__", None)
+                                == metadata.module_path
                                 or (
                                     isinstance(ft.handler, functools.partial)
                                     and ft.handler_module_path == metadata.module_path

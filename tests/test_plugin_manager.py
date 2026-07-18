@@ -10,8 +10,8 @@ import pytest
 import yaml
 
 from astrbot.core.star import star_manager as star_manager_module
-from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
+from astrbot.core.star.star_manager import PluginDependencyInstallError, PluginManager
 from astrbot.core.utils.pip_installer import PipInstallError
 from astrbot.core.utils.requirements_utils import MissingRequirementsPlan
 
