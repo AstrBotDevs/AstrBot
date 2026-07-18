@@ -68,7 +68,10 @@
                         type="button"
                         @click="openImage(partUrl(part))"
                       >
-                        <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+                        <img
+                          :src="partUrl(part)"
+                          :alt="part.filename || 'image'"
+                        />
                       </button>
 
                       <audio
@@ -144,7 +147,9 @@
                         </template>
                       </div>
 
-                      <pre v-else class="unknown-part">{{ formatJson(part) }}</pre>
+                      <pre v-else class="unknown-part">{{
+                        formatJson(part)
+                      }}</pre>
                     </template>
                   </template>
                 </template>
@@ -332,7 +337,11 @@ async function sendCurrentMessage() {
   const parts = buildOutgoingParts(text);
   const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   const selection = inputRef.value?.getCurrentSelection();
-  const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
+  const { userRecord, botRecord } = createLocalExchange({
+    sessionId,
+    messageId,
+    parts,
+  });
 
   draft.value = "";
   clearStaged({ revokeUrls: false });
@@ -347,6 +356,7 @@ async function sendCurrentMessage() {
     enableStreaming: enableStreaming.value,
     selectedProvider: selection?.providerId || "",
     selectedModel: selection?.modelName || "",
+    userRecord,
     botRecord,
   });
 }
