@@ -116,10 +116,12 @@ async def test_download_file_writes_successful_response(monkeypatch, tmp_path):
     assert target_path.read_bytes() == b"hello world"
 
 
+@pytest.mark.parametrize("post", [False, True])
 @pytest.mark.asyncio
-async def test_download_image_by_url_rejects_non_200_post_response(
+async def test_download_image_by_url_rejects_non_200_response(
     monkeypatch,
     tmp_path,
+    post,
 ):
     target_path = tmp_path / "image.jpg"
     _patch_download_session(
@@ -130,18 +132,20 @@ async def test_download_image_by_url_rejects_non_200_post_response(
     with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 404"):
         await io.download_image_by_url(
             "https://example.test/generate",
-            post=True,
-            post_data={"json": False},
+            post=post,
+            post_data={"json": False} if post else None,
             path=str(target_path),
         )
 
     assert not target_path.exists()
 
 
+@pytest.mark.parametrize("post", [False, True])
 @pytest.mark.asyncio
 async def test_download_image_by_url_rejects_non_200_response_after_ssl_fallback(
     monkeypatch,
     tmp_path,
+    post,
 ):
     class FakeSSLError(Exception):
         pass
@@ -160,18 +164,20 @@ async def test_download_image_by_url_rejects_non_200_response_after_ssl_fallback
     with pytest.raises(io.DownloadFileHTTPError, match="HTTP status code: 500"):
         await io.download_image_by_url(
             "https://example.test/generate",
-            post=True,
-            post_data={"json": False},
+            post=post,
+            post_data={"json": False} if post else None,
             path=str(target_path),
         )
 
     assert not target_path.exists()
 
 
+@pytest.mark.parametrize("post", [False, True])
 @pytest.mark.asyncio
-async def test_download_image_by_url_writes_successful_post_response(
+async def test_download_image_by_url_writes_successful_response(
     monkeypatch,
     tmp_path,
+    post,
 ):
     target_path = tmp_path / "image.jpg"
     _patch_download_session(
@@ -181,8 +187,8 @@ async def test_download_image_by_url_writes_successful_post_response(
 
     result = await io.download_image_by_url(
         "https://example.test/generate",
-        post=True,
-        post_data={"json": False},
+        post=post,
+        post_data={"json": False} if post else None,
         path=str(target_path),
     )
 

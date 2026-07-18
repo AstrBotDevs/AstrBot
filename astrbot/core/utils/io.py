@@ -113,7 +113,11 @@ def save_temp_img(img: Image.Image | bytes) -> str:
     return p
 
 
-async def _save_image_response(resp, url: str, path: str | None) -> str:
+async def _save_image_response(
+    resp: aiohttp.ClientResponse,
+    url: str,
+    path: str | None,
+) -> str:
     _raise_for_download_status(resp, url)
     content = await resp.read()
     if not path:
@@ -163,8 +167,6 @@ async def download_image_by_url(
             else:
                 async with session.get(url, ssl=ssl_context) as resp:
                     return await _save_image_response(resp, url, path)
-    except Exception as e:
-        raise e
 
 
 async def _emit_download_progress(progress_callback, payload: dict) -> None:
