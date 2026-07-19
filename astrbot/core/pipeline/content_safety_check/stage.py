@@ -41,11 +41,7 @@ class ContentSafetyCheckStage(Stage):
         else:
             texts = [check_text]
 
-        ok, info = True, ""
-        for text in texts:
-            ok, info = self.strategy_selector.check(text)
-            if not ok:
-                break
+        ok, info = self.strategy_selector.check("\n".join(texts))
         if not ok:
             if event.is_at_or_wake_command:
                 event.set_result(

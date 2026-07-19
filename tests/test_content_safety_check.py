@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -7,6 +8,25 @@ from astrbot.core.pipeline.content_safety_check.stage import ContentSafetyCheckS
 from astrbot.core.pipeline.content_safety_check.strategies.strategy import (
     StrategySelector,
 )
+
+
+@pytest.mark.asyncio
+async def test_content_safety_checks_combined_message_text_once():
+    event = SimpleNamespace(
+        is_at_or_wake_command=False,
+        get_message_str=lambda: "current message",
+        get_messages=lambda: [Reply(id="1", message_str="quoted message")],
+        stop_event=Mock(),
+    )
+    stage = ContentSafetyCheckStage()
+    stage.strategy_selector = SimpleNamespace(check=Mock(return_value=(True, "")))
+
+    async for _ in stage.process(event):
+        pass
+
+    stage.strategy_selector.check.assert_called_once_with(
+        "current message\nquoted message"
+    )
 
 
 @pytest.mark.asyncio
@@ -27,7 +47,7 @@ from astrbot.core.pipeline.content_safety_check.strategies.strategy import (
         ),
         (
             Reply(id="1", message_str="引用中包含淀粉砖"),
-            "^引用中包含淀粉砖$",
+            "^你说呢\n引用中包含淀粉砖$",
             None,
             True,
         ),
