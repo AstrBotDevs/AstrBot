@@ -41,7 +41,9 @@ import {
  */
 export interface BotMessageLike {
   content: {
-    message: Array<InteractiveChoicePart | (Record<string, unknown> & { type: string })>;
+    message: Array<
+      InteractiveChoicePart | (Record<string, unknown> & { type: string })
+    >;
     isLoading?: boolean;
   };
 }
@@ -77,4 +79,51 @@ export function applyInteractiveChoiceSse(
   botRecord.content.message.push(part);
   botRecord.content.isLoading = false;
   useInteractiveChoiceStore().addChoice(umo, part);
+}
+
+/**
+ * Apply a backend-emitted SSE `interactive_choice_resolved` payload to
+ * the client. Used to record server-driven terminal events (timeout
+ * or `asyncio.CancelledError`) so the box can flip into the
+ * non-interactive `cancelled` state.
+ *
+ * Behaviour:
+ *   - Returns silently on malformed payload (wrong type, missing
+ *     `data.request_id`, empty after trim).
+ *   - On a valid payload, writes the request_id into
+ *     `useInteractiveChoiceStore().cancelledStates[umo]` via
+ *     `markCancelled`.
+ *   - Does **not** mutate any bot record `content.message` — the
+ *     resolved event carries no `spec`, only the bookkeeping id.
+ *
+ * The `umo` argument scopes the write to a single session's bucket.
+ * Throws when missing, matching the `applyInteractiveChoiceSse`
+ * contract (Bug Y1 fix).
+ */
+export function applyInteractiveChoiceResolved(
+  umo: string,
+  payload: unknown,
+): void {
+  if (!umo) {
+    throw new Error(
+      "applyInteractiveChoiceResolved: missing required 'umo' (Bug Y1 fix)",
+    );
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return;
+  }
+  const root = payload as Record<string, unknown>;
+  if (root.type !== "interactive_choice_resolved") {
+    return;
+  }
+  const data = root.data as Record<string, unknown> | undefined;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return;
+  }
+  const requestId =
+    typeof data.request_id === "string" ? data.request_id.trim() : "";
+  if (!requestId) {
+    return;
+  }
+  useInteractiveChoiceStore().markCancelled(umo, requestId);
 }
