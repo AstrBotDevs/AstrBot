@@ -65,6 +65,17 @@ export const SUBMISSION_STORAGE_KEY = "astrbot-interactive-choice-submissions";
  */
 export const IGNORED_STORAGE_KEY = "astrbot-interactive-choice-ignored";
 
+/**
+ * localStorage key for per-UMO "this choice box has been resolved by
+ * the server (timeout or runtime cancel)" sets. Mirrored into
+ * `cancelledStates` on hydrate, written through on `markCancelled`.
+ *
+ * Kept separate from `IGNORED_STORAGE_KEY` so a user-ignored box and a
+ * server-cancelled box are tracked independently (different semantic
+ * sources; different visual states; different future analytics).
+ */
+export const CANCELLED_STORAGE_KEY = "astrbot-interactive-choice-cancelled";
+
 interface SubmitPayload {
   choice_id: string;
   free_text: string;
@@ -95,6 +106,9 @@ type PersistedSubmissions = Record<string, Record<string, SubmissionState>>;
 
 /** Per-UMO wire shape for ignored-by-user-message request ids. */
 type PersistedIgnored = Record<string, Record<string, true>>;
+
+/** Per-UMO wire shape for server-resolved (timeout/cancel) request ids. */
+type PersistedCancelled = Record<string, Record<string, true>>;
 
 /**
  * Structural shape of a bot message as consumed by
@@ -136,6 +150,22 @@ interface State {
    * truncate messages on reload.
    */
   ignoredStates: PersistedIgnored;
+  /**
+   * Per-UMO set of `request_id`s whose backend registry entry has
+   * been removed (timeout or `asyncio.CancelledError`). Written when:
+   *  - the SSE `interactive_choice_resolved {reason: "cancelled"}`
+   *    event arrives (`applyInteractiveChoiceResolved`)
+   *  - `reconcile(umo)` discovers the part is no longer in the
+   *    backend pending list (network / SSE miss 兜底)
+   *
+   * The set is monotone-additive per session, mirroring
+   * `ignoredStates`. Stored in its own localStorage key
+   * (`CANCELLED_STORAGE_KEY`) so a user-ignored box and a
+   * server-cancelled box are tracked independently — different
+   * semantic sources, different visual states, different future
+   * analytics.
+   */
+  cancelledStates: PersistedCancelled;
 }
 
 /** Sentinel used when a caller forgets to pass an explicit umo. */
@@ -163,6 +193,7 @@ export const useInteractiveChoiceStore = defineStore("interactiveChoice", {
     activeChoices: {},
     submissionStates: {},
     ignoredStates: {},
+    cancelledStates: {},
   }),
   getters: {
     hasAny(state): boolean {
@@ -298,6 +329,39 @@ export const useInteractiveChoiceStore = defineStore("interactiveChoice", {
     },
 
     /**
+     * Mark a single `request_id` under one UMO as "resolved by the
+     * server (timeout or cancel)". Idempotent — calling twice with
+     * the same arguments is a no-op. Persists immediately.
+     *
+     * Why single-rid (not batched like `markIgnored`): the only
+     * call sites are the SSE `interactive_choice_resolved` handler
+     * and the per-rid reconcile orphan-detection loop, both of
+     * which already iterate one rid at a time. A batched API would
+     * just push that loop up the call chain without any
+     * performance or correctness gain.
+     */
+    markCancelled(umo: string, requestId: string): void {
+      if (!umo) missingUmo("markCancelled");
+      if (!requestId) return;
+      const bucket = (this.cancelledStates[umo] ??= {});
+      if (bucket[requestId]) return;
+      bucket[requestId] = true;
+      this.persistCancelled();
+    },
+
+    /**
+     * Read-only check: has this `request_id` been marked cancelled
+     * under this UMO? Used by `InteractiveChoiceBox` to derive the
+     * `cancelled` state. Mirrors `isIgnored`'s permissive contract
+     * (empty inputs return false rather than throwing) so callers
+     * can probe without an explicit guard.
+     */
+    isCancelled(umo: string, requestId: string): boolean {
+      if (!umo || !requestId) return false;
+      return Boolean(this.cancelledStates[umo]?.[requestId]);
+    },
+
+    /**
      * Read pending choices + submission states for a given UMO from
      * localStorage and populate state. Switching to a different UMO
      * clears the in-memory state for the previous UMO first, so a
@@ -319,12 +383,14 @@ export const useInteractiveChoiceStore = defineStore("interactiveChoice", {
         this.activeChoices = {};
         this.submissionStates = {};
         this.ignoredStates = {};
+        this.cancelledStates = {};
       }
       this.currentUmo = umo;
 
       this.hydrateActiveChoices(umo);
       this.hydrateSubmissions(umo);
       this.hydrateIgnored(umo);
+      this.hydrateCancelled(umo);
     },
 
     hydrateActiveChoices(umo: string): void {
@@ -395,6 +461,27 @@ export const useInteractiveChoiceStore = defineStore("interactiveChoice", {
       }
       if (Object.keys(next).length > 0) {
         this.ignoredStates[umo] = next;
+      }
+    },
+
+    /**
+     * Hydrate `cancelledStates` for a given UMO from localStorage.
+     * Same defensive contract as `hydrateIgnored`: only
+     * well-shaped entries survive. Called once per `hydrate(umo)`;
+     * safe to re-call.
+     */
+    hydrateCancelled(umo: string): void {
+      const parsed = this.readPerUmo<true>(CANCELLED_STORAGE_KEY);
+      const perUmo = parsed[umo];
+      if (!perUmo) return;
+      const next: Record<string, true> = {};
+      for (const [requestId, _flag] of Object.entries(perUmo)) {
+        if (typeof requestId === "string" && requestId) {
+          next[requestId] = true;
+        }
+      }
+      if (Object.keys(next).length > 0) {
+        this.cancelledStates[umo] = next;
       }
     },
 
@@ -475,6 +562,20 @@ export const useInteractiveChoiceStore = defineStore("interactiveChoice", {
             ) {
               const p = part as InteractiveChoicePart;
               next[p.request_id] = p;
+            }
+          }
+          // ── v1.2: detect orphan parts (local but not server-side)
+          // and mark them cancelled. Must run BEFORE the
+          // activeChoices overwrite below, otherwise the local list
+          // is gone before we can diff it. Reuses the `next` dict
+          // built above (its keys ARE the backend request_ids).
+          const backendIds = new Set(Object.keys(next));
+          const localBucket = this.activeChoices[umo];
+          if (localBucket) {
+            for (const localRid of Object.keys(localBucket)) {
+              if (!backendIds.has(localRid)) {
+                this.markCancelled(umo, localRid);
+              }
             }
           }
           // Overwrite *only* this UMO's bucket; leave sibling UMOs
@@ -635,6 +736,21 @@ export const useInteractiveChoiceStore = defineStore("interactiveChoice", {
         );
       } catch (e) {
         console.warn("[interactiveChoice] persistIgnored failed:", e);
+      }
+    },
+
+    /**
+     * Serialize per-UMO `cancelledStates` to localStorage. Same
+     * best-effort policy as `persistIgnored`.
+     */
+    persistCancelled(): void {
+      try {
+        localStorage.setItem(
+          CANCELLED_STORAGE_KEY,
+          JSON.stringify(this.cancelledStates),
+        );
+      } catch (e) {
+        console.warn("[interactiveChoice] persistCancelled failed:", e);
       }
     },
   },

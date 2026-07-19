@@ -24,6 +24,7 @@ import { createPinia, setActivePinia } from "pinia";
 import MockAdapter from "axios-mock-adapter";
 
 import { httpClient } from "../api/http.ts";
+import type { InteractiveChoicePart } from "../composables/parseInteractiveChoice.ts";
 import { STORAGE_KEY, useInteractiveChoiceStore } from "./interactiveChoice.ts";
 
 const TEST_UMO = "webchat:test!1!sess";
@@ -494,6 +495,7 @@ test("injectOrphans injects multiple orphans each into the last bot message", ()
 // ---------------------------------------------------------------------------
 
 import {
+  CANCELLED_STORAGE_KEY,
   IGNORED_STORAGE_KEY,
   SUBMISSION_STORAGE_KEY,
 } from "./interactiveChoice.ts";
@@ -919,4 +921,81 @@ test("hydrate to a new UMO clears the prior UMO's ignoredStates", () => {
 test("markIgnored throws when umo is missing (safety)", () => {
   const store = useInteractiveChoiceStore();
   assert.throws(() => store.markIgnored("", ["rid"]), /missing required 'umo'/);
+});
+
+// ---------------------------------------------------------------------------
+// Task F2: per-UMO cancelledStates — server-driven "this box has been
+// resolved by timeout / cancel" tracking. Mirrors the ignoredStates
+// layout but is driven by the SSE `interactive_choice_resolved
+// {reason: "cancelled"}` event (and by `reconcile(umo)` orphan
+// detection) instead of by a later user message.
+// ---------------------------------------------------------------------------
+
+test("CANCELLED_STORAGE_KEY is the expected localStorage key", () => {
+  assert.equal(CANCELLED_STORAGE_KEY, "astrbot-interactive-choice-cancelled");
+});
+
+test("markCancelled is idempotent (re-mark is a no-op)", () => {
+  const store = useInteractiveChoiceStore();
+  store.markCancelled(TEST_UMO, "rid-1");
+  store.markCancelled(TEST_UMO, "rid-1");
+  store.markCancelled(TEST_UMO, "rid-1");
+  assert.equal(store.isCancelled(TEST_UMO, "rid-1"), true);
+});
+
+test("isCancelled returns false for unknown request_id", () => {
+  const store = useInteractiveChoiceStore();
+  assert.equal(store.isCancelled(TEST_UMO, "rid-unknown"), false);
+});
+
+test("cancelledStates is scoped per UMO (Bug Y1 mirror)", () => {
+  const store = useInteractiveChoiceStore();
+  const umoA = "webchat:FriendMessage:webchat!alice!sess";
+  const umoB = "webchat:FriendMessage:webchat!bob!sess";
+  store.markCancelled(umoA, "rid-1");
+  assert.equal(store.isCancelled(umoA, "rid-1"), true);
+  assert.equal(store.isCancelled(umoB, "rid-1"), false);
+});
+
+test("reconcile marks locally-tracked parts absent from backend as cancelled", async () => {
+  const store = useInteractiveChoiceStore();
+  const umo = "webchat:FriendMessage:webchat!alice!sess";
+
+  const partPresent: InteractiveChoicePart = {
+    type: "interactive_choice",
+    request_id: "rid-present",
+    prompt: "x?",
+    options: [{ id: "a", label: "A" }],
+  };
+  const partMissing: InteractiveChoicePart = {
+    type: "interactive_choice",
+    request_id: "rid-missing",
+    prompt: "y?",
+    options: [{ id: "b", label: "B" }],
+  };
+  store.addChoice(umo, partPresent);
+  store.addChoice(umo, partMissing);
+
+  // Backend pending list returns only the present one (simulates a
+  // missed SSE `interactive_choice_resolved {reason: "cancelled"}`
+  // event during a network outage).
+  mock.onPost("/api/chat/interactive-choice/pending").reply(200, {
+    status: "ok",
+    data: { pending: [partPresent] },
+  });
+
+  await store.reconcile(umo);
+
+  // The POST was issued to the right URL with the right body.
+  assert.equal(mock.history.post.length, 1);
+  assert.equal(
+    mock.history.post[0].url,
+    "/api/chat/interactive-choice/pending",
+  );
+  assert.deepEqual(JSON.parse(mock.history.post[0].data as string), {
+    session_id: umo,
+  });
+  // Orphan rid is now cancelled; the still-pending rid is not.
+  assert.equal(store.isCancelled(umo, "rid-missing"), true);
+  assert.equal(store.isCancelled(umo, "rid-present"), false);
 });
