@@ -1444,6 +1444,13 @@ async def build_main_agent(
                 if comp.chain:
                     for reply_comp in comp.chain:
                         if isinstance(reply_comp, Image):
+                            if not (reply_comp.url or reply_comp.file):
+                                logger.warning(
+                                    "Skip quoted image without file or URL for umo=%s, reply_id=%s",
+                                    event.unified_msg_origin,
+                                    getattr(comp, "id", None),
+                                )
+                                continue
                             has_embedded_image = True
                             path = await reply_comp.convert_to_file_path()
                             image_path = await _compress_image_for_provider(
