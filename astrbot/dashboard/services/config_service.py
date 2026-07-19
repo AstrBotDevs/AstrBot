@@ -1428,7 +1428,7 @@ class ProviderConfigService:
         try:
             models = await inst.get_models()
             models = models or []
-            return {
+            result = {
                 "models": models,
                 "provider_source_id": source_id,
                 "model_metadata": {
@@ -1437,6 +1437,11 @@ class ProviderConfigService:
                     if model_id in LLM_METADATAS
                 },
             }
+            key_mapping_getter = getattr(inst, "get_model_key_indexes", None)
+            if callable(key_mapping_getter):
+                model_key_indexes = key_mapping_getter()
+                result["model_key_indexes"] = model_key_indexes
+            return result
         finally:
             terminate_fn = getattr(inst, "terminate", None)
             if callable(terminate_fn):

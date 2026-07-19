@@ -66,6 +66,15 @@
                   <div class="provider-model-row__title">{{ entry.provider.id }}</div>
                   <div class="provider-model-row__subtitle">{{ entry.provider.model }}</div>
                   <div class="provider-model-row__meta">
+                    <template v-if="entry.keyIndexes?.length">
+                      <span
+                        v-for="keyIndex in entry.keyIndexes || []"
+                        :key="`key-${keyIndex}`"
+                        class="provider-model-row__badge provider-model-row__badge--enabled provider-model-row__badge--text"
+                      >
+                        Key {{ keyIndex + 1 }}
+                      </span>
+                    </template>
                     <v-tooltip
                       v-for="item in capabilityBadges(entry)"
                       :key="item.key"
@@ -192,6 +201,15 @@
                 >
                   <div class="provider-model-row__title provider-model-row__title--mono">{{ entry.model }}</div>
                   <div class="provider-model-row__meta">
+                    <template v-if="entry.keyIndexes?.length">
+                      <span
+                        v-for="keyIndex in entry.keyIndexes || []"
+                        :key="`key-${keyIndex}`"
+                        class="provider-model-row__badge provider-model-row__badge--enabled provider-model-row__badge--text"
+                      >
+                        Key {{ keyIndex + 1 }}
+                      </span>
+                    </template>
                     <v-tooltip
                       v-for="item in capabilityBadges(entry)"
                       :key="item.key"

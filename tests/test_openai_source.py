@@ -149,6 +149,111 @@ async def test_get_models_retries_transient_request_error(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_models_merges_models_from_all_api_keys():
+    class FakeClient:
+        def __init__(self, key: str):
+            self.key = key
+            self.closed = False
+            self.models = self
+
+        async def list(self):
+            models_by_key = {
+                "key-a": ["model-a", "shared-model"],
+                "key-b": ["model-b", "shared-model"],
+            }
+            return SimpleNamespace(
+                data=[SimpleNamespace(id=model) for model in models_by_key[self.key]]
+            )
+
+        async def close(self):
+            self.closed = True
+
+    provider = _make_provider({"key": ["key-a", "key-b"]})
+    created_clients: list[FakeClient] = []
+
+    def create_client(key):
+        client = FakeClient(key)
+        created_clients.append(client)
+        return client
+
+    provider._create_sdk_client = create_client
+    try:
+        assert await provider.get_models() == [
+            "model-a",
+            "model-b",
+            "shared-model",
+        ]
+        assert provider.get_model_key_indexes() == {
+            "model-a": [0],
+            "shared-model": [0, 1],
+            "model-b": [1],
+        }
+        assert all(client.closed for client in created_clients)
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_get_models_keeps_successful_keys_when_one_key_fails():
+    class FakeClient:
+        def __init__(self, key: str):
+            self.key = key
+            self.models = self
+
+        async def list(self):
+            if self.key == "bad-key":
+                raise RuntimeError("access denied")
+            return SimpleNamespace(data=[SimpleNamespace(id="model-b")])
+
+        async def close(self):
+            return None
+
+    provider = _make_provider({"key": ["bad-key", "good-key"]})
+    provider._create_sdk_client = FakeClient
+    try:
+        assert await provider.get_models() == ["model-b"]
+        assert provider.get_model_key_indexes() == {"model-b": [1]}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_text_chat_retries_with_another_key_for_model_access_error(
+    monkeypatch,
+):
+    class ModelAccessError(Exception):
+        status_code = 404
+
+    provider = _make_provider({"key": ["key-a", "key-b"], "model": "model-b"})
+    attempted_keys: list[str] = []
+
+    async def fake_prepare_chat_payload(*args, **kwargs):
+        return {"messages": [], "model": "model-b"}, []
+
+    async def fake_query(payloads, func_tool, *, request_max_retries=None):
+        attempted_keys.append(provider.client.api_key)
+        if provider.client.api_key == "key-a":
+            raise ModelAccessError("model not found")
+        return LLMResponse(role="assistant", completion_text="ok")
+
+    choices = iter(["key-a", "key-b"])
+    monkeypatch.setattr(
+        openai_source_module.random,
+        "choice",
+        lambda _keys: next(choices),
+    )
+    provider._prepare_chat_payload = fake_prepare_chat_payload
+    provider._query = fake_query
+    try:
+        response = await provider.text_chat(prompt="hello")
+        assert response.completion_text == "ok"
+        assert attempted_keys == ["key-a", "key-b"]
+        assert provider._candidate_api_keys_for_model("model-b") == ["key-b"]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_text_chat_passes_request_max_retries_to_query():
     captured: dict[str, object] = {}
 

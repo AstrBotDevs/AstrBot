@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import hashlib
 import inspect
 import json
 import random
@@ -50,6 +51,7 @@ from .request_retry import retry_provider_request
 )
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+    _model_key_cache: dict[str, dict[str, tuple[int, ...]]] = {}
 
     @classmethod
     def _truncate_error_text_candidate(cls, text: str) -> str:
@@ -353,6 +355,194 @@ class ProviderOpenAIOfficial(Provider):
             pass
         return create_proxy_client("OpenAI", proxy, httpx_module=httpx_module)
 
+    def _create_sdk_client(self, api_key: str | None):
+        """Create an OpenAI SDK client for one configured key.
+
+        Args:
+            api_key: API key assigned to the client.
+
+        Returns:
+            An Azure OpenAI or OpenAI async client matching the provider config.
+        """
+        if "api_version" in self.provider_config:
+            return AsyncAzureOpenAI(
+                api_key=api_key,
+                api_version=self.provider_config.get("api_version", None),
+                default_headers=self.custom_headers,
+                base_url=self.provider_config.get("api_base", ""),
+                timeout=self.timeout,
+                http_client=self._create_http_client(self.provider_config),
+            )
+        return AsyncOpenAI(
+            api_key=api_key,
+            base_url=self.provider_config.get("api_base", None),
+            default_headers=self.custom_headers,
+            timeout=self.timeout,
+            http_client=self._create_http_client(self.provider_config),
+        )
+
+    def _model_key_cache_id(self) -> str | None:
+        """Build a secret-safe identity for cached model-to-key mappings.
+
+        Returns:
+            A stable cache ID, or ``None`` before provider initialization.
+        """
+        provider_config = getattr(self, "provider_config", None)
+        api_keys = getattr(self, "api_keys", None)
+        if not isinstance(provider_config, dict) or not isinstance(api_keys, list):
+            return None
+        identity = {
+            "api_base": provider_config.get("api_base"),
+            "api_version": provider_config.get("api_version"),
+            "custom_headers": getattr(self, "custom_headers", None) or {},
+            "keys": [
+                hashlib.sha256(str(key).encode("utf-8")).hexdigest() for key in api_keys
+            ],
+        }
+        payload = json.dumps(identity, ensure_ascii=True, sort_keys=True, default=str)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def _store_model_key_indexes(
+        self,
+        model_key_indexes: dict[str, list[int]],
+    ) -> None:
+        """Store model ownership discovered from all configured keys.
+
+        Args:
+            model_key_indexes: Mapping from model ID to zero-based key indexes.
+        """
+        normalized = {
+            model: tuple(dict.fromkeys(indexes))
+            for model, indexes in model_key_indexes.items()
+        }
+        self._last_model_key_indexes = normalized
+        cache_id = self._model_key_cache_id()
+        if cache_id:
+            self._model_key_cache[cache_id] = normalized
+
+    def get_model_key_indexes(self) -> dict[str, list[int]]:
+        """Return the model ownership found by the latest model discovery.
+
+        Returns:
+            A copy of the model-to-key-index mapping.
+        """
+        mapping = getattr(self, "_last_model_key_indexes", {})
+        return {model: list(indexes) for model, indexes in mapping.items()}
+
+    def _candidate_api_keys_for_model(self, model: str) -> list[str]:
+        """Select keys known to expose a model, falling back to all keys.
+
+        Args:
+            model: Model ID used by the request.
+
+        Returns:
+            Deduplicated API keys eligible for the request.
+        """
+        api_keys = list(dict.fromkeys(getattr(self, "api_keys", []) or [""]))
+        cache_id = self._model_key_cache_id()
+        if not cache_id:
+            return api_keys
+        indexes = self._model_key_cache.get(cache_id, {}).get(model)
+        if not indexes:
+            return api_keys
+        matched = [
+            self.api_keys[index] for index in indexes if 0 <= index < len(self.api_keys)
+        ]
+        return list(dict.fromkeys(matched)) or api_keys
+
+    def _remember_model_key(self, model: str, api_key: str) -> None:
+        """Remember that a request succeeded for a model and key.
+
+        Args:
+            model: Model ID used by the request.
+            api_key: API key that completed the request.
+        """
+        cache_id = self._model_key_cache_id()
+        if not cache_id or api_key not in self.api_keys:
+            return
+        mapping = dict(self._model_key_cache.get(cache_id, {}))
+        indexes = list(mapping.get(model, ()))
+        key_index = self.api_keys.index(api_key)
+        if key_index not in indexes:
+            indexes.append(key_index)
+        mapping[model] = tuple(indexes)
+        self._model_key_cache[cache_id] = mapping
+
+    def _forget_model_key(self, model: str, api_key: str) -> None:
+        """Remove a model/key association after an access failure.
+
+        Args:
+            model: Model ID rejected by the provider.
+            api_key: API key that could not access the model.
+        """
+        cache_id = self._model_key_cache_id()
+        if not cache_id or api_key not in self.api_keys:
+            return
+        mapping = dict(self._model_key_cache.get(cache_id, {}))
+        indexes = list(mapping.get(model, ()))
+        key_index = self.api_keys.index(api_key)
+        if key_index not in indexes:
+            return
+        indexes.remove(key_index)
+        if indexes:
+            mapping[model] = tuple(indexes)
+        else:
+            mapping.pop(model, None)
+        self._model_key_cache[cache_id] = mapping
+
+    def _key_label(self, api_key: str) -> str:
+        """Return a log-safe ordinal label for an API key.
+
+        Args:
+            api_key: Configured API key to identify.
+
+        Returns:
+            A label such as ``Key #2`` without exposing key material.
+        """
+        try:
+            return f"Key #{self.api_keys.index(api_key) + 1}"
+        except (AttributeError, ValueError):
+            return "configured key"
+
+    def _is_key_or_model_access_error(self, error: Exception) -> bool:
+        """Check whether retrying the model with another key is appropriate.
+
+        Args:
+            error: Provider exception raised by a chat request.
+
+        Returns:
+            Whether the error indicates key authentication or model access failure.
+        """
+        status_codes = (
+            getattr(error, "status_code", None),
+            getattr(error, "status", None),
+            getattr(getattr(error, "response", None), "status_code", None),
+        )
+        if any(code in {401, 403, 404} for code in status_codes):
+            return True
+        error_text = " ".join(self._extract_error_text_candidates(error)).lower()
+        if "model" not in error_text and "模型" not in error_text:
+            return False
+        return any(
+            marker in error_text
+            for marker in (
+                "does not exist",
+                "not found",
+                "not available",
+                "not accessible",
+                "no access",
+                "access denied",
+                "insufficient permission",
+                "permission",
+                "not allowed",
+                "unauthorized",
+                "不存在",
+                "不可用",
+                "无权",
+                "权限",
+            )
+        )
+
     def __init__(self, provider_config, provider_settings) -> None:
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = None
@@ -369,25 +559,7 @@ class ProviderOpenAIOfficial(Provider):
             for key in self.custom_headers:
                 self.custom_headers[key] = str(self.custom_headers[key])
 
-        if "api_version" in provider_config:
-            # Using Azure OpenAI API
-            self.client = AsyncAzureOpenAI(
-                api_key=self.chosen_api_key,
-                api_version=provider_config.get("api_version", None),
-                default_headers=self.custom_headers,
-                base_url=provider_config.get("api_base", ""),
-                timeout=self.timeout,
-                http_client=self._create_http_client(provider_config),
-            )
-        else:
-            # Using OpenAI Official API
-            self.client = AsyncOpenAI(
-                api_key=self.chosen_api_key,
-                base_url=provider_config.get("api_base", None),
-                default_headers=self.custom_headers,
-                timeout=self.timeout,
-                http_client=self._create_http_client(provider_config),
-            )
+        self.client = self._create_sdk_client(self.chosen_api_key)
 
         self.default_params = inspect.signature(
             self.client.chat.completions.create,
@@ -435,18 +607,63 @@ class ProviderOpenAIOfficial(Provider):
         extra_body["reasoning_effort"] = "none"
 
     async def get_models(self):
-        try:
-            models_str = []
-            models = await retry_provider_request(
-                "OpenAI",
-                lambda: self.client.models.list(),
-            )
-            models = sorted(models.data, key=lambda x: x.id)
-            for model in models:
-                models_str.append(model.id)
-            return models_str
-        except NotFoundError as e:
-            raise Exception(f"获取模型列表失败：{e}")
+        api_keys = getattr(self, "api_keys", None)
+        if not isinstance(api_keys, list) or len(api_keys) <= 1:
+            try:
+                models = await retry_provider_request(
+                    "OpenAI",
+                    lambda: self.client.models.list(),
+                )
+                models_str = sorted(model.id for model in models.data)
+                if isinstance(api_keys, list):
+                    self._store_model_key_indexes({model: [0] for model in models_str})
+                return models_str
+            except NotFoundError as e:
+                raise Exception(f"获取模型列表失败：{e}")
+
+        unique_keys = list(dict.fromkeys(api_keys))
+        model_key_indexes: dict[str, list[int]] = {}
+        last_error: Exception | None = None
+        successful_requests = 0
+
+        for api_key in unique_keys:
+            key_index = api_keys.index(api_key)
+            client = None
+            try:
+                client = self._create_sdk_client(api_key)
+                models = await retry_provider_request(
+                    f"OpenAI {self._key_label(api_key)}",
+                    lambda client=client: client.models.list(),
+                )
+                successful_requests += 1
+                for model in models.data:
+                    model_id = getattr(model, "id", None)
+                    if not isinstance(model_id, str) or not model_id:
+                        continue
+                    model_key_indexes.setdefault(model_id, []).append(key_index)
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "Failed to fetch the OpenAI model list with %s: %s",
+                    self._key_label(api_key),
+                    type(exc).__name__,
+                )
+            finally:
+                if client is not None:
+                    try:
+                        await client.close()
+                    except Exception as exc:
+                        logger.debug(
+                            "Failed to close the temporary OpenAI client for %s: %s",
+                            self._key_label(api_key),
+                            type(exc).__name__,
+                        )
+
+        if successful_requests == 0 and last_error is not None:
+            raise last_error
+
+        self._store_model_key_indexes(model_key_indexes)
+        return sorted(model_key_indexes)
 
     @staticmethod
     def _sanitize_assistant_messages(payloads: dict) -> None:
@@ -1167,6 +1384,29 @@ class ProviderOpenAIOfficial(Provider):
             )
         # logger.error(f"发生了错误。Provider 配置如下: {self.provider_config}")
 
+        if self._is_key_or_model_access_error(e) and len(self.api_keys) > 1:
+            model_id = str(payloads.get("model") or self.get_model())
+            self._forget_model_key(model_id, chosen_key)
+            if chosen_key in available_api_keys:
+                available_api_keys.remove(chosen_key)
+            if available_api_keys:
+                next_key = random.choice(available_api_keys)
+                logger.warning(
+                    "%s cannot access model %s; retrying with %s.",
+                    self._key_label(chosen_key),
+                    model_id,
+                    self._key_label(next_key),
+                )
+                return (
+                    False,
+                    next_key,
+                    available_api_keys,
+                    payloads,
+                    context_query,
+                    func_tool,
+                    image_fallback_used,
+                )
+
         if is_connection_error(e):
             proxy = self.provider_config.get("proxy", "")
             log_connection_failure("OpenAI", e, proxy)
@@ -1204,8 +1444,9 @@ class ProviderOpenAIOfficial(Provider):
             payloads["tool_choice"] = tool_choice
 
         llm_response = None
-        max_retries = 10
-        available_api_keys = self.api_keys.copy()
+        model_id = str(payloads.get("model") or self.get_model())
+        available_api_keys = self._candidate_api_keys_for_model(model_id)
+        max_retries = max(10, len(available_api_keys) + 2)
         chosen_key = random.choice(available_api_keys)
         image_fallback_used = False
 
@@ -1219,6 +1460,7 @@ class ProviderOpenAIOfficial(Provider):
                     func_tool,
                     request_max_retries=request_max_retries,
                 )
+                self._remember_model_key(model_id, chosen_key)
                 break
             except Exception as e:
                 last_exception = e
@@ -1280,8 +1522,9 @@ class ProviderOpenAIOfficial(Provider):
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
-        max_retries = 10
-        available_api_keys = self.api_keys.copy()
+        model_id = str(payloads.get("model") or self.get_model())
+        available_api_keys = self._candidate_api_keys_for_model(model_id)
+        max_retries = max(10, len(available_api_keys) + 2)
         chosen_key = random.choice(available_api_keys)
         image_fallback_used = False
 
@@ -1296,6 +1539,7 @@ class ProviderOpenAIOfficial(Provider):
                     request_max_retries=request_max_retries,
                 ):
                     yield response
+                self._remember_model_key(model_id, chosen_key)
                 break
             except Exception as e:
                 last_exception = e
