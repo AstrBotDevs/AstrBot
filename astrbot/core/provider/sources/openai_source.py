@@ -1,6 +1,5 @@
 import asyncio
 import copy
-import hashlib
 import inspect
 import json
 import random
@@ -51,7 +50,6 @@ from .request_retry import retry_provider_request
 )
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
-    _model_key_cache: dict[str, dict[str, tuple[int, ...]]] = {}
 
     @classmethod
     def _truncate_error_text_candidate(cls, text: str) -> str:
@@ -381,27 +379,6 @@ class ProviderOpenAIOfficial(Provider):
             http_client=self._create_http_client(self.provider_config),
         )
 
-    def _model_key_cache_id(self) -> str | None:
-        """Build a secret-safe identity for cached model-to-key mappings.
-
-        Returns:
-            A stable cache ID, or ``None`` before provider initialization.
-        """
-        provider_config = getattr(self, "provider_config", None)
-        api_keys = getattr(self, "api_keys", None)
-        if not isinstance(provider_config, dict) or not isinstance(api_keys, list):
-            return None
-        identity = {
-            "api_base": provider_config.get("api_base"),
-            "api_version": provider_config.get("api_version"),
-            "custom_headers": getattr(self, "custom_headers", None) or {},
-            "keys": [
-                hashlib.sha256(str(key).encode("utf-8")).hexdigest() for key in api_keys
-            ],
-        }
-        payload = json.dumps(identity, ensure_ascii=True, sort_keys=True, default=str)
-        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
     def _store_model_key_indexes(
         self,
         model_key_indexes: dict[str, list[int]],
@@ -411,14 +388,9 @@ class ProviderOpenAIOfficial(Provider):
         Args:
             model_key_indexes: Mapping from model ID to zero-based key indexes.
         """
-        normalized = {
-            model: tuple(dict.fromkeys(indexes))
-            for model, indexes in model_key_indexes.items()
+        self._model_key_indexes = {
+            model: set(indexes) for model, indexes in model_key_indexes.items()
         }
-        self._last_model_key_indexes = normalized
-        cache_id = self._model_key_cache_id()
-        if cache_id:
-            self._model_key_cache[cache_id] = normalized
 
     def get_model_key_indexes(self) -> dict[str, list[int]]:
         """Return the model ownership found by the latest model discovery.
@@ -426,8 +398,8 @@ class ProviderOpenAIOfficial(Provider):
         Returns:
             A copy of the model-to-key-index mapping.
         """
-        mapping = getattr(self, "_last_model_key_indexes", {})
-        return {model: list(indexes) for model, indexes in mapping.items()}
+        mapping = getattr(self, "_model_key_indexes", {})
+        return {model: sorted(indexes) for model, indexes in mapping.items()}
 
     def _candidate_api_keys_for_model(self, model: str) -> list[str]:
         """Select keys known to expose a model, falling back to all keys.
@@ -438,15 +410,15 @@ class ProviderOpenAIOfficial(Provider):
         Returns:
             Deduplicated API keys eligible for the request.
         """
-        api_keys = list(dict.fromkeys(getattr(self, "api_keys", []) or [""]))
-        cache_id = self._model_key_cache_id()
-        if not cache_id:
-            return api_keys
-        indexes = self._model_key_cache.get(cache_id, {}).get(model)
+        api_keys = list(dict.fromkeys(self.api_keys or [""]))
+        mapping = getattr(self, "_model_key_indexes", {})
+        indexes = mapping.get(model)
         if not indexes:
             return api_keys
         matched = [
-            self.api_keys[index] for index in indexes if 0 <= index < len(self.api_keys)
+            self.api_keys[index]
+            for index in sorted(indexes)
+            if 0 <= index < len(self.api_keys)
         ]
         return list(dict.fromkeys(matched)) or api_keys
 
@@ -457,16 +429,13 @@ class ProviderOpenAIOfficial(Provider):
             model: Model ID used by the request.
             api_key: API key that completed the request.
         """
-        cache_id = self._model_key_cache_id()
-        if not cache_id or api_key not in self.api_keys:
+        if api_key not in self.api_keys:
             return
-        mapping = dict(self._model_key_cache.get(cache_id, {}))
-        indexes = list(mapping.get(model, ()))
-        key_index = self.api_keys.index(api_key)
-        if key_index not in indexes:
-            indexes.append(key_index)
-        mapping[model] = tuple(indexes)
-        self._model_key_cache[cache_id] = mapping
+        mapping = getattr(self, "_model_key_indexes", None)
+        if mapping is None:
+            mapping = {}
+            self._model_key_indexes = mapping
+        mapping.setdefault(model, set()).add(self.api_keys.index(api_key))
 
     def _forget_model_key(self, model: str, api_key: str) -> None:
         """Remove a model/key association after an access failure.
@@ -475,20 +444,15 @@ class ProviderOpenAIOfficial(Provider):
             model: Model ID rejected by the provider.
             api_key: API key that could not access the model.
         """
-        cache_id = self._model_key_cache_id()
-        if not cache_id or api_key not in self.api_keys:
+        if api_key not in self.api_keys:
             return
-        mapping = dict(self._model_key_cache.get(cache_id, {}))
-        indexes = list(mapping.get(model, ()))
-        key_index = self.api_keys.index(api_key)
-        if key_index not in indexes:
+        mapping = getattr(self, "_model_key_indexes", {})
+        indexes = mapping.get(model)
+        if not indexes:
             return
-        indexes.remove(key_index)
-        if indexes:
-            mapping[model] = tuple(indexes)
-        else:
+        indexes.discard(self.api_keys.index(api_key))
+        if not indexes:
             mapping.pop(model, None)
-        self._model_key_cache[cache_id] = mapping
 
     def _key_label(self, api_key: str) -> str:
         """Return a log-safe ordinal label for an API key.
@@ -547,6 +511,7 @@ class ProviderOpenAIOfficial(Provider):
         super().__init__(provider_config, provider_settings)
         self.chosen_api_key = None
         self.api_keys: list = super().get_keys()
+        self._model_key_indexes: dict[str, set[int]] = {}
         self.chosen_api_key = self.api_keys[0] if len(self.api_keys) > 0 else None
         self.timeout = provider_config.get("timeout", 120)
         self.custom_headers = provider_config.get("custom_headers", {})
@@ -614,7 +579,12 @@ class ProviderOpenAIOfficial(Provider):
                     "OpenAI",
                     lambda: self.client.models.list(),
                 )
-                models_str = sorted(model.id for model in models.data)
+                models_str = sorted(
+                    model_id
+                    for model in models.data
+                    if isinstance(model_id := getattr(model, "id", None), str)
+                    and model_id
+                )
                 if isinstance(api_keys, list):
                     self._store_model_key_indexes({model: [0] for model in models_str})
                 return models_str
@@ -663,7 +633,7 @@ class ProviderOpenAIOfficial(Provider):
             raise last_error
 
         self._store_model_key_indexes(model_key_indexes)
-        return sorted(model_key_indexes)
+        return sorted(model_key_indexes.keys())
 
     @staticmethod
     def _sanitize_assistant_messages(payloads: dict) -> None:

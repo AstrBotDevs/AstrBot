@@ -218,6 +218,29 @@ async def test_get_models_keeps_successful_keys_when_one_key_fails():
 
 
 @pytest.mark.asyncio
+async def test_get_models_raises_when_all_keys_fail():
+    class FakeClient:
+        def __init__(self, key: str):
+            self.key = key
+            self.models = self
+
+        async def list(self):
+            raise RuntimeError(f"access denied for {self.key}")
+
+        async def close(self):
+            return None
+
+    provider = _make_provider({"key": ["bad-key-a", "bad-key-b"]})
+    provider._create_sdk_client = FakeClient
+    try:
+        with pytest.raises(RuntimeError, match="bad-key-b"):
+            await provider.get_models()
+        assert provider.get_model_key_indexes() == {}
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_text_chat_retries_with_another_key_for_model_access_error(
     monkeypatch,
 ):
