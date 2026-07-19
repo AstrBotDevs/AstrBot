@@ -953,6 +953,7 @@
     "defaultPlaceholder": "Or type your own...",
     "expandDetails": "Show details",
     "collapseDetails": "Hide details",
-    "extraContentLabel": "Supplementary information (AI generated)"
+    "extraContentLabel": "Supplementary information (AI generated)",
+    "cancelled": "Cancelled"
   }
 }

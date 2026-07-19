@@ -986,6 +986,7 @@
     "defaultPlaceholder": "或输入自定义内容...",
     "expandDetails": "展开选项",
     "collapseDetails": "收起选项",
-    "extraContentLabel": "补充说明(由 AI 生成)"
+    "extraContentLabel": "补充说明(由 AI 生成)",
+    "cancelled": "已取消"
   }
 }
