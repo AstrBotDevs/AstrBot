@@ -1588,14 +1588,24 @@ class TestBuildMainAgent:
         mock_provider.text_chat.assert_not_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "image_kwargs",
+        [
+            {"file": ""},
+            {"file": None, "url": ""},
+            {"file": "", "url": ""},
+            {"file": "   ", "url": None},
+            {"file": None, "url": "   "},
+        ],
+    )
     async def test_build_main_agent_skips_empty_quoted_image_and_uses_fallback(
-        self, mock_event, mock_context, mock_provider
+        self, mock_event, mock_context, mock_provider, image_kwargs
     ):
         """Quoted image placeholders without a file or URL should not abort the request."""
         module = ama
         mock_reply = Reply(
             id="reply-1",
-            chain=[Plain(text="quoted text"), Image(file="")],
+            chain=[Plain(text="quoted text"), Image(**image_kwargs)],
             sender_nickname="",
             message_str="quoted text",
         )
@@ -1613,7 +1623,7 @@ class TestBuildMainAgent:
             patch("astrbot.core.astr_main_agent.AstrAgentContext"),
             patch(
                 "astrbot.core.astr_main_agent.extract_quoted_message_images",
-                AsyncMock(return_value=["/tmp/fallback-quoted.jpg"]),
+                AsyncMock(return_value=["fallback-quoted-image-ref"]),
             ) as mock_extract_quoted_images,
         ):
             mock_runner = MagicMock()
@@ -1628,7 +1638,7 @@ class TestBuildMainAgent:
             )
 
         assert result is not None
-        assert result.provider_request.image_urls == ["/tmp/fallback-quoted.jpg"]
+        assert result.provider_request.image_urls == ["fallback-quoted-image-ref"]
         mock_extract_quoted_images.assert_awaited_once()
 
     @pytest.mark.asyncio
