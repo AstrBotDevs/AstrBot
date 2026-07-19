@@ -11,12 +11,26 @@
 import { computed, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import type { GitStatsFetchState } from "@/composables/useSpcodeGitStats";
-import type { GitStatsDay } from "@/composables/parseSpcodeGitStats";
+import type { GitStatsDay, GitStatsHotFile } from "@/composables/parseSpcodeGitStats";
 import {
   STATS_PRESETS,
   type GitStatsRange,
   type GitStatsRangePreset,
 } from "@/composables/parseSpcodeGitStats";
+
+/** UI-facing cap for the user-controllable "Top N" hot-files picker.
+ *  Mirrors the backend's accepted range (1..50). The slider here
+ *  exposes 5..50 so the user can drive every value the API accepts;
+ *  the composable's defensive clamp catches any stray caller. */
+const HOT_FILES_MIN = 5;
+const HOT_FILES_MAX = 50;
+const HOT_FILES_DEFAULT = 10;
+
+/** localStorage key for the persisted user exclude-pattern list. The
+ *  limit (topFilesLimit) is owned by the parent so it can be re-fetched,
+ *  but the filter string is purely a client-side post-processing knob
+ *  so we keep it local to the panel. */
+const EXCLUDE_PATTERNS_STORAGE_KEY = "astrbot.spcode.gitDiffSidebar.hotFilesExclude";
 
 const props = defineProps<{
   state: GitStatsFetchState;
@@ -25,10 +39,14 @@ const props = defineProps<{
   isDark?: boolean;
   /** Time-range window (preset or custom). Owned by GitDiffSidebar. */
   range: GitStatsRange;
+  /** Server-side hot-files cap (5..50). Owned by the parent so a
+   *  change re-fetches with a new ETag bucket. */
+  topFilesLimit?: number;
 }>();
 const emit = defineEmits<{
   (e: "update:open", v: boolean): void;
   (e: "update:range", v: GitStatsRange): void;
+  (e: "update:topFilesLimit", v: number): void;
   (e: "refresh"): void;
   (e: "filter-date", p: { since: string; until: string }): void;
   (e: "filter-path", path: string): void;
@@ -298,13 +316,166 @@ const monthLabels = computed(() => {
 });
 
 // ── Hot files ──────────────────────────────────────────────────────
-const hotFiles = computed(() => snapshot.value?.hotFiles ?? []);
+/** Raw hot-files list as received from the backend (up to topFilesLimit). */
+const rawHotFiles = computed<GitStatsHotFile[]>(
+  () => snapshot.value?.hotFiles ?? [],
+);
+
+/** Comma-separated exclude patterns the user can edit in the settings
+ *  popover. Each entry is a case-insensitive glob (supports `*` and
+ *  `?`); an entry that does not contain a glob wildcard is treated as
+ *  a literal substring so simple filenames like `pyproject.toml` Just
+ *  Work. Persisted to localStorage so the user's noise-floor
+ *  preferences survive a reload. */
+const excludePatternsRaw = ref<string>("");
+function loadExcludePatterns(): string {
+  try {
+    return localStorage.getItem(EXCLUDE_PATTERNS_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+function saveExcludePatterns(value: string): void {
+  try {
+    localStorage.setItem(EXCLUDE_PATTERNS_STORAGE_KEY, value);
+  } catch {
+    /* localStorage disabled / quota — silently ignore */
+  }
+}
+excludePatternsRaw.value = loadExcludePatterns();
+watch(excludePatternsRaw, (v) => saveExcludePatterns(v));
+
+/** Parse "*.json, pyproject.toml, *.lock" → ["*.json", "pyproject.toml", "*.lock"].
+ *  Whitespace trimmed, empties dropped, case-folded for matching. */
+const excludePatterns = computed<string[]>(() =>
+  excludePatternsRaw.value
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => s.toLowerCase()),
+);
+
+/** Convert a single pattern to a RegExp with .gitignore semantics:
+ *  wildcard syntax (`*`/`?`) on top of plain text. The two anchor
+ *  flavors below let a single helper cover both "match this filename
+ *  anywhere" and "match this exact path" without forcing the user to
+ *  pick between two different filter UIs.
+ *
+ *  - Pattern WITHOUT `/` (filename-style): anchored only at the end
+ *    with `(?:^|/)<re>$`. So `pyproject.toml`,
+ *    `tool_loop_agent_runner.py`, and `*.json` all match the file's
+ *    basename at any depth. `*`/`?` still match a single path
+ *    segment (`*` is `[^/]*`, `?` is `[^/]`), so the trailing `$`
+ *    cleanly rejects `a.json.txt` and `*.json` will not bleed into
+ *    an unrelated `.json` parent.
+ *  - Pattern WITH `/` (path-shaped): fully anchored `^<re>$`. So
+ *    `dashboard/*.json` matches direct children of `dashboard/` and
+ *    does NOT match `dashboard/sub/foo.json`. Path-shape is the
+ *    "I want exactly this path" escape hatch.
+ *
+ *  Regex metacharacters in the user input are escaped — `*` and `?`
+ *  are the only wildcard operators. A user typing `a.json/b.json`
+ *  in the input means the literal file `a.json/b.json`, not a regex.
+ *
+ *  Examples:
+ *  - `*.json`              matches `chat.json` and
+ *                          `dashboard/src/foo.json`; NOT `a.json.txt`.
+ *  - `pyproject.toml`      matches `pyproject.toml` at any depth.
+ *  - `tool_loop_agent_runner.py`
+ *                          matches `…/tool_loop_agent_runner.py`.
+ *  - `dashboard/*.json`    matches `dashboard/chat.json`; NOT
+ *                          `dashboard/sub/chat.json` and NOT
+ *                          `foo/dashboard/chat.json`.
+ *  - `dashboard/**`        matches anything under `dashboard/`. */
+function patternToRegex(pattern: string): RegExp {
+  let re = "";
+  for (const ch of pattern) {
+    if (ch === "*") re += "[^/]*";
+    else if (ch === "?") re += "[^/]";
+    else if (/[.+^${}()|[\]\\]/.test(ch)) re += "\\" + ch;
+    else re += ch;
+  }
+  // Filename-style (no `/`): match the basename anywhere in the path.
+  // Path-shape (`/` present): match the full path exactly.
+  const anchored = pattern.includes("/") ? `^${re}$` : `(?:^|/)${re}$`;
+  return new RegExp(anchored);
+}
+const excludeRegexes = computed<RegExp[]>(() =>
+  excludePatterns.value.map(patternToRegex),
+);
+function isExcluded(path: string): boolean {
+  const lowered = path.toLowerCase();
+  for (const re of excludeRegexes.value) {
+    if (re.test(lowered)) return true;
+  }
+  return false;
+}
+
+/** The user-facing cap mirrored to a clamped number; an out-of-range
+ *  prop (defensive: parent could push a stale localStorage value) is
+ *  coerced so the slider / numeric input never shows a value the
+ *  backend would reject. */
+const topFilesLimit = computed<number>(() => {
+  const raw = props.topFilesLimit ?? HOT_FILES_DEFAULT;
+  return Math.min(HOT_FILES_MAX, Math.max(HOT_FILES_MIN, Math.floor(raw)));
+});
+
+/** Hot-files list after the client-side exclude filter. Order is
+ *  preserved (backend already sorts) and the bar's max is recomputed
+ *  against the filtered set so the surviving rows still fill the
+ *  available width. */
+const hotFiles = computed<GitStatsHotFile[]>(() =>
+  rawHotFiles.value.filter((f) => !isExcluded(f.path)),
+);
+const excludedCount = computed<number>(
+  () => rawHotFiles.value.length - hotFiles.value.length,
+);
 const maxHotCommits = computed(() =>
   Math.max(1, ...hotFiles.value.map((f) => f.commits)),
 );
 function barWidth(commits: number): string {
   return `${Math.round((commits / maxHotCommits.value) * 100)}%`;
 }
+
+/** Two-way binding for the slider/input — clamp + emit so the parent
+ *  re-fetches with the new top_files and the local input always
+ *  displays a valid integer. */
+const limitDraft = ref<number>(topFilesLimit.value);
+watch(
+  () => topFilesLimit.value,
+  (v) => {
+    limitDraft.value = v;
+  },
+);
+function commitLimitDraft(): void {
+  const next = Math.min(
+    HOT_FILES_MAX,
+    Math.max(HOT_FILES_MIN, Math.floor(Number(limitDraft.value) || HOT_FILES_DEFAULT)),
+  );
+  limitDraft.value = next;
+  if (next !== topFilesLimit.value) {
+    emit("update:topFilesLimit", next);
+  }
+}
+function bumpLimit(delta: number): void {
+  limitDraft.value = Math.min(
+    HOT_FILES_MAX,
+    Math.max(HOT_FILES_MIN, limitDraft.value + delta),
+  );
+  commitLimitDraft();
+}
+
+/** Settings popover open state. Lives in the panel because the only
+ *  thing inside the popover is the panel's own knobs. */
+const settingsOpen = ref(false);
+function closeSettings(): void {
+  settingsOpen.value = false;
+}
+
+/** Stable id for the exclude-pattern input so the <label for=...> in
+ *  the popover can target it without us having to register a
+ *  click-outside listener manually. */
+const hotFilesExcludeInputId = "git-stats-hot-exclude";
 
 // ── Events ─────────────────────────────────────────────────────────
 function onToggle(): void {
@@ -577,13 +748,158 @@ function cellTitle(cell: DayCell): string {
         </div>
 
         <!-- hot files -->
-        <div v-if="hotFiles.length > 0" class="git-stats-hot">
-          <div class="git-stats-hot-title">
-            {{
-              tm(
-                "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFiles",
-              )
-            }}
+        <div v-if="rawHotFiles.length > 0" class="git-stats-hot">
+          <div class="git-stats-hot-title-row">
+            <div class="git-stats-hot-title">
+              {{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFiles",
+                )
+              }}
+              <span class="git-stats-hot-limit-pill">{{
+                tm(
+                  "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesLimit",
+                  { n: topFilesLimit },
+                )
+              }}</span>
+              <span
+                v-if="excludedCount > 0"
+                class="git-stats-hot-excluded-pill"
+                :title="
+                  tm(
+                    'spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesExcludedHint',
+                    { n: excludedCount },
+                  )
+                "
+                >−{{ excludedCount }}</span
+              >
+            </div>
+            <v-menu
+              v-model="settingsOpen"
+              :close-on-content-click="false"
+              location="bottom end"
+            >
+              <template #activator="{ props: tipProps }">
+                <v-btn
+                  icon
+                  size="x-small"
+                  variant="text"
+                  class="git-stats-hot-settings"
+                  :title="
+                    tm(
+                      'spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesSettings',
+                    )
+                  "
+                  v-bind="tipProps"
+                  @click.stop
+                >
+                  <v-icon size="14">mdi-tune-variant</v-icon>
+                </v-btn>
+              </template>
+              <v-card class="git-stats-hot-settings-card" min-width="260">
+                <div class="git-stats-hot-settings-row">
+                  <label class="git-stats-hot-settings-label">
+                    {{
+                      tm(
+                        "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesLimitLabel",
+                      )
+                    }}
+                  </label>
+                  <div class="git-stats-hot-limit-input">
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      :disabled="limitDraft <= HOT_FILES_MIN"
+                      @click="bumpLimit(-5)"
+                    >
+                      <v-icon size="14">mdi-minus</v-icon>
+                    </v-btn>
+                    <input
+                      type="number"
+                      class="git-stats-hot-limit-number"
+                      :min="HOT_FILES_MIN"
+                      :max="HOT_FILES_MAX"
+                      v-model.number="limitDraft"
+                      @change="commitLimitDraft"
+                      @blur="commitLimitDraft"
+                    />
+                    <v-btn
+                      icon
+                      size="x-small"
+                      variant="text"
+                      :disabled="limitDraft >= HOT_FILES_MAX"
+                      @click="bumpLimit(5)"
+                    >
+                      <v-icon size="14">mdi-plus</v-icon>
+                    </v-btn>
+                  </div>
+                  <div class="git-stats-hot-settings-hint">
+                    {{
+                      tm(
+                        "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesLimitHint",
+                        { min: HOT_FILES_MIN, max: HOT_FILES_MAX },
+                      )
+                    }}
+                  </div>
+                </div>
+                <v-divider class="git-stats-hot-settings-divider" />
+                <div class="git-stats-hot-settings-row">
+                  <label
+                    class="git-stats-hot-settings-label"
+                    :for="hotFilesExcludeInputId"
+                  >
+                    {{
+                      tm(
+                        "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesExcludeLabel",
+                      )
+                    }}
+                  </label>
+                  <input
+                    :id="hotFilesExcludeInputId"
+                    v-model="excludePatternsRaw"
+                    type="text"
+                    class="git-stats-hot-exclude-input"
+                    :placeholder="
+                      tm(
+                        'spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesExcludePlaceholder',
+                      )
+                    "
+                    spellcheck="false"
+                  />
+                  <div class="git-stats-hot-settings-hint">
+                    {{
+                      tm(
+                        "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesExcludeHint",
+                      )
+                    }}
+                  </div>
+                </div>
+                <div class="git-stats-hot-settings-actions">
+                  <v-btn
+                    size="small"
+                    variant="text"
+                    :disabled="excludePatternsRaw.length === 0"
+                    @click="excludePatternsRaw = ''"
+                    >{{
+                      tm(
+                        "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesExcludeClear",
+                      )
+                    }}</v-btn
+                  >
+                  <v-btn
+                    size="small"
+                    variant="tonal"
+                    @click="closeSettings"
+                    >{{
+                      tm(
+                        "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesExcludeDone",
+                      )
+                    }}</v-btn
+                  >
+                </div>
+              </v-card>
+            </v-menu>
           </div>
           <button
             v-for="f in hotFiles"
@@ -610,6 +926,16 @@ function cellTitle(cell: DayCell): string {
               >{{ hotFileParts(f).suffix }}</span
             >
           </button>
+          <div
+            v-if="hotFiles.length === 0 && excludedCount > 0"
+            class="git-stats-hot-all-excluded"
+          >
+            {{
+              tm(
+                "spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.hotFilesAllExcluded",
+              )
+            }}
+          </div>
         </div>
       </template>
     </div>
@@ -809,10 +1135,120 @@ function cellTitle(cell: DayCell): string {
 .git-stats-hot {
   margin-top: 8px;
 }
+.git-stats-hot-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
 .git-stats-hot-title {
   font-weight: 600;
-  margin-bottom: 4px;
   opacity: 0.8;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.git-stats-hot-limit-pill {
+  font-weight: 500;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgb(var(--v-theme-on-surface), 0.08);
+  color: rgb(var(--v-theme-on-surface), 0.7);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.git-stats-hot-excluded-pill {
+  font-weight: 500;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgb(var(--v-theme-warning), 0.18);
+  color: rgb(var(--v-theme-warning));
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.git-stats-hot-settings {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.git-stats-hot-settings-card {
+  padding: 10px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.git-stats-hot-settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.git-stats-hot-settings-label {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+.git-stats-hot-limit-input {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.git-stats-hot-limit-number {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  /* Strip native spinner / borders so the input matches the rest of
+     the dashboard's 12px surfaces; the +/- buttons handle stepping. */
+  -moz-appearance: textfield;
+  appearance: textfield;
+  padding: 4px 6px;
+  border: 1px solid rgb(var(--v-border-color), 0.24);
+  border-radius: 4px;
+  background: rgb(var(--v-theme-on-surface), 0.03);
+  color: inherit;
+}
+.git-stats-hot-limit-number::-webkit-outer-spin-button,
+.git-stats-hot-limit-number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.git-stats-hot-exclude-input {
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid rgb(var(--v-border-color), 0.24);
+  border-radius: 4px;
+  background: rgb(var(--v-theme-on-surface), 0.03);
+  color: inherit;
+  font-family: ui-monospace, monospace;
+}
+.git-stats-hot-exclude-input:focus {
+  outline: none;
+  border-color: rgb(var(--v-theme-primary));
+}
+.git-stats-hot-settings-hint {
+  font-size: 10.5px;
+  opacity: 0.6;
+  line-height: 1.4;
+}
+.git-stats-hot-settings-divider {
+  margin: 0 -12px;
+}
+.git-stats-hot-settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.git-stats-hot-all-excluded {
+  font-size: 11px;
+  font-style: italic;
+  opacity: 0.6;
+  padding: 4px 2px;
 }
 .git-stats-hot-row {
   display: flex;

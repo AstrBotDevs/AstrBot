@@ -397,6 +397,8 @@
                 'todo-summary-bar--active': todoSidebarOpen,
                 'todo-summary-bar--dragging': isDraggingTodoBar,
                 'todo-summary-bar--centered': todoBarPos === null,
+                'todo-summary-bar--gitdiff-fullscreen':
+                  gitDiffSidebarOpen && gitDiffFullscreen,
               }"
               :style="todoBarStyle"
               tabindex="0"
@@ -618,7 +620,11 @@
       :stats="currentTodoSnapshot?.stats"
       :attention-items="currentTodoSnapshot?.attentionItems || []"
     />
-    <GitDiffSidebar v-model="gitDiffSidebarOpen" :is-dark="isDark" />
+    <GitDiffSidebar
+      v-model="gitDiffSidebarOpen"
+      :is-dark="isDark"
+      @fullscreen-change="gitDiffFullscreen = $event"
+    />
   </div>
 </template>
 
@@ -813,6 +819,7 @@ const deletingThread = ref(false);
 const refsSidebarOpen = ref(false);
 const todoSidebarOpen = ref(false);
 const gitDiffSidebarOpen = ref(false);
+const gitDiffFullscreen = ref(false);
 
 /* ── todo summary bar 拖动 ───────────────────────────
  * 浮窗可拖动,位置持久化到 localStorage。
@@ -2809,6 +2816,10 @@ function toggleTheme() {
   transform: translateX(-50%);
   animation: todo-bar-fade-in 0.2s ease;
 }
+.todo-summary-bar--gitdiff-fullscreen {
+  z-index: 1200;
+}
+
 @keyframes todo-bar-fade-in {
   from {
     opacity: 0;

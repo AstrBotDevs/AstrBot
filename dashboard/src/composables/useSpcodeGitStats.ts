@@ -28,6 +28,8 @@ export interface UseSpcodeGitStats {
     forceLoading?: boolean;
     since?: string;
     until?: string;
+    /** Server-side hot-files cap. Backend allows 1..50; UI clamps 5..50. */
+    topFiles?: number;
   }) => Promise<void>;
   /** Clear the ETag map (worktree / umo switch). */
   invalidateEtag: () => void;
@@ -39,8 +41,9 @@ export function useSpcodeGitStats(
 ): UseSpcodeGitStats {
   const state = ref<GitStatsFetchState>({ kind: "idle" });
   const spcodeStatus = useSpcodeProjectStatus();
-  // ETag + previous snapshot keyed by umo|worktree so a worktree
-  // switch never replays another worktree's stats on a 304 replay.
+  // ETag + previous snapshot keyed by umo|worktree|topFiles so a
+  // user changing the hot-files cap in the panel gets a fresh fetch
+  // instead of replaying the previous cap's snapshot.
   const etagMap = new Map<string, string>();
   const prevSnapshotMap = new Map<string, GitStatsData>();
   let abortController: AbortController | null = null;
@@ -51,14 +54,16 @@ export function useSpcodeGitStats(
     worktree: string | null,
     since: string,
     until: string,
+    topFiles: number,
   ): string {
-    return [umo, worktree ?? "", since, until].join("|");
+    return [umo, worktree ?? "", since, until, topFiles].join("|");
   }
 
   async function refresh(options?: {
     forceLoading?: boolean;
     since?: string;
     until?: string;
+    topFiles?: number;
   }): Promise<void> {
     if (!isMounted) return;
     const umo = spcodeStatus.status.value.umo;
@@ -76,7 +81,12 @@ export function useSpcodeGitStats(
     const worktree = toValue(worktreeRef);
     const since = options?.since ?? "";
     const until = options?.until ?? "";
-    const key = etagKey(umo, worktree, since, until);
+    // The backend's hard cap is 50; the UI's user-facing cap is 50
+    // (5..50). Clamp here too so a misbehaving caller can't trigger
+    // a 400 INVALID_PARAM envelope on every refresh.
+    const requestedTop = options?.topFiles ?? 10;
+    const topFiles = Math.min(50, Math.max(1, Math.floor(requestedTop)));
+    const key = etagKey(umo, worktree, since, until, topFiles);
     const etag = etagMap.get(key);
     try {
       const resp = await pluginExtensionApi.get<unknown>("spcode/git-stats", {
@@ -85,6 +95,7 @@ export function useSpcodeGitStats(
           ...(worktree ? { worktree } : {}),
           ...(since ? { since } : {}),
           ...(until ? { until } : {}),
+          top_files: topFiles,
         },
         headers: etag ? { "If-None-Match": etag } : {},
         // Surface 304 as a valid response (default axios would throw).

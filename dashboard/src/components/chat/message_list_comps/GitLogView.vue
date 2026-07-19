@@ -70,6 +70,11 @@ const props = defineProps<{
   /** Heatmap time-range window (preset or custom). Owned by the
    *  sidebar; we forward it down to GitStatsPanel verbatim. */
   range: GitStatsRange;
+  /** 2026-07-19 hot-files picker: user-controllable "Top N" cap
+   *  (5..50). Owned by the sidebar so a change re-fetches with a
+   *  new ETag bucket. Forwarded to GitStatsPanel for the live
+   *  counter and used by the refresh() calls below. */
+  topFilesLimit: number;
 }>();
 
 const emit = defineEmits<{
@@ -90,6 +95,10 @@ const emit = defineEmits<{
   (e: "update:statsOpen", v: boolean): void;
   /** Range popover picked a new value — sidebar owns state + persistence. */
   (e: "update:range", v: GitStatsRange): void;
+  /** 2026-07-19 hot-files picker: user picked a new "Top N" cap
+   *  in the settings popover. Sidebar owns state + persistence
+   *  and triggers the re-fetch via its statsRangeArgs watcher. */
+  (e: "update:topFilesLimit", v: number): void;
 }>();
 
 // isDark for GitStatsPanel — sourced from the customizer store the
@@ -348,14 +357,21 @@ function onStatsFilterPath(path: string): void {
  *  2026-07-18 fix(dashboard): previously called
  *  `gitStats.refresh({ forceLoading: true })` with no since/until
  *  — see the matching JSDoc on the sidebar's `statsRangeArgs` for
- *  the ETag-bucket story. */
+ *  the ETag-bucket story.
+ *  2026-07-19 hot-files picker: also forwards the user's "Top N"
+ *  cap so the manual refresh hits the same ETag bucket a setting
+ *  change would. */
 function onStatsRefresh(): void {
   const r = props.range;
   const args =
     r.kind === "preset"
       ? rangeForPreset(r.preset)
       : { since: r.since, until: r.until };
-  void props.gitStats.refresh({ forceLoading: true, ...args });
+  void props.gitStats.refresh({
+    forceLoading: true,
+    ...args,
+    topFiles: props.topFilesLimit,
+  });
 }
 
 // ── File list helpers (spec 2026-06-25 §3.3) ──────────────────────
@@ -443,8 +459,10 @@ function fileErrorMessage(state: GitShowFetchState): string | null {
       :open="statsOpen"
       :is-dark="isDark"
       :range="range"
+      :top-files-limit="topFilesLimit"
       @update:open="(v) => emit('update:statsOpen', v)"
       @update:range="(v) => emit('update:range', v)"
+      @update:top-files-limit="(v) => emit('update:topFilesLimit', v)"
       @refresh="onStatsRefresh"
       @filter-date="onStatsFilterDate"
       @filter-path="onStatsFilterPath"

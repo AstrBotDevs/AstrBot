@@ -57,7 +57,8 @@ The feature must:
 - on heatmap-day click, apply `{ref: "HEAD", n: 20, since: "YYYY-MM-DDT00:00:00", until: "YYYY-MM-DDT23:59:59"}` via the existing `apply` emit (local timezone; explicit times avoid git parsing a date-only `--until` as midnight and producing an empty range);
 - on hot-file click, apply `{ref: "HEAD", n: 20, path: "<repo-relative path>"}` via the existing `apply` emit;
 - cover loading / error (inline retry) / `empty_repository` / `truncated` (badge "only last N commits counted") states;
-- add i18n keys under `spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.*` for all shipped locales (en, zh-CN, ru — matching the locale set touched by the immediately preceding gitignore commit).
+- add i18n keys under `spcodeProjectLoad.diffSidebar.gitWorkflow.history.stats.*` for all shipped locales (en, zh-CN, ru — matching the locale set touched by the immediately preceding gitignore commit);
+- (2026-07-19 hot-files picker) ship a per-panel settings popover with a "Top N" stepper (5..30, default 10) that forwards to `GET /spcode/git-stats?top_files=N` and a comma-separated exclude-pattern glob filter applied client-side; persist the count under `astrbot.spcode.gitDiffSidebar.gitStatsTopFilesLimit` and the filter under `astrbot.spcode.gitDiffSidebar.hotFilesExclude`.
 
 The feature must **not**:
 
@@ -97,7 +98,7 @@ Failure reasons reused from `ReasonCode`: `feature_disabled`, `no_project_loaded
 ┌ 📊 Stats   132 commits · +9.2k −3.1k · 47 files        [↻] [▾] ┐ ← collapsed: one-line summary
 ├──────────────────────────────────────────────────────────┤
 │ [calendar heatmap: 26 week-columns × 7 rows]                   │ ← expanded body
-│ Hot files (Top 10):                                            │
+│ Hot files  [Top 10]  [−2]                          [⚙]        │  ← ⚙ opens count + filter popover
 │ ████████████ astrbot/core/pipeline.py   12 (+800 −120)         │
 │ ██████       astrbot/core/provider.py    6 (+210 −80)          │
 │ Totals: 132 commits · +9,200 −3,100 · 47 files · 2026-05-01 → 2026-07-18 │
@@ -121,6 +122,17 @@ Failure reasons reused from `ReasonCode`: `feature_disabled`, `no_project_loaded
 - Bar width = `commits / max(commits)` as a percentage; label is the path with middle truncation (`title` holds the full path); value reads `N commits (+A −D)`.
 - Row click emits the path-filter event.
 
+### Hot-files picker (2026-07-19)
+
+The panel ships a settings popover (toggled by a `mdi-tune-variant` button in the Hot files title row) exposing two knobs:
+
+- **Display count** (5–30, default 10). Stepper / numeric input with `−5` / `+5` buttons. Owned by the sidebar (`gitStatsTopFilesLimit`, persisted to `astrbot.spcode.gitDiffSidebar.gitStatsTopFilesLimit`); changes are forwarded to the panel as a `topFilesLimit` prop and re-fetched with `useSpcodeGitStats.refresh({ topFiles })` so the new value gets its own ETag bucket. The backend's hard cap is 50; the UI's user-facing cap is 30.
+- **Exclude patterns** (comma-separated globs, e.g. `*.json, *.lock, pyproject.toml`). Pure client-side post-processing: a path is hidden when any pattern matches it (case-insensitive, `*` matches any non-`/` run, `?` matches one non-`/` char, anything else is a literal substring). Persisted locally to `astrbot.spcode.gitDiffSidebar.hotFilesExclude`. A small `−N` warning pill on the title row surfaces how many of the fetched rows were hidden.
+
+The render list is `snapshot.hotFiles.filter(f => !isExcluded(f.path))` so the filter never widens the server's response — the user can only narrow it, and the bar's `max(commits)` is recomputed against the surviving rows so the visualisation stays full-width.
+
+If the exclude list filters out every fetched row, the section renders a single italic hint (`hotFilesAllExcluded` i18n key) inviting the user to clear the filter rather than an empty rectangle.
+
 ### States
 
 | State | Rendering |
@@ -135,13 +147,15 @@ Failure reasons reused from `ReasonCode`: `feature_disabled`, `no_project_loaded
 
 ```
 GitStatsPanel expand (first time)
-  → useSpcodeGitStats.refresh({ref: "HEAD"})
-  → GET /spcode/git-stats (umo, worktree from spcodeStatus + selectedWorktree)
+  → useSpcodeGitStats.refresh({ref: "HEAD", topFiles: sidebar.gitStatsTopFilesLimit})
+  → GET /spcode/git-stats (umo, worktree from spcodeStatus + selectedWorktree, top_files=5..30)
   → parseSpcodeGitStats → state ok
-  → render heatmap + bars + totals
-click day cell   → GitLogView: localFilter = {ref:"HEAD", n:20, since, until} → emit("apply") → sidebar onLogApply (existing)
-click file row   → GitLogView: localFilter = {ref:"HEAD", n:20, path}         → emit("apply") → sidebar onLogApply (existing)
-sidebar refresh button (viewMode==="history" && panel expanded) → gitStats.refresh()
+  → render heatmap + (hotFiles ∩ excludePatterns) + totals
+click day cell       → GitLogView: localFilter = {ref:"HEAD", n:20, since, until} → emit("apply") → sidebar onLogApply (existing)
+click file row       → GitLogView: localFilter = {ref:"HEAD", n:20, path}         → emit("apply") → sidebar onLogApply (existing)
+picker count change  → GitStatsPanel emit("update:topFilesLimit") → sidebar updates gitStatsTopFilesLimit → statsRangeArgs watcher re-fetches with new topFiles
+picker exclude edit  → GitStatsPanel: localStorage.setItem; computed hotFiles re-filters in-place (no fetch)
+sidebar refresh button (viewMode==="history" && panel expanded) → gitStats.refresh(statsRangeArgs())
 worktree switch  → sidebar recreates the composable (same lifecycle as gitShow)
 ```
 

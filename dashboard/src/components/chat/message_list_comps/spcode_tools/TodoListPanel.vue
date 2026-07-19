@@ -30,14 +30,48 @@
             <span class="list-title">{{ list?.title || 'Todo List' }}</span>
         </div>
 
+        <!-- 批量折叠 / 展开工具栏(collapsible 模式才有意义) -->
+        <div v-if="collapsible" class="bulk-toggle-row">
+            <button
+                type="button"
+                class="bulk-toggle-btn"
+                :disabled="!hasExpandableItems"
+                @click="expandAll"
+            >
+                <v-icon size="12">mdi-unfold-more-horizontal</v-icon>
+                <span>Expand all</span>
+            </button>
+            <button
+                type="button"
+                class="bulk-toggle-btn"
+                :disabled="!hasExpandableItems"
+                @click="collapseAll"
+            >
+                <v-icon size="12">mdi-unfold-less-horizontal</v-icon>
+                <span>Collapse all</span>
+            </button>
+        </div>
+
         <!-- Items -->
         <div class="items-list">
             <div
                 v-for="item in list?.items || []"
                 :key="item.id"
                 class="todo-item"
-                :class="['status-' + item.status, { 'has-notes': item.notes }]"
+                :class="[
+                    'status-' + item.status,
+                    { 'has-notes': item.notes, 'is-clickable': collapsible && hasNotes(item) },
+                ]"
+                @click="collapsible && hasNotes(item) ? toggle(item.id) : null"
             >
+                <v-icon
+                    v-if="collapsible"
+                    size="12"
+                    class="item-chevron"
+                    :class="{ 'is-expanded': isExpanded(item.id) }"
+                >
+                    mdi-chevron-right
+                </v-icon>
                 <v-icon
                     size="13"
                     class="item-check"
@@ -55,7 +89,7 @@
                     mdi-alert-circle
                 </v-icon>
                 <span
-                    v-if="item.notes"
+                    v-if="item.notes && showNotes(item)"
                     class="item-notes"
                 >{{ item.notes }}</span>
             </div>
@@ -73,19 +107,76 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 
 /**
  * TodoListPanel — 复用组件：渲染 todo_list 工具回传的完整列表视图（进度条 + items + 统计）。
  *
  * 原实现在 TodoListResult.vue 中,因侧边栏也需要同一份视图,故抽离为独立组件。
  * 接受的是已经剥离 envelope 后的 {list, stats, attention_items},由调用方保证。
+ *
+ * collapsible: 侧边栏等"实时监控"场景下,默认折叠每条 item,只露出状态/标题/ID,
+ * 点击行(或 chevron)展开 notes。配合上方的 Expand all / Collapse all
+ * 按钮可批量切换。TodoListResult(工具结果回显)继续走 false,行为不变。
  */
-const props = defineProps<{
-    list: any;
-    stats: any;
-    attentionItems?: number[];
-}>();
+const props = withDefaults(
+    defineProps<{
+        list: any;
+        stats: any;
+        attentionItems?: number[];
+        collapsible?: boolean;
+    }>(),
+    {
+        attentionItems: () => [],
+        collapsible: false,
+    },
+);
+
+/** 已展开的 item id 集合。仅在 collapsible=true 时使用。 */
+const expandedIds = ref<Set<string | number>>(new Set());
+
+/** 切到新会话/新 list 时清空展开状态,避免过期 id 残留。 */
+watch(
+    () => props.list,
+    () => {
+        expandedIds.value = new Set();
+    },
+);
+
+/** 单条 item 的 notes 是否存在(决定是否可折叠,以及是否显示 chevron)。 */
+function hasNotes(item: any): boolean {
+    return Boolean(item && item.notes);
+}
+
+function isExpanded(id: string | number): boolean {
+    return expandedIds.value.has(id);
+}
+
+function toggle(id: string | number): void {
+    // 复制后再 set,避免直接 mutate ref 内部值
+    const next = new Set(expandedIds.value);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    expandedIds.value = next;
+}
+
+/** collapsible 模式下 notes 才会显示;否则维持旧行为(总显示)。 */
+function showNotes(item: any): boolean {
+    return !props.collapsible || isExpanded(item.id);
+}
+
+const expandableItems = computed(() =>
+    (props.list?.items || []).filter((it: any) => hasNotes(it)),
+);
+const hasExpandableItems = computed(() => expandableItems.value.length > 0);
+
+function expandAll(): void {
+    expandedIds.value = new Set(expandableItems.value.map((it: any) => it.id));
+}
+
+function collapseAll(): void {
+    expandedIds.value = new Set();
+}
 
 function statusIcon(s: string): string {
     if (s === "done") return "mdi-check-circle";
@@ -169,6 +260,56 @@ const progressWidths = computed(() => {
     border-radius: 4px;
     background: rgba(var(--v-theme-on-surface), 0.03);
     font-size: 11.5px;
+    user-select: none;
+}
+.todo-item.is-clickable {
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+.todo-item.is-clickable:hover {
+    background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+/* 批量展开/折叠工具栏 */
+.bulk-toggle-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin: 2px 0 6px;
+}
+.bulk-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: rgba(var(--v-theme-on-surface), 0.65);
+    background: transparent;
+    border: 1px solid rgba(var(--v-border-color), 0.16);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.bulk-toggle-btn:hover:not(:disabled) {
+    background: rgba(var(--v-theme-on-surface), 0.06);
+    color: rgba(var(--v-theme-on-surface), 0.85);
+    border-color: rgba(var(--v-border-color), 0.32);
+}
+.bulk-toggle-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Chevron 旋转 */
+.item-chevron {
+    color: rgba(var(--v-theme-on-surface), 0.4);
+    transition: transform 0.18s ease;
+    flex-shrink: 0;
+}
+.item-chevron.is-expanded {
+    transform: rotate(90deg);
+    color: rgba(var(--v-theme-on-surface), 0.7);
 }
 .status-done .item-check { color: #2da44e; }
 .status-in_progress .item-check { color: #b58400; }

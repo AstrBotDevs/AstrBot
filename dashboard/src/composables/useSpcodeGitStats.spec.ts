@@ -79,12 +79,12 @@ beforeEach(() => {
 });
 
 describe("useSpcodeGitStats refresh params and ETag", () => {
-  it("refresh() without since/until does NOT pass them in params", async () => {
+  it("refresh() without since/until defaults top_files to 10", async () => {
     getMock.mockResolvedValueOnce(makeAxiosResponse(200, okEnvelope()));
     const { result, unmount } = withSetup(() => useSpcodeGitStats());
     await result.refresh();
     const call = getMock.mock.calls[0];
-    expect(call[1]?.params).toEqual({ umo: "umo-1" });
+    expect(call[1]?.params).toEqual({ umo: "umo-1", top_files: 10 });
     unmount();
   });
 
@@ -97,7 +97,39 @@ describe("useSpcodeGitStats refresh params and ETag", () => {
       umo: "umo-1",
       since: "2025-01-01",
       until: "2025-12-31",
+      top_files: 10,
     });
+    unmount();
+  });
+
+  it("refresh({topFiles}) forwards top_files in params with the supplied value", async () => {
+    getMock.mockResolvedValueOnce(makeAxiosResponse(200, okEnvelope()));
+    const { result, unmount } = withSetup(() => useSpcodeGitStats());
+    await result.refresh({ topFiles: 20 });
+    const call = getMock.mock.calls[0];
+    expect(call[1]?.params).toEqual({ umo: "umo-1", top_files: 20 });
+    unmount();
+  });
+
+  it("refresh({topFiles}) clamps out-of-range values to backend limits (1..50)", async () => {
+    getMock.mockResolvedValue(makeAxiosResponse(200, okEnvelope()));
+    const { result, unmount } = withSetup(() => useSpcodeGitStats());
+    await result.refresh({ topFiles: 0 });
+    await result.refresh({ topFiles: 9999 });
+    expect(getMock.mock.calls[0][1]?.params.top_files).toBe(1);
+    expect(getMock.mock.calls[1][1]?.params.top_files).toBe(50);
+    unmount();
+  });
+
+  it("different topFiles values produce a new ETag bucket", async () => {
+    getMock
+      .mockResolvedValueOnce(makeAxiosResponse(200, okEnvelope(), "etag-A"))
+      .mockResolvedValueOnce(makeAxiosResponse(200, okEnvelope(), "etag-B"));
+    const { result, unmount } = withSetup(() => useSpcodeGitStats());
+    await result.refresh({ topFiles: 10 });
+    await result.refresh({ topFiles: 20 });
+    const secondCall = getMock.mock.calls[1];
+    expect(secondCall[1]?.headers).toEqual({});
     unmount();
   });
 

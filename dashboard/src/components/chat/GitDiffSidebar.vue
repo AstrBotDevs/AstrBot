@@ -93,6 +93,11 @@ const STORAGE_KEYS = {
   // 2026-07-18 git-stats heatmap: stats-panel collapsed state.
   gitStatsOpen: "astrbot.spcode.gitDiffSidebar.gitStatsOpen",
   gitStatsRange: "astrbot.spcode.gitDiffSidebar.gitStatsRange",
+  // 2026-07-19 hot-files picker: user-controllable "Top N" cap
+  // (5..50). Owned by the sidebar so the change can re-fetch with
+  // a new ETag bucket via useSpcodeGitStats.refresh({topFiles}).
+  gitStatsTopFilesLimit:
+    "astrbot.spcode.gitDiffSidebar.gitStatsTopFilesLimit",
 } as const;
 
 function safeGetItem(key: string): string | null {
@@ -134,6 +139,22 @@ function loadSelectedScope(): GitDiffScope {
 // History view.
 function loadGitStatsOpen(): boolean {
   return safeGetItem(STORAGE_KEYS.gitStatsOpen) !== "false";
+}
+
+// 2026-07-19 hot-files picker: restore the user-controllable "Top N"
+// cap. Anything outside [5, 50] falls back to the 10 default so a
+// stale or hand-edited localStorage value can never put the panel
+// in a state the backend would reject.
+const HOT_FILES_MIN = 5;
+const HOT_FILES_MAX = 50;
+const HOT_FILES_DEFAULT = 10;
+function loadGitStatsTopFilesLimit(): number {
+  const v = safeGetItem(STORAGE_KEYS.gitStatsTopFilesLimit);
+  if (v === null) return HOT_FILES_DEFAULT;
+  const n = Number(v);
+  if (!Number.isInteger(n)) return HOT_FILES_DEFAULT;
+  if (n < HOT_FILES_MIN || n > HOT_FILES_MAX) return HOT_FILES_DEFAULT;
+  return n;
 }
 
 // 2026-07-18 git-stats heatmap: restore the saved range window from
@@ -197,7 +218,10 @@ const props = defineProps<{
   modelValue: boolean;
   isDark?: boolean;
 }>();
-const emit = defineEmits<{ (e: "update:modelValue", v: boolean): void }>();
+const emit = defineEmits<{
+  (e: "update:modelValue", v: boolean): void;
+  (e: "fullscreen-change", v: boolean): void;
+}>();
 
 // ── Scope switcher (spec 2026-06-20 §3) ────────────────────────────
 // `selectedScope` is the user's currently-displayed scope; it is
@@ -269,6 +293,7 @@ function onFullscreenKeyDown(e: KeyboardEvent): void {
 watch(
   globalFullscreen,
   (v) => {
+    emit("fullscreen-change", v);
     document.body.style.overflow = v ? "hidden" : "";
   },
   { immediate: true },
@@ -298,11 +323,20 @@ watch(
   { flush: "post" },
 );
 // 2026-07-18 git-stats heatmap: owned by the sidebar, persisted across
-// page reloads, and the source for the range prop passed to GitLogView.
+// reloads, and the source for the range prop passed to GitLogView.
 const gitStatsRange = ref<GitStatsRange>(loadGitStatsRange());
 watch(
   gitStatsRange,
   (v) => safeSetItem(STORAGE_KEYS.gitStatsRange, JSON.stringify(v)),
+  { flush: "post" },
+);
+// 2026-07-19 hot-files picker: owned by the sidebar, persisted across
+// reloads, and forwarded to GitLogView as a prop so the panel can
+// emit the new value and we re-fetch with the matching ETag bucket.
+const gitStatsTopFilesLimit = ref<number>(loadGitStatsTopFilesLimit());
+watch(
+  gitStatsTopFilesLimit,
+  (v) => safeSetItem(STORAGE_KEYS.gitStatsTopFilesLimit, String(v)),
   { flush: "post" },
 );
 
@@ -1365,10 +1399,22 @@ watch(
 // ...) and the backend's since/until filter is the source of
 // truth for the hot-files slice, exactly the same way the heatmap
 // frontend uses the same since/until to anchor its week columns.
-function statsRangeArgs(): { since: string; until: string } {
+function statsRangeArgs(): {
+  since: string;
+  until: string;
+  topFiles: number;
+} {
   const r = gitStatsRange.value;
-  if (r.kind === "preset") return rangeForPreset(r.preset);
-  return { since: r.since, until: r.until };
+  const sinceUntil =
+    r.kind === "preset" ? rangeForPreset(r.preset) : { since: r.since, until: r.until };
+  return {
+    since: sinceUntil.since,
+    until: sinceUntil.until,
+    // 2026-07-19 hot-files picker: always forward the user's cap so
+    // a changed cap re-fetches into a new ETag bucket immediately
+    // (the watcher below does not need to special-case this).
+    topFiles: gitStatsTopFilesLimit.value,
+  };
 }
 watch(
   [
@@ -1378,6 +1424,10 @@ watch(
     statsOpen,
     selectedWorktree,
     gitStatsRange,
+    // 2026-07-19 hot-files picker: a cap change should re-fetch
+    // immediately so the new bucket's ETag is populated and the
+    // panel's emit-handler path is the same as the range's.
+    gitStatsTopFilesLimit,
   ],
   ([open, mode, isRepo, panelOpen]) => {
     if (open && mode === "history" && isRepo && panelOpen) {
@@ -3319,7 +3369,9 @@ const currentRoot = computed<string | null>(() => {
             :git-stats="gitStats"
             v-model:stats-open="statsOpen"
             :range="gitStatsRange"
+            :top-files-limit="gitStatsTopFilesLimit"
             @update:range="(v) => (gitStatsRange = v)"
+            @update:top-files-limit="(v) => (gitStatsTopFilesLimit = v)"
             @apply="onLogApply"
             @reset="onLogReset"
             @load-more="onLogLoadMore"

@@ -26,12 +26,17 @@
       </div>
 
       <div class="sidebar-body">
-        <!-- Non-empty state -->
+        <!-- Non-empty state.
+             Sidebar acts as a live monitor for the active session's
+             todo snapshot, so per-item collapse is on by default to
+             keep noise low. TodoListResult (tool result echo) keeps
+             the full uncollapsed view via collapsible=false. -->
         <TodoListPanel
           v-if="list && stats"
           :list="list"
           :stats="stats"
           :attention-items="attentionItems"
+          collapsible
         />
 
         <!-- Empty state -->
