@@ -17,19 +17,34 @@ $ErrorActionPreference = "Stop"
 chcp 65001 | Out-Null
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
-if (-not $env:HTTP_PROXY) {
-    $env:HTTP_PROXY = "http://127.0.0.1:7897"
+$proxyUrl = "http://127.0.0.1:7897"
+$env:HTTP_PROXY = $proxyUrl
+$env:HTTPS_PROXY = $proxyUrl
+$env:http_proxy = $proxyUrl
+$env:https_proxy = $proxyUrl
+$env:QQTOOLS_BROWSER_PROXY = $proxyUrl
+Remove-Item Env:ALL_PROXY -ErrorAction SilentlyContinue
+Remove-Item Env:all_proxy -ErrorAction SilentlyContinue
+$WinGetLinks = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
+if ((Test-Path $WinGetLinks) -and ($env:Path -notlike "*$WinGetLinks*")) {
+    $env:Path = "$WinGetLinks;$env:Path"
 }
-if (-not $env:HTTPS_PROXY) {
-    $env:HTTPS_PROXY = "http://127.0.0.1:7897"
-}
-if (-not $env:QQTOOLS_BROWSER_PROXY) {
-    $env:QQTOOLS_BROWSER_PROXY = $env:HTTPS_PROXY
+$FfmpegLink = Join-Path $WinGetLinks "ffmpeg.exe"
+if (Test-Path $FfmpegLink) {
+    $FfmpegTarget = (Get-Item $FfmpegLink).Target | Select-Object -First 1
+    if ($FfmpegTarget) {
+        $FfmpegBin = Split-Path $FfmpegTarget -Parent
+        if ($env:Path -notlike "*$FfmpegBin*") {
+            $env:Path = "$FfmpegBin;$env:Path"
+        }
+    }
 }
 
 $Root = $PSScriptRoot
 $UvPath = "C:\Users\mai\.local\bin\uv.exe"
 $PythonPath = Join-Path $Root ".venv\Scripts\python.exe"
+$env:UV_CACHE_DIR = Join-Path $Root "data\cache\uv"
+$env:HF_HOME = Join-Path $Root "data\cache\huggingface"
 
 function Invoke-CheckedCommand {
     param(
@@ -240,7 +255,7 @@ function Stop-ExistingAstrBotOwners {
     $ProcessIds = Get-AstrBotStopPlan -Owners $Owners
     foreach ($ProcessId in $ProcessIds) {
         Write-Host "Stopping old AstrBot process PID $ProcessId ..." -ForegroundColor Yellow
-        Stop-Process -Id $ProcessId -Force
+        Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
     }
     Start-Sleep -Seconds 2
 }

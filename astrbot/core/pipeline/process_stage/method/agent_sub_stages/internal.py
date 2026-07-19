@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import replace
 
 from astrbot.core import db_helper, logger
+from astrbot.core.agent.execution_policy import get_agent_execution_policy
 from astrbot.core.agent.message import (
     CheckpointData,
     CheckpointMessageSegment,
@@ -218,10 +219,22 @@ class InternalAgentSubStage(Stage):
                 agent_runner: AgentRunner | None = None
                 runner_registered = False
                 try:
+                    execution_policy = get_agent_execution_policy(event)
+                    max_step = (
+                        execution_policy.max_steps
+                        if execution_policy
+                        else self.max_step
+                    )
+                    tool_call_timeout = (
+                        execution_policy.tool_timeout_seconds
+                        if execution_policy
+                        else self.tool_call_timeout
+                    )
                     build_cfg = replace(
                         self.main_agent_cfg,
                         provider_wake_prefix=provider_wake_prefix,
                         streaming_response=streaming_response,
+                        tool_call_timeout=tool_call_timeout,
                     )
 
                     build_result: MainAgentBuildResult | None = await build_main_agent(
@@ -311,7 +324,7 @@ class InternalAgentSubStage(Stage):
                                 run_live_agent(
                                     agent_runner,
                                     tts_provider,
-                                    self.max_step,
+                                    max_step,
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
@@ -342,7 +355,7 @@ class InternalAgentSubStage(Stage):
                             .set_async_stream(
                                 run_agent(
                                     agent_runner,
-                                    self.max_step,
+                                    max_step,
                                     self.show_tool_use,
                                     self.show_tool_call_result,
                                     show_reasoning=self.show_reasoning,
@@ -372,7 +385,7 @@ class InternalAgentSubStage(Stage):
                     else:
                         async for _ in run_agent(
                             agent_runner,
-                            self.max_step,
+                            max_step,
                             self.show_tool_use,
                             self.show_tool_call_result,
                             stream_to_general,

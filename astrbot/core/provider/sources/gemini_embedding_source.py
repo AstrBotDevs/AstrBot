@@ -20,8 +20,21 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         self.provider_config = provider_config
         self.provider_settings = provider_settings
 
-        api_key: str = provider_config["embedding_api_key"]
-        api_base: str = provider_config["embedding_api_base"]
+        api_key = str(provider_config.get("embedding_api_key") or "").strip()
+        if not api_key:
+            source_keys = provider_config.get("key", [])
+            if isinstance(source_keys, list):
+                api_key = next(
+                    (str(item).strip() for item in source_keys if str(item).strip()),
+                    "",
+                )
+        if not api_key:
+            raise ValueError("Gemini Embedding requires a configured API key.")
+        api_base = str(
+            provider_config.get("embedding_api_base")
+            or provider_config.get("api_base")
+            or ""
+        )
         timeout: int = int(provider_config.get("timeout", 20))
 
         http_options = types.HttpOptions(timeout=timeout * 1000)

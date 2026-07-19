@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import socket
 import sqlite3
 import subprocess
@@ -18,11 +19,15 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER_QQ = "2831304142"
+DEFAULT_PROVIDER = "deepseek/deepseek-v4-pro"
+FALLBACK_PROVIDER = "deepseek/deepseek-v4-flash"
+FAST_VISION_PROVIDER = "google_gemini/gemini-flash-lite-latest"
+DEEP_VISION_PROVIDER = "google_gemini/gemini-flash-latest"
 DB_PATH = ROOT / "data/data_v4.db"
 REQUIRED_DISABLED_PLUGINS = {
     "data.plugins.astrbot_plugin_livingmemory.main",
-    "data.plugins.astrbot_plugin_bilibili.main",
 }
+REQUIRED_ENABLED_PLUGINS = {"data.plugins.astrbot_plugin_bilibili.main"}
 REQUIRED_DISABLED_API_SEARCH_TOOLS = {
     "web_search_tavily",
     "tavily_extract_web_page",
@@ -339,10 +344,10 @@ def check_core() -> list[Check]:
     default_provider = provider_settings.get("default_provider_id")
     checks.append(
         ok("core.default_provider", str(default_provider))
-        if default_provider == "google_gemini/gemini-2.5-flash"
+        if default_provider == DEFAULT_PROVIDER
         else fail(
             "core.default_provider",
-            f"expected google_gemini/gemini-2.5-flash, got {default_provider!r}",
+            f"expected {DEFAULT_PROVIDER}, got {default_provider!r}",
         )
     )
 
@@ -356,6 +361,17 @@ def check_core() -> list[Check]:
         else fail(
             "core.web_search",
             f"built-in web_search should be false, got {web_search!r}",
+        )
+    )
+    checks.append(
+        ok(
+            "core.media_callback",
+            "NapCat uses one-time HTTP media sources instead of Windows file paths",
+        )
+        if data.get("callback_api_base") == "http://host.docker.internal:6185"
+        else fail(
+            "core.media_callback",
+            "callback_api_base must be reachable from the NapCat container",
         )
     )
 
@@ -372,8 +388,8 @@ def check_core() -> list[Check]:
     persona = provider_settings.get("default_personality")
     checks.append(
         ok("core.persona", str(persona))
-        if persona == "catgirl"
-        else fail("core.persona", f"expected catgirl, got {persona!r}")
+        if persona == "atri"
+        else fail("core.persona", f"expected atri, got {persona!r}")
     )
 
     active_reply = (ltm.get("active_reply") or {}).get("enable")
@@ -404,7 +420,9 @@ def check_core() -> list[Check]:
     gemini_enabled = [
         p.get("id")
         for p in providers
-        if str(p.get("id", "")).startswith("google_gemini/") and bool(p.get("enable"))
+        if str(p.get("id", "")).startswith("google_gemini/")
+        and p.get("provider_type", "chat_completion") == "chat_completion"
+        and bool(p.get("enable"))
     ]
     gemini_sources_enabled = [
         s.get("id")
@@ -415,24 +433,30 @@ def check_core() -> list[Check]:
         )
         and bool(s.get("enable"))
     ]
-    vision_provider = next(
-        (
-            provider
-            for provider in providers
-            if provider.get("id") == "google_gemini/gemini-2.5-flash"
-        ),
-        {},
+    vision_providers = {
+        provider.get("id"): provider
+        for provider in providers
+        if provider.get("id") in {FAST_VISION_PROVIDER, DEEP_VISION_PROVIDER}
+    }
+    expected_vision = {FAST_VISION_PROVIDER, DEEP_VISION_PROVIDER}
+    enabled_vision = set(gemini_enabled)
+    image_modalities_ok = all(
+        "image" in (vision_providers.get(provider_id, {}).get("modalities") or [])
+        for provider_id in expected_vision
     )
     checks.append(
-        ok("core.vision_provider", "Gemini 2.5 Flash is enabled for image input")
-        if gemini_enabled == ["google_gemini/gemini-2.5-flash"]
+        ok(
+            "core.vision_provider",
+            "Gemini Flash-Lite Latest and Flash Latest are enabled for layered image input",
+        )
+        if enabled_vision == expected_vision
         and gemini_sources_enabled == ["google_gemini"]
-        and "image" in (vision_provider.get("modalities") or [])
+        and image_modalities_ok
         else fail(
             "core.vision_provider",
-            "expected enabled Gemini 2.5 Flash with image modality; "
+            f"expected enabled {sorted(expected_vision)} with image modality; "
             f"providers={gemini_enabled}, sources={gemini_sources_enabled}, "
-            f"modalities={vision_provider.get('modalities')!r}",
+            f"modalities_ok={image_modalities_ok}",
         )
     )
     return checks
@@ -444,13 +468,59 @@ def check_plugin_configs() -> list[Check]:
     disabled_plugins = set(load_preference("inactivated_plugins", []))
     disabled_tools = set(load_preference("inactivated_llm_tools", []))
     missing_disabled = sorted(REQUIRED_DISABLED_PLUGINS - disabled_plugins)
+    wrongly_disabled = sorted(REQUIRED_ENABLED_PLUGINS & disabled_plugins)
     checks.append(
-        ok("plugins.disabled_slow", "LivingMemory and Bilibili are disabled")
-        if not missing_disabled
+        ok("plugins.runtime_balance", "LivingMemory disabled; Bilibili enabled")
+        if not missing_disabled and not wrongly_disabled
         else fail(
-            "plugins.disabled_slow",
-            f"slow/no-credential plugins still active: {missing_disabled}",
+            "plugins.runtime_balance",
+            f"missing disabled={missing_disabled}; wrongly disabled={wrongly_disabled}",
         )
+    )
+
+    bilibili = load_json(ROOT / "data/config/astrbot_plugin_bilibili_config.json")
+    parser = load_json(ROOT / "data/config/astrbot_plugin_parser_config.json")
+    bili_parser = next(
+        (
+            item
+            for item in parser.get("parsers_template", []) or []
+            if item.get("__template_key") == "bilibili"
+        ),
+        {},
+    )
+    checks.append(
+        ok(
+            "plugins.bilibili",
+            "BV/card parsing, AI summaries, video extraction, and proxy are enabled",
+        )
+        if bilibili.get("enable_parse_miniapp") is True
+        and bilibili.get("enable_parse_BV") is True
+        and bilibili.get("enable_ai_summary") is True
+        and bilibili.get("proxy") == "http://127.0.0.1:7897"
+        and bili_parser.get("enable") is True
+        and bili_parser.get("use_proxy") is True
+        and parser.get("proxy") == "http://127.0.0.1:7897"
+        else fail("plugins.bilibili", "Bilibili plugin or parser configuration drift")
+    )
+    ffmpeg_path = shutil.which("ffmpeg")
+    if not ffmpeg_path:
+        winget_ffmpeg = (
+            Path(os.environ.get("LOCALAPPDATA", ""))
+            / "Microsoft"
+            / "WinGet"
+            / "Links"
+            / "ffmpeg.exe"
+        )
+        try:
+            if winget_ffmpeg.is_file():
+                ffmpeg_path = str(winget_ffmpeg)
+        except PermissionError:
+            # Managed diagnostics may be unable to stat a valid WinGet link.
+            ffmpeg_path = str(winget_ffmpeg)
+    checks.append(
+        ok("runtime.ffmpeg", ffmpeg_path)
+        if ffmpeg_path
+        else fail("runtime.ffmpeg", "ffmpeg is required for video/audio merging")
     )
 
     missing_disabled_tools = sorted(REQUIRED_DISABLED_API_SEARCH_TOOLS - disabled_tools)
@@ -491,14 +561,21 @@ def check_plugin_configs() -> list[Check]:
     browser = qqtools.get("browser_config", {})
     permission = qqtools.get("tool_permission", {})
     allow_users = [str(user) for user in permission.get("tool_allow_users", [])]
+    admin_only_tools = permission.get("admin_only_tools", [])
     checks.append(
-        ok("qqtools.browser", f"browser enabled for {OWNER_QQ}")
+        ok(
+            "qqtools.browser",
+            "public browser search is available; interactive mutations stay restricted",
+        )
         if browser.get("browser") is True
         and OWNER_QQ in allow_users
-        and "browser_*" in permission.get("admin_only_tools", [])
+        and "browser_*" not in admin_only_tools
+        and "browser_click*" in admin_only_tools
+        and "browser_input" in admin_only_tools
+        and "browser_send_image" in admin_only_tools
         else fail(
             "qqtools.browser",
-            "QQTools browser must be enabled and restricted to the owner allow-list",
+            "QQTools browser read/write permissions are not safely separated",
         )
     )
 
@@ -506,13 +583,25 @@ def check_plugin_configs() -> list[Check]:
     angel_access = angel.get("access_control", {})
     angel_wake = angel.get("wake_interaction", {})
     checks.append(
-        ok("angel_heart.passive_gate", "empty whitelist blocks passive takeover")
+        ok(
+            "angel_heart.passive_gate",
+            "passive takeover is gated while explicit wake always replies",
+        )
         if angel_access.get("whitelist_enabled") is True
         and angel_access.get("chat_ids") == []
         and angel_access.get("group_chat_enhancement") is False
-        and angel_wake.get("force_reply_when_summoned") is False
-        and angel_wake.get("reply_even_not_questioned") is False
+        and angel_wake.get("force_reply_when_summoned") is True
+        and angel_wake.get("reply_even_not_questioned") is True
         else fail("angel_heart.passive_gate", "AngelHeart is not fully gated")
+    )
+    angel_identity = (angel.get("personality") or {}).get("ai_self_identity", "")
+    checks.append(
+        ok("persona.angel_heart", "ATRI identity and wake aliases aligned")
+        if "亚托莉" in angel_identity
+        and "修理工" in angel_identity
+        and "香草" not in angel_identity
+        and str(angel_wake.get("alias", "")).startswith("亚托莉|")
+        else fail("persona.angel_heart", "AngelHeart still has persona drift")
     )
 
     private = load_json(
@@ -534,22 +623,49 @@ def check_plugin_configs() -> list[Check]:
             "Private Companion should be proactive-only and non-passive",
         )
     )
+    private_basic = private.get("basic_config") or {}
+    checks.append(
+        ok(
+            "persona.private_companion",
+            "owner uses direct you/I address; repairer remains a third-person relation",
+        )
+        if private_basic.get("bot_name") == "亚托莉"
+        and private_basic.get("plugin_specific_persona_id") == "atri"
+        and private_basic.get("target_user_ids") == [OWNER_QQ]
+        and private_basic.get("private_user_aliases") == f"{OWNER_QQ}=你"
+        else fail(
+            "persona.private_companion",
+            "owner address and repairer relation are not aligned",
+        )
+    )
 
     wakepro = load_json(ROOT / "data/config/astrbot_plugin_wakepro_config.json")
     pipeline = wakepro.get("pipeline", {})
+    contextual_wake = wakepro.get("wake", {})
     checks.append(
-        ok("wakepro.non_blocking", "mention-only pipeline")
-        if pipeline.get("steps") == ["mention(\u63d0\u53ca\u5524\u9192)"]
+        ok(
+            "wakepro.contextual_followup",
+            "mention plus low-cost contextual follow-up pipeline",
+        )
+        if pipeline.get("steps")
+        == ["mention(\u63d0\u53ca\u5524\u9192)", "wake(\u667a\u80fd\u5524\u9192)"]
         and pipeline.get("blacklist_steps") == []
+        and float(contextual_wake.get("prolong", 0)) == 60.0
+        and float(contextual_wake.get("similar", 1)) == 0.35
+        and float(contextual_wake.get("ask", 0)) == 1.0
+        and float(contextual_wake.get("bored", 0)) == 1.0
+        and float(contextual_wake.get("interest", 0)) == 1.0
+        and float(contextual_wake.get("prob", 1)) == 0.0
         else fail(
-            "wakepro.non_blocking", "WakePro should not run blocking/wake/silence steps"
+            "wakepro.contextual_followup",
+            "WakePro should allow only mention and controlled contextual follow-up",
         )
     )
 
     meme = load_json(ROOT / "data/config/meme_manager_config.json")
     checks.append(
         ok("meme_manager.frequency", "low-frequency stickers")
-        if meme.get("emotion_llm_provider_id") == "deepseek/deepseek-v4-pro"
+        if meme.get("emotion_llm_provider_id") == FALLBACK_PROVIDER
         and int(meme.get("max_emotions_per_message", 0)) <= 1
         and int(meme.get("emotions_probability", 100)) <= 35
         else warn("meme_manager.frequency", "sticker frequency may be too high")
@@ -578,10 +694,16 @@ def check_plugin_configs() -> list[Check]:
         "enable_expression_patterns": maibot.get("enable_expression_patterns"),
         "enable_llm_hooks": runtime_internal.get("enable_llm_hooks"),
     }
-    off_slow_flags = {
+    expected_batch_flags = {
         "enable_jargon_learning": basic.get("enable_jargon_learning"),
         "enable_style_learning": basic.get("enable_style_learning"),
+        "enable_expression_user_scope": maibot.get("enable_expression_user_scope"),
+    }
+    off_slow_flags = {
         "enable_realtime_learning": basic.get("enable_realtime_learning"),
+        "enable_realtime_expression_learning": maibot.get(
+            "enable_realtime_expression_learning"
+        ),
         "enable_ml_analysis": ml.get("enable_ml_analysis"),
         "enable_memory_graph": maibot.get("enable_memory_graph"),
         "enable_knowledge_graph": maibot.get("enable_knowledge_graph"),
@@ -592,17 +714,23 @@ def check_plugin_configs() -> list[Check]:
     disabled_expected = [
         key for key, value in expected_on_flags.items() if value is not True
     ]
+    disabled_batch_flags = [
+        key for key, value in expected_batch_flags.items() if value is not True
+    ]
     enabled_slow_flags = [key for key, value in off_slow_flags.items() if value is True]
     hook_timeout = float(runtime_internal.get("llm_hook_context_timeout", 999) or 999)
     checks.append(
         ok(
             "self_learning.balanced",
-            "affection/mood/capture enabled; slow paths disabled",
+            "capture and group-scoped batch social learning enabled; realtime slow paths disabled",
         )
-        if not disabled_expected and not enabled_slow_flags and hook_timeout <= 1.5
+        if not disabled_expected
+        and not disabled_batch_flags
+        and not enabled_slow_flags
+        and hook_timeout <= 1.5
         else fail(
             "self_learning.balanced",
-            f"disabled expected flags={disabled_expected}; enabled slow flags={enabled_slow_flags}; hook_timeout={hook_timeout}",
+            f"disabled expected flags={disabled_expected}; disabled batch flags={disabled_batch_flags}; enabled slow flags={enabled_slow_flags}; hook_timeout={hook_timeout}",
         )
     )
 
@@ -831,6 +959,85 @@ def check_code_guards() -> list[Check]:
         else fail(
             "code.qqtools_browser_search",
             "browser_search tool is missing or not registered",
+        )
+    )
+
+    semantic_router = (
+        ROOT / "data/plugins/astrbot_plugin_semantic_router/main.py"
+    ).read_text(encoding="utf-8-sig")
+    checks.append(
+        ok(
+            "code.semantic_router_tool_lookup",
+            "legacy and current Tool Manager lookup interfaces are supported",
+        )
+        if "def _get_registered_tool" in semantic_router
+        and 'getattr(manager, "get_tool", None)' in semantic_router
+        and 'getattr(manager, "get_func", None)' in semantic_router
+        else fail(
+            "code.semantic_router_tool_lookup",
+            "semantic router cannot resolve tools across Tool Manager versions",
+        )
+    )
+    checks.append(
+        ok(
+            "code.semantic_router_preserves_browser",
+            "QQTools browser_search is preserved instead of overwritten by fallback",
+        )
+        if 'self._get_registered_tool("browser_search") is None' in semantic_router
+        and "preserving registered browser_search tool" in semantic_router
+        else fail(
+            "code.semantic_router_preserves_browser",
+            "semantic router may overwrite the registered browser_search tool",
+        )
+    )
+    checks.append(
+        ok(
+            "code.semantic_router_route_release",
+            "LLM leases release on response, Agent completion, and message send",
+        )
+        if "@filter.after_message_sent(priority=200000)" in semantic_router
+        and "release_route_after_send" in semantic_router
+        and "@filter.on_llm_response(priority=200000)" in semantic_router
+        and "release_route_after_llm_response" in semantic_router
+        else fail(
+            "code.semantic_router_route_release",
+            "route leases can be stranded behind another stopped send hook",
+        )
+    )
+
+    control_plane = (
+        ROOT / "data/plugins/astrbot_plugin_semantic_router/control_plane.py"
+    ).read_text(encoding="utf-8-sig")
+    checks.append(
+        ok(
+            "code.semantic_router_overload_reply",
+            "FAST reserve, delayed admission, overload reply, and lease watchdog enabled",
+        )
+        if "llm_queue_saturated" in control_plane
+        and "没让它继续挤队列" in control_plane
+        and "async def acquire_route" in control_plane
+        and "_expire_route_lease" in control_plane
+        and "await self.control_plane.acquire_route(event)" in semantic_router
+        else fail(
+            "code.semantic_router_overload_reply",
+            "adaptive LLM admission or abandoned-lease recovery is missing",
+        )
+    )
+
+    dailyhub_main = (ROOT / "data/plugins/astrbot_plugin_dailyhub/main.py").read_text(
+        encoding="utf-8-sig"
+    )
+    checks.append(
+        ok(
+            "code.dailyhub_gold_tool",
+            "get_daily_news exposes current gold prices to the Agent",
+        )
+        if '@filter.llm_tool(name="get_daily_news")' in dailyhub_main
+        and "source(string)" in dailyhub_main
+        and '"gold"' in dailyhub_main
+        else fail(
+            "code.dailyhub_gold_tool",
+            "DailyHub gold capability is missing from its registered LLM tool",
         )
     )
 

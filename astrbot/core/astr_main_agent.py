@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from astrbot.core import logger
+from astrbot.core.agent.execution_policy import get_agent_execution_policy
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
@@ -219,7 +220,12 @@ def _select_provider(
     event: AstrMessageEvent, plugin_context: Context
 ) -> Provider | None:
     """Select chat provider for the event."""
-    sel_provider = event.get_extra("selected_provider")
+    execution_policy = get_agent_execution_policy(event)
+    sel_provider = (
+        execution_policy.provider_id
+        if execution_policy and execution_policy.provider_id
+        else event.get_extra("selected_provider")
+    )
     if sel_provider and isinstance(sel_provider, str):
         provider = plugin_context.get_provider_by_id(sel_provider)
         if provider is None:
@@ -270,7 +276,15 @@ async def _apply_kb(
     plugin_context: Context,
     config: MainAgentBuildConfig,
 ) -> None:
-    if not config.kb_agentic_mode:
+    execution_policy = get_agent_execution_policy(event)
+    if execution_policy and execution_policy.knowledge_mode == "off":
+        return
+
+    kb_agentic_mode = config.kb_agentic_mode
+    if execution_policy:
+        kb_agentic_mode = execution_policy.knowledge_mode == "agentic"
+
+    if not kb_agentic_mode:
         if req.prompt is None or not req.prompt.strip():
             return
         try:
@@ -1338,6 +1352,7 @@ async def build_main_agent(
 
     If apply_reset is False, will not call reset on the agent runner.
     """
+    execution_policy = get_agent_execution_policy(event)
     provider = provider or _select_provider(event, plugin_context)
     if provider is None:
         logger.info("未找到任何对话模型（提供商），跳过 LLM 请求处理。")
@@ -1557,10 +1572,25 @@ async def build_main_agent(
             )
         )
 
+    if execution_policy and execution_policy.allowed_tools is not None:
+        allowed_tools = set(execution_policy.allowed_tools)
+        if req.func_tool:
+            req.func_tool.tools = [
+                tool for tool in req.func_tool.tools if tool.name in allowed_tools
+            ]
+
     fallback_providers = _get_fallback_chat_providers(
         provider, plugin_context, config.provider_settings
     )
-    selected_provider = _select_image_chat_provider(provider, req, fallback_providers)
+    selected_provider = provider
+    if not (
+        execution_policy
+        and execution_policy.provider_id
+        and event.get_extra("agent_vision_preprocessed")
+    ):
+        selected_provider = _select_image_chat_provider(
+            provider, req, fallback_providers
+        )
     if selected_provider is not provider:
         provider = selected_provider
         if req.model:
@@ -1622,7 +1652,11 @@ async def build_main_agent(
         enforce_max_turns=config.max_context_length,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
-        request_max_retries=config.provider_settings.get("request_max_retries", 5),
+        request_max_retries=(
+            max(1, execution_policy.request_max_retries)
+            if execution_policy
+            else config.provider_settings.get("request_max_retries", 5)
+        ),
         tool_result_overflow_dir=(
             get_astrbot_system_tmp_path()
             if req.func_tool and req.func_tool.get_tool("astrbot_file_read_tool")

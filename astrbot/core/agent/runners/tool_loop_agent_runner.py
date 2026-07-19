@@ -51,6 +51,10 @@ from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
 from ..context.manager import ContextManager
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
+from ..execution_policy import (
+    AGENT_TOOL_AUTHORIZATION_EXTRA_KEY,
+    get_agent_execution_policy,
+)
 from ..hooks import BaseAgentRunHooks
 from ..message import (
     AssistantMessageSegment,
@@ -1074,6 +1078,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     valid_params = func_tool_args
 
                 try:
+                    event = getattr(self.run_context.context, "event", None)
+                    if event is not None and hasattr(event, "set_extra"):
+                        event.set_extra(AGENT_TOOL_AUTHORIZATION_EXTRA_KEY, None)
                     await self.agent_hooks.on_tool_start(
                         self.run_context,
                         func_tool,
@@ -1081,6 +1088,35 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_start hook: {e}", exc_info=True)
+
+                authorization = (
+                    event.get_extra(AGENT_TOOL_AUTHORIZATION_EXTRA_KEY)
+                    if event is not None and hasattr(event, "get_extra")
+                    else None
+                )
+                execution_policy = (
+                    get_agent_execution_policy(event)
+                    if event is not None and hasattr(event, "get_extra")
+                    else None
+                )
+                authorization_matches = (
+                    isinstance(authorization, dict)
+                    and authorization.get("tool_name") == func_tool_name
+                )
+                if execution_policy and not (
+                    authorization_matches and authorization.get("allowed") is True
+                ):
+                    denial_message = (
+                        authorization.get("message") if authorization_matches else None
+                    )
+                    _append_tool_call_result(
+                        func_tool_id,
+                        str(
+                            denial_message
+                            or f"error: Tool {func_tool_name} was denied by policy."
+                        ),
+                    )
+                    continue
 
                 executor = self.tool_executor.execute(
                     tool=func_tool,

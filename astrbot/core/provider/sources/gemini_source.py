@@ -133,7 +133,15 @@ class ProviderGoogleGenAI(Provider):
         if e.message is None:
             e.message = ""
 
-        if e.code == 429 or "API key not valid" in e.message:
+        if e.code == 429:
+            logger.error(
+                "Gemini rate limit reached; failing fast without rotating keys. "
+                "Current key: %s...",
+                self.chosen_api_key[:12],
+            )
+            raise Exception("Gemini API rate limit reached.")
+
+        if "API key not valid" in e.message:
             keys.remove(self.chosen_api_key)
             if len(keys) > 0:
                 self.set_key(random.choice(keys))
@@ -185,6 +193,25 @@ class ProviderGoogleGenAI(Provider):
         native_coderunner = self.provider_config.get("gm_native_coderunner", False)
         native_search = self.provider_config.get("gm_native_search", False)
         url_context = self.provider_config.get("gm_url_context", False)
+
+        # Gemini rejects requests that combine native tools with function calls.
+        # Keep AstrBot's function tools available because the agent runner depends on them.
+        if tools and not tools.empty():
+            disabled_native_tools = []
+            if native_coderunner:
+                native_coderunner = False
+                disabled_native_tools.append("code execution")
+            if native_search:
+                native_search = False
+                disabled_native_tools.append("Google Search")
+            if url_context:
+                url_context = False
+                disabled_native_tools.append("URL context")
+            if disabled_native_tools:
+                logger.warning(
+                    "Gemini native tools (%s) are disabled for this request because function tools are in use.",
+                    ", ".join(disabled_native_tools),
+                )
 
         if "gemini-2.0-lite" in model_name:
             if native_coderunner or native_search or url_context:
@@ -246,9 +273,9 @@ class ProviderGoogleGenAI(Provider):
             # Use prefix match so new variants (3.1, 3-flash-lite-preview, etc.) are
             # covered without needing to keep an exhaustive list up to date.
             # Gemini 2.5 series models don't support thinkingLevel; use thinkingBudget instead.
-            thinking_level = self.provider_config.get("gm_thinking_config", {}).get(
-                "level", "HIGH"
-            )
+            thinking_level = payloads.get("thinking_level") or self.provider_config.get(
+                "gm_thinking_config", {}
+            ).get("level", "HIGH")
             if thinking_level and isinstance(thinking_level, str):
                 thinking_level = thinking_level.upper()
                 if thinking_level not in ["MINIMAL", "LOW", "MEDIUM", "HIGH"]:
@@ -257,10 +284,10 @@ class ProviderGoogleGenAI(Provider):
                     )
                     thinking_level = "HIGH"
                 level = types.ThinkingLevel(thinking_level)
-                thinking_config = types.ThinkingConfig()
-                if not hasattr(types.ThinkingConfig, "thinking_level"):
-                    setattr(types.ThinkingConfig, "thinking_level", level)
-                else:
+                try:
+                    thinking_config = types.ThinkingConfig(thinking_level=level)
+                except TypeError:
+                    thinking_config = types.ThinkingConfig()
                     thinking_config.thinking_level = level
 
         return types.GenerateContentConfig(
@@ -618,7 +645,12 @@ class ProviderGoogleGenAI(Provider):
                         contents=cast(types.ContentListUnion, conversation),
                         config=config,
                     ),
-                    max_attempts=request_max_retries,
+                    max_attempts=(
+                        max(1, request_max_retries)
+                        if request_max_retries is not None
+                        else None
+                    ),
+                    retry_rate_limits=False,
                 )
                 logger.debug(f"genai result: {result}")
 
@@ -710,7 +742,12 @@ class ProviderGoogleGenAI(Provider):
                         contents=cast(types.ContentListUnion, conversation),
                         config=config,
                     ),
-                    max_attempts=request_max_retries,
+                    max_attempts=(
+                        max(1, request_max_retries)
+                        if request_max_retries is not None
+                        else None
+                    ),
+                    retry_rate_limits=False,
                 )
                 break
             except APIError as e:
@@ -860,10 +897,20 @@ class ProviderGoogleGenAI(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        for key in (
+            "max_tokens",
+            "temperature",
+            "top_p",
+            "top_k",
+            "stop",
+            "thinking_level",
+        ):
+            if key in kwargs and kwargs[key] is not None:
+                payloads[key] = kwargs[key]
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
-        retry = 10
+        retry = max(1, request_max_retries) if request_max_retries is not None else 10
         keys = self.api_keys.copy()
 
         for _ in range(retry):
@@ -927,10 +974,20 @@ class ProviderGoogleGenAI(Provider):
         model = model or self.get_model()
 
         payloads = {"messages": context_query, "model": model}
+        for key in (
+            "max_tokens",
+            "temperature",
+            "top_p",
+            "top_k",
+            "stop",
+            "thinking_level",
+        ):
+            if key in kwargs and kwargs[key] is not None:
+                payloads[key] = kwargs[key]
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
-        retry = 10
+        retry = max(1, request_max_retries) if request_max_retries is not None else 10
         keys = self.api_keys.copy()
 
         for _ in range(retry):
