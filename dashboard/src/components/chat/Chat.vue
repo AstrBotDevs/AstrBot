@@ -1971,6 +1971,7 @@ async function handleRegenerateMessage(
     message,
     selection?.providerId || "",
     selection?.modelName || "",
+    enableStreaming.value,
   );
 }
 

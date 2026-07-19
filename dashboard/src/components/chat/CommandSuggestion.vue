@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from "vue";
+import { computed, reactive, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
 export interface SuggestionCommand {
@@ -88,7 +88,14 @@ const tooltip = reactive({
   y: 0,
 });
 
-const hoveredKey = ref<string | null>(null);
+watch(
+  () => props.visible,
+  (visible) => {
+    if (!visible) {
+      tooltip.visible = false;
+    }
+  },
+);
 
 const tooltipStyle = computed(() => ({
   position: "fixed" as const,
@@ -115,30 +122,6 @@ const panelStyle = computed(() => {
   };
 });
 
-watch(
-  () => props.visible,
-  (val) => {
-    if (!val) {
-      tooltip.visible = false;
-    }
-  },
-);
-
-watch(
-  () => props.commands,
-  (cmds) => {
-    if (hoveredKey.value) {
-      const stillExists = cmds.some(
-        (c) => `${c.handler_full_name}:${c.effective_command}` === hoveredKey.value,
-      );
-      if (!stillExists) {
-        tooltip.visible = false;
-        hoveredKey.value = null;
-      }
-    }
-  },
-);
-
 function handleSelect(index: number) {
   const cmd = props.commands[index];
   if (cmd) {
@@ -148,13 +131,11 @@ function handleSelect(index: number) {
 
 function handleMouseEnter(index: number) {
   emit("updateSelectedIndex", index);
+  // 显示 tooltip
   const cmd = props.commands[index];
-  if (cmd) {
-    hoveredKey.value = `${cmd.handler_full_name}:${cmd.effective_command}`;
-    if (cmd.description) {
-      tooltip.text = cmd.description;
-      tooltip.visible = true;
-    }
+  if (cmd?.description) {
+    tooltip.text = cmd.description;
+    tooltip.visible = true;
   }
 }
 
@@ -165,7 +146,6 @@ function handleMouseMove(e: MouseEvent) {
 
 function handleMouseLeave() {
   tooltip.visible = false;
-  hoveredKey.value = null;
 }
 </script>
 
@@ -253,7 +233,7 @@ function handleMouseLeave() {
 }
 
 .is-dark .command-description {
-  color: #e0e0e0;
+  color: #999;
 }
 
 .command-suggestion-hint {

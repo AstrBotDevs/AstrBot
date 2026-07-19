@@ -63,6 +63,8 @@ class WhitelistCheckStage(Stage):
         ):
             if self.wl_log:
                 logger.info(
-                    f"会话 ID {event.unified_msg_origin} 不在会话白名单中，已终止事件传播。请在配置文件中添加该会话 ID 到白名单。",
+                    f"Session ID {event.unified_msg_origin} is not in the session "
+                    "allowlist, so event propagation was stopped. Add this session "
+                    "ID to the allowlist in the configuration file.",
                 )
             event.stop_event()

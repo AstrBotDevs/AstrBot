@@ -461,8 +461,6 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import axios from "axios";
 import { fileApi } from "@/api/v1";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
 import RegenerateMenu, {
   type RegenerateModelSelection,
 } from "@/components/chat/RegenerateMenu.vue";
@@ -472,21 +470,21 @@ import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue"
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
-import ThreadNode from "@/components/chat/message_list_comps/ThreadNode.vue";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import InteractiveChoiceBox from "@/components/chat/message_list_comps/InteractiveChoiceBox.vue";
 import {
   isInteractiveChoicePayload,
-  validateInteractiveChoice,
   truncateInteractiveChoice,
   tryRecoverInteractiveChoiceFromPlainText,
   type InteractiveChoicePart,
 } from "@/composables/parseInteractiveChoice";
 import { useInteractiveChoiceStore } from "@/stores/interactiveChoice";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
+import {
+  CHAT_MARKDOWN_CUSTOM_TAGS,
+  registerChatMarkdownComponents,
+} from "@/components/chat/chatMarkdownComponents";
 import {
   attachmentName,
   attachmentPresentation,
@@ -563,15 +561,11 @@ const emit = defineEmits<{
   ];
 }>();
 
-setCustomComponents("chat-message", {
-  ref: RefNode,
-  thread: ThreadNode,
-  code_block: ThemeAwareMarkdownCodeBlock,
-});
+registerChatMarkdownComponents();
 
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
-const customMarkdownTags = ["ref"];
+const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
 const downloadingFiles = ref(new Set<string>());
 const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
@@ -1267,6 +1261,12 @@ function formatDuration(seconds: number) {
   max-width: min(1000px, 95%);
 }
 
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
+}
+
 .from-user .message-stack {
   align-items: flex-end;
   max-width: 72%;
@@ -1495,11 +1495,14 @@ function formatDuration(seconds: number) {
 
 .image-part {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   border: 0;
   padding: 0;
   margin-top: 8px;
   background: transparent;
   cursor: zoom-in;
+  text-align: left;
 }
 
 .image-part img {
