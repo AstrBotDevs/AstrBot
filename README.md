@@ -1,9 +1,14 @@
 > This Branch is for *spzx*, use it with the plugins following 
 >
 > **SPCODE TOOLKIT** (https://github.com/elecvoid243/astrbot_plugin_spcode_toolkit)
+>
 > **NEO CARGO MANAGER** (https://github.com/elecvoid243/astrbot_plugin_neo_cargo)
+>
 > **ASK USER CHOICE** (https://github.com/elecvoid243/astrbot_plugin_ask_user_choice)
+>
 > **LIGHTRAG ADAPDATOR** (https://github.com/elecvoid243/astrbot_plugin_lightrag)
+>
+> 
 
 ![AstrBot-Logo-Simplified](https://github.com/user-attachments/assets/ffd99b6b-3272-4682-beaa-6fe74250f7d9)
 
