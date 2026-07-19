@@ -90,6 +90,13 @@ export function applyInteractiveChoiceSse(
  * Behaviour:
  *   - Returns silently on malformed payload (wrong type, missing
  *     `data.request_id`, empty after trim).
+ *   - **Filters on `data.reason === "cancelled"`**: events with any
+ *     other reason (notably the v1.0 success-path `reason:
+ *     "submitted"`, and any future reason values such as `"expired"`,
+ *     `"error"`) are silently dropped. Without this filter, the
+ *     success path would also write to `cancelledStates` and flip a
+ *     just-submitted box into the cancelled visual. Reviewer flag
+ *     from F3.
  *   - On a valid payload, writes the request_id into
  *     `useInteractiveChoiceStore().cancelledStates[umo]` via
  *     `markCancelled`.
@@ -123,6 +130,15 @@ export function applyInteractiveChoiceResolved(
   const requestId =
     typeof data.request_id === "string" ? data.request_id.trim() : "";
   if (!requestId) {
+    return;
+  }
+  // Only the server-cancel / timeout path writes to cancelledStates.
+  // Other reasons (notably v1.0's success-path `reason: "submitted"`)
+  // are dropped here so a successful submission never flips the box
+  // to the cancelled visual. Filter runs AFTER request_id validation
+  // so malformed payloads still fail fast on the id check.
+  const reason = typeof data.reason === "string" ? data.reason : "";
+  if (reason !== "cancelled") {
     return;
   }
   useInteractiveChoiceStore().markCancelled(umo, requestId);

@@ -63,6 +63,16 @@ describe("applyInteractiveChoiceResolved", () => {
     expect(Object.keys(store.cancelledStates[umo] ?? {})).toHaveLength(0);
   });
 
+  it("ignores reason: 'submitted' (v1.0 success path)", () => {
+    const store = useInteractiveChoiceStore();
+    const umo = "webchat:FriendMessage:webchat!alice!sess";
+    applyInteractiveChoiceResolved(umo, {
+      type: "interactive_choice_resolved",
+      data: { request_id: "rid-1", reason: "submitted" },
+    });
+    expect(store.isCancelled(umo, "rid-1")).toBe(false);
+  });
+
   it("throws when umo is missing (Bug Y1 contract)", () => {
     expect(() =>
       applyInteractiveChoiceResolved("", {
