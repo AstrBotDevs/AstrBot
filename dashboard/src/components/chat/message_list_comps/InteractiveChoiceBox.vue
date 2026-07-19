@@ -2,9 +2,11 @@
   Author: elecvoid243
   Date: 2026-06-28
   Spec: docs/superpowers/specs/2026-06-28-dynamic-choice-box-rendering-design.md §4
+  v1.2 增量: docs/superpowers/specs/2026-07-19-server-driven-cancelled-state-design.md §4.4
 
   InteractiveChoiceBox: 动态渲染 LLM ask_user_choice 工具输出的选项框。
-  4 状态机(pending / submitted_via_option / submitted_via_input / ignored) + a11y。
+  5 状态机(pending / submitted_via_option / submitted_via_input / ignored / cancelled) + a11y。
+  v1.2 新增 `cancelled` 状态,覆盖服务端超时与运行时取消两种场景。
 -->
 <template>
   <div
