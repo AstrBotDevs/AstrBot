@@ -66,6 +66,7 @@ import { pluginExtensionApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import GitDiffBodyContent from "@/components/chat/message_list_comps/GitDiffBodyContent.vue";
 import FileBrowserView from "@/components/chat/message_list_comps/FileBrowserView.vue";
+import { useRecentFiles } from "@/composables/useRecentFiles";
 import GitCommitBar from "@/components/chat/message_list_comps/GitCommitBar.vue";
 import GitCommitDialog from "@/components/chat/message_list_comps/GitCommitDialog.vue";
 import WorktreeCreateDialog from "@/components/chat/message_list_comps/WorktreeCreateDialog.vue";
@@ -264,6 +265,13 @@ const SCOPE_OPTIONS: ReadonlyArray<ScopeOption> = [
 // null = use primary (main) worktree. This ref is passed to
 // useSpcodeGitDiff which auto-refreshes on changes.
 const selectedWorktree = ref<string | null>(null);
+
+// ── Recent files (spec 2026-07-20 recent-files §3, §4) ──────────────
+// One bucket per worktree, persisted to localStorage by
+// useRecentFiles. Pass `selectedWorktree` (Ref<string|null>) so the
+// composable re-loads on worktree switch.
+const recentFiles = useRecentFiles(selectedWorktree);
+const showClearConfirm = ref(false);
 
 // ── View-mode tab (spec 2026-06-20 §5.1 + §5.2) ─────────────────────
 // "files" shows <FileBrowserView>; "diff" shows <GitDiffBodyContent>;
@@ -502,6 +510,20 @@ watch(selectedWorktree, (newVal) => {
 watch(fileBrowserCurrentPath, (newPath) => {
   if (newPath) persistCurrentPath(newPath);
 });
+
+// 2026-07-20 Recent Files §6.1: drive recordOpen off the canonical
+// preview-path writer so every entry point (search jumps, tree clicks,
+// recent-row clicks) shares one filter. Null writes (close preview /
+// worktree switch) are skipped; non-worktree paths are filtered inside
+// recordOpen. `immediate: false` keeps the empty initial state clean.
+watch(
+  [fileBrowserPreviewPath, currentRoot],
+  ([newPath, root]) => {
+    if (!newPath || !root) return;
+    recentFiles.recordOpen(newPath);
+  },
+  { immediate: false },
+);
 
 const composable = useSpcodeGitDiff(selectedWorktree, selectedScope);
 // git-status is fetched alongside git-diff ONLY for the unstaged view.
@@ -787,6 +809,29 @@ const confirmTargetIsNew = computed<boolean>(
 const confirmRestorePathsOpen = ref(false);
 const pendingRestorePaths = ref<string[]>([]);
 const isBulkRestoring = ref(false);
+
+// ── Recent files handlers (spec 2026-07-20 recent-files §6.1) ───────
+// Spec:
+//   - select  → open the file the user just clicked (no line jump)
+//   - remove  → drop one entry from the per-worktree bucket
+//   - clear   → already opened via the dialog; this confirms it
+function onRecentSelect(payload: { path: string }): void {
+  // Same navigation contract as onFileOpen but without a `line` field:
+  // RecentFilesBlock emits `{ path }` only; we deliberately don't jump
+  // to any anchor.
+  fileBrowserPreviewPath.value = payload.path;
+  const sep = payload.path.includes("\\") ? "\\" : "/";
+  const lastSep = payload.path.lastIndexOf(sep);
+  if (lastSep > 0 && payload.path.slice(0, lastSep) !== fileBrowserCurrentPath.value) {
+    fileBrowserCurrentPath.value = payload.path.slice(0, lastSep);
+  }
+  fileSearchScrollToLine.value = null;
+}
+
+function onConfirmClear(): void {
+  recentFiles.clear();
+  showClearConfirm.value = false;
+}
 
 // ── Worktree management state (spec 2026-06-27 §2.4) ────────
 const createDialogOpen = ref(false);
@@ -3348,8 +3393,12 @@ const currentRoot = computed<string | null>(() => {
             :worktree="selectedWorktree"
             :git-log="gitLog"
             :git-show="gitShow"
+            :recent-entries="recentFiles.entries.value"
             @navigate="onFileBrowserNavigate"
             @open-file="onFileOpen"
+            @recent-select="onRecentSelect"
+            @recent-remove="(p) => recentFiles.remove(p.path)"
+            @recent-clear="showClearConfirm = true"
           />
           <GitDiffBodyContent
             v-else-if="viewMode === 'diff'"
@@ -3683,6 +3732,39 @@ const currentRoot = computed<string | null>(() => {
                     "spcodeProjectLoad.diffSidebar.gitWorkflow.unstage.unstageAll.confirmAction",
                   )
                 }}
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
+        <!-- Recent Files: Clear confirmation (spec 2026-07-20 recent-files §6.3).
+             Shape mirrors the existing delete / restore dialogs. Tinted
+             `error` because clearing is irreversible (no undo); not
+             `warning` (which sidebar uses for reversible-but-impactive
+             flows like unstage-all). -->
+        <v-dialog v-model="showClearConfirm" max-width="420">
+          <v-card>
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">
+              {{
+                tm(
+                  "spcodeProjectLoad.fileBrowser.recentFiles.clearConfirmTitle",
+                )
+              }}
+            </v-card-title>
+            <v-card-text class="pt-4">
+              {{
+                tm(
+                  "spcodeProjectLoad.fileBrowser.recentFiles.clearConfirmMessage",
+                )
+              }}
+            </v-card-text>
+            <v-card-actions class="pa-4 pt-0">
+              <v-spacer />
+              <v-btn variant="text" @click="showClearConfirm = false">
+                {{ tm("spcodeProjectLoad.fileBrowser.editor.cancel") }}
+              </v-btn>
+              <v-btn variant="text" color="error" @click="onConfirmClear">
+                {{ tm("spcodeProjectLoad.fileBrowser.recentFiles.clear") }}
               </v-btn>
             </v-card-actions>
           </v-card>
