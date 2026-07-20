@@ -99,6 +99,15 @@ class DingtalkPlatformAdapter(Platform):
         self.client_ = client  # 用于 websockets 的 client
         self._shutdown_event = threading.Event()
         self._terminated_event = threading.Event()
+        self.card_template_id = str(platform_config.get("card_template_id", "") or "")
+        self.card_content_key = str(
+            platform_config.get("card_content_key", "content") or "content"
+        )
+        self.card_update_interval = _safe_float(
+            platform_config.get("card_update_interval", 0.35),
+            0.35,
+        )
+        self._card_sessions: dict[str, tuple[object, str]] = {}
 
     def _id_to_sid(self, dingtalk_id: str | None) -> str:
         if not dingtalk_id:
@@ -753,6 +762,71 @@ class DingtalkPlatformAdapter(Platform):
                 # at_str=at_str,
             )
 
+    async def create_message_card(
+        self,
+        message_id: str,
+        incoming_message: dingtalk_stream.ChatbotMessage,
+    ) -> str:
+        if not self.card_template_id:
+            return ""
+
+        try:
+            card_replier = dingtalk_stream.AICardReplier(
+                self.client_,
+                incoming_message,
+            )
+            card_instance_id = await card_replier.async_create_and_deliver_card(
+                self.card_template_id,
+                {self.card_content_key: ""},
+            )
+        except AttributeError as e:
+            logger.error(
+                "钉钉流式卡片创建失败: 当前 dingtalk_stream 不支持 AICardReplier: %s",
+                e,
+            )
+            return ""
+        except Exception as e:
+            logger.error("钉钉流式卡片创建失败: %s", e)
+            return ""
+
+        if not card_instance_id:
+            logger.error("钉钉流式卡片创建失败: card_instance_id 为空")
+            return ""
+
+        card_token = message_id or card_instance_id
+        self._card_sessions[card_token] = (card_replier, card_instance_id)
+        return card_token
+
+    async def send_card_message(
+        self,
+        card_token: str,
+        content: str,
+        is_final: bool,
+    ) -> None:
+        card_session = self._card_sessions.get(card_token)
+        if not card_session:
+            logger.warning("钉钉流式卡片更新跳过: 找不到卡片会话")
+            return
+
+        card_replier, card_instance_id = card_session
+        try:
+            await card_replier.async_streaming(
+                card_instance_id,
+                content_key=self.card_content_key,
+                content_value=content,
+                append=False,
+                finished=is_final,
+                failed=False,
+            )
+        except Exception as e:
+            logger.error("钉钉流式卡片更新失败: %s", e)
+            if is_final:
+                self._card_sessions.pop(card_token, None)
+            return
+
+        if is_final:
+            self._card_sessions.pop(card_token, None)
+
     def create_event(self, message: AstrBotMessage) -> DingtalkMessageEvent:
         """Creates a Dingtalk message event.
 
@@ -860,3 +934,10 @@ class DingtalkPlatformAdapter(Platform):
 
     def get_client(self):
         return self.client
+
+
+def _safe_float(value: object, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default

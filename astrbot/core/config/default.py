@@ -442,6 +442,8 @@ CONFIG_METADATA_2 = {
                         "client_id": "",
                         "client_secret": "",
                         "card_template_id": "",
+                        "card_content_key": "content",
+                        "card_update_interval": 0.35,
                     },
                     "Telegram": {
                         "id": "telegram",
@@ -753,6 +755,16 @@ CONFIG_METADATA_2 = {
                         "description": "卡片模板 ID",
                         "type": "string",
                         "hint": "可选。钉钉互动卡片模板 ID。启用后将使用互动卡片进行流式回复。",
+                    },
+                    "card_content_key": {
+                        "description": "卡片内容变量名",
+                        "type": "string",
+                        "hint": "可选。钉钉互动卡片模板中用于接收流式文本内容的变量名，默认 content。",
+                    },
+                    "card_update_interval": {
+                        "description": "卡片更新间隔",
+                        "type": "float",
+                        "hint": "可选。钉钉互动卡片流式更新的最小间隔，单位秒，默认 0.35。",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",
