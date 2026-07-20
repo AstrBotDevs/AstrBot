@@ -2438,16 +2438,17 @@ CONFIG_METADATA_2 = {
                         "hint": "嵌入向量的维度。根据模型不同，可能需要调整，请参考具体模型的文档。此配置项请务必填写正确，否则将导致向量数据库无法正常工作。",
                         "_special": "get_embedding_dim",
                     },
+                    "max_batch_size": {
+                        "description": "最大批次大小",
+                        "type": "int",
+                        "hint": "每批向嵌入 API 发送的文本数量上限。各服务商限制不同：DashScope/阿里云百炼限制为 10；OpenAI 支持 2048；Ollama/Gemini/NVIDIA 通常可设为 100-2048。超过限制会触发 API 400 错误。",
+                        "slider": {"min": 1, "max": 2048, "step": 1},
+                    },
                     "embedding_dimensions_mode": {
                         "description": "嵌入维度参数发送模式",
                         "type": "string",
                         "options": ["auto", "always", "never"],
                         "hint": "控制是否在 OpenAI 兼容 Embedding 请求中发送 dimensions 参数。auto 会仅对官方 OpenAI embedding-3 模型自动发送；第三方兼容 API 如需该参数可改为 always，报错时改为 never。",
-                    },
-                    "max_batch_size": {
-                        "description": "最大批次大小",
-                        "type": "int",
-                        "hint": "每批向嵌入 API 发送的文本数量上限。各服务商限制不同：DashScope/阿里云百炼限制为 10；OpenAI 支持 2048；Ollama/Gemini/NVIDIA 通常可设为 100-2048。超过限制会触发 API 400 错误。",
                     },
                     "embedding_model": {
                         "description": "嵌入模型",
