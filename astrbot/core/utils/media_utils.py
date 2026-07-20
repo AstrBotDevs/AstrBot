@@ -1127,7 +1127,7 @@ async def convert_audio_format(
     Raises:
         Exception: Raised when ffmpeg is unavailable or conversion fails.
     """
-    detected_format = _get_audio_magic_type(audio_path)
+    detected_format = await asyncio.to_thread(_get_audio_magic_type, audio_path)
     if audio_path.lower().endswith(f".{output_format}") and (
         detected_format == output_format
         or (output_format == "ogg" and detected_format == "opus")
