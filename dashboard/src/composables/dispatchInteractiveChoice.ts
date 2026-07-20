@@ -141,5 +141,16 @@ export function applyInteractiveChoiceResolved(
   if (reason !== "cancelled") {
     return;
   }
-  useInteractiveChoiceStore().markCancelled(umo, requestId);
+  // v1.2.1 fix: the `umo` param passed by the SSE pipeline
+  // (`connection.sessionId`) is the raw conversation UUID, but the
+  // InteractiveChoiceBox component reads from the store using the
+  // full unified_msg_origin (e.g. "webchat:FriendMessage:webchat!u!cid").
+  // Prefer the `data.umo` field set by the backend plugin (which has
+  // access to the real UMO), falling back to the passed-in value for
+  // backward compatibility with plugin versions that don't include it.
+  const resolvedUmo =
+    typeof data.umo === "string" && data.umo.trim()
+      ? data.umo.trim()
+      : umo;
+  useInteractiveChoiceStore().markCancelled(resolvedUmo, requestId);
 }

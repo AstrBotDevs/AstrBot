@@ -490,7 +490,8 @@ function ariaLabelForOption(opt: InteractiveChoiceOption): string {
   word-break: break-word;
 }
 
-.choice-ignored-label {
+.choice-ignored-label,
+.choice-cancelled-label {
   font-size: 13px;
   font-weight: 600;
   margin-right: 6px;

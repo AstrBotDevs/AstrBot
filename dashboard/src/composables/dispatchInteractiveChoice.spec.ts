@@ -81,4 +81,37 @@ describe("applyInteractiveChoiceResolved", () => {
       }),
     ).toThrow(/missing required 'umo'/);
   });
+
+  it("uses data.umo over the passed umo param (v1.2.1 fix)", () => {
+    // Simulate the real bug: the SSE pipeline passes the raw
+    // conversation UUID, but the backend includes the full
+    // unified_msg_origin in data.umo. The dispatcher must write
+    // to the full UMO bucket so InteractiveChoiceBox (which reads
+    // with props.currentUmo) can see the cancelled state.
+    const store = useInteractiveChoiceStore();
+    const rawSessionId = "abc-123";
+    const fullUmo = "webchat:FriendMessage:webchat!alice!abc-123";
+    applyInteractiveChoiceResolved(rawSessionId, {
+      type: "interactive_choice_resolved",
+      data: {
+        request_id: "rid-1",
+        reason: "cancelled",
+        umo: fullUmo,
+      },
+    });
+    // The cancelled state must be written under the FULL UMO, not
+    // the raw session ID.
+    expect(store.isCancelled(fullUmo, "rid-1")).toBe(true);
+    expect(store.isCancelled(rawSessionId, "rid-1")).toBe(false);
+  });
+
+  it("falls back to umo param when data.umo is absent (backward compat)", () => {
+    const store = useInteractiveChoiceStore();
+    const umo = "webchat:FriendMessage:webchat!alice!sess";
+    applyInteractiveChoiceResolved(umo, {
+      type: "interactive_choice_resolved",
+      data: { request_id: "rid-1", reason: "cancelled" },
+    });
+    expect(store.isCancelled(umo, "rid-1")).toBe(true);
+  });
 });
