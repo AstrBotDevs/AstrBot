@@ -366,6 +366,76 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
 
 @pytest.mark.asyncio
+async def test_execute_handoff_passes_valid_fallbacks_and_retries_to_tool_loop_agent(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    class _ChatProvider:
+        pass
+
+    primary = _ChatProvider()
+    fallback = _ChatProvider()
+    non_chat_provider = object()
+    providers = {
+        "primary": primary,
+        "fallback": fallback,
+        "non-chat": non_chat_provider,
+    }
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "primary"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        get_provider_by_id=lambda provider_id: providers.get(provider_id),
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {
+            "provider_settings": {
+                "fallback_chat_models": [
+                    "primary",
+                    "fallback",
+                    "fallback",
+                    "missing",
+                    "non-chat",
+                ],
+                "request_max_retries": 7,
+            }
+        },
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id="primary",
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+    monkeypatch.setattr("astrbot.core.astr_agent_tool_exec.Provider", _ChatProvider)
+
+    async for _result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        pass
+
+    assert captured["fallback_providers"] == [fallback]
+    assert captured["request_max_retries"] == 7
+
+
+@pytest.mark.asyncio
 async def test_background_wakeup_passes_provider_settings_to_main_agent(
     monkeypatch: pytest.MonkeyPatch,
 ):
