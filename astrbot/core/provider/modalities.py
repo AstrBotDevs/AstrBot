@@ -34,6 +34,72 @@ def _message_to_dict(message: dict[str, Any] | Message) -> dict[str, Any] | None
     return None
 
 
+# Image MIME types that some OpenAI-compatible gateways reject even when the
+# model claims image support. Animated GIFs in particular are accepted by raw
+# Gemini (which wants image/heif/video/mp4 for animations) but rejected by
+# several Gemini-flavored OpenAI proxies with "mime type is not supported".
+# Keeping this list narrow avoids over-stripping providers that do accept GIF
+# (e.g. Anthropic Claude). See issue #9295.
+_UNSUPPORTED_IMAGE_MIMES = frozenset({"image/gif"})
+
+# Lazily-built extension → MIME mapping used only for http(s) URL fallback.
+_IMAGE_EXT_TO_MIME: dict[str, str] = {
+    ".gif": "image/gif",
+}
+
+
+def _extract_image_mime(part: dict[str, Any]) -> str | None:
+    """Best-effort extraction of an image MIME type from a multimodal part.
+
+    Handles the OpenAI-style ``{"image_url": {"url": ...}}`` and the Anthropic /
+    Gemini-style ``{"source": {"media_type": ...}}`` / ``{"mimeType": ...}``
+    layouts, as well as a bare ``{"url": ...}`` or ``{"image_url": "<url>"}``.
+
+    Returns:
+        The lowercased MIME type (e.g. ``image/gif``) if it can be determined,
+        otherwise ``None``.
+    """
+    image_url = part.get("image_url")
+    if isinstance(image_url, dict):
+        url = image_url.get("url")
+    else:
+        url = image_url
+    if not isinstance(url, str):
+        url = part.get("url") if isinstance(part.get("url"), str) else None
+
+    if isinstance(url, str):
+        # data URLs look like "data:image/gif;base64,...."
+        if url.lower().startswith("data:"):
+            head = url[5:].split(",", 1)[0]
+            # head is e.g. "image/gif;base64"
+            mime = head.split(";", 1)[0].strip().lower()
+            if mime:
+                return mime
+        else:
+            # Fall back to the URL path extension for http(s) URLs.
+            path = url.split("?", 1)[0].split("#", 1)[0].lower()
+            for ext, mime in _IMAGE_EXT_TO_MIME.items():
+                if path.endswith(ext):
+                    return mime
+
+    source = part.get("source")
+    if isinstance(source, dict):
+        media_type = source.get("media_type")
+        if isinstance(media_type, str):
+            return media_type.lower()
+
+    mime_type = part.get("mimeType") or part.get("mime_type")
+    if isinstance(mime_type, str):
+        return mime_type.lower()
+
+    return None
+
+
+def _is_unsupported_image_mime(mime: str | None) -> bool:
+    """Return True when the MIME is known to be rejected by some providers."""
+    return bool(mime) and mime in _UNSUPPORTED_IMAGE_MIMES
+
+
 def sanitize_contexts_by_modalities(
     contexts: Sequence[dict[str, Any] | Message],
     modalities: list[str] | None,
@@ -51,7 +117,11 @@ def sanitize_contexts_by_modalities(
     supports_image = "image" in modalities
     supports_audio = "audio" in modalities
     supports_tool_use = "tool_use" in modalities
-    if supports_image and supports_audio and supports_tool_use:
+    # Even when the provider declares all modalities, we may still need to walk
+    # the contexts to drop specific image MIME types (e.g. image/gif) that some
+    # OpenAI-compatible gateways reject. See issue #9295.
+    needs_mime_pass = supports_image and bool(_UNSUPPORTED_IMAGE_MIMES)
+    if supports_image and supports_audio and supports_tool_use and not needs_mime_pass:
         copied_contexts = []
         for msg in contexts:
             copied_msg = _message_to_dict(msg)
@@ -83,7 +153,7 @@ def sanitize_contexts_by_modalities(
                 msg.pop("tool_calls", None)
                 msg.pop("tool_call_id", None)
 
-        if not supports_image or not supports_audio:
+        if not supports_image or not supports_audio or needs_mime_pass:
             content = msg.get("content")
             if isinstance(content, list):
                 filtered_parts: list[Any] = []
@@ -91,7 +161,18 @@ def sanitize_contexts_by_modalities(
                 for part in content:
                     if isinstance(part, dict):
                         part_type = str(part.get("type", "")).lower()
-                        if not supports_image and part_type in {"image_url", "image"}:
+                        if part_type in {"image_url", "image"} and (
+                            not supports_image
+                            or _is_unsupported_image_mime(_extract_image_mime(part))
+                        ):
+                            # Either the model has no image modality at all, or it
+                            # declares image support but the specific MIME (e.g.
+                            # image/gif) is rejected by some OpenAI-compatible
+                            # gateways (notably certain Gemini endpoints that only
+                            # accept JPEG/PNG/WebP). Replacing the block with a
+                            # placeholder prevents the unsupported bytes from being
+                            # persisted into the session history and poisoning all
+                            # subsequent requests. See issue #9295.
                             removed_any_multimodal = True
                             stats.fixed_image_blocks += 1
                             filtered_parts.append({"type": "text", "text": "[Image]"})
