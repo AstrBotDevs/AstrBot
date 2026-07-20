@@ -4,7 +4,7 @@ import traceback
 from typing import Any
 
 from astrbot.core import logger, sp
-from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
+from astrbot.core.agent.mcp_client import MCPTool, clean_tool_name, validate_mcp_stdio_config
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 from astrbot.core.tools.registry import get_builtin_tool_config_statuses
@@ -79,7 +79,10 @@ class ToolsService:
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
                     if name_key == name:
                         mcp_client = runtime.client
-                        server_info["tools"] = [tool.name for tool in mcp_client.tools]
+                        server_info["tools"] = [
+                            clean_tool_name(name, tool.name)
+                            for tool in mcp_client.tools
+                        ]
                         server_info["errlogs"] = mcp_client.server_errlogs
                         break
                 else:
