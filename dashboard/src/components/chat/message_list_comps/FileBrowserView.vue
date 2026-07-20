@@ -495,6 +495,27 @@ function onPreviewDeleted(): void {
 // reloads. (DocumentManager deliberately does NOT persist its panel
 // state; the workspace view has persisted since 2026-07-02 and we
 // keep that behavior rather than regressing it.)
+// 2026-07-20 search-trigger: detect Mac so the kbd hint on
+// the idle search bar can show "⌘ F" instead of the
+// Windows/Linux "Ctrl F". userAgentData is the modern API
+// (Chromium only, but covers the dashboard's deployment
+// surface); navigator.platform is the fallback for the
+// remaining browsers. Wrapped in an IIFE so the value is
+// computed once at module-init instead of on every render
+// — the result is constant for the page's lifetime.
+const isMacPlatform: boolean = (() => {
+  if (typeof navigator === "undefined") return false;
+  const uaDataPlatform = (
+    navigator as Navigator & { userAgentData?: { platform?: string } }
+  ).userAgentData?.platform;
+  const platform = uaDataPlatform ?? navigator.platform ?? "";
+  return /mac|iphone|ipad|ipod/i.test(platform);
+})();
+/** Keyboard-shortcut label rendered inside the idle search
+ *  bar's right-side kbd chip. Pure platform detection — no
+ *  locale dependency — so it lives in code rather than i18n. */
+const searchShortcutLabel: string = isMacPlatform ? "⌘ F" : "Ctrl F";
+
 const SEARCH_OPEN_STORAGE_KEY = "astrbot.spcode.gitDiffSidebar.searchOpen";
 
 /** Load the persisted panel state; any value other than the literal
@@ -557,6 +578,18 @@ function onSearchInput(e: Event): void {
 function onSearchClose(e: KeyboardEvent): void {
   e.stopPropagation();
   searchOpen.value = false;
+}
+
+/** 2026-07-20 search-toggle-button: the explicit magnifier button
+ *  on the right of the toolbar. Toggles the panel — opens when
+ *  closed, closes when open. Same role as the Cmd/Ctrl+F shortcut
+ *  (which also toggles via the onKeyDown handler) and the fake
+ *  search bar's click (which is hard-coded to `searchOpen = true`
+ *  because the fake bar is only mounted when the panel is closed).
+ *  The watcher above already handles focus + query reset on every
+ *  transition, so this just flips the ref. */
+function toggleSearch(): void {
+  searchOpen.value = !searchOpen.value;
 }
 
 // ── File-area fullscreen (2026-07-18, elecvoid243) ───────────────
@@ -673,25 +706,48 @@ onBeforeUnmount(() => {
            + @input; the composable owns the 300ms debounce. Esc on
            the input closes the panel (stopPropagation prevents the
            capture-phase fallback from also firing). Gated on the
-           project being loaded, same as the topbar below. -->
+           project being loaded, same as the topbar below.
+
+           2026-07-20 search-trigger: the idle state is a
+           full-width "fake" search bar: same border, radius,
+           padding, and font as the active input, with a placeholder
+           string in the middle and a kbd shortcut hint on the
+           right. Clicking it swaps in the real <input> and the
+           existing watcher auto-focuses it. The two elements
+           share every visual property that matters, so the
+           transition is a no-op for layout — no jump, no
+           reflow flicker, no width recompute.
+
+           2026-07-20 search-toggle-button: re-added the explicit
+           magnifier button (right of the input) so users have a
+           way to close the panel from the toolbar — previously the
+           only way out was Esc or Cmd/Ctrl+F, both keyboard-only.
+           The button toggles searchOpen, same as the trigger
+           button on the left: it opens the panel when closed and
+           closes it when open. Stays mounted in both states so the
+           user always sees a mouse-friendly exit when the input
+           has focus. -->
       <div
         v-if="spcodeStatus.status.value.loaded"
         class="file-browser-search-toolbar"
         data-testid="file-browser-search-toolbar"
       >
-        <v-btn
-          icon
-          size="small"
-          variant="text"
-          :class="['file-browser-search-toggle', { 'is-active': searchOpen }]"
+        <button
+          v-if="!searchOpen"
+          type="button"
+          class="file-browser-search-trigger"
           :title="tm('spcodeProjectLoad.diffSidebar.search.button')"
           :aria-label="tm('spcodeProjectLoad.diffSidebar.search.button')"
-          @click="searchOpen = !searchOpen"
+          @click="searchOpen = true"
         >
-          <v-icon size="16">mdi-magnify</v-icon>
-        </v-btn>
+          <v-icon size="16" class="file-browser-search-trigger__icon">mdi-magnify</v-icon>
+          <span class="file-browser-search-trigger__placeholder">
+            {{ tm('spcodeProjectLoad.diffSidebar.search.placeholder') }}
+          </span>
+          <kbd class="file-browser-search-trigger__hint" aria-hidden="true">{{ searchShortcutLabel }}</kbd>
+        </button>
         <input
-          v-if="searchOpen"
+          v-else
           ref="searchInputRef"
           :value="fileSearchQuery"
           type="text"
@@ -702,6 +758,18 @@ onBeforeUnmount(() => {
           @input="onSearchInput"
           @keydown.escape.stop="onSearchClose"
         />
+        <v-btn
+          icon
+          size="small"
+          variant="text"
+          :class="['file-browser-search-toggle', { 'is-active': searchOpen }]"
+          :title="tm('spcodeProjectLoad.diffSidebar.search.button')"
+          :aria-label="tm('spcodeProjectLoad.diffSidebar.search.button')"
+          :aria-pressed="searchOpen"
+          @click="toggleSearch"
+        >
+          <v-icon size="16">mdi-magnify</v-icon>
+        </v-btn>
       </div>
       <!-- 2026-07-18: topbar = breadcrumb (flex 1) + the file-area
            fullscreen toggle pinned to the right edge. The bar's own
@@ -1009,24 +1077,50 @@ onBeforeUnmount(() => {
 /* 2026-07-18 workspace-search-parity: search toolbar (toggle + input).
    Visual spec mirrors DocumentManager's __search-toolbar (which itself
    mirrors the sidebar's old files-toolbar) so all three search UIs
-   read identically. */
+   read identically.
+
+   2026-07-20 search-trigger: the toolbar now hosts a single
+   full-width element — either the "fake" search bar (idle, looks
+   like an input) or the real <input> (active). The two share
+   every visual property that matters (border, radius, padding,
+   background, font) so the swap is a no-op for layout. The
+   container's own padding is reduced to 0 vertically because the
+   inner element carries the border, so adding container padding
+   on top would make the bar taller when active than when idle
+   (or vice versa). */
 .file-browser-search-toolbar {
   display: flex;
   align-items: center;
+  /* 2026-07-20 search-toggle-button: gap between the input and
+     the toggle button on the right. The input itself uses
+     flex:1 to claim the rest, and the toggle button is a
+     fixed-width Vuetify icon button (size=small). 6px matches
+     the rhythm of the rest of the toolbar / breadcrumb row. */
   gap: 6px;
   padding: 4px 8px;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   flex-shrink: 0;
 }
+/* 2026-07-20 search-toggle-button: active state for the
+   right-side magnifier. When search is open the button
+   takes a primary tint so the user can see at a glance that
+   clicking it will close the panel. Matches the pre-trigger
+   v-btn design (round button, primary-tinted background,
+   primary text colour). */
 .file-browser-search-toggle.is-active {
   background: rgba(var(--v-theme-primary), 0.12);
   color: rgb(var(--v-theme-primary));
 }
-/* Inline search input. flex:1 takes the remaining horizontal space
-   (the toggle button is the only fixed-width sibling). Border, radius,
-   and focus ring align with chat's input fields (radius 8px, primary
-   16% ring). min-width:0 lets the input shrink below its intrinsic
-   content width inside the flex row. */
+/* Shared "looks like an input" baseline. Both the idle trigger
+   button and the active <input> use these properties so the
+   click-to-activate transition doesn't shift the layout. The
+   flex:1 block is the load-bearing part — without it the
+   trigger collapses to its content width and the bar looks
+   tiny, defeating the affordance. Note: <input> is a
+   replaced element, so we do NOT put `display: flex` in the
+   shared block — flex layout is added separately on the
+   trigger-only rule below. */
+.file-browser-search-trigger,
 .file-browser-search-input {
   flex: 1;
   min-width: 0;
@@ -1038,11 +1132,87 @@ onBeforeUnmount(() => {
   font-size: 13px;
   color: rgb(var(--v-theme-on-surface));
   font-family: inherit;
+  /* Triggers a "this is clickable" hover without changing the
+     shape — only the border + a subtle background shift, so the
+     swap to the real <input> (which keeps the same border)
+     stays visually consistent. */
   transition:
     border-color 0.14s ease,
     box-shadow 0.14s ease,
     background 0.14s ease;
 }
+/* Trigger-only flex layout for the icon + placeholder + kbd
+   row, plus button resets so the browser's default button
+   styles (font, line-height, padding) don't leak in and
+   offset the alignment relative to the active <input>. The
+   text-align: left + appearance: none are required to get the
+   iOS Safari / Firefox default-button reset; otherwise the
+   placeholder text starts centered and the kbd hint moves
+   away from the right edge. */
+.file-browser-search-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.file-browser-search-trigger:hover {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.04);
+}
+.file-browser-search-trigger:focus-visible {
+  /* Same focus ring as the active input so keyboard users get a
+     consistent focus indicator. :focus-visible (not :focus) so
+     mouse clicks don't paint the ring. */
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.16);
+}
+.file-browser-search-trigger__icon {
+  /* Slightly muted to read as decoration, not as a primary
+     affordance — the bar itself is the affordance. */
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
+  flex-shrink: 0;
+}
+.file-browser-search-trigger__placeholder {
+  /* Placeholder-style muted text, but rendered as a real <span>
+     so the search bar still has visible content (pure CSS
+     placeholders disappear on focus, and there's no focus
+     state here). The flex:1 + overflow:ellipsis combo lets the
+     placeholder shrink gracefully on narrow viewports without
+     pushing the kbd hint off the right edge. */
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
+}
+.file-browser-search-trigger__hint {
+  /* Small monospace pill on the right. Looks like a key
+     cap — the standard "this has a shortcut" hint. The
+     uppercase + small font size keeps it from competing
+     with the placeholder text. Pointer-events:none so
+     the whole button is still a single click target — if
+     the user happens to click on the kbd, it should
+     activate the search bar, not select the kbd text. */
+  pointer-events: none;
+  flex-shrink: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 3px 6px;
+  border: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.2));
+  border-radius: 4px;
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.56));
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+/* Inline search input. The shared block above handles flex /
+   border / padding; this rule adds the focus ring on top so
+   clicking the trigger -> focusing the input looks seamless. */
 .file-browser-search-input::placeholder {
   color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
 }

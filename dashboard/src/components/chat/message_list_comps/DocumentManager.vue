@@ -338,6 +338,24 @@ function exitFullscreen(): void {
   isFullscreen.value = false;
 }
 
+// 2026-07-20 search-trigger: detect Mac so the kbd hint on
+// the idle search bar can show "⌘ F" instead of the
+// Windows/Linux "Ctrl F". Mirrors the same IIFE in
+// FileBrowserView.vue. Kept inline rather than extracted into
+// a shared composable because (a) this is the second use, and
+// the rule of thumb is 3+ before extracting, and (b) the result
+// is constant for the page's lifetime, so the value is captured
+// at module init and never re-evaluated.
+const isMacPlatform: boolean = (() => {
+  if (typeof navigator === "undefined") return false;
+  const uaDataPlatform = (
+    navigator as Navigator & { userAgentData?: { platform?: string } }
+  ).userAgentData?.platform;
+  const platform = uaDataPlatform ?? navigator.platform ?? "";
+  return /mac|iphone|ipad|ipod/i.test(platform);
+})();
+const searchShortcutLabel: string = isMacPlatform ? "⌘ F" : "Ctrl F";
+
 // ── Docs search (2026-07-17 docs-search) ──────────────────────────
 // Mirrors the workspace Files-view search (GitDiffSidebar toolbar +
 // SearchPanel) but scoped to docsRoot via the backend's path_filter.
@@ -403,6 +421,14 @@ function onSearchInput(e: Event): void {
 function onSearchClose(e: KeyboardEvent): void {
   e.stopPropagation();
   searchOpen.value = false;
+}
+
+/** 2026-07-20 search-toggle-button: the explicit magnifier button
+ *  on the right of the toolbar. Toggles the panel — opens when
+ *  closed, closes when open. Mirrors the same role in
+ *  FileBrowserView.vue. */
+function toggleSearch(): void {
+  searchOpen.value = !searchOpen.value;
 }
 
 /** Open a search hit in the manager. `path` is repo-relative POSIX
@@ -1258,26 +1284,33 @@ onBeforeUnmount(() => {
              the shared docsSearchQuery ref (:value + @input); the
              composable owns the 300ms debounce. Esc on the input
              closes the panel. -->
+        <!-- 2026-07-20 search-trigger: idle state is a full-width
+             "fake" search bar (button styled as an input). Click
+             activates it; the existing watcher auto-focuses the
+             real <input>. Mirrors FileBrowserView's search
+             toolbar — they share the same data shape, i18n
+             keys, and the same shared CSS variables so the two
+             read identically. -->
         <div
           class="document-manager__search-toolbar"
           data-testid="document-manager-search-toolbar"
         >
-          <v-btn
-            icon
-            size="small"
-            variant="text"
-            :class="[
-              'document-manager__search-toggle',
-              { 'is-active': searchOpen },
-            ]"
+          <button
+            v-if="!searchOpen"
+            type="button"
+            class="document-manager__search-trigger"
             :title="tm('spcodeProjectLoad.diffSidebar.search.button')"
             :aria-label="tm('spcodeProjectLoad.diffSidebar.search.button')"
-            @click="searchOpen = !searchOpen"
+            @click="searchOpen = true"
           >
-            <v-icon size="16">mdi-magnify</v-icon>
-          </v-btn>
+            <v-icon size="16" class="document-manager__search-trigger__icon">mdi-magnify</v-icon>
+            <span class="document-manager__search-trigger__placeholder">
+              {{ tm('spcodeProjectLoad.diffSidebar.search.placeholder') }}
+            </span>
+            <kbd class="document-manager__search-trigger__hint" aria-hidden="true">{{ searchShortcutLabel }}</kbd>
+          </button>
           <input
-            v-if="searchOpen"
+            v-else
             ref="searchInputRef"
             :value="docsSearchQuery"
             type="text"
@@ -1290,6 +1323,21 @@ onBeforeUnmount(() => {
             @input="onSearchInput"
             @keydown.escape.stop="onSearchClose"
           />
+          <v-btn
+            icon
+            size="small"
+            variant="text"
+            :class="[
+              'document-manager__search-toggle',
+              { 'is-active': searchOpen },
+            ]"
+            :title="tm('spcodeProjectLoad.diffSidebar.search.button')"
+            :aria-label="tm('spcodeProjectLoad.diffSidebar.search.button')"
+            :aria-pressed="searchOpen"
+            @click="toggleSearch"
+          >
+            <v-icon size="16">mdi-magnify</v-icon>
+          </v-btn>
         </div>
         <FileBrowserBreadcrumb
           v-if="projectRoot"
@@ -1941,21 +1989,33 @@ onBeforeUnmount(() => {
   gap: 4px;
   flex-shrink: 0;
 }
-/* 2026-07-17 docs-search: search toolbar (toggle + input). Visual
-   spec mirrors .git-diff-sidebar-files-toolbar so both search UIs
-   look identical. */
+/* 2026-07-17 docs-search: search toolbar. Visual spec mirrors
+   .file-browser-search-toolbar (and git-diff-sidebar-files-toolbar
+   before that) so all three search UIs look identical.
+
+   2026-07-20 search-trigger: the toolbar now hosts a single
+   full-width element — either the "fake" search bar (idle, looks
+   like an input) or the real <input> (active). They share every
+   visual property that matters (border, radius, padding,
+   background, font) so the swap is a no-op for layout. The
+   shared selector at the top is the load-bearing block. */
 .document-manager__search-toolbar {
   display: flex;
   align-items: center;
+  /* 2026-07-20 search-toggle-button: gap between the input and
+     the toggle button. Mirrors the FileBrowserView toolbar. */
   gap: 6px;
   padding: 4px 8px;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   flex-shrink: 0;
 }
+/* 2026-07-20 search-toggle-button: active state for the
+   right-side magnifier. Mirrors FileBrowserView. */
 .document-manager__search-toggle.is-active {
   background: rgba(var(--v-theme-primary), 0.12);
   color: rgb(var(--v-theme-primary));
 }
+.document-manager__search-trigger,
 .document-manager__search-input {
   flex: 1;
   min-width: 0;
@@ -1971,6 +2031,49 @@ onBeforeUnmount(() => {
     border-color 0.14s ease,
     box-shadow 0.14s ease,
     background 0.14s ease;
+}
+.document-manager__search-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.document-manager__search-trigger:hover {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.04);
+}
+.document-manager__search-trigger:focus-visible {
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.16);
+}
+.document-manager__search-trigger__icon {
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
+  flex-shrink: 0;
+}
+.document-manager__search-trigger__placeholder {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));
+}
+.document-manager__search-trigger__hint {
+  pointer-events: none;
+  flex-shrink: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 3px 6px;
+  border: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.2));
+  border-radius: 4px;
+  color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.56));
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 .document-manager__search-input::placeholder {
   color: var(--chat-section-label, rgba(var(--v-theme-on-surface), 0.48));

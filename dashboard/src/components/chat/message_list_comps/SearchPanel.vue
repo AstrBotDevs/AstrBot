@@ -106,6 +106,22 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
+/** 2026-07-20 click-empty-to-close: click on the panel's empty
+ *  padding (the area that has no results, no mode toggle, no
+ *  status line) closes the panel — standard "click the backdrop
+ *  to dismiss" pattern. We use the `e.target === e.currentTarget`
+ *  identity check rather than `e.stopPropagation()` on the
+ *  children: the children don't need to know about the close
+ *  behaviour, and bubbling keeps working for their own click
+ *  handlers. The wrapper fires the close only when the click
+ *  landed on the wrapper's own box (i.e. the padding / empty
+ *  area), never when it bubbled up from a child. */
+function onWrapperClick(e: MouseEvent): void {
+  if (e.target === e.currentTarget) {
+    emit("update:modelValue", false);
+  }
+}
+
 // Try the per-reason i18n key (added in T8); fall back to the raw reason
 // string when the key is missing so the UI stays useful during development.
 function errorReasonLabel(reason: string): string {
@@ -136,7 +152,15 @@ function countKey(m: SearchMode): string {
 </script>
 
 <template>
-  <div v-if="modelValue" class="search-panel" @keydown="onKeydown">
+  <div
+    v-if="modelValue"
+    class="search-panel"
+    :class="{ 'is-dismissable': true }"
+    role="region"
+    :aria-label="tm('spcodeProjectLoad.diffSidebar.search.placeholder')"
+    @click="onWrapperClick"
+    @keydown="onKeydown"
+  >
     <!-- The search <input> + close button used to live here. They now
          live in the hosting file browser's own search toolbar
          (FileBrowserView / DocumentManager), so the input is always
@@ -240,6 +264,24 @@ function countKey(m: SearchMode): string {
   gap: 6px;
   max-height: 50%;
   overflow: hidden;
+  /* 2026-07-20 click-empty-to-close: cursor:pointer on the
+     wrapper signals that the empty area is clickable. Clicks
+     on the children (mode toggle, result list) keep their
+     own cursor (default / pointer) because their handlers
+     stop the close path (e.target === e.currentTarget is
+     false for bubbling clicks). */
+  cursor: pointer;
+  transition: background-color 0.14s ease;
+}
+.search-panel:hover {
+  /* Subtle hover on the empty area only — strong enough to
+     communicate "this is interactive", quiet enough not to
+     fight the mode-toggle / result-row backgrounds. The
+     children retain their own hover styles (search-panel-result
+     has a stronger 6% hover) so this is mostly visible in
+     the empty area below the result list, which is the
+     exact spot the user pointed at in the screenshot. */
+  background-color: rgba(var(--v-theme-on-surface), 0.02);
 }
 /* 2026-07-02 toolbar input: the .search-panel-input-row /
    .search-panel-input classes were removed when the <input> moved
