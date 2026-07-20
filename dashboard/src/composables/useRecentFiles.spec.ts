@@ -197,6 +197,57 @@ describe("clear", () => {
   });
 });
 
+describe("worktree switching", () => {
+  it("reloads the bucket when worktree ref changes", async () => {
+    const wt = ref<string | null>("/worktrees/A");
+    const { entries, recordOpen } = useRecentFiles(wt);
+    recordOpen("/worktrees/A/a.py");
+
+    // Pre-seed B's bucket so we can confirm we read B and discard A.
+    localStorage.setItem(
+      `spcode.recentFiles.${fnv1aHex("/worktrees/B")}`,
+      JSON.stringify({
+        entries: [{ path: "/worktrees/B/b.py", openedAt: 123 }],
+      }),
+    );
+
+    wt.value = "/worktrees/B";
+    await Promise.resolve(); // flush watcher microtask
+    expect(entries.value.map((e) => e.path)).toEqual(["/worktrees/B/b.py"]);
+  });
+
+  it("shows an empty list when switching to a brand-new worktree", async () => {
+    const wt = ref<string | null>("/worktrees/A");
+    const { entries, recordOpen } = useRecentFiles(wt);
+    recordOpen("/worktrees/A/a.py");
+
+    wt.value = "/worktrees/C"; // never seen
+    await Promise.resolve();
+    expect(entries.value).toEqual([]);
+  });
+
+  it("writing to a new worktree after switching does not touch the old bucket", async () => {
+    const wt = ref<string | null>("/worktrees/A");
+    const { recordOpen } = useRecentFiles(wt);
+    recordOpen("/worktrees/A/a.py");
+    const aRawBefore = localStorage.getItem(
+      `spcode.recentFiles.${fnv1aHex("/worktrees/A")}`,
+    );
+    const parsedA = JSON.parse(aRawBefore!);
+    expect(parsedA.entries[0].path).toBe("/worktrees/A/a.py");
+
+    wt.value = "/worktrees/B";
+    await Promise.resolve();
+    const { recordOpen: recB } = useRecentFiles(wt);
+    recB("/worktrees/B/b.py");
+
+    const aRawAfter = localStorage.getItem(
+      `spcode.recentFiles.${fnv1aHex("/worktrees/A")}`,
+    );
+    expect(aRawAfter).toBe(aRawBefore);
+  });
+});
+
 // Mirror of the composable's FNV-1a — duplicated here so the test file
 // is self-contained and not coupled to internals. The two
 // implementations MUST stay byte-identical for the spec to hold.
