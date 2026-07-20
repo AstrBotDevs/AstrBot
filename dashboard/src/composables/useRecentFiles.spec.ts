@@ -129,6 +129,74 @@ describe("recordOpen", () => {
   });
 });
 
+describe("remove", () => {
+  it("drops the row whose path matches exactly", () => {
+    const wt = ref<string | null>(WT);
+    const { entries, recordOpen, remove } = useRecentFiles(wt);
+    recordOpen(`${WT}/a.py`);
+    recordOpen(`${WT}/b.py`);
+    remove(`${WT}/a.py`);
+    expect(entries.value.map((e) => e.path)).toEqual([`${WT}/b.py`]);
+  });
+
+  it("is a no-op when the path is not present", () => {
+    const wt = ref<string | null>(WT);
+    const { entries, recordOpen, remove } = useRecentFiles(wt);
+    recordOpen(`${WT}/a.py`);
+    remove(`${WT}/nope.py`);
+    expect(entries.value.map((e) => e.path)).toEqual([`${WT}/a.py`]);
+  });
+
+  it("persists the trimmed list", () => {
+    const wt = ref<string | null>(WT);
+    const { recordOpen, remove } = useRecentFiles(wt);
+    recordOpen(`${WT}/a.py`);
+    recordOpen(`${WT}/b.py`);
+    remove(`${WT}/a.py`);
+    const raw = JSON.parse(
+      localStorage.getItem(`spcode.recentFiles.${fnv1aHex(WT)}`)!,
+    );
+    expect(raw.entries.map((e: { path: string }) => e.path)).toEqual([
+      `${WT}/b.py`,
+    ]);
+  });
+});
+
+describe("clear", () => {
+  it("empties the current bucket", () => {
+    const wt = ref<string | null>(WT);
+    const { entries, recordOpen, clear } = useRecentFiles(wt);
+    recordOpen(`${WT}/a.py`);
+    recordOpen(`${WT}/b.py`);
+    clear();
+    expect(entries.value).toEqual([]);
+  });
+
+  it("persists the empty list", () => {
+    const wt = ref<string | null>(WT);
+    const { recordOpen, clear } = useRecentFiles(wt);
+    recordOpen(`${WT}/a.py`);
+    clear();
+    const raw = JSON.parse(
+      localStorage.getItem(`spcode.recentFiles.${fnv1aHex(WT)}`)!,
+    );
+    expect(raw.entries).toEqual([]);
+  });
+
+  it("does not affect other buckets", () => {
+    const wtA = ref<string | null>("/worktrees/A");
+    const wtB = ref<string | null>("/worktrees/B");
+    const a = useRecentFiles(wtA);
+    const b = useRecentFiles(wtB);
+    a.recordOpen("/worktrees/A/foo.py");
+    b.recordOpen("/worktrees/B/bar.py");
+
+    a.clear();
+    expect(a.entries.value).toEqual([]);
+    expect(b.entries.value.map((e) => e.path)).toEqual(["/worktrees/B/bar.py"]);
+  });
+});
+
 // Mirror of the composable's FNV-1a — duplicated here so the test file
 // is self-contained and not coupled to internals. The two
 // implementations MUST stay byte-identical for the spec to hold.

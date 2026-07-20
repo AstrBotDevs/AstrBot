@@ -137,10 +137,13 @@ export function useRecentFiles(worktree: Ref<string | null>): UseRecentFiles {
     persist();
   }
   function remove(path: string): void {
-    // Stub — implemented in Task 3.
+    entries.value = entries.value.filter((e) => e.path !== path);
+    persist();
   }
+
   function clear(): void {
-    // Stub — implemented in Task 3.
+    entries.value = [];
+    persist();
   }
 
   // Initial load.
