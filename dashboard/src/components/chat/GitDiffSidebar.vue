@@ -3923,19 +3923,21 @@ const currentRoot = computed<string | null>(() => {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 1px;
+  /* 6px constant hit-area. Matches ReasoningSidebar / TodoSidebar
+     so all three sidebars share the same drag-handle feel. Hover
+     only swaps the background colour - no width transition. */
+  width: 6px;
   background: var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
   cursor: ew-resize;
   z-index: 10;
-  transition:
-    width 0.15s ease,
-    background 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 .git-diff-sidebar-resizer:hover,
 .git-diff-sidebar-resizer:active {
-  width: 6px;
-  background: rgba(var(--v-theme-primary), 0.45);
+  /* 0.2 alpha matches ReasoningSidebar / TodoSidebar so all three
+     sidebars share the same hover affordance. */
+  background: rgba(var(--v-theme-primary), 0.2);
 }
 
 /* ── Transition ───────────────────────────────────────────────── */
