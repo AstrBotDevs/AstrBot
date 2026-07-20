@@ -2270,6 +2270,7 @@ CONFIG_METADATA_2 = {
                         "description": "最大批次大小",
                         "type": "int",
                         "hint": "每批向嵌入 API 发送的文本数量上限。各服务商限制不同：DashScope/阿里云百炼限制为 10；OpenAI 支持 2048；Ollama/Gemini/NVIDIA 通常可设为 100-2048。超过限制会触发 API 400 错误。",
+                        "slider": {"min": 1, "max": 2048, "step": 1},
                     },
                     "embedding_dimensions_mode": {
                         "description": "嵌入维度参数发送模式",

@@ -352,7 +352,10 @@ class EmbeddingProvider(AbstractProvider):
         Returns:
             The maximum number of texts per batch.
         """
-        return int(self.provider_config.get("max_batch_size", 100))
+        max_batch_size = int(self.provider_config.get("max_batch_size", 100))
+        if max_batch_size < 1:
+            raise ValueError("max_batch_size must be greater than or equal to 1")
+        return max_batch_size
 
     async def test(self) -> None:
         await self.get_embedding("astrbot")
