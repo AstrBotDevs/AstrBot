@@ -20,6 +20,8 @@ import FileBrowserFilePreview from "./FileBrowserFilePreview.vue";
 import FileTreeList from "./FileTreeList.vue";
 import SearchPanel from "./SearchPanel.vue";
 import DocumentHistoryPanel from "./DocumentHistoryPanel.vue";
+import RecentFilesBlock from "./RecentFilesBlock.vue";
+import type { RecentEntry } from "@/composables/useRecentFiles";
 
 const props = defineProps<{
   /** Directory whose entries are shown in the left pane. */
@@ -61,6 +63,12 @@ const props = defineProps<{
    * the user asks for "view this change" in the history pane.
    */
   gitShow: UseSpcodeGitShow;
+  /**
+   * 2026-07-20 recent-files: per-worktree Recent bucket rendered
+   * above the file tree. Optional so the workspace tab's older
+   * call sites (and tests) keep mounting without supplying it.
+   */
+  recentEntries?: RecentEntry[];
 }>();
 
 /**
@@ -77,6 +85,14 @@ const emit = defineEmits<{
     payload: { dirPath: string; previewPath: string | null },
   ): void;
   (e: "open-file", p: { path: string; line: number }): void;
+  // 2026-07-20 recent-files: pass-throughs for <RecentFilesBlock>.
+  // - recent-select: the user picked a row; parent mirrors onFileOpen
+  //   with `line: 0` so the preview jumps without an anchor.
+  // - recent-remove: parent drops the row from the worktree bucket.
+  // - recent-clear: parent opens the secondary-confirm dialog.
+  (e: "recent-select", p: { path: string }): void;
+  (e: "recent-remove", p: { path: string }): void;
+  (e: "recent-clear"): void;
 }>();
 
 const { tm } = useModuleI18n("features/chat");
@@ -193,6 +209,20 @@ function onSearchOpenFile(p: { path: string; line: number }): void {
   if (!confirmLeaveEditing()) return;
   searchOpen.value = false;
   emit("open-file", p);
+}
+
+// 2026-07-20 recent-files: pass-throughs for <RecentFilesBlock>.
+// These are intentionally thin — the parent (GitDiffSidebar) is the
+// one that owns the bucket and the dialog state, so FileBrowserView
+// stays a pure adapter and stays test-mountable without a sidebar.
+function onRecentSelect(p: { path: string }): void {
+  emit("recent-select", p);
+}
+function onRecentRemove(p: { path: string }): void {
+  emit("recent-remove", p);
+}
+function onRecentClear(): void {
+  emit("recent-clear");
 }
 
 /** Manually re-fetch the workspace contents. Exposed to the parent
@@ -894,6 +924,18 @@ onBeforeUnmount(() => {
             class="file-browser-pane-left"
             :style="{ width: leftPanePercent + '%' }"
           >
+            <!-- 2026-07-20 recent-files: per-worktree recent list,
+                 default-collapsed block sitting above the directory
+                 tree. v-if="rootPath" so we never render the panel
+                 when there's no project context (spec §4.1). -->
+            <RecentFilesBlock
+              v-if="rootPath"
+              :entries="recentEntries ?? []"
+              :current-root="rootPath"
+              @select="onRecentSelect"
+              @remove="onRecentRemove"
+              @clear="onRecentClear"
+            />
             <FileTreeList
               :state="dirComposable.state.value"
               :selected-path="previewPath"
