@@ -119,7 +119,22 @@ export function useRecentFiles(worktree: Ref<string | null>): UseRecentFiles {
   }
 
   function recordOpen(path: string): void {
-    // Stub — implemented in Task 2.
+    const root = worktree.value;
+    if (!root) return;
+    // Path validation: the file must live strictly inside the worktree
+    // (or be the root itself). Prevents arbitrary filesystem paths
+    // from polluting the bucket from search jumps or external triggers.
+    const sep = sepOf(root);
+    if (path !== root && !path.startsWith(root + sep)) return;
+
+    // Dedupe: strip any prior entry pointing at this exact path so
+    // the repeat-open re-lands it at the head.
+    const filtered = entries.value.filter((e) => e.path !== path);
+    filtered.unshift({ path, openedAt: Date.now() });
+    // Cap to MAX_ENTRIES. Old entries beyond the cap are discarded
+    // (LIFO retention).
+    entries.value = filtered.slice(0, MAX_ENTRIES);
+    persist();
   }
   function remove(path: string): void {
     // Stub — implemented in Task 3.
