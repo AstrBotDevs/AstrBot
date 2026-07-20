@@ -1378,6 +1378,27 @@ watch(
   },
 );
 
+// 2026-07-20 fix(dashboard, elecvoid243): sync stagedFiles from the
+// authoritative git-status snapshot whenever it loads successfully.
+// Without this, the commit dialog shows an empty file list and AI
+// commit-message generation is disabled after component recreation
+// (e.g. user navigates away from /chat to /settings and back), even
+// though the actual git staging area still holds the staged files.
+// The stagedCount computed already falls back to gitStatus, but
+// stagedFiles (a local optimistic Set) was never initialised from it,
+// so Array.from(stagedFiles) passed to GitCommitDialog was always
+// empty on first mount.
+watch(
+  () => gitStatus.state.value,
+  (s) => {
+    if (s.kind !== "ok") return;
+    const stagedPaths = s.snapshot.files
+      .filter((f) => f.scope === "staged")
+      .map((f) => f.path);
+    stagedFiles.value = new Set(stagedPaths);
+  },
+);
+
 // 2026-07-18 git-stats heatmap: lazy-fetch the stats snapshot once
 // the panel is (or becomes) visible. Fires on: sidebar open while in
 // history view, switching into history view, panel re-expand,
