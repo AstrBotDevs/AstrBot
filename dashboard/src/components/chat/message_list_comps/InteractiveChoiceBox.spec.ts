@@ -15,20 +15,58 @@
 //   2. ignored + no title → only prompt span renders (no empty span)
 //   3. pending baseline  → the pre-existing title/prompt path still works
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import type { InteractiveChoicePart } from "@/composables/parseInteractiveChoice";
 
-// Mock the Pinia store: the only method InteractiveChoiceBox touches
-// at render time is `getSubmissionState`, and for these tests we want
-// it to return null (i.e. "this part has no submission yet"). Pulling
-// in the real store would also require createPinia() + happy-dom
-// localStorage and trigger unwanted hydrate side effects.
+// Stateful mock of the Pinia store. Mirrors the real
+// `useInteractiveChoiceStore` surface that InteractiveChoiceBox
+// reads (getSubmissionState / isCancelled) and writes (markSubmitted
+// / markCancelled) during render. Backed by internal Maps so the
+// "submission wins over cancelled" race test can sequence
+// markSubmitted then markCancelled against the same UMO + rid and
+// observe the priority at the rendered class binding.
+//
+// Why stateful instead of vi.fn().mockReturnValue(): a fresh
+// per-test spy is annoying to reset (`mockReturnValue` between
+// `beforeEach` blocks has surprising behaviour with reactive reads)
+// and the existing tests need the same "no submission by default"
+// behaviour, which a Map-backed `?? null` fallback gives for free.
+const storeMock = vi.hoisted(() => {
+  type Submission = {
+    kind: "option" | "input";
+    optionId?: string;
+    freeText?: string;
+  };
+  const submissions = new Map<string, Submission>();
+  const cancelled = new Map<string, boolean>();
+  return {
+    getSubmissionState(umo: string, rid: string): Submission | null {
+      return submissions.get(`${umo}::${rid}`) ?? null;
+    },
+    markSubmitted(
+      umo: string,
+      rid: string,
+      kind: Submission["kind"],
+      payload: { optionId?: string; freeText?: string } = {},
+    ): void {
+      submissions.set(`${umo}::${rid}`, { kind, ...payload });
+    },
+    isCancelled(umo: string, rid: string): boolean {
+      return cancelled.get(`${umo}::${rid}`) ?? false;
+    },
+    markCancelled(umo: string, rid: string): void {
+      cancelled.set(`${umo}::${rid}`, true);
+    },
+    _reset(): void {
+      submissions.clear();
+      cancelled.clear();
+    },
+  };
+});
+
 vi.mock("@/stores/interactiveChoice", () => ({
-  useInteractiveChoiceStore: () => ({
-    getSubmissionState: () => null,
-    markSubmitted: vi.fn(),
-  }),
+  useInteractiveChoiceStore: () => storeMock,
 }));
 
 // i18n init happens in vitest.setup.ts; useModuleI18n('features/chat')
@@ -55,11 +93,17 @@ function makePart(
   };
 }
 
-function mountBox(props: { part: InteractiveChoicePart; isIgnored?: boolean }) {
+function mountBox(props: {
+  part: InteractiveChoicePart;
+  isIgnored?: boolean;
+  umo?: string;
+}) {
+  const { part, isIgnored, umo } = props;
   return mount(InteractiveChoiceBox, {
     props: {
-      umo: UMO,
-      ...props,
+      umo: umo ?? UMO,
+      part,
+      isIgnored,
     },
     // pending 分支里有 v-btn(自由输入的提交按钮)。本 spec 只在
     // ignored / pending 状态断言,无需 v-btn 真行为;给个 stub
@@ -71,6 +115,10 @@ function mountBox(props: { part: InteractiveChoicePart; isIgnored?: boolean }) {
     },
   });
 }
+
+beforeEach(() => {
+  storeMock._reset();
+});
 
 describe("InteractiveChoiceBox — ignored header (v1.2)", () => {
   it("renders both title and prompt spans when both are present", () => {
@@ -131,5 +179,108 @@ describe("InteractiveChoiceBox — ignored header (v1.2)", () => {
       isIgnored: false,
     });
     expect(wrapper.find(".choice-header--ignored").exists()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task F4: fifth box state `cancelled` (v1.2 spec §4.4 + §5.1).
+//
+// State priority binding (spec §5.1):
+//   submissionState  >  cancelledState  >  props.isIgnored  >  pending
+//
+// Why submission wins over cancelled: race safety. If the user
+// clicks an option at T=timeout−1, the local submission intent is
+// honest (UI shows "已选择 X"). The server's cancellation arrives
+// a frame later (or after a network outage). The UI must NOT lie
+// about what the user chose — flipping to "已取消" would discard
+// the user's click.
+//
+// These 5 tests pin:
+//   1. baseline →  is-pending class (no state overrides)
+//   2. cancelled only →  is-cancelled class
+//   3. submission wins over cancelled (race safety)
+//   4. cancelled template branch renders the icon + i18n label
+//      and does NOT render the pending option buttons / input
+//   5. pending template branch does NOT render the cancelled UI
+// ---------------------------------------------------------------------------
+
+describe("InteractiveChoiceBox — cancelled state (v1.2)", () => {
+  it("applies is-pending class when no state overrides", () => {
+    const wrapper = mountBox({
+      part: makePart({ title: "未提交的 title" }),
+    });
+    expect(wrapper.find(".interactive-choice-box.is-pending").exists()).toBe(
+      true,
+    );
+    expect(wrapper.find(".interactive-choice-box.is-cancelled").exists()).toBe(
+      false,
+    );
+    expect(wrapper.find(".interactive-choice-box.is-submitted").exists()).toBe(
+      false,
+    );
+  });
+
+  it("applies is-cancelled class when cancelledStates[umo][rid] is true", () => {
+    const umo = "webchat:FriendMessage:webchat!alice!sess";
+    storeMock.markCancelled(umo, "req-1");
+
+    const wrapper = mountBox({
+      part: makePart({ title: "已取消的 title" }),
+      umo,
+    });
+    expect(wrapper.find(".interactive-choice-box.is-cancelled").exists()).toBe(
+      true,
+    );
+    expect(wrapper.find(".interactive-choice-box.is-pending").exists()).toBe(
+      false,
+    );
+    expect(wrapper.find(".interactive-choice-box.is-submitted").exists()).toBe(
+      false,
+    );
+  });
+
+  it("submission wins over cancelled (race safety: T=timeout-1)", () => {
+    const umo = "webchat:FriendMessage:webchat!alice!sess";
+    // Simulate: user clicked option A at T=timeout-1, then the
+    // server's `interactive_choice_resolved {reason: "cancelled"}`
+    // event arrives. Per spec §5.1, the UI must keep showing the
+    // user's submitted choice (UI honesty over server truth).
+    storeMock.markSubmitted(umo, "req-1", "option", { optionId: "A" });
+    storeMock.markCancelled(umo, "req-1");
+
+    const wrapper = mountBox({
+      part: makePart({ title: "已选择 A" }),
+      umo,
+    });
+    expect(wrapper.find(".interactive-choice-box.is-submitted").exists()).toBe(
+      true,
+    );
+    expect(wrapper.find(".interactive-choice-box.is-cancelled").exists()).toBe(
+      false,
+    );
+  });
+
+  it("renders cancelled header (icon + i18n label) when state is 'cancelled'", () => {
+    const umo = "webchat:FriendMessage:webchat!alice!sess";
+    storeMock.markCancelled(umo, "req-1");
+
+    const wrapper = mountBox({
+      part: makePart({ title: "超时未回" }),
+      umo,
+    });
+    // New v1.2 contract: `.choice-header--cancelled` + i18n label
+    expect(wrapper.find(".choice-header--cancelled").exists()).toBe(true);
+    expect(wrapper.find(".choice-cancelled-label").exists()).toBe(true);
+    // Cancelled boxes are non-interactive → pending UI must NOT render
+    expect(wrapper.find(".choice-options").exists()).toBe(false);
+    expect(wrapper.find(".choice-input-row").exists()).toBe(false);
+  });
+
+  it("does NOT render the cancelled UI when state is 'pending'", () => {
+    const wrapper = mountBox({
+      part: makePart({ title: "待回答" }),
+    });
+    expect(wrapper.find(".choice-header--cancelled").exists()).toBe(false);
+    expect(wrapper.find(".choice-cancelled-label").exists()).toBe(false);
   });
 });

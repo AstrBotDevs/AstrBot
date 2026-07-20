@@ -919,6 +919,7 @@
     "defaultPlaceholder": "Или введите свой вариант...",
     "expandDetails": "Показать варианты",
     "collapseDetails": "Скрыть варианты",
-    "extraContentLabel": "Дополнительная информация (сгенерирована ИИ)"
+    "extraContentLabel": "Дополнительная информация (сгенерирована ИИ)",
+    "cancelled": "Отменено"
   }
 }

@@ -7,7 +7,10 @@ import {
   validateInteractiveChoice,
   truncateInteractiveChoice,
 } from "./parseInteractiveChoice";
-import { applyInteractiveChoiceSse } from "./dispatchInteractiveChoice";
+import {
+  applyInteractiveChoiceSse,
+  applyInteractiveChoiceResolved,
+} from "./dispatchInteractiveChoice";
 import { abandonPendingInteractiveChoices } from "./abandonPendingInteractiveChoices";
 // Author: elecvoid243
 // Date: 2026-07-05
@@ -1380,6 +1383,24 @@ export function useMessages(options: UseMessagesOptions) {
       }
       applyInteractiveChoiceSse(sessionId, botRecord, normalized);
       return;
+    } else if (msgType === "interactive_choice_resolved") {
+      // Bug Y1 fix (mirrors the branch above): scope the store
+      // write to the live session. Guard on `sessionId` so a
+      // caller that forgets to thread sessionId through to a
+      // stream consumer doesn't trip the dispatcher's
+      // "missing required 'umo'" throw. Do NOT push anything to
+      // botRecord.content.message here — the resolved event
+      // carries no spec; the box reads cancelledStates from the
+      // store and re-renders via the `state` computed property
+      // (added in Task F4).
+      if (!sessionId) {
+        console.warn(
+          "[interactiveChoice] resolved SSE event without sessionId; dropping",
+        );
+        return;
+      }
+      applyInteractiveChoiceResolved(sessionId, normalized);
+      return;
     }
 
     if (msgType === "plain") {
@@ -1449,7 +1470,9 @@ export function useMessages(options: UseMessagesOptions) {
         // `tool_call` was an `ask_user_choice` (already filtered above).
         // `finishToolCall` would otherwise synthesise a name-less part on
         // miss, which renders as "tool" next to the InteractiveChoiceBox.
-        if (isAskUserChoiceToolCallResult(botRecord, parsed, filteredToolCallIds)) {
+        if (
+          isAskUserChoiceToolCallResult(botRecord, parsed, filteredToolCallIds)
+        ) {
           return;
         }
         finishToolCall(botRecord, parsed);

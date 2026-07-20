@@ -2,9 +2,11 @@
   Author: elecvoid243
   Date: 2026-06-28
   Spec: docs/superpowers/specs/2026-06-28-dynamic-choice-box-rendering-design.md §4
+  v1.2 增量: docs/superpowers/specs/2026-07-19-server-driven-cancelled-state-design.md §4.4
 
   InteractiveChoiceBox: 动态渲染 LLM ask_user_choice 工具输出的选项框。
-  4 状态机(pending / submitted_via_option / submitted_via_input / ignored) + a11y。
+  5 状态机(pending / submitted_via_option / submitted_via_input / ignored / cancelled) + a11y。
+  v1.2 新增 `cancelled` 状态,覆盖服务端超时与运行时取消两种场景。
 -->
 <template>
   <div
@@ -14,12 +16,18 @@
       'is-submitted':
         state === 'submitted_via_option' || state === 'submitted_via_input',
       'is-ignored': state === 'ignored',
+      'is-cancelled': state === 'cancelled',
       'is-dark': isDark,
     }"
-    :aria-live="state === 'ignored' ? 'polite' : undefined"
+    :aria-live="
+      state === 'ignored' || state === 'cancelled' ? 'polite' : undefined
+    "
   >
     <!-- Header: title + prompt -->
-    <div v-if="state !== 'ignored'" class="choice-header">
+    <div
+      v-if="state !== 'ignored' && state !== 'cancelled'"
+      class="choice-header"
+    >
       <v-icon v-if="state === 'pending'" size="16" class="choice-header-icon"
         >mdi-help-circle-outline</v-icon
       >
@@ -33,7 +41,10 @@
         <div class="choice-prompt" :title="part.prompt">{{ part.prompt }}</div>
       </div>
     </div>
-    <div v-else class="choice-header choice-header--ignored">
+    <div
+      v-else-if="state === 'ignored'"
+      class="choice-header choice-header--ignored"
+    >
       <v-icon size="16" class="choice-header-icon">mdi-eye-off-outline</v-icon>
       <span class="choice-ignored-label">{{
         tm("interactiveChoice.ignored")
@@ -41,6 +52,36 @@
       <span
         v-if="part.title"
         class="choice-title choice-title--ignored"
+        :title="part.title"
+        >{{ part.title }}</span
+      >
+      <span
+        v-if="part.prompt"
+        class="choice-prompt choice-prompt--muted"
+        :title="part.prompt"
+        >{{ part.prompt }}</span
+      >
+    </div>
+    <!-- v1.2: cancelled header(server-driven terminal state).Mirrors the
+         .choice-header--ignored template shape exactly so the CSS in Step 8
+         can use consolidated selectors (.choice-header--ignored,
+         .choice-header--cancelled) and the box looks visually consistent
+         with the ignored state. The 即可消失 option buttons / input are
+         rendered by the `v-if="state === 'pending'"` branch below,which
+         already excludes cancelled because `state !== 'pending'`. -->
+    <div
+      v-else-if="state === 'cancelled'"
+      class="choice-header choice-header--cancelled"
+    >
+      <v-icon size="16" class="choice-header-icon"
+        >mdi-close-circle-outline</v-icon
+      >
+      <span class="choice-cancelled-label">{{
+        tm("interactiveChoice.cancelled")
+      }}</span>
+      <span
+        v-if="part.title"
+        class="choice-title choice-title--cancelled"
         :title="part.title"
         >{{ part.title }}</span
       >
@@ -241,6 +282,16 @@ const submissionState = computed(() =>
   interactiveChoiceStore.getSubmissionState(props.umo, props.part.request_id),
 );
 
+// v1.2: Reactively reads the server-cancelled flag for this
+// choice's request_id, scoped by UMO. Driven by two independent
+// paths (live SSE `interactive_choice_resolved {reason: "cancelled"}`
+// from F3 and `reconcile(umo)` orphan detection from F2) so the
+// box can flip to the non-interactive "已取消" state regardless of
+// whether the resolved event arrived cleanly.
+const cancelledState = computed(() =>
+  interactiveChoiceStore.isCancelled(props.umo, props.part.request_id),
+);
+
 // 自由文本输入框的临时输入——这是 UI 局部状态,不需要全局共享,保留 ref。
 const freeText = ref("");
 
@@ -253,15 +304,29 @@ type State =
   | "pending"
   | "submitted_via_option"
   | "submitted_via_input"
-  | "ignored";
+  | "ignored"
+  | "cancelled"; // ── v1.2 新增
 
 const state = computed<State>(() => {
-  // 已被后续 user message 忽略的 bot 消息上的 box,只要用户没提交过,显示 ignored
-  if (props.isIgnored && !submissionState.value) return "ignored";
-  if (!submissionState.value) return "pending";
-  return submissionState.value.kind === "option"
-    ? "submitted_via_option"
-    : "submitted_via_input";
+  // 状态优先级(从高到低)——spec §5.1 强制约束:
+  //   1. submissionState —— 用户已提交,UI 必须诚实显示"已选择 X"
+  //   2. cancelledState  —— 后端推送/兜底检测到超时或取消
+  //   3. props.isIgnored —— 后续 user message 已"走过"本 box
+  //   4. pending         —— 默认
+  //
+  // 为什么 submission 必须排在 cancelled 之前:竞态保护。如果用户在
+  // T=timeout−1 抢点提交,本地提交意图是诚实的(显示"已选择 X"),
+  // 服务端 a moment later 发来 cancelled 事件 / 因网络故障 reconcile
+  // 兜底检测到 backend list 里已无此 rid。如果 cancelled 排第一,UI
+  // 会把用户已选的那一选项偷偷改成"已取消",那就是 UI 在说谎。
+  if (submissionState.value) {
+    return submissionState.value.kind === "option"
+      ? "submitted_via_option"
+      : "submitted_via_input";
+  }
+  if (cancelledState.value) return "cancelled";
+  if (props.isIgnored) return "ignored";
+  return "pending";
 });
 
 const submittedLabel = computed(() => {
@@ -358,7 +423,8 @@ function ariaLabelForOption(opt: InteractiveChoiceOption): string {
 }
 
 .interactive-choice-box.is-submitted,
-.interactive-choice-box.is-ignored {
+.interactive-choice-box.is-ignored,
+.interactive-choice-box.is-cancelled {
   opacity: 0.6;
   background: transparent;
   border-color: rgba(var(--v-theme-on-surface), 0.12);
@@ -406,7 +472,8 @@ function ariaLabelForOption(opt: InteractiveChoiceOption): string {
   opacity: 0.7;
 }
 
-.choice-header--ignored {
+.choice-header--ignored,
+.choice-header--cancelled {
   color: rgba(var(--v-theme-on-surface), 0.6);
   /* 让长 title / prompt 能在 header 行内自然换行,不被压成单字符。
      v1.2 之前 ignored header 只渲染 label + prompt,内容短;补上
@@ -415,7 +482,8 @@ function ariaLabelForOption(opt: InteractiveChoiceOption): string {
   flex-wrap: wrap;
 }
 
-.choice-title--ignored {
+.choice-title--ignored,
+.choice-title--cancelled {
   /* 与 pending/submitted 的 .choice-title 共享字号字重,这里只
      收敛 line-height 让行内 title 不与 label 基线打架。 */
   line-height: 1.3;
@@ -521,7 +589,8 @@ function ariaLabelForOption(opt: InteractiveChoiceOption): string {
 }
 
 .is-ignored .choice-option-button,
-.is-submitted .choice-option-button {
+.is-submitted .choice-option-button,
+.is-cancelled .choice-option-button {
   pointer-events: none;
   opacity: 0.6;
 }
