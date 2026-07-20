@@ -511,19 +511,9 @@ watch(fileBrowserCurrentPath, (newPath) => {
   if (newPath) persistCurrentPath(newPath);
 });
 
-// 2026-07-20 Recent Files §6.1: drive recordOpen off the canonical
-// preview-path writer so every entry point (search jumps, tree clicks,
-// recent-row clicks) shares one filter. Null writes (close preview /
-// worktree switch) are skipped; non-worktree paths are filtered inside
-// recordOpen. `immediate: false` keeps the empty initial state clean.
-watch(
-  [fileBrowserPreviewPath, currentRoot],
-  ([newPath, root]) => {
-    if (!newPath || !root) return;
-    recentFiles.recordOpen(newPath);
-  },
-  { immediate: false },
-);
+// 2026-07-20 Recent Files §6.1: the watcher on [previewPath, currentRoot]
+// is attached immediately after `currentRoot` is declared (further down),
+// because Vue's analyser hoists variable usage but TypeScript does not.
 
 const composable = useSpcodeGitDiff(selectedWorktree, selectedScope);
 // git-status is fetched alongside git-diff ONLY for the unstaged view.
@@ -2931,6 +2921,22 @@ const truncatedMax = computed(() => {
 const currentRoot = computed<string | null>(() => {
   return selectedWorktree.value ?? mainWorktreePath.value ?? projectRoot.value;
 });
+
+// 2026-07-20 Recent Files §6.1: drive recordOpen off the canonical
+// preview-path writer so every entry point (search jumps, tree clicks,
+// recent-row clicks) shares one filter. Null writes (close preview /
+// worktree switch) are skipped; non-worktree paths are filtered inside
+// recordOpen. `immediate: false` keeps the empty initial state clean.
+// Attached here (not earlier) because `currentRoot` is a script-level
+// computed declaration and the TypeScript checker can't forward-ref it.
+watch(
+  [fileBrowserPreviewPath, currentRoot],
+  ([newPath, root]) => {
+    if (!newPath || !root) return;
+    recentFiles.recordOpen(newPath);
+  },
+  { immediate: false },
+);
 </script>
 
 <template>
