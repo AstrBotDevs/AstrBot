@@ -123,12 +123,36 @@ function onEntryNavigate(entry: SpcodeFileBrowserEntry) {
   // branch is only reached for directories and whitelist matches.
 }
 
-function onBreadcrumbNavigate(path: string) {
-  // FileBrowserBreadcrumb emits paths derived from the absolute
-  // meta.path returned by the backend, so convert back to a
-  // project-relative string before forwarding. DocumentManager
-  // assigns this to docsRoot.
-  emit("breadcrumb-navigate", projectRelativePath(path, props.rootPath));
+// 2026-07-20: the inner-tree breadcrumb now emits the same
+// { dirPath, previewPath } payload shape as the top-level
+// FileBrowserBreadcrumb in DocumentManager (via FileTreeList
+// re-emission). We translate the file case into the existing
+// "select" event so DocumentManager can stay on a string-typed
+// breadcrumb-navigate contract and not need to know about the
+// payload shape — it just sees "tree navigated to <dir>" plus,
+// optionally, "tree also wants <file> selected".
+//
+// The directory case is unchanged: project-relative path goes
+// out on `breadcrumb-navigate` and DocumentManager sets it as
+// docsRoot.
+function onBreadcrumbNavigate(payload: {
+  dirPath: string;
+  previewPath: string | null;
+}) {
+  const dirRel = projectRelativePath(payload.dirPath, props.rootPath);
+  emit("breadcrumb-navigate", dirRel);
+  if (payload.previewPath) {
+    // File path typed into the inner breadcrumb: mirror what
+    // DocumentManager's top-level onBreadcrumbNavigate does —
+    // select the file (docsRoot-relative form so the rest of
+    // DocumentManager can stay relative-path-typed).
+    const fileRel = docsRootRelativePath(
+      payload.previewPath,
+      props.rootPath,
+      dirRel,
+    );
+    emit("select", fileRel);
+  }
 }
 
 // Exposed so the parent (DocumentManager) can force a re-fetch of

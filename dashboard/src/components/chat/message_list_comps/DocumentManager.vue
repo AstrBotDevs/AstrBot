@@ -53,6 +53,7 @@ import MarkdownView from "@/components/shared/MarkdownView.vue";
 import { useResizableSplit } from "@/composables/useResizableSplit";
 import {
   projectRelativePath,
+  docsRootRelativePath,
   absoluteFromSelectedDoc,
 } from "@/composables/pathUtils";
 
@@ -758,15 +759,62 @@ function onTreeNavigate(dirRel: string) {
   editMode.value = false;
 }
 
-// FileBrowserBreadcrumb emits absolute paths (its segments are
-// derived from the absolute breadcrumbPath we feed it). Convert
-// back to a project-relative string before forwarding to
-// onTreeNavigate, otherwise docsRoot ends up holding an absolute
-// path and the next pathRef computation glues projectRoot on
-// top of it, producing "F:\repo\F:\repo\docs/..." that the
-// backend resolves as path_not_found.
-function onBreadcrumbNavigate(absPath: string) {
-  onTreeNavigate(projectRelativePath(absPath, props.projectRoot));
+// 2026-07-20: FileBrowserBreadcrumb's emit switched from a bare
+// absolute path to a `{ dirPath, previewPath }` payload so the
+// path-input feature can route a typed file path to "navigate to
+// the parent AND select this file" (mirroring FileBrowserView's
+// behaviour). Segment clicks always send previewPath: null so
+// the directory branch below is a pure docsRoot change.
+//
+// Path glue is the same as the old single-string version:
+// file-browser entries are absolute, but docsRoot / selectedDoc
+// are stored project- / docsRoot-relative. projectRelativePath
+// and docsRootRelativePath (pathUtils.ts) are the single source
+// of truth for that translation — using them here keeps the
+// "F:\repo\docs\F:\repo\docs/..." double-prefix bug out of this
+// handler too.
+//
+// 2026-07-20 dirty-edit guard: the previous onTreeNavigate had
+// no check (it just reset editMode), silently discarding unsaved
+// edits on a segment click. The path-input flow is more
+// "intentional" than a segment click, so we surface the prompt
+// up front and let the user either confirm or cancel. Matches
+// FileBrowserView's confirmLeaveEditing().
+function onBreadcrumbNavigate(payload: {
+  dirPath: string;
+  previewPath: string | null;
+}): void {
+  if (editMode.value) {
+    const ok = window.confirm(
+      tm("spcodeProjectLoad.documentManager.editor.cancelDirty"),
+    );
+    if (!ok) return;
+  }
+
+  const dirRel = projectRelativePath(payload.dirPath, props.projectRoot);
+  docsRoot.value = dirRel || ".";
+  selectedRevision.value = null;
+  editMode.value = false;
+  editBuffer.value = "";
+  saveError.value = null;
+
+  if (payload.previewPath) {
+    // File path typed in the path input: also select the file so
+    // the right pane renders its content. docsRootRelativePath
+    // strips projectRoot + docsRoot and returns the basename (or
+    // nested segment if the user typed a deeper path than we
+    // navigated to, which shouldn't happen for our file-vs-dir
+    // detection in the breadcrumb but is defended by the helper).
+    selectedDoc.value = docsRootRelativePath(
+      payload.previewPath,
+      props.projectRoot,
+      dirRel || ".",
+    );
+    viewMode.value = "rendered";
+  } else {
+    // Directory navigation: clear any previously-selected file.
+    selectedDoc.value = null;
+  }
 }
 
 function onTreeSelect(fileRel: string) {

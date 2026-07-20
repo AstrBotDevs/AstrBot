@@ -333,6 +333,16 @@
         "diff": "Git Diff"
       },
       "breadcrumbRoot": "Project root",
+      "pathInputPlaceholder": "Enter a project-relative path to jump, then press Enter",
+      "pathInputTooltip": "Click to enter a project-relative path",
+      "pathInput": {
+        "error": {
+          "empty": "Path cannot be empty",
+          "absolute": "Only project-relative paths are allowed (no leading / or C:)",
+          "parentSegment": "Path cannot contain .. segments (would escape the project root)",
+          "noRoot": "Project root is not loaded, cannot resolve path"
+        }
+      },
       "fullscreen": {
         "enter": "Fullscreen file area",
         "exit": "Exit fullscreen"

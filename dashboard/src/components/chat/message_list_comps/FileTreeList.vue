@@ -40,9 +40,19 @@ const props = defineProps<{
   allowedExtensions?: string[];
 }>();
 
+// 2026-07-20: the breadcrumb-navigate payload shape mirrors
+// FileBrowserBreadcrumb's new emit (see that file for the full
+// rationale). It is the re-emitted version of FileBrowserBreadcrumb's
+// `navigate` event, so the two must stay in lockstep. Parents
+// (FileBrowserView, DocumentTreePanel) consume this payload and
+// decide whether to update the directory listing only, or also
+// open a file preview.
 const emit = defineEmits<{
   (e: "navigate", entry: SpcodeFileBrowserEntry): void;
-  (e: "breadcrumb-navigate", path: string): void;
+  (
+    e: "breadcrumb-navigate",
+    payload: { dirPath: string; previewPath: string | null },
+  ): void;
 }>();
 
 const showBreadcrumb = computed(

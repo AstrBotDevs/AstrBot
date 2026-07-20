@@ -154,11 +154,20 @@ function onEntryNavigate(entry: SpcodeFileBrowserEntry): void {
   }
 }
 
-function onBreadcrumbNavigate(path: string): void {
+// 2026-07-20: FileBrowserBreadcrumb switched its emit from a
+// bare path string to a `{ dirPath, previewPath }` payload so the
+// path-input feature can route a typed file path to "navigate to
+// the parent + preview this file" (matching what <FileTreeList>
+// does on a file click). Segment clicks always send
+// previewPath: null, but we no longer second-guess that here —
+// the breadcrumb is the single source of truth for whether the
+// destination is a file or a directory.
+function onBreadcrumbNavigate(payload: {
+  dirPath: string;
+  previewPath: string | null;
+}): void {
   if (!confirmLeaveEditing()) return;
-  // Clicking a breadcrumb segment always clears the preview — the
-  // user is moving up the tree, not asking to keep the file open.
-  emit("navigate", { dirPath: path, previewPath: null });
+  emit("navigate", payload);
 }
 
 function onPreviewTargetNavigate(resolvedTarget: string): void {

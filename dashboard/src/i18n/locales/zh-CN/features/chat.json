@@ -333,6 +333,16 @@
         "diff": "Git 变更"
       },
       "breadcrumbRoot": "项目根",
+      "pathInputPlaceholder": "输入项目相对路径跳转（仅支持相对路径），Enter 确认",
+      "pathInputTooltip": "点击输入项目相对路径跳转",
+      "pathInput": {
+        "error": {
+          "empty": "路径不能为空",
+          "absolute": "仅支持项目相对路径，不能使用绝对路径（如 / 或 C:）",
+          "parentSegment": "路径不能包含 .. 段（会跳出项目根目录）",
+          "noRoot": "项目根目录未加载，无法解析路径"
+        }
+      },
       "fullscreen": {
         "enter": "全屏文件区域",
         "exit": "退出全屏"
