@@ -1067,8 +1067,9 @@ export const useExtensionPage = () => {
       extension_config.config = {};
       getExtensions();
     } catch (err) {
-      toast(err, "error");
-      onLoadingDialogResult(2, err.message || String(err), -1);
+      const errMsg = resolveErrorMessage(err, tm("messages.operationFailed"));
+      toast(errMsg, "error");
+      onLoadingDialogResult(2, errMsg, -1);
     }
   };
   
