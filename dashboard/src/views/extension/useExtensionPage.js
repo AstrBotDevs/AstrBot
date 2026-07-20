@@ -1045,22 +1045,30 @@ export const useExtensionPage = () => {
   };
   
   const updateConfig = async () => {
+    loadingDialog.title = tm("status.loading");
+    loadingDialog.statusCode = 0;
+    loadingDialog.result = "";
+    loadingDialog.show = true;
     try {
       const res = await axios.post(
         "/api/config/plugin/update?plugin_name=" + curr_namespace.value,
         extension_config.config,
       );
-      if (res.data.status === "ok") {
-        toast(res.data.message, "success");
-      } else {
+      if (res.data.status !== "ok") {
         toast(res.data.message, "error");
+        onLoadingDialogResult(2, res.data.message, -1);
+        return;
       }
+
+      toast(res.data.message, "success");
+      onLoadingDialogResult(1, res.data.message);
       configDialog.value = false;
       extension_config.metadata = {};
       extension_config.config = {};
       getExtensions();
     } catch (err) {
       toast(err, "error");
+      onLoadingDialogResult(2, err.message || String(err), -1);
     }
   };
   
