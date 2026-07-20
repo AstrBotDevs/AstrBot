@@ -290,7 +290,12 @@ const {
   </v-dialog>
 
   <!-- 加载对话框 -->
-  <v-dialog v-model="loadingDialog.show" width="700" persistent>
+  <v-dialog
+    v-model="loadingDialog.show"
+    width="700"
+    persistent
+    transition="dialog-transition"
+  >
     <v-card>
       <v-card-title class="text-h5">{{ loadingDialog.title }}</v-card-title>
       <v-card-text style="max-height: calc(100vh - 200px); overflow-y: auto">
@@ -301,19 +306,24 @@ const {
           class="mb-4"
         ></v-progress-linear>
 
-        <div v-if="loadingDialog.statusCode !== 0" class="py-8 text-center">
-          <v-icon
-            class="mb-6"
-            :color="loadingDialog.statusCode === 1 ? 'success' : 'error'"
-            :icon="
-              loadingDialog.statusCode === 1
-                ? 'mdi-check-circle-outline'
-                : 'mdi-alert-circle-outline'
-            "
-            size="128"
-          ></v-icon>
-          <div class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
-        </div>
+        <v-fade-transition>
+          <div
+            v-if="loadingDialog.statusCode !== 0"
+            class="py-8 text-center"
+          >
+            <v-icon
+              class="mb-6"
+              :color="loadingDialog.statusCode === 1 ? 'success' : 'error'"
+              :icon="
+                loadingDialog.statusCode === 1
+                  ? 'mdi-check-circle-outline'
+                  : 'mdi-alert-circle-outline'
+              "
+              size="128"
+            ></v-icon>
+            <div class="text-h4 font-weight-bold">{{ loadingDialog.result }}</div>
+          </div>
+        </v-fade-transition>
 
         <div style="margin-top: 32px">
           <h3>{{ tm("dialogs.loading.logs") }}</h3>
