@@ -437,6 +437,14 @@
         "network": "网络连接失败",
         "unknown": "加载失败 ({reason})",
         "retry": "重试"
+      },
+      "recentFiles": {
+        "titleWithCount": "最近文件 ({count})",
+        "empty": "暂无最近打开的文件",
+        "clear": "清空",
+        "removeTooltip": "从列表中移除",
+        "clearConfirmTitle": "确认清空最近文件?",
+        "clearConfirmMessage": "此操作将从列表中移除所有最近打开的文件,且无法撤销。"
       }
     },
     "diffSidebar": {

@@ -437,6 +437,14 @@
         "network": "Network error",
         "unknown": "Load failed ({reason})",
         "retry": "Retry"
+      },
+      "recentFiles": {
+        "titleWithCount": "Recent Files ({count})",
+        "empty": "No recently opened files",
+        "clear": "Clear",
+        "removeTooltip": "Remove from list",
+        "clearConfirmTitle": "Clear recent files?",
+        "clearConfirmMessage": "This will remove all recently opened files from the list. It cannot be undone."
       }
     },
     "diffSidebar": {
