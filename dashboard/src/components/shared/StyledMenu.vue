@@ -7,7 +7,7 @@
     <v-card
       class="styled-menu-card"
       :class="{ 'styled-menu-card-borderless': noBorder }"
-      elevation="8"
+      elevation="0"
       rounded="lg"
     >
       <v-list density="compact" class="styled-menu-list pa-1">
@@ -35,9 +35,10 @@ withDefaults(defineProps<{
 .styled-menu-card {
   min-width: 100px;
   width: fit-content;
-  border: 1px solid rgba(var(--v-theme-primary), 0.15) !important;
+  border: 0 !important;
   background: rgba(var(--v-theme-surface), 0.98) !important;
   backdrop-filter: blur(10px);
+  box-shadow: var(--astrbot-menu-shadow, 0 12px 28px rgba(0, 0, 0, 0.08)) !important;
 }
 
 .styled-menu-card-borderless {
@@ -70,7 +71,7 @@ withDefaults(defineProps<{
 /* 深色模式下的下拉框样式 - 需要全局样式才能检测主题 */
 .v-theme--PurpleThemeDark .styled-menu-card {
   background: rgba(var(--v-theme-surface), 0.98) !important;
-  border: 1px solid rgba(var(--v-theme-primary), 0.2) !important;
+  border: 0 !important;
 }
 
 .v-theme--PurpleThemeDark .styled-menu-card-borderless {

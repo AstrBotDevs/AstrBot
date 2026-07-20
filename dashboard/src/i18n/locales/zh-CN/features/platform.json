@@ -9,18 +9,13 @@
   "webhookCopyFailed": "复制失败，请手动复制",
   "webhookDialog": {
     "title": "Webhook 回调地址",
-    "description": "回调地址如下，请确保网络环境可以公网访问。也可以在日志中查看回调地址信息。建议填写 配置文件 -> 系统 中的「对外可达的回调接口地址」配置项。",
+    "description": "回调地址如下，请确保网络环境可以公网访问。也可以在日志中查看回调地址信息。建议填写 设置 -> 常规 中的「对外可达的回调接口地址」配置项。",
     "close": "关闭"
   },
   "details": {
     "adapterType": "适配器类型",
     "token": "Token",
     "description": "描述"
-  },
-  "logs": {
-    "title": "平台日志",
-    "expand": "展开",
-    "collapse": "收起"
   },
   "dialog": {
     "add": "新增",
@@ -181,6 +176,9 @@
     "created": "创建成功",
     "startFailed": "发起扫码创建失败",
     "pollFailed": "获取扫码创建状态失败",
+    "platformIdLabel": "机器人 ID",
+    "platformIdRequired": "机器人 ID 不能为空",
+    "platformIdInvalid": "机器人 ID 不能包含空格、':' 或 '!'",
     "mode": {
       "title": "选择创建方式",
       "scan": "扫码一键创建",

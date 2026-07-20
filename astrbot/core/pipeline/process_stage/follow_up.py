@@ -25,6 +25,7 @@ class FollowUpCapture:
     ticket: FollowUpTicket
     order_seq: int
     monitor_task: asyncio.Task[None]
+    target_run_id: str | None = None
 
 
 def _event_follow_up_text(event: AstrMessageEvent) -> str:
@@ -197,6 +198,9 @@ def try_capture_follow_up(event: AstrMessageEvent) -> FollowUpCapture | None:
         ticket=ticket,
         order_seq=order_seq,
         monitor_task=monitor_task,
+        target_run_id=str(runner_event.message_obj.message_id)
+        if getattr(runner_event.message_obj, "message_id", None) is not None
+        else None,
     )
 
 

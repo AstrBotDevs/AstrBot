@@ -2,10 +2,12 @@
 
 import os
 
+from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.26.0-beta.11"
+VERSION = __version__
+
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -113,6 +115,7 @@ DEFAULT_CONFIG = {
         "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
         "websearch_firecrawl_key": [],
+        "websearch_exa_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -133,8 +136,8 @@ DEFAULT_CONFIG = {
         ),
         "llm_compress_keep_recent_ratio": 0.15,
         "llm_compress_provider_id": "",
-        "max_context_length": 50,
-        "dequeue_context_length": 10,
+        "max_context_length": -1,  # 默认不限制
+        "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -1590,9 +1593,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "https://api.xiaomimimo.com/v1",
-                        "model": "mimo-v2-omni",
-                        "mimo-stt-system-prompt": "You are a speech transcription assistant. Transcribe the spoken content from the audio exactly and return only the transcription text.",
-                        "mimo-stt-user-prompt": "Please transcribe the content of the audio and return only the transcription text.",
+                        "model": "mimo-v2.5-asr",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -1839,6 +1840,7 @@ CONFIG_METADATA_2 = {
                         "embedding_model": "",
                         "embedding_dimensions": 1024,
                         "max_batch_size": 100,
+                        "embedding_dimensions_mode": "auto",
                         "timeout": 20,
                         "proxy": "",
                     },
@@ -1952,6 +1954,20 @@ CONFIG_METADATA_2 = {
                         "timeout": 20,
                         "nvidia_rerank_truncate": "",
                     },
+                    "TEI Rerank": {
+                        "id": "tei_rerank",
+                        "type": "tei_rerank",
+                        "provider": "huggingface",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "rerank_api_key": "",
+                        "rerank_api_base": "http://127.0.0.1:8080",
+                        "timeout": 20,
+                        "tei_rerank_truncate": False,
+                        "tei_rerank_truncation_direction": "Right",
+                        "tei_rerank_raw_scores": False,
+                        "tei_rerank_return_text": False,
+                    },
                     "Xinference STT": {
                         "id": "xinference_stt",
                         "type": "xinference_stt",
@@ -2047,6 +2063,27 @@ CONFIG_METADATA_2 = {
                             "NONE",
                             "END",
                         ],
+                    },
+                    "tei_rerank_truncate": {
+                        "description": "截断超长文本",
+                        "type": "bool",
+                        "hint": "当输入超过模型最大上下文长度时，是否自动截断。启用后需配合 截断方向 使用。",
+                    },
+                    "tei_rerank_truncation_direction": {
+                        "description": "截断方向",
+                        "type": "string",
+                        "options": ["left", "right"],
+                        "hint": "选择从文本的左侧(left)还是右侧(right)开始截断。仅在 截断超长文本 为 True 时生效。",
+                    },
+                    "tei_rerank_raw_scores": {
+                        "description": "返回原始分数",
+                        "type": "bool",
+                        "hint": "如果为 True，返回模型原始 logit 分数（可能为负值），不经过 sigmoid 归一化。默认 False。",
+                    },
+                    "tei_rerank_return_text": {
+                        "description": "返回排序结果中的文档原文",
+                        "type": "bool",
+                        "hint": "如果为 True，每个排序结果将附带原始文本。默认 False 以减少网络传输。",
                     },
                     "modalities": {
                         "description": "模型能力",
@@ -2233,6 +2270,12 @@ CONFIG_METADATA_2 = {
                         "description": "最大批次大小",
                         "type": "int",
                         "hint": "每批向嵌入 API 发送的文本数量上限。各服务商限制不同：DashScope/阿里云百炼限制为 10；OpenAI 支持 2048；Ollama/Gemini/NVIDIA 通常可设为 100-2048。超过限制会触发 API 400 错误。",
+                    },
+                    "embedding_dimensions_mode": {
+                        "description": "嵌入维度参数发送模式",
+                        "type": "string",
+                        "options": ["auto", "always", "never"],
+                        "hint": "控制是否在 OpenAI 兼容 Embedding 请求中发送 dimensions 参数。auto 会仅对官方 OpenAI embedding-3 模型自动发送；第三方兼容 API 如需该参数可改为 always，报错时改为 never。",
                     },
                     "embedding_model": {
                         "description": "嵌入模型",
@@ -2618,16 +2661,6 @@ CONFIG_METADATA_2 = {
                         "description": "超时时间",
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
-                    },
-                    "mimo-stt-system-prompt": {
-                        "description": "系统提示词",
-                        "type": "string",
-                        "hint": "用于指导 MiMo STT 转录行为的 system prompt。",
-                    },
-                    "mimo-stt-user-prompt": {
-                        "description": "用户提示词",
-                        "type": "string",
-                        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。",
                     },
                     "openai-tts-voice": {
                         "description": "voice",
@@ -3317,6 +3350,7 @@ CONFIG_METADATA_3 = {
                             "bocha",
                             "brave",
                             "firecrawl",
+                            "exa",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3368,6 +3402,16 @@ CONFIG_METADATA_3 = {
                         "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
                         "condition": {
                             "provider_settings.websearch_provider": "baidu_ai_search",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_exa_key": {
+                        "description": "Exa API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。Get a key at https://dashboard.exa.ai",
+                        "condition": {
+                            "provider_settings.websearch_provider": "exa",
                             "provider_settings.web_search": True,
                         },
                     },
