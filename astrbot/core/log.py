@@ -380,10 +380,11 @@ class LogManager:
         cls._log_broker = log_broker
 
         targets = [logger]
-        targets.extend(
-            logging.getLogger(f"{PLUGIN_LOGGER_PREFIX}{name}")
-            for name in cls._plugin_logger_names
-        )
+        if logger.name == "astrbot":
+            targets.extend(
+                logging.getLogger(f"{PLUGIN_LOGGER_PREFIX}{name}")
+                for name in cls._plugin_logger_names
+            )
         for target in targets:
             cls._ensure_logger_enricher_filter(target)
 
