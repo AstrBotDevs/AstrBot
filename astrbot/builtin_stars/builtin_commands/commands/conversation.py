@@ -320,10 +320,12 @@ class ConversationCommands:
         result: list[dict] = []
         for msg in compressed:
             entry = {"role": msg.role}
-            if isinstance(msg.content, str):
+            if msg.content is None:
+                entry["content"] = None
+            elif isinstance(msg.content, (str, list)):
                 entry["content"] = msg.content
             else:
-                entry["content"] = str(msg.content) if msg.content else ""
+                entry["content"] = str(msg.content)
             if msg.tool_calls is not None:
                 entry["tool_calls"] = [
                     tc.model_dump() if isinstance(tc, ToolCall) else tc

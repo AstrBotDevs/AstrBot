@@ -1,3 +1,5 @@
+import math
+
 from astrbot import logger
 from astrbot.core.agent.message import Message
 
@@ -58,8 +60,8 @@ class ContextManager:
         if method == "turns":
             return max(0, total_turns - self.config.retain_turns)
         if method == "percentage":
-            floor = int(total_turns * self.config.retain_percentage)
-            return max(0, total_turns - floor)
+            min_keep = math.ceil(total_turns * self.config.retain_percentage)
+            return max(0, total_turns - min_keep)
         # "null" — no lower bound
         return total_turns
 
@@ -91,6 +93,14 @@ class ContextManager:
             messages, drop_turns=requested,
         )
 
+    def _token_guard_exceeded(self, tokens: int, max_context_tokens: int) -> bool:
+        """Return True if token guard is enabled and the ratio exceeds the threshold."""
+        if not self.config.enable_token_guard:
+            return False
+        if max_context_tokens <= 0 or tokens <= 0:
+            return False
+        return (tokens / max_context_tokens) > self.config.token_guard_threshold
+
     def _triggers_fired(
         self,
         messages: list[Message],
@@ -103,11 +113,8 @@ class ContextManager:
             if total_turns > self.config.max_turns:
                 return True
 
-        if self.config.enable_token_guard:
-            if max_context_tokens > 0 and current_tokens > 0:
-                ratio = current_tokens / max_context_tokens
-                if ratio > self.config.token_guard_threshold:
-                    return True
+        if self._token_guard_exceeded(current_tokens, max_context_tokens):
+            return True
 
         return False
 
@@ -158,16 +165,13 @@ class ContextManager:
                         )
 
             # 3. double-check（仅 enable_token_guard）
-            if self.config.enable_token_guard and max_context_tokens > 0:
-                tokens_after = self.token_counter.count_tokens(result)
-                if tokens_after > 0:
-                    ratio = tokens_after / max_context_tokens
-                    if ratio > self.config.token_guard_threshold:
-                        logger.info(
-                            "Context still exceeds token guard threshold after disposal, "
-                            "applying halving truncation (unconstrained by retention).",
-                        )
-                        result = self.truncator.truncate_by_halving(result)
+            tokens_after = self.token_counter.count_tokens(result)
+            if self._token_guard_exceeded(tokens_after, max_context_tokens):
+                logger.info(
+                    "Context still exceeds token guard threshold after disposal, "
+                    "applying halving truncation (unconstrained by retention).",
+                )
+                result = self.truncator.truncate_by_halving(result)
 
             return result
         except Exception:
