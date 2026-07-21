@@ -50,6 +50,28 @@ from .request_retry import retry_provider_request
 )
 class ProviderOpenAIOfficial(Provider):
     _ERROR_TEXT_CANDIDATE_MAX_CHARS = 4096
+    # 空内容占位常量，方便统一修改
+    EMPTY_CONTENT_PLACEHOLDER = " "
+
+    # 新增：统一转换消息格式，带完整类型防御
+    def _adapt_messages_for_third_party(self, payloads: dict) -> None:
+        messages = payloads.get("messages", [])
+        for msg in messages:
+            # 过滤非字典消息，防止 .get 报错
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content")
+            # 处理多模态数组content
+            if isinstance(content, list):
+                text_parts = []
+                for block in content:
+                    # 仅处理标准text块，跳过图片/音频等
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text_parts.append(block.get("text", ""))
+                msg["content"] = " ".join(text_parts) if text_parts else self.EMPTY_CONTENT_PLACEHOLDER
+            # 空内容填充占位符
+            if not content:
+                msg["content"] = self.EMPTY_CONTENT_PLACEHOLDER
 
     @classmethod
     def _truncate_error_text_candidate(cls, text: str) -> str:
@@ -535,15 +557,11 @@ class ProviderOpenAIOfficial(Provider):
         *,
         request_max_retries: int | None = None,
     ) -> LLMResponse:
-        # 修复第三方LLM服务(MindIE等)不支持content数组、空content导致422校验失败
-        for msg in payloads.get("messages", []):
-            if isinstance(msg.get("content"), list):
-                # 拼接数组内所有文本内容
-                texts = [block.get("text", "") for block in msg["content"] if block.get("type") == "text"]
-                msg["content"] = " ".join(texts) if texts else " "
-            # 空内容填充占位符，避免输入校验失败
-            if not msg.get("content"):
-                msg["content"] = " "
+         # 仅非原生OpenAI服务执行格式适配（MindIE、国产推理等）
+        base_url = self.client.base_url.host or ""
+        if "openai.com" not in base_url:
+            self._adapt_messages_for_third_party(payloads)
+
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -602,15 +620,11 @@ class ProviderOpenAIOfficial(Provider):
         *,
         request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
-        # 修复第三方LLM服务(MindIE等)不支持content数组、空content导致422校验失败
-        for msg in payloads.get("messages", []):
-            if isinstance(msg.get("content"), list):
-                # 拼接数组内所有文本内容
-                texts = [block.get("text", "") for block in msg["content"] if block.get("type") == "text"]
-                msg["content"] = " ".join(texts) if texts else " "
-            # 空内容填充占位符，避免输入校验失败
-            if not msg.get("content"):
-                msg["content"] = " "
+        # 仅非原生OpenAI服务执行格式适配（MindIE、国产推理等）
+        base_url = self.client.base_url.host or ""
+        if "openai.com" not in base_url:
+            self._adapt_messages_for_third_party(payloads)
+
         """流式查询API，逐步返回结果"""
         if tools:
             model = payloads.get("model", "").lower()
