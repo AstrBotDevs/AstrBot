@@ -535,6 +535,15 @@ class ProviderOpenAIOfficial(Provider):
         *,
         request_max_retries: int | None = None,
     ) -> LLMResponse:
+        # 修复第三方LLM服务(MindIE等)不支持content数组、空content导致422校验失败
+        for msg in payloads.get("messages", []):
+            if isinstance(msg.get("content"), list):
+                # 拼接数组内所有文本内容
+                texts = [block.get("text", "") for block in msg["content"] if block.get("type") == "text"]
+                msg["content"] = " ".join(texts) if texts else " "
+            # 空内容填充占位符，避免输入校验失败
+            if not msg.get("content"):
+                msg["content"] = " "
         if tools:
             model = payloads.get("model", "").lower()
             omit_empty_param_field = "gemini" in model
@@ -593,6 +602,15 @@ class ProviderOpenAIOfficial(Provider):
         *,
         request_max_retries: int | None = None,
     ) -> AsyncGenerator[LLMResponse, None]:
+        # 修复第三方LLM服务(MindIE等)不支持content数组、空content导致422校验失败
+        for msg in payloads.get("messages", []):
+            if isinstance(msg.get("content"), list):
+                # 拼接数组内所有文本内容
+                texts = [block.get("text", "") for block in msg["content"] if block.get("type") == "text"]
+                msg["content"] = " ".join(texts) if texts else " "
+            # 空内容填充占位符，避免输入校验失败
+            if not msg.get("content"):
+                msg["content"] = " "
         """流式查询API，逐步返回结果"""
         if tools:
             model = payloads.get("model", "").lower()
