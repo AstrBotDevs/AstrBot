@@ -1662,6 +1662,10 @@
         "description": "reference_id",
         "hint": "Fishaudio TTS reference model ID (optional). If set, the model ID is used directly instead of looking up by role name. Example: 626bb6d3f3364c9cbc3aa6a67300a664. More models: https://fish.audio/zh-CN/discovery; open a model detail page to copy the model ID."
       },
+      "fishaudio-tts-model": {
+        "description": "TTS Model",
+        "hint": "FishAudio TTS engine model ID, e.g. s1, s2-pro. Leave empty to use the API default model. See https://fish.audio"
+      },
       "whisper_hint": {
         "description": "Notes for local Whisper deployment",
         "hint": "Before enabling, install the openai-whisper library (NVIDIA users download ~2GB mainly for torch and cuda; CPU users download ~1GB), and install ffmpeg. Otherwise STT will not work."
