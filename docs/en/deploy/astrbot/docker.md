@@ -75,6 +75,26 @@ View AstrBot logs with the following command:
 sudo docker logs -f astrbot
 ```
 
+
+## Deploy via Docker Desktop on Windows
+
+### For Windows CMD
+
+Set `TZ` to the standard IANA time zone format (Region/City). Use `Asia/Shanghai` for China.
+
+```bash
+docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%/data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+```
+
+### For PowerShell
+
+Set `TZ` to the standard IANA time zone format (Region/City). Use `Asia/Shanghai` for China.
+
+```bash
+docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}/data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+```
+
+
 ## 🎉 All Done
 
 If everything goes well, you will see logs printed by AstrBot.
