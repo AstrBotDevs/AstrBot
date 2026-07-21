@@ -1756,6 +1756,27 @@ export type GetPluginReadmeByIdResponse = (string);
 
 export type GetPluginReadmeByIdError = unknown;
 
+export type GetPluginMarketReadmeData = {
+    query: {
+        /**
+         * Optional GitHub proxy URL prefix (e.g. https://gh-proxy.com).
+         */
+        proxy?: string;
+        /**
+         * Git ref (commit_sha preferred; falls back to master).
+         */
+        ref?: string;
+        /**
+         * Full GitHub repo URL (https://github.com/{author}/{repo}).
+         */
+        repo: string;
+    };
+};
+
+export type GetPluginMarketReadmeResponse = (string);
+
+export type GetPluginMarketReadmeError = unknown;
+
 export type GetPluginChangelogByIdData = {
     query: {
         plugin_id: string;

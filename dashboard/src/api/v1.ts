@@ -1287,6 +1287,11 @@ export const pluginApi = {
       openApiV1.getPluginReadmeById({ query: { plugin_id: pluginId } }),
     );
   },
+  marketReadme(params: { repo: string; ref?: string; proxy?: string }) {
+    return typed<OpenConfig>(
+      openApiV1.getPluginMarketReadme({ query: params }),
+    );
+  },
   changelog(pluginId: string) {
     return typed<OpenConfig>(
       openApiV1.getPluginChangelogById({ query: { plugin_id: pluginId } }),

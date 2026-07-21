@@ -1191,6 +1191,16 @@ export const getPluginReadmeById = <ThrowOnError extends boolean = false>(option
 };
 
 /**
+ * Get a marketplace plugin's README from its GitHub repo
+ */
+export const getPluginMarketReadme = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginMarketReadmeData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetPluginMarketReadmeResponse, GetPluginMarketReadmeError, ThrowOnError>({
+        ...options,
+        url: '/api/v1/plugins/market/readme'
+    });
+};
+
+/**
  * Get plugin CHANGELOG content by query ID
  */
 export const getPluginChangelogById = <ThrowOnError extends boolean = false>(options: OptionsLegacyParser<GetPluginChangelogByIdData, ThrowOnError>) => {

@@ -610,15 +610,32 @@ const fetchReadme = async () => {
   renderedReadme.value = "";
 
   if (isMarketDetail.value) {
-    const readmeUrl = getDocumentUrl("readme_url");
-    if (!readmeUrl) {
+    const repo = repoUrl.value;
+    if (!repo) {
       readmeEmpty.value = true;
       readmeLoading.value = false;
       return;
     }
+    const ref =
+      props.marketPlugin?.commit_sha || props.marketPlugin?.branch || "";
+    const proxy =
+      props.state?.getSelectedGitHubProxy?.() || undefined;
 
     try {
-      const content = await fetchRemoteMarkdown(readmeUrl);
+      const res = await pluginApi.marketReadme({
+        repo,
+        ref: ref || undefined,
+        proxy: proxy || undefined,
+      });
+
+      if (res.data.status !== "ok") {
+        // Missing README on the repo is a normal outcome — show the empty
+        // state rather than surfacing an error alert.
+        readmeEmpty.value = true;
+        return;
+      }
+
+      const content = res.data.data?.content || "";
       if (!content.trim()) {
         readmeEmpty.value = true;
         return;
@@ -726,7 +743,7 @@ const fetchChangelog = async () => {
 };
 
 const showDocsSection = computed(
-  () => !isMarketDetail.value || !!getDocumentUrl("readme_url"),
+  () => !isMarketDetail.value || !!repoUrl.value,
 );
 
 const showChangelogSection = computed(
@@ -737,7 +754,8 @@ watch(
   () => [
     props.plugin?.name,
     props.sourceTab,
-    props.marketPlugin?.readme_url,
+    props.marketPlugin?.repo,
+    props.marketPlugin?.commit_sha,
     props.marketPlugin?.changelog_url,
   ],
   async () => {
