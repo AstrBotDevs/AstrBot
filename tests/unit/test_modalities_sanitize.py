@@ -86,6 +86,84 @@ def test_gif_http_url_with_query_string_still_detected() -> None:
     assert stats.fixed_image_blocks == 1
 
 
+def test_gif_http_url_path_strips_query_via_urlsplit() -> None:
+    """A real ``?`` inside the path (percent-encoded) must not be mis-split.
+
+    ``urlsplit`` keeps the percent-encoded ``%3F`` inside the path, so a path
+    ending in ``.gif`` followed by an encoded delimiter is still detected.
+    """
+    contexts = [
+        _user(
+            _image_url_part(
+                "https://cdn.example.com/path%3Fextra/anim.gif?sig=1#x",
+            ),
+        ),
+    ]
+    sanitized, stats = sanitize_contexts_by_modalities(contexts, ["text", "image"])
+
+    assert sanitized[0]["content"] == [{"type": "text", "text": "[Image]"}]
+    assert stats.fixed_image_blocks == 1
+
+
+def test_anthropic_media_type_with_params_still_detected() -> None:
+    """``media_type`` carrying parameters must normalize down to ``image/gif``."""
+    contexts = [
+        _user(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/gif; charset=binary",
+                    "data": "R0lGODlh8ADwAPcAAPxzxg==",
+                },
+            },
+        ),
+    ]
+    sanitized, stats = sanitize_contexts_by_modalities(
+        contexts,
+        ["text", "image", "audio", "tool_use"],
+    )
+
+    assert sanitized[0]["content"] == [{"type": "text", "text": "[Image]"}]
+    assert stats.fixed_image_blocks == 1
+
+
+def test_gemini_mimetype_field_with_params_still_detected() -> None:
+    """A bare ``mimeType``/``mime_type`` with params must also be normalized."""
+    contexts = [
+        _user(
+            {
+                "type": "image",
+                "mimeType": " image/gif;codec=xyz ",
+            },
+        ),
+    ]
+    sanitized, stats = sanitize_contexts_by_modalities(contexts, ["text", "image"])
+
+    assert sanitized[0]["content"] == [{"type": "text", "text": "[Image]"}]
+    assert stats.fixed_image_blocks == 1
+
+
+def test_non_gif_media_type_with_params_preserved() -> None:
+    """Non-unsupported MIME with parameters must be preserved, not stripped."""
+    contexts = [
+        _user(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png; charset=utf-8",
+                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
+                },
+            },
+        ),
+    ]
+    sanitized, stats = sanitize_contexts_by_modalities(contexts, ["text", "image"])
+
+    assert sanitized[0]["content"] == contexts[0]["content"]
+    assert not stats.changed
+
+
 # ---------------------------------------------------------------------------
 # Non-GIF images must be preserved when image is supported
 # ---------------------------------------------------------------------------
