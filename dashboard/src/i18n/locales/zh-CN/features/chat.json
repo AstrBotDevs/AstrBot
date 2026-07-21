@@ -2,7 +2,7 @@
   "title": "聊天吧!",
   "subtitle": "与AI助手进行对话",
   "input": {
-    "placeholder": "开始输入...",
+    "placeholder": "想问什么都可以",
     "send": "发送",
     "clear": "清空",
     "upload": "上传文件",
@@ -31,7 +31,7 @@
     "liveMode": "实时对话"
   },
   "welcome": {
-    "title": "欢迎使用 AstrBot",
+    "title": "今天想聊点什么？",
     "subtitle": "您的智能对话助手",
     "quickActions": "快速操作",
     "examples": "示例问题"
@@ -73,6 +73,7 @@
     "placeholder": "继续追问这段内容..."
   },
   "conversation": {
+    "title": "对话",
     "newConversation": "新的聊天",
     "noHistory": "暂无对话历史",
     "systemStatus": "系统状态",
@@ -131,7 +132,16 @@
     "name": "项目名称",
     "emoji": "图标 (Emoji)",
     "description": "项目描述（可选）",
+    "workspace": {
+      "type": "工作区",
+      "session": "按会话分开",
+      "project": "项目共享工作区",
+      "custom": "自定义路径",
+      "path": "工作区路径"
+    },
+    "loadingSessions": "加载对话中...",
     "noSessions": "该项目暂无对话",
+    "noProjects": "暂无项目",
     "confirmDelete": "确定要删除项目 \"{title}\" 吗？项目中的对话不会被删除。"
   },
   "time": {
@@ -145,6 +155,9 @@
     "cachedTokens": "输入（缓存）",
     "duration": "耗时",
     "ttft": "首字时间"
+  },
+  "tokenUsage": {
+    "tooltip": "{used} / {limit} tokens（{percent}%）"
   },
   "refs": {
     "title": "引用",

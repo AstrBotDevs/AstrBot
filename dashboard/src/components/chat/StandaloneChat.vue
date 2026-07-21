@@ -68,7 +68,10 @@
                         type="button"
                         @click="openImage(partUrl(part))"
                       >
-                        <img :src="partUrl(part)" :alt="part.filename || 'image'" />
+                        <img
+                          :src="partUrl(part)"
+                          :alt="part.filename || 'image'"
+                        />
                       </button>
 
                       <audio
@@ -85,9 +88,27 @@
                         :src="partUrl(part)"
                       />
 
-                      <div v-else-if="part.type === 'file'" class="file-part">
-                        <v-icon size="20">mdi-file-document-outline</v-icon>
-                        <span>{{ part.filename || "file" }}</span>
+                      <div
+                        v-else-if="part.type === 'file'"
+                        class="file-part"
+                        :style="{
+                          '--attachment-color':
+                            attachmentPresentation(part).color,
+                        }"
+                      >
+                        <v-icon
+                          class="file-part-icon"
+                          :icon="attachmentPresentation(part).icon"
+                          size="24"
+                        />
+                        <div class="file-part-meta">
+                          <span class="file-part-name">
+                            {{ attachmentName(part) }}
+                          </span>
+                          <span class="file-part-kind">
+                            {{ attachmentPresentation(part).label }}
+                          </span>
+                        </div>
                       </div>
 
                       <div
@@ -126,7 +147,9 @@
                         </template>
                       </div>
 
-                      <pre v-else class="unknown-part">{{ formatJson(part) }}</pre>
+                      <pre v-else class="unknown-part">{{
+                        formatJson(part)
+                      }}</pre>
                     </template>
                   </template>
                 </template>
@@ -184,16 +207,20 @@ import {
   ref,
 } from "vue";
 import { chatApi, configRouteApi, fileApi } from "@/api/v1";
-import { setCustomComponents } from "markstream-vue";
-import "markstream-vue/index.css";
 import ChatInput from "@/components/chat/ChatInput.vue";
+import {
+  CHAT_MARKDOWN_CUSTOM_TAGS,
+  registerChatMarkdownComponents,
+} from "@/components/chat/chatMarkdownComponents";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
-import RefNode from "@/components/chat/message_list_comps/RefNode.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";
 import ToolCallItem from "@/components/chat/message_list_comps/ToolCallItem.vue";
-import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import {
+  attachmentName,
+  attachmentPresentation,
+} from "@/components/chat/attachmentPresentation";
 import { useMediaHandling } from "@/composables/useMediaHandling";
 import {
   displayParts as displayMessageParts,
@@ -213,10 +240,7 @@ const props = withDefaults(defineProps<{ configId?: string | null }>(), {
   configId: "default",
 });
 
-setCustomComponents("chat-message", {
-  ref: RefNode,
-  code_block: ThemeAwareMarkdownCodeBlock,
-});
+registerChatMarkdownComponents();
 
 const { tm } = useModuleI18n("features/chat");
 const customizer = useCustomizerStore();
@@ -231,7 +255,7 @@ const inputRef = ref<InstanceType<typeof ChatInput> | null>(null);
 const imagePreview = reactive({ visible: false, url: "" });
 
 const isDark = computed(() => customizer.uiTheme === "PurpleThemeDark");
-const customMarkdownTags = ["ref"];
+const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
 
 const {
   stagedFiles,
@@ -310,7 +334,11 @@ async function sendCurrentMessage() {
   const parts = buildOutgoingParts(text);
   const messageId = crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   const selection = inputRef.value?.getCurrentSelection();
-  const { botRecord } = createLocalExchange({ sessionId, messageId, parts });
+  const { userRecord, botRecord } = createLocalExchange({
+    sessionId,
+    messageId,
+    parts,
+  });
 
   draft.value = "";
   clearStaged({ revokeUrls: false });
@@ -325,6 +353,7 @@ async function sendCurrentMessage() {
     enableStreaming: enableStreaming.value,
     selectedProvider: selection?.providerId || "",
     selectedModel: selection?.modelName || "",
+    userRecord,
     botRecord,
   });
 }
@@ -411,7 +440,8 @@ function partUrl(part: MessagePart) {
   if (part.embedded_url) return part.embedded_url;
   if (part.embedded_file?.url) return part.embedded_file.url;
   if (part.attachment_id) return fileApi.contentUrl(part.attachment_id);
-  if (part.filename) return fileApi.byNameUrl(part.filename);
+  const lookupFilename = part.stored_filename || part.filename;
+  if (lookupFilename) return fileApi.byNameUrl(lookupFilename);
   return "";
 }
 
@@ -491,6 +521,7 @@ function closeImage() {
 }
 
 .welcome-title {
+  font-family: "Outfit", "Noto Sans", sans-serif;
   font-size: 24px;
   font-weight: 700;
 }
@@ -499,6 +530,7 @@ function closeImage() {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  font-weight: 410;
 }
 
 .message-row {
@@ -511,6 +543,12 @@ function closeImage() {
 
 .message-stack {
   max-width: 88%;
+}
+
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
 }
 
 .from-user .message-stack {
@@ -546,11 +584,14 @@ function closeImage() {
 
 .image-part {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   border: 0;
   padding: 0;
   margin-top: 8px;
   background: transparent;
   cursor: zoom-in;
+  text-align: left;
 }
 
 .image-part img {
@@ -573,10 +614,51 @@ function closeImage() {
 }
 
 .file-part {
-  display: flex;
+  --attachment-color: #607d8b;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  width: min(420px, 100%);
   margin-top: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.055);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--attachment-color) 13%, transparent),
+    rgba(var(--v-theme-on-surface), 0.055) 58%
+  );
+}
+
+.file-part-icon {
+  color: var(--attachment-color);
+}
+
+.file-part-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.file-part-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.file-part-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--attachment-color);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
 }
 
 .tool-call-block {
@@ -607,22 +689,6 @@ function closeImage() {
   z-index: 1;
   padding-bottom: 10px;
   background: rgb(var(--v-theme-background));
-}
-
-.standalone-composer::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  left: 0;
-  right: 0;
-  top: -32px;
-  height: 32px;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(var(--v-theme-background), 0),
-    rgb(var(--v-theme-background))
-  );
 }
 
 .standalone-composer :deep(.input-area) {

@@ -1,6 +1,6 @@
 [project]
 name = "AstrBot"
-version = "4.26.0-beta.12"
+version = "4.26.7"
 description = "Easy-to-use multi-platform LLM chatbot and development framework"
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }
@@ -42,7 +42,7 @@ dependencies = [
   "qrcode>=8.2",
   "quart>=0.20.0",
   "python-telegram-bot>=22.6",
-  "qq-botpy>=1.2.1",
+  "qq-botpy==1.2.1",
   "silk-python>=0.2.6",
   "slack-sdk>=3.35.0",
   "sqlalchemy[asyncio]>=2.0.41",
@@ -65,7 +65,7 @@ dependencies = [
   "python-socks>=2.8.0",
   "pysocks>=1.7.1",
   "packaging>=24.2",
-  "python-ripgrep==0.0.8",
+  "python-ripgrep==0.0.8 ; python_version < '3.14'",
   "pyotp>=2.9.0",
 ]
 

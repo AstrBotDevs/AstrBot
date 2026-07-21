@@ -24,9 +24,11 @@ from astrbot.dashboard.schemas import (
     PluginConfigUpdateRequest,
     PluginEnabledRequest,
     PluginInstallRequest,
+    PluginSourceBindRequest,
     PluginSourceRequest,
     PluginUninstallRequest,
     PluginUpdateRequest,
+    PluginValidateRepoRequest,
     PluginVersionSupportRequest,
 )
 from astrbot.dashboard.services.config_service import (
@@ -484,6 +486,18 @@ async def check_plugin_version_support(
     return await _check_plugin_version_support_payload(_model_dict(payload), service)
 
 
+@router.post("/plugins/validate/repo")
+async def validate_plugin_repo(
+    payload: PluginValidateRepoRequest,
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    return await _run_service(
+        service.validate_plugin_repo(_model_dict(payload)),
+        log_label="/api/plugin/validate-repo",
+    )
+
+
 @router.post("/plugins/install/github")
 async def install_plugin_from_github(
     payload: PluginInstallRequest,
@@ -498,6 +512,15 @@ async def install_plugin_from_github(
         "url": repository,
         "proxy": body.get("proxy"),
         "ignore_version_check": body.get("ignore_version_check", False),
+        **{
+            key: body[key]
+            for key in (
+                "install_method",
+                "registry_url",
+                "market_plugin_id",
+            )
+            if key in body
+        },
     }
     if body.get("download_url"):
         install_payload["download_url"] = body["download_url"]
@@ -523,6 +546,15 @@ async def install_plugin_from_url(
                 "download_url": download_url,
                 "proxy": body.get("proxy"),
                 "ignore_version_check": body.get("ignore_version_check", False),
+                **{
+                    key: body[key]
+                    for key in (
+                        "install_method",
+                        "registry_url",
+                        "market_plugin_id",
+                    )
+                    if key in body
+                },
             }
         ),
         log_label="/api/plugin/install",
@@ -1038,6 +1070,20 @@ async def reload_plugin(
     return await _run_service(
         service.reload_plugin({"name": plugin_id}),
         log_label="/api/plugin/reload",
+    )
+
+
+@router.post("/plugins/{plugin_id}/source")
+async def bind_plugin_source(
+    plugin_id: str,
+    payload: PluginSourceBindRequest,
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    body = _model_dict(payload)
+    return await _run_service(
+        service.bind_plugin_market_source({"name": plugin_id, **body}),
+        log_label="/api/plugin/source",
     )
 
 

@@ -20,6 +20,23 @@
         },
         "openapi": {
             "title": "OpenAPI"
+        },
+        "resources": {
+            "title": "О программе"
+        }
+    },
+    "resources": {
+        "changelog": {
+            "subtitle": "Просмотреть изменения текущей и предыдущих версий."
+        },
+        "documentation": {
+            "subtitle": "Открыть официальную документацию AstrBot."
+        },
+        "faq": {
+            "subtitle": "Посмотреть частые вопросы и советы по устранению проблем."
+        },
+        "github": {
+            "subtitle": "Открыть репозиторий AstrBot на GitHub."
         }
     },
     "systemConfig": {

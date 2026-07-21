@@ -23,6 +23,9 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     strip_message_parts_path_fields,
     webchat_message_parts_have_content,
 )
+from astrbot.core.platform.sources.webchat.request_flags import (
+    resolve_webchat_request_flags,
+)
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path, get_astrbot_temp_path
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
@@ -56,6 +59,8 @@ class LiveChatSession:
         self.temp_audio_path: str | None = None
         self.chat_subscriptions: dict[str, str] = {}
         self.chat_subscription_tasks: dict[str, asyncio.Task] = {}
+        self.chat_request_tasks: dict[str, asyncio.Task] = {}
+        self.interrupted_chat_requests: set[str] = set()
         self.ws_send_lock = asyncio.Lock()
 
     def start_speaking(self, stamp: str) -> None:
@@ -176,16 +181,73 @@ class LiveChatService:
         live_session = self.create_session(username)
         logger.info(f"[Live Chat] WebSocket 连接建立: {username}")
 
+        def finish_chat_request(
+            completed: asyncio.Task,
+            request_id: str,
+        ) -> None:
+            """Release a multiplexed request task and observe its exception.
+
+            Args:
+                completed: Finished WebSocket chat request task.
+                request_id: Request identifier used in the session task map.
+            """
+            if live_session.chat_request_tasks.get(request_id) is completed:
+                live_session.chat_request_tasks.pop(request_id, None)
+            try:
+                completed.result()
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                logger.error(
+                    f"[Live Chat] WebSocket chat request failed: {exc}",
+                    exc_info=True,
+                )
+
         try:
             while True:
                 message = await receive_json()
                 ct = force_ct or message.get("ct", "live")
                 if ct == "chat":
-                    await self.handle_chat_message(
-                        live_session,
-                        message,
-                        send_json,
-                    )
+                    if message.get("t") == "send":
+                        request_id = str(message.get("message_id") or uuid.uuid4())
+                        message["message_id"] = request_id
+                        existing_task = live_session.chat_request_tasks.get(request_id)
+                        if existing_task and not existing_task.done():
+                            await self.send_chat_payload(
+                                live_session,
+                                {
+                                    "ct": "chat",
+                                    "t": "error",
+                                    "data": "Duplicate active message_id",
+                                    "code": "INVALID_MESSAGE_FORMAT",
+                                    "message_id": request_id,
+                                },
+                                send_json,
+                            )
+                            continue
+                        task = asyncio.create_task(
+                            self.handle_chat_message(
+                                live_session,
+                                message,
+                                send_json,
+                            ),
+                            name=f"chat_ws_request_{request_id}",
+                        )
+                        live_session.chat_request_tasks[request_id] = task
+                        task.add_done_callback(
+                            lambda completed, request_id=request_id: (
+                                finish_chat_request(
+                                    completed,
+                                    request_id,
+                                )
+                            )
+                        )
+                    else:
+                        await self.handle_chat_message(
+                            live_session,
+                            message,
+                            send_json,
+                        )
                 else:
                     await self.handle_live_message(
                         live_session,
@@ -205,7 +267,7 @@ class LiveChatService:
             logger.info(f"[Live Chat] WebSocket 连接关闭: {username}")
 
     async def create_attachment_from_file(
-        self, filename: str, attach_type: str
+        self, filename: str, attach_type: str, display_name: str | None = None
     ) -> dict | None:
         return await create_attachment_part_from_existing_file(
             filename,
@@ -213,6 +275,7 @@ class LiveChatService:
             insert_attachment=self.db.insert_attachment,
             attachments_dir=self.attachments_dir,
             fallback_dirs=[self.webchat_img_dir],
+            display_name=display_name,
         )
 
     @staticmethod
@@ -355,7 +418,10 @@ class LiveChatService:
         return request_id
 
     async def cleanup_chat_subscriptions(self, session: LiveChatSession) -> None:
-        tasks = list(session.chat_subscription_tasks.values())
+        tasks = [
+            *session.chat_subscription_tasks.values(),
+            *session.chat_request_tasks.values(),
+        ]
         for task in tasks:
             task.cancel()
         if tasks:
@@ -365,6 +431,8 @@ class LiveChatService:
             webchat_queue_mgr.remove_back_queue(request_id)
         session.chat_subscriptions.clear()
         session.chat_subscription_tasks.clear()
+        session.chat_request_tasks.clear()
+        session.interrupted_chat_requests.clear()
 
     async def handle_chat_message(
         self,
@@ -373,6 +441,12 @@ class LiveChatService:
         send_json: SendJson,
     ) -> None:
         msg_type = message.get("t")
+        message_id = str(message.get("message_id") or uuid.uuid4())
+        request_metadata = (
+            {"message_id": message_id}
+            if msg_type == "send" or message.get("message_id")
+            else {}
+        )
 
         if msg_type == "bind":
             chat_session_id = message.get("session_id")
@@ -405,7 +479,12 @@ class LiveChatService:
             return
 
         if msg_type == "interrupt":
-            session.should_interrupt = True
+            if message.get("message_id"):
+                session.interrupted_chat_requests.add(message_id)
+            else:
+                session.interrupted_chat_requests.update(
+                    session.chat_request_tasks.keys()
+                )
             await self.send_chat_payload(
                 session,
                 {
@@ -413,6 +492,7 @@ class LiveChatService:
                     "t": "error",
                     "data": "INTERRUPTED",
                     "code": "INTERRUPTED",
+                    **request_metadata,
                 },
                 send_json,
             )
@@ -431,29 +511,15 @@ class LiveChatService:
             )
             return
 
-        if session.is_processing:
-            await self.send_chat_payload(
-                session,
-                {
-                    "ct": "chat",
-                    "t": "error",
-                    "data": "Session is busy",
-                    "code": "PROCESSING_ERROR",
-                },
-                send_json,
-            )
-            return
-
         payload = message.get("message")
         session_id = message.get("session_id") or session.session_id
-        message_id = message.get("message_id") or str(uuid.uuid4())
         selected_provider = message.get("selected_provider")
         selected_model = message.get("selected_model")
         selected_stt_provider = message.get("selected_stt_provider")
         selected_tts_provider = message.get("selected_tts_provider")
         persona_prompt = message.get("persona_prompt")
         show_reasoning = message.get("show_reasoning")
-        enable_streaming = message.get("enable_streaming", True)
+        flags = resolve_webchat_request_flags(message)
 
         if not isinstance(payload, list):
             await self.send_chat_payload(
@@ -463,6 +529,7 @@ class LiveChatService:
                     "t": "error",
                     "data": "message must be list",
                     "code": "INVALID_MESSAGE_FORMAT",
+                    **request_metadata,
                 },
                 send_json,
             )
@@ -478,6 +545,7 @@ class LiveChatService:
                     "t": "error",
                     "data": "Message content is empty",
                     "code": "INVALID_MESSAGE_FORMAT",
+                    **request_metadata,
                 },
                 send_json,
             )
@@ -485,8 +553,6 @@ class LiveChatService:
 
         await self.ensure_chat_subscription(session, session_id, send_json)
 
-        session.is_processing = True
-        session.should_interrupt = False
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
         llm_checkpoint_id = str(uuid.uuid4())
 
@@ -505,7 +571,7 @@ class LiveChatService:
                         "selected_tts_provider": selected_tts_provider,
                         "persona_prompt": persona_prompt,
                         "show_reasoning": show_reasoning,
-                        "enable_streaming": enable_streaming,
+                        "flags": flags,
                         "message_id": message_id,
                         "llm_checkpoint_id": llm_checkpoint_id,
                     },
@@ -531,6 +597,7 @@ class LiveChatService:
                         "created_at": to_utc_isoformat(saved_user_record.created_at),
                         "llm_checkpoint_id": llm_checkpoint_id,
                     },
+                    **request_metadata,
                 },
                 send_json,
             )
@@ -589,13 +656,14 @@ class LiveChatService:
                             "id": part["attachment_id"],
                             "type": part["type"],
                         },
+                        **request_metadata,
                     },
                     send_json,
                 )
 
             while True:
-                if session.should_interrupt:
-                    session.should_interrupt = False
+                if message_id in session.interrupted_chat_requests:
+                    session.interrupted_chat_requests.discard(message_id)
                     await flush_pending_bot_message()
                     break
 
@@ -623,6 +691,7 @@ class LiveChatService:
                                 "ct": "chat",
                                 "type": "agent_stats",
                                 "data": parsed_agent_stats,
+                                **request_metadata,
                             },
                             send_json,
                         )
@@ -650,13 +719,27 @@ class LiveChatService:
                     message_accumulator.add_attachment(part)
                     await send_attachment_saved_event(part)
                 elif result_type == "file":
-                    filename = str(result_text).replace("[FILE]", "").split("|", 1)[0]
-                    part = await self.create_attachment_from_file(filename, "file")
+                    filename = str(result_text).replace("[FILE]", "", 1)
+                    display_name = None
+                    if "|" in filename:
+                        filename, display_name = filename.split("|", 1)
+                    part = await self.create_attachment_from_file(
+                        filename,
+                        "file",
+                        display_name=display_name,
+                    )
                     message_accumulator.add_attachment(part)
                     await send_attachment_saved_event(part)
                 elif result_type == "video":
-                    filename = str(result_text).replace("[VIDEO]", "").split("|", 1)[0]
-                    part = await self.create_attachment_from_file(filename, "video")
+                    filename = str(result_text).replace("[VIDEO]", "", 1)
+                    display_name = None
+                    if "|" in filename:
+                        filename, display_name = filename.split("|", 1)
+                    part = await self.create_attachment_from_file(
+                        filename,
+                        "video",
+                        display_name=display_name,
+                    )
                     message_accumulator.add_attachment(part)
                     await send_attachment_saved_event(part)
 
@@ -688,6 +771,7 @@ class LiveChatService:
                                     ),
                                     "llm_checkpoint_id": llm_checkpoint_id,
                                 },
+                                **request_metadata,
                             },
                             send_json,
                         )
@@ -704,6 +788,7 @@ class LiveChatService:
                     "t": "error",
                     "data": f"处理失败: {str(exc)}",
                     "code": "PROCESSING_ERROR",
+                    **request_metadata,
                 },
                 send_json,
             )
@@ -716,7 +801,7 @@ class LiveChatService:
                     f"[Live Chat] Failed to persist pending chat message: {exc}",
                     exc_info=True,
                 )
-            session.is_processing = False
+            session.interrupted_chat_requests.discard(message_id)
             webchat_queue_mgr.remove_back_queue(message_id)
 
     async def build_chat_message_parts(self, message: list[dict]) -> list[dict]:

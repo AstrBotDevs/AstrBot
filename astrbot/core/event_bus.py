@@ -60,7 +60,7 @@ class EventBus:
             return
         exc = task.exception()
         if exc is not None:
-            logger.error("pipeline 任务执行异常", exc_info=exc)
+            logger.error("Pipeline task failed.", exc_info=exc)
 
     def _print_event(self, event: AstrMessageEvent, conf_name: str) -> None:
         """用于记录事件信息

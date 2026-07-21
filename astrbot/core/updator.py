@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import time
 import zipfile
@@ -8,6 +9,10 @@ import psutil
 
 from astrbot.core import logger
 from astrbot.core.config.default import VERSION
+from astrbot.core.desktop_runtime import (
+    DESKTOP_MANAGED_RESTART_MESSAGE,
+    is_desktop_managed_backend,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_path
 from astrbot.core.utils.io import ensure_dir
 
@@ -56,16 +61,19 @@ class AstrBotUpdator(RepoZipUpdator):
         try:
             parent = psutil.Process(os.getpid())
             children = parent.children(recursive=True)
-            logger.info(f"正在终止 {len(children)} 个子进程。")
+            logger.info(f"Terminating {len(children)} child processes.")
             for child in children:
-                logger.info(f"正在终止子进程 {child.pid}")
+                logger.info(f"Terminating child process {child.pid}")
                 child.terminate()
                 try:
                     child.wait(timeout=3)
                 except psutil.NoSuchProcess:
                     continue
                 except psutil.TimeoutExpired:
-                    logger.info(f"子进程 {child.pid} 没有被正常终止, 正在强行杀死。")
+                    logger.info(
+                        f"Child process {child.pid} did not terminate cleanly; "
+                        "killing it."
+                    )
                     child.kill()
         except psutil.NoSuchProcess:
             pass
@@ -135,6 +143,11 @@ class AstrBotUpdator(RepoZipUpdator):
             quoted_args = [f'"{arg}"' if " " in arg else arg for arg in argv[1:]]
             os.execl(executable, quoted_executable, *quoted_args)
             return
+        elif os.name == "nt":
+            subprocess.Popen(
+                [executable] + argv[1:], creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+            os._exit(0)
         os.execv(executable, argv)
 
     def _reboot(self, delay: int = 3) -> None:
@@ -142,6 +155,10 @@ class AstrBotUpdator(RepoZipUpdator):
         在指定的延迟后，终止所有子进程并重新启动程序
         这里只能使用 os.exec* 来重启程序
         """
+        if is_desktop_managed_backend():
+            logger.error(DESKTOP_MANAGED_RESTART_MESSAGE)
+            raise RuntimeError(DESKTOP_MANAGED_RESTART_MESSAGE)
+
         time.sleep(delay)
         self.terminate_child_processes()
         executable = sys.executable
@@ -151,7 +168,9 @@ class AstrBotUpdator(RepoZipUpdator):
             reboot_argv = self._build_reboot_argv(executable)
             self._exec_reboot(executable, reboot_argv)
         except Exception as e:
-            logger.error(f"重启失败（{executable}, {e}），请尝试手动重启。")
+            logger.error(
+                f"Restart failed ({executable}, {e}). Try restarting manually."
+            )
             raise e
 
     async def check_update(
@@ -225,7 +244,7 @@ class AstrBotUpdator(RepoZipUpdator):
         if latest:
             latest_version = update_data[0]["tag_name"]
             if self.compare_version(VERSION, latest_version) >= 0:
-                raise Exception("当前已经是最新版本。")
+                raise Exception("AstrBot is already up to date.")
             target_version = latest_version
             file_url = update_data[0]["zipball_url"]
         elif str(version).startswith("v"):
@@ -235,12 +254,12 @@ class AstrBotUpdator(RepoZipUpdator):
                     target_version = data["tag_name"]
                     file_url = data["zipball_url"]
             if not file_url:
-                raise Exception(f"未找到版本号为 {version} 的更新文件。")
+                raise Exception(f"No update package was found for version {version}.")
         else:
             if len(str(version)) != 40:
-                raise Exception("commit hash 长度不正确，应为 40")
+                raise Exception("The commit hash must be 40 characters long.")
             file_url = f"https://github.com/AstrBotDevs/AstrBot/archive/{version}.zip"
-        logger.info(f"准备更新至指定版本的 AstrBot Core: {version}")
+        logger.info(f"Preparing to update AstrBot Core to version {version}")
 
         if proxy:
             proxy = proxy.removesuffix("/")
@@ -252,7 +271,8 @@ class AstrBotUpdator(RepoZipUpdator):
         if hosted_package_url:
             try:
                 logger.info(
-                    f"优先从托管存储下载 AstrBot Core 更新包: {hosted_package_url}"
+                    "Attempting to download the AstrBot Core update package from "
+                    f"hosted storage first: {hosted_package_url}"
                 )
                 await self._download_file(
                     hosted_package_url,
@@ -266,8 +286,8 @@ class AstrBotUpdator(RepoZipUpdator):
                 return zip_path
             except Exception as exc:
                 logger.warning(
-                    f"从托管存储下载 AstrBot Core 更新包失败: {exc}，"
-                    "将回退到当前更新源。"
+                    "Failed to download the AstrBot Core update package from hosted "
+                    f"storage: {exc}. Falling back to the current update source."
                 )
 
         await self._download_file(
@@ -290,5 +310,5 @@ class AstrBotUpdator(RepoZipUpdator):
             Exception: If the archive cannot be extracted or applied.
         """
 
-        logger.info("下载 AstrBot Core 更新文件完成，正在执行解压...")
+        logger.info("AstrBot Core update package downloaded; extracting the archive.")
         self.unzip_file(str(zip_path), self.MAIN_PATH)

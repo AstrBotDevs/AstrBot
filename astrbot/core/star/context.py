@@ -401,7 +401,8 @@ class Context:
         prov = self.provider_manager.inst_map.get(provider_id)
         if provider_id and not prov:
             logger.warning(
-                f"没有找到 ID 为 {provider_id} 的提供商，这可能是由于您修改了提供商（模型）ID 导致的。"
+                f"Provider {provider_id} was not found. Its provider or model ID "
+                "may have been changed."
             )
         return prov
 
@@ -561,7 +562,7 @@ class Context:
             )
 
             if tool.name in tool_name:
-                logger.warning("替换已存在的 LLM 工具: " + tool.name)
+                logger.warning("Replacing existing LLM tool: " + tool.name)
                 self.provider_manager.llm_tools.remove_func(tool.name)
             self.provider_manager.llm_tools.func_list.append(tool)
 

@@ -4,6 +4,14 @@ import { fetchWithAuth } from "@/api/http";
 
 export type TransportMode = "sse" | "websocket";
 
+export function buildChatRequestFlags(enableStreaming = true) {
+  return {
+    enable_inline_genui: true,
+    enable_default_system_prompt: true,
+    enable_streaming: enableStreaming,
+  };
+}
+
 export interface MessagePart {
   type: string;
   text?: string;
@@ -14,6 +22,7 @@ export interface MessagePart {
   embedded_file?: { url?: string; filename?: string; attachment_id?: string };
   attachment_id?: string;
   filename?: string;
+  stored_filename?: string;
   tool_calls?: ToolCall[];
   [key: string]: unknown;
 }
@@ -68,9 +77,19 @@ export interface ChatSessionProject {
   emoji?: string;
 }
 
+interface ActiveChatRun {
+  run_id: string;
+  session_id: string;
+  llm_checkpoint_id?: string | null;
+  status?: string;
+  revision?: number;
+  content?: ChatContent;
+}
+
 interface ActiveConnection {
   sessionId: string;
   messageId: string;
+  runId?: string;
   transport: TransportMode;
   abort?: AbortController;
   ws?: WebSocket;
@@ -78,6 +97,10 @@ interface ActiveConnection {
   userRecord?: ChatRecord;
   completed?: boolean;
   errorShown?: boolean;
+  botVisible?: boolean;
+  deferredBeforeBot?: ChatRecord;
+  followUpCaptured?: boolean;
+  followUpTargetRunId?: string;
 }
 
 interface SendMessageStreamOptions {
@@ -122,6 +145,7 @@ export function useMessages(options: UseMessagesOptions) {
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
   const chatWebSockets: Record<string, WebSocket> = {};
   const closingChatWebSockets = new WeakSet<WebSocket>();
+  const deferredBotAnchors = new WeakMap<ChatRecord, ChatRecord>();
   const attachmentBlobCache = new Map<string, Promise<string>>();
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>(
     {},
@@ -142,7 +166,9 @@ export function useMessages(options: UseMessagesOptions) {
   });
 
   function isSessionRunning(sessionId: string) {
-    return Boolean(activeConnections[sessionId]);
+    return Object.values(activeConnections).some(
+      (connection) => connection.sessionId === sessionId,
+    );
   }
 
   function isUserMessage(msg: ChatRecord) {
@@ -160,34 +186,40 @@ export function useMessages(options: UseMessagesOptions) {
     return [];
   }
 
-  function isMessageStreaming(msg: ChatRecord, msgIndex: number) {
-    if (
-      !options.currentSessionId.value ||
-      !isSessionRunning(options.currentSessionId.value)
-    ) {
-      return false;
-    }
-    return !isUserMessage(msg) && msgIndex === activeMessages.value.length - 1;
+  function isMessageStreaming(msg: ChatRecord, _msgIndex: number) {
+    const sessionId = options.currentSessionId.value;
+    if (!sessionId || isUserMessage(msg)) return false;
+    return Object.values(activeConnections).some(
+      (connection) =>
+        connection.sessionId === sessionId &&
+        connection.botVisible !== false &&
+        (connection.botRecord === msg ||
+          (connection.botRecord?.id != null &&
+            String(connection.botRecord.id) === String(msg.id))),
+    );
   }
 
   async function resolvePartMedia(part: MessagePart): Promise<void> {
     if (part.embedded_url) return;
     let url: string;
     let cacheKey: string;
+    const storedFilename =
+      typeof part.stored_filename === "string" ? part.stored_filename : "";
+    const lookupFilename = storedFilename || part.filename || "";
     if (part.attachment_id) {
       cacheKey = `att:${part.attachment_id}`;
       url = fileApi.contentUrl(part.attachment_id);
-    } else if (part.filename) {
-      cacheKey = `file:${part.filename}`;
+    } else if (lookupFilename) {
+      cacheKey = `file:${lookupFilename}`;
       url = "";
     } else {
       return;
     }
     let promise = attachmentBlobCache.get(cacheKey);
     if (!promise) {
-      if (part.filename) {
+      if (!part.attachment_id && lookupFilename) {
         promise = fileApi
-          .getByName(part.filename)
+          .getByName(lookupFilename)
           .then((resp) => URL.createObjectURL(resp.data));
       } else {
         promise = fetchWithAuth(url).then(async (resp) => {
@@ -210,7 +242,11 @@ export function useMessages(options: UseMessagesOptions) {
     const tasks: Promise<void>[] = [];
     for (const record of records) {
       for (const part of record.content?.message || []) {
-        if (mediaTypes.includes(part.type) && !part.embedded_url && (part.attachment_id || part.filename)) {
+        if (
+          mediaTypes.includes(part.type) &&
+          !part.embedded_url &&
+          (part.attachment_id || part.stored_filename || part.filename)
+        ) {
           tasks.push(resolvePartMedia(part));
         }
       }
@@ -218,9 +254,13 @@ export function useMessages(options: UseMessagesOptions) {
     await Promise.all(tasks);
   }
 
-  async function loadSessionMessages(sessionId: string) {
+  async function loadSessionMessages(
+    sessionId: string,
+    resumeRuns = true,
+    showLoading = true,
+  ) {
     if (!sessionId) return;
-    loadingMessages.value = true;
+    if (showLoading) loadingMessages.value = true;
     try {
       const response = await chatApi.getSession(sessionId);
       const payload = response.data?.data || {};
@@ -231,12 +271,45 @@ export function useMessages(options: UseMessagesOptions) {
       messagesBySession[sessionId] = records;
       sessionProjects[sessionId] = normalizeSessionProject(payload.project);
       loadedSessions[sessionId] = true;
+      if (resumeRuns && Array.isArray(payload.active_runs)) {
+        await restoreNextActiveRun(sessionId, payload.active_runs);
+      }
     } catch (error) {
       console.error("Failed to load session messages:", error);
       messagesBySession[sessionId] = messagesBySession[sessionId] || [];
     } finally {
-      loadingMessages.value = false;
+      if (showLoading) loadingMessages.value = false;
     }
+  }
+
+  async function restoreNextActiveRun(
+    sessionId: string,
+    activeRuns: ActiveChatRun[],
+  ) {
+    const run = activeRuns[0];
+    if (!run?.run_id || isSessionRunning(sessionId)) return;
+
+    const checkpointId = run.llm_checkpoint_id || null;
+    const records = (messagesBySession[sessionId] || []).filter((record) => {
+      return !(
+        checkpointId &&
+        record.llm_checkpoint_id === checkpointId &&
+        messageContent(record).type === "bot"
+      );
+    });
+    const botRecord = normalizeHistoryRecord({
+      id: `active-run-${run.run_id}`,
+      content: run.content || { type: "bot", message: [] },
+      llm_checkpoint_id: checkpointId,
+      created_at: new Date().toISOString(),
+    });
+    botRecord.content.isLoading = botRecord.content.message.length === 0;
+    records.push(botRecord);
+    messagesBySession[sessionId] = records;
+    const restoredRecords = messagesBySession[sessionId];
+    const reactiveBotRecord = restoredRecords[restoredRecords.length - 1];
+    await resolveRecordMedia([reactiveBotRecord]);
+    startResumeStream(sessionId, run.run_id, reactiveBotRecord);
   }
 
   function createLocalExchange({
@@ -247,16 +320,16 @@ export function useMessages(options: UseMessagesOptions) {
     loadedSessions[sessionId] = true;
     messagesBySession[sessionId] = messagesBySession[sessionId] || [];
 
-    const userRecord: ChatRecord = {
+    const userRecord = reactive<ChatRecord>({
       id: `local-user-${messageId}`,
       created_at: new Date().toISOString(),
       content: {
         type: "user",
         message: parts.map(stripUploadOnlyFields),
       },
-    };
+    });
 
-    const botRecord: ChatRecord = {
+    const botRecord = reactive<ChatRecord>({
       id: `local-bot-${messageId}`,
       created_at: new Date().toISOString(),
       content: {
@@ -265,14 +338,33 @@ export function useMessages(options: UseMessagesOptions) {
         reasoning: "",
         isLoading: true,
       },
-    };
-
-    messagesBySession[sessionId].push(userRecord, botRecord);
+    });
 
     const sessionMessages = messagesBySession[sessionId];
+    if (isSessionRunning(sessionId)) {
+      const activeBotConnections = Object.values(activeConnections).filter(
+        (connection) =>
+          connection.sessionId === sessionId &&
+          connection.botVisible !== false &&
+          connection.botRecord &&
+          sessionMessages.includes(connection.botRecord),
+      );
+      const activeBotRecord =
+        activeBotConnections[activeBotConnections.length - 1]?.botRecord;
+      if (activeBotRecord) {
+        const activeBotIndex = sessionMessages.indexOf(activeBotRecord);
+        sessionMessages.splice(activeBotIndex, 0, userRecord);
+        deferredBotAnchors.set(botRecord, activeBotRecord);
+      } else {
+        sessionMessages.push(userRecord);
+      }
+    } else {
+      sessionMessages.push(userRecord, botRecord);
+    }
+
     return {
-      userRecord: sessionMessages[sessionMessages.length - 2],
-      botRecord: sessionMessages[sessionMessages.length - 1],
+      userRecord,
+      botRecord,
     };
   }
 
@@ -327,7 +419,9 @@ export function useMessages(options: UseMessagesOptions) {
       content: content as unknown as Record<string, unknown>,
     });
     const payload = response.data?.data || {};
-    const updated = payload.message ? normalizeHistoryRecord(payload.message) : null;
+    const updated = payload.message
+      ? normalizeHistoryRecord(payload.message)
+      : null;
     if (updated) {
       Object.assign(record, updated);
       await resolveRecordMedia([record]);
@@ -394,6 +488,7 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord: ChatRecord,
     selectedProvider = "",
     selectedModel = "",
+    enableStreaming = true,
   ) {
     if (!sessionId || botRecord.id == null) return;
     const targetMessageId = botRecord.id;
@@ -408,25 +503,32 @@ export function useMessages(options: UseMessagesOptions) {
     };
 
     const abort = new AbortController();
-    activeConnections[sessionId] = {
+    const connection: ActiveConnection = {
       sessionId,
       messageId: String(botRecord.id),
       transport: "sse",
       abort,
+      botRecord,
+      botVisible: true,
     };
+    activeConnections[connection.messageId] = connection;
 
     try {
-      const response = await fetchWithAuth(chatApi.regenerateMessageUrl(sessionId, targetMessageId), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetchWithAuth(
+        chatApi.regenerateMessageUrl(sessionId, targetMessageId),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            selected_provider: selectedProvider,
+            selected_model: selectedModel,
+            flags: buildChatRequestFlags(enableStreaming),
+          }),
+          signal: abort.signal,
         },
-        body: JSON.stringify({
-          selected_provider: selectedProvider,
-          selected_model: selectedModel,
-        }),
-        signal: abort.signal,
-      });
+      );
       if (!response.ok || !response.body) {
         throw new Error(`Regenerate failed: ${response.status}`);
       }
@@ -436,16 +538,21 @@ export function useMessages(options: UseMessagesOptions) {
         throw new Error(payload?.message || "Regenerate failed.");
       }
       await readSseStream(response.body, (payload) => {
-        processStreamPayload(botRecord, payload);
+        processStreamPayload(botRecord, payload, undefined, connection);
         options.onStreamUpdate?.(sessionId);
       });
     } catch (error) {
       if (!abort.signal.aborted) {
-        appendPlain(botRecord, `\n\n${String((error as Error)?.message || error)}`);
+        appendPlain(
+          botRecord,
+          `\n\n${String((error as Error)?.message || error)}`,
+        );
         console.error("Regenerate failed:", error);
       }
     } finally {
-      delete activeConnections[sessionId];
+      if (activeConnections[connection.messageId]?.abort === abort) {
+        delete activeConnections[connection.messageId];
+      }
       await options.onSessionsChanged?.();
     }
   }
@@ -460,8 +567,8 @@ export function useMessages(options: UseMessagesOptions) {
       connection.abort?.abort();
     });
     Object.values(chatWebSockets).forEach(closeTrackedWebSocket);
-    Object.keys(activeConnections).forEach((sessionId) => {
-      delete activeConnections[sessionId];
+    Object.keys(activeConnections).forEach((messageId) => {
+      delete activeConnections[messageId];
     });
     Object.keys(chatWebSockets).forEach((sessionId) => {
       delete chatWebSockets[sessionId];
@@ -477,7 +584,10 @@ export function useMessages(options: UseMessagesOptions) {
     const normalizedContent: ChatContent = {
       type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
       message: normalizedMessage,
-      reasoning: extractReasoningText(normalizedMessage, content.reasoning || ""),
+      reasoning: extractReasoningText(
+        normalizedMessage,
+        content.reasoning || "",
+      ),
       agentStats: content.agentStats || content.agent_stats,
       refs: content.refs,
     };
@@ -515,12 +625,17 @@ export function useMessages(options: UseMessagesOptions) {
     llmCheckpointId: string | null = null,
   ) {
     const abort = new AbortController();
-    activeConnections[sessionId] = {
+    const connection: ActiveConnection = {
       sessionId,
       messageId,
       transport: "sse",
       abort,
+      botRecord,
+      userRecord,
+      botVisible: messagesBySession[sessionId]?.includes(botRecord) ?? false,
+      deferredBeforeBot: deferredBotAnchors.get(botRecord),
     };
+    activeConnections[messageId] = connection;
 
     fetchWithAuth(chatApi.sendStreamUrl(), {
       method: "POST",
@@ -530,7 +645,7 @@ export function useMessages(options: UseMessagesOptions) {
       body: JSON.stringify({
         session_id: sessionId,
         message: parts.map(partToPayload),
-        enable_streaming: enableStreaming,
+        flags: buildChatRequestFlags(enableStreaming),
         selected_provider: selectedProvider,
         selected_model: selectedModel,
         _skip_user_history: skipUserHistory,
@@ -543,19 +658,109 @@ export function useMessages(options: UseMessagesOptions) {
           throw new Error(`SSE connection failed: ${response.status}`);
         }
         await readSseStream(response.body, (payload) => {
-          processStreamPayload(botRecord, payload, userRecord);
+          processStreamPayload(botRecord, payload, userRecord, connection);
           options.onStreamUpdate?.(sessionId);
         });
       })
       .catch((error) => {
         if (abort.signal.aborted) return;
+        ensureBotRecordVisible(connection);
         appendPlain(botRecord, `\n\n${String(error?.message || error)}`);
         console.error("SSE chat failed:", error);
       })
       .finally(async () => {
-        delete activeConnections[sessionId];
-        await options.onSessionsChanged?.();
+        if (activeConnections[messageId]?.abort === abort) {
+          delete activeConnections[messageId];
+          await options.onSessionsChanged?.();
+        }
       });
+  }
+
+  function startResumeStream(
+    sessionId: string,
+    runId: string,
+    botRecord: ChatRecord,
+  ) {
+    const abort = new AbortController();
+    const connection: ActiveConnection = {
+      sessionId,
+      messageId: runId,
+      runId,
+      transport: "sse",
+      abort,
+      botRecord,
+      botVisible: true,
+    };
+    activeConnections[runId] = connection;
+
+    void (async () => {
+      let receivedEnd = false;
+      let lastError: unknown = null;
+
+      for (
+        let attempt = 0;
+        attempt < 5 && !abort.signal.aborted;
+        attempt += 1
+      ) {
+        let retryable = true;
+        try {
+          const response = await fetchWithAuth(
+            chatApi.resumeRunStreamUrl(runId),
+            {
+              headers: { Accept: "text/event-stream" },
+              signal: abort.signal,
+            },
+          );
+          const contentType = response.headers.get("content-type") || "";
+          if (
+            !response.ok ||
+            !response.body ||
+            !contentType.includes("text/event-stream")
+          ) {
+            retryable = response.status >= 500;
+            throw new Error(`Resume stream failed: ${response.status}`);
+          }
+
+          await readSseStream(response.body, (payload) => {
+            processStreamPayload(botRecord, payload, undefined, connection);
+            options.onStreamUpdate?.(sessionId);
+            const payloadType = payload?.type || payload?.t;
+            if (payloadType === "end") receivedEnd = true;
+          });
+          if (receivedEnd) break;
+          lastError = new Error("Resume stream closed before completion.");
+        } catch (error) {
+          if (abort.signal.aborted) return;
+          lastError = error;
+        }
+
+        if (!retryable || attempt === 4 || abort.signal.aborted) break;
+        await new Promise<void>((resolve) => {
+          const timeout = window.setTimeout(resolve, 250 * 2 ** attempt);
+          abort.signal.addEventListener(
+            "abort",
+            () => {
+              window.clearTimeout(timeout);
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      }
+
+      if (!receivedEnd && lastError && !abort.signal.aborted) {
+        console.error("Resume chat stream failed:", lastError);
+      }
+
+      const ownsConnection = activeConnections[runId]?.abort === abort;
+      if (ownsConnection) delete activeConnections[runId];
+      if (!abort.signal.aborted && ownsConnection) {
+        if (!isSessionRunning(sessionId)) {
+          await loadSessionMessages(sessionId, true, false);
+        }
+        await options.onSessionsChanged?.();
+      }
+    })();
   }
 
   function startWebSocketStream(
@@ -570,7 +775,7 @@ export function useMessages(options: UseMessagesOptions) {
   ) {
     const ws = getOrCreateChatWebSocket(sessionId);
 
-    activeConnections[sessionId] = {
+    const connection: ActiveConnection = {
       sessionId,
       messageId,
       transport: "websocket",
@@ -579,7 +784,10 @@ export function useMessages(options: UseMessagesOptions) {
       userRecord,
       completed: false,
       errorShown: false,
+      botVisible: messagesBySession[sessionId]?.includes(botRecord) ?? false,
+      deferredBeforeBot: deferredBotAnchors.get(botRecord),
     };
+    activeConnections[messageId] = connection;
 
     sendWebSocketPayload(sessionId, messageId, {
       ct: "chat",
@@ -587,10 +795,19 @@ export function useMessages(options: UseMessagesOptions) {
       session_id: sessionId,
       message_id: messageId,
       message: parts.map(partToPayload),
-      enable_streaming: enableStreaming,
+      flags: buildChatRequestFlags(enableStreaming),
       selected_provider: selectedProvider,
       selected_model: selectedModel,
     });
+  }
+
+  function getWebSocketConnections(sessionId: string, ws?: WebSocket) {
+    return Object.values(activeConnections).filter(
+      (connection) =>
+        connection.sessionId === sessionId &&
+        connection.transport === "websocket" &&
+        (!ws || connection.ws === ws),
+    );
   }
 
   function getOrCreateChatWebSocket(sessionId: string) {
@@ -611,9 +828,10 @@ export function useMessages(options: UseMessagesOptions) {
       handleWebSocketMessage(sessionId, event);
     };
     ws.onerror = () => {
-      const connection = activeConnections[sessionId];
-      if (connection?.transport === "websocket" && connection.botRecord) {
+      for (const connection of getWebSocketConnections(sessionId, ws)) {
+        if (!connection.botRecord) continue;
         connection.errorShown = true;
+        ensureBotRecordVisible(connection);
         appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
       }
     };
@@ -622,20 +840,20 @@ export function useMessages(options: UseMessagesOptions) {
         delete chatWebSockets[sessionId];
       }
 
-      const connection = activeConnections[sessionId];
-      if (connection?.transport !== "websocket" || connection.ws !== ws) {
-        return;
+      const connections = getWebSocketConnections(sessionId, ws);
+      for (const connection of connections) {
+        if (
+          !connection.completed &&
+          !connection.errorShown &&
+          !closingChatWebSockets.has(ws) &&
+          connection.botRecord
+        ) {
+          ensureBotRecordVisible(connection);
+          appendPlain(connection.botRecord, "\n\nWebSocket connection closed.");
+        }
+        delete activeConnections[connection.messageId];
       }
-      if (
-        !connection.completed &&
-        !connection.errorShown &&
-        !closingChatWebSockets.has(ws) &&
-        connection.botRecord
-      ) {
-        appendPlain(connection.botRecord, "\n\nWebSocket connection closed.");
-      }
-      delete activeConnections[sessionId];
-      await options.onSessionsChanged?.();
+      if (connections.length) await options.onSessionsChanged?.();
     };
     return ws;
   }
@@ -647,7 +865,7 @@ export function useMessages(options: UseMessagesOptions) {
   ) {
     const ws = getOrCreateChatWebSocket(sessionId);
     const send = () => {
-      const connection = activeConnections[sessionId];
+      const connection = activeConnections[messageId];
       if (
         connection?.transport !== "websocket" ||
         connection.messageId !== messageId ||
@@ -660,6 +878,7 @@ export function useMessages(options: UseMessagesOptions) {
       } catch (error) {
         connection.errorShown = true;
         if (connection.botRecord) {
+          ensureBotRecordVisible(connection);
           appendPlain(connection.botRecord, "\n\nWebSocket connection failed.");
         }
         console.error("Failed to send WebSocket payload:", error);
@@ -679,14 +898,26 @@ export function useMessages(options: UseMessagesOptions) {
   }
 
   function handleWebSocketMessage(sessionId: string, event: MessageEvent) {
-    const connection = activeConnections[sessionId];
-    if (connection?.transport !== "websocket" || !connection.botRecord) {
-      return;
-    }
-
     try {
       const payload = JSON.parse(event.data);
-      processStreamPayload(connection.botRecord, payload, connection.userRecord);
+      const payloadMessageId =
+        payload?.message_id == null ? "" : String(payload.message_id);
+      let connection = payloadMessageId
+        ? activeConnections[payloadMessageId]
+        : undefined;
+      if (!connection) {
+        const candidates = getWebSocketConnections(sessionId);
+        connection = candidates[0];
+      }
+      if (connection?.transport !== "websocket" || !connection.botRecord) {
+        return;
+      }
+      processStreamPayload(
+        connection.botRecord,
+        payload,
+        connection.userRecord,
+        connection,
+      );
       options.onStreamUpdate?.(sessionId);
       if (payload.type === "end" || payload.t === "end") {
         void finishWebSocketStream(sessionId, connection.messageId);
@@ -697,7 +928,7 @@ export function useMessages(options: UseMessagesOptions) {
   }
 
   async function finishWebSocketStream(sessionId: string, messageId: string) {
-    const connection = activeConnections[sessionId];
+    const connection = activeConnections[messageId];
     if (
       connection?.transport !== "websocket" ||
       connection.messageId !== messageId
@@ -705,7 +936,7 @@ export function useMessages(options: UseMessagesOptions) {
       return;
     }
     connection.completed = true;
-    delete activeConnections[sessionId];
+    delete activeConnections[messageId];
     await options.onSessionsChanged?.();
   }
 
@@ -719,10 +950,48 @@ export function useMessages(options: UseMessagesOptions) {
     }
   }
 
+  function ensureBotRecordVisible(connection: ActiveConnection) {
+    const { botRecord, userRecord } = connection;
+    if (!botRecord) return;
+    const records = messagesBySession[connection.sessionId] || [];
+    if (records.includes(botRecord)) {
+      connection.botVisible = true;
+      return;
+    }
+    if (!userRecord) return;
+
+    const userIndex = records.indexOf(userRecord);
+    let insertionAnchor = connection.deferredBeforeBot;
+    if (insertionAnchor) {
+      for (const candidate of Object.values(activeConnections)) {
+        if (candidate.messageId === connection.messageId) break;
+        if (
+          candidate.sessionId === connection.sessionId &&
+          candidate.deferredBeforeBot === connection.deferredBeforeBot &&
+          candidate.botVisible &&
+          candidate.botRecord &&
+          records.includes(candidate.botRecord)
+        ) {
+          insertionAnchor = candidate.botRecord;
+        }
+      }
+    }
+    const anchorIndex = insertionAnchor ? records.indexOf(insertionAnchor) : -1;
+    if (anchorIndex >= 0) {
+      records.splice(anchorIndex + 1, 0, botRecord);
+    } else if (userIndex >= 0) {
+      records.splice(userIndex + 1, 0, botRecord);
+    } else {
+      records.push(botRecord);
+    }
+    connection.botVisible = true;
+  }
+
   function processStreamPayload(
     botRecord: ChatRecord,
     payload: any,
     userRecord?: ChatRecord,
+    connection?: ActiveConnection,
   ) {
     const normalized =
       payload?.ct === "chat"
@@ -732,7 +1001,61 @@ export function useMessages(options: UseMessagesOptions) {
     const chainType = normalized?.chain_type;
     const data = normalized?.data ?? "";
 
+    if (msgType === "follow_up_captured") {
+      if (connection) {
+        connection.followUpCaptured = true;
+        connection.followUpTargetRunId = String(data?.target_run_id || "");
+        const target = Object.values(activeConnections).find(
+          (candidate) =>
+            candidate.runId === connection.followUpTargetRunId &&
+            candidate.botRecord,
+        );
+        const records = messagesBySession[connection.sessionId] || [];
+        if (target?.botRecord && connection.userRecord) {
+          const userIndex = records.indexOf(connection.userRecord);
+          const targetIndex = records.indexOf(target.botRecord);
+          if (targetIndex >= 0) {
+            if (userIndex > targetIndex) {
+              records.splice(userIndex, 1);
+              const updatedTargetIndex = records.indexOf(target.botRecord);
+              records.splice(updatedTargetIndex, 0, connection.userRecord);
+            } else if (userIndex < 0) {
+              records.splice(targetIndex, 0, connection.userRecord);
+            }
+            connection.deferredBeforeBot = target.botRecord;
+          } else if (userIndex < 0) {
+            records.push(connection.userRecord);
+          }
+        }
+      }
+      return;
+    }
+    if (msgType === "run_started") {
+      if (connection) {
+        connection.runId = String(data?.run_id || connection.messageId);
+        ensureBotRecordVisible(connection);
+      }
+      return;
+    }
     if (msgType === "session_id" || msgType === "session_bound") return;
+    if (connection && msgType !== "user_message_saved" && msgType !== "end") {
+      ensureBotRecordVisible(connection);
+    }
+    if (msgType === "run_snapshot") {
+      const snapshot = data && typeof data === "object" ? data : {};
+      const snapshotRecord = normalizeHistoryRecord({
+        id: `active-run-${snapshot.run_id || "unknown"}`,
+        content: snapshot.content || { type: "bot", message: [] },
+        llm_checkpoint_id: snapshot.llm_checkpoint_id || null,
+      });
+      snapshotRecord.content.isLoading =
+        snapshot.status === "running" &&
+        snapshotRecord.content.message.length === 0;
+      botRecord.content = snapshotRecord.content;
+      botRecord.llm_checkpoint_id = snapshotRecord.llm_checkpoint_id;
+      void resolveRecordMedia([botRecord]);
+      return;
+    }
     if (msgType === "user_message_saved") {
       if (userRecord) {
         userRecord.id = data?.id || userRecord.id;
@@ -796,13 +1119,25 @@ export function useMessages(options: UseMessagesOptions) {
 
     if (["image", "record", "file", "video"].includes(msgType)) {
       markMessageStarted(botRecord);
-      const filename = String(data)
+      const rawFilename = String(data)
         .replace("[IMAGE]", "")
         .replace("[RECORD]", "")
         .replace("[FILE]", "")
-        .replace("[VIDEO]", "")
-        .split("|", 1)[0];
+        .replace("[VIDEO]", "");
+      const separatorIndex = rawFilename.indexOf("|");
+      const storedFilename =
+        separatorIndex >= 0
+          ? rawFilename.slice(0, separatorIndex)
+          : rawFilename;
+      const displayFilename =
+        separatorIndex >= 0
+          ? rawFilename.slice(separatorIndex + 1)
+          : storedFilename;
+      const filename = displayFilename || storedFilename;
       const mediaPart: MessagePart = { type: msgType, filename };
+      if (storedFilename && storedFilename !== filename) {
+        mediaPart.stored_filename = storedFilename;
+      }
       if (msgType !== "file") {
         resolvePartMedia(mediaPart).then(() => {
           messageContent(botRecord).message.push(mediaPart);
@@ -889,7 +1224,10 @@ export function normalizeMessageParts(
   fallbackReasoning = "",
 ): MessagePart[] {
   const normalizedParts = normalizePartsInternal(parts);
-  if (fallbackReasoning && !normalizedParts.some((part) => part.type === "think")) {
+  if (
+    fallbackReasoning &&
+    !normalizedParts.some((part) => part.type === "think")
+  ) {
     normalizedParts.unshift({ type: "think", think: fallbackReasoning });
   }
   return normalizedParts;
@@ -935,16 +1273,18 @@ export function reasoningActivityTitle(
   counts: ReturnType<typeof reasoningActivityCounts>,
   tm: (key: string, params?: Record<string, string | number>) => string,
 ) {
-  return [
-    counts.thinkCount > 0
-      ? tm("reasoning.thinkSummary", { count: counts.thinkCount })
-      : "",
-    counts.toolCount > 0
-      ? tm("reasoning.toolSummary", { count: counts.toolCount })
-      : "",
-  ]
-    .filter(Boolean)
-    .join(tm("reasoning.summarySeparator")) || tm("reasoning.thinking");
+  return (
+    [
+      counts.thinkCount > 0
+        ? tm("reasoning.thinkSummary", { count: counts.thinkCount })
+        : "",
+      counts.toolCount > 0
+        ? tm("reasoning.toolSummary", { count: counts.toolCount })
+        : "",
+    ]
+      .filter(Boolean)
+      .join(tm("reasoning.summarySeparator")) || tm("reasoning.thinking")
+  );
 }
 
 export function thinkingParts(content: ChatContent): MessagePart[] {
@@ -1116,7 +1456,8 @@ export function upsertToolCall(record: ChatRecord, toolCall: any) {
   const targetId = toolCall.id;
   if (targetId != null) {
     for (const part of record.content.message) {
-      if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
+      if (part.type !== "tool_call" || !Array.isArray(part.tool_calls))
+        continue;
       const matched = part.tool_calls.find((item) => item.id === targetId);
       if (matched) {
         Object.assign(matched, toolCall);
@@ -1124,7 +1465,10 @@ export function upsertToolCall(record: ChatRecord, toolCall: any) {
       }
     }
   }
-  record.content.message.push({ type: "tool_call", tool_calls: [{ ...toolCall }] });
+  record.content.message.push({
+    type: "tool_call",
+    tool_calls: [{ ...toolCall }],
+  });
 }
 
 export function finishToolCall(record: ChatRecord, result: any) {
