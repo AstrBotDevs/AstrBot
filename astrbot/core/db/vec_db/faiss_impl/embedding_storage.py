@@ -137,13 +137,12 @@ class EmbeddingStorage:
         await self.save_index()
 
     async def search(self, vector: np.ndarray, k: int) -> tuple:
-        """搜索向量"""
+        """搜索向量
+
+        接受 1D (d,) 或 2D (1, d) 向量，自动展平为 Faiss 期望的 (1, d)。
+        """
         assert self.index is not None, "FAISS index is not initialized."
-        if vector.ndim != 1:
-            raise ValueError(
-                f"查询向量必须是 1 维, 实际维度: {vector.ndim}。"
-                " 如需批量搜索请使用 Faiss 原生 API。"
-            )
+        vector = np.asarray(vector, dtype=np.float32).ravel()
         if vector.shape[0] != self.dimension:
             raise ValueError(
                 f"向量维度不匹配, 期望: {self.dimension}, 实际: {vector.shape[0]}",
