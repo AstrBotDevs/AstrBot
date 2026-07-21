@@ -1725,6 +1725,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "https://api.fish.audio/v1",
+                        "fishaudio-tts-model": "",
                         "fishaudio-tts-character": "可莉",
                         "fishaudio-tts-reference-id": "",
                         "timeout": "20",
@@ -2677,6 +2678,11 @@ CONFIG_METADATA_2 = {
                         "description": "reference_id",
                         "type": "string",
                         "hint": "fishaudio TTS 的参考模型ID（可选）。如果填入此字段，将直接使用模型ID而不通过角色名称查询。例如：626bb6d3f3364c9cbc3aa6a67300a664。更多模型请访问：https://fish.audio/zh-CN/discovery，进入模型详情界面后可复制模型ID",
+                    },
+                    "fishaudio-tts-model": {
+                        "description": "TTS 模型",
+                        "type": "string",
+                        "hint": "FishAudio TTS 引擎模型 ID，如 s1、s2-pro。留空则使用 API 默认模型。详见 https://fish.audio",
                     },
                     "whisper_hint": {
                         "description": "本地部署 Whisper 模型须知",
