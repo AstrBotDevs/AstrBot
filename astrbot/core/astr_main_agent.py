@@ -177,18 +177,43 @@ class MainAgentBuildConfig:
     file_extract_msh_api_key: str = ""
     """The API key for Moonshot AI file extraction provider."""
     context_limit_reached_strategy: str = "truncate_by_turns"
-    """The strategy to handle context length limit reached."""
+    """[DEPRECATED — migrated to orthogonal fields below]"""
     llm_compress_instruction: str = ""
-    """The instruction for compression in llm_compress strategy."""
+    """[DEPRECATED — migrated to summary_prompt]"""
     llm_compress_keep_recent_ratio: float = 0.15
-    """Percent of current context tokens to keep as exact recent context during llm_compress strategy."""
+    """[DEPRECATED — migrated to retain_percentage]"""
     llm_compress_provider_id: str = ""
-    """The provider ID for the LLM used in context compression."""
+    """[DEPRECATED — migrated to summary_provider_id]"""
     max_context_length: int = 50
-    """The maximum number of turns to keep in context. -1 means no limit.
-    This enforce max turns before compression"""
+    """[DEPRECATED — migrated to enable_turn_limit + max_turns]"""
     dequeue_context_length: int = 10
-    """The number of oldest turns to remove when context length limit is reached."""
+    """[DEPRECATED — migrated to discard_turns]"""
+
+    # -- New context management fields (orthogonal trigger/disposal) --
+    enable_turn_limit: bool = False
+    """Enable turn-based trigger. When True, exceeding max_turns triggers disposal."""
+    max_turns: int = 50
+    """Maximum conversation turns before disposal fires. Must be >= 2."""
+    enable_token_guard: bool = True
+    """Enable token-count-based trigger."""
+    token_guard_threshold: float = 0.82
+    """Token ratio (current_tokens / max_tokens) that triggers disposal. Range 0.5–0.99."""
+    enable_summary: bool = True
+    """Enable LLM summary compression. Priority over discard."""
+    enable_discard: bool = True
+    """Enable discard of oldest turns. Fallback when summary unavailable."""
+    discard_turns: int = 1
+    """Number of turns to discard at once. Must be >= 1."""
+    summary_prompt: str = ""
+    """Custom instruction for summary generation. Empty = built-in default."""
+    summary_provider_id: str = ""
+    """Provider ID for summary LLM. Empty = use current chat model."""
+    retention_method: str = "turns"
+    """Retention method: 'turns', 'percentage', or 'null'."""
+    retain_turns: int = 20
+    """Minimum turns to keep when retention_method = 'turns'. Must be >= 1."""
+    retain_percentage: float = 0.3
+    """Minimum ratio of turns to keep when retention_method = 'percentage'. Range 0.1–0.9."""
     fallback_max_context_tokens: int = 128000
     """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
     llm_safety_mode: bool = True
@@ -1263,15 +1288,13 @@ def _get_compress_provider(
     plugin_context: Context,
     event: AstrMessageEvent | None = None,
 ) -> Provider | None:
-    if config.context_limit_reached_strategy != "llm_compress":
-        return None
-    if config.llm_compress_provider_id:
-        provider = plugin_context.get_provider_by_id(config.llm_compress_provider_id)
+    if config.summary_provider_id:
+        provider = plugin_context.get_provider_by_id(config.summary_provider_id)
         if provider and isinstance(provider, Provider):
             return provider
         logger.warning(
             "指定的上下文压缩模型 %s 不可用",
-            config.llm_compress_provider_id,
+            config.summary_provider_id,
         )
     # fallback: use current chat provider for this session
     if event:
@@ -1645,11 +1668,18 @@ async def build_main_agent(
         tool_executor=FunctionToolExecutor(),
         agent_hooks=MAIN_AGENT_HOOKS,
         streaming=config.streaming_response,
-        llm_compress_instruction=config.llm_compress_instruction,
-        llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
-        llm_compress_provider=_get_compress_provider(config, plugin_context, event),
-        truncate_turns=config.dequeue_context_length,
-        enforce_max_turns=config.max_context_length,
+        summary_prompt=config.summary_prompt,
+        retain_percentage=config.retain_percentage,
+        summary_provider=_get_compress_provider(config, plugin_context, event),
+        discard_turns=config.discard_turns,
+        enable_turn_limit=config.enable_turn_limit,
+        max_turns=config.max_turns,
+        enable_token_guard=config.enable_token_guard,
+        token_guard_threshold=config.token_guard_threshold,
+        enable_summary=config.enable_summary,
+        enable_discard=config.enable_discard,
+        retention_method=config.retention_method,
+        retain_turns=config.retain_turns,
         tool_schema_mode=config.tool_schema_mode,
         fallback_providers=fallback_providers,
         request_max_retries=config.provider_settings.get("request_max_retries", 5),

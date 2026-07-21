@@ -3,130 +3,173 @@ from astrbot.core.agent.message import Message
 
 from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
 from .config import ContextConfig
+from .round_utils import split_into_rounds
 from .token_counter import EstimateTokenCounter
 from .truncator import ContextTruncator
 
 
 class ContextManager:
-    """Context compression manager."""
+    """Context compression manager — orthogonal trigger/disposal model."""
 
     def __init__(
         self,
         config: ContextConfig,
     ) -> None:
-        """Initialize the context manager.
-
-        There are two strategies to handle context limit reached:
-        1. Truncate by turns: remove older messages by turns.
-        2. LLM-based compression: use LLM to summarize old messages.
-
-        Args:
-            config: The context configuration.
-
-        """
         self.config = config
-
         self.token_counter = config.custom_token_counter or EstimateTokenCounter()
         self.truncator = ContextTruncator()
 
+        # Build compressors on demand. Summary compressor only when a provider is
+        # available; discard compressor is always available (no external dep).
+        self._summary_compressor = None
         if config.custom_compressor:
-            self.compressor = config.custom_compressor
-        elif config.llm_compress_provider:
-            self.compressor = LLMSummaryCompressor(
-                provider=config.llm_compress_provider,
-                keep_recent_ratio=config.llm_compress_keep_recent_ratio,
-                instruction_text=config.llm_compress_instruction,
-                token_counter=self.token_counter,
-            )
+            self._unity_compressor = config.custom_compressor
         else:
-            self.compressor = TruncateByTurnsCompressor(
-                truncate_turns=config.truncate_turns,
+            if config.summary_provider:
+                self._summary_compressor = LLMSummaryCompressor(
+                    provider=config.summary_provider,
+                    keep_recent_ratio=config.retain_percentage,
+                    instruction_text=config.summary_prompt,
+                    compression_threshold=config.token_guard_threshold,
+                    token_counter=self.token_counter,
+                )
+            self._discard_compressor = TruncateByTurnsCompressor(
+                truncate_turns=config.discard_turns,
+                compression_threshold=config.token_guard_threshold,
             )
+
+    # -- helpers ----------------------------------------------------------
+
+    def _count_turns(self, messages: list[Message]) -> int:
+        """Count the number of conversation turns (non-system rounds)."""
+        rounds = split_into_rounds(messages)
+        # Filter out rounds that are exclusively system messages
+        return sum(
+            1
+            for rnd in rounds
+            if any(
+                (isinstance(m, Message) and m.role != "system") for m in rnd
+            )
+        )
+
+    def _compute_discard_limit(self, total_turns: int) -> int:
+        """Maximum number of turns that discard may remove, given retention."""
+        method = self.config.retention_method
+        if method == "turns":
+            return max(0, total_turns - self.config.retain_turns)
+        if method == "percentage":
+            floor = int(total_turns * self.config.retain_percentage)
+            return max(0, total_turns - floor)
+        # "null" — no lower bound
+        return total_turns
+
+    async def _try_summary(self, messages: list[Message]) -> list[Message] | None:
+        """Attempt LLM summary compression. Returns compressed messages or None."""
+        if not self.config.enable_summary or self._summary_compressor is None:
+            return None
+        try:
+            result = await self._summary_compressor(messages)
+            if result is messages:
+                return None  # compressor chose not to compress
+            if len(result) >= len(messages):
+                return None  # no effective reduction
+            return result
+        except Exception:
+            logger.warning("LLM summary compression failed, falling back.", exc_info=True)
+            return None
+
+    def _try_discard(self, messages: list[Message]) -> list[Message] | None:
+        """Discard oldest turns, bounded by retention."""
+        if not self.config.enable_discard:
+            return None
+        total_turns = self._count_turns(messages)
+        max_discardable = self._compute_discard_limit(total_turns)
+        if max_discardable <= 0:
+            return None  # retention prevents any discard
+        requested = min(self.config.discard_turns, max_discardable)
+        return self.truncator.truncate_by_dropping_oldest_turns(
+            messages, drop_turns=requested,
+        )
+
+    def _triggers_fired(
+        self,
+        messages: list[Message],
+        current_tokens: int,
+        max_context_tokens: int,
+    ) -> bool:
+        """Return True if any trigger condition is met."""
+        if self.config.enable_turn_limit:
+            total_turns = self._count_turns(messages)
+            if total_turns > self.config.max_turns:
+                return True
+
+        if self.config.enable_token_guard:
+            if max_context_tokens > 0 and current_tokens > 0:
+                ratio = current_tokens / max_context_tokens
+                if ratio > self.config.token_guard_threshold:
+                    return True
+
+        return False
+
+    # -- main entry point -------------------------------------------------
 
     async def process(
         self,
         messages: list[Message],
         trusted_token_usage: int = 0,
+        max_context_tokens: int = 0,
     ) -> list[Message]:
-        """Process the messages.
+        """Process messages through the orthogonal trigger/disposal pipeline.
 
         Args:
             messages: The original message list.
+            trusted_token_usage: External token count hint (e.g. from conversation stats).
+            max_context_tokens: The model's context window size (provider-level value).
 
         Returns:
             The processed message list.
-
         """
         try:
             result = messages
 
-            # 1. 基于轮次的截断 (Enforce max turns)
-            if self.config.enforce_max_turns != -1:
-                result = self.truncator.truncate_by_turns(
-                    result,
-                    keep_most_recent_turns=self.config.enforce_max_turns,
-                    drop_turns=self.config.truncate_turns,
-                )
+            # 1. 独立检查前置条件
+            current_tokens = self.token_counter.count_tokens(
+                result, trusted_token_usage,
+            )
 
-            # 2. 基于 token 的压缩
-            if self.config.max_context_tokens > 0:
-                total_tokens = self.token_counter.count_tokens(
-                    result,
-                    trusted_token_usage,
-                )
+            if not self._triggers_fired(result, current_tokens, max_context_tokens):
+                return result
 
-                if self.compressor.should_compress(
-                    result,
-                    total_tokens,
-                    self.config.max_context_tokens,
-                ):
-                    result = await self._run_compression(result, total_tokens)
+            # 2. 处置入口：custom > summary > discard
+            if hasattr(self, "_unity_compressor"):
+                result = await self._unity_compressor(result)
+            else:
+                compressed = await self._try_summary(result)
+                if compressed is not None:
+                    result = compressed
+                else:
+                    discarded = self._try_discard(result)
+                    if discarded is not None:
+                        result = discarded
+                    else:
+                        logger.warning(
+                            "Context disposal triggered but both summary and discard "
+                            "are unavailable or disabled. No compression applied.",
+                        )
+
+            # 3. double-check（仅 enable_token_guard）
+            if self.config.enable_token_guard and max_context_tokens > 0:
+                tokens_after = self.token_counter.count_tokens(result)
+                if tokens_after > 0:
+                    ratio = tokens_after / max_context_tokens
+                    if ratio > self.config.token_guard_threshold:
+                        logger.info(
+                            "Context still exceeds token guard threshold after disposal, "
+                            "applying halving truncation (unconstrained by retention).",
+                        )
+                        result = self.truncator.truncate_by_halving(result)
 
             return result
-        except Exception as e:
-            logger.error(f"Error during context processing: {e}", exc_info=True)
+        except Exception:
+            logger.error("Error during context processing.", exc_info=True)
             return messages
-
-    async def _run_compression(
-        self,
-        messages: list[Message],
-        prev_tokens: int,
-    ) -> list[Message]:
-        """Compress/truncate the messages.
-
-        Args:
-            messages: The original message list.
-            prev_tokens: The token count before compression.
-
-        Returns:
-            The compressed/truncated message list.
-
-        """
-        logger.debug("Compress triggered, starting compression...")
-
-        messages = await self.compressor(messages)
-
-        # double check
-        tokens_after_summary = self.token_counter.count_tokens(messages)
-
-        # calculate compress rate
-        compress_rate = (tokens_after_summary / self.config.max_context_tokens) * 100
-        logger.info(
-            f"Compress completed."
-            f" {prev_tokens} -> {tokens_after_summary} tokens,"
-            f" compression rate: {compress_rate:.2f}%.",
-        )
-
-        # last check
-        if self.compressor.should_compress(
-            messages,
-            tokens_after_summary,
-            self.config.max_context_tokens,
-        ):
-            logger.info(
-                "Context still exceeds max tokens after compression, applying halving truncation...",
-            )
-            # still need compress, truncate by half
-            messages = self.truncator.truncate_by_halving(messages)
-
-        return messages

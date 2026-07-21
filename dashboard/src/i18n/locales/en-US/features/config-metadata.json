@@ -11,7 +11,13 @@
         },
         "agent_runner_type": {
           "description": "Runner",
-          "labels": ["Built-in Agent", "Dify", "Coze", "Alibaba Cloud Bailian Application", "DeerFlow"]
+          "labels": [
+            "Built-in Agent",
+            "Dify",
+            "Coze",
+            "Alibaba Cloud Bailian Application",
+            "DeerFlow"
+          ]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent Runner Provider ID"
@@ -251,41 +257,6 @@
         }
       }
     },
-    "truncate_and_compress": {
-      "hint": "[Context Management](https://docs.astrbot.app/en/use/context-compress.html)",
-      "description": "Context Management Strategy",
-      "provider_settings": {
-        "max_context_length": {
-          "description": "Max Turns Before Compression",
-          "hint": "Persistent conversation history is truncated or LLM-compressed by the strategy below only after it exceeds this many turns. Request-time contexts are also constrained by this value before sending. -1 means no turn-based limit."
-        },
-        "dequeue_context_length": {
-          "description": "Turns to Discard When Limit Exceeded",
-          "hint": "When history exceeds 'Max Turns Before Compression' and LLM compression is unavailable, discard this many oldest turns at once. Request-time truncation also reuses this value."
-        },
-        "context_limit_reached_strategy": {
-          "description": "Handling for History Limits or Context Window Pressure",
-          "labels": ["Truncate by Turns", "Compress by LLM"],
-          "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
-        },
-        "llm_compress_instruction": {
-          "description": "Context Compression Instruction",
-          "hint": "If empty, the default prompt will be used."
-        },
-        "llm_compress_keep_recent_ratio": {
-          "description": "Recent Context Token Ratio to Keep",
-          "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
-        },
-        "llm_compress_provider_id": {
-          "description": "Model Provider ID for Context Compression",
-          "hint": "When left empty, the current chat model will be used for compression. If the model is unavailable or compression fails, AstrBot falls back to the 'Truncate by Turns' strategy."
-        },
-        "fallback_max_context_tokens": {
-          "description": "Fallback context window size",
-          "hint": "When max_context_tokens is 0 and the model is not in built-in metadata, use this value as the context window size. Default: 128000."
-        }
-      }
-    },
     "others": {
       "description": "Other Settings",
       "provider_settings": {
@@ -358,7 +329,10 @@
         "tool_schema_mode": {
           "description": "Tool Schema Mode",
           "hint": "Lazy-tool-load sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
-          "labels": ["Lazy-tool-load (two-stage)", "Full schema"]
+          "labels": [
+            "Lazy-tool-load (two-stage)",
+            "Full schema"
+          ]
         },
         "streaming_response": {
           "description": "Streaming Output"
@@ -366,7 +340,10 @@
         "unsupported_streaming_strategy": {
           "description": "Platforms Without Streaming Support",
           "hint": "Select the handling method for platforms that don't support streaming responses. Real-time segmented reply sends content immediately when the system detects segment points like punctuation during streaming reception",
-          "labels": ["Real-time Segmented Reply", "Disable Streaming Response"]
+          "labels": [
+            "Real-time Segmented Reply",
+            "Disable Streaming Response"
+          ]
         },
         "wake_prefix": {
           "description": "Additional LLM Chat Wake Prefix",
@@ -400,6 +377,69 @@
       "provider_tts_settings": {
         "dual_output": {
           "description": "Output Both Voice and Text When TTS is Enabled"
+        }
+      }
+    },
+    "context_management": {
+      "hint": "[Context Management](https://docs.astrbot.app/en/use/context-compress.html)",
+      "description": "Context Management (Orthogonal Trigger/Disposal)",
+      "provider_settings": {
+        "enable_turn_limit": {
+          "description": "Enable Turn Limit Trigger",
+          "hint": "When enabled, disposal triggers when turn count exceeds max_turns."
+        },
+        "max_turns": {
+          "description": "Max Turns Before Trigger",
+          "hint": "Triggers disposal when turn count exceeds this value. Minimum 2."
+        },
+        "enable_token_guard": {
+          "description": "Enable Token Ratio Trigger",
+          "hint": "When enabled, disposal triggers when token usage ratio exceeds the threshold."
+        },
+        "token_guard_threshold": {
+          "description": "Token Trigger Threshold",
+          "hint": "Triggers disposal when current_tokens / context_window exceeds this ratio. Range 0.5–0.99."
+        },
+        "enable_summary": {
+          "description": "Enable LLM Summary Compression",
+          "hint": "When enabled, LLM summary is used first on trigger. Priority over discard when both are on."
+        },
+        "summary_prompt": {
+          "description": "Summary Prompt",
+          "hint": "Custom instruction for summary generation. Empty uses built-in default."
+        },
+        "summary_provider_id": {
+          "description": "Summary Provider ID",
+          "hint": "Provider ID for summary LLM. Empty uses the current chat model."
+        },
+        "enable_discard": {
+          "description": "Enable Discard Old Turns",
+          "hint": "When enabled, oldest turns are discarded on trigger. Fallback when summary is unavailable."
+        },
+        "discard_turns": {
+          "description": "Turns to Discard at Once",
+          "hint": "Number of oldest turns to discard on trigger. Minimum 1. Constrained by retention."
+        },
+        "retention_method": {
+          "description": "Retention Method",
+          "labels": [
+            "By Turns",
+            "By Percentage",
+            "No Retention"
+          ],
+          "hint": "Lower bound on how many turns to keep."
+        },
+        "retain_turns": {
+          "description": "Minimum Turns to Retain",
+          "hint": "When retention method is turns, at least this many turns are kept. Minimum 1."
+        },
+        "retain_percentage": {
+          "description": "Minimum Percentage to Retain",
+          "hint": "When retention method is percentage, at least this ratio of turns is kept. Range 0.1–0.9."
+        },
+        "fallback_max_context_tokens": {
+          "description": "Fallback Context Window Size",
+          "hint": "Used when the model is not in built-in metadata. Default: 128000."
         }
       }
     }
@@ -468,7 +508,10 @@
       },
       "lark_connection_mode": {
         "description": "Subscription Mode",
-        "labels": ["Long Connection Mode", "Webhook Server Mode"]
+        "labels": [
+          "Long Connection Mode",
+          "Webhook Server Mode"
+        ]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
@@ -957,7 +1000,10 @@
           "split_mode": {
             "description": "Split Mode",
             "hint": "Used to segment a message. By default, it will be separated by punctuation marks like period, question mark, etc. For example, filling `[。？！]` will remove all periods, question marks, and exclamation marks. re.findall(r'<regex>', text)",
-            "labels": ["Regex", "Words List"]
+            "labels": [
+              "Regex",
+              "Words List"
+            ]
           },
           "regex": {
             "description": "Segmentation Regular Expression",
@@ -1252,7 +1298,12 @@
       "modalities": {
         "description": "Model capabilities",
         "hint": "Modalities supported by the model. If the model does not support images, uncheck image.",
-        "labels": ["Text", "Image", "Audio", "Tool use"]
+        "labels": [
+          "Text",
+          "Image",
+          "Audio",
+          "Tool use"
+        ]
       },
       "custom_headers": {
         "description": "Custom request headers",

@@ -124,8 +124,14 @@ DEFAULT_CONFIG = {
         "default_personality": "default",
         "persona_pool": ["*"],
         "prompt_prefix": "{{prompt}}",
-        "context_limit_reached_strategy": "llm_compress",  # or truncate_by_turns
-        "llm_compress_instruction": (
+        "enable_turn_limit": False,
+        "max_turns": 50,
+        "enable_token_guard": True,
+        "token_guard_threshold": 0.82,
+        "enable_summary": True,
+        "enable_discard": True,
+        "discard_turns": 1,
+        "summary_prompt": (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
             "The primary goal of this summary is to enable seamless continuation of the work that follows.\n"
             "1. Systematically cover all core topics discussed and the final conclusion/outcome for each; clearly highlight the latest primary focus.\n"
@@ -134,10 +140,10 @@ DEFAULT_CONFIG = {
             "4. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "5. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent_ratio": 0.15,
-        "llm_compress_provider_id": "",
-        "max_context_length": -1,  # 默认不限制
-        "dequeue_context_length": 1,
+        "summary_provider_id": "",
+        "retention_method": "turns",
+        "retain_turns": 20,
+        "retain_percentage": 0.3,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -2872,11 +2878,41 @@ CONFIG_METADATA_2 = {
                     "prompt_prefix": {
                         "type": "string",
                     },
-                    "max_context_length": {
+                    "enable_turn_limit": {
+                        "type": "bool",
+                    },
+                    "max_turns": {
                         "type": "int",
                     },
-                    "dequeue_context_length": {
+                    "enable_token_guard": {
+                        "type": "bool",
+                    },
+                    "token_guard_threshold": {
+                        "type": "float",
+                    },
+                    "enable_summary": {
+                        "type": "bool",
+                    },
+                    "enable_discard": {
+                        "type": "bool",
+                    },
+                    "discard_turns": {
                         "type": "int",
+                    },
+                    "summary_prompt": {
+                        "type": "string",
+                    },
+                    "summary_provider_id": {
+                        "type": "string",
+                    },
+                    "retention_method": {
+                        "type": "string",
+                    },
+                    "retain_turns": {
+                        "type": "int",
+                    },
+                    "retain_percentage": {
+                        "type": "float",
                     },
                     "streaming_response": {
                         "type": "bool",
@@ -3613,7 +3649,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.enable": True,
                 },
             },
-            "truncate_and_compress": {
+            "context_management": {
                 "hint": "",
                 "description": "上下文管理策略",
                 "type": "object",

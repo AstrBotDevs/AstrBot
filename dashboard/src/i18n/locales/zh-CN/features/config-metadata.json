@@ -11,7 +11,13 @@
         },
         "agent_runner_type": {
           "description": "执行器",
-          "labels": ["内置 Agent", "Dify", "Coze", "阿里云百炼应用", "DeerFlow"]
+          "labels": [
+            "内置 Agent",
+            "Dify",
+            "Coze",
+            "阿里云百炼应用",
+            "DeerFlow"
+          ]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent 执行器提供商 ID"
@@ -253,41 +259,6 @@
         }
       }
     },
-    "truncate_and_compress": {
-      "hint": "AstrBot 如何管理工作记忆。详见: [上下文管理策略](https://docs.astrbot.app/use/context-compress.html)。",
-      "description": "上下文管理策略",
-      "provider_settings": {
-        "max_context_length": {
-          "description": "压缩前最多保留对话轮数",
-          "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。"
-        },
-        "dequeue_context_length": {
-          "description": "轮次超限时一次丢弃轮数",
-          "hint": "当超过\"压缩前最多保留对话轮数\"且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。"
-        },
-        "context_limit_reached_strategy": {
-          "description": "历史超限或上下文接近上限时的处理方式",
-          "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
-          "hint": "普通会话历史仅在超过\"压缩前最多保留对话轮数\"后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。"
-        },
-        "llm_compress_instruction": {
-          "description": "上下文压缩提示词",
-          "hint": "如果为空则使用默认提示词。"
-        },
-        "llm_compress_keep_recent_ratio": {
-          "description": "压缩时保留最近上下文比例",
-          "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。"
-        },
-        "llm_compress_provider_id": {
-          "description": "用于上下文压缩的模型提供商 ID",
-          "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为\"按对话轮数截断\"的策略。"
-        },
-        "fallback_max_context_tokens": {
-          "description": "上下文窗口兜底值",
-          "hint": "当 max_context_tokens 为 0 且模型不在内置元数据中时，使用此值作为上下文窗口大小。默认 128000。"
-        }
-      }
-    },
     "others": {
       "description": "其他配置",
       "provider_settings": {
@@ -360,7 +331,10 @@
         "tool_schema_mode": {
           "description": "工具调用模式",
           "hint": "lazy-tool-load 先下发工具名称与描述，再下发参数；full 一次性下发完整参数。",
-          "labels": ["Lazy-tool-load（两阶段）", "Full（完整参数）"]
+          "labels": [
+            "Lazy-tool-load（两阶段）",
+            "Full（完整参数）"
+          ]
         },
         "streaming_response": {
           "description": "流式输出"
@@ -368,7 +342,10 @@
         "unsupported_streaming_strategy": {
           "description": "不支持流式回复的平台",
           "hint": "选择在不支持流式回复的平台上的处理方式。实时分段回复会在系统接收流式响应检测到诸如标点符号等分段点时,立即发送当前已接收的内容",
-          "labels": ["实时分段回复", "关闭流式回复"]
+          "labels": [
+            "实时分段回复",
+            "关闭流式回复"
+          ]
         },
         "wake_prefix": {
           "description": "LLM 聊天额外唤醒前缀",
@@ -402,6 +379,69 @@
       "provider_tts_settings": {
         "dual_output": {
           "description": "开启 TTS 时同时输出语音和文字内容"
+        }
+      }
+    },
+    "context_management": {
+      "hint": "AstrBot 如何管理工作记忆。详见: [上下文管理策略](https://docs.astrbot.app/use/context-compress.html)。",
+      "description": "上下文管理策略（正交触发/处置模型）",
+      "provider_settings": {
+        "enable_turn_limit": {
+          "description": "启用轮次上限触发",
+          "hint": "开启后，对话轮次超过 max_turns 时触发压缩。"
+        },
+        "max_turns": {
+          "description": "触发轮次上限",
+          "hint": "对话轮次超过此值时触发压缩。最小值 2。"
+        },
+        "enable_token_guard": {
+          "description": "启用 Token 阈值触发",
+          "hint": "开启后，上下文 token 占比超过 threshold 时触发压缩。"
+        },
+        "token_guard_threshold": {
+          "description": "Token 触发阈值",
+          "hint": "当前 token 数 / 模型上下文窗口 > 此值时触发压缩。范围 0.5–0.99。"
+        },
+        "enable_summary": {
+          "description": "启用 LLM 摘要压缩",
+          "hint": "开启后，触发压缩时优先使用 LLM 摘要。与丢弃同时开启时优先摘要。"
+        },
+        "summary_prompt": {
+          "description": "摘要提示词",
+          "hint": "如果为空则使用默认提示词。"
+        },
+        "summary_provider_id": {
+          "description": "摘要用模型提供商 ID",
+          "hint": "留空时使用当前聊天模型进行摘要。"
+        },
+        "enable_discard": {
+          "description": "启用丢弃旧轮次",
+          "hint": "开启后，触发压缩时丢弃最旧轮次。摘要不可用时作为回退策略。"
+        },
+        "discard_turns": {
+          "description": "一次丢弃轮次数",
+          "hint": "触发丢弃时一次丢弃的轮次数。最小值 1。受保留下限约束。"
+        },
+        "retention_method": {
+          "description": "保留方式",
+          "labels": [
+            "按轮次",
+            "按比例",
+            "不保留"
+          ],
+          "hint": "丢弃时至少保留多少对话。turns: 按轮次数; percentage: 按比例; null: 无下限。"
+        },
+        "retain_turns": {
+          "description": "至少保留轮次数",
+          "hint": "保留方式为按轮次时，至少保留此数量的轮次。最小值 1。"
+        },
+        "retain_percentage": {
+          "description": "至少保留比例",
+          "hint": "保留方式为按比例时，至少保留此比例的轮次。范围 0.1–0.9。"
+        },
+        "fallback_max_context_tokens": {
+          "description": "上下文窗口兜底值",
+          "hint": "当模型不在内置元数据中时，使用此值作为上下文窗口大小。"
         }
       }
     }
@@ -470,7 +510,10 @@
       },
       "lark_connection_mode": {
         "description": "订阅方式",
-        "labels": ["长连接模式", "推送至服务器模式"]
+        "labels": [
+          "长连接模式",
+          "推送至服务器模式"
+        ]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
@@ -959,7 +1002,10 @@
           "split_mode": {
             "description": "分段模式",
             "hint": "用于分隔一段消息。默认情况下会根据句号、问号等标点符号分隔。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。re.findall(r'<regex>', text)",
-            "labels": ["正则表达式", "分段词列表"]
+            "labels": [
+              "正则表达式",
+              "分段词列表"
+            ]
           },
           "regex": {
             "description": "分段正则表达式",
@@ -1254,7 +1300,12 @@
       "modalities": {
         "description": "模型能力",
         "hint": "模型支持的模态及能力。",
-        "labels": ["文本", "图像", "音频", "工具使用"]
+        "labels": [
+          "文本",
+          "图像",
+          "音频",
+          "工具使用"
+        ]
       },
       "custom_headers": {
         "description": "自定义请求头",

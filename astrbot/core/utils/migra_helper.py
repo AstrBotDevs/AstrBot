@@ -180,3 +180,140 @@ async def migra(
     except Exception as e:
         logger.error(f"Migration for provider-source structure failed: {e!s}")
         logger.error(traceback.format_exc())
+
+    # Migrate context config: old implicit-value fields → orthogonal trigger/disposal
+    try:
+        _migra_context_config(astrbot_config["provider_settings"])
+        _validate_context_config(astrbot_config["provider_settings"])
+        for conf in acm.confs.values():
+            _migra_context_config(conf["provider_settings"])
+            _validate_context_config(conf["provider_settings"])
+    except Exception as e:
+        logger.error(f"Migration for context config failed: {e!s}")
+        logger.error(traceback.format_exc())
+
+
+def _migra_context_config(ps: dict) -> bool:
+    """Migrate old context config fields to new orthogonal fields.
+
+    Returns True if any migration happened.
+    """
+    migrated = False
+
+    # 1. max_context_length → enable_turn_limit + max_turns
+    if "max_context_length" in ps:
+        old_val = ps.pop("max_context_length")
+        migrated = True
+        if old_val > 0:
+            ps["enable_turn_limit"] = True
+            ps["max_turns"] = old_val
+        else:
+            ps["enable_turn_limit"] = False
+
+    # 2. dequeue_context_length → discard_turns
+    if "dequeue_context_length" in ps:
+        ps["discard_turns"] = ps.pop("dequeue_context_length")
+        migrated = True
+
+    # 3. context_limit_reached_strategy → enable_summary + enable_discard
+    if "context_limit_reached_strategy" in ps:
+        strategy = ps.pop("context_limit_reached_strategy")
+        migrated = True
+        if strategy == "llm_compress":
+            ps["enable_summary"] = True
+            ps["enable_discard"] = True
+        else:  # truncate_by_turns or other
+            ps["enable_summary"] = False
+            ps["enable_discard"] = True
+
+    # 4. llm_compress_instruction → summary_prompt
+    if "llm_compress_instruction" in ps:
+        ps["summary_prompt"] = ps.pop("llm_compress_instruction")
+        migrated = True
+
+    # 5. llm_compress_keep_recent_ratio → retain_percentage + retention_method
+    if "llm_compress_keep_recent_ratio" in ps:
+        ps["retain_percentage"] = ps.pop("llm_compress_keep_recent_ratio")
+        ps["retention_method"] = "percentage"
+        migrated = True
+
+    # 6. llm_compress_provider_id → summary_provider_id
+    if "llm_compress_provider_id" in ps:
+        ps["summary_provider_id"] = ps.pop("llm_compress_provider_id")
+        migrated = True
+
+    if migrated:
+        logger.info("Migrated old context config to orthogonal trigger/disposal model.")
+
+    return migrated
+
+
+def _validate_context_config(ps: dict) -> None:
+    """Validate new context config fields and log warnings for violations."""
+
+    def _has(k: str) -> bool:
+        return k in ps
+
+    if _has("enable_turn_limit") and _has("max_turns"):
+        if ps.get("enable_turn_limit") and ps.get("max_turns", 50) < 2:
+            logger.warning("max_turns should be >= 2 when enable_turn_limit is True.")
+
+    if _has("token_guard_threshold"):
+        val = ps["token_guard_threshold"]
+        if not (0.5 <= val <= 0.99):
+            logger.warning(
+                "token_guard_threshold %.2f is outside recommended range [0.5, 0.99].",
+                val,
+            )
+
+    if _has("discard_turns") and ps.get("discard_turns", 1) < 1:
+        logger.warning("discard_turns should be >= 1.")
+
+    if _has("retention_method"):
+        method = ps["retention_method"]
+        if method not in ("turns", "percentage", "null"):
+            logger.warning("Unknown retention_method '%s'. Use 'turns', 'percentage', or 'null'.", method)
+
+    if (
+        _has("retention_method")
+        and ps["retention_method"] == "turns"
+        and _has("retain_turns")
+        and ps.get("retain_turns", 20) < 1
+    ):
+        logger.warning("retain_turns should be >= 1.")
+
+    if (
+        _has("retention_method")
+        and ps["retention_method"] == "percentage"
+        and _has("retain_percentage")
+    ):
+        val = ps["retain_percentage"]
+        if not (0.1 <= val <= 0.9):
+            logger.warning(
+                "retain_percentage %.2f is outside recommended range [0.1, 0.9].",
+                val,
+            )
+
+    # Both disposal methods disabled → trigger fires but nothing happens
+    if _has("enable_summary") and _has("enable_discard"):
+        if not ps.get("enable_summary") and not ps.get("enable_discard"):
+            logger.warning(
+                "Both enable_summary and enable_discard are False. "
+                "Context will not be compressed when triggers fire.",
+            )
+
+    # Implicit constraint: retain_turns > max_turns is pointless
+    if (
+        _has("enable_turn_limit")
+        and ps.get("enable_turn_limit")
+        and _has("retention_method")
+        and ps["retention_method"] == "turns"
+        and _has("retain_turns")
+        and _has("max_turns")
+    ):
+        if ps["retain_turns"] > ps["max_turns"]:
+            logger.warning(
+                "retain_turns (%d) > max_turns (%d). Retention lower bound will take priority.",
+                ps["retain_turns"],
+                ps["max_turns"],
+            )
