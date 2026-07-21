@@ -1659,6 +1659,10 @@
                 "description": "Coze API Key",
                 "hint": "ID модели Fishaudio; используется вместо имени роли."
             },
+            "fishaudio-tts-model": {
+                "description": "Модель TTS",
+                "hint": "ID модели движка FishAudio TTS, например s1, s2-pro. Оставьте пустым для модели по умолчанию. См. https://fish.audio"
+            },
             "whisper_hint": {
                 "description": "Заметки по локальному развертыванию Whisper",
                 "hint": "Перед включением установите openai-whisper и ffmpeg."
