@@ -97,7 +97,15 @@ class ContextManager:
         """Return True if token guard is enabled and the ratio exceeds the threshold."""
         if not self.config.enable_token_guard:
             return False
-        if max_context_tokens <= 0 or tokens <= 0:
+        if max_context_tokens <= 0:
+            logger.warning(
+                "Token guard is enabled but max_context_tokens is %s. "
+                "Token guarding is effectively disabled. "
+                "Set max_context_tokens in the provider config to enable it.",
+                max_context_tokens,
+            )
+            return False
+        if tokens <= 0:
             return False
         return (tokens / max_context_tokens) > self.config.token_guard_threshold
 
@@ -165,7 +173,7 @@ class ContextManager:
                         )
 
             # 3. double-check（仅 enable_token_guard）
-            tokens_after = self.token_counter.count_tokens(result)
+            tokens_after = self.token_counter.count_tokens(result, trusted_token_usage)
             if self._token_guard_exceeded(tokens_after, max_context_tokens):
                 logger.info(
                     "Context still exceeds token guard threshold after disposal, "

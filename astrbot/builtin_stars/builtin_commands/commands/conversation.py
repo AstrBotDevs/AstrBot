@@ -203,7 +203,7 @@ class ConversationCommands:
 
         # 权限检查（与 reset 相同模式）
         scene = RstScene.get_scene(is_group, is_unique_session)
-        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {})
+        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {}) or {}
         plugin_config = alter_cmd_cfg.get("astrbot", {})
         compact_cfg = plugin_config.get("compact", {})
         required_perm = compact_cfg.get(
@@ -250,10 +250,26 @@ class ConversationCommands:
         # 解析历史记录
         import json
 
-        raw_history: str = conv.history or "[]"
-        history: list[dict] = (
-            json.loads(raw_history) if isinstance(raw_history, str) else raw_history
-        )
+        raw_history = conv.history or "[]"
+        try:
+            parsed_history = (
+                json.loads(raw_history) if isinstance(raw_history, str) else raw_history
+            )
+        except json.JSONDecodeError:
+            message.set_result(
+                MessageEventResult().message("❌ Conversation history is corrupted and cannot be compacted."),
+            )
+            return
+
+        if not isinstance(parsed_history, list) or any(
+            not isinstance(item, dict) for item in parsed_history
+        ):
+            message.set_result(
+                MessageEventResult().message("⚠️ Conversation history has an unexpected structure and cannot be compacted."),
+            )
+            return
+
+        history: list[dict] = parsed_history
         if not history:
             message.set_result(
                 MessageEventResult().message("ℹ️ Conversation is empty, nothing to compact."),
@@ -305,7 +321,11 @@ class ConversationCommands:
 
         # 获取 provider 的 max_context_tokens（使 token guard 触发器正常工作）
         provider = self.context.get_using_provider(umo=umo)
-        max_context_tokens = provider.provider_config.get("max_context_tokens", 0) if provider else 0
+        max_context_tokens = (
+            provider.provider_config.get("max_context_tokens", 0)
+            if provider and getattr(provider, "provider_config", None)
+            else 0
+        )
 
         try:
             compressed = await cm.process(messages, max_context_tokens=max_context_tokens)
