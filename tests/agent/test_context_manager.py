@@ -904,11 +904,15 @@ class TestContextManager:
         mock_compressor.should_compress = MagicMock(return_value=False)
         manager.compressor = mock_compressor
 
-        result = await manager._run_compression(messages, prev_tokens=100)
+        result, was_lossy = await manager._run_compression(messages, prev_tokens=100)
 
         # Compressor __call__ should be invoked
         mock_compressor.assert_called_once_with(messages)
         assert result == compressed
+        # mock_compressor is not an LLMSummaryCompressor, so this is treated
+        # as a lossy (hard) truncation, same as the built-in
+        # TruncateByTurnsCompressor.
+        assert was_lossy is True
 
     @pytest.mark.asyncio
     async def test_run_compression_applies_compressor_through_process(self):
