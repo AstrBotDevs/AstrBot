@@ -7,6 +7,7 @@ import pytest
 
 import astrbot.api as api
 from astrbot.core.log import LogManager
+from astrbot.core.star import Star
 from astrbot.core.star.star import StarMetadata, star_map
 
 
@@ -20,6 +21,8 @@ def test_plugin_logger_cache_refreshes_after_plugin_rename(
     """
     module_path = "data.plugins.cache_refresh.main"
     caller_module = "data.plugins.cache_refresh.helpers"
+    monkeypatch.setattr(LogManager, "_plugin_logger_names", set())
+    monkeypatch.setattr(LogManager, "_plugin_level_overrides", {})
     monkeypatch.setitem(
         star_map,
         module_path,
@@ -63,3 +66,54 @@ def test_global_level_sync_handles_mock_logger(
         assert plugin_logger.level == logging.WARNING
     finally:
         plugin_logger.setLevel(previous_level)
+
+
+def test_legacy_plugin_without_super_uses_dedicated_logger(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure the historical API logger works without ``Star.__init__``.
+
+    Args:
+        monkeypatch: Pytest fixture used to isolate logger and registry state.
+    """
+    module_path = "data.plugins.legacy_logger.main"
+    namespace = {
+        "__name__": module_path,
+        "Star": Star,
+        "logger": api.logger,
+    }
+    exec(
+        "class LegacyPlugin(Star):\n"
+        "    def __init__(self, context):\n"
+        "        self.context = context\n"
+        "    def logger_state(self):\n"
+        "        return (\n"
+        "            logger.name,\n"
+        "            logger.getEffectiveLevel(),\n"
+        "            logger.isEnabledFor(20),\n"
+        "            logger.isEnabledFor(30),\n"
+        "        )\n",
+        namespace,
+    )
+    star_map[module_path].name = "legacy_logger"
+    monkeypatch.setattr(LogManager, "_plugin_logger_names", set())
+    monkeypatch.setattr(LogManager, "_log_broker", None)
+    monkeypatch.setattr(
+        LogManager,
+        "_plugin_level_overrides",
+        {"legacy_logger": "WARNING"},
+    )
+    api._logger_cache.pop(module_path, None)
+
+    try:
+        plugin = namespace["LegacyPlugin"](object())
+
+        assert plugin.logger_state() == (
+            "astrbot.plugin.legacy_logger",
+            logging.WARNING,
+            False,
+            True,
+        )
+        assert "legacy_logger" in LogManager._plugin_logger_names
+    finally:
+        api._logger_cache.pop(module_path, None)

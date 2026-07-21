@@ -30,6 +30,7 @@ def _resolve_caller_logger(module_name: str) -> logging.Logger:
         the caller does not belong to a registered plugin.
     """
     # Imported lazily to avoid a circular import with astrbot.core.star.
+    from astrbot.core.log import LogManager
     from astrbot.core.star.star import star_map
 
     cached = _logger_cache.get(module_name)
@@ -47,7 +48,7 @@ def _resolve_caller_logger(module_name: str) -> logging.Logger:
             continue
         package = module_path.rpartition(".")[0]
         if module_name == module_path or module_name.startswith(package + "."):
-            resolved = logging.getLogger(f"astrbot.plugin.{metadata.name}")
+            resolved = LogManager.get_plugin_logger(metadata.name)
             _logger_cache[module_name] = (module_path, metadata.name, resolved)
             return resolved
 
