@@ -1,7 +1,9 @@
 """Tests for the plugin-aware logger exposed by ``astrbot.api``."""
 
+import json
 import logging
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -160,3 +162,67 @@ def test_queue_handler_only_scans_plugins_for_global_logger(
     finally:
         existing_logger.handlers[:] = previous_handlers
         existing_logger.filters[:] = previous_filters
+
+
+def test_plugin_log_level_is_persisted_atomically(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure a plugin log-level update atomically replaces its config file.
+
+    Args:
+        tmp_path: Temporary directory for the persisted configuration.
+        monkeypatch: Pytest fixture used to isolate LogManager class state.
+    """
+    config_path = tmp_path / "plugin_log_levels.json"
+    monkeypatch.setattr(
+        LogManager,
+        "_plugin_log_levels_path",
+        MagicMock(return_value=config_path),
+    )
+    monkeypatch.setattr(LogManager, "_plugin_level_overrides", {})
+    monkeypatch.setattr(LogManager, "_plugin_logger_names", set())
+
+    LogManager.set_plugin_log_level("atomic_plugin", "warning")
+
+    assert json.loads(config_path.read_text(encoding="utf-8")) == {
+        "atomic_plugin": "WARNING"
+    }
+    assert LogManager._plugin_level_overrides == {"atomic_plugin": "WARNING"}
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_plugin_log_level_write_failure_preserves_previous_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure a failed atomic replace preserves disk and memory state.
+
+    Args:
+        tmp_path: Temporary directory for the persisted configuration.
+        monkeypatch: Pytest fixture used to isolate LogManager class state.
+    """
+    config_path = tmp_path / "plugin_log_levels.json"
+    config_path.write_text('{"existing_plugin": "INFO"}', encoding="utf-8")
+    previous_overrides = {"existing_plugin": "INFO"}
+    monkeypatch.setattr(
+        LogManager,
+        "_plugin_log_levels_path",
+        MagicMock(return_value=config_path),
+    )
+    monkeypatch.setattr(
+        LogManager,
+        "_plugin_level_overrides",
+        previous_overrides,
+    )
+    monkeypatch.setattr(LogManager, "_plugin_logger_names", set())
+
+    with (
+        patch.object(Path, "replace", side_effect=OSError("replace failed")),
+        pytest.raises(OSError, match="replace failed"),
+    ):
+        LogManager.set_plugin_log_level("new_plugin", "ERROR")
+
+    assert json.loads(config_path.read_text(encoding="utf-8")) == previous_overrides
+    assert LogManager._plugin_level_overrides is previous_overrides
+    assert not list(tmp_path.glob("*.tmp"))

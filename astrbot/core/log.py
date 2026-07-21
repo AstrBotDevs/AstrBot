@@ -5,9 +5,11 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import time
 from asyncio import Queue
 from collections import deque
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger as _raw_loguru_logger
@@ -282,8 +284,8 @@ class LogManager:
         return logger
 
     @classmethod
-    def _plugin_log_levels_path(cls) -> str:
-        return os.path.join(get_astrbot_config_path(), "plugin_log_levels.json")
+    def _plugin_log_levels_path(cls) -> Path:
+        return Path(get_astrbot_config_path()) / "plugin_log_levels.json"
 
     @classmethod
     def _load_plugin_level_overrides(cls) -> dict[str, str]:
@@ -291,7 +293,7 @@ class LogManager:
         if cls._plugin_level_overrides is None:
             cls._plugin_level_overrides = {}
             try:
-                with open(cls._plugin_log_levels_path(), encoding="utf-8") as f:
+                with cls._plugin_log_levels_path().open(encoding="utf-8") as f:
                     data = json.load(f)
                 if isinstance(data, dict):
                     cls._plugin_level_overrides = {
@@ -326,7 +328,7 @@ class LogManager:
         Raises:
             ValueError: If the level name is not valid.
         """
-        overrides = cls._load_plugin_level_overrides()
+        overrides = dict(cls._load_plugin_level_overrides())
         if level is None:
             overrides.pop(plugin_name, None)
         else:
@@ -335,9 +337,29 @@ class LogManager:
                 raise ValueError(f"Invalid log level: {level}")
             overrides[plugin_name] = level
 
-        os.makedirs(os.path.dirname(cls._plugin_log_levels_path()), exist_ok=True)
-        with open(cls._plugin_log_levels_path(), "w", encoding="utf-8") as f:
-            json.dump(overrides, f, indent=2)
+        config_path = cls._plugin_log_levels_path()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=config_path.parent,
+                prefix=f".{config_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as f:
+                temp_path = Path(f.name)
+                json.dump(overrides, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            temp_path.replace(config_path)
+        except Exception:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+            raise
+
+        cls._plugin_level_overrides = overrides
 
         if plugin_name in cls._plugin_logger_names:
             logging.getLogger(f"{PLUGIN_LOGGER_PREFIX}{plugin_name}").setLevel(
