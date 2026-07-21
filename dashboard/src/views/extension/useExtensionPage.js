@@ -1110,6 +1110,15 @@ export const useExtensionPage = () => {
     try {
       const res = await pluginApi.updateLogLevel(pluginName, level);
       if (res.data.status === "ok") {
+        const serverLevel = res.data.data?.log_level;
+        // Preserve null as "follow global" and only skip synchronization
+        // when an older server does not return the field.
+        if (
+          curr_namespace.value === pluginName &&
+          serverLevel !== undefined
+        ) {
+          extension_config.log_level = serverLevel;
+        }
         toast(tm("messages.logLevelUpdated"), "success");
       } else {
         // Roll back the optimistic update, unless the dialog has already
