@@ -498,13 +498,6 @@ class LogManager:
 
             # Plugin loggers without an explicit override follow the global level.
             plugin_level = logger.level
-            if not isinstance(plugin_level, int):
-                configured_level = logging.getLevelName(str(level).upper())
-                plugin_level = (
-                    configured_level
-                    if isinstance(configured_level, int)
-                    else logging.INFO
-                )
             overrides = cls._load_plugin_level_overrides()
             for name in cls._plugin_logger_names:
                 if name not in overrides:

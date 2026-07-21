@@ -46,10 +46,10 @@ def test_plugin_logger_cache_refreshes_after_plugin_rename(
         api._logger_cache.pop(caller_module, None)
 
 
-def test_global_level_sync_handles_mock_logger(
+def test_global_level_sync_updates_plugin_loggers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Ensure global level syncing always passes a valid logging level.
+    """Ensure global level syncing updates plugins without overrides.
 
     Args:
         monkeypatch: Pytest fixture used to isolate LogManager class state.
@@ -57,14 +57,14 @@ def test_global_level_sync_handles_mock_logger(
     plugin_name = "mock_level_sync"
     plugin_logger = logging.getLogger(f"astrbot.plugin.{plugin_name}")
     previous_level = plugin_logger.level
-    global_logger = MagicMock()
-    global_logger.level = MagicMock()
+    global_logger = logging.Logger("global_level_sync")
     monkeypatch.setattr(LogManager, "_plugin_logger_names", {plugin_name})
     monkeypatch.setattr(LogManager, "_plugin_level_overrides", {})
 
     try:
         LogManager.configure_logger(global_logger, {"log_level": "WARNING"})
 
+        assert global_logger.level == logging.WARNING
         assert plugin_logger.level == logging.WARNING
     finally:
         plugin_logger.setLevel(previous_level)
