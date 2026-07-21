@@ -36,6 +36,8 @@ class ServeTTSRequest(BaseModel):
     normalize: bool = True
     # 平衡模式将延迟减少到300毫秒，但可能会降低稳定性
     latency: Literal["normal", "balanced"] = "normal"
+    # TTS 模型，如 s1、s2-pro 等。FishAudio API 要求请求中携带该字段
+    model: str = ""
 
 
 @register_provider_adapter(
@@ -67,7 +69,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
-        self.set_model(provider_config.get("model", ""))
+        self.set_model(provider_config.get("fishaudio-tts-model", ""))
 
     async def _get_reference_id_by_character(self, character: str) -> str | None:
         """获取角色的reference_id
@@ -139,6 +141,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
             text=text,
             format="wav",
             reference_id=reference_id,
+            model=self.get_model(),
         )
 
     async def get_audio(self, text: str) -> str:
