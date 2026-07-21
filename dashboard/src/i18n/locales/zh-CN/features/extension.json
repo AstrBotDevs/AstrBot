@@ -196,7 +196,12 @@
     },
     "config": {
       "title": "插件配置",
-      "noConfig": "这个插件没有配置"
+      "noConfig": "这个插件没有其他配置项",
+      "coreSettings": {
+        "logLevel": "日志级别",
+        "logLevelHint": "仅影响该插件的日志输出，立即生效，无需重启",
+        "followGlobal": "跟随全局"
+      }
     },
     "loading": {
       "title": "加载中...",
@@ -264,6 +269,7 @@
     "refreshSuccess": "插件列表已刷新！",
     "refreshFailed": "刷新插件列表时发生错误",
     "operationFailed": "操作失败",
+    "logLevelUpdated": "日志级别已更新并实时生效",
     "reloadSuccess": "重载成功",
     "reloadFailed": "重载失败",
     "updateSuccess": "更新成功!",

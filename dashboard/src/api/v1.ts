@@ -1259,6 +1259,17 @@ export const pluginApi = {
       }),
     );
   },
+  updateLogLevel(
+    pluginId: string,
+    level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL" | null,
+  ) {
+    return typed<OpenConfig>(
+      openApiV1.updatePluginLogLevel({
+        path: { plugin_id: pluginId },
+        body: { level },
+      }),
+    );
+  },
   listConfigFiles(pluginId: string, configKey: string) {
     return typed<any>(
       openApiV1.listPluginConfigFilesById({

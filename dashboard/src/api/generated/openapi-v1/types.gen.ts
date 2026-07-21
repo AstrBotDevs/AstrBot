@@ -1871,6 +1871,23 @@ export type UpdatePluginConfigResponse = (SuccessEnvelope);
 
 export type UpdatePluginConfigError = unknown;
 
+export type UpdatePluginLogLevelData = {
+    body: {
+        /**
+         * Log level name, or null to follow the global level.
+         */
+        level?: ('DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL') | null;
+        [key: string]: unknown | string;
+    };
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type UpdatePluginLogLevelResponse = (SuccessEnvelope);
+
+export type UpdatePluginLogLevelError = unknown;
+
 export type GetPluginConfigSchemaData = {
     path: {
         plugin_id: string;
