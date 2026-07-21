@@ -340,6 +340,19 @@ export type LoginRequest = {
     trust_device_flag?: boolean;
 };
 
+export type McpPromptPreviewRequest = {
+    server_name: string;
+    name: string;
+    arguments?: ({
+    [key: string]: (string);
+} | null);
+};
+
+export type McpResourceReadRequest = {
+    server_name: string;
+    uri: string;
+};
+
 export type McpServerConfig = {
     name: string;
     enabled?: boolean;
@@ -2296,6 +2309,55 @@ export type CreateMcpServerData = {
 export type CreateMcpServerResponse = (SuccessEnvelope);
 
 export type CreateMcpServerError = unknown;
+
+export type ListMcpResourcesData = {
+    query: {
+        cursor?: string;
+        server_name: string;
+    };
+};
+
+export type ListMcpResourcesResponse = (SuccessEnvelope);
+
+export type ListMcpResourcesError = unknown;
+
+export type ListMcpResourceTemplatesData = {
+    query: {
+        cursor?: string;
+        server_name: string;
+    };
+};
+
+export type ListMcpResourceTemplatesResponse = (SuccessEnvelope);
+
+export type ListMcpResourceTemplatesError = unknown;
+
+export type ListMcpPromptsData = {
+    query: {
+        cursor?: string;
+        server_name: string;
+    };
+};
+
+export type ListMcpPromptsResponse = (SuccessEnvelope);
+
+export type ListMcpPromptsError = unknown;
+
+export type PreviewMcpPromptData = {
+    body: McpPromptPreviewRequest;
+};
+
+export type PreviewMcpPromptResponse = (SuccessEnvelope);
+
+export type PreviewMcpPromptError = unknown;
+
+export type ReadMcpResourceData = {
+    body: McpResourceReadRequest;
+};
+
+export type ReadMcpResourceResponse = (SuccessEnvelope);
+
+export type ReadMcpResourceError = unknown;
 
 export type UpdateMcpServerByNameData = {
     body: {

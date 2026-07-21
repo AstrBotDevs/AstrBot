@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import AsyncMock
 
 import httpx
 import jwt
@@ -1066,6 +1067,11 @@ async def test_v1_openapi_is_served_by_fastapi(asgi_client: httpx.AsyncClient):
     assert "/api/v1/plugins" in spec["paths"]
     assert "/api/v1/conversations" in spec["paths"]
     assert "/api/v1/mcp/servers" in spec["paths"]
+    assert "/api/v1/mcp/resources" in spec["paths"]
+    assert "/api/v1/mcp/resource-templates" in spec["paths"]
+    assert "/api/v1/mcp/prompts" in spec["paths"]
+    assert "/api/v1/mcp/prompts/preview" in spec["paths"]
+    assert "/api/v1/mcp/resources/read" in spec["paths"]
     assert "/api/v1/skills" in spec["paths"]
     assert "/api/v1/file" in spec["paths"]
 
@@ -1085,6 +1091,8 @@ def test_static_openapi_v1_paths_include_api_version():
 
     assert path_keys
     assert all(path.startswith("/api/v1/") for path in path_keys)
+    assert "/api/v1/mcp/prompts" in path_keys
+    assert "/api/v1/mcp/prompts/preview" in path_keys
 
 
 @pytest.mark.asyncio
@@ -3088,6 +3096,433 @@ async def test_v1_mcp_scope_accepts_api_key(
     data = response.json()
     assert data["status"] == "ok"
     assert any(server["name"] == "demo-server" for server in data["data"])
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_resource_routes(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    client = SimpleNamespace(
+        supports_resources=True,
+        tools=[],
+        server_errlogs=[],
+        list_resources=AsyncMock(
+            return_value=SimpleNamespace(
+                resources=[
+                    SimpleNamespace(
+                        uri="file:///guide.md",
+                        name="guide",
+                        description="Guide",
+                        mimeType="text/markdown",
+                        size=5,
+                        annotations=None,
+                    )
+                ],
+                nextCursor="page-2",
+            )
+        ),
+        list_resource_templates=AsyncMock(
+            return_value=SimpleNamespace(
+                resourceTemplates=[
+                    SimpleNamespace(
+                        uriTemplate="file:///docs/{name}",
+                        name="document",
+                        description=None,
+                        mimeType="text/plain",
+                        annotations=None,
+                    )
+                ],
+                nextCursor=None,
+            )
+        ),
+        read_resource=AsyncMock(
+            return_value=SimpleNamespace(
+                contents=[
+                    SimpleNamespace(
+                        uri="file:///guide.md",
+                        mimeType="text/markdown",
+                        text="hello",
+                    )
+                ]
+            )
+        ),
+    )
+    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    fake_tools.mcp_server_runtime_view["demo-server"] = SimpleNamespace(client=client)
+    headers = _jwt_headers()
+
+    resources_response = await asgi_client.get(
+        "/api/v1/mcp/resources",
+        params={"server_name": "demo-server", "cursor": "page-1"},
+        headers=headers,
+    )
+    templates_response = await asgi_client.get(
+        "/api/v1/mcp/resource-templates",
+        params={"server_name": "demo-server"},
+        headers=headers,
+    )
+    read_response = await asgi_client.post(
+        "/api/v1/mcp/resources/read",
+        json={"server_name": "demo-server", "uri": "file:///guide.md"},
+        headers=headers,
+    )
+
+    assert resources_response.status_code == 200
+    assert resources_response.json()["data"] == {
+        "resources": [
+            {
+                "uri": "file:///guide.md",
+                "name": "guide",
+                "title": None,
+                "description": "Guide",
+                "mime_type": "text/markdown",
+                "size": 5,
+                "annotations": None,
+            }
+        ],
+        "next_cursor": "page-2",
+    }
+    assert templates_response.status_code == 200
+    assert templates_response.json()["data"]["resource_templates"] == [
+        {
+            "uri_template": "file:///docs/{name}",
+            "name": "document",
+            "title": None,
+            "description": None,
+            "mime_type": "text/plain",
+            "annotations": None,
+        }
+    ]
+    assert read_response.status_code == 200
+    assert read_response.json()["data"] == {
+        "contents": [
+            {
+                "type": "text",
+                "uri": "file:///guide.md",
+                "mime_type": "text/markdown",
+                "text": "hello",
+                "size": 5,
+                "truncated": False,
+            }
+        ]
+    }
+    client.list_resources.assert_awaited_once_with("page-1")
+    client.list_resource_templates.assert_awaited_once_with(None)
+    client.read_resource.assert_awaited_once_with("file:///guide.md")
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_resource_routes_require_mcp_scope(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    list_resources = AsyncMock(return_value={"resources": [], "next_cursor": None})
+    list_resource_templates = AsyncMock(
+        return_value={"resource_templates": [], "next_cursor": None}
+    )
+    read_resource = AsyncMock(return_value={"contents": []})
+    monkeypatch.setattr(
+        asgi_app.state.services.tools,
+        "list_mcp_resources",
+        list_resources,
+    )
+    monkeypatch.setattr(
+        asgi_app.state.services.tools,
+        "list_mcp_resource_templates",
+        list_resource_templates,
+    )
+    monkeypatch.setattr(
+        asgi_app.state.services.tools,
+        "read_mcp_resource",
+        read_resource,
+    )
+    tool_key = "abk_fastapi_v1_tool_only"
+    mcp_key = "abk_fastapi_v1_mcp_resources"
+    fake_db.add_api_key(tool_key, scopes=["tool"])
+    fake_db.add_api_key(mcp_key, scopes=["mcp"])
+
+    forbidden_response = await asgi_client.get(
+        "/api/v1/mcp/resources",
+        params={"server_name": "demo-server"},
+        headers={"X-API-Key": tool_key},
+    )
+    allowed_response = await asgi_client.get(
+        "/api/v1/mcp/resources",
+        params={"server_name": "demo-server"},
+        headers={"X-API-Key": mcp_key},
+    )
+    forbidden_templates_response = await asgi_client.get(
+        "/api/v1/mcp/resource-templates",
+        params={"server_name": "demo-server"},
+        headers={"X-API-Key": tool_key},
+    )
+    allowed_templates_response = await asgi_client.get(
+        "/api/v1/mcp/resource-templates",
+        params={"server_name": "demo-server"},
+        headers={"X-API-Key": mcp_key},
+    )
+    forbidden_read_response = await asgi_client.post(
+        "/api/v1/mcp/resources/read",
+        json={"server_name": "demo-server", "uri": "file:///guide.md"},
+        headers={"X-API-Key": tool_key},
+    )
+    allowed_read_response = await asgi_client.post(
+        "/api/v1/mcp/resources/read",
+        json={"server_name": "demo-server", "uri": "file:///guide.md"},
+        headers={"X-API-Key": mcp_key},
+    )
+
+    assert forbidden_response.status_code == 403
+    assert forbidden_response.json()["message"] == "Insufficient API key scope"
+    assert allowed_response.status_code == 200
+    assert forbidden_templates_response.status_code == 403
+    assert forbidden_templates_response.json()["message"] == (
+        "Insufficient API key scope"
+    )
+    assert allowed_templates_response.status_code == 200
+    assert forbidden_read_response.status_code == 403
+    assert forbidden_read_response.json()["message"] == "Insufficient API key scope"
+    assert allowed_read_response.status_code == 200
+    list_resources.assert_awaited_once_with("demo-server", None)
+    list_resource_templates.assert_awaited_once_with("demo-server", None)
+    read_resource.assert_awaited_once_with("demo-server", "file:///guide.md")
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_prompt_catalog_route(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    client = SimpleNamespace(
+        supports_prompts=True,
+        list_prompts=AsyncMock(
+            return_value=SimpleNamespace(
+                prompts=[
+                    SimpleNamespace(
+                        name="review",
+                        title="Review code",
+                        description="Review a change",
+                        arguments=[
+                            SimpleNamespace(
+                                name="language",
+                                description="Programming language",
+                                required=True,
+                            )
+                        ],
+                        icons=[{"src": "https://example.invalid/icon.png"}],
+                        meta={"secret": "not exposed"},
+                    )
+                ],
+                nextCursor="",
+                meta={"secret": "not exposed"},
+            )
+        ),
+    )
+    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    fake_tools.mcp_server_runtime_view["demo-server"] = SimpleNamespace(client=client)
+
+    response = await asgi_client.get(
+        "/api/v1/mcp/prompts",
+        params={"server_name": "demo-server", "cursor": ""},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "prompts": [
+            {
+                "name": "review",
+                "title": "Review code",
+                "description": "Review a change",
+                "arguments": [
+                    {
+                        "name": "language",
+                        "description": "Programming language",
+                        "required": True,
+                    }
+                ],
+            }
+        ],
+        "next_cursor": "",
+    }
+    client.list_prompts.assert_awaited_once_with("")
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_prompt_catalog_requires_mcp_scope(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    list_prompts = AsyncMock(return_value={"prompts": [], "next_cursor": None})
+    monkeypatch.setattr(
+        asgi_app.state.services.tools,
+        "list_mcp_prompts",
+        list_prompts,
+    )
+    tool_key = "abk_fastapi_v1_prompt_tool_only"
+    mcp_key = "abk_fastapi_v1_mcp_prompts"
+    fake_db.add_api_key(tool_key, scopes=["tool"])
+    fake_db.add_api_key(mcp_key, scopes=["mcp"])
+
+    forbidden_response = await asgi_client.get(
+        "/api/v1/mcp/prompts",
+        params={"server_name": "demo-server"},
+        headers={"X-API-Key": tool_key},
+    )
+    allowed_response = await asgi_client.get(
+        "/api/v1/mcp/prompts",
+        params={"server_name": "demo-server"},
+        headers={"X-API-Key": mcp_key},
+    )
+
+    assert forbidden_response.status_code == 403
+    assert forbidden_response.json()["message"] == "Insufficient API key scope"
+    assert allowed_response.status_code == 200
+    assert allowed_response.json()["data"] == {
+        "prompts": [],
+        "next_cursor": None,
+    }
+    list_prompts.assert_awaited_once_with("demo-server", None)
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_prompt_preview_route(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    client = SimpleNamespace(
+        supports_prompts=True,
+        get_prompt=AsyncMock(
+            return_value=SimpleNamespace(
+                description="not exposed",
+                messages=[
+                    SimpleNamespace(
+                        role="user",
+                        content=SimpleNamespace(
+                            type="text",
+                            text="Review MCP SDK as Python.",
+                            _meta={"secret": "not exposed"},
+                        ),
+                    ),
+                    SimpleNamespace(
+                        role="assistant",
+                        content=SimpleNamespace(
+                            type="resource",
+                            resource=SimpleNamespace(
+                                uri="file:///review.md",
+                                mimeType="text/markdown",
+                                text="Looks good",
+                            ),
+                        ),
+                    ),
+                ],
+                _meta={"secret": "not exposed"},
+            )
+        ),
+    )
+    fake_tools = fake_core_lifecycle.provider_manager.llm_tools
+    fake_tools.mcp_server_runtime_view["demo-server"] = SimpleNamespace(client=client)
+
+    response = await asgi_client.post(
+        "/api/v1/mcp/prompts/preview",
+        json={
+            "server_name": "demo-server",
+            "name": "review",
+            "arguments": {"language": "Python", "focus": ""},
+        },
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "messages": [
+            {
+                "role": "user",
+                "content": {
+                    "type": "text",
+                    "text": "Review MCP SDK as Python.",
+                    "size": 25,
+                    "truncated": False,
+                },
+            },
+            {
+                "role": "assistant",
+                "content": {
+                    "type": "resource",
+                    "resource": {
+                        "type": "text",
+                        "uri": "file:///review.md",
+                        "mime_type": "text/markdown",
+                        "text": "Looks good",
+                        "size": 10,
+                        "truncated": False,
+                    },
+                },
+            },
+        ],
+        "total_messages": 2,
+        "messages_truncated": False,
+        "text_truncated": False,
+    }
+    client.get_prompt.assert_awaited_once_with(
+        "review",
+        {"language": "Python", "focus": ""},
+    )
+
+
+@pytest.mark.asyncio
+async def test_v1_mcp_prompt_preview_requires_mcp_scope_and_strict_body(
+    asgi_app: FastAPI,
+    asgi_client: httpx.AsyncClient,
+    fake_db: FakeDb,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    preview_prompt = AsyncMock(
+        return_value={
+            "messages": [],
+            "total_messages": 0,
+            "messages_truncated": False,
+            "text_truncated": False,
+        }
+    )
+    monkeypatch.setattr(
+        asgi_app.state.services.tools,
+        "preview_mcp_prompt",
+        preview_prompt,
+    )
+    tool_key = "abk_fastapi_v1_prompt_preview_tool_only"
+    mcp_key = "abk_fastapi_v1_prompt_preview"
+    fake_db.add_api_key(tool_key, scopes=["tool"])
+    fake_db.add_api_key(mcp_key, scopes=["mcp"])
+    payload = {"server_name": "demo-server", "name": "review"}
+
+    forbidden_response = await asgi_client.post(
+        "/api/v1/mcp/prompts/preview",
+        json=payload,
+        headers={"X-API-Key": tool_key},
+    )
+    allowed_response = await asgi_client.post(
+        "/api/v1/mcp/prompts/preview",
+        json=payload,
+        headers={"X-API-Key": mcp_key},
+    )
+    invalid_response = await asgi_client.post(
+        "/api/v1/mcp/prompts/preview",
+        json={**payload, "_meta": {"secret": "not accepted"}},
+        headers={"X-API-Key": mcp_key},
+    )
+
+    assert forbidden_response.status_code == 403
+    assert forbidden_response.json()["message"] == "Insufficient API key scope"
+    assert allowed_response.status_code == 200
+    assert allowed_response.json()["data"]["messages"] == []
+    assert invalid_response.status_code == 422
+    preview_prompt.assert_awaited_once_with("demo-server", "review", None)
 
 
 @pytest.mark.asyncio

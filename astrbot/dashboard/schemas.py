@@ -309,6 +309,19 @@ class McpServerByNameRequest(OpenModel):
     enabled: bool | None = None
 
 
+class McpResourceReadRequest(BaseModel):
+    server_name: str = Field(..., min_length=1)
+    uri: str = Field(..., min_length=1)
+
+
+class McpPromptPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    server_name: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
+    arguments: dict[str, str] | None = None
+
+
 class ModelScopeSyncRequest(BaseModel):
     access_token: str | None = None
 

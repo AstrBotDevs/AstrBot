@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 import traceback
-from typing import Any
+from typing import Any, NoReturn
+
+from mcp.shared.exceptions import McpError
 
 from astrbot.core import logger, sp
-from astrbot.core.agent.mcp_client import MCPTool, validate_mcp_stdio_config
+from astrbot.core.agent.mcp_client import (
+    MCPClient,
+    MCPPromptPaginationNotSupportedError,
+    MCPResourcePaginationNotSupportedError,
+    MCPTool,
+    validate_mcp_stdio_config,
+)
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.star import star_map
 from astrbot.core.tools.registry import get_builtin_tool_config_statuses
@@ -16,6 +24,286 @@ class ToolsServiceError(Exception):
 
 class EmptyMcpServersError(ValueError):
     pass
+
+
+_MCP_RESOURCE_TEXT_PREVIEW_MAX_BYTES = 256 * 1024
+_MCP_RESOURCE_TEXT_SIZE_CHUNK_CHARS = 64 * 1024
+_MCP_PROMPT_PREVIEW_MAX_MESSAGES = 100
+_MCP_PROMPT_TEXT_PREVIEW_MAX_BYTES = 256 * 1024
+_MCP_PROMPT_METADATA_MAX_BYTES = 64 * 1024
+_MCP_BASE64_ALPHABET = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+)
+
+
+def _serialize_mcp_annotations(annotations: object) -> dict[str, Any] | None:
+    if annotations is None:
+        return None
+
+    if isinstance(annotations, dict):
+        audience = annotations.get("audience")
+        priority = annotations.get("priority")
+    else:
+        audience = getattr(annotations, "audience", None)
+        priority = getattr(annotations, "priority", None)
+
+    serialized: dict[str, Any] = {}
+    if audience is not None:
+        serialized["audience"] = [
+            str(getattr(item, "value", item)) for item in audience
+        ]
+    if priority is not None:
+        serialized["priority"] = float(priority)
+    return serialized
+
+
+def _serialize_mcp_resource(resource: object) -> dict[str, Any]:
+    return {
+        "uri": str(getattr(resource, "uri")),
+        "name": str(getattr(resource, "name")),
+        "title": getattr(resource, "title", None),
+        "description": getattr(resource, "description", None),
+        "mime_type": getattr(resource, "mimeType", None),
+        "size": getattr(resource, "size", None),
+        "annotations": _serialize_mcp_annotations(
+            getattr(resource, "annotations", None)
+        ),
+    }
+
+
+def _serialize_mcp_resource_template(template: object) -> dict[str, Any]:
+    return {
+        "uri_template": str(getattr(template, "uriTemplate")),
+        "name": str(getattr(template, "name")),
+        "title": getattr(template, "title", None),
+        "description": getattr(template, "description", None),
+        "mime_type": getattr(template, "mimeType", None),
+        "annotations": _serialize_mcp_annotations(
+            getattr(template, "annotations", None)
+        ),
+    }
+
+
+def _bounded_mcp_text_preview(
+    text: str,
+    max_preview_bytes: int,
+) -> tuple[str, int, bool]:
+    preview = bytearray()
+    size = 0
+    for offset in range(0, len(text), _MCP_RESOURCE_TEXT_SIZE_CHUNK_CHARS):
+        encoded_chunk = text[
+            offset : offset + _MCP_RESOURCE_TEXT_SIZE_CHUNK_CHARS
+        ].encode("utf-8")
+        size += len(encoded_chunk)
+        remaining = max_preview_bytes - len(preview)
+        if remaining > 0:
+            preview.extend(encoded_chunk[:remaining])
+
+    truncated = size > max_preview_bytes
+    if not truncated:
+        return text, size, False
+    return preview.decode("utf-8", errors="ignore"), size, True
+
+
+def _serialize_mcp_resource_content(
+    content: object,
+    text_preview_budget: int,
+) -> dict[str, Any]:
+    uri = str(getattr(content, "uri"))
+    mime_type = getattr(content, "mimeType", None)
+    text = getattr(content, "text", None)
+    if isinstance(text, str):
+        text, size, truncated = _bounded_mcp_text_preview(
+            text,
+            text_preview_budget,
+        )
+        return {
+            "type": "text",
+            "uri": uri,
+            "mime_type": mime_type,
+            "text": text,
+            "size": size,
+            "truncated": truncated,
+        }
+
+    blob = getattr(content, "blob", None)
+    if isinstance(blob, str):
+        padding = 2 if blob.endswith("==") else int(blob.endswith("="))
+        size = max(0, len(blob) * 3 // 4 - padding)
+        return {
+            "type": "blob",
+            "uri": uri,
+            "mime_type": mime_type,
+            "size": size,
+        }
+
+    raise ToolsServiceError("MCP server returned an unsupported resource content type")
+
+
+def _serialize_mcp_prompt_content(
+    content: object,
+    text_preview_budget: int,
+    metadata_budget: int,
+) -> tuple[dict[str, Any], int, int, bool]:
+    content_type = getattr(content, "type", None)
+    if content_type == "text":
+        text = getattr(content, "text", None)
+        if not isinstance(text, str):
+            raise ToolsServiceError("MCP server returned invalid prompt text content")
+        preview, size, truncated = _bounded_mcp_text_preview(
+            text,
+            text_preview_budget,
+        )
+        return (
+            {
+                "type": "text",
+                "text": preview,
+                "size": size,
+                "truncated": truncated,
+            },
+            len(preview.encode("utf-8")),
+            0,
+            truncated,
+        )
+
+    if content_type in {"image", "audio"}:
+        data = getattr(content, "data", None)
+        mime_type = getattr(content, "mimeType", None)
+        if not isinstance(data, str) or not isinstance(mime_type, str):
+            raise ToolsServiceError("MCP server returned invalid prompt binary content")
+        metadata_size = _validate_mcp_prompt_metadata(
+            metadata_budget,
+            mime_type,
+        )
+        return (
+            {
+                "type": content_type,
+                "mime_type": mime_type,
+                "size": _validated_mcp_prompt_base64_size(data),
+            },
+            0,
+            metadata_size,
+            False,
+        )
+
+    if content_type == "resource":
+        resource = getattr(content, "resource", None)
+        if resource is None:
+            raise ToolsServiceError("MCP server returned invalid embedded resource")
+        uri = getattr(resource, "uri", None)
+        mime_type = getattr(resource, "mimeType", None)
+        if uri is None or (mime_type is not None and not isinstance(mime_type, str)):
+            raise ToolsServiceError("MCP server returned invalid embedded resource")
+        has_text = isinstance(getattr(resource, "text", None), str)
+        has_blob = isinstance(getattr(resource, "blob", None), str)
+        if has_text == has_blob:
+            raise ToolsServiceError("MCP server returned invalid embedded resource")
+        if has_blob:
+            _validated_mcp_prompt_base64_size(getattr(resource, "blob"))
+        metadata_size = _validate_mcp_prompt_metadata(
+            metadata_budget,
+            str(uri),
+            mime_type,
+        )
+        serialized = _serialize_mcp_resource_content(resource, text_preview_budget)
+        preview = serialized.get("text", "")
+        return (
+            {"type": "resource", "resource": serialized},
+            len(preview.encode("utf-8")),
+            metadata_size,
+            bool(serialized.get("truncated", False)),
+        )
+
+    if content_type == "resource_link":
+        uri = getattr(content, "uri", None)
+        name = getattr(content, "name", None)
+        mime_type = getattr(content, "mimeType", None)
+        size = getattr(content, "size", None)
+        if (
+            uri is None
+            or not isinstance(name, str)
+            or (mime_type is not None and not isinstance(mime_type, str))
+            or (
+                size is not None
+                and (not isinstance(size, int) or isinstance(size, bool) or size < 0)
+            )
+        ):
+            raise ToolsServiceError("MCP server returned invalid resource link content")
+        uri = str(uri)
+        metadata_size = _validate_mcp_prompt_metadata(
+            metadata_budget,
+            uri,
+            name,
+            mime_type,
+        )
+        return (
+            {
+                "type": "resource_link",
+                "uri": uri,
+                "name": name,
+                "mime_type": mime_type,
+                "size": size,
+            },
+            0,
+            metadata_size,
+            False,
+        )
+
+    raise ToolsServiceError("MCP server returned an unsupported prompt content type")
+
+
+def _validated_mcp_prompt_base64_size(data: str) -> int:
+    padding = 2 if data.endswith("==") else int(data.endswith("="))
+    encoded_length = len(data) - padding
+    remainder = encoded_length % 4
+    if remainder == 1 or (padding and padding != (4 - remainder) % 4):
+        raise ToolsServiceError("MCP server returned invalid prompt binary content")
+
+    for index, character in enumerate(data):
+        if index < encoded_length:
+            if character not in _MCP_BASE64_ALPHABET:
+                raise ToolsServiceError(
+                    "MCP server returned invalid prompt binary content"
+                )
+        elif character != "=":
+            raise ToolsServiceError("MCP server returned invalid prompt binary content")
+
+    return encoded_length * 6 // 8
+
+
+def _validate_mcp_prompt_metadata(
+    metadata_budget: int,
+    *values: str | None,
+) -> int:
+    size = 0
+    for value in values:
+        if value is None:
+            continue
+        for offset in range(0, len(value), _MCP_RESOURCE_TEXT_SIZE_CHUNK_CHARS):
+            size += len(
+                value[offset : offset + _MCP_RESOURCE_TEXT_SIZE_CHUNK_CHARS].encode(
+                    "utf-8"
+                )
+            )
+            if size > metadata_budget:
+                raise ToolsServiceError("MCP server returned oversized prompt metadata")
+    return size
+
+
+def _raise_mcp_resource_operation_error(
+    operation: str,
+    server_name: str,
+    exc: Exception,
+) -> NoReturn:
+    if isinstance(exc, MCPResourcePaginationNotSupportedError):
+        raise ToolsServiceError(str(exc)) from None
+
+    logger.error(
+        f"Failed to {operation} for MCP server {server_name} ({type(exc).__name__})"
+    )
+    raise ToolsServiceError(
+        f"Failed to {operation} for MCP server {server_name}"
+    ) from None
 
 
 def extract_mcp_server_config(mcp_servers_value: object) -> dict:
@@ -71,9 +359,10 @@ class ToolsService:
                 server_info = {
                     "name": name,
                     "active": server_config.get("active", True),
+                    "supports_resources": False,
                 }
                 for key, value in server_config.items():
-                    if key != "active":
+                    if key not in {"active", "supports_resources"}:
                         server_info[key] = value
 
                 for name_key, runtime in self.tool_mgr.mcp_server_runtime_view.items():
@@ -81,6 +370,9 @@ class ToolsService:
                         mcp_client = runtime.client
                         server_info["tools"] = [tool.name for tool in mcp_client.tools]
                         server_info["errlogs"] = mcp_client.server_errlogs
+                        server_info["supports_resources"] = bool(
+                            mcp_client.supports_resources
+                        )
                         break
                 else:
                     server_info["tools"] = []
@@ -91,6 +383,221 @@ class ToolsService:
         except Exception as exc:
             logger.error(traceback.format_exc())
             raise ToolsServiceError(f"Failed to get MCP server list: {exc!s}") from exc
+
+    def _get_mcp_resource_client(self, server_name: str) -> MCPClient:
+        runtime = self.tool_mgr.mcp_server_runtime_view.get(server_name)
+        if runtime is None:
+            raise ToolsServiceError(f"MCP server {server_name} is not connected")
+
+        client = runtime.client
+        if not client.supports_resources:
+            raise ToolsServiceError(
+                f"MCP server {server_name} does not advertise resources support"
+            )
+        return client
+
+    async def list_mcp_resources(
+        self,
+        server_name: str,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        client = self._get_mcp_resource_client(server_name)
+        try:
+            result = await client.list_resources(cursor)
+            return {
+                "resources": [
+                    _serialize_mcp_resource(resource) for resource in result.resources
+                ],
+                "next_cursor": getattr(result, "nextCursor", None),
+            }
+        except ToolsServiceError:
+            raise
+        except Exception as exc:
+            _raise_mcp_resource_operation_error("list resources", server_name, exc)
+
+    async def list_mcp_resource_templates(
+        self,
+        server_name: str,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        client = self._get_mcp_resource_client(server_name)
+        try:
+            result = await client.list_resource_templates(cursor)
+            return {
+                "resource_templates": [
+                    _serialize_mcp_resource_template(template)
+                    for template in result.resourceTemplates
+                ],
+                "next_cursor": getattr(result, "nextCursor", None),
+            }
+        except ToolsServiceError:
+            raise
+        except Exception as exc:
+            _raise_mcp_resource_operation_error(
+                "list resource templates",
+                server_name,
+                exc,
+            )
+
+    async def read_mcp_resource(
+        self,
+        server_name: str,
+        uri: str,
+    ) -> dict[str, Any]:
+        client = self._get_mcp_resource_client(server_name)
+        try:
+            result = await client.read_resource(uri)
+            contents = []
+            text_preview_budget = _MCP_RESOURCE_TEXT_PREVIEW_MAX_BYTES
+            for content in result.contents:
+                serialized = _serialize_mcp_resource_content(
+                    content,
+                    text_preview_budget,
+                )
+                contents.append(serialized)
+                if serialized["type"] == "text":
+                    text_preview_budget -= len(serialized["text"].encode("utf-8"))
+            return {"contents": contents}
+        except ToolsServiceError:
+            raise
+        except Exception as exc:
+            _raise_mcp_resource_operation_error("read resource", server_name, exc)
+
+    async def list_mcp_prompts(
+        self,
+        server_name: str,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        runtime = self.tool_mgr.mcp_server_runtime_view.get(server_name)
+        if runtime is None:
+            raise ToolsServiceError(f"MCP server {server_name} is not connected")
+
+        client = runtime.client
+        if not getattr(client, "supports_prompts", False):
+            raise ToolsServiceError(
+                f"MCP server {server_name} does not advertise prompts support"
+            )
+
+        try:
+            result = await client.list_prompts(cursor)
+            return {
+                "prompts": [
+                    {
+                        "name": str(getattr(prompt, "name")),
+                        "title": getattr(prompt, "title", None),
+                        "description": getattr(prompt, "description", None),
+                        "arguments": [
+                            {
+                                "name": str(getattr(argument, "name")),
+                                "description": getattr(
+                                    argument,
+                                    "description",
+                                    None,
+                                ),
+                                "required": bool(getattr(argument, "required", False)),
+                            }
+                            for argument in (getattr(prompt, "arguments", None) or [])
+                        ],
+                    }
+                    for prompt in result.prompts
+                ],
+                "next_cursor": getattr(result, "nextCursor", None),
+            }
+        except MCPPromptPaginationNotSupportedError as exc:
+            raise ToolsServiceError(str(exc)) from None
+        except Exception as exc:
+            logger.error(
+                f"Failed to list prompts for MCP server {server_name} ({type(exc).__name__})"
+            )
+            raise ToolsServiceError(
+                f"Failed to list prompts for MCP server {server_name}"
+            ) from None
+
+    async def preview_mcp_prompt(
+        self,
+        server_name: str,
+        name: str,
+        arguments: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        runtime = self.tool_mgr.mcp_server_runtime_view.get(server_name)
+        if runtime is None:
+            raise ToolsServiceError(f"MCP server {server_name} is not connected")
+
+        client = runtime.client
+        if not getattr(client, "supports_prompts", False):
+            raise ToolsServiceError(
+                f"MCP server {server_name} does not advertise prompts support"
+            )
+
+        try:
+            result = await client.get_prompt(name, arguments)
+            messages = getattr(result, "messages", None)
+            if not isinstance(messages, list):
+                raise ToolsServiceError(
+                    "MCP server returned an invalid prompt message list"
+                )
+
+            serialized_messages = []
+            text_preview_budget = _MCP_PROMPT_TEXT_PREVIEW_MAX_BYTES
+            metadata_budget = _MCP_PROMPT_METADATA_MAX_BYTES
+            text_truncated = False
+            for message in messages[:_MCP_PROMPT_PREVIEW_MAX_MESSAGES]:
+                role = getattr(message, "role", None)
+                role = getattr(role, "value", role)
+                if role not in {"user", "assistant"}:
+                    raise ToolsServiceError(
+                        "MCP server returned an unsupported prompt message role"
+                    )
+
+                (
+                    content,
+                    consumed_text_bytes,
+                    consumed_metadata_bytes,
+                    content_truncated,
+                ) = _serialize_mcp_prompt_content(
+                    getattr(message, "content", None),
+                    text_preview_budget,
+                    metadata_budget,
+                )
+                text_preview_budget = max(
+                    0,
+                    text_preview_budget - consumed_text_bytes,
+                )
+                metadata_budget = max(
+                    0,
+                    metadata_budget - consumed_metadata_bytes,
+                )
+                text_truncated = text_truncated or content_truncated
+                serialized_messages.append({"role": role, "content": content})
+
+            return {
+                "messages": serialized_messages,
+                "total_messages": len(messages),
+                "messages_truncated": len(messages) > _MCP_PROMPT_PREVIEW_MAX_MESSAGES,
+                "text_truncated": text_truncated,
+            }
+        except MemoryError:
+            raise
+        except ToolsServiceError:
+            raise
+        except McpError as exc:
+            if getattr(exc.error, "code", None) == -32602:
+                raise ToolsServiceError(
+                    f"MCP server {server_name} rejected the prompt name or arguments"
+                ) from None
+            logger.error(
+                f"Failed to preview prompt for MCP server {server_name} ({type(exc).__name__})"
+            )
+            raise ToolsServiceError(
+                f"Failed to preview prompt for MCP server {server_name}"
+            ) from None
+        except Exception as exc:
+            logger.error(
+                f"Failed to preview prompt for MCP server {server_name} ({type(exc).__name__})"
+            )
+            raise ToolsServiceError(
+                f"Failed to preview prompt for MCP server {server_name}"
+            ) from None
 
     def get_mcp_server_config(self, name: str) -> dict | None:
         config = self.tool_mgr.load_mcp_config()

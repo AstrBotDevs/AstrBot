@@ -2778,6 +2778,101 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/mcp/resources:
+    get:
+      tags: [MCP]
+      summary: List resources exposed by a connected MCP server
+      operationId: listMcpResources
+      x-astrbot-scope: mcp
+      parameters:
+        - name: server_name
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/resource-templates:
+    get:
+      tags: [MCP]
+      summary: List resource templates exposed by a connected MCP server
+      operationId: listMcpResourceTemplates
+      x-astrbot-scope: mcp
+      parameters:
+        - name: server_name
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/prompts:
+    get:
+      tags: [MCP]
+      summary: List prompts exposed by a connected MCP server
+      operationId: listMcpPrompts
+      x-astrbot-scope: mcp
+      parameters:
+        - name: server_name
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/prompts/preview:
+    post:
+      tags: [MCP]
+      summary: Safely preview a prompt from a connected MCP server
+      operationId: previewMcpPrompt
+      x-astrbot-scope: mcp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/McpPromptPreviewRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
+  /api/v1/mcp/resources/read:
+    post:
+      tags: [MCP]
+      summary: Read a text preview or binary metadata from an MCP resource
+      operationId: readMcpResource
+      x-astrbot-scope: mcp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/McpResourceReadRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/mcp/servers/by-name:
     put:
       tags: [MCP]
@@ -5705,6 +5800,36 @@ components:
         timeout:
           type: integer
       additionalProperties: true
+
+    McpResourceReadRequest:
+      type: object
+      required: [server_name, uri]
+      properties:
+        server_name:
+          type: string
+          minLength: 1
+        uri:
+          type: string
+          minLength: 1
+      additionalProperties: false
+
+    McpPromptPreviewRequest:
+      type: object
+      required: [server_name, name]
+      properties:
+        server_name:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        arguments:
+          oneOf:
+            - type: object
+              additionalProperties:
+                type: string
+            - type: "null"
+      additionalProperties: false
 
     ModelScopeSyncRequest:
       type: object

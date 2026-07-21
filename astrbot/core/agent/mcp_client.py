@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import inspect
 import logging
 import os
 import re
@@ -93,6 +94,21 @@ _DENIED_DOCKER_ARGS = frozenset(
     }
 )
 _STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS"
+_MCP_ERROR_LOG_LEVELS = frozenset(
+    {"warning", "error", "critical", "alert", "emergency"}
+)
+_MCP_SERVER_ERROR_LOG_MAX_ENTRIES = 100
+_MCP_SERVER_ERROR_LOG_MAX_CHARS = 4096
+_MCP_TOOL_LIST_MAX_PAGES = 100
+
+
+class MCPResourcePaginationNotSupportedError(RuntimeError):
+    """Raised when the installed MCP SDK cannot pass pagination cursors."""
+
+
+class MCPPromptPaginationNotSupportedError(RuntimeError):
+    """Raised when the installed MCP SDK cannot paginate MCP prompts."""
+
 
 try:
     import anyio
@@ -411,8 +427,24 @@ class MCPClient:
 
         self._mcp_server_config: dict | None = None
         self._server_name: str | None = None
+        self._server_capabilities: mcp.types.ServerCapabilities | None = None
         self._reconnect_lock = asyncio.Lock()  # Lock for thread-safe reconnection
         self._reconnecting: bool = False
+
+    async def _handle_protocol_logging_message(
+        self,
+        msg: mcp.types.LoggingMessageNotificationParams,
+    ) -> None:
+        if msg.level not in _MCP_ERROR_LOG_LEVELS:
+            return
+
+        log_msg = f"[{msg.level.upper()}] {msg.data!s}"
+        if len(log_msg) > _MCP_SERVER_ERROR_LOG_MAX_CHARS:
+            log_msg = log_msg[: _MCP_SERVER_ERROR_LOG_MAX_CHARS - 3] + "..."
+
+        self.server_errlogs.append(log_msg)
+        if len(self.server_errlogs) > _MCP_SERVER_ERROR_LOG_MAX_ENTRIES:
+            del self.server_errlogs[:-_MCP_SERVER_ERROR_LOG_MAX_ENTRIES]
 
     async def _run_connection(
         self,
@@ -521,16 +553,8 @@ class MCPClient:
         """Internal: perform the actual connection inside _run_connection's task."""
         # exit_stack is always set by _run_connection before _do_connect is called.
         assert self.exit_stack is not None
+        self._server_capabilities = None
         cfg = _prepare_config(mcp_server_config.copy())
-
-        def logging_callback(
-            msg: str | mcp.types.LoggingMessageNotificationParams,
-        ) -> None:
-            # Handle MCP service error logs
-            if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
-                if msg.level in ("warning", "error", "critical", "alert", "emergency"):
-                    log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
-                    self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
             success, error_msg = await _quick_test_mcp_connection(cfg)
@@ -562,7 +586,7 @@ class MCPClient:
                     mcp.ClientSession(
                         *streams,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=self._handle_protocol_logging_message,
                     ),
                 )
             else:
@@ -609,7 +633,7 @@ class MCPClient:
                         read_stream=read_s,
                         write_stream=write_s,
                         read_timeout_seconds=read_timeout,
-                        logging_callback=logging_callback,  # type: ignore
+                        logging_callback=self._handle_protocol_logging_message,
                     ),
                 )
 
@@ -620,19 +644,6 @@ class MCPClient:
                 **cfg,
             )
 
-            def callback(msg: str | mcp.types.LoggingMessageNotificationParams) -> None:
-                # Handle MCP service error logs
-                if isinstance(msg, mcp.types.LoggingMessageNotificationParams):
-                    if msg.level in (
-                        "warning",
-                        "error",
-                        "critical",
-                        "alert",
-                        "emergency",
-                    ):
-                        log_msg = f"[{msg.level.upper()}] {str(msg.data)}"
-                        self.server_errlogs.append(log_msg)
-
             stdio_transport = await self.exit_stack.enter_async_context(
                 mcp.stdio_client(
                     server_params,
@@ -640,24 +651,245 @@ class MCPClient:
                         level=logging.INFO,
                         logger=logger,
                         identifier=f"MCPServer-{name}",
-                        callback=callback,
                     ),  # type: ignore
                 ),
             )
 
             # Create a new client session
             self.session = await self.exit_stack.enter_async_context(
-                mcp.ClientSession(*stdio_transport),
+                mcp.ClientSession(
+                    *stdio_transport,
+                    logging_callback=self._handle_protocol_logging_message,
+                ),
             )
-        await self.session.initialize()
+        initialize_result = await self.session.initialize()
+        self._server_capabilities = initialize_result.capabilities
 
     async def list_tools_and_save(self) -> mcp.ListToolsResult:
         """List all tools from the server and save them to self.tools"""
         if not self.session:
             raise Exception("MCP Client is not initialized")
-        response = await self.session.list_tools()
+        if (
+            self._server_capabilities is not None
+            and getattr(self._server_capabilities, "tools", None) is None
+        ):
+            response = mcp.types.ListToolsResult(tools=[])
+        else:
+            response = await self.session.list_tools()
+
+        next_cursor = getattr(response, "nextCursor", None)
+        if next_cursor is None:
+            self.tools = response.tools
+            return response
+
+        def use_first_page(reason: str) -> mcp.ListToolsResult:
+            server_name = self._server_name or self.name or "unknown"
+            logger.warning(
+                f"MCP server {server_name} returned a paginated tool catalog, "
+                f"but {reason}; using the first page only."
+            )
+            self.tools = response.tools
+            return response
+
+        try:
+            parameters = inspect.signature(self.session.list_tools).parameters
+        except (TypeError, ValueError):
+            return use_first_page(
+                "the installed MCP SDK pagination support could not be detected"
+            )
+
+        params_parameter = parameters.get("params")
+        supports_params = bool(
+            hasattr(mcp.types, "PaginatedRequestParams")
+            and params_parameter
+            and params_parameter.kind
+            in {
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            }
+        )
+        cursor_parameter = parameters.get("cursor")
+        supports_cursor = bool(
+            cursor_parameter
+            and cursor_parameter.kind
+            in {
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            }
+        ) or any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+        if not supports_params and not supports_cursor:
+            return use_first_page(
+                "the installed MCP SDK does not support pagination cursors"
+            )
+
+        all_tools = list(response.tools)
+        seen_cursors: set[str] = set()
+        page_count = 1
+        while next_cursor is not None:
+            if next_cursor in seen_cursors:
+                return use_first_page("the server repeated a pagination cursor")
+            if page_count >= _MCP_TOOL_LIST_MAX_PAGES:
+                return use_first_page(
+                    f"the catalog exceeded {_MCP_TOOL_LIST_MAX_PAGES} pages"
+                )
+
+            seen_cursors.add(next_cursor)
+            try:
+                if supports_params:
+                    page = await self.session.list_tools(
+                        params=mcp.types.PaginatedRequestParams(cursor=next_cursor)
+                    )
+                else:
+                    page = await self.session.list_tools(cursor=next_cursor)
+                all_tools.extend(page.tools)
+                next_cursor = getattr(page, "nextCursor", None)
+            except (TypeError, MemoryError):
+                raise
+            except Exception as exc:
+                return use_first_page(
+                    f"requesting a later page failed ({type(exc).__name__})"
+                )
+            page_count += 1
+
+        response.tools = all_tools
+        response.nextCursor = None
         self.tools = response.tools
         return response
+
+    @property
+    def supports_resources(self) -> bool:
+        """Whether the connected server advertises MCP resources support."""
+        return bool(self._server_capabilities and self._server_capabilities.resources)
+
+    async def list_resources(
+        self,
+        cursor: str | None = None,
+    ) -> mcp.types.ListResourcesResult:
+        """List resources exposed by the connected MCP server."""
+        if not self.session:
+            raise ValueError("MCP session is not available for resource listing.")
+        if not self.supports_resources:
+            raise RuntimeError("MCP server does not advertise resources support.")
+
+        if cursor is None:
+            return await self.session.list_resources()
+
+        try:
+            return await self.session.list_resources(cursor=cursor)
+        except TypeError as exc:
+            if "unexpected keyword argument 'cursor'" not in str(exc):
+                raise
+            raise MCPResourcePaginationNotSupportedError(
+                "The installed MCP SDK does not support resource pagination."
+            ) from exc
+
+    async def list_resource_templates(
+        self,
+        cursor: str | None = None,
+    ) -> mcp.types.ListResourceTemplatesResult:
+        """List resource templates exposed by the connected MCP server."""
+        if not self.session:
+            raise ValueError(
+                "MCP session is not available for resource template listing."
+            )
+        if not self.supports_resources:
+            raise RuntimeError("MCP server does not advertise resources support.")
+
+        if cursor is None:
+            return await self.session.list_resource_templates()
+
+        try:
+            return await self.session.list_resource_templates(cursor=cursor)
+        except TypeError as exc:
+            if "unexpected keyword argument 'cursor'" not in str(exc):
+                raise
+            raise MCPResourcePaginationNotSupportedError(
+                "The installed MCP SDK does not support resource template pagination."
+            ) from exc
+
+    async def read_resource(self, uri: str) -> mcp.types.ReadResourceResult:
+        """Read an MCP resource from the current connected session."""
+        if not self.session:
+            raise ValueError("MCP session is not available for resource reading.")
+        if not self.supports_resources:
+            raise RuntimeError("MCP server does not advertise resources support.")
+        return await self.session.read_resource(uri=uri)
+
+    @property
+    def supports_prompts(self) -> bool:
+        """Whether the connected server advertises MCP prompts support."""
+        return bool(
+            self._server_capabilities
+            and getattr(self._server_capabilities, "prompts", None)
+        )
+
+    async def list_prompts(
+        self,
+        cursor: str | None = None,
+    ) -> mcp.types.ListPromptsResult:
+        """List prompts exposed by the connected MCP server."""
+        if not self.session:
+            raise ValueError("MCP session is not available for prompt listing.")
+        if not self.supports_prompts:
+            raise RuntimeError("MCP server does not advertise prompts support.")
+
+        if cursor is None:
+            return await self.session.list_prompts()
+
+        try:
+            parameters = inspect.signature(self.session.list_prompts).parameters
+        except (TypeError, ValueError) as exc:
+            raise MCPPromptPaginationNotSupportedError(
+                "The installed MCP SDK prompt pagination support could not be detected."
+            ) from exc
+
+        params_parameter = parameters.get("params")
+        supports_params = bool(
+            hasattr(mcp.types, "PaginatedRequestParams")
+            and params_parameter
+            and params_parameter.kind
+            in {
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            }
+        )
+        cursor_parameter = parameters.get("cursor")
+        supports_cursor = bool(
+            cursor_parameter
+            and cursor_parameter.kind
+            in {
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            }
+        ) or any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters.values()
+        )
+
+        if supports_params:
+            return await self.session.list_prompts(
+                params=mcp.types.PaginatedRequestParams(cursor=cursor)
+            )
+        if supports_cursor:
+            return await self.session.list_prompts(cursor=cursor)
+        raise MCPPromptPaginationNotSupportedError(
+            "The installed MCP SDK does not support prompt pagination."
+        )
+
+    async def get_prompt(
+        self,
+        name: str,
+        arguments: dict[str, str] | None = None,
+    ) -> mcp.types.GetPromptResult:
+        """Resolve a prompt exposed by the connected MCP server."""
+        if not self.session:
+            raise ValueError("MCP session is not available for prompt retrieval.")
+        if not self.supports_prompts:
+            raise RuntimeError("MCP server does not advertise prompts support.")
+        return await self.session.get_prompt(name=name, arguments=arguments)
 
     def _cancel_connection_task(self, task: asyncio.Task) -> None:
         """Cancel a connection owner task and track it until it finishes."""
@@ -786,6 +1018,8 @@ class MCPClient:
             if pending:
                 await asyncio.gather(*pending, return_exceptions=True)
             self._old_connection_tasks.clear()
+
+        self._server_capabilities = None
 
         # Set running_event to unblock any waiting tasks
         self.running_event.set()

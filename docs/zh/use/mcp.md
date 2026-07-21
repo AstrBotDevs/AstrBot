@@ -95,6 +95,17 @@ npx -v
 
 即可。
 
+## 浏览 MCP Resources
+
+当已连接的 MCP Server 声明 `resources` 能力时，WebUI 中对应的 Server 会显示
+**Resources** 按钮。打开后可以浏览该 Server 提供的 Resource Catalog 和
+Resource Templates；只有在用户显式选择具体 Resource 后，AstrBot 才会读取
+并展示其元数据和纯文本预览。
+
+每次读取返回的文本预览总量上限为 256 KiB。二进制内容不会发送到浏览器，只展示
+URI、MIME Type 和大小。浏览功能不会把 Resources 注册为模型可调用的 Tools，
+也不会把内容加入模型上下文。当前暂不支持 Resource 订阅和变更通知。
+
 参考链接：
 
 1. 在这里了解如何使用 MCP: [Model Context Protocol](https://modelcontextprotocol.io/introduction)

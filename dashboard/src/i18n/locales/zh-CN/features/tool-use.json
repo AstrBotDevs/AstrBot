@@ -27,6 +27,31 @@
       "availableTools": "可用工具",
       "configSummary": "配置: {keys}",
       "noConfig": "未设置配置"
+    },
+    "resources": {
+      "button": "Resources",
+      "title": "Resources · {name}",
+      "applicationControlled": "Resource 仅在管理面板中浏览，并且只会在你明确选择后读取；它们不会作为 Tool 暴露给模型。",
+      "tabs": {
+        "resources": "Resources",
+        "templates": "Resource 模板"
+      },
+      "catalogTitle": "Resource 目录",
+      "previewTitle": "预览",
+      "selectPrompt": "选择一个 Resource 后读取并预览",
+      "empty": "该服务器未返回任何 Resource",
+      "templatesEmpty": "该服务器未返回任何 Resource 模板",
+      "loadMore": "加载更多",
+      "noContents": "该 Resource 未返回任何内容",
+      "truncated": "为了限制响应大小，预览内容已截断。",
+      "binaryUnavailable": "二进制 Resource 内容不会发送到浏览器，也不会提供预览。",
+      "close": "关闭",
+      "errors": {
+        "list": "加载 Resource 失败：{error}",
+        "templates": "加载 Resource 模板失败：{error}",
+        "read": "读取 Resource 失败：{error}",
+        "unknown": "未知错误"
+      }
     }
   },
   "functionTools": {
