@@ -4,6 +4,7 @@ import copy
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 from astrbot import logger
 from astrbot.core.agent.message import Message
@@ -56,7 +57,7 @@ def _extract_image_mime(part: dict[str, Any]) -> str | None:
     layouts, as well as a bare ``{"url": ...}`` or ``{"image_url": "<url>"}``.
 
     Returns:
-        The lowercased MIME type (e.g. ``image/gif``) if it can be determined,
+        The normalized MIME type (e.g. ``image/gif``) if it can be determined,
         otherwise ``None``.
     """
     image_url = part.get("image_url")
@@ -68,6 +69,7 @@ def _extract_image_mime(part: dict[str, Any]) -> str | None:
         url = part.get("url") if isinstance(part.get("url"), str) else None
 
     if isinstance(url, str):
+        url = url.strip()
         # data URLs look like "data:image/gif;base64,...."
         if url.lower().startswith("data:"):
             head = url[5:].split(",", 1)[0]
@@ -76,8 +78,10 @@ def _extract_image_mime(part: dict[str, Any]) -> str | None:
             if mime:
                 return mime
         else:
-            # Fall back to the URL path extension for http(s) URLs.
-            path = url.split("?", 1)[0].split("#", 1)[0].lower()
+            # Fall back to the URL path extension for http(s) URLs. urlsplit
+            # robustly separates the path from query/fragment even when those
+            # delimiters appear percent-encoded inside the path itself.
+            path = urlsplit(url).path.lower()
             for ext, mime in _IMAGE_EXT_TO_MIME.items():
                 if path.endswith(ext):
                     return mime
@@ -86,11 +90,15 @@ def _extract_image_mime(part: dict[str, Any]) -> str | None:
     if isinstance(source, dict):
         media_type = source.get("media_type")
         if isinstance(media_type, str):
-            return media_type.lower()
+            # Normalize by stripping parameters (e.g. "image/gif; charset=binary"
+            # -> "image/gif") so it matches _UNSUPPORTED_IMAGE_MIMES.
+            return media_type.split(";", 1)[0].strip().lower()
 
     mime_type = part.get("mimeType") or part.get("mime_type")
     if isinstance(mime_type, str):
-        return mime_type.lower()
+        # Strip parameters (e.g. "image/gif;codec=xyz" -> "image/gif") to align
+        # with the data-URL and source.media_type handling above.
+        return mime_type.split(";", 1)[0].strip().lower()
 
     return None
 
