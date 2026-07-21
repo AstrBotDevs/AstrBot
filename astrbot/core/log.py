@@ -1,6 +1,7 @@
 """日志系统，统一将标准 logging 输出转发到 loguru。"""
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -12,9 +13,18 @@ from typing import TYPE_CHECKING
 from loguru import logger as _raw_loguru_logger
 
 from astrbot.core.config.default import VERSION
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_config_path,
+    get_astrbot_data_path,
+)
 
 CACHED_SIZE = 500
+
+PLUGIN_LOGGER_PREFIX = "astrbot.plugin."
+"""Prefix of per-plugin logger names; full name is ``astrbot.plugin.<plugin_name>``."""
+
+PLUGIN_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+"""Allowed per-plugin log levels."""
 
 if TYPE_CHECKING:
     from loguru import Record
@@ -24,7 +34,13 @@ class _RecordEnricherFilter(logging.Filter):
     """为 logging.LogRecord 注入 AstrBot 日志字段。"""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.plugin_tag = "[Plug]" if _is_plugin_path(record.pathname) else "[Core]"
+        if record.name.startswith(PLUGIN_LOGGER_PREFIX):
+            # Records from a per-plugin logger are tagged with the plugin name.
+            record.plugin_tag = f"[{record.name[len(PLUGIN_LOGGER_PREFIX) :]}]"
+        else:
+            record.plugin_tag = (
+                "[Plug]" if _is_plugin_path(record.pathname) else "[Core]"
+            )
         record.short_levelname = _get_short_level_name(record.levelname)
         record.astrbot_version_tag = (
             f" [v{VERSION}]" if record.levelno >= logging.WARNING else ""
@@ -173,6 +189,9 @@ class LogManager:
     _console_sink_id: int | None = None
     _file_sink_id: int | None = None
     _trace_sink_id: int | None = None
+    _plugin_logger_names: set[str] = set()
+    _plugin_level_overrides: dict[str, str] | None = None
+    _log_broker: "LogBroker | None" = None
     _NOISY_LOGGER_LEVELS: dict[str, int] = {
         "aiosqlite": logging.WARNING,
         "filelock": logging.WARNING,
@@ -263,24 +282,125 @@ class LogManager:
         return logger
 
     @classmethod
+    def _plugin_log_levels_path(cls) -> str:
+        return os.path.join(get_astrbot_config_path(), "plugin_log_levels.json")
+
+    @classmethod
+    def _load_plugin_level_overrides(cls) -> dict[str, str]:
+        """Lazily load persisted per-plugin log level overrides from disk."""
+        if cls._plugin_level_overrides is None:
+            cls._plugin_level_overrides = {}
+            try:
+                with open(cls._plugin_log_levels_path(), encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    cls._plugin_level_overrides = {
+                        str(name): str(level).upper()
+                        for name, level in data.items()
+                        if str(level).upper() in PLUGIN_LOG_LEVELS
+                    }
+            except (OSError, ValueError):
+                pass
+        return cls._plugin_level_overrides
+
+    @classmethod
+    def get_plugin_log_level(cls, plugin_name: str) -> str | None:
+        """Get the log level override of a plugin.
+
+        Args:
+            plugin_name: The plugin name.
+
+        Returns:
+            The configured level name, or None if the plugin follows the global level.
+        """
+        return cls._load_plugin_level_overrides().get(plugin_name)
+
+    @classmethod
+    def set_plugin_log_level(cls, plugin_name: str, level: str | None) -> None:
+        """Persist and apply a per-plugin log level override.
+
+        Args:
+            plugin_name: The plugin name.
+            level: The level name to apply, or None to follow the global level.
+
+        Raises:
+            ValueError: If the level name is not valid.
+        """
+        overrides = cls._load_plugin_level_overrides()
+        if level is None:
+            overrides.pop(plugin_name, None)
+        else:
+            level = level.upper()
+            if level not in PLUGIN_LOG_LEVELS:
+                raise ValueError(f"Invalid log level: {level}")
+            overrides[plugin_name] = level
+
+        os.makedirs(os.path.dirname(cls._plugin_log_levels_path()), exist_ok=True)
+        with open(cls._plugin_log_levels_path(), "w", encoding="utf-8") as f:
+            json.dump(overrides, f, indent=2)
+
+        if plugin_name in cls._plugin_logger_names:
+            logging.getLogger(f"{PLUGIN_LOGGER_PREFIX}{plugin_name}").setLevel(
+                cls._effective_plugin_log_level(plugin_name)
+            )
+
+    @classmethod
+    def _effective_plugin_log_level(cls, plugin_name: str) -> int:
+        override = cls.get_plugin_log_level(plugin_name)
+        if override:
+            return logging.getLevelName(override)
+        base_level = logging.getLogger("astrbot").level
+        return base_level if base_level > 0 else logging.INFO
+
+    @classmethod
+    def get_plugin_logger(cls, plugin_name: str) -> logging.Logger:
+        """Get or create the dedicated logger for a plugin.
+
+        The logger is isolated from the global ``astrbot`` logger so its level
+        can be tuned independently. Its level defaults to the persisted
+        per-plugin override, falling back to the current global level.
+
+        Args:
+            plugin_name: The plugin name.
+
+        Returns:
+            The plugin's dedicated logger.
+        """
+        plugin_logger = cls.GetLogger(f"{PLUGIN_LOGGER_PREFIX}{plugin_name}")
+        if plugin_name not in cls._plugin_logger_names:
+            cls._plugin_logger_names.add(plugin_name)
+            if cls._log_broker is not None:
+                cls.set_queue_handler(plugin_logger, cls._log_broker)
+        # GetLogger() resets the level to DEBUG, so re-apply the effective level.
+        plugin_logger.setLevel(cls._effective_plugin_log_level(plugin_name))
+        return plugin_logger
+
+    @classmethod
     def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker) -> None:
-        cls._ensure_logger_enricher_filter(logger)
+        cls._log_broker = log_broker
 
-        for handler in logger.handlers:
-            if isinstance(handler, LogQueueHandler):
-                return
-
-        handler = LogQueueHandler(log_broker)
-        handler.setLevel(logging.DEBUG)
-        handler.addFilter(_QueueAnsiColorFilter())
-        handler.setFormatter(
-            logging.Formatter(
-                "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "
-                "[%(source_file)s:%(source_line)d]: %(message)s%(ansi_reset)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            ),
+        targets = [logger]
+        targets.extend(
+            logging.getLogger(f"{PLUGIN_LOGGER_PREFIX}{name}")
+            for name in cls._plugin_logger_names
         )
-        logger.addHandler(handler)
+        for target in targets:
+            cls._ensure_logger_enricher_filter(target)
+
+            if any(isinstance(handler, LogQueueHandler) for handler in target.handlers):
+                continue
+
+            handler = LogQueueHandler(log_broker)
+            handler.setLevel(logging.DEBUG)
+            handler.addFilter(_QueueAnsiColorFilter())
+            handler.setFormatter(
+                logging.Formatter(
+                    "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "
+                    "[%(source_file)s:%(source_line)d]: %(message)s%(ansi_reset)s",
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                ),
+            )
+            target.addHandler(handler)
 
     @classmethod
     def _remove_sink(cls, sink_id: int | None) -> None:
@@ -352,6 +472,22 @@ class LogManager:
                 logger.setLevel(level)
             except Exception:
                 logger.setLevel(logging.INFO)
+
+            # Plugin loggers without an explicit override follow the global level.
+            plugin_level = logger.level
+            if not isinstance(plugin_level, int):
+                configured_level = logging.getLevelName(str(level).upper())
+                plugin_level = (
+                    configured_level
+                    if isinstance(configured_level, int)
+                    else logging.INFO
+                )
+            overrides = cls._load_plugin_level_overrides()
+            for name in cls._plugin_logger_names:
+                if name not in overrides:
+                    logging.getLogger(f"{PLUGIN_LOGGER_PREFIX}{name}").setLevel(
+                        plugin_level
+                    )
 
         if "log_file" in config:
             file_conf = config.get("log_file") or {}
