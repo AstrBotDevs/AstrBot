@@ -15,14 +15,13 @@ Tests the full new pipeline:
 """
 
 from typing import Literal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from astrbot.core.agent.context.config import ContextConfig
 from astrbot.core.agent.context.manager import ContextManager
 from astrbot.core.agent.message import Message
-
 
 # ====================== Helpers ======================
 
@@ -54,13 +53,18 @@ class MockProvider:
         return MagicMock(id="test_provider", type="openai")
 
 
-def create_message(role: Literal["system", "user", "assistant", "tool"], content: str) -> Message:
+def create_message(
+    role: Literal["system", "user", "assistant", "tool"], content: str
+) -> Message:
     return Message(role=role, content=content)
 
 
 def create_messages(count: int) -> list[Message]:
     """Alternating user/assistant messages."""
-    return [create_message("user" if i % 2 == 0 else "assistant", f"Message {i}") for i in range(count)]
+    return [
+        create_message("user" if i % 2 == 0 else "assistant", f"Message {i}")
+        for i in range(count)
+    ]
 
 
 # ====================== Trigger Dimension Tests ======================
@@ -160,8 +164,8 @@ class TestTriggerDimension:
         """Only one trigger needs to fire for compression to run."""
         cfg = ContextConfig(
             enable_turn_limit=True,
-            max_turns=2,                 # will trigger
-            enable_token_guard=False,    # won't trigger
+            max_turns=2,  # will trigger
+            enable_token_guard=False,  # won't trigger
             enable_summary=False,
             enable_discard=True,
             discard_turns=1,
@@ -504,6 +508,381 @@ class TestEdgeCases:
         # Check system message preserved
         assert result[0].role == "system"
         assert result[0].content == "You are helpful."
+
+
+# ====================== Custom Compressor Tests ======================
+
+
+class TestCustomCompressor:
+    """Custom compressor (_unity_compressor) path through process()."""
+
+    @pytest.mark.asyncio
+    async def test_custom_compressor_used_when_provided(self):
+        """custom_compressor is invoked by process() instead of summary/discard."""
+        call_log = []
+
+        async def my_compressor(messages: list[Message]) -> list[Message]:
+            call_log.append("called")
+            # Simulate compression: keep only last 2 messages
+            return messages[-2:]
+
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=2,
+            enable_token_guard=False,
+            custom_compressor=my_compressor,
+        )
+        manager = ContextManager(cfg)
+        msgs = create_messages(10)
+
+        result = await manager.process(msgs)
+
+        assert call_log == ["called"]
+        # Custom compressor returned only last 2 messages
+        assert len(result) == 2
+        assert result[0].content == "Message 8"
+        assert result[1].content == "Message 9"
+
+    @pytest.mark.asyncio
+    async def test_custom_compressor_skips_summary_and_discard(self):
+        """When custom_compressor is set, summary and discard are NOT called."""
+        custom_called = False
+        summary_called = False
+        discard_called = False
+
+        async def my_compressor(messages: list[Message]) -> list[Message]:
+            nonlocal custom_called
+            custom_called = True
+            return messages
+
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=2,
+            enable_token_guard=False,
+            enable_summary=True,
+            enable_discard=True,
+            summary_provider=MockProvider(),  # would be used if not for custom
+            custom_compressor=my_compressor,
+        )
+        manager = ContextManager(cfg)
+
+        # Spy on summary and discard
+        original_try_summary = manager._try_summary
+        original_try_discard = manager._try_discard
+
+        async def spy_summary(messages):
+            nonlocal summary_called
+            summary_called = True
+            return await original_try_summary(messages)
+
+        def spy_discard(messages):
+            nonlocal discard_called
+            discard_called = True
+            return original_try_discard(messages)
+
+        manager._try_summary = spy_summary
+        manager._try_discard = spy_discard
+
+        msgs = create_messages(10)
+        await manager.process(msgs)
+
+        assert custom_called, "Custom compressor should have been called"
+        assert not summary_called, (
+            "Summary should NOT be called when custom compressor exists"
+        )
+        assert not discard_called, (
+            "Discard should NOT be called when custom compressor exists"
+        )
+
+    @pytest.mark.asyncio
+    async def test_custom_compressor_result_used_as_is(self):
+        """process() passes custom compressor's return value through directly (no validation)."""
+
+        async def my_compressor(messages: list[Message]) -> list[Message]:
+            return [create_message("assistant", "Custom result")]
+
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=2,
+            enable_token_guard=False,
+            custom_compressor=my_compressor,
+        )
+        manager = ContextManager(cfg)
+        msgs = create_messages(10)
+
+        result = await manager.process(msgs)
+
+        assert len(result) == 1
+        assert result[0].content == "Custom result"
+
+    @pytest.mark.asyncio
+    async def test_custom_compressor_passed_no_trigger(self):
+        """When no trigger fires, custom compressor is NOT called."""
+        call_log = []
+
+        async def my_compressor(messages: list[Message]) -> list[Message]:
+            call_log.append("called")
+            return messages
+
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=100,  # won't trigger
+            enable_token_guard=False,
+            custom_compressor=my_compressor,
+        )
+        manager = ContextManager(cfg)
+        msgs = create_messages(4)
+
+        result = await manager.process(msgs)
+
+        assert call_log == [], (
+            "Custom compressor should NOT be called when no trigger fires"
+        )
+        assert len(result) == len(msgs)
+
+
+# ====================== _try_summary Edge Cases ======================
+
+
+class TestTrySummaryEdgeCases:
+    """Edge cases within _try_summary:
+
+    - Identity check: compressor returns same list object by reference.
+    - No reduction: compressor returns a new list of equal/longer length.
+    - Compressor exception: compressor.__call__() raises, falls back to discard.
+    """
+
+    @pytest.mark.asyncio
+    async def test_identity_check_returns_none(self):
+        """When compressor returns the exact same list (is), _try_summary returns None."""
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=2,
+            enable_token_guard=False,
+        )
+        manager = ContextManager(cfg)
+        msgs = create_messages(10)
+
+        # Replace _summary_compressor with one that returns the same list object
+        async def identity_compressor(messages):
+            return messages  # returns the exact same list (is check)
+
+        manager._summary_compressor = identity_compressor
+
+        result = await manager.process(msgs)
+
+        # _try_summary returned None (identity), process should still work
+        assert isinstance(result, list)
+
+    @pytest.mark.asyncio
+    async def test_no_effective_reduction_returns_none(self):
+        """When compressor returns a new list of same length, _try_summary returns None."""
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=2,
+            enable_token_guard=False,
+        )
+        manager = ContextManager(cfg)
+        msgs = create_messages(10)
+
+        async def no_op_compressor(messages):
+            return list(messages)  # new list, same length
+
+        manager._summary_compressor = no_op_compressor
+
+        result = await manager.process(msgs)
+
+        assert isinstance(result, list)
+
+    @pytest.mark.asyncio
+    async def test_summary_longer_than_input_returns_none(self):
+        """When compressor returns a longer list than input, _try_summary returns None."""
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=2,
+            enable_token_guard=False,
+            enable_discard=False,  # No fallback, so no compression at all
+        )
+        manager = ContextManager(cfg)
+        msgs = create_messages(3)
+
+        async def expander_compressor(messages):
+            return messages + [create_message("assistant", "extra")]
+
+        manager._summary_compressor = expander_compressor
+
+        result = await manager.process(msgs)
+
+        # _try_summary returned None, disposal had no effect
+        assert len(result) == len(msgs)
+
+    @pytest.mark.asyncio
+    async def test_summary_exception_falls_back_to_discard(self):
+        """When compressor.__call__() raises, _try_summary catches and falls back to discard."""
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=2,
+            enable_token_guard=False,
+            enable_summary=True,
+            enable_discard=True,
+            discard_turns=2,
+            retention_method="null",
+        )
+        manager = ContextManager(cfg)
+        msgs = create_messages(10)
+
+        # Replace _summary_compressor with one that raises
+        async def broken_compressor(messages):
+            raise RuntimeError("Summary compressor failed")
+
+        manager._summary_compressor = broken_compressor
+
+        with patch("astrbot.core.agent.context.manager.logger") as mock_logger:
+            result = await manager.process(msgs)
+
+        # Should have fallen back to discard
+        assert mock_logger.warning.called
+        assert len(result) < len(msgs)
+
+    @pytest.mark.asyncio
+    async def test_summary_exception_without_discall_fallback(self):
+        """Compressor raises and discard disabled → no compression, original returned."""
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=2,
+            enable_token_guard=False,
+            enable_summary=True,
+            enable_discard=False,
+        )
+        manager = ContextManager(cfg)
+        msgs = create_messages(10)
+
+        async def broken_compressor(messages):
+            raise RuntimeError("Summary compressor failed")
+
+        manager._summary_compressor = broken_compressor
+
+        result = await manager.process(msgs)
+
+        # No fallback, original messages returned
+        assert len(result) == len(msgs)
+
+
+# ====================== _try_discard Edge Cases ======================
+
+
+class TestTryDiscardEdgeCases:
+    """Edge cases within _try_discard and _compute_discard_limit."""
+
+    @pytest.mark.asyncio
+    async def test_discard_prevented_by_retention(self):
+        """When retain_turns >= total_turns, max_discardable=0 and nothing is discarded."""
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=2,
+            enable_token_guard=False,
+            enable_summary=False,
+            enable_discard=True,
+            discard_turns=5,
+            retention_method="turns",
+            retain_turns=10,  # retain >= total (10 turns), so max_discardable=0
+        )
+        manager = ContextManager(cfg)
+        msgs = create_messages(20)  # 10 turns
+
+        result = await manager.process(msgs)
+
+        # Retention prevents any discard, original messages returned
+        assert len(result) == len(msgs)
+
+    @pytest.mark.asyncio
+    async def test_discard_limit_total_turns_zero(self):
+        """_compute_discard_limit(0) returns 0 for all retention methods."""
+        cfg = ContextConfig(
+            enable_turn_limit=True,
+            max_turns=2,
+            enable_token_guard=False,
+            enable_summary=False,
+            enable_discard=True,
+            discard_turns=5,
+            retention_method="turns",
+            retain_turns=3,
+        )
+        manager = ContextManager(cfg)
+
+        # Directly test _compute_discard_limit
+        assert manager._compute_discard_limit(0) == 0
+
+        # Test all three retention methods
+        for method, retain in [("turns", 5), ("percentage", 0.3), ("null", None)]:
+            cfg2 = ContextConfig(
+                enable_turn_limit=True,
+                max_turns=2,
+                retention_method=method,
+                retain_turns=retain if isinstance(retain, int) else 5,
+                retain_percentage=retain if isinstance(retain, float) else 0.3,
+            )
+            m = ContextManager(cfg2)
+            assert m._compute_discard_limit(0) == 0, f"method={method}"
+
+    @pytest.mark.asyncio
+    async def test_discard_limit_percentage_boundary(self):
+        """_compute_discard_limit with retain_percentage=0 and 1.0."""
+        cfg_0 = ContextConfig(retention_method="percentage", retain_percentage=0.0)
+        m0 = ContextManager(cfg_0)
+        total = 10
+        # retain_percentage=0 → floor=0 → max_discardable = 10 - 0 = 10
+        assert m0._compute_discard_limit(total) == total
+
+        cfg_1 = ContextConfig(retention_method="percentage", retain_percentage=1.0)
+        m1 = ContextManager(cfg_1)
+        # retain_percentage=1.0 → floor=10 → max_discardable = 10 - 10 = 0
+        assert m1._compute_discard_limit(total) == 0
+
+    @pytest.mark.asyncio
+    async def test_discard_limit_exact_turns_boundary(self):
+        """_compute_discard_limit when total_turns == retain_turns."""
+        cfg = ContextConfig(retention_method="turns", retain_turns=5)
+        manager = ContextManager(cfg)
+        # total=5, retain=5 → max_discardable = max(0, 5-5) = 0
+        assert manager._compute_discard_limit(5) == 0
+        # total=6, retain=5 → max_discardable = max(0, 6-5) = 1
+        assert manager._compute_discard_limit(6) == 1
+
+
+# ====================== Trusted Token Usage Tests ======================
+
+
+class TestTrustedTokenUsage:
+    """trusted_token_usage parameter passed to process()."""
+
+    @pytest.mark.asyncio
+    async def test_trusted_token_usage_non_zero_passed_through(self):
+        """Non-zero trusted_token_usage is passed to token_counter."""
+        cfg = ContextConfig(
+            enable_turn_limit=False,
+            enable_token_guard=True,
+            token_guard_threshold=0.5,
+            enable_summary=False,
+            enable_discard=False,
+        )
+        manager = ContextManager(cfg)
+        msgs = create_messages(4)
+
+        # Patch the token_counter to verify trusted_token_usage is passed
+        original_count = manager.token_counter.count_tokens
+
+        def spy_count_tokens(messages, trusted_token_usage=0):
+            assert trusted_token_usage == 999, (
+                f"Expected trusted_token_usage=999, got {trusted_token_usage}"
+            )
+            return original_count(messages, trusted_token_usage)
+
+        manager.token_counter.count_tokens = spy_count_tokens
+
+        result = await manager.process(msgs, trusted_token_usage=999)
+
+        assert isinstance(result, list)
 
 
 # ====================== Integration Scenarios ======================

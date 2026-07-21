@@ -187,15 +187,14 @@ class TestMigraContextConfig:
         ):
             assert old_key not in ps, f"{old_key} should have been removed"
 
-    def test_retain_percentage_zero_uses_turns(self):
-        """llm_compress_keep_recent_ratio=0 → retain_percentage=0, retention_method stays 'turns'."""
+    def test_retain_percentage_zero_becomes_percentage(self):
+        """llm_compress_keep_recent_ratio=0 → retain_percentage=0, retention_method becomes 'percentage'."""
         ps = make_old_settings(llm_compress_keep_recent_ratio=0)
         result = _call_migra(ps)
 
         assert result is True
         assert ps.get("retain_percentage") == 0
-        # When ratio is 0, it's ambiguous; the migration may or may not
-        # change retention_method. Both outcomes are reasonable.
+        assert ps.get("retention_method") == "percentage"
         assert "llm_compress_keep_recent_ratio" not in ps
 
 

@@ -262,10 +262,17 @@ class ConversationCommands:
 
         original_len = len(history)
 
-        # 将 dict 转换为 Message 对象
+        # 将 dict 转换为 Message 对象（保留完整元数据）
+        from astrbot.core.agent.message import Message, ToolCall
+
         messages: list[Message] = []
         for item in history:
-            messages.append(Message(role=item.get("role", "user"), content=item.get("content", "")))
+            messages.append(Message(
+                role=item.get("role", "user"),
+                content=item.get("content", ""),
+                tool_calls=item.get("tool_calls"),
+                tool_call_id=item.get("tool_call_id"),
+            ))
 
         # 构建 ContextConfig
         from astrbot.core.agent.context.config import ContextConfig
@@ -295,8 +302,13 @@ class ConversationCommands:
         )
 
         cm = ContextManager(config)
+
+        # 获取 provider 的 max_context_tokens（使 token guard 触发器正常工作）
+        provider = self.context.get_using_provider(umo=umo)
+        max_context_tokens = provider.provider_config.get("max_context_tokens", 0) if provider else 0
+
         try:
-            compressed = await cm.process(messages)
+            compressed = await cm.process(messages, max_context_tokens=max_context_tokens)
         except Exception:
             logger.error("Context compression failed.", exc_info=True)
             message.set_result(
@@ -304,13 +316,22 @@ class ConversationCommands:
             )
             return
 
-        # 将 Message 对象转回 dict
+        # 将 Message 对象转回 dict（保留完整元数据）
         result: list[dict] = []
         for msg in compressed:
+            entry = {"role": msg.role}
             if isinstance(msg.content, str):
-                result.append({"role": msg.role, "content": msg.content})
+                entry["content"] = msg.content
             else:
-                result.append({"role": msg.role, "content": str(msg.content) if msg.content else ""})
+                entry["content"] = str(msg.content) if msg.content else ""
+            if msg.tool_calls is not None:
+                entry["tool_calls"] = [
+                    tc.model_dump() if isinstance(tc, ToolCall) else tc
+                    for tc in msg.tool_calls
+                ]
+            if msg.tool_call_id is not None:
+                entry["tool_call_id"] = msg.tool_call_id
+            result.append(entry)
 
         # 保存
         await self.context.conversation_manager.update_conversation(umo, cid, result)
