@@ -121,6 +121,93 @@ class ConversationCommands:
             return None
         return conv.persona_id
 
+    async def _check_command_permission(
+        self,
+        command: str,
+        message: AstrMessageEvent,
+        is_group: bool,
+        is_unique_session: bool,
+    ) -> bool:
+        scene = RstScene.get_scene(is_group, is_unique_session)
+        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {}) or {}
+        plugin_config = alter_cmd_cfg.get("astrbot", {})
+        cmd_cfg = plugin_config.get(command, {})
+        required_perm = cmd_cfg.get(
+            scene.key,
+            "admin" if is_group and not is_unique_session else "member",
+        )
+        if required_perm == "admin" and message.role != "admin":
+            message.set_result(
+                MessageEventResult().message(
+                    f"{command.capitalize()} command requires admin permission in {scene.name} scenario, "
+                    f"you (ID {message.get_sender_id()}) are not admin, cannot perform this action.",
+                ),
+            )
+            return False
+        return True
+
+    def _build_context_config(self, settings: dict, umo: str):
+        from astrbot.core.agent.context.config import ContextConfig
+
+        summary_provider_id = settings.get("summary_provider_id", "")
+        summary_provider = (
+            self.context.get_provider_by_id(summary_provider_id)
+            if summary_provider_id
+            else None
+        )
+        if not summary_provider:
+            summary_provider = self.context.get_using_provider(umo=umo)
+
+        return ContextConfig(
+            enable_turn_limit=settings.get("enable_turn_limit", False),
+            max_turns=settings.get("max_turns", 50),
+            enable_token_guard=settings.get("enable_token_guard", True),
+            token_guard_threshold=settings.get("token_guard_threshold", 0.82),
+            enable_summary=settings.get("enable_summary", True),
+            enable_discard=settings.get("enable_discard", True),
+            discard_turns=settings.get("discard_turns", 1),
+            summary_prompt=settings.get("summary_prompt", ""),
+            summary_provider=summary_provider,
+            retention_method=settings.get("retention_method", "turns"),
+            retain_turns=settings.get("retain_turns", 20),
+            retain_percentage=settings.get("retain_percentage", 0.3),
+        )
+
+    def _history_to_messages(self, history: list[dict]):
+        from astrbot.core.agent.message import Message
+
+        return [
+            Message(
+                role=item.get("role", "user"),
+                content=item.get("content", ""),
+                tool_calls=item.get("tool_calls"),
+                tool_call_id=item.get("tool_call_id"),
+            )
+            for item in history
+        ]
+
+    def _messages_to_history(self, messages):
+        from astrbot.core.agent.message import ToolCall
+
+        result: list[dict] = []
+        for msg in messages:
+            entry = {"role": msg.role}
+            if msg.content is None:
+                entry["content"] = None
+            elif isinstance(msg.content, (str, list, dict)):
+                entry["content"] = msg.content
+            else:
+                entry["content"] = str(msg.content)
+            if msg.tool_calls is not None:
+                entry["tool_calls"] = [
+                    tc.model_dump() if isinstance(tc, ToolCall) else tc
+                    for tc in msg.tool_calls
+                ]
+            if msg.tool_call_id is not None:
+                entry["tool_call_id"] = msg.tool_call_id
+            result.append(entry)
+        return result
+
     async def reset(self, message: AstrMessageEvent) -> None:
         """重置 LLM 会话"""
         umo = message.unified_msg_origin
@@ -128,24 +215,9 @@ class ConversationCommands:
         is_unique_session = cfg["platform_settings"]["unique_session"]
         is_group = bool(message.get_group_id())
 
-        scene = RstScene.get_scene(is_group, is_unique_session)
-
-        alter_cmd_cfg = await sp.get_async("global", "global", "alter_cmd", {})
-        plugin_config = alter_cmd_cfg.get("astrbot", {})
-        reset_cfg = plugin_config.get("reset", {})
-
-        required_perm = reset_cfg.get(
-            scene.key,
-            "admin" if is_group and not is_unique_session else "member",
-        )
-
-        if required_perm == "admin" and message.role != "admin":
-            message.set_result(
-                MessageEventResult().message(
-                    f"Reset command requires admin permission in {scene.name} scenario, "
-                    f"you (ID {message.get_sender_id()}) are not admin, cannot perform this action.",
-                ),
-            )
+        if not await self._check_command_permission(
+            "reset", message, is_group, is_unique_session
+        ):
             return
 
         agent_runner_type = cfg["provider_settings"]["agent_runner_type"]
@@ -191,6 +263,127 @@ class ConversationCommands:
 
         message.set_extra("_clean_group_context_session", True)
 
+        message.set_result(MessageEventResult().message(ret))
+
+    async def compact(self, message: AstrMessageEvent) -> None:
+        """手动触发上下文的处置与压缩"""
+        umo = message.unified_msg_origin
+        cfg = self.context.get_config(umo=umo)
+        settings = cfg["provider_settings"]
+        is_unique_session = cfg["platform_settings"]["unique_session"]
+        is_group = bool(message.get_group_id())
+
+        # 权限检查（与 reset 相同模式）
+        if not await self._check_command_permission(
+            "compact", message, is_group, is_unique_session
+        ):
+            return
+
+        # 第三方 agent runner 跳过（不走 ContextManager）
+        agent_runner_type = settings.get("agent_runner_type", "")
+        if agent_runner_type in THIRD_PARTY_AGENT_RUNNER_KEY:
+            message.set_result(
+                MessageEventResult().message(
+                    "ℹ️ Compact is not supported for third-party agent runners "
+                    f"({agent_runner_type}). Use /reset instead."
+                ),
+            )
+            return
+
+        cid = await self.context.conversation_manager.get_curr_conversation_id(umo)
+        if not cid:
+            message.set_result(
+                MessageEventResult().message(
+                    "😕 You are not in a conversation. Use /new to create one.",
+                ),
+            )
+            return
+
+        conv = await self.context.conversation_manager.get_conversation(umo, cid)
+        if not conv:
+            message.set_result(
+                MessageEventResult().message("😕 Conversation not found."),
+            )
+            return
+
+        # 解析历史记录
+        import json
+
+        raw_history = conv.history or "[]"
+        try:
+            parsed_history = (
+                json.loads(raw_history) if isinstance(raw_history, str) else raw_history
+            )
+        except json.JSONDecodeError:
+            message.set_result(
+                MessageEventResult().message(
+                    "❌ Conversation history is corrupted and cannot be compacted."
+                ),
+            )
+            return
+
+        if not isinstance(parsed_history, list) or any(
+            not isinstance(item, dict) for item in parsed_history
+        ):
+            message.set_result(
+                MessageEventResult().message(
+                    "⚠️ Conversation history has an unexpected structure and cannot be compacted."
+                ),
+            )
+            return
+
+        history: list[dict] = parsed_history
+        if not history:
+            message.set_result(
+                MessageEventResult().message(
+                    "ℹ️ Conversation is empty, nothing to compact."
+                ),
+            )
+            return
+
+        original_len = len(history)
+
+        # 将 dict 转换为 Message 对象（保留完整元数据）
+        messages = self._history_to_messages(history)
+
+        # 构建 ContextConfig
+        from astrbot.core.agent.context.manager import ContextManager
+
+        config = self._build_context_config(settings, umo)
+        cm = ContextManager(config)
+
+        # 获取 provider 的 max_context_tokens（使 token guard 触发器正常工作）
+        provider = self.context.get_using_provider(umo=umo)
+        max_context_tokens = (
+            provider.provider_config.get("max_context_tokens", 0)
+            if provider and getattr(provider, "provider_config", None)
+            else 0
+        )
+
+        try:
+            compressed = await cm.process(
+                messages, max_context_tokens=max_context_tokens
+            )
+        except Exception:
+            logger.error("Context compression failed.", exc_info=True)
+            message.set_result(
+                MessageEventResult().message(
+                    "❌ Context compression failed. See logs for details."
+                ),
+            )
+            return
+
+        # 将 Message 对象转回 dict（保留完整元数据）
+        result = self._messages_to_history(compressed)
+
+        # 保存
+        await self.context.conversation_manager.update_conversation(umo, cid, result)
+
+        removed = original_len - len(result)
+        ret = (
+            f"✅ Context compressed: {removed} messages removed "
+            f"({original_len} → {len(result)})."
+        )
         message.set_result(MessageEventResult().message(ret))
 
     async def stop(self, message: AstrMessageEvent) -> None:

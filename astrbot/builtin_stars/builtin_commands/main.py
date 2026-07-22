@@ -144,6 +144,11 @@ class Main(star.Star):
         """重置 LLM 会话"""
         await self.conversation_c.reset(message)
 
+    @filter.command("compact")
+    async def compact(self, message: AstrMessageEvent) -> None:
+        """手动触发上下文的处置与压缩"""
+        await self.conversation_c.compact(message)
+
     @filter.command("stop")
     async def stop(self, message: AstrMessageEvent) -> None:
         """停止当前会话中正在运行的 Agent"""
