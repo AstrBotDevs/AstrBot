@@ -1047,13 +1047,15 @@ class TestBuildMainAgent:
                 plugin_context=mock_context,
                 config=module.MainAgentBuildConfig(
                     tool_call_timeout=60,
-                    max_context_length=7,
+                    enable_turn_limit=True,
+                    max_turns=7,
                 ),
             )
 
         assert result is not None
         mock_runner.reset.assert_awaited_once()
-        assert mock_runner.reset.await_args.kwargs["enforce_max_turns"] == 7
+        assert mock_runner.reset.await_args.kwargs["enable_turn_limit"] is True
+        assert mock_runner.reset.await_args.kwargs["max_turns"] == 7
 
     @pytest.mark.asyncio
     async def test_build_main_agent_no_provider(self, mock_event, mock_context):

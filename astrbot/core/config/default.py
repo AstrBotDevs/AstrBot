@@ -124,8 +124,14 @@ DEFAULT_CONFIG = {
         "default_personality": "default",
         "persona_pool": ["*"],
         "prompt_prefix": "{{prompt}}",
-        "context_limit_reached_strategy": "llm_compress",  # or truncate_by_turns
-        "llm_compress_instruction": (
+        "enable_turn_limit": False,
+        "max_turns": 50,
+        "enable_token_guard": True,
+        "token_guard_threshold": 0.82,
+        "enable_summary": True,
+        "enable_discard": True,
+        "discard_turns": 1,
+        "summary_prompt": (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
             "The primary goal of this summary is to enable seamless continuation of the work that follows.\n"
             "1. Systematically cover all core topics discussed and the final conclusion/outcome for each; clearly highlight the latest primary focus.\n"
@@ -134,10 +140,10 @@ DEFAULT_CONFIG = {
             "4. If there was an initial user goal, state it first and describe the current progress/status.\n"
             "5. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent_ratio": 0.15,
-        "llm_compress_provider_id": "",
-        "max_context_length": -1,  # 默认不限制
-        "dequeue_context_length": 1,
+        "summary_provider_id": "",
+        "retention_method": "turns",
+        "retain_turns": 20,
+        "retain_percentage": 0.3,
         "streaming_response": False,
         "show_tool_use_status": False,
         "show_tool_call_result": False,
@@ -2872,11 +2878,41 @@ CONFIG_METADATA_2 = {
                     "prompt_prefix": {
                         "type": "string",
                     },
-                    "max_context_length": {
+                    "enable_turn_limit": {
+                        "type": "bool",
+                    },
+                    "max_turns": {
                         "type": "int",
                     },
-                    "dequeue_context_length": {
+                    "enable_token_guard": {
+                        "type": "bool",
+                    },
+                    "token_guard_threshold": {
+                        "type": "float",
+                    },
+                    "enable_summary": {
+                        "type": "bool",
+                    },
+                    "enable_discard": {
+                        "type": "bool",
+                    },
+                    "discard_turns": {
                         "type": "int",
+                    },
+                    "summary_prompt": {
+                        "type": "string",
+                    },
+                    "summary_provider_id": {
+                        "type": "string",
+                    },
+                    "retention_method": {
+                        "type": "string",
+                    },
+                    "retain_turns": {
+                        "type": "int",
+                    },
+                    "retain_percentage": {
+                        "type": "float",
                     },
                     "streaming_response": {
                         "type": "bool",
@@ -3613,63 +3649,115 @@ CONFIG_METADATA_3 = {
                     "provider_settings.enable": True,
                 },
             },
-            "truncate_and_compress": {
+            "context_management": {
                 "hint": "",
-                "description": "上下文管理策略",
+                "description": "上下文管理策略（正交触发/处置模型）",
                 "type": "object",
                 "items": {
-                    "provider_settings.max_context_length": {
-                        "description": "压缩前最多保留对话轮数",
+                    "provider_settings.enable_turn_limit": {
+                        "description": "启用轮次上限触发",
+                        "type": "bool",
+                        "hint": "开启后，对话轮次超过 max_turns 时触发压缩。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.max_turns": {
+                        "description": "触发轮次上限",
                         "type": "int",
-                        "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。",
+                        "hint": "对话轮次超过此值时触发压缩。最小值 2。",
+                        "condition": {
+                            "provider_settings.enable_turn_limit": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.enable_token_guard": {
+                        "description": "启用 Token 阈值触发",
+                        "type": "bool",
+                        "hint": "开启后，上下文 token 占比超过 threshold 时触发压缩。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.dequeue_context_length": {
-                        "description": "轮次超限时一次丢弃轮数",
+                    "provider_settings.token_guard_threshold": {
+                        "description": "Token 触发阈值",
+                        "type": "float",
+                        "hint": "当前 token 数 / 模型上下文窗口 > 此值时触发压缩。范围 0.5–0.99。",
+                        "condition": {
+                            "provider_settings.enable_token_guard": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.enable_summary": {
+                        "description": "启用 LLM 摘要压缩",
+                        "type": "bool",
+                        "hint": "开启后，触发压缩时优先使用 LLM 摘要。与丢弃同时开启时优先摘要。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.enable_discard": {
+                        "description": "启用丢弃旧轮次",
+                        "type": "bool",
+                        "hint": "开启后，触发压缩时丢弃最旧轮次。摘要不可用时作为回退策略。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.discard_turns": {
+                        "description": "一次丢弃轮次数",
                         "type": "int",
-                        "hint": "当超过“压缩前最多保留对话轮数”且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。",
+                        "hint": "触发丢弃时一次丢弃的轮次数。最小值 1。受保留下限约束。",
                         "condition": {
+                            "provider_settings.enable_discard": True,
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.context_limit_reached_strategy": {
-                        "description": "历史超限或上下文接近上限时的处理方式",
-                        "type": "string",
-                        "options": ["truncate_by_turns", "llm_compress"],
-                        "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                        "hint": "普通会话历史仅在超过“压缩前最多保留对话轮数”后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。",
-                    },
-                    "provider_settings.llm_compress_instruction": {
-                        "description": "上下文压缩提示词",
+                    "provider_settings.summary_prompt": {
+                        "description": "摘要提示词",
                         "type": "text",
                         "hint": "如果为空则使用默认提示词。",
                         "condition": {
-                            "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.enable_summary": True,
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.llm_compress_keep_recent_ratio": {
-                        "description": "压缩时保留最近上下文比例",
-                        "type": "float",
-                        "slider": {"min": 0, "max": 0.3, "step": 0.01},
-                        "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。",
-                        "condition": {
-                            "provider_settings.context_limit_reached_strategy": "llm_compress",
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.llm_compress_provider_id": {
-                        "description": "用于上下文压缩的模型提供商 ID",
+                    "provider_settings.summary_provider_id": {
+                        "description": "摘要用模型提供商 ID",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为“按对话轮数截断”的策略。",
+                        "hint": "留空时使用当前聊天模型进行摘要。",
                         "condition": {
-                            "provider_settings.context_limit_reached_strategy": "llm_compress",
+                            "provider_settings.enable_summary": True,
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.retention_method": {
+                        "description": "保留方式",
+                        "type": "string",
+                        "options": ["turns", "percentage", "null"],
+                        "labels": ["按轮次", "按比例", "不保留"],
+                        "hint": "丢弃时至少保留多少对话。turns: 按轮次数; percentage: 按比例; null: 无下限。",
+                        "condition": {
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.retain_turns": {
+                        "description": "至少保留轮次数",
+                        "type": "int",
+                        "hint": "保留方式为按轮次时，至少保留此数量的轮次。最小值 1。",
+                        "condition": {
+                            "provider_settings.retention_method": "turns",
+                            "provider_settings.agent_runner_type": "local",
+                        },
+                    },
+                    "provider_settings.retain_percentage": {
+                        "description": "至少保留比例",
+                        "type": "float",
+                        "slider": {"min": 0.1, "max": 0.9, "step": 0.01},
+                        "hint": "保留方式为按比例时，至少保留此比例的轮次。范围 0.1–0.9。",
+                        "condition": {
+                            "provider_settings.retention_method": "percentage",
                             "provider_settings.agent_runner_type": "local",
                         },
                     },

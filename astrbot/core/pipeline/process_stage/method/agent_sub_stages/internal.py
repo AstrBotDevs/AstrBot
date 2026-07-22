@@ -91,7 +91,7 @@ class InternalAgentSubStage(Stage):
             "",
         )
 
-        # 上下文管理相关
+        # 上下文管理相关（正交触发/处置模型）
         self.context_limit_reached_strategy: str = settings.get(
             "context_limit_reached_strategy",
             "truncate_by_turns",
@@ -107,13 +107,28 @@ class InternalAgentSubStage(Stage):
             "llm_compress_provider_id",
             "",
         )
-        self.max_context_length = settings["max_context_length"]  # int
+        self.max_context_length = settings.get("max_context_length", -1)  # int
         self.dequeue_context_length: int = min(
-            max(1, settings["dequeue_context_length"]),
-            self.max_context_length - 1,
+            max(1, settings.get("dequeue_context_length", 1)),
+            max(1, self.max_context_length - 1),
         )
         if self.dequeue_context_length <= 0:
             self.dequeue_context_length = 1
+
+        # New orthogonal fields
+        self.enable_turn_limit: bool = settings.get("enable_turn_limit", False)
+        self.max_turns: int = settings.get("max_turns", 50)
+        self.enable_token_guard: bool = settings.get("enable_token_guard", True)
+        self.token_guard_threshold: float = settings.get("token_guard_threshold", 0.82)
+        self.enable_summary: bool = settings.get("enable_summary", True)
+        self.enable_discard: bool = settings.get("enable_discard", True)
+        self.discard_turns: int = settings.get("discard_turns", 1)
+        self.summary_prompt: str = settings.get("summary_prompt", "")
+        self.summary_provider_id: str = settings.get("summary_provider_id", "")
+        self.retention_method: str = settings.get("retention_method", "turns")
+        self.retain_turns: int = settings.get("retain_turns", 20)
+        self.retain_percentage: float = settings.get("retain_percentage", 0.3)
+
         self.fallback_max_context_tokens: int = settings.get(
             "fallback_max_context_tokens",
             128000,
@@ -148,6 +163,18 @@ class InternalAgentSubStage(Stage):
             llm_compress_provider_id=self.llm_compress_provider_id,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
+            enable_turn_limit=self.enable_turn_limit,
+            max_turns=self.max_turns,
+            enable_token_guard=self.enable_token_guard,
+            token_guard_threshold=self.token_guard_threshold,
+            enable_summary=self.enable_summary,
+            enable_discard=self.enable_discard,
+            discard_turns=self.discard_turns,
+            summary_prompt=self.summary_prompt,
+            summary_provider_id=self.summary_provider_id,
+            retention_method=self.retention_method,
+            retain_turns=self.retain_turns,
+            retain_percentage=self.retain_percentage,
             fallback_max_context_tokens=self.fallback_max_context_tokens,
             llm_safety_mode=self.llm_safety_mode,
             safety_mode_strategy=self.safety_mode_strategy,
