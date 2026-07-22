@@ -109,9 +109,7 @@ class DiscordPlatformAdapter(Platform):
         try:
             return await self.client.fetch_channel(channel_id)
         except Exception as e:
-            logger.warning(
-                f"[Discord] fetch_channel({channel_id}) failed: {e}"
-            )
+            logger.warning(f"[Discord] fetch_channel({channel_id}) failed: {e}")
             return None
 
     @override
@@ -744,9 +742,7 @@ class DiscordPlatformAdapter(Platform):
                     pass
                 return
             except Exception as e:
-                logger.warning(
-                    f"[Discord] Failed to defer command '{cmd_name}': {e}"
-                )
+                logger.warning(f"[Discord] Failed to defer command '{cmd_name}': {e}")
                 try:
                     if not ctx.interaction.response.is_done():
                         await ctx.respond("指令响应失败，请稍后重试。", ephemeral=True)
