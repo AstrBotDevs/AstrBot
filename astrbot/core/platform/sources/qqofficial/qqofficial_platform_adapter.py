@@ -331,11 +331,13 @@ class QQOfficialPlatformAdapter(Platform):
     @staticmethod
     def _normalize_interaction_result_code(
         result: Any,
+        handler_name: str | None = None,
     ) -> QQOfficialInteractionResultCode | None:
         """Convert a plugin result into a valid QQ Official acknowledgement code.
 
         Args:
             result: The result returned by an interaction handler.
+            handler_name: Fully qualified name of the handler that returned the result.
 
         Returns:
             A valid QQ Official result code, or None when the result is absent or invalid.
@@ -347,8 +349,9 @@ class QQOfficialPlatformAdapter(Platform):
                 return QQOfficialInteractionResultCode(result)
             except ValueError:
                 pass
-        logger.warning(
-            f"QQ Official interaction handler returned an invalid result code: {result!r}"
+        logger.debug(
+            "QQ Official interaction handler returned an invalid result code "
+            f"from {handler_name or '<unknown>'}: {result!r}"
         )
         return None
 
@@ -391,7 +394,10 @@ class QQOfficialPlatformAdapter(Platform):
                     f"QQ Official interaction handler failed: {handler.handler_full_name}"
                 )
                 continue
-            normalized_result = self._normalize_interaction_result_code(result)
+            normalized_result = self._normalize_interaction_result_code(
+                result,
+                getattr(handler, "handler_full_name", None),
+            )
             if normalized_result is not None:
                 result_code = normalized_result
                 break

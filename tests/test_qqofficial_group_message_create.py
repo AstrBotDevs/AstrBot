@@ -2,7 +2,7 @@ import asyncio
 import re
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import botpy
 import botpy.message
@@ -520,4 +520,32 @@ async def test_ws_interaction_dispatch_acknowledges_failure_when_unhandled(monke
 
     adapter.client.api.on_interaction_result.assert_awaited_once_with(
         "interaction-2", QQOfficialInteractionResultCode.FAILED
+    )
+
+
+@pytest.mark.asyncio
+async def test_ws_interaction_dispatch_logs_invalid_result_handler(monkeypatch):
+    adapter = _make_qqofficial_adapter()
+    adapter.client.api = SimpleNamespace(on_interaction_result=AsyncMock())
+    debug = MagicMock()
+    handler = SimpleNamespace(
+        handler=AsyncMock(return_value="invalid"),
+        handler_full_name="test.invalid_callback_handler",
+    )
+    monkeypatch.setattr(
+        star_handlers_registry,
+        "get_handlers_by_event_type",
+        lambda event_type: [handler],
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.qqofficial.qqofficial_platform_adapter.logger.debug",
+        debug,
+    )
+
+    await adapter.dispatch_interaction(SimpleNamespace(id="interaction-3"))
+
+    debug.assert_called_once()
+    assert "test.invalid_callback_handler" in debug.call_args.args[0]
+    adapter.client.api.on_interaction_result.assert_awaited_once_with(
+        "interaction-3", QQOfficialInteractionResultCode.FAILED
     )
