@@ -13,6 +13,7 @@ from astrbot.core.platform.message_type import MessageType
 from astrbot.core.star.session_llm_manager import SessionServiceManager
 from astrbot.core.star.star import star_map
 from astrbot.core.star.star_handler import EventType, star_handlers_registry
+from astrbot.core.utils.text_utils import calculate_word_count
 
 from ..context import PipelineContext
 from ..stage import Stage, register_stage, registered_stages
@@ -217,7 +218,8 @@ class ResultDecorateStage(Stage):
                     new_chain = []
                     for comp in result.chain:
                         if isinstance(comp, Plain):
-                            if len(comp.text) > self.words_count_threshold:
+                            word_count = calculate_word_count(comp.text)
+                            if word_count > self.words_count_threshold:
                                 # 不分段回复
                                 new_chain.append(comp)
                                 continue
@@ -311,7 +313,7 @@ class ResultDecorateStage(Stage):
             if should_tts and tts_provider:
                 new_chain = []
                 for comp in result.chain:
-                    if isinstance(comp, Plain) and len(comp.text) > 1:
+                    if isinstance(comp, Plain) and calculate_word_count(comp.text) > 1:
                         try:
                             logger.info(f"TTS request: {comp.text}")
                             audio_path = await tts_provider.get_audio(comp.text)
@@ -372,7 +374,8 @@ class ResultDecorateStage(Stage):
                     else:
                         break
                 plain_str = "".join(parts)
-                if plain_str and len(plain_str) > self.t2i_word_threshold:
+                word_count = calculate_word_count(plain_str)
+                if plain_str and word_count > self.t2i_word_threshold:
                     render_start = time.time()
                     try:
                         url = await html_renderer.render_t2i(
@@ -410,7 +413,7 @@ class ResultDecorateStage(Stage):
                 word_cnt = 0
                 for comp in result.chain:
                     if isinstance(comp, Plain):
-                        word_cnt += len(comp.text)
+                        word_cnt += calculate_word_count(comp.text)
                 if word_cnt > self.forward_threshold:
                     node = Node(
                         uin=event.get_self_id(),
