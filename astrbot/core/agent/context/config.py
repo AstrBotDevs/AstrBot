@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from .compressor import ContextCompressor
 from .token_counter import TokenCounter
@@ -52,7 +52,7 @@ class ContextConfig:
     """Resolved LLM provider for summary generation. None = no summary available."""
 
     # -- Retention (lower bound) --
-    retention_method: str = "turns"
+    retention_method: Literal["turns", "percentage", "null"] = "turns"
     """Retention method: 'turns', 'percentage', or 'null'."""
     retain_turns: int = 20
     """Minimum turns to keep when retention_method is 'turns'. Must be >= 1."""

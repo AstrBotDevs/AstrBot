@@ -100,12 +100,21 @@ class ContextManager:
         if not self.config.enable_token_guard:
             return False
         if max_context_tokens <= 0:
-            logger.warning(
-                "Token guard is enabled but max_context_tokens is %s. "
-                "Token guarding is effectively disabled. "
-                "Set max_context_tokens in the provider config to enable it.",
-                max_context_tokens,
-            )
+            # Avoid flooding logs: warn once per instance, debug thereafter.
+            if not getattr(self, "_token_guard_warning_emitted", False):
+                logger.warning(
+                    "Token guard is enabled but max_context_tokens is %s. "
+                    "Token guarding is effectively disabled. "
+                    "Set max_context_tokens in the provider config to enable it.",
+                    max_context_tokens,
+                )
+                self._token_guard_warning_emitted = True
+            else:
+                logger.debug(
+                    "Token guard is enabled but max_context_tokens is %s; "
+                    "token guarding remains effectively disabled.",
+                    max_context_tokens,
+                )
             return False
         if tokens <= 0:
             return False

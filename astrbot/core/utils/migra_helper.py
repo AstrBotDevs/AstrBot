@@ -263,10 +263,15 @@ def _validate_context_config(ps: dict) -> None:
 
     if _has("token_guard_threshold"):
         val = ps["token_guard_threshold"]
-        if not (0.5 <= val <= 0.99):
+        if isinstance(val, (int, float)) and not (0.5 <= val <= 0.99):
             logger.warning(
                 "token_guard_threshold %.2f is outside recommended range [0.5, 0.99].",
                 val,
+            )
+        elif not isinstance(val, (int, float)):
+            logger.warning(
+                "token_guard_threshold is not a number (got %s). Expected a float between 0.5 and 0.99.",
+                type(val).__name__,
             )
 
     if _has("discard_turns") and ps.get("discard_turns", 1) < 1:
@@ -294,10 +299,15 @@ def _validate_context_config(ps: dict) -> None:
         and _has("retain_percentage")
     ):
         val = ps["retain_percentage"]
-        if not (0.1 <= val <= 0.9):
+        if isinstance(val, (int, float)) and not (0.1 <= val <= 0.9):
             logger.warning(
                 "retain_percentage %.2f is outside recommended range [0.1, 0.9].",
                 val,
+            )
+        elif not isinstance(val, (int, float)):
+            logger.warning(
+                "retain_percentage is not a number (got %s). Expected a float between 0.1 and 0.9.",
+                type(val).__name__,
             )
 
     # Both disposal methods disabled → trigger fires but nothing happens
