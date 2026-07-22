@@ -611,21 +611,19 @@ class ProviderManager:
                 f"({provider_config['id']}): {e}. A dependency may be missing.",
                 exc_info=True,
             )
-            return
+            raise
         except Exception as e:
             logger.critical(
                 f"Failed to load provider adapter {provider_config['type']}"
                 f"({provider_config['id']}): {e}. Unknown cause.",
                 exc_info=True,
             )
-            return
+            raise
 
         if provider_config["type"] not in provider_cls_map:
-            logger.error(
-                f"Provider adapter not found: {provider_config['type']}({provider_config['id']}). Skipped.",
-                exc_info=True,
-            )
-            return
+            msg = f"Provider adapter not found: {provider_config['type']}({provider_config['id']})."
+            logger.error(msg, exc_info=True)
+            raise ValueError(msg)
 
         provider_metadata = provider_cls_map[provider_config["type"]]
         try:
