@@ -212,6 +212,7 @@
     <ListConfigItem
       v-else-if="itemMeta?.type === 'list'"
       :model-value="modelValue"
+      :show-item-index="configKey === 'key'"
       @update:model-value="emitUpdate"
       class="config-field"
     />
