@@ -511,4 +511,4 @@ async def on_qqofficial_interaction(
     return QQOfficialInteractionResultCode.SUCCESS
 ```
 
-Acknowledgement codes use `QQOfficialInteractionResultCode`: `SUCCESS` (0), `FAILED` (1), `RATE_LIMITED` (2), `DUPLICATE` (3), `FORBIDDEN` (4), and `ADMIN_ONLY` (5). This feature is available only on the QQ Official WebSocket adapter.
+Acknowledgement codes use `QQOfficialInteractionResultCode`: `SUCCESS` (0), `FAILED` (1), `RATE_LIMITED` (2), `DUPLICATE` (3), `FORBIDDEN` (4), and `ADMIN_ONLY` (5). This feature is available only on the QQ Official WebSocket adapter; the QQ Official Webhook adapter does not currently dispatch interaction events and is not supported.

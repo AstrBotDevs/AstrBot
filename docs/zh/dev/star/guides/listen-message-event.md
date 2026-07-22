@@ -512,4 +512,4 @@ async def on_qqofficial_interaction(
     return QQOfficialInteractionResultCode.SUCCESS
 ```
 
-回执码使用 `QQOfficialInteractionResultCode`：`SUCCESS`（0）、`FAILED`（1）、`RATE_LIMITED`（2）、`DUPLICATE`（3）、`FORBIDDEN`（4）和 `ADMIN_ONLY`（5）。该功能仅适用于 QQ 官方 WebSocket 适配器。
+回执码使用 `QQOfficialInteractionResultCode`：`SUCCESS`（0）、`FAILED`（1）、`RATE_LIMITED`（2）、`DUPLICATE`（3）、`FORBIDDEN`（4）和 `ADMIN_ONLY`（5）。该功能仅适用于 QQ 官方 WebSocket 适配器；QQ 官方 Webhook 适配器目前不会分发 interaction 事件，暂不支持此功能。
