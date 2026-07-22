@@ -204,9 +204,9 @@ def _migra_context_config(ps: dict) -> bool:
     if "max_context_length" in ps:
         old_val = ps.pop("max_context_length")
         migrated = True
-        if old_val > 0:
+        if isinstance(old_val, (int, float)) and old_val > 0:
             ps["enable_turn_limit"] = True
-            ps["max_turns"] = old_val
+            ps["max_turns"] = int(old_val)
         else:
             ps["enable_turn_limit"] = False
 
@@ -222,9 +222,11 @@ def _migra_context_config(ps: dict) -> bool:
         if strategy == "llm_compress":
             ps["enable_summary"] = True
             ps["enable_discard"] = True
+            ps["retention_method"] = "percentage"
         else:  # truncate_by_turns or other
             ps["enable_summary"] = False
             ps["enable_discard"] = True
+            ps["retention_method"] = "turns"
 
     # 4. llm_compress_instruction → summary_prompt
     if "llm_compress_instruction" in ps:
@@ -234,7 +236,8 @@ def _migra_context_config(ps: dict) -> bool:
     # 5. llm_compress_keep_recent_ratio → retain_percentage + retention_method
     if "llm_compress_keep_recent_ratio" in ps:
         ps["retain_percentage"] = ps.pop("llm_compress_keep_recent_ratio")
-        ps["retention_method"] = "percentage"
+        if "retention_method" not in ps:
+            ps["retention_method"] = "percentage"
         migrated = True
 
     # 6. llm_compress_provider_id → summary_provider_id
@@ -272,7 +275,10 @@ def _validate_context_config(ps: dict) -> None:
     if _has("retention_method"):
         method = ps["retention_method"]
         if method not in ("turns", "percentage", "null"):
-            logger.warning("Unknown retention_method '%s'. Use 'turns', 'percentage', or 'null'.", method)
+            logger.warning(
+                "Unknown retention_method '%s'. Use 'turns', 'percentage', or 'null'.",
+                method,
+            )
 
     if (
         _has("retention_method")
