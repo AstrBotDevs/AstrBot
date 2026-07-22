@@ -358,7 +358,7 @@ def register_on_qqofficial_interaction(**kwargs):
     """Register a QQ Official callback-button interaction handler.
 
     The handler receives a botpy interaction object and should return an
-    interaction result code from 0 to 5. Return None when the interaction is
+    QQOfficialInteractionResultCode or an integer from 0 to 5. Return None when the interaction is
     not handled so later handlers can inspect it.
     """
 
