@@ -27,6 +27,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.star.star_handler import EventType, star_handlers_registry
 from astrbot.core.utils.media_utils import MediaResolver
 
 from ...register import register_platform_adapter
@@ -254,6 +255,10 @@ class botClient(Client):
         self.platform.remember_session_message_id(abm.session_id, abm.message_id)
         self.platform.commit_event(self.platform.create_event(abm))
 
+    async def on_interaction_create(self, interaction: Any) -> None:
+        """Forward QQ Official callback-button interactions to the platform."""
+        await self.platform.dispatch_interaction(interaction)
+
     async def bot_connect(self, session) -> None:
         logger.info("[QQOfficial] Websocket session starting.")
 
@@ -299,11 +304,13 @@ class QQOfficialPlatformAdapter(Platform):
                 public_messages=True,
                 public_guild_messages=True,
                 direct_message=guild_dm,
+                interaction=True,
             )
         else:
             self.intents = botpy.Intents(
                 public_guild_messages=True,
                 direct_message=guild_dm,
+                interaction=True,
             )
         self.client = botClient(
             intents=self.intents,
@@ -320,6 +327,46 @@ class QQOfficialPlatformAdapter(Platform):
         self._allow_group_proactive_send = True
 
         self.test_mode = os.environ.get("TEST_MODE", "off") == "on"
+
+    async def dispatch_interaction(self, interaction: Any) -> None:
+        """Dispatch a QQ Official callback-button interaction and acknowledge it.
+
+        Args:
+            interaction: The botpy interaction object received from the gateway.
+        """
+        result_code = 1
+        try:
+            for handler in star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnQQOfficialInteractionEvent
+            ):
+                try:
+                    result = await handler.handler(interaction)
+                except Exception:
+                    logger.exception(
+                        f"QQ Official interaction handler failed: {handler.handler_full_name}"
+                    )
+                    continue
+                if result is None:
+                    continue
+                if type(result) is int and 0 <= result <= 5:
+                    result_code = result
+                    break
+                logger.warning(
+                    f"QQ Official interaction handler returned an invalid result code: {result!r}"
+                )
+        finally:
+            interaction_id = str(getattr(interaction, "id", ""))
+            if not interaction_id:
+                logger.warning(
+                    "QQ Official interaction has no id; cannot acknowledge it."
+                )
+                return
+            try:
+                await self.client.api.on_interaction_result(interaction_id, result_code)
+            except Exception:
+                logger.exception(
+                    f"Failed to acknowledge QQ Official interaction: {interaction_id}"
+                )
 
     async def send_by_session(
         self,
