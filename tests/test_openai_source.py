@@ -1217,7 +1217,7 @@ async def test_audio_preprocess_failure_does_not_log_media_ref(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_prepare_chat_payload_keeps_original_context_image_when_materialization_fails(
+async def test_prepare_chat_payload_drops_context_image_when_materialization_fails(
     monkeypatch,
 ):
     provider = _make_provider()
@@ -1261,10 +1261,8 @@ async def test_prepare_chat_payload_keeps_original_context_image_when_materializ
         assert payloads["messages"][0]["content"] == [
             {"type": "text", "text": "look"},
             {
-                "type": "image_url",
-                "image_url": {
-                    "url": "https://example.com/expired.png",
-                },
+                "type": "text",
+                "text": "[Image unavailable]",
             },
         ]
     finally:

@@ -14,7 +14,7 @@ from pathlib import Path
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
-from astrbot.core.agent.message import TextPart
+from astrbot.core.agent.message import TextPart, strip_images_from_history_messages
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContext
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
@@ -1358,6 +1358,44 @@ def _select_image_chat_provider(
     return provider
 
 
+def _is_remote_image_ref(image_ref: str) -> bool:
+    lowered = image_ref.lower()
+    return lowered.startswith("http://") or lowered.startswith("https://")
+
+
+def _finalize_request_image_urls(
+    image_urls: list[str] | None,
+    *,
+    max_total: int = 4,
+) -> list[str]:
+    """Dedupe and prioritize local image refs over remote URLs.
+
+    Remote CDN links (especially QQ multimedia URLs) expire easily. Keeping them
+    beside already-downloaded local paths causes models to "see" missing/wrong
+    images in later turns.
+    """
+    urls = normalize_and_dedupe_strings(image_urls or [])
+    if not urls:
+        return []
+
+    local_refs: list[str] = []
+    embedded_refs: list[str] = []
+    remote_refs: list[str] = []
+    for ref in urls:
+        lowered = ref.lower()
+        if _is_remote_image_ref(ref):
+            remote_refs.append(ref)
+        elif lowered.startswith("data:") or lowered.startswith("base64://"):
+            embedded_refs.append(ref)
+        else:
+            local_refs.append(ref)
+
+    ordered = local_refs + embedded_refs + remote_refs
+    if max_total > 0:
+        ordered = ordered[:max_total]
+    return ordered
+
+
 async def build_main_agent(
     *,
     event: AstrMessageEvent,
@@ -1388,7 +1426,9 @@ async def build_main_agent(
                 "provider_request 必须是 ProviderRequest 类型。"
             )
             if req.conversation:
-                req.contexts = json.loads(req.conversation.history)
+                req.contexts = strip_images_from_history_messages(
+                    json.loads(req.conversation.history)
+                )
         else:
             req = ProviderRequest()
             req.prompt = ""
@@ -1521,7 +1561,9 @@ async def build_main_agent(
 
             conversation = await _get_session_conv(event, plugin_context)
             req.conversation = conversation
-            req.contexts = json.loads(conversation.history)
+            req.contexts = strip_images_from_history_messages(
+                json.loads(conversation.history)
+            )
             event.set_extra("provider_request", req)
 
     if isinstance(req.contexts, str):
@@ -1537,7 +1579,12 @@ async def build_main_agent(
                 )
             )
         )
-    req.image_urls = normalize_and_dedupe_strings(req.image_urls)
+    raw_max_quoted_fallback_images = getattr(config, "max_quoted_fallback_images", 4)
+    max_quoted_fallback_images = max(int(raw_max_quoted_fallback_images or 4), 4)
+    req.image_urls = _finalize_request_image_urls(
+        req.image_urls,
+        max_total=max_quoted_fallback_images,
+    )
     req.audio_urls = normalize_and_dedupe_strings(req.audio_urls)
 
     if config.file_extract_enabled:
