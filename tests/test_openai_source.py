@@ -1,5 +1,6 @@
 import base64
 import builtins
+import importlib
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -11,10 +12,12 @@ from PIL import Image as PILImage
 
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
+from astrbot.core.agent.message import ContentPart, TextPart
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
+from astrbot.core.provider.sources.opencode_go_source import ProviderOpenCodeGo
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
 
 
@@ -28,6 +31,39 @@ class _ErrorWithResponse(Exception):
     def __init__(self, message: str, response_text: str):
         super().__init__(message)
         self.response = SimpleNamespace(text=response_text)
+
+
+class _ModelsProviderStub:
+    def __init__(self, models: list[str]):
+        self._models = models
+
+    async def get_models(self) -> list[str]:
+        return self._models
+
+
+class _OpenCodeGoDelegateStub:
+    def __init__(self):
+        self.stream_kwargs: dict[str, object] | None = None
+
+    async def text_chat_stream(self, **kwargs):
+        self.stream_kwargs = kwargs
+        yield SimpleNamespace(role="assistant")
+
+
+class _OpenCodeGoUnitProvider(ProviderOpenCodeGo):
+    openai_provider: _ModelsProviderStub
+
+    def __init__(self, models: list[str]):
+        self.openai_provider = _ModelsProviderStub(models)
+        self.model_name = "kimi-k2.6"
+
+
+class _OpenCodeGoStreamUnitProvider(ProviderOpenCodeGo):
+    openai_provider: _OpenCodeGoDelegateStub
+
+    def __init__(self, delegate: _OpenCodeGoDelegateStub):
+        self.openai_provider = delegate
+        self.model_name = "kimi-k2.6"
 
 
 def _make_provider(overrides: dict | None = None) -> ProviderOpenAIOfficial:
@@ -60,6 +96,12 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     )
 
 
+def _make_opencode_go_provider_for_unit_tests(
+    models: list[str] | None = None,
+) -> ProviderOpenCodeGo:
+    return _OpenCodeGoUnitProvider(models or [])
+
+
 def test_create_http_client_uses_openai_httpx_module(monkeypatch):
     captured: dict[str, object] = {}
 
@@ -82,7 +124,7 @@ def test_create_http_client_uses_openai_httpx_module(monkeypatch):
     provider = ProviderOpenAIOfficial.__new__(ProviderOpenAIOfficial)
     provider._create_http_client({"proxy": ""})
 
-    from openai import _base_client as openai_base_client
+    openai_base_client = importlib.import_module("openai._base_client")
 
     assert captured["httpx_module"] is openai_base_client.httpx
 
@@ -390,6 +432,147 @@ async def test_groq_payload_drops_reasoning_content_from_assistant_history():
         assert "reasoning" not in assistant_message
     finally:
         await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_force_tool_call_reasoning_content_config_adds_missing_value():
+    provider = _make_provider({"force_tool_call_reasoning_content": True})
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{"id": "call-1", "type": "function"}],
+                }
+            ]
+        }
+
+        provider._ensure_tool_call_reasoning_content(payloads, {})
+
+        assert payloads["messages"][0]["reasoning_content"] == " "
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_force_tool_call_reasoning_content_config_respects_disabled_thinking():
+    provider = _make_provider({"force_tool_call_reasoning_content": True})
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{"id": "call-1", "type": "function"}],
+                }
+            ]
+        }
+
+        provider._ensure_tool_call_reasoning_content(
+            payloads,
+            {"thinking": {"type": "disabled"}},
+        )
+
+        assert "reasoning_content" not in payloads["messages"][0]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_moonshot_provider_name_without_config_does_not_force_reasoning_content():
+    provider = _make_provider({"provider": "moonshot"})
+    try:
+        payloads = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{"id": "call-1", "type": "function"}],
+                }
+            ]
+        }
+
+        provider._ensure_tool_call_reasoning_content(payloads, {})
+
+        assert "reasoning_content" not in payloads["messages"][0]
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
+async def test_opencode_go_get_models_prefixes_and_filters_chat_models_once():
+    provider = _make_opencode_go_provider_for_unit_tests(
+        [
+            "kimi-k2.6",
+            "opencode-go/kimi-k2.5",
+            "minimax-m2.5",
+            "opencode-go/minimax-m2.7",
+            " ",
+        ]
+    )
+    call_count = 0
+    original_to_api_model = ProviderOpenCodeGo._to_api_model
+
+    def counting_to_api_model(model: str | None) -> str:
+        nonlocal call_count
+        call_count += 1
+        return original_to_api_model(model)
+
+    provider._to_api_model = counting_to_api_model
+
+    assert await provider.get_models() == [
+        "opencode-go/kimi-k2.5",
+        "opencode-go/kimi-k2.6",
+    ]
+    assert call_count == 5
+
+
+def test_opencode_go_resolve_model_strips_prefix_and_rejects_messages_only_model():
+    provider = _make_opencode_go_provider_for_unit_tests()
+
+    assert provider._resolve_model("opencode-go/kimi-k2.6") == "kimi-k2.6"
+    assert provider._resolve_model(None) == "kimi-k2.6"
+    with pytest.raises(ValueError, match="/v1/messages"):
+        provider._resolve_model("opencode-go/minimax-m2.5")
+
+
+def test_opencode_go_delegate_config_defaults_force_reasoning_content_only_when_absent():
+    provider = ProviderOpenCodeGo.__new__(ProviderOpenCodeGo)
+    provider.provider_config = {"model": "opencode-go/kimi-k2.6"}
+    provider.api_base = "https://example.test/v1"
+
+    config = provider._build_delegate_config(model="kimi-k2.6")
+
+    assert config["force_tool_call_reasoning_content"] is True
+
+    provider.provider_config = {
+        "model": "opencode-go/kimi-k2.6",
+        "force_tool_call_reasoning_content": False,
+    }
+
+    config = provider._build_delegate_config(model="kimi-k2.6")
+
+    assert config["force_tool_call_reasoning_content"] is False
+
+
+@pytest.mark.asyncio
+async def test_opencode_go_text_chat_stream_forwards_extra_user_content_parts():
+    delegate = _OpenCodeGoDelegateStub()
+    provider = _OpenCodeGoStreamUnitProvider(delegate)
+    extra_parts: list[ContentPart] = [TextPart(text="extra context")]
+
+    responses = [
+        response
+        async for response in provider.text_chat_stream(
+            prompt="hello",
+            extra_user_content_parts=extra_parts,
+        )
+    ]
+
+    assert responses
+    assert delegate.stream_kwargs is not None
+    assert delegate.stream_kwargs["extra_user_content_parts"] is extra_parts
 
 
 @pytest.mark.asyncio

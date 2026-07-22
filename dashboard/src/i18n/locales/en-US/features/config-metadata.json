@@ -1280,6 +1280,10 @@
         "description": "Disable thinking mode",
         "hint": "Close Ollama thinking mode."
       },
+      "force_tool_call_reasoning_content": {
+        "description": "Force reasoning content in tool-call history",
+        "hint": "Some OpenAI-compatible model services require assistant tool-call history to include reasoning_content when thinking mode is enabled."
+      },
       "custom_extra_body": {
         "description": "Custom request body parameters",
         "hint": "Add extra parameters to requests, such as temperature, top_p, max_tokens, etc.",
