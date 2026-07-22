@@ -81,11 +81,12 @@ class ContextManager:
             )
             return None
 
-    def _try_discard(self, messages: list[Message]) -> list[Message] | None:
+    def _try_discard(
+        self, messages: list[Message], total_turns: int
+    ) -> list[Message] | None:
         """Discard oldest turns, bounded by retention."""
         if not self.config.enable_discard:
             return None
-        total_turns = self._count_turns(messages)
         max_discardable = self._compute_discard_limit(total_turns)
         if max_discardable <= 0:
             return None  # retention prevents any discard
@@ -122,22 +123,24 @@ class ContextManager:
 
     def _triggers_fired(
         self,
-        messages: list[Message],
+        total_turns: int,
         current_tokens: int,
         max_context_tokens: int,
     ) -> bool:
         """Return True if any trigger condition is met."""
-        if self.config.enable_turn_limit:
-            total_turns = self._count_turns(messages)
-            if total_turns > self.config.max_turns:
-                return True
+        if self.config.enable_turn_limit and total_turns > self.config.max_turns:
+            return True
 
         if self._token_guard_exceeded(current_tokens, max_context_tokens):
             return True
 
         return False
 
-    async def _select_disposal(self, messages: list[Message]) -> list[Message]:
+    async def _select_disposal(
+        self,
+        messages: list[Message],
+        total_turns: int,
+    ) -> list[Message]:
         """Apply disposal strategy: custom > summary > discard."""
         if self._unity_compressor is not None:
             return await self._unity_compressor(messages)
@@ -146,7 +149,7 @@ class ContextManager:
         if compressed is not None:
             return compressed
 
-        discarded = self._try_discard(messages)
+        discarded = self._try_discard(messages, total_turns=total_turns)
         if discarded is not None:
             return discarded
 
@@ -182,12 +185,15 @@ class ContextManager:
                 result,
                 trusted_token_usage,
             )
+            total_turns = self._count_turns(result)
 
-            if not self._triggers_fired(result, current_tokens, max_context_tokens):
+            if not self._triggers_fired(
+                total_turns, current_tokens, max_context_tokens
+            ):
                 return result
 
             # 2. 处置入口：_select_disposal 封装 custom > summary > discard
-            result = await self._select_disposal(result)
+            result = await self._select_disposal(result, total_turns)
 
             # 3. double-check（仅 enable_token_guard）
             tokens_after = self.token_counter.count_tokens(result, trusted_token_usage)
