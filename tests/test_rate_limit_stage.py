@@ -24,8 +24,8 @@ async def test_stalled_concurrent_events_use_current_time_after_lock(monkeypatch
     real_sleep = asyncio.sleep
     base_time = real_datetime(2026, 1, 1)
 
-    class FakeDateTime:
-        """Return time from the deterministic virtual clock."""
+    class FakeDateTime(real_datetime):
+        """Subclass of datetime with a deterministic now()."""
 
         @classmethod
         def now(cls) -> real_datetime:
@@ -59,6 +59,8 @@ async def test_stalled_concurrent_events_use_current_time_after_lock(monkeypatch
 
     await asyncio.gather(*(limiter.process(FakeEvent()) for _ in range(5)))
 
-    assert sleep_durations == pytest.approx([60.3, 60.3])
+    margin = 0.3
+    expected_stall = limiter.rate_limit_time.total_seconds() + margin
+    assert sleep_durations == pytest.approx([expected_stall, expected_stall])
     timestamps = list(limiter.event_timestamps[FakeEvent.session_id])
     assert timestamps == sorted(timestamps)
