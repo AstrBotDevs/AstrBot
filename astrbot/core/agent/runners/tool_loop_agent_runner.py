@@ -206,16 +206,20 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         tool_executor: BaseFunctionToolExecutor[TContext],
         agent_hooks: BaseAgentRunHooks[TContext],
         streaming: bool = False,
-        # enforce max turns, will discard older turns when exceeded BEFORE compression
-        # -1 means no limit
-        enforce_max_turns: int = -1,
-        # llm compressor
-        llm_compress_instruction: str | None = None,
-        llm_compress_keep_recent_ratio: float = 0.15,
-        llm_compress_provider: Provider | None = None,
-        # truncate by turns compressor
-        truncate_turns: int = 1,
-        # customize
+        # -- Context management (new orthogonal fields) --
+        summary_prompt: str = "",
+        retain_percentage: float = 0.3,
+        summary_provider: Provider | None = None,
+        discard_turns: int = 1,
+        enable_turn_limit: bool = False,
+        max_turns: int = 50,
+        enable_token_guard: bool = True,
+        token_guard_threshold: float = 0.82,
+        enable_summary: bool = True,
+        enable_discard: bool = True,
+        retention_method: str = "turns",
+        retain_turns: int = 20,
+        # -- Customisation --
         custom_token_counter: TokenCounter | None = None,
         custom_compressor: ContextCompressor | None = None,
         tool_schema_mode: str | None = "full",
@@ -227,31 +231,35 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     ) -> None:
         self.req = request
         self.streaming = streaming
-        self.enforce_max_turns = enforce_max_turns
-        self.llm_compress_instruction = llm_compress_instruction
-        self.llm_compress_keep_recent_ratio = llm_compress_keep_recent_ratio
-        self.llm_compress_provider = llm_compress_provider
-        self.truncate_turns = truncate_turns
         self.custom_token_counter = custom_token_counter
         self.custom_compressor = custom_compressor
         self.request_max_retries = request_max_retries
         self.tool_result_overflow_dir = tool_result_overflow_dir
         self.read_tool = read_tool
         self._tool_result_token_counter = EstimateTokenCounter()
+
+        # Provider-level context window size (needed for token guard trigger)
+        cfg = getattr(provider, "provider_config", {}) or {}
+        self._max_context_tokens: int = cfg.get("max_context_tokens", 0)
+
         self.request_context_manager_config = ContextConfig(
-            # <=0 disables token-based guarding.
-            max_context_tokens=provider.provider_config.get("max_context_tokens", 0),
-            # Enforce max turns before token-based guarding.
-            enforce_max_turns=self.enforce_max_turns,
-            truncate_turns=self.truncate_turns,
-            llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
-            llm_compress_provider=self.llm_compress_provider,
+            enable_turn_limit=enable_turn_limit,
+            max_turns=max_turns,
+            enable_token_guard=enable_token_guard,
+            token_guard_threshold=token_guard_threshold,
+            enable_summary=enable_summary,
+            enable_discard=enable_discard,
+            discard_turns=discard_turns,
+            summary_prompt=summary_prompt,
+            retain_percentage=retain_percentage,
+            retention_method=retention_method,
+            retain_turns=retain_turns,
+            summary_provider=summary_provider,
             custom_token_counter=self.custom_token_counter,
             custom_compressor=self.custom_compressor,
         )
         self.request_context_manager = ContextManager(
-            self.request_context_manager_config
+            self.request_context_manager_config,
         )
 
         self.provider = provider
@@ -724,7 +732,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         token_usage = self.req.conversation.token_usage if self.req.conversation else 0
         self._simple_print_message_role("[BefCompact]", self.run_context.messages)
         self.run_context.messages = await self.request_context_manager.process(
-            self.run_context.messages, trusted_token_usage=token_usage
+            self.run_context.messages,
+            trusted_token_usage=token_usage,
+            max_context_tokens=self._max_context_tokens,
         )
         self._simple_print_message_role("[AftCompact]", self.run_context.messages)
 
