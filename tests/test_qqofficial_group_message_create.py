@@ -435,6 +435,7 @@ async def test_result_decorate_segments_qqofficial_ws_plain_result():
 def test_ws_interaction_result_code_rejects_boolean():
     assert QQOfficialPlatformAdapter._normalize_interaction_result_code(True) is None
 
+
 def _make_qqofficial_adapter() -> QQOfficialPlatformAdapter:
     return QQOfficialPlatformAdapter(
         {
@@ -476,6 +477,7 @@ async def test_ws_interaction_dispatch_acknowledges_first_handler_result(monkeyp
     adapter = _make_qqofficial_adapter()
     adapter.client.api = SimpleNamespace(on_interaction_result=AsyncMock())
     interaction = SimpleNamespace(id="interaction-1")
+    # Covers integer subclasses returned by third-party libraries, e.g. numpy.int64.
     result_code = type("ResultCode", (int,), {})(
         QQOfficialInteractionResultCode.SUCCESS
     )

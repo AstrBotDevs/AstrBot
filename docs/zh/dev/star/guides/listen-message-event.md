@@ -500,7 +500,9 @@ from astrbot.api.event import QQOfficialInteractionResultCode, filter
 
 
 @filter.on_qqofficial_interaction()
-async def on_qqofficial_interaction(self, interaction: Any) -> int | None:
+async def on_qqofficial_interaction(
+    self, interaction: Any
+) -> QQOfficialInteractionResultCode | None:
     resolved = getattr(getattr(interaction, "data", None), "resolved", {})
     button_data = getattr(resolved, "button_data", None)
     if button_data != "demo:confirm":
