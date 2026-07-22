@@ -318,6 +318,78 @@ def format_poll(poll: dict[str, Any]) -> str:
     return " ".join(parts)
 
 
+def summarize_note_for_context(
+    note: dict[str, Any],
+    max_text_length: int = 500,
+) -> str:
+    """将一个 Misskey 帖子对象格式化成纯文本摘要，供 LLM 阅读上下文用。
+
+    设计原则：
+    - 只输出纯文本，不创建任何多模态组件 — 避免 LLM 把父帖图片误识别为本次输入。
+    - 远端用户使用 acct 风格（@user@host）。
+    - text 为空但有 CW / 附件 / 投票时，省略空内容行，避免冗余。
+    - max_text_length 为负数（约定 -1）表示不截断。
+    """
+    if not isinstance(note, dict):
+        return ""
+
+    user = note.get("user") or {}
+    username = user.get("username") or ""
+    host = user.get("host") or ""
+    nickname = user.get("name") or username or "未知用户"
+    if username:
+        author = f"@{username}@{host}" if host else f"@{username}"
+        if nickname and nickname != username:
+            author = f"{author} ({nickname})"
+    else:
+        author = nickname or "未知用户"
+
+    text = note.get("text") or ""
+    if (
+        isinstance(text, str)
+        and max_text_length >= 0
+        and len(text) > max_text_length
+    ):
+        text = text[:max_text_length] + "...(已截断)"
+
+    cw = note.get("cw")
+    files = note.get("files") or []
+    poll = note.get("poll")
+
+    lines: list[str] = [f"作者: {author}"]
+    if cw:
+        lines.append(f"内容警告(CW): {cw}")
+    if text:
+        lines.append(f"内容: {text}")
+    elif not cw and not files and not isinstance(poll, dict):
+        lines.append("内容: (无文本)")
+
+    if files:
+        descs = []
+        for f in files:
+            if not isinstance(f, dict):
+                continue
+            name = f.get("name") or "附件"
+            ftype = f.get("type") or ""
+            if ftype.startswith("image/"):
+                descs.append(f"图片[{name}]")
+            elif ftype.startswith("video/"):
+                descs.append(f"视频[{name}]")
+            elif ftype.startswith("audio/"):
+                descs.append(f"音频[{name}]")
+            else:
+                descs.append(f"文件[{name}]")
+        if descs:
+            lines.append("附件: " + ", ".join(descs))
+
+    if isinstance(poll, dict):
+        poll_text = format_poll(poll)
+        if poll_text:
+            lines.append(poll_text)
+
+    return "\n".join(lines)
+
+
 def extract_sender_info(
     raw_data: dict[str, Any],
     is_chat: bool = False,
