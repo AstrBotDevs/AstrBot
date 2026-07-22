@@ -194,7 +194,7 @@ class ConversationCommands:
             entry = {"role": msg.role}
             if msg.content is None:
                 entry["content"] = None
-            elif isinstance(msg.content, (str, list)):
+            elif isinstance(msg.content, (str, list, dict)):
                 entry["content"] = msg.content
             else:
                 entry["content"] = str(msg.content)

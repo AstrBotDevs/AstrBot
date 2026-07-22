@@ -239,9 +239,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._tool_result_token_counter = EstimateTokenCounter()
 
         # Provider-level context window size (needed for token guard trigger)
-        self._max_context_tokens: int = provider.provider_config.get(
-            "max_context_tokens", 0,
-        )
+        cfg = getattr(provider, "provider_config", {}) or {}
+        self._max_context_tokens: int = cfg.get("max_context_tokens", 0)
 
         self.request_context_manager_config = ContextConfig(
             enable_turn_limit=enable_turn_limit,
