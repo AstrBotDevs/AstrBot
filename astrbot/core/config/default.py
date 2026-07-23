@@ -1340,6 +1340,18 @@ CONFIG_METADATA_2 = {
                         "proxy": "",
                         "custom_headers": {},
                     },
+                    "Eden AI": {
+                        "id": "edenai",
+                        "provider": "edenai",
+                        "type": "openai_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "timeout": 120,
+                        "api_base": "https://api.edenai.run/v3",
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
                     "OpenRouter": {
                         "id": "openrouter",
                         "provider": "openrouter",
