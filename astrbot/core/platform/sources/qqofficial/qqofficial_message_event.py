@@ -787,10 +787,7 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     file_source = i.url
             elif isinstance(i, At):
                 qq_value = str(i.qq)
-                if qq_value == "all":
-                    plain_text += "@everyone"
-                else:
-                    plain_text += f"<@!{qq_value}>"
+                plain_text += f"<@!{qq_value}>"
             else:
                 logger.debug(f"qq_official 忽略 {i.type}")
         return (
