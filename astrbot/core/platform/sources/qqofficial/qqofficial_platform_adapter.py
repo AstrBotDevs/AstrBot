@@ -698,6 +698,44 @@ class QQOfficialPlatformAdapter(Platform):
         return re.sub(r"<faceType=\d+[^>]*>", replace_face, content)
 
     @staticmethod
+    def _sanitize_command_interaction_tags(content: str) -> str:
+        """Replace QQ Official command interaction tags with user text."""
+        import re
+
+        tag_pattern = re.compile(
+            r"<\s*qqbot-cmd-[\w:-]+\b(?P<attrs>[^<>]*)/?>",
+            re.IGNORECASE,
+        )
+        text_attr_pattern = re.compile(
+            r"""\btext\s*=\s*(?P<quote>["'])(?P<value>.*?)(?P=quote)""",
+            re.IGNORECASE | re.DOTALL,
+        )
+
+        def replace_tag(match: re.Match[str]) -> str:
+            attrs = match.group("attrs") or ""
+            text_match = text_attr_pattern.search(attrs)
+            if not text_match:
+                return ""
+            return text_match.group("value")
+
+        return tag_pattern.sub(replace_tag, content).strip()
+
+    @staticmethod
+    def _normalize_message_content(
+        content: str | None,
+        mention_id: str | None = None,
+    ) -> str:
+        raw_content = content or ""
+        if mention_id is not None:
+            raw_content = raw_content.replace(
+                "<@!" + mention_id + ">",
+                "",
+            )
+        return QQOfficialPlatformAdapter._sanitize_command_interaction_tags(
+            QQOfficialPlatformAdapter._parse_face_message(raw_content.strip())
+        )
+
+    @staticmethod
     async def _parse_from_qqofficial(
         message: botpy.message.Message
         | botpy.message.GroupMessage
@@ -788,8 +826,8 @@ class QQOfficialPlatformAdapter(Platform):
                         f"<@!{mention_id}>",
                         "",
                     )
-                abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
-                    plain_content_raw.strip()
+                abm.message_str = QQOfficialPlatformAdapter._normalize_message_content(
+                    plain_content_raw
                 )
                 abm.self_id = bot_mention_ids[0] if bot_mention_ids else "qq_official"
                 if group_mentioned:
@@ -802,8 +840,8 @@ class QQOfficialPlatformAdapter(Platform):
                     message.author.user_openid,
                     getattr(message.author, "username", "") or "",
                 )
-                abm.message_str = QQOfficialPlatformAdapter._parse_face_message(
-                    (message.content or "").strip()
+                abm.message_str = QQOfficialPlatformAdapter._normalize_message_content(
+                    message.content
                 )
                 abm.self_id = "unknown_selfid"
                 msg.append(At(qq="qq_official"))
@@ -822,11 +860,9 @@ class QQOfficialPlatformAdapter(Platform):
             else:
                 abm.self_id = ""
 
-            plain_content = QQOfficialPlatformAdapter._parse_face_message(
-                message.content.replace(
-                    "<@!" + str(abm.self_id) + ">",
-                    "",
-                ).strip()
+            plain_content = QQOfficialPlatformAdapter._normalize_message_content(
+                message.content,
+                mention_id=str(abm.self_id),
             )
 
             await QQOfficialPlatformAdapter._append_attachments(
