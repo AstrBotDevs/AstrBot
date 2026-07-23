@@ -1028,6 +1028,20 @@ class PluginManager:
                         specified_module_path = smd.module_path
                         break
 
+            if specified_module_path:
+                inactivated_plugins = (
+                    await sp.global_get("inactivated_plugins", [])
+                ) or []
+                if specified_module_path in inactivated_plugins:
+                    # 已停用插件没有实例，无需重载；此处若继续执行 _unbind_plugin，
+                    # 会将其在 __init__ 中通过 add_llm_tools 注册的工具从
+                    # func_list 中移除且无法恢复（load 会跳过停用插件的实例化）。
+                    # 新配置会在重新启用插件时由完整的 reload 流程应用。见 #8582。
+                    logger.info(
+                        f"插件 {specified_plugin_name} 处于禁用状态，跳过重载。",
+                    )
+                    return True, None
+
             # 终止插件
             if not specified_module_path:
                 # 重载所有插件
