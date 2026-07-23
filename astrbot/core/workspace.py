@@ -16,6 +16,7 @@ WORKSPACE_TYPES = {
     WORKSPACE_TYPE_PROJECT,
     WORKSPACE_TYPE_CUSTOM,
 }
+UNKNOWN_WORKSPACE_NAME = "unknown"
 
 
 def normalize_umo_for_workspace(umo: str) -> str:
@@ -25,10 +26,13 @@ def normalize_umo_for_workspace(umo: str) -> str:
         umo: Unified message origin.
 
     Returns:
-        Filesystem-safe workspace directory name.
+        Filesystem-safe workspace directory name. Empty, dot-only, and
+        separator-only values use UNKNOWN_WORKSPACE_NAME.
     """
     normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", umo.strip())
-    return normalized or "unknown"
+    if not normalized.strip("._-"):
+        return UNKNOWN_WORKSPACE_NAME
+    return normalized
 
 
 def normalize_project_workspace_type(value: Any) -> str:
