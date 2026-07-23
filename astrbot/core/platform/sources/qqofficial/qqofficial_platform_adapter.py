@@ -14,6 +14,7 @@ import botpy.message
 from botpy import Client
 from botpy.connection import ConnectionState
 from botpy.gateway import BotWebSocket
+from botpy.types.message import MarkdownPayload
 
 from astrbot import logger
 from astrbot.api.event import MessageChain
@@ -379,7 +380,13 @@ class QQOfficialPlatformAdapter(Platform):
             )
             return
 
-        payload: dict[str, Any] = {"content": plain_text}
+        has_mentions = any(isinstance(c, At) for c in message_chain.chain)
+        payload: dict[str, Any] = {}
+        if has_mentions:
+            payload["markdown"] = MarkdownPayload(content=plain_text)
+            payload["msg_type"] = 2
+        else:
+            payload["content"] = plain_text
         if msg_id and not allow_group_proactive_send:
             payload["msg_id"] = msg_id
         ret: Any = None
