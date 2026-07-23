@@ -16,6 +16,9 @@ from astrbot.core.platform.sources.webchat.message_parts_helper import (
     strip_message_parts_path_fields,
     webchat_message_parts_have_content,
 )
+from astrbot.core.platform.sources.webchat.request_flags import (
+    resolve_webchat_request_flags,
+)
 from astrbot.core.platform.sources.webchat.webchat_queue_mgr import webchat_queue_mgr
 from astrbot.core.utils.datetime_utils import to_utc_isoformat
 from astrbot.dashboard.services.api_key_service import ApiKeyService
@@ -371,7 +374,7 @@ class OpenApiService:
         message_id = str(post_data.get("message_id") or uuid4())
         selected_provider = post_data.get("selected_provider")
         selected_model = post_data.get("selected_model")
-        enable_streaming = post_data.get("enable_streaming", True)
+        flags = resolve_webchat_request_flags(post_data)
 
         back_queue = webchat_queue_mgr.get_or_create_back_queue(message_id, session_id)
         try:
@@ -384,7 +387,7 @@ class OpenApiService:
                         "message": message_parts,
                         "selected_provider": selected_provider,
                         "selected_model": selected_model,
-                        "enable_streaming": enable_streaming,
+                        "flags": flags,
                         "message_id": message_id,
                     },
                 )

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from astrbot.core import LogBroker
 from astrbot.core.core_lifecycle import AstrBotCoreLifecycle
 from astrbot.core.db import BaseDatabase
+from astrbot.core.log import LogManager
 from astrbot.dashboard.responses import ApiError, error
 from astrbot.dashboard.services.api_key_service import ApiKeyService
 from astrbot.dashboard.services.auth_service import AuthService
@@ -157,10 +159,30 @@ def create_dashboard_asgi_app(
     async def value_error_handler(_request: Request, exc: ValueError):
         return JSONResponse(error(str(exc)), status_code=400)
 
-    @app.exception_handler(HTTPException)
-    async def http_error_handler(_request: Request, exc: HTTPException):
-        detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
-        return JSONResponse(error(detail), status_code=exc.status_code)
+    @app.exception_handler(StarletteHTTPException)
+    async def starlette_http_error_handler(
+        _request: Request, exc: StarletteHTTPException
+    ):
+        if isinstance(exc.detail, str):
+            return JSONResponse(
+                error(exc.detail), status_code=exc.status_code, headers=exc.headers
+            )
+        return JSONResponse(
+            error("Request failed", exc.detail),
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
+
+    @app.exception_handler(Exception)
+    async def catch_all_handler(_request: Request, exc: Exception):
+        LogManager.GetLogger("astrbot.dashboard").error(
+            "Unhandled exception in dashboard API",
+            exc_info=exc,
+        )
+        return JSONResponse(
+            error("Internal server error"),
+            status_code=500,
+        )
 
     # Legacy dashboard routes keep old /api/* callers working without entering OpenAPI.
     app.include_router(legacy_api_keys_router)

@@ -20,6 +20,23 @@
     },
     "openapi": {
       "title": "OpenAPI"
+    },
+    "resources": {
+      "title": "关于"
+    }
+  },
+  "resources": {
+    "changelog": {
+      "subtitle": "查看当前版本和历史版本的更新内容。"
+    },
+    "documentation": {
+      "subtitle": "打开 AstrBot 官方文档。"
+    },
+    "faq": {
+      "subtitle": "查看常见问题与排障说明。"
+    },
+    "github": {
+      "subtitle": "访问 AstrBot GitHub 仓库。"
     }
   },
   "systemConfig": {

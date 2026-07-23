@@ -96,11 +96,14 @@ def register_command(
             command_name.parent_group.add_sub_command_filter(new_command)
         else:
             logger.warning(
-                f"注册指令{command_name} 的子指令时未提供 sub_command 参数。",
+                f"No sub_command argument was provided while registering a "
+                f"subcommand for {command_name}.",
             )
     # 裸指令
     elif command_name is None:
-        logger.warning("注册裸指令时未提供 command_name 参数。")
+        logger.warning(
+            "No command_name argument was provided while registering a bare command."
+        )
     else:
         new_command = CommandFilter(command_name, alias, None)
         add_to_event_filters = True
@@ -213,7 +216,10 @@ def register_command_group(
     if isinstance(command_group_name, RegisteringCommandable):
         # 子指令组
         if sub_command is None:
-            logger.warning(f"{command_group_name} 指令组的子指令组 sub_command 未指定")
+            logger.warning(
+                f"No sub_command was specified for a subgroup of command group "
+                f"{command_group_name}."
+            )
         else:
             new_group = CommandGroupFilter(
                 sub_command,
@@ -223,7 +229,7 @@ def register_command_group(
             command_group_name.parent_group.add_sub_command_filter(new_group)
     # 根指令组
     elif command_group_name is None:
-        logger.warning("根指令组的名称未指定")
+        logger.warning("No name was specified for the root command group.")
     else:
         new_group = CommandGroupFilter(command_group_name, alias)
 

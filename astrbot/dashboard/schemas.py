@@ -116,10 +116,17 @@ class ChatMessagePatchRequest(OpenModel):
     content: dict[str, Any]
 
 
+class ChatFlags(BaseModel):
+    enable_inline_genui: bool = True
+    enable_default_system_prompt: bool = True
+    enable_streaming: bool = True
+
+
 class ChatMessageRegenerateRequest(OpenModel):
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
+    flags: ChatFlags | None = None
 
 
 class ChatThreadCreateRequest(OpenModel):
@@ -133,6 +140,7 @@ class ChatThreadMessageRequest(OpenModel):
     selected_provider: str | None = None
     selected_model: str | None = None
     enable_streaming: bool | None = None
+    flags: ChatFlags | None = None
 
 
 class CronJobRequest(OpenModel):
@@ -198,6 +206,7 @@ class OpenApiChatRequest(OpenModel):
     config_name: str | None = None
     platform_id: str | None = None
     enable_streaming: bool | None = None
+    flags: ChatFlags | None = None
 
 
 class ImMessageRequest(OpenModel):

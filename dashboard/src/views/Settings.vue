@@ -11,7 +11,10 @@
                     :key="item.id"
                     type="button"
                     class="settings-nav__item"
-                    :class="{ 'settings-nav__item--active': activeSettingsSection === item.id }"
+                    :class="{
+                        'settings-nav__item--active': activeSettingsSection === item.id,
+                        'settings-nav__item--divider': item.dividerBefore
+                    }"
                     :aria-pressed="activeSettingsSection === item.id"
                     @click="activeSettingsSection = item.id"
                 >
@@ -395,12 +398,39 @@
                         </div>
                     </div>
                 </section>
+
+                <section id="settings-resources" class="settings-section" v-show="activeSettingsSection === 'resources'">
+                    <div class="settings-section__heading">
+                        <div class="settings-section__title">{{ tm('sections.resources.title') }}</div>
+                    </div>
+                    <div class="settings-section__content">
+                        <div class="settings-list-card">
+                            <div
+                                v-for="item in resourceItems"
+                                :key="item.key"
+                                class="settings-item"
+                            >
+                                <div class="settings-item__label">
+                                    <div class="settings-item__title">{{ item.title }}</div>
+                                    <div class="settings-item__subtitle">{{ item.subtitle }}</div>
+                                </div>
+                                <div class="settings-item__control">
+                                    <v-btn variant="tonal" @click="item.action()">
+                                        <v-icon class="mr-2">{{ item.icon }}</v-icon>
+                                        {{ item.title }}
+                                    </v-btn>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </main>
         </div>
     </div>
 
     <WaitingForRestart ref="wfr" />
     <BackupDialog ref="backupDialog" />
+    <ChangelogDialog v-model="changelogDialog" />
     <DashboardTwoFactorDialog
         v-model="configSave2faDialogVisible"
         :error-message="configSave2faError"
@@ -421,9 +451,10 @@ import SidebarCustomizer from '@/components/shared/SidebarCustomizer.vue';
 import BackupDialog from '@/components/shared/BackupDialog.vue';
 import StorageCleanupPanel from '@/components/shared/StorageCleanupPanel.vue';
 import DashboardTwoFactorDialog from '@/components/shared/DashboardTwoFactorDialog.vue';
+import ChangelogDialog from '@/components/shared/ChangelogDialog.vue';
 import { restartAstrBot as restartAstrBotRuntime } from '@/utils/restartAstrBot';
 import { copyToClipboard } from '@/utils/clipboard';
-import { useModuleI18n } from '@/i18n/composables';
+import { useI18n, useModuleI18n } from '@/i18n/composables';
 import { useTheme } from 'vuetify';
 import { PurpleTheme } from '@/theme/LightTheme';
 import { useToastStore } from '@/stores/toast';
@@ -431,6 +462,7 @@ import { askForConfirmation, useConfirmDialog } from '@/utils/confirmDialog';
 
 const { tm } = useModuleI18n('features/settings');
 const { tm: tmMeta } = useModuleI18n('features/config-metadata');
+const { t, locale } = useI18n();
 const toastStore = useToastStore();
 const confirmDialog = useConfirmDialog();
 const theme = useTheme();
@@ -497,6 +529,7 @@ const configSave2faRotationHint = ref('');
 const configSavePendingData = ref(null);
 const systemConfigAutoSaveTimer = ref(null);
 const activeSettingsSection = ref('general');
+const changelogDialog = ref(false);
 
 const apiKeyExpiryOptions = computed(() => [
     { title: tm('apiKey.expiryOptions.day1'), value: 1 },
@@ -526,7 +559,50 @@ const settingsNavItems = computed(() => [
     { id: 'network', label: tm('sections.network.title'), icon: 'mdi mdi-lan-connect' },
     { id: 'security', label: tm('sections.security.title'), icon: 'mdi mdi-shield-lock-outline' },
     { id: 'maintenance', label: tm('sections.maintenance.title'), icon: 'mdi mdi-tools' },
-    { id: 'openapi', label: tm('sections.openapi.title'), icon: 'mdi mdi-api' }
+    { id: 'openapi', label: tm('sections.openapi.title'), icon: 'mdi mdi-api' },
+    { id: 'resources', label: tm('sections.resources.title'), icon: 'mdi mdi-information-outline', dividerBefore: true }
+]);
+
+const openExternalLink = (url) => {
+    if (typeof window === 'undefined') return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+const openFaqLink = () => {
+    openExternalLink(locale.value === 'en-US'
+        ? 'https://docs.astrbot.app/en/faq.html'
+        : 'https://docs.astrbot.app/faq.html');
+};
+
+const resourceItems = computed(() => [
+    {
+        key: 'changelog',
+        title: t('core.navigation.changelog'),
+        subtitle: tm('resources.changelog.subtitle'),
+        icon: 'mdi-note-text-outline',
+        action: () => { changelogDialog.value = true; }
+    },
+    {
+        key: 'documentation',
+        title: t('core.navigation.documentation'),
+        subtitle: tm('resources.documentation.subtitle'),
+        icon: 'mdi-book-open-variant',
+        action: () => openExternalLink('https://docs.astrbot.app')
+    },
+    {
+        key: 'faq',
+        title: t('core.navigation.faq'),
+        subtitle: tm('resources.faq.subtitle'),
+        icon: 'mdi-frequently-asked-questions',
+        action: openFaqLink
+    },
+    {
+        key: 'github',
+        title: t('core.navigation.github'),
+        subtitle: tm('resources.github.subtitle'),
+        icon: 'mdi-github',
+        action: () => openExternalLink('https://github.com/AstrBotDevs/AstrBot')
+    }
 ]);
 
 const configIncludedScopes = ['bot', 'provider'];
@@ -916,6 +992,8 @@ onMounted(async () => {
         activeSettingsSection.value = 'maintenance';
     } else if (hash.includes('settings-openapi')) {
         activeSettingsSection.value = 'openapi';
+    } else if (hash.includes('settings-resources')) {
+        activeSettingsSection.value = 'resources';
     }
 });
 
@@ -993,6 +1071,20 @@ onUnmounted(() => {
 .settings-nav__item:hover {
     background: rgba(var(--v-theme-on-surface), 0.045);
     color: rgb(var(--v-theme-on-surface));
+}
+
+.settings-nav__item--divider {
+    margin-top: 13px;
+}
+
+.settings-nav__item--divider::after {
+    position: absolute;
+    top: -9px;
+    right: 0;
+    left: 0;
+    height: 1px;
+    background: var(--settings-divider);
+    content: "";
 }
 
 .settings-nav__item--active {

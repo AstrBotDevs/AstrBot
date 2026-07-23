@@ -1799,6 +1799,31 @@
         }
       }
     },
+    "/api/v1/chat/runs/{run_id}/stream": {
+      "get": {
+        "tags": [
+          "Chat"
+        ],
+        "summary": "Resume an active webchat run as an SSE stream",
+        "operationId": "resumeChatRun",
+        "x-astrbot-scope": "chat",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumed server-sent chat stream or an error envelope"
+          }
+        }
+      }
+    },
     "/api/v1/chat/sessions/{session_id}/messages/{message_id}": {
       "patch": {
         "tags": [
@@ -3382,6 +3407,31 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/PluginVersionSupportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Ok"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/validate/repo": {
+      "post": {
+        "tags": [
+          "Plugins"
+        ],
+        "summary": "Validate a GitHub plugin repository before installation",
+        "operationId": "validatePluginRepo",
+        "x-astrbot-scope": "plugin",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginValidateRepoRequest"
               }
             }
           }
@@ -5967,6 +6017,28 @@
         },
         "additionalProperties": false
       },
+      "ChatFlags": {
+        "type": "object",
+        "description": "Per-request ChatUI feature flags. A value here takes priority over its legacy top-level field, followed by the documented default.",
+        "properties": {
+          "enable_inline_genui": {
+            "type": "boolean",
+            "default": true,
+            "description": "Inject the inline HTML GenUI system prompt for this request."
+          },
+          "enable_default_system_prompt": {
+            "type": "boolean",
+            "default": true,
+            "description": "Allow the ChatUI default system prompt when no persona overrides it."
+          },
+          "enable_streaming": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field."
+          }
+        },
+        "additionalProperties": false
+      },
       "ChatRequest": {
         "type": "object",
         "required": [
@@ -6011,7 +6083,12 @@
           },
           "enable_streaming": {
             "type": "boolean",
-            "default": true
+            "default": true,
+            "deprecated": true,
+            "description": "Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority."
+          },
+          "flags": {
+            "$ref": "#/components/schemas/ChatFlags"
           },
           "_skip_user_history": {
             "type": "boolean",
@@ -6080,7 +6157,12 @@
           },
           "enable_streaming": {
             "type": "boolean",
-            "default": true
+            "default": true,
+            "deprecated": true,
+            "description": "Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority."
+          },
+          "flags": {
+            "$ref": "#/components/schemas/ChatFlags"
           }
         },
         "additionalProperties": false
@@ -6139,7 +6221,12 @@
           },
           "enable_streaming": {
             "type": "boolean",
-            "default": true
+            "default": true,
+            "deprecated": true,
+            "description": "Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority."
+          },
+          "flags": {
+            "$ref": "#/components/schemas/ChatFlags"
           }
         },
         "additionalProperties": false
@@ -6154,6 +6241,17 @@
             "type": "string"
           },
           "description": {
+            "type": "string"
+          },
+          "workspace_type": {
+            "type": "string",
+            "enum": [
+              "session",
+              "project",
+              "custom"
+            ]
+          },
+          "workspace_path": {
             "type": "string"
           }
         },
@@ -6188,6 +6286,9 @@
             "type": "string"
           },
           "filename": {
+            "type": "string"
+          },
+          "stored_filename": {
             "type": "string"
           },
           "mime_type": {
@@ -6247,6 +6348,9 @@
       "PluginSourceBindRequest": {
         "type": "object",
         "properties": {
+          "install_method": {
+            "type": "string"
+          },
           "registry_url": {
             "type": "string",
             "nullable": true
@@ -6312,6 +6416,16 @@
           },
           "ignore_version_check": {
             "type": "boolean"
+          },
+          "install_method": {
+            "type": "string"
+          },
+          "registry_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "market_plugin_id": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -6336,6 +6450,31 @@
           },
           "ignore_version_check": {
             "type": "boolean"
+          },
+          "install_method": {
+            "type": "string"
+          },
+          "registry_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "market_plugin_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PluginValidateRepoRequest": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "proxy": {
+            "type": "string"
           }
         },
         "additionalProperties": false

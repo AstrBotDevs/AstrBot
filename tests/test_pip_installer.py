@@ -699,7 +699,10 @@ async def test_install_raises_dedicated_pip_install_error_on_non_conflict_failur
 
     installer = PipInstaller("")
 
-    with pytest.raises(pip_installer_module.PipInstallError, match="错误码：2"):
+    with pytest.raises(
+        pip_installer_module.PipInstallError,
+        match="error code 2",
+    ):
         await installer.install(package_name="demo-package")
 
 
@@ -715,7 +718,10 @@ async def test_run_pip_with_classification_raises_install_error_on_non_conflict_
 
     installer = PipInstaller("")
 
-    with pytest.raises(pip_installer_module.PipInstallError, match="错误码：3"):
+    with pytest.raises(
+        pip_installer_module.PipInstallError,
+        match="error code 3",
+    ):
         await installer._run_pip_with_classification(["install", "demo-package"])
 
 
@@ -1827,7 +1833,9 @@ async def test_install_logs_redacted_pip_argv_when_credentials_present(monkeypat
         package_name="--index-url https://user:secret@example.com/simple demo-package"
     )
 
-    argv_logs = [line for line in logged_lines if line.startswith("Pip 包管理器 argv:")]
+    argv_logs = [
+        line for line in logged_lines if line.startswith("Pip package manager argv:")
+    ]
 
     assert len(argv_logs) == 1
     assert "secret" not in argv_logs[0]

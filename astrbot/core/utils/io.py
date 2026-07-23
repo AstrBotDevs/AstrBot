@@ -67,21 +67,24 @@ def ensure_dir(dir_path: str | Path) -> None:
     """确保目录存在。如果路径处存在非目录的文件或损坏的符号链接，则先将其删除。"""
     p = Path(dir_path)
     if (p.exists() or p.is_symlink()) and not p.is_dir():
-        logger.warning(f"路径 {p} 已存在但不是目录，正在清理以创建目录。")
+        logger.warning(
+            f"Path {p} exists but is not a directory; removing it before creating "
+            "the directory."
+        )
         try:
             if p.is_dir():
                 shutil.rmtree(p, onerror=on_error)
             else:
                 p.unlink()
         except Exception as e:
-            logger.error(f"清理冲突路径 {p} 失败: {e!s}")
-            raise RuntimeError(f"无法清理冲突路径 {p}：{e!s}") from e
+            logger.error(f"Failed to remove conflicting path {p}: {e!s}")
+            raise RuntimeError(f"Could not remove conflicting path {p}: {e!s}") from e
 
     try:
         p.mkdir(parents=True, exist_ok=True)
     except Exception as e:
-        logger.error(f"创建目录 {p} 失败: {e!s}")
-        raise RuntimeError(f"无法创建目录 {p}：{e!s}") from e
+        logger.error(f"Failed to create directory {p}: {e!s}")
+        raise RuntimeError(f"Could not create directory {p}: {e!s}") from e
 
 
 def port_checker(port: int, host: str = "localhost") -> bool:

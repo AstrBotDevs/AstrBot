@@ -32,10 +32,11 @@ class ContentSafetyCheckStage(Stage):
             if event.is_at_or_wake_command:
                 event.set_result(
                     MessageEventResult().message(
-                        "你的消息或者大模型的响应中包含不适当的内容，已被屏蔽。",
+                        "Your message or the model response contains inappropriate "
+                        "content and has been blocked.",
                     ),
                 )
                 yield
             event.stop_event()
-            logger.info(f"内容安全检查不通过，原因：{info}")
+            logger.info(f"Content safety check failed: {info}")
             return

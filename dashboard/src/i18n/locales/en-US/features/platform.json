@@ -9,18 +9,13 @@
   "webhookCopyFailed": "Copy failed, please copy manually",
   "webhookDialog": {
     "title": "Webhook Callback URL",
-    "description": "The callback address is as follows, please ensure that the network environment can be accessed. You can also view the callback address information in the logs.",
+    "description": "The callback address is as follows, please ensure that the network environment can be publicly accessible. You can also view the callback address information in the logs. It is recommended to fill in the \"Externally Accessible Callback API Address\" in Settings -> General.",
     "close": "Close"
   },
   "details": {
     "adapterType": "Adapter Type",
     "token": "Token",
     "description": "Description"
-  },
-  "logs": {
-    "title": "Platform Logs",
-    "expand": "Expand",
-    "collapse": "Collapse"
   },
   "dialog": {
     "add": "Add",

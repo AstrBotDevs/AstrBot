@@ -198,6 +198,10 @@ class InternalAgentSubStage(Stage):
                     follow_up_activated,
                 ) = await prepare_follow_up_capture(follow_up_capture)
                 if follow_up_consumed_marked:
+                    event.set_extra(
+                        "_follow_up_captured",
+                        {"target_run_id": follow_up_capture.target_run_id},
+                    )
                     logger.info(
                         "Follow-up ticket already consumed, stopping processing. umo=%s, seq=%s",
                         event.unified_msg_origin,
@@ -289,7 +293,9 @@ class InternalAgentSubStage(Stage):
                     # 检测 Live Mode
                     if action_type == "live":
                         # Live Mode: 使用 run_live_agent
-                        logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
+                        logger.info(
+                            "[Internal Agent] Live Mode detected; enabling TTS processing."
+                        )
 
                         # 获取 TTS Provider
                         tts_provider = (
@@ -300,7 +306,8 @@ class InternalAgentSubStage(Stage):
 
                         if not tts_provider:
                             logger.warning(
-                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
+                                "[Live Mode] No TTS provider is configured; using "
+                                "standard streaming mode."
                             )
 
                         # 使用 run_live_agent，总是使用流式响应
@@ -472,7 +479,7 @@ class InternalAgentSubStage(Stage):
             and not req.tool_calls_result
             and not user_aborted
         ):
-            logger.debug("LLM 响应为空，不保存记录。")
+            logger.debug("The LLM response is empty; not saving a record.")
             return
 
         messages_to_save: list[Message] = []
