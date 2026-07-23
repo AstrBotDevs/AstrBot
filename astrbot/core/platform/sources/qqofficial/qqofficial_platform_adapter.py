@@ -384,6 +384,7 @@ class QQOfficialPlatformAdapter(Platform):
         payload: dict[str, Any] = {}
         if has_mentions:
             payload["markdown"] = MarkdownPayload(content=plain_text)
+            # QQ Official account message type for markdown content
             payload["msg_type"] = 2
         else:
             payload["content"] = plain_text
