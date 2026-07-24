@@ -93,6 +93,7 @@ class MyPlugin(Star):
 3. 在 `__init__` 方法中会传入 `Context` 对象，这个对象包含了 AstrBot 的大多数组件
 4. 具体的处理函数 `Handler` 在插件类中定义，如这里的 `helloworld` 函数。
 5. 请务必使用 `from astrbot.api import logger` 来获取日志对象，而不是使用 `logging` 模块。
+6. 每个插件在 `__init__` 后会自动拥有独立的 `self.logger`。这个 logger 的等级可以在 WebUI 的插件配置弹窗中单独设置，不会影响其他插件和核心。也可以继续使用 `from astrbot.api import logger`，它会根据调用位置自动路由到当前插件的 logger。
 
 > [!TIP]
 >

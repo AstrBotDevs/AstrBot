@@ -2075,6 +2075,32 @@ paths:
         "200":
           $ref: "#/components/responses/Ok"
 
+  /api/v1/plugins/{plugin_id}/log-level:
+    put:
+      tags: [Plugins]
+      summary: Set plugin log level
+      description: Set the log level of a plugin. Pass null to follow the global log level.
+      operationId: updatePluginLogLevel
+      x-astrbot-scope: plugin
+      parameters:
+        - $ref: "#/components/parameters/PluginId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                level:
+                  type: string
+                  nullable: true
+                  enum: [DEBUG, INFO, WARNING, ERROR, CRITICAL, null]
+                  description: Log level name, or null to follow the global level.
+              additionalProperties: true
+      responses:
+        "200":
+          $ref: "#/components/responses/Ok"
+
   /api/v1/plugins/{plugin_id}/config/schema:
     get:
       tags: [Plugins]

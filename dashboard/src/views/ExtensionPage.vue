@@ -128,6 +128,8 @@ const {
   pluginOff,
   openExtensionConfig,
   updateConfig,
+  updatePluginLogLevel,
+  pluginLogLevelSaving,
   showPluginInfo,
   reloadPlugin,
   viewReadme,
@@ -170,6 +172,15 @@ const {
   handleLocaleChange,
   searchDebounceTimer,
 } = pageState;
+
+const logLevelItems = computed(() => [
+  { title: tm("dialogs.config.coreSettings.followGlobal"), value: null },
+  { title: "DEBUG", value: "DEBUG" },
+  { title: "INFO", value: "INFO" },
+  { title: "WARNING", value: "WARNING" },
+  { title: "ERROR", value: "ERROR" },
+  { title: "CRITICAL", value: "CRITICAL" },
+]);
 
 const selectedPluginId = computed(() => {
   const pluginId = route.params.pluginId;
@@ -431,6 +442,30 @@ const updateDialogPluginLogo = computed(() => {
         tm("dialogs.config.title")
       }}</v-card-title>
       <v-card-text>
+        <div
+          class="d-flex align-center justify-space-between flex-wrap"
+          style="gap: 12px"
+        >
+          <div>
+            <div class="text-subtitle-1 font-weight-medium">
+              {{ tm("dialogs.config.coreSettings.logLevel") }}
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              {{ tm("dialogs.config.coreSettings.logLevelHint") }}
+            </div>
+          </div>
+          <v-select
+            :model-value="extension_config.log_level"
+            :items="logLevelItems"
+            :loading="pluginLogLevelSaving"
+            density="compact"
+            variant="outlined"
+            hide-details
+            style="max-width: 220px; min-width: 180px"
+            @update:model-value="updatePluginLogLevel"
+          ></v-select>
+        </div>
+        <v-divider class="my-4"></v-divider>
         <div style="max-height: 60vh; overflow-y: auto; padding-right: 8px">
           <AstrBotConfig
             v-if="extension_config.metadata"
@@ -445,9 +480,13 @@ const updateDialogPluginLogo = computed(() => {
       </v-card-text>
       <v-card-actions>
         <v-spacer></v-spacer>
-        <v-btn color="blue-darken-1" variant="text" @click="updateConfig">{{
-          tm("buttons.saveAndClose")
-        }}</v-btn>
+        <v-btn
+          v-if="extension_config.metadata"
+          color="blue-darken-1"
+          variant="text"
+          @click="updateConfig"
+          >{{ tm("buttons.saveAndClose") }}</v-btn
+        >
         <v-btn
           color="blue-darken-1"
           variant="text"
