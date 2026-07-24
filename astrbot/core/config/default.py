@@ -9,6 +9,8 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 VERSION = __version__
 
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
+FORWARD_NODE_MAX_LENGTH_DEFAULT = 1000
+FORWARD_NODE_HARD_LIMIT_DEFAULT = 1200
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
         "description": "Base URL",
@@ -64,6 +66,8 @@ DEFAULT_CONFIG = {
         },
         "reply_prefix": "",
         "forward_threshold": 1500,
+        "forward_node_max_length": FORWARD_NODE_MAX_LENGTH_DEFAULT,
+        "forward_node_hard_limit": FORWARD_NODE_HARD_LIMIT_DEFAULT,
         "enable_id_white_list": True,
         "id_whitelist": [],
         "id_whitelist_log": True,
@@ -1078,6 +1082,14 @@ CONFIG_METADATA_2 = {
                     "forward_threshold": {
                         "type": "int",
                         "hint": "超过一定字数后，机器人会将消息折叠成 QQ 群聊的 “转发消息”，以防止刷屏。目前仅 QQ 平台适配器适用。",
+                    },
+                    "forward_node_max_length": {
+                        "type": "int",
+                        "hint": "合并转发内单个节点期望的文本长度，达到该长度后会优先在句号、换行等自然断点附近切开。",
+                    },
+                    "forward_node_hard_limit": {
+                        "type": "int",
+                        "hint": "合并转发内单个节点的文本硬上限，超过后一定会强制切开，用来避开 QQ/NapCat 对单条转发节点的隐藏限制。",
                     },
                     "enable_id_white_list": {
                         "type": "bool",
@@ -3939,6 +3951,16 @@ CONFIG_METADATA_3 = {
                     "platform_settings.forward_threshold": {
                         "description": "转发消息的字数阈值",
                         "type": "int",
+                    },
+                    "platform_settings.forward_node_max_length": {
+                        "description": "单个转发节点目标长度",
+                        "type": "int",
+                        "hint": "合并转发内单个节点期望容纳的文本长度，达到该长度后会优先寻找句号、换行等自然断点，避免一句话被切得太碎。",
+                    },
+                    "platform_settings.forward_node_hard_limit": {
+                        "description": "单个转发节点硬上限",
+                        "type": "int",
+                        "hint": "合并转发内单个节点的最大文本长度。超过后一定会强制切开，用来避开 QQ/NapCat 对单条转发节点的隐藏限制。",
                     },
                     "platform_settings.empty_mention_waiting": {
                         "description": "只 @ 机器人是否触发等待",
