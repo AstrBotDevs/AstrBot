@@ -7,7 +7,10 @@ from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.tool import ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.computer.computer_client import get_booter
-from astrbot.core.tools.computer_tools.util import check_admin_permission
+from astrbot.core.tools.computer_tools.util import (
+    check_admin_permission,
+    format_exception_message,
+)
 from astrbot.core.tools.registry import builtin_tool
 
 _SHIPYARD_NEO_TOOL_CONFIG = {
@@ -89,7 +92,7 @@ class BrowserExecTool(FunctionTool):
             )
             return _to_json(result)
         except Exception as e:
-            return f"Error executing browser command: {str(e)}"
+            return f"Error executing browser command: {format_exception_message(e)}"
 
 
 @builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
@@ -154,7 +157,9 @@ class BrowserBatchExecTool(FunctionTool):
             )
             return _to_json(result)
         except Exception as e:
-            return f"Error executing browser batch command: {str(e)}"
+            return (
+                f"Error executing browser batch command: {format_exception_message(e)}"
+            )
 
 
 @builtin_tool(config=_SHIPYARD_NEO_TOOL_CONFIG)
@@ -201,4 +206,4 @@ class RunBrowserSkillTool(FunctionTool):
             )
             return _to_json(result)
         except Exception as e:
-            return f"Error running browser skill: {str(e)}"
+            return f"Error running browser skill: {format_exception_message(e)}"

@@ -16,6 +16,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_system_tmp_path
 from ..registry import builtin_tool
 from .util import (
     check_admin_permission,
+    format_exception_message,
     is_local_runtime,
     workspace_root_for_context,
 )
@@ -136,8 +137,7 @@ class ExecuteShellTool(FunctionTool):
                 )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            detail = str(e) or type(e).__name__
-            return f"Error executing command: {detail}"
+            return f"Error executing command: {format_exception_message(e)}"
 
 
 def _is_self_detached_command(command: str) -> bool:

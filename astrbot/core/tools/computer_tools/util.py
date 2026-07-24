@@ -45,6 +45,11 @@ async def workspace_root_for_context(
         return workspace_root(umo)
 
 
+def format_exception_message(exc: BaseException) -> str:
+    message = str(exc).strip()
+    return message or exc.__class__.__name__
+
+
 def is_local_runtime(context: ContextWrapper[AstrAgentContext]) -> bool:
     cfg = context.context.context.get_config(
         umo=context.context.event.unified_msg_origin
