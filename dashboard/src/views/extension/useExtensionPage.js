@@ -1139,16 +1139,23 @@ export const useExtensionPage = () => {
   };
 
   const updateConfig = async () => {
+    loadingDialog.title = tm("status.loading");
+    loadingDialog.statusCode = 0;
+    loadingDialog.result = "";
+    loadingDialog.show = true;
     try {
       const res = await pluginApi.updateConfig(
         curr_namespace.value,
         extension_config.config,
       );
-      if (res.data.status === "ok") {
-        toast(res.data.message, "success");
-      } else {
+      if (res.data.status !== "ok") {
         toast(res.data.message, "error");
+        onLoadingDialogResult(2, res.data.message, -1);
+        return;
       }
+
+      toast(res.data.message, "success");
+      onLoadingDialogResult(1, res.data.message);
       configDialog.value = false;
       currentConfigPlugin.value = "";
       extension_config.metadata = {};
@@ -1157,7 +1164,9 @@ export const useExtensionPage = () => {
       extension_config.log_level = null;
       getExtensions();
     } catch (err) {
-      toast(err, "error");
+      const errMsg = resolveErrorMessage(err, tm("messages.operationFailed"));
+      toast(errMsg, "error");
+      onLoadingDialogResult(2, errMsg, -1);
     }
   };
 
