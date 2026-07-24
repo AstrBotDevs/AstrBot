@@ -1485,8 +1485,8 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
 
 @pytest.mark.asyncio
-async def test_skills_like_requery_passes_extra_user_content_parts():
-    """skills-like 模式 re-query 时应传递 extra_user_content_parts（如 image_caption）"""
+async def test_skills_like_requery_preserves_request_tool_metadata_and_usage():
+    """skills-like re-query preserves metadata and counts its token usage."""
     from astrbot.core.agent.message import TextPart
 
     captured_kwargs = {}
@@ -1502,7 +1502,12 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                     tools_call_name=["test_tool"],
                     tools_call_args=[{"query": "test"}],
                     tools_call_ids=["call_1"],
-                    usage=TokenUsage(input_other=10, output=5),
+                    tools_call_extra_content={
+                        "call_1": {
+                            "google": {"thought_signature": "selection-signature"}
+                        }
+                    },
+                    usage=TokenUsage(input_other=10, input_cached=2, output=5),
                 )
             if self.call_count == 2:
                 # 第二次调用：re-query with param schema
@@ -1513,7 +1518,10 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
                     tools_call_name=["test_tool"],
                     tools_call_args=[{"query": "actual"}],
                     tools_call_ids=["call_2"],
-                    usage=TokenUsage(input_other=10, output=5),
+                    tools_call_extra_content={
+                        "call_2": {"google": {"thought_signature": "requery-signature"}}
+                    },
+                    usage=TokenUsage(input_other=20, input_cached=3, output=7),
                 )
             # 后续调用：正常回复
             return LLMResponse(
@@ -1532,11 +1540,13 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     tool_set = ToolSet(tools=[tool])
 
     caption_part = TextPart(text="<image_caption>一张猫的照片</image_caption>")
+    conversation = SimpleNamespace(cid="test-conversation", token_usage=0)
     req = ProviderRequest(
         prompt="看看这张图",
         func_tool=tool_set,
         contexts=[],
         extra_user_content_parts=[caption_part],
+        conversation=cast(Any, conversation),
     )
 
     event = MockEvent(umo="test_umo", sender_id="test_sender")
@@ -1563,6 +1573,145 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     parts = captured_kwargs["extra_user_content_parts"]
     assert len(parts) == 1
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+
+    assistant_tool_message = next(
+        message
+        for message in run_context.messages
+        if message.role == "assistant" and message.tool_calls
+    )
+    assert assistant_tool_message.tool_calls[0].id == "call_2"
+    assert assistant_tool_message.tool_calls[0].extra_content == {
+        "google": {"thought_signature": "requery-signature"}
+    }
+    assert runner.stats.token_usage == TokenUsage(
+        input_other=30,
+        input_cached=5,
+        output=12,
+    )
+    assert conversation.token_usage == 47
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_repair_counts_both_extra_requests():
+    """skills-like repair counts both provider requests after tool selection."""
+
+    class RepairProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            if self.call_count == 1:
+                return LLMResponse(
+                    role="assistant",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "test"}],
+                    tools_call_ids=["call_1"],
+                    usage=TokenUsage(input_other=2, input_cached=3, output=5),
+                )
+            if self.call_count == 2:
+                return LLMResponse(
+                    role="assistant",
+                    completion_text="",
+                    usage=TokenUsage(input_other=7, input_cached=11, output=13),
+                )
+            if self.call_count == 3:
+                return LLMResponse(
+                    role="assistant",
+                    tools_call_name=["test_tool"],
+                    tools_call_args=[{"query": "repaired"}],
+                    tools_call_ids=["call_3"],
+                    usage=TokenUsage(input_other=17, input_cached=19, output=23),
+                )
+            raise AssertionError("Unexpected provider request")
+
+    provider = RepairProvider()
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    conversation = SimpleNamespace(cid="test-conversation", token_usage=0)
+    request = ProviderRequest(
+        prompt="run tool",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+        conversation=cast(Any, conversation),
+    )
+    run_context = ContextWrapper(
+        context=MockAgentContext(MockEvent("test_umo", "test_sender"))
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=run_context,
+        tool_executor=cast(Any, MockToolExecutor()),
+        agent_hooks=MockHooks(),
+        tool_schema_mode="skills_like",
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert provider.call_count == 3
+    assert runner.stats.token_usage == TokenUsage(
+        input_other=26,
+        input_cached=33,
+        output=41,
+    )
+    assert conversation.token_usage == 100
+
+
+@pytest.mark.asyncio
+async def test_skills_like_without_requery_does_not_double_count_usage():
+    """A tool selection without a matching schema is counted only once."""
+
+    class UnknownToolProvider(MockProvider):
+        async def text_chat(self, **kwargs) -> LLMResponse:
+            self.call_count += 1
+            return LLMResponse(
+                role="assistant",
+                tools_call_name=["missing_tool"],
+                tools_call_args=[{}],
+                tools_call_ids=["call_missing"],
+                usage=TokenUsage(input_other=29, input_cached=31, output=37),
+            )
+
+    provider = UnknownToolProvider()
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={"type": "object", "properties": {}},
+        handler=AsyncMock(),
+    )
+    conversation = SimpleNamespace(cid="test-conversation", token_usage=0)
+    request = ProviderRequest(
+        prompt="run tool",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+        conversation=cast(Any, conversation),
+    )
+    runner = ToolLoopAgentRunner()
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=cast(Any, MockToolExecutor()),
+        agent_hooks=MockHooks(),
+        tool_schema_mode="skills_like",
+    )
+
+    async for _ in runner.step():
+        pass
+
+    assert provider.call_count == 1
+    assert runner.stats.token_usage == TokenUsage(
+        input_other=29,
+        input_cached=31,
+        output=37,
+    )
+    assert conversation.token_usage == 97
 
 
 @pytest.mark.asyncio
