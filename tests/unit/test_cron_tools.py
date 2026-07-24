@@ -8,11 +8,19 @@ import pytest
 from astrbot.core.tools.cron_tools import FutureTaskTool
 
 
-def _context(cron_mgr, *, umo: str = "test:group:shared", sender_id: str = "user-1"):
+def _context(
+    cron_mgr,
+    *,
+    umo: str = "test:group:shared",
+    sender_id: str = "user-1",
+    role: str | None = "admin",
+):
     return SimpleNamespace(
         context=SimpleNamespace(
             context=SimpleNamespace(cron_manager=cron_mgr),
             event=SimpleNamespace(
+                role=role,
+                is_admin=lambda: role == "admin",
                 unified_msg_origin=umo,
                 get_sender_id=lambda: sender_id,
             ),
@@ -76,17 +84,10 @@ async def test_future_task_edit_requires_job_id():
     """Edit mode should require job_id."""
     tool = FutureTaskTool()
     cron_mgr = SimpleNamespace()
-    context = SimpleNamespace(
-        context=SimpleNamespace(
-            context=SimpleNamespace(cron_manager=cron_mgr),
-            event=SimpleNamespace(
-                unified_msg_origin="test:private:session",
-                get_sender_id=lambda: "user-1",
-            ),
-        )
-    )
 
-    result = await tool.call(context, action="edit")
+    result = await tool.call(
+        _context(cron_mgr, umo="test:private:session"), action="edit"
+    )
 
     assert result == "error: job_id is required when action=edit."
 
@@ -119,18 +120,9 @@ async def test_future_task_edit_updates_existing_job():
         db=SimpleNamespace(get_cron_job=AsyncMock(return_value=existing_job)),
         update_job=AsyncMock(return_value=updated_job),
     )
-    context = SimpleNamespace(
-        context=SimpleNamespace(
-            context=SimpleNamespace(cron_manager=cron_mgr),
-            event=SimpleNamespace(
-                unified_msg_origin="test:private:session",
-                get_sender_id=lambda: "user-1",
-            ),
-        )
-    )
 
     result = await tool.call(
-        context,
+        _context(cron_mgr, umo="test:private:session"),
         action="edit",
         job_id="job-1",
         name="new name",
@@ -154,6 +146,84 @@ async def test_future_task_edit_updates_existing_job():
         },
     )
     assert result == "Updated future task job-1 (new name)."
+
+
+@pytest.mark.asyncio
+async def test_future_task_uses_event_admin_contract():
+    """Authorization should use the event's public admin predicate."""
+    tool = FutureTaskTool()
+    context = SimpleNamespace(
+        context=SimpleNamespace(
+            context=SimpleNamespace(cron_manager=SimpleNamespace()),
+            event=SimpleNamespace(
+                is_admin=lambda: True,
+                unified_msg_origin="test:private:session",
+                get_sender_id=lambda: "admin-user",
+            ),
+        )
+    )
+
+    result = await tool.call(context, action="edit")
+
+    assert result == "error: job_id is required when action=edit."
+
+
+@pytest.mark.asyncio
+async def test_future_task_admin_can_create_task():
+    """Administrators should retain the existing task creation behavior."""
+    tool = FutureTaskTool()
+    job = SimpleNamespace(
+        job_id="job-1",
+        name="daily-report",
+        next_run_time="2026-07-14T08:00:00+08:00",
+    )
+    cron_mgr = SimpleNamespace(add_active_job=AsyncMock(return_value=job))
+
+    result = await tool.call(
+        _context(cron_mgr, sender_id="admin-user"),
+        action="create",
+        name="daily-report",
+        cron_expression="0 8 * * *",
+        note="Generate a daily report",
+    )
+
+    cron_mgr.add_active_job.assert_awaited_once_with(
+        name="daily-report",
+        cron_expression="0 8 * * *",
+        payload={
+            "session": "test:group:shared",
+            "sender_id": "admin-user",
+            "note": "Generate a daily report",
+            "origin": "tool",
+        },
+        description="Generate a daily report",
+        run_once=False,
+        run_at=None,
+    )
+    assert result == (
+        "Scheduled future task job-1 (daily-report) expression '0 8 * * *' "
+        "(next 2026-07-14T08:00:00+08:00)."
+    )
+
+
+@pytest.mark.parametrize("action", ["create", "edit", "delete", "list"])
+@pytest.mark.parametrize("role", ["member", None])
+@pytest.mark.asyncio
+async def test_future_task_rejects_non_admin_users_for_every_action(
+    action: str, role: str | None
+):
+    """Every action should fail closed for members and missing roles."""
+    tool = FutureTaskTool()
+
+    result = await tool.call(
+        _context(SimpleNamespace(), sender_id="regular-user", role=role),
+        action=action,
+    )
+
+    assert result == (
+        "error: Permission denied. Future task management is only allowed for "
+        "admin users. User's ID is: regular-user."
+    )
 
 
 @pytest.mark.asyncio
