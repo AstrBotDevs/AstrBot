@@ -470,6 +470,41 @@ async def test_upload_document_skips_rollback_when_refresh_fails_after_commit(
 
 
 @pytest.mark.asyncio
+async def test_upload_document_sanitizes_lone_surrogates_before_storage(
+    stub_provider_manager_module,
+) -> None:
+    """Extracted text must be UTF-8 encodable before reaching vector storage."""
+    KBHelper = _import_kb_helper()
+
+    helper = KBHelper.__new__(KBHelper)
+    helper.kb = KnowledgeBase(
+        kb_name="Test KB",
+        description="",
+        embedding_provider_id="emb",
+    )
+    helper.kb_db = MagicMock()
+    helper.vec_db = AsyncMock()
+    helper.kb_medias_dir = Path("/tmp/kb-medias-unused")
+    helper.vec_db.insert_batch = AsyncMock()
+    helper.kb_db.get_db = _successful_get_db(_session_with_begin())
+    helper.kb_db.update_kb_stats = AsyncMock()
+    helper.refresh_kb = AsyncMock()
+    helper.refresh_document = AsyncMock()
+
+    with patch.object(helper, "_ensure_vec_db", new=AsyncMock()):
+        await helper.upload_document(
+            file_name="demo.txt",
+            file_content=None,
+            file_type="txt",
+            pre_chunked_text=["broken \ud83d emoji"],
+        )
+
+    contents = helper.vec_db.insert_batch.await_args.kwargs["contents"]
+    assert contents == ["broken ? emoji"]
+    contents[0].encode("utf-8")
+
+
+@pytest.mark.asyncio
 async def test_cleanup_failed_upload_deletes_vectors_before_metadata(
     tmp_path: Path,
     stub_provider_manager_module,

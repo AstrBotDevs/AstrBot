@@ -4,6 +4,7 @@ import os
 from collections.abc import AsyncGenerator
 from typing import Literal, TypeAlias, Union
 
+from astrbot import logger
 from astrbot.core.agent.message import ContentPart, Message, is_checkpoint_message
 from astrbot.core.agent.tool import ToolSet
 from astrbot.core.provider.entities import (
@@ -338,6 +339,24 @@ class EmbeddingProvider(AbstractProvider):
         """获取向量的维度"""
         ...
 
+    @property
+    def max_batch_size(self) -> int:
+        """Maximum batch size per single embedding API call.
+
+        Providers may set ``max_batch_size`` in their config to override this
+        value.  For example, DashScope / Alibaba Cloud Bailian requires 10.
+
+        The default of 100 is safe for most providers (OpenAI supports up to
+        2048, Ollama and Gemini also handle large batches without issues).
+
+        Returns:
+            The maximum number of texts per batch.
+        """
+        max_batch_size = int(self.provider_config.get("max_batch_size", 100))
+        if max_batch_size < 1:
+            raise ValueError("max_batch_size must be greater than or equal to 1")
+        return max_batch_size
+
     async def test(self) -> None:
         await self.get_embedding("astrbot")
 
@@ -362,6 +381,16 @@ class EmbeddingProvider(AbstractProvider):
             向量列表
 
         """
+        # Respect the provider's maximum batch size limit.
+        if batch_size > self.max_batch_size:
+            logger.debug(
+                "Batch size %d exceeds provider limit %d, capping to %d.",
+                batch_size,
+                self.max_batch_size,
+                self.max_batch_size,
+            )
+            batch_size = self.max_batch_size
+
         semaphore = asyncio.Semaphore(tasks_limit)
         all_embeddings: list[list[float]] = []
         failed_batches: list[tuple[int, list[str]]] = []
