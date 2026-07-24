@@ -21,6 +21,7 @@ from tenacity import (
 from astrbot import logger
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.utils.log_pipe import LogPipe
+from astrbot.core.utils.ssrf_guard import validate_mcp_url
 
 from .run_context import TContext
 from .tool import FunctionTool
@@ -93,6 +94,43 @@ _DENIED_DOCKER_ARGS = frozenset(
     }
 )
 _STDIO_ALLOWLIST_ENV = "ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS"
+_NPX_PACKAGE_ALLOWLIST_ENV = "ASTRBOT_MCP_NPX_ALLOWED_PACKAGES"
+_PACKAGE_RUNNER_COMMANDS = frozenset({"npx", "bunx", "uvx"})
+_MAX_RESPONSE_TEXT_LENGTH_ENV = "ASTRBOT_MCP_MAX_RESPONSE_TEXT_LENGTH"
+_DEFAULT_MAX_RESPONSE_TEXT_LENGTH = 200_000
+
+# Variables needed by Windows subprocess launchers (executable resolution via
+# PATH/PATHEXT, temp dirs, etc.) to spawn MCP stdio servers correctly.
+# Deliberately NOT the full os.environ: MCP subprocesses are third-party code
+# and forwarding secrets such as *_KEY/*_TOKEN would leak them.
+_WINDOWS_SAFE_ENV_VARS = frozenset(
+    {
+        "PATH",
+        "PATHEXT",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "USERPROFILE",
+        "USERNAME",
+        "SYSTEMROOT",
+        "SYSTEMDRIVE",
+        "WINDIR",
+        "COMSPEC",
+        "TEMP",
+        "TMP",
+        "PROCESSOR_ARCHITECTURE",
+        "NUMBER_OF_PROCESSORS",
+        "PROGRAMDATA",
+        "PROGRAMFILES",
+        "PROGRAMFILES(X86)",
+        "PROGRAMW6432",
+        "COMMONPROGRAMFILES",
+        "ALLUSERSPROFILE",
+        "PUBLIC",
+        "DOTNET_ROOT",
+    }
+)
 
 try:
     import anyio
@@ -157,6 +195,19 @@ def _get_stdio_command_allowlist() -> set[str]:
     return allowed
 
 
+def _get_npx_package_allowlist() -> set[str] | None:
+    """Optional allowlist restricting which packages npx/bunx/uvx may launch.
+
+    Disabled (returns None) unless ASTRBOT_MCP_NPX_ALLOWED_PACKAGES is set, to
+    avoid breaking existing setups; set it to a comma-separated list of
+    package specs (e.g. "@modelcontextprotocol/server-filesystem") to opt in.
+    """
+    configured = os.environ.get(_NPX_PACKAGE_ALLOWLIST_ENV, "")
+    if not configured.strip():
+        return None
+    return {item.strip() for item in configured.split(",") if item.strip()}
+
+
 def _is_stdio_config(config: dict) -> bool:
     cfg = _prepare_config(config.copy())
     return "url" not in cfg
@@ -210,6 +261,16 @@ def _validate_stdio_args(command_name: str, args: object) -> None:
             raise ValueError(
                 f"MCP stdio Docker args are unsafe and not allowed: {', '.join(denied)}."
             )
+    elif command_name in _PACKAGE_RUNNER_COMMANDS:
+        allowlist = _get_npx_package_allowlist()
+        if allowlist is not None:
+            packages = [arg for arg in args if not arg.startswith("-")]
+            disallowed = [pkg for pkg in packages if pkg not in allowlist]
+            if not packages or disallowed:
+                raise ValueError(
+                    f"MCP stdio `{command_name}` may only launch packages listed in "
+                    f"{_NPX_PACKAGE_ALLOWLIST_ENV}: {', '.join(sorted(allowlist)) or '(empty)'}."
+                )
 
 
 def validate_mcp_stdio_config(config: dict) -> None:
@@ -260,7 +321,13 @@ def _prepare_stdio_env(config: dict) -> dict:
 
 
 def _merge_environment_variables(env: dict) -> dict:
-    """合并环境变量，处理Windows不区分大小写的情况"""
+    """合并环境变量，处理Windows不区分大小写的情况
+
+    Only inherits a curated allowlist of system variables needed to launch
+    subprocesses on Windows (see _WINDOWS_SAFE_ENV_VARS), never the full
+    os.environ, so secrets (API keys, tokens) configured for AstrBot itself
+    are not forwarded to MCP stdio subprocesses.
+    """
     merged = env.copy()
 
     # 将用户环境变量转换为统一的大小写形式便于比较
@@ -268,7 +335,10 @@ def _merge_environment_variables(env: dict) -> dict:
 
     for sys_key, sys_value in os.environ.items():
         sys_key_lower = sys_key.lower()
-        if sys_key_lower not in user_keys_lower:
+        if (
+            sys_key.upper() in _WINDOWS_SAFE_ENV_VARS
+            and sys_key_lower not in user_keys_lower
+        ):
             # 使用系统环境变量中的原始大小写
             merged[sys_key] = sys_value
 
@@ -286,6 +356,8 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     timeout = cfg.get("timeout", 10)
 
     try:
+        validate_mcp_url(url)
+
         if "transport" in cfg:
             transport_type = cfg["transport"]
         elif "type" in cfg:
@@ -335,6 +407,42 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         return False, f"Connection timeout: {timeout} seconds"
     except Exception as e:
         return False, f"{e!s}"
+
+
+def _get_max_response_text_length() -> int:
+    try:
+        return int(
+            os.environ.get(
+                _MAX_RESPONSE_TEXT_LENGTH_ENV, _DEFAULT_MAX_RESPONSE_TEXT_LENGTH
+            )
+        )
+    except ValueError:
+        return _DEFAULT_MAX_RESPONSE_TEXT_LENGTH
+
+
+def _cap_mcp_response_size(
+    result: "mcp.types.CallToolResult",
+) -> "mcp.types.CallToolResult":
+    """Truncate oversized text content in an MCP tool response.
+
+    MCP servers are third-party code; a malicious or compromised one could
+    return arbitrarily large text blocks to exhaust memory or blow out the
+    LLM context. This caps each text block, leaving normal-sized responses
+    untouched. Configurable via ASTRBOT_MCP_MAX_RESPONSE_TEXT_LENGTH.
+    """
+    max_len = _get_max_response_text_length()
+    if max_len <= 0:
+        return result
+
+    for block in result.content:
+        text = getattr(block, "text", None)
+        if isinstance(text, str) and len(text) > max_len:
+            omitted = len(text) - max_len
+            block.text = (
+                text[:max_len] + f"\n...[truncated, {omitted} characters omitted]"
+            )
+
+    return result
 
 
 def _normalize_mcp_input_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -533,6 +641,11 @@ class MCPClient:
                     self.server_errlogs.append(log_msg)
 
         if "url" in cfg:
+            # Defense in depth: re-validate here (in addition to the check
+            # inside _quick_test_mcp_connection) so this path stays safe even
+            # if it is ever reached without going through the quick test.
+            validate_mcp_url(cfg["url"])
+
             success, error_msg = await _quick_test_mcp_connection(cfg)
             if not success:
                 raise Exception(error_msg)
@@ -809,8 +922,9 @@ class MCPTool(FunctionTool, Generic[TContext]):
     async def call(
         self, context: ContextWrapper[TContext], **kwargs
     ) -> mcp.types.CallToolResult:
-        return await self.mcp_client.call_tool_with_reconnect(
+        result = await self.mcp_client.call_tool_with_reconnect(
             tool_name=self.mcp_tool.name,
             arguments=kwargs,
             read_timeout_seconds=timedelta(seconds=context.tool_call_timeout),
         )
+        return _cap_mcp_response_size(result)
