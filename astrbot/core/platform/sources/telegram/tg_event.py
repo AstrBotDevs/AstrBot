@@ -76,9 +76,12 @@ class TelegramPlatformEvent(AstrMessageEvent):
         platform_meta: PlatformMetadata,
         session_id: str,
         client: ExtBot,
+        reply_to_message: str = "off",
     ) -> None:
         super().__init__(message_str, message_obj, platform_meta, session_id)
         self.client = client
+        # 机器人回复时引用原消息的范围：off / private / group / all
+        self.reply_to_message = reply_to_message
 
     @classmethod
     def _split_message(cls, text: str) -> list[str]:
@@ -271,6 +274,7 @@ class TelegramPlatformEvent(AstrMessageEvent):
         client: ExtBot,
         message: MessageChain,
         user_name: str,
+        default_reply_to_message_id: str | None = None,
     ) -> None:
         image_path = None
 
@@ -283,6 +287,11 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 reply_message_id = i.id
             if isinstance(i, At):
                 at_user_id = i.name
+
+        # 消息链未显式包含引用时，按配置默认引用触发该回复的原消息
+        if not has_reply and default_reply_to_message_id:
+            has_reply = True
+            reply_message_id = default_reply_to_message_id
 
         at_flag = False
         message_thread_id = None
@@ -341,10 +350,32 @@ class TelegramPlatformEvent(AstrMessageEvent):
                 )
 
     async def send(self, message: MessageChain) -> None:
-        if self.get_message_type() == MessageType.GROUP_MESSAGE:
-            await self.send_with_client(self.client, message, self.message_obj.group_id)
+        is_group = self.get_message_type() == MessageType.GROUP_MESSAGE
+        # 根据配置范围决定是否默认引用触发该回复的原消息。
+        # 当配置为 off 时，清除消息链中已有的 Reply 组件（来自全局管道
+        # 「回复时引用发送人消息」等设置），确保 Telegram 平台完全不引用。
+        should_reply = self.reply_to_message == "all" or self.reply_to_message == (
+            "group" if is_group else "private"
+        )
+        if not should_reply:
+            message.chain = [c for c in message.chain if not isinstance(c, Reply)]
+        default_reply_to_message_id = (
+            self.message_obj.message_id if should_reply else None
+        )
+        if is_group:
+            await self.send_with_client(
+                self.client,
+                message,
+                self.message_obj.group_id,
+                default_reply_to_message_id,
+            )
         else:
-            await self.send_with_client(self.client, message, self.get_sender_id())
+            await self.send_with_client(
+                self.client,
+                message,
+                self.get_sender_id(),
+                default_reply_to_message_id,
+            )
         await super().send(message)
 
     async def react(self, emoji: str | None, big: bool = False) -> None:

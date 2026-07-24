@@ -602,6 +602,16 @@
         "description": "Telegram 轮询重启延迟",
         "hint": "当轮询意外结束尝试自动重启时的延迟时间，单位为秒。默认为 5s。"
       },
+      "telegram_reply_to_message": {
+        "description": "Telegram 回复时引用消息",
+        "labels": [
+          "关闭",
+          "仅私聊",
+          "仅群聊",
+          "私聊和群聊"
+        ],
+        "hint": "机器人回复时是否引用触发该回复的原消息。off：关闭；private：仅私聊；group：仅群聊；all：私聊和群聊都引用。默认 off。"
+      },
       "telegram_token": {
         "description": "Bot Token",
         "hint": "如果你的网络环境为中国大陆，请在 `其他配置` 处设置代理或更改 api_base。"

@@ -79,6 +79,8 @@ class TelegramPlatformAdapter(Platform):
             True,
         )
         self.last_command_hash = None
+        # 机器人回复时引用原消息的范围：off / private / group / all
+        self.reply_to_message = self.config.get("telegram_reply_to_message", "off")
 
         self.scheduler = AsyncIOScheduler()
         self.scheduler.add_listener(
@@ -484,9 +486,17 @@ class TelegramPlatformAdapter(Platform):
         if not _from_user:
             logger.warning("[Telegram] Received a message without a from_user.")
             return None
+        # 同时读取显示名称和用户名，都不存在时回退为 "Unknown"
+        display_name = " ".join(
+            part for part in (_from_user.first_name, _from_user.last_name) if part
+        ).strip()
+        if display_name and _from_user.username:
+            nickname = f"{display_name} (@{_from_user.username})"
+        else:
+            nickname = display_name or _from_user.username or "Unknown"
         message.sender = MessageMember(
             str(_from_user.id),
-            _from_user.username or "Unknown",
+            nickname,
         )
         message.self_id = str(context.bot.username)
         message.raw_message = update
@@ -751,6 +761,7 @@ class TelegramPlatformAdapter(Platform):
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
+            reply_to_message=self.reply_to_message,
         )
 
     async def handle_msg(self, message: AstrBotMessage) -> None:
