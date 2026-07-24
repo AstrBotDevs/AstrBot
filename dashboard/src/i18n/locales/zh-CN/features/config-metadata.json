@@ -1664,6 +1664,10 @@
         "description": "reference_id",
         "hint": "fishaudio TTS 的参考模型ID（可选）。如果填入此字段，将直接使用模型ID而不通过角色名称查询。例如：626bb6d3f3364c9cbc3aa6a67300a664。更多模型请访问：https://fish.audio/zh-CN/discovery，进入模型详情界面后可复制模型ID"
       },
+      "fishaudio-tts-model": {
+        "description": "TTS 模型",
+        "hint": "FishAudio TTS 引擎模型 ID，如 s1、s2-pro。留空则使用 API 默认模型。详见 https://fish.audio"
+      },
       "whisper_hint": {
         "description": "本地部署 Whisper 模型须知",
         "hint": "启用前请 pip 安装 openai-whisper 库（N卡用户大约下载 2GB，主要是 torch 和 cuda，CPU 用户大约下载 1 GB），并且安装 ffmpeg。否则将无法正常转文字。"
