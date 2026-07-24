@@ -27,8 +27,8 @@ jobs:
       
     - name: Check code formatting with ruff
       run: |
-        uvx --from ruff==0.15.15 ruff format --check .
+        uvx --from ruff==0.15.22 ruff format --check .
         
     - name: Check code style with ruff
       run: |
-        uvx --from ruff==0.15.15 ruff check .
+        uvx --from ruff==0.15.22 ruff check .
