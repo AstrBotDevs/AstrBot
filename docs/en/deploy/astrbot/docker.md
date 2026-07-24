@@ -83,13 +83,13 @@ sudo docker logs -f astrbot
 Set `TZ` to the standard IANA time zone format (Region/City). Use `Asia/Shanghai` for China.
 
 ```bash
-docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%/data:/AstrBot/data" --name soulter/astrbot:latest
+docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
 ```
 > [!TIP]
 > If your network environment is in mainland China, the above command will not pull properly. Please use the following command to pull the image:
 >
 > ```bash
-> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%/data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
 > ```
 >
 > (Thanks to DaoCloud ❤️)
@@ -99,13 +99,13 @@ docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "%cd%/data:/Ast
 Set `TZ` to the standard IANA time zone format (Region/City). Use `Asia/Shanghai` for China.
 
 ```powershell
-docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}/data:/AstrBot/data" --name soulter/astrbot:latest
+docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot soulter/astrbot:latest
 ```
 > [!TIP]
 > If your network environment is in mainland China, the above command will not pull properly. Please use the following command to pull the image:
 >
 > ```powershell
-> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}/data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
+> docker run -itd -p 6185:6185 -p 6199:6199 -e TZ=Asia/Shanghai -v "${PWD}\data:/AstrBot/data" --name astrbot m.daocloud.io/docker.io/soulter/astrbot:latest
 > ```
 >
 > (Thanks to DaoCloud ❤️)
