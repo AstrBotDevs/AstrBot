@@ -21,8 +21,20 @@ def test_requirements_utils_parse_package_install_input_collects_specs_and_names
     assert parsed.requirement_names == {"demo-package", "another-package"}
 
 
-def test_core_constraints_provider_writes_constraints_file_from_fallback_distribution(
+@pytest.mark.parametrize(
+    ("installed_version", "expected_constraint"),
+    [
+        ("2.4.1", "shared-lib>=2.4.1,<3"),
+        ("v4.2.0rc1", "shared-lib>=4.2.0rc1,<5"),
+        ("1!2.3", "shared-lib>=1!2.3,<1!3"),
+        ("2.4.1+linux.1", "shared-lib>=2.4.1,<3"),
+        ("not-a-version", "shared-lib==not-a-version"),
+    ],
+)
+def test_core_constraints_provider_writes_installed_version_range(
     monkeypatch,
+    installed_version,
+    expected_constraint,
 ):
     class FakeFallbackDistribution:
         metadata = {"Name": "AstrBot-App"}
@@ -59,7 +71,7 @@ def test_core_constraints_provider_writes_constraints_file_from_fallback_distrib
     monkeypatch.setattr(
         core_constraints_module,
         "collect_installed_distribution_versions",
-        lambda paths: {"shared-lib": "2.0"},
+        lambda paths: {"shared-lib": installed_version},
     )
 
     core_constraints_module._get_core_constraints.cache_clear()
@@ -68,7 +80,8 @@ def test_core_constraints_provider_writes_constraints_file_from_fallback_distrib
         with provider.constraints_file() as constraints_path:
             assert constraints_path is not None
             assert (
-                Path(constraints_path).read_text(encoding="utf-8") == "shared-lib==2.0"
+                Path(constraints_path).read_text(encoding="utf-8")
+                == expected_constraint
             )
     finally:
         core_constraints_module._get_core_constraints.cache_clear()
