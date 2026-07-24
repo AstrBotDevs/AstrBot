@@ -1,6 +1,7 @@
 """Tests for AstrBotCoreLifecycle."""
 
 import asyncio
+import logging
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -609,6 +610,7 @@ class TestAstrBotCoreLifecycleInitialize:
                 new_callable=AsyncMock,
             ),
         ):
+            mock_logger.level = logging.INFO
             # Should not raise, just log the error
             await lifecycle.initialize()
 

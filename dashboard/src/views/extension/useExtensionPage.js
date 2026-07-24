@@ -94,7 +94,9 @@ export const useExtensionPage = () => {
     metadata: {},
     config: {},
     i18n: {},
+    log_level: null,
   });
+  const pluginLogLevelSaving = ref(false);
   const pluginMarketData = ref([]);
   const loadingDialog = reactive({
     show: false,
@@ -1084,13 +1086,55 @@ export const useExtensionPage = () => {
     curr_namespace.value = extension_name;
     currentConfigPlugin.value = extension_name;
     configDialog.value = true;
+    extension_config.log_level = null;
     try {
       const res = await pluginApi.config(extension_name);
+      // Discard the response if the user has already switched to another
+      // plugin's config dialog while the request was in flight.
+      if (curr_namespace.value !== extension_name) return;
       extension_config.metadata = res.data.data.metadata;
       extension_config.config = res.data.data.config;
       extension_config.i18n = res.data.data.i18n || {};
+      extension_config.log_level = res.data.data.log_level ?? null;
     } catch (err) {
       toast(err, "error");
+    }
+  };
+
+  const updatePluginLogLevel = async (level) => {
+    if (pluginLogLevelSaving.value) return;
+    const pluginName = curr_namespace.value;
+    const previous = extension_config.log_level;
+    extension_config.log_level = level;
+    pluginLogLevelSaving.value = true;
+    try {
+      const res = await pluginApi.updateLogLevel(pluginName, level);
+      if (res.data.status === "ok") {
+        const serverLevel = res.data.data?.log_level;
+        // Preserve null as "follow global" and only skip synchronization
+        // when an older server does not return the field.
+        if (
+          curr_namespace.value === pluginName &&
+          serverLevel !== undefined
+        ) {
+          extension_config.log_level = serverLevel;
+        }
+        toast(tm("messages.logLevelUpdated"), "success");
+      } else {
+        // Roll back the optimistic update, unless the dialog has already
+        // been switched to another plugin.
+        if (curr_namespace.value === pluginName) {
+          extension_config.log_level = previous;
+        }
+        toast(res.data.message || tm("messages.operationFailed"), "error");
+      }
+    } catch (err) {
+      if (curr_namespace.value === pluginName) {
+        extension_config.log_level = previous;
+      }
+      toast(err, "error");
+    } finally {
+      pluginLogLevelSaving.value = false;
     }
   };
 
@@ -1110,6 +1154,7 @@ export const useExtensionPage = () => {
       extension_config.metadata = {};
       extension_config.config = {};
       extension_config.i18n = {};
+      extension_config.log_level = null;
       getExtensions();
     } catch (err) {
       toast(err, "error");
@@ -2465,6 +2510,8 @@ export const useExtensionPage = () => {
     pluginOff,
     openExtensionConfig,
     updateConfig,
+    updatePluginLogLevel,
+    pluginLogLevelSaving,
     showPluginInfo,
     reloadPlugin,
     viewReadme,
