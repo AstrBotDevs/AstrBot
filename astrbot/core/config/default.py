@@ -119,6 +119,8 @@ DEFAULT_CONFIG = {
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
+        "account_nickname_display": False,
+        "account_nickname_only": False,
         "group_name_display": False,
         "datetime_system_prompt": True,
         "default_personality": "default",
@@ -2860,6 +2862,12 @@ CONFIG_METADATA_2 = {
                     "identifier": {
                         "type": "bool",
                     },
+                    "account_nickname_display": {
+                        "type": "bool",
+                    },
+                    "account_nickname_only": {
+                        "type": "bool",
+                    },
                     "group_name_display": {
                         "type": "bool",
                     },
@@ -3730,6 +3738,23 @@ CONFIG_METADATA_3 = {
                         "description": "用户识别",
                         "type": "bool",
                         "hint": "启用后，会在提示词前包含用户 ID 信息。",
+                    },
+                    "provider_settings.account_nickname_display": {
+                        "description": "追加用户账号昵称",
+                        "type": "bool",
+                        "hint": "启用后，会在支持的平台上向模型额外提供用户账号昵称。",
+                        "condition": {
+                            "provider_settings.identifier": True,
+                        },
+                    },
+                    "provider_settings.account_nickname_only": {
+                        "description": "仅使用账号昵称",
+                        "type": "bool",
+                        "hint": "启用后，模型将只看到用户账号昵称，不再看到群昵称。取不到账号昵称时会回退到原昵称。",
+                        "condition": {
+                            "provider_settings.identifier": True,
+                            "provider_settings.account_nickname_display": True,
+                        },
                     },
                     "provider_settings.group_name_display": {
                         "description": "显示群名称",
