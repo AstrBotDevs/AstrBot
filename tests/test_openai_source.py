@@ -13,6 +13,7 @@ import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.sources.atlascloud_source import ProviderAtlasCloud
 from astrbot.core.provider.sources.groq_source import ProviderGroq
 from astrbot.core.provider.sources.openai_source import ProviderOpenAIOfficial
 from astrbot.core.utils.media_utils import ResolvedMediaData, file_uri_to_path
@@ -55,6 +56,22 @@ def _make_groq_provider(overrides: dict | None = None) -> ProviderGroq:
     if overrides:
         provider_config.update(overrides)
     return ProviderGroq(
+        provider_config=provider_config,
+        provider_settings={},
+    )
+
+
+def _make_atlascloud_provider(
+    overrides: dict | None = None,
+) -> ProviderAtlasCloud:
+    provider_config = {
+        "id": "test-atlascloud",
+        "type": "atlascloud_chat_completion",
+        "key": ["test-key"],
+    }
+    if overrides:
+        provider_config.update(overrides)
+    return ProviderAtlasCloud(
         provider_config=provider_config,
         provider_settings={},
     )
@@ -118,6 +135,25 @@ def test_create_http_client_falls_back_to_global_httpx_module(monkeypatch):
     provider._create_http_client({"proxy": ""})
 
     assert captured["httpx_module"] is openai_source_module.httpx
+
+
+def test_atlascloud_provider_sets_default_openai_compatible_endpoint():
+    provider = _make_atlascloud_provider()
+
+    assert str(provider.client.base_url).rstrip("/") == "https://api.atlascloud.ai/v1"
+    assert provider.get_model() == "qwen/qwen3.5-flash"
+
+
+def test_atlascloud_provider_keeps_custom_endpoint_and_model():
+    provider = _make_atlascloud_provider(
+        {
+            "api_base": "https://proxy.example.com/v1",
+            "model": "deepseek-ai/deepseek-v4-pro",
+        },
+    )
+
+    assert str(provider.client.base_url).rstrip("/") == "https://proxy.example.com/v1"
+    assert provider.get_model() == "deepseek-ai/deepseek-v4-pro"
 
 
 @pytest.mark.asyncio
