@@ -1415,6 +1415,9 @@
       "gemini_embedding": {
         "hint": "Gemini Embedding 无需手动添加 /v1beta。"
       },
+      "dashscope_embedding": {
+        "hint": "阿里云百炼 Embedding，默认地址为 https://dashscope.aliyuncs.com/api/v1。"
+      },
       "volcengine_cluster": {
         "description": "火山引擎集群",
         "hint": "若使用语音复刻大模型，可选volcano_icl或volcano_icl_concurr，默认使用volcano_tts"
