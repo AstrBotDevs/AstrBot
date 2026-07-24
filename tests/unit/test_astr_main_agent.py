@@ -392,6 +392,24 @@ class TestApplyKb:
         ]
 
     @pytest.mark.asyncio
+    async def test_apply_kb_skips_cron_events(self, mock_event, mock_context):
+        """Test scheduled tasks do not inject KB results as user content."""
+        module = ama
+        mock_event.get_platform_name.return_value = "cron"
+        req = ProviderRequest(prompt="scheduled task", system_prompt="System prompt")
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60, kb_agentic_mode=False
+        )
+        retrieve = AsyncMock(return_value="KB result")
+
+        with patch("astrbot.core.astr_main_agent.retrieve_knowledge_base", retrieve):
+            await module._apply_kb(mock_event, req, mock_context, config)
+
+        retrieve.assert_not_awaited()
+        assert req.system_prompt == "System prompt"
+        assert req.extra_user_content_parts == []
+
+    @pytest.mark.asyncio
     async def test_apply_kb_with_agentic_mode(self, mock_event, mock_context):
         """Test applying knowledge base in agentic mode."""
         module = ama

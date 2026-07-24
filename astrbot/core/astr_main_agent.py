@@ -276,6 +276,8 @@ async def _apply_kb(
     config: MainAgentBuildConfig,
 ) -> None:
     if not config.kb_agentic_mode:
+        if event.get_platform_name() == "cron":
+            return
         if req.prompt is None or not req.prompt.strip():
             return
         try:
