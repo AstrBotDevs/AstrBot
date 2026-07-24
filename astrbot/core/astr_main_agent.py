@@ -12,6 +12,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from astrbot.core import logger
+from astrbot.core.agent.context.config import (
+    DEFAULT_FALLBACK_MAX_CONTEXT_TOKENS,
+    resolve_compression_threshold,
+)
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import TextPart
@@ -98,6 +102,7 @@ from astrbot.core.utils.astrbot_path import (
     get_astrbot_system_tmp_path,
     get_astrbot_workspaces_path,
 )
+from astrbot.core.utils.config_number import coerce_int_config
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.media_utils import (
@@ -179,6 +184,12 @@ class MainAgentBuildConfig:
     """The API key for Moonshot AI file extraction provider."""
     context_limit_reached_strategy: str = "truncate_by_turns"
     """The strategy to handle context length limit reached."""
+    compression_threshold_mode: str = "percentage"
+    """How percentage and output-reserve compression thresholds are combined."""
+    compression_threshold_percentage: float = 0.82
+    """User-defined context usage threshold."""
+    compression_max_output_tokens: int = 0
+    """Maximum output budget override. Zero uses model metadata."""
     llm_compress_instruction: str = ""
     """The instruction for compression in llm_compress strategy."""
     llm_compress_keep_recent_ratio: float = 0.15
@@ -190,7 +201,7 @@ class MainAgentBuildConfig:
     This enforce max turns before compression"""
     dequeue_context_length: int = 10
     """The number of oldest turns to remove when context length limit is reached."""
-    fallback_max_context_tokens: int = 128000
+    fallback_max_context_tokens: int = DEFAULT_FALLBACK_MAX_CONTEXT_TOKENS
     """Fallback max context tokens. When max_context_tokens is 0 and the model is not in LLM_METADATAS, use this value."""
     llm_safety_mode: bool = True
     """This will inject healthy and safe system prompt into the main agent,
@@ -1600,17 +1611,59 @@ async def build_main_agent(
             req.model = None
         fallback_providers = [p for p in fallback_providers if p is not provider]
 
-    if provider.provider_config.get("max_context_tokens", 0) <= 0:
-        model = provider.get_model()
-        if model_info := LLM_METADATAS.get(model):
-            provider.provider_config["max_context_tokens"] = model_info["limit"][
-                "context"
-            ]
-        else:
-            # fallback: default to configured fallback value
-            provider.provider_config["max_context_tokens"] = (
-                config.fallback_max_context_tokens
-            )
+    configured_context_tokens = coerce_int_config(
+        provider.provider_config.get("max_context_tokens", 0),
+        default=0,
+        min_value=0,
+        field_name="max_context_tokens",
+        source="provider config",
+    )
+    model_info = LLM_METADATAS.get(provider.get_model())
+    metadata_limit = (model_info.get("limit") or {}) if model_info else {}
+    metadata_context_tokens = coerce_int_config(
+        metadata_limit.get("context", 0),
+        default=0,
+        min_value=0,
+        field_name="model context limit",
+        source="model metadata",
+    )
+    fallback_context_tokens = coerce_int_config(
+        config.fallback_max_context_tokens,
+        default=DEFAULT_FALLBACK_MAX_CONTEXT_TOKENS,
+        min_value=1,
+        field_name="fallback_max_context_tokens",
+    )
+    provider.provider_config["max_context_tokens"] = (
+        configured_context_tokens or metadata_context_tokens or fallback_context_tokens
+    )
+
+    metadata_output_tokens = coerce_int_config(
+        metadata_limit.get("output", 0),
+        default=0,
+        min_value=0,
+        field_name="model output limit",
+        source="model metadata",
+    )
+    configured_output_tokens = coerce_int_config(
+        config.compression_max_output_tokens,
+        default=0,
+        min_value=0,
+        field_name="compression_max_output_tokens",
+    )
+    threshold_result = resolve_compression_threshold(
+        mode=config.compression_threshold_mode,
+        percentage=config.compression_threshold_percentage,
+        max_context_tokens=provider.provider_config["max_context_tokens"],
+        max_output_tokens=configured_output_tokens or metadata_output_tokens,
+    )
+    if threshold_result["fallback_reason"]:
+        logger.warning(
+            "Compression threshold mode %s requires max output tokens, but no "
+            "override or model metadata is available for %s; using %.0f%%.",
+            threshold_result["mode"],
+            provider.get_model(),
+            threshold_result["effective_threshold"] * 100,
+        )
 
     if event.get_platform_name() == "webchat":
         asyncio.create_task(_handle_webchat(event, req, provider))
@@ -1652,6 +1705,7 @@ async def build_main_agent(
         tool_executor=FunctionToolExecutor(),
         agent_hooks=MAIN_AGENT_HOOKS,
         streaming=config.streaming_response,
+        compression_threshold=threshold_result["effective_threshold"],
         llm_compress_instruction=config.llm_compress_instruction,
         llm_compress_keep_recent_ratio=config.llm_compress_keep_recent_ratio,
         llm_compress_provider=_get_compress_provider(config, plugin_context, event),
