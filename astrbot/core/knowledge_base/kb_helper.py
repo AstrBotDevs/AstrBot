@@ -25,7 +25,10 @@ from .chunking.markdown import MarkdownChunker
 from .chunking.recursive import RecursiveCharacterChunker
 from .kb_db_sqlite import KBSQLiteDatabase
 from .models import KBDocument, KBMedia, KnowledgeBase
-from .parsers.url_parser import extract_text_from_url
+from .parsers.url_parser import (
+    SUPPORTED_URL_EXTRACT_PROVIDERS,
+    extract_text_from_url,
+)
 from .parsers.util import select_parser
 from .prompts import TEXT_REPAIR_SYSTEM_PROMPT
 
@@ -729,14 +732,27 @@ class KBHelper:
             ValueError: 如果 URL 为空或无法提取内容
             IOError: 如果网络请求失败
         """
-        # 获取 Tavily API 密钥
-        config = self.prov_mgr.acm.default_conf
-        tavily_keys = config.get("provider_settings", {}).get(
-            "websearch_tavily_key", []
+        # 根据配置的网页搜索提供商选择 URL 内容提取后端。
+        # 仅 Tavily 与 Firecrawl 支持单页内容提取；其余提供商回退到 Tavily。
+        provider_settings = (
+            self.prov_mgr.acm.default_conf.get("provider_settings") or {}
         )
-        if not tavily_keys:
+        websearch_provider = provider_settings.get("websearch_provider", "tavily").lower()
+        url_extract_provider = (
+            websearch_provider
+            if websearch_provider in SUPPORTED_URL_EXTRACT_PROVIDERS
+            else "tavily"
+        )
+        tavily_keys = provider_settings.get("websearch_tavily_key", [])
+        firecrawl_keys = provider_settings.get("websearch_firecrawl_key", [])
+
+        provider_keys = (
+            firecrawl_keys if url_extract_provider == "firecrawl" else tavily_keys
+        )
+        if not provider_keys:
             raise ValueError(
-                "Error: Tavily API key is not configured in provider_settings."
+                f"Error: {url_extract_provider.capitalize()} API key is not "
+                "configured in provider_settings."
             )
 
         # 阶段1: 从 URL 提取内容
@@ -744,7 +760,12 @@ class KBHelper:
             await progress_callback("extracting", 0, 100)
 
         try:
-            text_content = await extract_text_from_url(url, tavily_keys)
+            text_content = await extract_text_from_url(
+                url,
+                tavily_keys,
+                provider=url_extract_provider,
+                firecrawl_keys=firecrawl_keys,
+            )
         except Exception as e:
             logger.error(f"Failed to extract content from URL {url}: {e}")
             raise OSError(f"Failed to extract content from URL {url}: {e}") from e
