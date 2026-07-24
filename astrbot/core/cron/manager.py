@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 _CRONTAB_WEEKDAY_NAMES = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
 _CRONTAB_WEEKDAY_PATTERN = re.compile(r"^(?:(\*)|(\d+)(?:-(\d+))?)(?:/(\d+))?$")
+_DEFAULT_PROACTIVE_REQUEST_MAX_RETRIES = 1
 
 
 def _normalize_crontab_day_of_week(day_of_week: str) -> str:
@@ -417,12 +418,22 @@ class CronJobManager:
             cron_event.role = "admin"
 
         provider_settings = cfg.get("provider_settings", {}) or {}
+        proactive_settings = provider_settings.get("proactive_capability", {})
+        if not isinstance(proactive_settings, dict):
+            proactive_settings = {}
+        proactive_request_max_retries = proactive_settings.get("request_max_retries")
+        if proactive_request_max_retries is None:
+            proactive_request_max_retries = _DEFAULT_PROACTIVE_REQUEST_MAX_RETRIES
+        cron_provider_settings = {
+            **provider_settings,
+            "request_max_retries": proactive_request_max_retries,
+        }
         tool_call_timeout = provider_settings.get("tool_call_timeout", 120)
         config = MainAgentBuildConfig(
             tool_call_timeout=tool_call_timeout,
             llm_safety_mode=False,
             streaming_response=False,
-            provider_settings=provider_settings,
+            provider_settings=cron_provider_settings,
         )
         req = ProviderRequest()
         conv = await _get_session_conv(event=cron_event, plugin_context=self.ctx)
