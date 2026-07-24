@@ -14,6 +14,7 @@ from astrbot.core.provider.func_tool_manager import (
     FunctionToolManager,
     _PermissionGuardedTool,
 )
+from astrbot.core.skills.skill_manager import SkillInfo
 
 
 class _DummyEvent:
@@ -363,6 +364,110 @@ async def test_execute_handoff_passes_tool_call_timeout_to_tool_loop_agent(
 
     assert len(results) == 1
     assert captured["tool_call_timeout"] == 120
+
+
+def test_build_handoff_skills_prompt_filters_selected_skills(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    manager = SimpleNamespace(
+        list_skills=lambda **_kwargs: [
+            SkillInfo(
+                name="web-search-skill",
+                description="Search the web",
+                path="/skills/web-search-skill/SKILL.md",
+                active=True,
+            ),
+            SkillInfo(
+                name="other-skill",
+                description="Other work",
+                path="/skills/other-skill/SKILL.md",
+                active=True,
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "astrbot.core.astr_agent_tool_exec.SkillManager",
+        lambda: manager,
+    )
+
+    prompt = FunctionToolExecutor._build_handoff_skills_prompt(
+        ["web-search-skill"],
+        "local",
+    )
+
+    assert "web-search-skill" in prompt
+    assert "Search the web" in prompt
+    assert "other-skill" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_execute_handoff_appends_agent_skills_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    async def _fake_get_current_chat_provider_id(_umo):
+        return "provider-id"
+
+    async def _fake_tool_loop_agent(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(completion_text="ok")
+
+    context = SimpleNamespace(
+        get_current_chat_provider_id=_fake_get_current_chat_provider_id,
+        tool_loop_agent=_fake_tool_loop_agent,
+        get_config=lambda **_kwargs: {"provider_settings": {}},
+    )
+    event = _DummyEvent([])
+    run_context = ContextWrapper(context=SimpleNamespace(event=event, context=context))
+    tool = SimpleNamespace(
+        name="transfer_to_subagent",
+        provider_id=None,
+        agent=SimpleNamespace(
+            name="subagent",
+            tools=[],
+            skills=["web-search-skill"],
+            instructions="subagent-instructions",
+            begin_dialogs=[],
+            run_hooks=None,
+        ),
+    )
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_build_handoff_skills_prompt",
+        classmethod(lambda cls, skill_names, runtime: "SKILL PROMPT"),
+    )
+
+    results = []
+    async for result in FunctionToolExecutor._execute_handoff(
+        tool,
+        run_context,
+        image_urls_prepared=True,
+        input="hello",
+        image_urls=[],
+    ):
+        results.append(result)
+
+    assert len(results) == 1
+    assert captured["system_prompt"] == "subagent-instructions\n\nSKILL PROMPT"
+
+
+def test_build_handoff_system_prompt_omits_empty_parts(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        FunctionToolExecutor,
+        "_build_handoff_skills_prompt",
+        classmethod(lambda cls, skill_names, runtime: "SKILL PROMPT\n"),
+    )
+
+    prompt = FunctionToolExecutor._build_handoff_system_prompt(
+        "  ",
+        ["web-search-skill"],
+        "local",
+    )
+
+    assert prompt == "SKILL PROMPT"
 
 
 @pytest.mark.asyncio

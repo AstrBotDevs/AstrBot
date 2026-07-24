@@ -30,6 +30,7 @@ from astrbot.core.message.message_event_result import (
 from astrbot.core.platform.message_session import MessageSession
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
+from astrbot.core.skills.skill_manager import SkillManager, build_skills_prompt
 from astrbot.core.tools.computer_tools import (
     CuaKeyboardTypeTool,
     CuaMouseClickTool,
@@ -298,6 +299,39 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return None if toolset.empty() else toolset
 
     @classmethod
+    def _build_handoff_system_prompt(
+        cls,
+        instructions: str | None,
+        skill_names: list[str] | None,
+        runtime: str,
+    ) -> str:
+        skills_prompt = cls._build_handoff_skills_prompt(skill_names, runtime)
+        parts = [
+            part.strip()
+            for part in (instructions, skills_prompt)
+            if isinstance(part, str) and part.strip()
+        ]
+        return "\n\n".join(parts)
+
+    @classmethod
+    def _build_handoff_skills_prompt(
+        cls,
+        skill_names: list[str] | None,
+        runtime: str,
+    ) -> str:
+        if skill_names == []:
+            return ""
+
+        skills = SkillManager().list_skills(active_only=True, runtime=runtime)
+        if skill_names is not None:
+            allowed = set(skill_names)
+            skills = [skill for skill in skills if skill.name in allowed]
+
+        if not skills:
+            return ""
+        return build_skills_prompt(skills)
+
+    @classmethod
     async def _execute_handoff(
         cls,
         tool: HandoffTool,
@@ -353,7 +387,14 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 except Exception:
                     continue
 
-        prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
+        cfg = ctx.get_config(umo=umo)
+        prov_settings: dict = cfg.get("provider_settings", {})
+        runtime = str(prov_settings.get("computer_use_runtime", "local"))
+        system_prompt = cls._build_handoff_system_prompt(
+            tool.agent.instructions,
+            getattr(tool.agent, "skills", []),
+            runtime,
+        )
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
@@ -361,7 +402,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             chat_provider_id=prov_id,
             prompt=input_,
             image_urls=image_urls,
-            system_prompt=tool.agent.instructions,
+            system_prompt=system_prompt,
             tools=toolset,
             contexts=contexts,
             max_steps=agent_max_step,
