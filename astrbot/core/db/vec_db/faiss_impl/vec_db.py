@@ -219,7 +219,7 @@ class FaissVecDB(BaseVecDB):
         """
         embedding = await self.embedding_provider.get_embedding(query)
         scores, indices = await self.embedding_storage.search(
-            vector=np.array([embedding]).astype("float32"),
+            vector=np.array(embedding).astype("float32"),
             k=fetch_k if metadata_filters else k,
         )
         if len(indices[0]) == 0 or indices[0][0] == -1:

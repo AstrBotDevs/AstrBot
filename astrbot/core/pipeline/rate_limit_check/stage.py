@@ -55,9 +55,9 @@ class RateLimitStage(Stage):
 
         """
         session_id = event.session_id
-        now = datetime.now()
 
         async with self.locks[session_id]:  # 确保同一会话不会并发修改队列
+            now = datetime.now()
             # 检查并处理限流，可能需要多次检查直到满足条件
             while True:
                 timestamps = self.event_timestamps[session_id]
