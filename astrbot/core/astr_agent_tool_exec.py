@@ -45,6 +45,18 @@ from astrbot.core.tools.computer_tools import (
     PythonTool,
 )
 from astrbot.core.tools.message_tools import SendMessageToUserTool
+from astrbot.core.tools.web_search_tools import (
+    BaiduWebSearchTool,
+    BochaWebSearchTool,
+    BraveWebSearchTool,
+    ExaGetContentsTool,
+    ExaWebSearchTool,
+    FirecrawlExtractWebPageTool,
+    FirecrawlWebSearchTool,
+    TavilyExtractWebPageTool,
+    TavilyWebSearchTool,
+    normalize_legacy_web_search_config,
+)
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.history_saver import persist_agent_history
 from astrbot.core.utils.image_ref_utils import is_supported_image_ref
@@ -241,6 +253,37 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         return {}
 
     @classmethod
+    def _get_web_search_tools(
+        cls,
+        cfg: dict,
+        tool_mgr,
+    ) -> list:
+        normalize_legacy_web_search_config(cfg)
+        prov_settings = cfg.get("provider_settings", {})
+
+        if not prov_settings.get("web_search", False):
+            return []
+
+        provider = prov_settings.get("websearch_provider", "tavily")
+        result: list = []
+        if provider == "tavily":
+            result.append(tool_mgr.get_builtin_tool(TavilyWebSearchTool))
+            result.append(tool_mgr.get_builtin_tool(TavilyExtractWebPageTool))
+        elif provider == "bocha":
+            result.append(tool_mgr.get_builtin_tool(BochaWebSearchTool))
+        elif provider == "brave":
+            result.append(tool_mgr.get_builtin_tool(BraveWebSearchTool))
+        elif provider == "firecrawl":
+            result.append(tool_mgr.get_builtin_tool(FirecrawlWebSearchTool))
+            result.append(tool_mgr.get_builtin_tool(FirecrawlExtractWebPageTool))
+        elif provider == "baidu_ai_search":
+            result.append(tool_mgr.get_builtin_tool(BaiduWebSearchTool))
+        elif provider == "exa":
+            result.append(tool_mgr.get_builtin_tool(ExaWebSearchTool))
+            result.append(tool_mgr.get_builtin_tool(ExaGetContentsTool))
+        return result
+
+    @classmethod
     def _build_handoff_toolset(
         cls,
         run_context: ContextWrapper[AstrAgentContext],
@@ -261,6 +304,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             tool_mgr,
             provider_settings.get("sandbox", {}).get("booter"),
         )
+        web_search_tools = cls._get_web_search_tools(cfg, tool_mgr)
 
         # Keep persona semantics aligned with the main agent: tools=None means
         # "all tools", including runtime computer-use tools.
@@ -278,6 +322,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     toolset.add_tool(registered_tool)
             for runtime_tool in runtime_computer_tools.values():
                 toolset.add_tool(runtime_tool)
+            for web_tool in web_search_tools:
+                toolset.add_tool(web_tool)
             return None if toolset.empty() else toolset
 
         if not tools:
@@ -293,6 +339,13 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 runtime_tool = runtime_computer_tools.get(tool_name_or_obj)
                 if runtime_tool:
                     toolset.add_tool(runtime_tool)
+                    continue
+                web_tool = next(
+                    (t for t in web_search_tools if t.name == tool_name_or_obj),
+                    None,
+                )
+                if web_tool:
+                    toolset.add_tool(web_tool)
             elif isinstance(tool_name_or_obj, FunctionTool):
                 toolset.add_tool(tool_name_or_obj)
         return None if toolset.empty() else toolset
