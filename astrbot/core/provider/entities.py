@@ -323,6 +323,8 @@ class LLMResponse:
 
     id: str | None = None
     """The ID of the response. For chunked responses, it's the ID of the chunk; for non-chunked responses, it's the ID of the response."""
+    message_id: str | None = None
+    """The ID of the assistant message output item, if the provider returns one."""
     usage: TokenUsage | None = None
     """The usage of the response. For chunked responses, it's the usage of the chunk; for non-chunked responses, it's the usage of the response."""
 
@@ -343,6 +345,7 @@ class LLMResponse:
         | None = None,
         is_chunk: bool = False,
         id: str | None = None,
+        message_id: str | None = None,
         usage: TokenUsage | None = None,
     ) -> None:
         """初始化 LLMResponse
@@ -379,6 +382,8 @@ class LLMResponse:
 
         if id is not None:
             self.id = id
+        if message_id is not None:
+            self.message_id = message_id
         if usage is not None:
             self.usage = usage
 
