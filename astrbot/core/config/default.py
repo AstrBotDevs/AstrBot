@@ -4444,5 +4444,6 @@ DEFAULT_VALUE_MAP = {
     "list": [],
     "file": [],
     "object": {},
+    "dict": {},
     "template_list": [],
 }
