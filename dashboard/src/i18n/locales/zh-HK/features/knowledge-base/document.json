@@ -1,0 +1,55 @@
+{
+  "title": "文件詳情",
+  "backToKB": "返回知識庫",
+  "info": {
+    "title": "文件資訊",
+    "name": "文件名稱",
+    "type": "文件類型",
+    "size": "檔案大小",
+    "chunkCount": "Chunk 數量",
+    "createdAt": "上載時間"
+  },
+  "chunks": {
+    "title": "Chunk 列表",
+    "empty": "暫無 Chunk",
+    "index": "索引",
+    "content": "內容",
+    "charCount": "字數",
+    "actions": "操作",
+    "view": "查看",
+    "edit": "編輯",
+    "delete": "刪除",
+    "preview": "預覽",
+    "search": "搜尋 Chunk",
+    "searchPlaceholder": "輸入關鍵字搜尋 Chunk 內容...",
+    "showing": "顯示中",
+    "deleteConfirm": "確定要刪除此 Chunk？",
+    "deleteSuccess": "刪除 Chunk 成功",
+    "deleteFailed": "刪除 Chunk 失敗"
+  },
+  "edit": {
+    "title": "編輯 Chunk",
+    "content": "Chunk 內容",
+    "cancel": "取消",
+    "save": "儲存",
+    "saveSuccess": "儲存 Chunk 成功",
+    "saveFailed": "儲存 Chunk 失敗"
+  },
+  "delete": {
+    "title": "刪除 Chunk",
+    "confirmText": "確定要刪除此 Chunk？",
+    "warning": "刪除後無法復原，可能會影響知識庫的搜尋效果。",
+    "cancel": "取消",
+    "confirm": "刪除",
+    "deleteSuccess": "刪除 Chunk 成功",
+    "deleteFailed": "刪除 Chunk 失敗"
+  },
+  "view": {
+    "title": "Chunk 詳情",
+    "index": "索引",
+    "content": "內容",
+    "charCount": "字數",
+    "vecDocId": "向量 ID",
+    "close": "關閉"
+  }
+}

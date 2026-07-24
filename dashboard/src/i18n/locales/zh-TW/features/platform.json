@@ -1,0 +1,142 @@
+{
+  "title": "機器人",
+  "subtitle": "管理平台適配器實例，連線到不同的訊息平台",
+  "adapters": "平台適配器",
+  "addAdapter": "建立機器人",
+  "emptyText": "暫無平台適配器，點擊 建立機器人 新增",
+  "viewWebhook": "查看 Webhook 連結",
+  "webhookCopied": "Webhook URL 已複製到剪貼簿",
+  "webhookCopyFailed": "複製失敗，請手動複製",
+  "webhookDialog": {
+    "title": "Webhook 回呼位址",
+    "description": "回呼位址如下，請確保網路環境可以公網存取。也可以在日誌中查看回呼位址資訊。建議填寫 設定檔 -> 系統 中的「對外可達的回呼介面位址」設定項。",
+    "close": "關閉"
+  },
+  "details": {
+    "adapterType": "適配器類型",
+    "token": "Token",
+    "description": "描述"
+  },
+  "logs": {
+    "title": "平台日誌",
+    "expand": "展開",
+    "collapse": "收合"
+  },
+  "dialog": {
+    "add": "新增",
+    "edit": "編輯",
+    "adapter": "機器人",
+    "refresh": "重新整理",
+    "cancel": "取消",
+    "save": "儲存",
+    "addPlatform": "建立機器人",
+    "connectTitle": "接入 {name}",
+    "viewTutorial": "查看接入教學",
+    "noTemplates": "暫無平台範本",
+    "idConflict": {
+      "title": "ID 衝突警告",
+      "message": "偵測到 ID \"{id}\" 重複。請使用一個新的 ID。",
+      "confirm": "好的"
+    },
+    "securityWarning": {
+      "title": "安全提醒",
+      "aiocqhttpTokenMissing": "為了增強連線安全性，強烈建議您設定 ws_reverse_token。未設定 Token 可能導致安全風險。",
+      "learnMore": "了解更多"
+    },
+    "invalidPlatformId": "平台 ID 不能包含 ':' 或 '!'。"
+  },
+  "createDialog": {
+    "step1Title": "選擇訊息平台類別",
+    "step1Hint": "想把機器人接入到哪裡？如 QQ、企業微信、飛書、Discord、Telegram 等。",
+    "platformTypeLabel": "訊息平台類別",
+    "configFileTitle": "設定檔",
+    "optional": "選填",
+    "configHint": "想如何設定機器人？設定檔包含了聊天模型、人格、知識庫、擴充套件範圍等豐富的機器人設定項。",
+    "configDefaultHint": "預設使用預設設定檔「default」。您也可以稍後設定。",
+    "useExistingConfig": "使用現有設定檔",
+    "selectConfigLabel": "選擇設定檔",
+    "createNewConfig": "建立新設定檔",
+    "newConfigNameLabel": "新設定檔名稱",
+    "newConfigTitle": "使用新的設定檔",
+    "newConfigLoadFailed": "無法載入預設設定範本",
+    "addRouteRule": "新增路由規則",
+    "viewMode": "查看",
+    "editMode": "編輯",
+    "noRouteRules": "該平台暫無路由規則，將使用預設設定檔",
+    "sessionIdPlaceholder": "會話ID或*",
+    "allSessions": "全部會話",
+    "configMissing": "設定檔不存在",
+    "routeHint": "*訊息下發時，根據會話來源按順序從上到下配對首個符合條件的設定檔。使用 * 表示配對所有。使用 /sid 指令取得會話 ID。全部不符合時將使用預設設定檔。",
+    "warningContinue": "無視警告並繼續建立",
+    "warningEditAgain": "重新修改",
+    "configDrawerTitle": "設定檔管理",
+    "configDrawerIdLabel": "ID",
+    "configTableHeaders": {
+      "configId": "與此實例關聯的設定檔 ID",
+      "scope": "在此實例下的套用範圍"
+    },
+    "routeTableHeaders": {
+      "source": "訊息會話來源(訊息類型:會話 ID)",
+      "config": "使用設定檔",
+      "actions": "操作"
+    },
+    "messageTypeOptions": {
+      "all": "全部訊息",
+      "group": "群組訊息(GroupMessage)",
+      "friend": "私聊訊息(FriendMessage)"
+    },
+    "messageTypeLabels": {
+      "all": "全部訊息",
+      "group": "群組訊息",
+      "friend": "私聊訊息"
+    }
+  },
+  "messages": {
+    "updateSuccess": "更新成功！",
+    "addSuccess": "新增成功！",
+    "deleteSuccess": "刪除成功！",
+    "statusUpdateSuccess": "狀態更新成功！",
+    "deleteConfirm": "確定要刪除平台適配器",
+    "configNotFoundOpenConfig": "目標設定檔不存在，已打開設定頁面以便檢查。",
+    "updateMissingPlatformId": "更新失敗，缺少平台 ID。",
+    "platformUpdateFailed": "平台更新失敗。",
+    "addSuccessWithConfig": "平台新增成功，設定檔已更新",
+    "configIdMissing": "無法取得設定檔 ID。",
+    "routingUpdateFailed": "更新路由表失敗: {message}",
+    "createConfigFailed": "建立新設定檔失敗: {message}",
+    "platformIdMissing": "無法取得平台 ID。",
+    "routingSaveFailed": "儲存路由表失敗: {message}"
+  },
+  "status": {
+    "enabled": "已啟用",
+    "disabled": "已停用",
+    "connecting": "連線中",
+    "connected": "已連線",
+    "disconnected": "已斷線",
+    "error": "錯誤"
+  },
+  "runtimeStatus": {
+    "running": "運行中",
+    "error": "發生錯誤",
+    "pending": "等待啟動",
+    "stopped": "已停止",
+    "unknown": "未知",
+    "errors": "個錯誤"
+  },
+  "platformQr": {
+    "title": "二維碼登入",
+    "show": "查看二維碼",
+    "status": "二維碼狀態",
+    "waiting": "等待二維碼",
+    "close": "關閉"
+  },
+  "errorDialog": {
+    "title": "錯誤詳情",
+    "platformId": "平台 ID",
+    "errorCount": "錯誤數量",
+    "lastError": "最近錯誤",
+    "occurredAt": "發生時間",
+    "traceback": "錯誤堆疊",
+    "close": "關閉"
+  }
+} 
