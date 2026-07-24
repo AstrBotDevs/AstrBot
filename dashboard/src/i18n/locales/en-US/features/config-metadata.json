@@ -1682,6 +1682,16 @@
       "enable": {
         "description": "Enable"
       },
+      "api_key": {
+        "description": "API Key"
+      },
+      "language": {
+        "description": "Language"
+      },
+      "enable_itn": {
+        "description": "Enable ITN",
+        "hint": "Convert digit words to Arabic numerals"
+      },
       "key": {
         "description": "API Key"
       },

@@ -1679,6 +1679,16 @@
             "enable": {
                 "description": "Включить"
             },
+            "api_key": {
+                "description": "API ключ"
+            },
+            "language": {
+                "description": "Язык"
+            },
+            "enable_itn": {
+                "description": "Включить ITN",
+                "hint": "Преобразовать цифры в арабские"
+            },
             "key": {
                 "description": "Ключ Coze API для доступа к сервисам Coze."
             },

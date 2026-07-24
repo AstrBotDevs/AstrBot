@@ -1742,6 +1742,20 @@ CONFIG_METADATA_2 = {
                         "dashscope_tts_voice": "loongstella",
                         "timeout": "20",
                     },
+                    "阿里云百炼 STT (Qwen3-ASR)": {
+                        "id": "dashscope_stt",
+                        "provider": "dashscope",
+                        "type": "dashscope_stt",
+                        "provider_type": "speech_to_text",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                        "model": "qwen3-asr-flash",
+                        "language": "",
+                        "enable_itn": False,
+                        "timeout": "20",
+                        "proxy": "",
+                    },
                     "Azure TTS": {
                         "id": "azure_tts",
                         "type": "azure_tts",
@@ -2706,6 +2720,19 @@ CONFIG_METADATA_2 = {
                     "enable": {
                         "description": "启用",
                         "type": "bool",
+                    },
+                    "api_key": {
+                        "description": "API key",
+                        "type": "string",
+                    },
+                    "language": {
+                        "description": "语种",
+                        "type": "string",
+                    },
+                    "enable_itn": {
+                        "description": "开启 ITN",
+                        "type": "bool",
+                        "hint": "将数字文本转换为阿拉伯数字。"
                     },
                     "key": {
                         "description": "API Key",
