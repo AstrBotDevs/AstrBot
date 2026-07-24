@@ -99,7 +99,9 @@ async def call_event_hook(
         except BaseException:
             logger.error(traceback.format_exc())
 
-        if event.is_stopped():
+        # Post-send hooks are cleanup notifications. Every registered cleanup must
+        # run even when the message result was already marked as stopped.
+        if event.is_stopped() and hook_type != EventType.OnAfterMessageSentEvent:
             logger.info(
                 f"{star_map[handler.handler_module_path].name} - {handler.handler_name} 终止了事件传播。",
             )

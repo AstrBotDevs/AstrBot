@@ -1,10 +1,12 @@
 import asyncio
+import hashlib
 import math
 import random
 from collections.abc import AsyncGenerator
 
 import astrbot.core.message.components as Comp
 from astrbot.core import logger
+from astrbot.core.agent.stream_controller import StreamController, StreamSignal
 from astrbot.core.message.components import BaseMessageComponent, ComponentType
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 from astrbot.core.platform.astr_message_event import AstrMessageEvent
@@ -173,6 +175,12 @@ class RespondStage(Stage):
         result = event.get_result()
         if result is None:
             return
+        if event.get_extra("agent_control_terminal_sent", False):
+            logger.info(
+                "Skipping normal reply stage after a verified terminal tool delivery."
+            )
+            event.clear_result()
+            return
         if event.get_extra("_streaming_finished", False):
             # prevent some plugin make result content type to LLM_RESULT after streaming finished, lead to send again
             return
@@ -183,6 +191,22 @@ class RespondStage(Stage):
         logger.info(
             f"Prepare to send - {event.get_sender_name()}/{event.get_sender_id()}: {event._outline_chain(result.chain)}",
         )
+
+        # A terminal AgentRun may be observed by more than one pipeline hook.
+        # Keep a per-event hash so the same final chain cannot be emitted twice.
+        if result.chain and len(result.chain) > 0:
+            chain_hash = hashlib.blake2b(
+                repr(event._outline_chain(result.chain)).encode("utf-8"),
+                digest_size=16,
+            ).hexdigest()
+            previous_hash = event.get_extra("agent_control_final_response_hash", "")
+            if previous_hash == chain_hash:
+                logger.warning(
+                    "Skipping duplicate final Agent response for the current event."
+                )
+                event.clear_result()
+                return
+            event.set_extra("agent_control_final_response_hash", chain_hash)
 
         if result.result_content_type == ResultContentType.STREAMING_RESULT:
             if result.async_stream is None:
@@ -197,7 +221,19 @@ class RespondStage(Stage):
                 == "realtime_segmenting"
             )
             logger.info(f"应用流式输出({event.get_platform_id()})")
-            await event.send_streaming(result.async_stream, realtime_segmenting)
+
+            async def controlled_stream():
+                controller = StreamController(idle_timeout=15.0)
+                async for frame in controller.run(result.async_stream):
+                    event.set_extra("agent_stream_signal", frame.signal.value)
+                    if frame.signal is StreamSignal.DELTA and frame.payload is not None:
+                        yield frame.payload
+                    elif frame.signal is StreamSignal.ERROR:
+                        yield MessageChain().message("流式回复发生错误，请稍后重试。")
+                    elif frame.signal is StreamSignal.CANCEL:
+                        yield MessageChain().message("回复已取消。")
+
+            await event.send_streaming(controlled_stream(), realtime_segmenting)
             return
         if len(result.chain) > 0:
             # 检查路径映射

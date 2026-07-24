@@ -19,10 +19,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER_QQ = "2831304142"
-DEFAULT_PROVIDER = "deepseek/deepseek-v4-pro"
+DEFAULT_PROVIDER = "google_gemini_bot/gemini-3.5-flash"
 FALLBACK_PROVIDER = "deepseek/deepseek-v4-flash"
-FAST_VISION_PROVIDER = "google_gemini/gemini-flash-lite-latest"
-DEEP_VISION_PROVIDER = "google_gemini/gemini-flash-latest"
+FAST_VISION_PROVIDER = "google_gemini_bot/gemini-3.1-flash-lite"
+DEEP_VISION_PROVIDER = "google_gemini_bot/gemini-3.5-flash"
 DB_PATH = ROOT / "data/data_v4.db"
 REQUIRED_DISABLED_PLUGINS = {
     "data.plugins.astrbot_plugin_livingmemory.main",
@@ -416,11 +416,26 @@ def check_core() -> list[Check]:
             f"enabled={id_whitelist_enabled!r}, entries={len(id_whitelist)}",
         )
     )
+    rate_limit = platform_settings.get("rate_limit") or {}
+    checks.append(
+        ok(
+            "core.flood_protection",
+            "extreme floods are discarded without stalling normal group traffic",
+        )
+        if int(rate_limit.get("time", 0)) == 10
+        and int(rate_limit.get("count", 0)) == 120
+        and rate_limit.get("strategy") == "discard"
+        else fail(
+            "core.flood_protection",
+            "expected 120 messages/10 seconds with discard strategy",
+        )
+    )
 
+    expected_vision = {FAST_VISION_PROVIDER, DEEP_VISION_PROVIDER}
     gemini_enabled = [
         p.get("id")
         for p in providers
-        if str(p.get("id", "")).startswith("google_gemini/")
+        if p.get("id") in expected_vision
         and p.get("provider_type", "chat_completion") == "chat_completion"
         and bool(p.get("enable"))
     ]
@@ -438,7 +453,6 @@ def check_core() -> list[Check]:
         for provider in providers
         if provider.get("id") in {FAST_VISION_PROVIDER, DEEP_VISION_PROVIDER}
     }
-    expected_vision = {FAST_VISION_PROVIDER, DEEP_VISION_PROVIDER}
     enabled_vision = set(gemini_enabled)
     image_modalities_ok = all(
         "image" in (vision_providers.get(provider_id, {}).get("modalities") or [])
@@ -447,10 +461,10 @@ def check_core() -> list[Check]:
     checks.append(
         ok(
             "core.vision_provider",
-            "Gemini Flash-Lite Latest and Flash Latest are enabled for layered image input",
+            "Gemini 3.1 Flash-Lite + 3.5 Flash are enabled for layered image input",
         )
         if enabled_vision == expected_vision
-        and gemini_sources_enabled == ["google_gemini"]
+        and "google_gemini_bot" in gemini_sources_enabled
         and image_modalities_ok
         else fail(
             "core.vision_provider",
@@ -459,6 +473,61 @@ def check_core() -> list[Check]:
             f"modalities_ok={image_modalities_ok}",
         )
     )
+    domestic_source = next(
+        (
+            source
+            for source in provider_sources
+            if source.get("id") == "google_gemini_bot"
+        ),
+        None,
+    )
+    domestic_base = str((domestic_source or {}).get("api_base", "")).rstrip("/")
+    domestic_proxy = str((domestic_source or {}).get("proxy", "") or "").strip()
+    domestic_hosts = ("apinebula.ai",)
+    checks.append(
+        ok(
+            "core.gemini_domestic_route",
+            "google_gemini_bot uses an approved apinebula domestic endpoint directly; proxy remains disabled",
+        )
+        if domestic_source
+        and bool(domestic_source.get("enable"))
+        and any(host in domestic_base.lower() for host in domestic_hosts)
+        and not domestic_proxy
+        else fail(
+            "core.gemini_domestic_route",
+            f"expected enabled google_gemini_bot on an approved apinebula endpoint without proxy; "
+            f"base={domestic_base or '<missing>'}, "
+            f"proxy={'set' if domestic_proxy else 'empty'}",
+        )
+    )
+    stt_settings = data.get("provider_stt_settings") or {}
+    audio_capable = [
+        str(provider.get("id"))
+        for provider in providers
+        if bool(provider.get("enable"))
+        and "audio" in (provider.get("modalities") or [])
+    ]
+    if bool(stt_settings.get("enable")) and stt_settings.get("provider_id"):
+        checks.append(
+            ok(
+                "core.voice_provider",
+                f"STT enabled: {stt_settings['provider_id']}",
+            )
+        )
+    elif audio_capable:
+        checks.append(
+            ok(
+                "core.voice_provider",
+                "STT is disabled; audio-capable LLM fallback is available",
+            )
+        )
+    else:
+        checks.append(
+            fail(
+                "core.voice_provider",
+                "STT is disabled and no enabled audio-capable provider is available",
+            )
+        )
     return checks
 
 
@@ -502,8 +571,11 @@ def check_plugin_configs() -> list[Check]:
         and parser.get("proxy") == "http://127.0.0.1:7897"
         else fail("plugins.bilibili", "Bilibili plugin or parser configuration drift")
     )
-    ffmpeg_path = shutil.which("ffmpeg")
-    if not ffmpeg_path:
+    ffmpeg_candidates: list[str] = []
+    resolved_ffmpeg = shutil.which("ffmpeg")
+    if resolved_ffmpeg:
+        ffmpeg_candidates.append(resolved_ffmpeg)
+    if not ffmpeg_candidates:
         winget_ffmpeg = (
             Path(os.environ.get("LOCALAPPDATA", ""))
             / "Microsoft"
@@ -513,21 +585,66 @@ def check_plugin_configs() -> list[Check]:
         )
         try:
             if winget_ffmpeg.is_file():
-                ffmpeg_path = str(winget_ffmpeg)
+                ffmpeg_candidates.append(str(winget_ffmpeg))
         except PermissionError:
-            # Managed diagnostics may be unable to stat a valid WinGet link.
-            ffmpeg_path = str(winget_ffmpeg)
+            ffmpeg_candidates.append(str(winget_ffmpeg))
+    if not ffmpeg_candidates:
+        try:
+            import imageio_ffmpeg
+
+            bundled_ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+            if bundled_ffmpeg:
+                ffmpeg_candidates.append(str(bundled_ffmpeg))
+        except (ImportError, OSError, RuntimeError):
+            pass
+    ffmpeg_path = ""
+    for candidate in ffmpeg_candidates:
+        try:
+            probe = subprocess.run(
+                [candidate, "-version"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if probe.returncode == 0:
+            ffmpeg_path = candidate
+            break
+    if not ffmpeg_path:
+        try:
+            import imageio_ffmpeg
+
+            bundled_ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+            if bundled_ffmpeg:
+                probe = subprocess.run(
+                    [bundled_ffmpeg, "-version"],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=3,
+                    check=False,
+                )
+                if probe.returncode == 0:
+                    ffmpeg_path = str(bundled_ffmpeg)
+        except (ImportError, OSError, subprocess.SubprocessError, RuntimeError):
+            pass
     checks.append(
         ok("runtime.ffmpeg", ffmpeg_path)
         if ffmpeg_path
-        else fail("runtime.ffmpeg", "ffmpeg is required for video/audio merging")
+        else warn(
+            "runtime.ffmpeg",
+            "ffmpeg is unavailable; music/video delivery is disabled until a runnable binary is installed",
+        )
     )
 
     missing_disabled_tools = sorted(REQUIRED_DISABLED_API_SEARCH_TOOLS - disabled_tools)
     checks.append(
         ok(
             "tools.api_search_disabled",
-            "API-key web search tools are disabled; QQTools browser is used",
+            "legacy Tavily tools are disabled; controlled search backends are used",
         )
         if not missing_disabled_tools
         else fail(
@@ -557,6 +674,63 @@ def check_plugin_configs() -> list[Check]:
         )
     )
 
+    semantic_router_config = load_json(
+        ROOT / "data/config/astrbot_plugin_semantic_router_config.json"
+    )
+    checks.append(
+        ok(
+            "semantic_router.realtime_search",
+            "AnySearch evidence is primary with deterministic QQTools fallback",
+        )
+        if (ROOT / "data/plugins/astrbot_plugin_anysearch/main.py").is_file()
+        and semantic_router_config.get("anysearch_enabled") is True
+        and semantic_router_config.get("direct_search_enabled") is True
+        and semantic_router_config.get("integrated_search_answer_enabled") is True
+        and semantic_router_config.get("knowledge_auto_stage_search_enabled") is True
+        else fail(
+            "semantic_router.realtime_search",
+            "AnySearch routing, deterministic search, or controlled knowledge staging drifted",
+        )
+    )
+    checks.append(
+        ok(
+            "semantic_router.adaptive_mailbox",
+            "adaptive mailbox capacity, coalescing, and FAST reserve are enabled",
+        )
+        if semantic_router_config.get("adaptive_mailbox_enabled") is True
+        and int(semantic_router_config.get("mailbox_global_capacity", 0)) == 32
+        and int(semantic_router_config.get("mailbox_session_capacity", 0)) == 6
+        and float(semantic_router_config.get("fragment_quiet_window_seconds", 0)) == 1.2
+        and float(semantic_router_config.get("fragment_hard_window_seconds", 0)) == 4.0
+        and int(semantic_router_config.get("mailbox_max_merge_count", 0)) == 5
+        and int(
+            semantic_router_config.get("control_plane_fast_reserved_concurrency", 0)
+        )
+        == 1
+        else fail(
+            "semantic_router.adaptive_mailbox",
+            "adaptive mailbox configuration is missing or has drifted",
+        )
+    )
+    checks.append(
+        ok(
+            "semantic_router.semantic_planner",
+            "intent is classified by a bounded fast model before search/memory execution",
+        )
+        if semantic_router_config.get("semantic_planner_enabled") is True
+        and semantic_router_config.get("context_on_wake_required") is True
+        and float(semantic_router_config.get("semantic_planner_timeout_seconds", 0))
+        <= 4.0
+        and "_plan_semantic_intent"
+        in (ROOT / "data/plugins/astrbot_plugin_semantic_router/main.py").read_text(
+            encoding="utf-8-sig"
+        )
+        else fail(
+            "semantic_router.semantic_planner",
+            "semantic planner or mandatory wake context configuration is missing",
+        )
+    )
+
     qqtools = load_json(ROOT / "data/config/astrbot_plugin_qq_tools_config.json")
     browser = qqtools.get("browser_config", {})
     permission = qqtools.get("tool_permission", {})
@@ -565,19 +739,94 @@ def check_plugin_configs() -> list[Check]:
     checks.append(
         ok(
             "qqtools.browser",
-            "public browser search is available; interactive mutations stay restricted",
+            "browser reads are available; interactive mutations use Agent risk approval",
         )
         if browser.get("browser") is True
         and OWNER_QQ in allow_users
         and "browser_*" not in admin_only_tools
-        and "browser_click*" in admin_only_tools
-        and "browser_input" in admin_only_tools
+        and "browser_click*" not in admin_only_tools
+        and "browser_input" not in admin_only_tools
         and "browser_send_image" in admin_only_tools
         else fail(
             "qqtools.browser",
             "QQTools browser read/write permissions are not safely separated",
         )
     )
+    office_config = load_json(
+        ROOT / "data/config/astrbot_plugin_office_assistant_config.json"
+    )
+    office_trigger = office_config.get("trigger_settings", {})
+    office_permission = office_config.get("permission_settings", {})
+    office_read = office_config.get("read_settings", {})
+    checks.append(
+        ok(
+            "office_assistant.restricted",
+            "Office tools are owner-only, mention-gated, workspace-scoped, and built",
+        )
+        if (ROOT / "data/plugins/astrbot_plugin_office_assistant/main.py").is_file()
+        and (
+            ROOT
+            / "data/plugins/astrbot_plugin_office_assistant/word_renderer_js/dist/cli.js"
+        ).is_file()
+        and office_trigger.get("enable_features_in_group") is True
+        and office_trigger.get("require_at_in_group") is True
+        and office_trigger.get("allow_local_excel_script") is False
+        and office_permission.get("allow_all_users") is False
+        and OWNER_QQ
+        in {str(item) for item in office_permission.get("whitelist_users", [])}
+        and office_read.get("allow_external_input_files") is False
+        else fail(
+            "office_assistant.restricted",
+            "Office plugin build or owner/workspace restrictions are incomplete",
+        )
+    )
+    mcp_config = load_json(ROOT / "data/mcp_server.json")
+    anysearch_mcp = mcp_config.get("mcpServers", {}).get(
+        "anysearch-readonly-fallback", {}
+    )
+    mcp_shape_ok = (
+        anysearch_mcp.get("active") is True
+        and anysearch_mcp.get("url") == "https://api.anysearch.com/mcp"
+        and anysearch_mcp.get("transport") == "streamable_http"
+        and anysearch_mcp.get("tool_name_prefix") == "mcp_anysearch_"
+        and not anysearch_mcp.get("headers")
+    )
+    unavailable_mcp_tools: list[str] = []
+    capability_db = (
+        ROOT / "data/plugin_data/astrbot_plugin_semantic_router/agent_control.db"
+    )
+    if capability_db.exists():
+        try:
+            with sqlite3.connect(capability_db) as conn:
+                rows = conn.execute(
+                    "select name from capability_catalog "
+                    "where status='unavailable' and name like 'mcp_anysearch_%'"
+                ).fetchall()
+            unavailable_mcp_tools = [str(row[0]) for row in rows]
+        except sqlite3.Error:
+            unavailable_mcp_tools = []
+    if not mcp_shape_ok:
+        checks.append(
+            fail(
+                "mcp.anysearch_fallback",
+                "AnySearch MCP fallback is missing, duplicated, or contains embedded credentials",
+            )
+        )
+    elif unavailable_mcp_tools:
+        checks.append(
+            warn(
+                "mcp.anysearch_fallback",
+                "MCP endpoint is unavailable; AnySearch plugin remains the primary path "
+                f"({len(unavailable_mcp_tools)} fallback tools unavailable)",
+            )
+        )
+    else:
+        checks.append(
+            ok(
+                "mcp.anysearch_fallback",
+                "anonymous read-only AnySearch MCP fallback uses an isolated tool prefix",
+            )
+        )
 
     angel = load_json(ROOT / "data/config/astrbot_plugin_angel_heart_config.json")
     angel_access = angel.get("access_control", {})
@@ -632,10 +881,37 @@ def check_plugin_configs() -> list[Check]:
         if private_basic.get("bot_name") == "亚托莉"
         and private_basic.get("plugin_specific_persona_id") == "atri"
         and private_basic.get("target_user_ids") == [OWNER_QQ]
-        and private_basic.get("private_user_aliases") == f"{OWNER_QQ}=你"
+        and private_basic.get("private_user_aliases") == f"你={OWNER_QQ}"
+        and private.get("enable_livingmemory_integration") is False
+        and (private.get("external_memory_config") or {}).get(
+            "enable_livingmemory_integration"
+        )
+        is False
         else fail(
             "persona.private_companion",
             "owner address and repairer relation are not aligned",
+        )
+    )
+    companion_store_path = (
+        ROOT / "data/plugin_data/astrbot_plugin_private_companion/companions.json"
+    )
+    companion_store = (
+        load_json(companion_store_path) if companion_store_path.exists() else {}
+    )
+    companion_users = companion_store.get("users") or {}
+    owner_keys = {
+        str(user_id)
+        for user_id, record in companion_users.items()
+        if isinstance(record, dict) and record.get("relationship_role") == "owner"
+    }
+    checks.append(
+        ok("memory.private_identity", "private memory owner is keyed by stable QQ ID")
+        if not companion_store_path.exists()
+        or not companion_users
+        or (OWNER_QQ in owner_keys and owner_keys <= {OWNER_QQ})
+        else fail(
+            "memory.private_identity",
+            f"private memory owner record uses display alias(es): {sorted(owner_keys)}",
         )
     )
 
@@ -894,6 +1170,19 @@ def check_runtime_ports() -> list[Check]:
             )
 
     watched_files = [
+        ROOT / "astrbot/core/platform/sources/aiocqhttp/aiocqhttp_platform_adapter.py",
+        ROOT / "astrbot/core/agent/tool.py",
+        ROOT / "astrbot/core/agent/tool_gateway.py",
+        ROOT / "astrbot/core/agent/model_gateway.py",
+        ROOT / "astrbot/core/agent/job_manager.py",
+        ROOT / "astrbot/core/agent/evidence_store.py",
+        ROOT / "astrbot/core/agent/stream_controller.py",
+        ROOT / "astrbot/core/astr_agent_run_util.py",
+        ROOT / "astrbot/core/agent/runners/tool_loop_agent_runner.py",
+        ROOT / "data/plugins/astrbot_plugin_semantic_router/main.py",
+        ROOT / "data/plugins/astrbot_plugin_semantic_router/control_plane.py",
+        ROOT / "data/plugins/astrbot_plugin_listen_music/agent_capabilities.yaml",
+        ROOT / "data/plugins/astrbot_plugin_image_processor/main.py",
         ROOT / "data/plugins/astrbot_plugin_qq_tools/main.py",
         ROOT / "data/plugins/astrbot_plugin_qq_tools/tools/browser.py",
         ROOT / "data/plugins/spectrecore/utils/llm_utils.py",
@@ -942,6 +1231,106 @@ def check_runtime_ports() -> list[Check]:
 
 def check_code_guards() -> list[Check]:
     checks: list[Check] = []
+    tool_gateway_path = ROOT / "astrbot/core/agent/tool_gateway.py"
+    evidence_store_path = ROOT / "astrbot/core/agent/evidence_store.py"
+    tool_gateway = (
+        tool_gateway_path.read_text(encoding="utf-8-sig")
+        if tool_gateway_path.exists()
+        else ""
+    )
+    evidence_store = (
+        evidence_store_path.read_text(encoding="utf-8-sig")
+        if evidence_store_path.exists()
+        else ""
+    )
+    runner_source = (
+        ROOT / "astrbot/core/agent/runners/tool_loop_agent_runner.py"
+    ).read_text(encoding="utf-8-sig")
+    semantic_router_source = (
+        ROOT / "data/plugins/astrbot_plugin_semantic_router/main.py"
+    ).read_text(encoding="utf-8-sig")
+    control_plane_source = (
+        ROOT / "data/plugins/astrbot_plugin_semantic_router/control_plane.py"
+    ).read_text(encoding="utf-8-sig")
+    checks.append(
+        ok(
+            "code.unified_tool_gateway",
+            "ToolGateway validates schemas, normalizes outcomes, and owns resource leases",
+        )
+        if "class ToolGateway" in tool_gateway
+        and "validate_arguments" in tool_gateway
+        and "async def invoke" in tool_gateway
+        and "ToolResourceScheduler" in tool_gateway
+        and "ToolGateway.invoke(" in runner_source
+        and semantic_router_source.count("ToolGateway.invoke(") >= 2
+        else fail(
+            "code.unified_tool_gateway",
+            "unified ToolGateway or bounded resource scheduler is missing",
+        )
+    )
+    checks.append(
+        ok(
+            "code.agent_evidence_chain",
+            "Agent runs, tool attempts, and hash-only evidence are persisted",
+        )
+        if "class AgentEvidenceStore" in evidence_store
+        and "agent_runs" in evidence_store
+        and "tool_attempts" in evidence_store
+        and "evidence_records" in evidence_store
+        and "trace_id" in control_plane_source
+        and "audit_decision" in control_plane_source
+        else fail(
+            "code.agent_evidence_chain",
+            "Agent evidence store or decision-to-trace link is missing",
+        )
+    )
+    checks.append(
+        ok(
+            "code.shadow_acceptance_telemetry",
+            "plan candidates, trace-linked tool calls, and delivery outcomes are audited",
+        )
+        if "candidate_tools" in control_plane_source
+        and "tool_required" in control_plane_source
+        and "trace_id TEXT NOT NULL DEFAULT ''" in control_plane_source
+        and "message_delivery_audit" in control_plane_source
+        and "audit_message_delivery" in control_plane_source
+        and "audit_response_candidate" in semantic_router_source
+        else fail(
+            "code.shadow_acceptance_telemetry",
+            "shadow acceptance telemetry is incomplete",
+        )
+    )
+    pipeline_context = (ROOT / "astrbot/core/pipeline/context_utils.py").read_text(
+        encoding="utf-8-sig"
+    )
+    checks.append(
+        ok(
+            "code.after_send_cleanup",
+            "all post-send cleanup hooks run even when an event is already stopped",
+        )
+        if "hook_type != EventType.OnAfterMessageSentEvent" in pipeline_context
+        else fail(
+            "code.after_send_cleanup",
+            "a stopped result can prevent later post-send lock cleanup hooks",
+        )
+    )
+    aiocqhttp_adapter = (
+        ROOT / "astrbot/core/platform/sources/aiocqhttp/aiocqhttp_platform_adapter.py"
+    ).read_text(encoding="utf-8-sig")
+    checks.append(
+        ok(
+            "code.aiocqhttp_mface_image",
+            "QQ store emojis are preserved as standard image components",
+        )
+        if 'elif t in {"mface", "marketface"}' in aiocqhttp_adapter
+        and "abm.message.append(Image(file=image_url, url=image_url))"
+        in aiocqhttp_adapter
+        and 'elif t == "mface":\n                continue' not in aiocqhttp_adapter
+        else fail(
+            "code.aiocqhttp_mface_image",
+            "QQ store emojis can be silently dropped before image understanding",
+        )
+    )
     qqtools_main = (ROOT / "data/plugins/astrbot_plugin_qq_tools/main.py").read_text(
         encoding="utf-8-sig"
     )
@@ -961,10 +1350,223 @@ def check_code_guards() -> list[Check]:
             "browser_search tool is missing or not registered",
         )
     )
-
     semantic_router = (
         ROOT / "data/plugins/astrbot_plugin_semantic_router/main.py"
     ).read_text(encoding="utf-8-sig")
+    checks.append(
+        ok(
+            "code.semantic_router_private_wake",
+            "private messages materialize wake state before ProcessStage",
+        )
+        if "event.is_private_chat()" in semantic_router
+        and "self.route_private_without_wake" in semantic_router
+        and "event.is_at_or_wake_command = True" in semantic_router
+        else fail(
+            "code.semantic_router_private_wake",
+            "private messages may be routed but skipped by ProcessStage",
+        )
+    )
+    skill_manager = (ROOT / "astrbot/core/skills/skill_manager.py").read_text(
+        encoding="utf-8-sig"
+    )
+    main_agent = (ROOT / "astrbot/core/astr_main_agent.py").read_text(
+        encoding="utf-8-sig"
+    )
+    iris_processor = (
+        ROOT
+        / "data/plugins/astrbot_plugin_iris_memory/iris_memory/processing/message_processor.py"
+    ).read_text(encoding="utf-8-sig")
+    checks.append(
+        ok(
+            "code.identity_memory_boundaries",
+            "persona, Skills, Iris memory, and companion context cannot grant permissions",
+        )
+        if "Skill trust boundary" in skill_manager
+        and "<astrbot_runtime_boundaries>" in main_agent
+        and "<iris_memory_boundary>" in iris_processor
+        and "<private_companion_boundary>"
+        in (ROOT / "data/plugins/astrbot_plugin_private_companion/main.py").read_text(
+            encoding="utf-8-sig"
+        )
+        else fail(
+            "code.identity_memory_boundaries",
+            "untrusted persona/Skill/memory context is missing an explicit boundary",
+        )
+    )
+    checks.append(
+        ok(
+            "code.iris_persona_scope",
+            "Iris memory uses configured persona scope and caches one-turn retrieval",
+        )
+        if "get_persona_id_for_query" in iris_processor
+        and "get_persona_id_for_storage" in iris_processor
+        and "iris_memory_context_ready" in iris_processor
+        and 'where_clause["persona_id"] = persona_id'
+        in (
+            ROOT
+            / "data/plugins/astrbot_plugin_iris_memory/iris_memory/web/repositories/memory_repo.py"
+        ).read_text(encoding="utf-8-sig")
+        else fail(
+            "code.iris_persona_scope",
+            "Iris memory may use a null persona scope or repeat retrieval on tool-loop turns",
+        )
+    )
+    checks.append(
+        ok(
+            "code.skill_metadata_boundary",
+            "Skill frontmatter is sanitized before prompt injection",
+        )
+        if "def _sanitize_prompt_description" in skill_manager
+        and "description = _sanitize_prompt_description(skill.description"
+        in skill_manager
+        and "untrusted task data" in skill_manager
+        else fail(
+            "code.skill_metadata_boundary",
+            "Skill metadata can inject unsanitized instructions into the Agent prompt",
+        )
+    )
+    image_processor = (
+        ROOT / "data/plugins/astrbot_plugin_image_processor/main.py"
+    ).read_text(encoding="utf-8-sig")
+    checks.append(
+        ok(
+            "code.image_processor_timeout_fallback",
+            "vision timeout reuses preflight evidence without a second OCR lock",
+        )
+        if 'category="preflight_fallback"' in image_processor
+        and 'model_id="local/preflight"' in image_processor
+        and "async with self._semaphore:" in image_processor
+        and "async with session_lock, self._semaphore:" not in image_processor
+        and "image context exceeded hard deadline" in semantic_router
+        else fail(
+            "code.image_processor_timeout_fallback",
+            "vision timeout can repeat OCR or retain a conversation lock",
+        )
+    )
+    checks.append(
+        ok(
+            "code.semantic_router_image_priority",
+            "resolved images take priority over generic search phrases",
+        )
+        if "if image_requested:" in semantic_router
+        and 'query = ""' in semantic_router
+        and 'event.set_extra("semantic_router_image_requested", True)'
+        in semantic_router
+        and "visual evidence indicates that meme provenance" in semantic_router
+        else fail(
+            "code.semantic_router_image_priority",
+            "quoted image questions may be diverted into web search before vision",
+        )
+    )
+    checks.append(
+        ok(
+            "code.semantic_router_recent_image_bridge",
+            "image-only events are cached before WakePro and restored for follow-ups",
+        )
+        if "priority=100000" in semantic_router
+        and "async def capture_recent_images" in semantic_router
+        and "semantic_router_recent_image_attached" in semantic_router
+        and "semantic_router_recent_image_paths" in semantic_router
+        and "Comp.Image.fromFileSystem(path)" in semantic_router
+        and "def _references_recent_image" in semantic_router
+        and '"我上面发图片"' in semantic_router
+        else fail(
+            "code.semantic_router_recent_image_bridge",
+            "separate image and follow-up text events can lose visual context",
+        )
+    )
+    checks.append(
+        ok(
+            "code.semantic_router_wake_context_snapshot",
+            "name wakes materialize scoped context before downstream handlers",
+        )
+        if '"semantic_router_context_snapshot"' in semantic_router
+        and "semantic_router_context_required" in semantic_router
+        and "isinstance(item, Comp.Reply)" in semantic_router
+        and 'text = "[图片]"' in semantic_router
+        else fail(
+            "code.semantic_router_wake_context_snapshot",
+            "wake context can be lost when a downstream handler short-circuits",
+        )
+    )
+    checks.append(
+        ok(
+            "code.image_processor_unstructured_response",
+            "restored image paths and plain-text Gemini output remain usable",
+        )
+        if '"social_intent": raw[:1600]' in image_processor
+        and '"confidence": 0.75' in image_processor
+        and 'get_extra("semantic_router_recent_image_paths", [])' in image_processor
+        and 'message_obj = getattr(event, "message_obj", None)' in image_processor
+        else fail(
+            "code.image_processor_unstructured_response",
+            "non-JSON vision responses or restored QQ image paths can be discarded",
+        )
+    )
+    main_agent_source = (ROOT / "astrbot/core/astr_main_agent.py").read_text(
+        encoding="utf-8-sig"
+    )
+    checks.append(
+        ok(
+            "code.main_agent_dynamic_vision_fallback",
+            "image requests discover active Gemini vision providers from Provider Manager",
+        )
+        if "available_providers: list[Provider] | None = None" in main_agent_source
+        and "plugin_context.get_all_providers()" in main_agent_source
+        and 'startswith("google_gemini_bot/")' in main_agent_source
+        else fail(
+            "code.main_agent_dynamic_vision_fallback",
+            "image requests are limited to text fallback_chat_models",
+        )
+    )
+    antiprompt_source = (ROOT / "data/plugins/antipromptinjector/main.py").read_text(
+        encoding="utf-8-sig"
+    )
+    antiprompt_config = load_json(ROOT / "data/config/antipromptinjector_config.json")
+    checks.append(
+        ok(
+            "code.antiprompt_admin_guard",
+            "administrators cannot be auto-blacklisted by persona heuristics",
+        )
+        if "if event.is_admin():" in antiprompt_source
+        and "removed administrator" in antiprompt_source
+        and "2831304142" not in (antiprompt_config.get("blacklist") or {})
+        else fail(
+            "code.antiprompt_admin_guard",
+            "a false-positive anti-prompt heuristic can stop the owner response path",
+        )
+    )
+    checks.append(
+        ok(
+            "code.semantic_router_bounded_search",
+            "meme searches use QQTools first and all evidence retrieval has a hard deadline",
+        )
+        if "self._fetch_search_result(event, query), timeout=15.0" in semantic_router
+        and '"browser_search",' in semantic_router
+        and "timeout=10," in semantic_router
+        and "self._fetch_search_candidate(kind, engine, url), timeout=4.0"
+        in semantic_router
+        else fail(
+            "code.semantic_router_bounded_search",
+            "search fallback can bypass QQTools or retain a conversation indefinitely",
+        )
+    )
+    angel_front_desk = (
+        ROOT / "data/plugins/astrbot_plugin_angel_heart/roles/front_desk.py"
+    ).read_text(encoding="utf-8-sig")
+    checks.append(
+        ok(
+            "code.angel_heart_control_plane_bypass",
+            "admitted FAST and WORK requests skip AngelHeart's second queue",
+        )
+        if 'event.get_extra("agent_mailbox_class", "")' in angel_front_desk
+        and '"angelheart_control_plane_bypass"' in angel_front_desk
+        and '{"FAST", "WORK", "CRITICAL"}' in angel_front_desk
+        else fail(
+            "code.angel_heart_control_plane_bypass",
+            "control-plane requests can be delayed again by AngelHeart detention",
+        )
+    )
     checks.append(
         ok(
             "code.semantic_router_tool_lookup",
@@ -976,6 +1578,69 @@ def check_code_guards() -> list[Check]:
         else fail(
             "code.semantic_router_tool_lookup",
             "semantic router cannot resolve tools across Tool Manager versions",
+        )
+    )
+    capability_seed = (
+        ROOT / "data/plugins/astrbot_plugin_semantic_router/plugin_capabilities.json"
+    )
+    runtime_capability_seed = (
+        ROOT
+        / "data/plugin_data/astrbot_plugin_semantic_router/plugin_capabilities.json"
+    )
+    capability_seed_valid = False
+    capability_seed_detail = "seed file not present"
+    for seed in (runtime_capability_seed, capability_seed):
+        if not seed.exists():
+            continue
+        try:
+            payload = load_json(seed)
+            entries = payload.get("capabilities") if isinstance(payload, dict) else None
+            if isinstance(entries, list):
+                capability_seed_valid = True
+                capability_seed_detail = f"{len(entries)} seed declarations"
+                break
+            capability_seed_detail = "capabilities is not a list"
+        except (OSError, json.JSONDecodeError) as exc:
+            capability_seed_detail = f"invalid JSON: {exc}"
+    checks.append(
+        ok(
+            "code.semantic_router_capability_catalog",
+            f"live Tool Manager catalog with valid seed fallback ({capability_seed_detail})",
+        )
+        if capability_seed_valid
+        and "def _refresh_capability_memory" in semantic_router
+        and "quarantined invalid capability seed" in semantic_router
+        else fail(
+            "code.semantic_router_capability_catalog",
+            f"capability seed or live catalog recovery is incomplete ({capability_seed_detail})",
+        )
+    )
+    checks.append(
+        ok(
+            "code.semantic_router_job_context",
+            "background job tools retain plugin context after FunctionTool initialization",
+        )
+        if 'self.__dict__["plugin"] = plugin' in semantic_router
+        and 'self.__dict__["operation"] = operation' in semantic_router
+        else fail(
+            "code.semantic_router_job_context",
+            "AgentJobControlTool may lose its plugin context",
+        )
+    )
+    agent_tool_exec = (ROOT / "astrbot/core/astr_agent_tool_exec.py").read_text(
+        encoding="utf-8-sig"
+    )
+    checks.append(
+        ok(
+            "code.mcp_tool_outcome_contract",
+            "MCP None, empty, timeout, and error results are normalized",
+        )
+        if "async def _execute_mcp" in agent_tool_exec
+        and 'error_code="empty_result"' in agent_tool_exec
+        and 'error_code="mcp_error"' in agent_tool_exec
+        else fail(
+            "code.mcp_tool_outcome_contract",
+            "MCP tools can still terminate silently on empty results",
         )
     )
     checks.append(
@@ -1010,6 +1675,36 @@ def check_code_guards() -> list[Check]:
     ).read_text(encoding="utf-8-sig")
     checks.append(
         ok(
+            "code.semantic_router_commerce_and_music",
+            "deal discovery requires search and generic music requests cannot become fake song names",
+        )
+        if all(
+            marker in semantic_router
+            for marker in ('"小黑盒"', '"值得买"', '"放几个"', '"随便放"')
+        )
+        and all(
+            marker in control_plane
+            for marker in ('"小黑盒"', '"优惠"', '"折扣"', '"史低"')
+        )
+        else fail(
+            "code.semantic_router_commerce_and_music",
+            "deal queries can skip search or generic music requests can produce invalid song names",
+        )
+    )
+    checks.append(
+        ok(
+            "code.semantic_router_music_delivery_chain",
+            "automatic playback exposes find_music and deliver_music in one route",
+        )
+        if '"find_music", "deliver_music"' in control_plane
+        and '"search_music",' in control_plane
+        else fail(
+            "code.semantic_router_music_delivery_chain",
+            "automatic playback can stop after candidate search because delivery is not allowlisted",
+        )
+    )
+    checks.append(
+        ok(
             "code.semantic_router_overload_reply",
             "FAST reserve, delayed admission, overload reply, and lease watchdog enabled",
         )
@@ -1021,6 +1716,25 @@ def check_code_guards() -> list[Check]:
         else fail(
             "code.semantic_router_overload_reply",
             "adaptive LLM admission or abandoned-lease recovery is missing",
+        )
+    )
+    checks.append(
+        ok(
+            "code.semantic_router_adaptive_mailbox",
+            "mailbox admission runs after wake detection and before high-latency work",
+        )
+        if "priority=90000" in semantic_router
+        and "async def _coalesce_mailbox" in semantic_router
+        and "async def _work_budget" in semantic_router
+        and 'admission_class == "CONTEXT_ONLY"' in semantic_router
+        and "contextual_group_image" in semantic_router
+        and 'event, text, "search", 5.0' in semantic_router
+        and '"vision", 8.0' in semantic_router
+        and "message_admission_audit" in control_plane
+        and "capability_failure_report" in control_plane
+        else fail(
+            "code.semantic_router_adaptive_mailbox",
+            "adaptive admission, work budgets, or metadata-only audit is missing",
         )
     )
 
@@ -1038,6 +1752,36 @@ def check_code_guards() -> list[Check]:
         else fail(
             "code.dailyhub_gold_tool",
             "DailyHub gold capability is missing from its registered LLM tool",
+        )
+    )
+
+    bili_main = (ROOT / "data/plugins/astrbot_plugin_bilibili/main.py").read_text(
+        encoding="utf-8-sig"
+    )
+    bili_video_tool = (
+        ROOT / "data/plugins/astrbot_plugin_bilibili/tools/bili_video_info.py"
+    ).read_text(encoding="utf-8-sig")
+    bili_summary_tool = (
+        ROOT / "data/plugins/astrbot_plugin_bilibili/tools/bili_video_summary.py"
+    ).read_text(encoding="utf-8-sig")
+    control_plane_source = (
+        ROOT / "data/plugins/astrbot_plugin_semantic_router/control_plane.py"
+    ).read_text(encoding="utf-8-sig")
+    checks.append(
+        ok(
+            "code.bilibili_agent_video_tool",
+            "BV references use the registered read-only video capability",
+        )
+        if "BiliVideoInfoTool" in bili_main
+        and "BiliVideoSummaryTool" in bili_main
+        and "self.context.add_llm_tools(*llm_tools)" in bili_main
+        and 'name: str = "bili_get_video_info"' in bili_video_tool
+        and 'name: str = "bili_get_video_summary"' in bili_summary_tool
+        and '"bili_get_video_info"' in control_plane_source
+        and '"bili_get_video_summary"' in control_plane_source
+        else fail(
+            "code.bilibili_agent_video_tool",
+            "Bilibili video capability is not registered or routed",
         )
     )
 

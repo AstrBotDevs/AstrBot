@@ -157,7 +157,10 @@ class AstrBotCoreLifecycle:
 
         await self.db.initialize()
 
-        await html_renderer.initialize()
+        # Avoid contacting the remote T2I endpoint when the feature is disabled.
+        # Local rendering remains available for explicitly requested cards.
+        if self.astrbot_config.get("t2i", False):
+            await html_renderer.initialize()
 
         # 初始化 UMOP 配置路由器
         self.umop_config_router = UmopConfigRouter(sp=sp)

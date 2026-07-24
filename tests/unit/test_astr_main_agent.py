@@ -774,6 +774,7 @@ class TestEnsurePersonaAndSkills:
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
 
         assert "You are helpful." in req.system_prompt
+        assert "<astrbot_runtime_boundaries>" in req.system_prompt
 
     @pytest.mark.asyncio
     async def test_ensure_persona_from_conversation(self, mock_event, mock_context):
@@ -1598,6 +1599,7 @@ class TestBuildMainAgent:
 
         assert result is not None
         assert caption_provider.text_chat.await_count == 1
+        assert caption_provider.text_chat.await_args.kwargs["request_max_retries"] == 1
 
         extra_text = "\n".join(
             part.text for part in result.provider_request.extra_user_content_parts
@@ -1788,6 +1790,58 @@ class TestBuildMainAgent:
         assert result.provider is text_provider
         assert result.provider_request.image_urls == ["/tmp/image.jpg"]
         assert mock_runner.reset.call_args.kwargs["provider"] is text_provider
+
+    @pytest.mark.asyncio
+    async def test_build_main_agent_discovers_image_provider_from_manager(
+        self, mock_event, mock_context
+    ):
+        """Test image requests discover a vision provider outside text fallbacks."""
+        module = ama
+        text_provider = MagicMock(spec=Provider)
+        text_provider.provider_config = {
+            "id": "deepseek/deepseek-v4-pro",
+            "modalities": ["text", "tool_use"],
+            "max_context_tokens": 128000,
+        }
+        text_provider.get_model.return_value = "deepseek-v4-pro"
+
+        vision_provider = MagicMock(spec=Provider)
+        vision_provider.provider_config = {
+            "id": "google_gemini_bot/gemini-3.1-flash-lite",
+            "modalities": ["text", "image", "audio", "tool_use"],
+            "max_context_tokens": 128000,
+        }
+        vision_provider.get_model.return_value = "gemini-3.1-flash-lite"
+        mock_context.get_all_providers.return_value = [text_provider, vision_provider]
+        mock_context.get_provider_by_id.return_value = None
+        mock_context.get_config.return_value = {}
+
+        req = ProviderRequest(prompt="describe this", image_urls=["/tmp/image.jpg"])
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=module.MainAgentBuildConfig(
+                    tool_call_timeout=60,
+                    llm_safety_mode=False,
+                    computer_use_runtime="none",
+                    add_cron_tools=False,
+                    provider_settings={"fallback_chat_models": []},
+                ),
+                provider=text_provider,
+                req=req,
+            )
+
+        assert result is not None
+        assert result.provider is vision_provider
+        assert mock_runner.reset.call_args.kwargs["provider"] is vision_provider
 
     @pytest.mark.asyncio
     async def test_build_main_agent_with_video_attachment(

@@ -1,6 +1,8 @@
 import copy
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any, Generic
+from dataclasses import dataclass as std_dataclass
+from dataclasses import field as std_field
+from typing import Any, Generic, Literal
 
 import jsonschema
 import mcp
@@ -13,7 +15,39 @@ from astrbot.core.message.message_event_result import MessageEventResult
 from .run_context import ContextWrapper, TContext
 
 ParametersType = dict[str, Any]
-ToolExecResult = str | mcp.types.CallToolResult
+
+
+@std_dataclass(slots=True)
+class ToolOutcome:
+    """Normalized result produced by any Agent tool executor.
+
+    Args:
+        status: Stable execution state understood by the Agent loop.
+        result: Optional MCP-compatible payload exposed to the model.
+        terminal: Whether a successful direct result completed the user request.
+        retryable: Whether an idempotent caller may try an approved fallback.
+        side_effect_performed: Whether the tool changed state or sent user-visible data.
+        error_code: Stable machine-readable failure category.
+        diagnostics: Sanitized runtime detail for logs and audits.
+    """
+
+    status: Literal["success", "direct_sent", "empty", "failed", "timeout", "cancelled"]
+    result: mcp.types.CallToolResult | None = None
+    terminal: bool = False
+    retryable: bool = False
+    side_effect_performed: bool = False
+    error_code: str = ""
+    diagnostics: str = ""
+    content: str = ""
+    structured_content: Any | None = None
+    evidence_ids: list[str] = std_field(default_factory=list)
+    trace_id: str = ""
+    attempt_id: str = ""
+    arguments_hash: str = ""
+    elapsed_ms: int = 0
+
+
+ToolExecResult = str | mcp.types.CallToolResult | ToolOutcome
 
 
 @dataclass
@@ -63,6 +97,45 @@ class FunctionTool(ToolSchema, Generic[TContext]):
     Declare this tool as a background task. Background tasks return immediately
     with a task identifier while the real work continues asynchronously.
     """
+    background_timeout_seconds: int = 120
+    """Hard watchdog for a background task, bounded by the job manager."""
+    background_cancellable: bool = True
+    """Whether a queued or running background task can be cancelled safely."""
+    background_notify: bool = True
+    """Whether completion should be delivered deterministically to the requester."""
+
+    provider: str = "astrbot"
+    """Provider or subsystem that owns the tool."""
+
+    plugin: str = ""
+    """Plugin identifier that registered the tool, when applicable."""
+
+    risk: str = "R3"
+    """Policy risk level used by the capability broker."""
+
+    read_only: bool = False
+    """Whether the tool only reads data and has no external side effect."""
+
+    idempotent: bool = False
+    """Whether repeating the same call is safe."""
+
+    resource_group: str = "plugin"
+    """Scheduler resource pool used for this tool."""
+
+    fallback_group: str = ""
+    """Optional group of read-only fallback tools."""
+
+    evidence_requirements: list[str] = Field(default_factory=list)
+    """Evidence fields required before the Agent may claim completion."""
+
+    output_schema: dict[str, Any] | None = None
+    """Optional JSON Schema used to validate structured tool output."""
+
+    timeout_seconds: float = 120.0
+    """Maximum time allowed for the complete tool execution."""
+
+    direct_send: bool = False
+    """Whether a successful result may terminate the user-facing run."""
 
     def __repr__(self) -> str:
         return f"FuncTool(name={self.name}, parameters={self.parameters}, description={self.description})"

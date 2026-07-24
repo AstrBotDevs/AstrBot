@@ -377,6 +377,9 @@ class ProviderOpenAIOfficial(Provider):
                 default_headers=self.custom_headers,
                 base_url=provider_config.get("api_base", ""),
                 timeout=self.timeout,
+                # Retry policy is owned by retry_provider_request so a
+                # provider cannot silently add another retry layer.
+                max_retries=0,
                 http_client=self._create_http_client(provider_config),
             )
         else:
@@ -386,6 +389,9 @@ class ProviderOpenAIOfficial(Provider):
                 base_url=provider_config.get("api_base", None),
                 default_headers=self.custom_headers,
                 timeout=self.timeout,
+                # Retry policy is owned by retry_provider_request so a
+                # provider cannot silently add another retry layer.
+                max_retries=0,
                 http_client=self._create_http_client(provider_config),
             )
 
@@ -456,9 +462,10 @@ class ProviderOpenAIOfficial(Provider):
 
             content = msg.get("content")
             tool_calls = msg.get("tool_calls")
-            reasoning_content = msg.get("reasoning_content")
-
-            if _is_empty(content) and not tool_calls and not reasoning_content:
+            # Reasoning metadata alone is not a valid assistant message for
+            # OpenAI-compatible APIs. A failed tool/model turn can leave a
+            # think-only record in history; drop it before the next request.
+            if _is_empty(content) and not tool_calls:
                 logger.warning(f"过滤第 {idx} 条空 assistant 消息 (无工具调用)")
                 continue
 

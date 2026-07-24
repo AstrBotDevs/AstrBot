@@ -284,6 +284,14 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
     url = cfg["url"]
     headers = cfg.get("headers", {})
     timeout = cfg.get("timeout", 10)
+    proxy = cfg.get("proxy")
+    if proxy is None:
+        proxy = (
+            os.environ.get("ASTRBOT_MCP_PROXY")
+            or os.environ.get("HTTPS_PROXY")
+            or os.environ.get("HTTP_PROXY")
+        )
+    proxy = str(proxy).strip() if proxy else None
 
     try:
         if "transport" in cfg:
@@ -293,7 +301,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
         else:
             raise Exception("MCP connection config missing transport or type field")
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(trust_env=False) as session:
             if transport_type == "streamable_http":
                 test_payload = {
                     "jsonrpc": "2.0",
@@ -314,6 +322,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                     },
                     json=test_payload,
                     timeout=aiohttp.ClientTimeout(total=timeout),
+                    proxy=proxy,
                 ) as response:
                     if response.status == 200:
                         return True, ""
@@ -326,6 +335,7 @@ async def _quick_test_mcp_connection(config: dict) -> tuple[bool, str]:
                         "Accept": "application/json, text/event-stream",
                     },
                     timeout=aiohttp.ClientTimeout(total=timeout),
+                    proxy=proxy,
                 ) as response:
                     if response.status == 200:
                         return True, ""
@@ -491,6 +501,11 @@ class MCPClient:
                                 read=sse_read_timeout_seconds,
                             ),
                             follow_redirects=True,
+                            proxy=cfg.get("proxy")
+                            or os.environ.get("ASTRBOT_MCP_PROXY")
+                            or os.environ.get("HTTPS_PROXY")
+                            or os.environ.get("HTTP_PROXY"),
+                            trust_env=False,
                         ),
                     )
                     self._streams_context = streamable_http_client(
@@ -683,10 +698,16 @@ class MCPTool(FunctionTool, Generic[TContext]):
     """A function tool that calls an MCP service."""
 
     def __init__(
-        self, mcp_tool: mcp.Tool, mcp_client: MCPClient, mcp_server_name: str, **kwargs
+        self,
+        mcp_tool: mcp.Tool,
+        mcp_client: MCPClient,
+        mcp_server_name: str,
+        tool_name_prefix: str = "",
+        **kwargs,
     ) -> None:
+        prefix = re.sub(r"[^a-zA-Z0-9_-]", "_", tool_name_prefix.strip())
         super().__init__(
-            name=mcp_tool.name,
+            name=f"{prefix}{mcp_tool.name}" if prefix else mcp_tool.name,
             description=mcp_tool.description or "",
             parameters=_normalize_mcp_input_schema(mcp_tool.inputSchema),
         )

@@ -15,6 +15,8 @@ class ContextSanitizeStats:
     fixed_audio_blocks: int = 0
     fixed_tool_messages: int = 0
     removed_tool_calls: int = 0
+    removed_empty_assistant_messages: int = 0
+    fixed_invalid_media_blocks: int = 0
 
     @property
     def changed(self) -> bool:
@@ -23,6 +25,8 @@ class ContextSanitizeStats:
             or self.fixed_audio_blocks
             or self.fixed_tool_messages
             or self.removed_tool_calls
+            or self.removed_empty_assistant_messages
+            or self.fixed_invalid_media_blocks
         )
 
 
@@ -40,24 +44,15 @@ def sanitize_contexts_by_modalities(
 ) -> tuple[list[dict[str, Any]], ContextSanitizeStats]:
     if not contexts:
         return [], ContextSanitizeStats()
-    if not modalities or not isinstance(modalities, list):
-        copied_contexts = []
-        for msg in contexts:
-            copied_msg = _message_to_dict(msg)
-            if copied_msg:
-                copied_contexts.append(copied_msg)
-        return copied_contexts, ContextSanitizeStats()
-
-    supports_image = "image" in modalities
-    supports_audio = "audio" in modalities
-    supports_tool_use = "tool_use" in modalities
-    if supports_image and supports_audio and supports_tool_use:
-        copied_contexts = []
-        for msg in contexts:
-            copied_msg = _message_to_dict(msg)
-            if copied_msg:
-                copied_contexts.append(copied_msg)
-        return copied_contexts, ContextSanitizeStats()
+    supports_image = (
+        not modalities or not isinstance(modalities, list) or "image" in modalities
+    )
+    supports_audio = (
+        not modalities or not isinstance(modalities, list) or "audio" in modalities
+    )
+    supports_tool_use = (
+        not modalities or not isinstance(modalities, list) or "tool_use" in modalities
+    )
 
     sanitized_contexts: list[dict[str, Any]] = []
     stats = ContextSanitizeStats()
@@ -83,38 +78,91 @@ def sanitize_contexts_by_modalities(
                 msg.pop("tool_calls", None)
                 msg.pop("tool_call_id", None)
 
-        if not supports_image or not supports_audio:
-            content = msg.get("content")
-            if isinstance(content, list):
-                filtered_parts: list[Any] = []
-                removed_any_multimodal = False
-                for part in content:
-                    if isinstance(part, dict):
-                        part_type = str(part.get("type", "")).lower()
-                        if not supports_image and part_type in {"image_url", "image"}:
-                            removed_any_multimodal = True
-                            stats.fixed_image_blocks += 1
-                            filtered_parts.append({"type": "text", "text": "[Image]"})
-                            continue
-                        if not supports_audio and part_type in {
-                            "audio_url",
-                            "input_audio",
-                        }:
-                            removed_any_multimodal = True
-                            stats.fixed_audio_blocks += 1
-                            filtered_parts.append({"type": "text", "text": "[Audio]"})
-                            continue
+        content = msg.get("content")
+        if isinstance(content, list):
+            filtered_parts: list[Any] = []
+            changed_parts = False
+            for part in content:
+                if not isinstance(part, dict):
                     filtered_parts.append(part)
-                if removed_any_multimodal:
-                    msg["content"] = filtered_parts
+                    continue
+                part_type = str(part.get("type", "")).lower()
+                if part_type in {"image_url", "image"}:
+                    image_value = part.get("image_url") or part.get("image")
+                    image_url = (
+                        image_value.get("url")
+                        if isinstance(image_value, dict)
+                        else image_value
+                    )
+                    valid_image = isinstance(image_url, str) and bool(image_url.strip())
+                    if valid_image and image_url.startswith("data:"):
+                        _, separator, encoded = image_url.partition(",")
+                        valid_image = bool(separator and encoded.strip())
+                    if not valid_image:
+                        stats.fixed_invalid_media_blocks += 1
+                        changed_parts = True
+                        filtered_parts.append(
+                            {"type": "text", "text": "[Image unavailable]"}
+                        )
+                        continue
+                    if not supports_image:
+                        stats.fixed_image_blocks += 1
+                        changed_parts = True
+                        filtered_parts.append({"type": "text", "text": "[Image]"})
+                        continue
+                if part_type in {"audio_url", "input_audio", "audio"}:
+                    audio_value = (
+                        part.get("audio_url")
+                        or part.get("input_audio")
+                        or part.get("audio")
+                    )
+                    audio_url = (
+                        audio_value.get("url")
+                        if isinstance(audio_value, dict)
+                        else audio_value
+                    )
+                    valid_audio = isinstance(audio_url, str) and bool(audio_url.strip())
+                    if valid_audio and audio_url.startswith("data:"):
+                        _, separator, encoded = audio_url.partition(",")
+                        valid_audio = bool(separator and encoded.strip())
+                    if not valid_audio:
+                        stats.fixed_invalid_media_blocks += 1
+                        changed_parts = True
+                        filtered_parts.append(
+                            {"type": "text", "text": "[Audio unavailable]"}
+                        )
+                        continue
+                    if not supports_audio:
+                        stats.fixed_audio_blocks += 1
+                        changed_parts = True
+                        filtered_parts.append({"type": "text", "text": "[Audio]"})
+                        continue
+                filtered_parts.append(part)
+            if changed_parts:
+                msg["content"] = filtered_parts
 
         if role == "assistant":
             content = msg.get("content")
             has_tool_calls = bool(msg.get("tool_calls"))
             if not has_tool_calls:
-                if not content:
-                    continue
-                if isinstance(content, str) and not content.strip():
+                meaningful_content = bool(content)
+                if isinstance(content, str):
+                    meaningful_content = bool(content.strip())
+                elif isinstance(content, list):
+                    meaningful_content = any(
+                        (
+                            not isinstance(part, dict)
+                            or (
+                                part.get("type") == "text"
+                                and str(part.get("text") or "").strip()
+                            )
+                            or part.get("type")
+                            in {"image_url", "image", "audio_url", "input_audio"}
+                        )
+                        for part in content
+                    )
+                if not meaningful_content:
+                    stats.removed_empty_assistant_messages += 1
                     continue
 
         sanitized_contexts.append(msg)
@@ -150,9 +198,12 @@ def log_context_sanitize_stats(stats: ContextSanitizeStats) -> None:
     logger.debug(
         "context modality fix applied: "
         "fixed_image_blocks=%s, fixed_audio_blocks=%s, "
-        "fixed_tool_messages=%s, removed_tool_calls=%s",
+        "fixed_tool_messages=%s, removed_tool_calls=%s, "
+        "removed_empty_assistant_messages=%s, fixed_invalid_media_blocks=%s",
         stats.fixed_image_blocks,
         stats.fixed_audio_blocks,
         stats.fixed_tool_messages,
         stats.removed_tool_calls,
+        stats.removed_empty_assistant_messages,
+        stats.fixed_invalid_media_blocks,
     )

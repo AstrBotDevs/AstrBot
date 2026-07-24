@@ -315,7 +315,8 @@ async def test_restricted_local_member_can_read_plugin_provided_skill(
         path=str(plugin_skill),
     )
 
-    assert result == "# Demo Skill\n\nRead plugin docs."
+    assert "<untrusted_skill_content>" in result
+    assert "# Demo Skill\n\nRead plugin docs." in result.replace("\r\n", "\n")
 
 
 @pytest.mark.asyncio
@@ -340,7 +341,8 @@ async def test_restricted_local_member_can_read_plugin_skill_inventory_even_if_p
         path=str(plugin_skill),
     )
 
-    assert result == "# Demo Skill\n"
+    assert "<untrusted_skill_content>" in result
+    assert "# Demo Skill\n" in result.replace("\r\n", "\n")
 
 
 @pytest.mark.asyncio

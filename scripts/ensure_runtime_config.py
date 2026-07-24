@@ -13,10 +13,19 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 OWNER_QQ = "2831304142"
-DEFAULT_PROVIDER = "deepseek/deepseek-v4-pro"
+DEFAULT_PROVIDER = "google_gemini_bot/gemini-3.5-flash"
 FALLBACK_PROVIDER = "deepseek/deepseek-v4-flash"
-FAST_VISION_PROVIDER = "google_gemini/gemini-flash-lite-latest"
-DEEP_VISION_PROVIDER = "google_gemini/gemini-flash-latest"
+GEMINI_DOMESTIC_API_BASE = "https://apinebula.ai"
+FAST_VISION_PROVIDER = "google_gemini_bot/gemini-3.1-flash-lite"
+DEEP_VISION_PROVIDER = "google_gemini_bot/gemini-3.5-flash"
+# Text planning and short replies use the higher-quality Gemini Bot model;
+# the Lite model remains reserved for cheap visual preflight and captions.
+FAST_TEXT_PROVIDER = DEEP_VISION_PROVIDER
+CHAT_FALLBACK_PROVIDERS = [
+    FAST_TEXT_PROVIDER,
+    "deepseek/deepseek-v4-pro",
+    FALLBACK_PROVIDER,
+]
 EMBEDDING_PROVIDER = "google_gemini/gemini-embedding-001"
 PERSONA_ID = "atri"
 DB_PATH = ROOT / "data/data_v4.db"
@@ -85,12 +94,20 @@ def set_many(target: dict[str, Any], updates: dict[str, Any]) -> None:
 
 
 def ensure_core_config(data: dict[str, Any]) -> None:
+    no_proxy = data.setdefault("no_proxy", [])
+    for host in ("apinebula.com", "apinebula.ai"):
+        if host not in no_proxy:
+            no_proxy.append(host)
+    rate_limit = data.setdefault("platform_settings", {}).setdefault("rate_limit", {})
+    rate_limit["time"] = 10
+    rate_limit["count"] = 120
+    rate_limit["strategy"] = "discard"
     provider_settings = data.setdefault("provider_settings", {})
     set_many(
         provider_settings,
         {
             "default_provider_id": DEFAULT_PROVIDER,
-            "fallback_chat_models": [FALLBACK_PROVIDER],
+            "fallback_chat_models": CHAT_FALLBACK_PROVIDERS,
             "default_personality": PERSONA_ID,
             "web_search": False,
             "websearch_provider": "tavily",
@@ -119,7 +136,18 @@ def ensure_core_config(data: dict[str, Any]) -> None:
     for source in data.get("provider_sources", []) or []:
         source_id = str(source.get("id", ""))
         provider_name = str(source.get("provider", ""))
-        if source_id.startswith("google_gemini") or provider_name == "google":
+        if source_id == "google_gemini_bot":
+            source["enable"] = True
+            source["api_base"] = GEMINI_DOMESTIC_API_BASE
+            source["proxy"] = ""
+            source["gm_resp_image_modal"] = False
+            # Search, code execution, and URL context are routed through the
+            # controlled Tool Manager; native Gemini tools can emit malformed
+            # function calls during strict JSON vision classification.
+            source["gm_native_search"] = False
+            source["gm_native_coderunner"] = False
+            source["gm_url_context"] = False
+        elif source_id.startswith("google_gemini") or provider_name == "google":
             source["enable"] = True
             source["proxy"] = "http://127.0.0.1:7897"
             source["gm_resp_image_modal"] = False
@@ -153,14 +181,14 @@ def ensure_core_config(data: dict[str, Any]) -> None:
 
     vision_defaults = {
         FAST_VISION_PROVIDER: {
-            "model": "gemini-flash-lite-latest",
+            "model": "gemini-3.1-flash-lite",
             "max_context_tokens": 1_000_000,
-            "reasoning": True,
+            "reasoning": False,
         },
         DEEP_VISION_PROVIDER: {
-            "model": "gemini-flash-latest",
-            "max_context_tokens": 1_048_576,
-            "reasoning": True,
+            "model": "gemini-3.5-flash",
+            "max_context_tokens": 1_000_000,
+            "reasoning": False,
         },
     }
     for provider_id, defaults in vision_defaults.items():
@@ -174,7 +202,7 @@ def ensure_core_config(data: dict[str, Any]) -> None:
             provider,
             {
                 "enable": True,
-                "provider_source_id": "google_gemini",
+                "provider_source_id": "google_gemini_bot",
                 "model": defaults["model"],
                 "modalities": ["text", "image", "audio", "tool_use"],
                 "custom_extra_body": {},
@@ -191,7 +219,7 @@ def ensure_core_config(data: dict[str, Any]) -> None:
                 DEEP_VISION_PROVIDER,
                 EMBEDDING_PROVIDER,
             }
-        elif provider_id in {DEFAULT_PROVIDER, FALLBACK_PROVIDER}:
+        elif provider_id in {DEFAULT_PROVIDER, *CHAT_FALLBACK_PROVIDERS}:
             provider["enable"] = True
 
 
@@ -233,10 +261,6 @@ def ensure_qqtools(data: dict[str, Any]) -> None:
     browser["auto_install_browser_deps"] = False
 
     permission = data.setdefault("tool_permission", {})
-    admin_only_tools = list(permission.get("admin_only_tools", []))
-    ensure_list_item(admin_only_tools, "browser_*")
-    permission["admin_only_tools"] = admin_only_tools
-
     allow_users = {str(user) for user in permission.get("tool_allow_users", [])}
     allow_users.add(OWNER_QQ)
     permission["tool_allow_users"] = sorted(allow_users)
@@ -255,30 +279,55 @@ def ensure_qqtools(data: dict[str, Any]) -> None:
         "view_video",
         "schedule",
         "manage_wake",
-        "browser_click*",
-        "browser_input",
-        "browser_scroll",
         "browser_send_image",
-        "browser_close",
-        "browser_wait",
     ]
+    # Keep optional QQTools Gemini helpers on the same domestic endpoint as
+    # the core Gemini Bot provider.
+    data.setdefault("gemini_video_config", {})["api_url"] = GEMINI_DOMESTIC_API_BASE
+
+
+def ensure_gemini_image(data: dict[str, Any]) -> None:
+    """Align the Gemini image plugin with the configured domestic provider.
+
+    Args:
+        data: Mutable Gemini image plugin configuration.
+    """
+
+    api_config = data.setdefault("api_config", {})
+    api_config["use_system_provider"] = True
+    api_config["provider_id"] = DEEP_VISION_PROVIDER
+    api_config["base_url"] = GEMINI_DOMESTIC_API_BASE
+    api_config["proxy"] = ""
 
 
 def ensure_semantic_router(data: dict[str, Any]) -> None:
     data["control_plane_enabled"] = True
     data["control_plane_shadow_mode"] = False
-    data["control_plane_fast_provider"] = FALLBACK_PROVIDER
+    data["control_plane_fast_provider"] = FAST_TEXT_PROVIDER
     data["control_plane_standard_provider"] = DEFAULT_PROVIDER
     data["control_plane_max_concurrency"] = 4
     data["control_plane_fast_reserved_concurrency"] = 1
     data["control_plane_fast_queue_timeout_seconds"] = 2.0
     data["control_plane_queue_timeout_seconds"] = 5.0
     data["control_plane_lease_timeout_seconds"] = 120.0
+    data["adaptive_mailbox_enabled"] = True
+    data["mailbox_global_capacity"] = 32
+    data["mailbox_session_capacity"] = 6
+    data["fragment_quiet_window_seconds"] = 1.2
+    data["fragment_hard_window_seconds"] = 4.0
+    data["mailbox_max_merge_count"] = 5
+    data["recent_image_ttl_seconds"] = 120.0
     data["image_understanding_enabled"] = True
     data["integrated_image_answer_enabled"] = True
     data["knowledge_ingestion_enabled"] = True
+    # Keep successful search evidence in the owner-reviewed candidate queue.
+    # This does not write directly to the permanent knowledge base.
     data["knowledge_auto_stage_search_enabled"] = True
     data["knowledge_auto_stage_notify_owner"] = False
+    data["direct_search_enabled"] = True
+    data["integrated_search_answer_enabled"] = True
+    data["anysearch_enabled"] = True
+    data["anysearch_timeout_seconds"] = 12.0
     data["vision_provider_id"] = FAST_VISION_PROVIDER
     data["meme_auto_search_terms"] = [
         "哈基米",
@@ -292,6 +341,58 @@ def ensure_semantic_router(data: dict[str, Any]) -> None:
     ]
 
 
+def ensure_office_assistant(data: dict[str, Any]) -> None:
+    """Keep Office tools restricted to the owner and the current workspace.
+
+    Args:
+        data: Mutable Office Assistant configuration.
+    """
+
+    data.setdefault("feature_settings", {}).update(
+        {"enable_office_files": True, "enable_pdf_conversion": True}
+    )
+    data.setdefault("trigger_settings", {}).update(
+        {
+            "enable_features_in_group": True,
+            "require_at_in_group": True,
+            "auto_block_execution_tools": True,
+            "allow_local_excel_script": False,
+            "reply_to_user": True,
+        }
+    )
+    data.setdefault("permission_settings", {}).update(
+        {"allow_all_users": False, "whitelist_users": [OWNER_QQ]}
+    )
+    data.setdefault("read_settings", {}).update(
+        {
+            "allow_external_input_files": False,
+            "enable_docx_image_review": False,
+            "max_inline_docx_image_count": 0,
+        }
+    )
+
+
+def ensure_mcp_servers(data: dict[str, Any]) -> None:
+    """Keep the prefixed read-only AnySearch MCP fallback available.
+
+    Args:
+        data: Mutable MCP server configuration.
+    """
+
+    servers = data.setdefault("mcpServers", {})
+    servers["anysearch-readonly-fallback"] = {
+        "url": "https://api.anysearch.com/mcp",
+        "transport": "streamable_http",
+        # AnySearch is reached through the user's local proxy; Gemini remains
+        # explicitly direct in the provider-source configuration above.
+        "proxy": "http://127.0.0.1:7897",
+        "timeout": 12,
+        "active": True,
+        "optional": True,
+        "tool_name_prefix": "mcp_anysearch_",
+    }
+
+
 def ensure_image_processor(data: dict[str, Any]) -> None:
     data.pop("vision_provider_id", None)
     data.pop("vision_timeout_seconds", None)
@@ -299,7 +400,7 @@ def ensure_image_processor(data: dict[str, Any]) -> None:
     data["deep_vision_provider_id"] = DEEP_VISION_PROVIDER
     data["fast_semantic_provider_id"] = FALLBACK_PROVIDER
     data["deep_semantic_provider_id"] = DEFAULT_PROVIDER
-    data["fast_vision_timeout_seconds"] = 4.0
+    data["fast_vision_timeout_seconds"] = 6.0
     data["deep_vision_timeout_seconds"] = 12.0
     data["route_confidence_threshold"] = 0.72
     data["vision_cache_hours"] = 24
@@ -507,7 +608,9 @@ def ensure_private_companion(data: dict[str, Any]) -> None:
     basic["bot_name"] = "亚托莉"
     basic["plugin_specific_persona_id"] = PERSONA_ID
     basic["target_user_ids"] = [OWNER_QQ]
-    basic["private_user_aliases"] = f"{OWNER_QQ}=你"
+    # Alias mappings use ``alias=canonical_id``.  Keep the stable QQ ID as
+    # the canonical identity; a display label must never become a principal.
+    basic["private_user_aliases"] = f"你={OWNER_QQ}"
     basic["default_nickname"] = "你"
     basic["default_style"] = "亲近、温暖、活泼、有感情但不过度黏人"
 
@@ -515,7 +618,7 @@ def ensure_private_companion(data: dict[str, Any]) -> None:
     data["bot_name"] = "亚托莉"
     data["plugin_specific_persona_id"] = PERSONA_ID
     data["target_user_ids"] = [OWNER_QQ]
-    data["private_user_aliases"] = f"{OWNER_QQ}=你"
+    data["private_user_aliases"] = f"你={OWNER_QQ}"
     data["default_nickname"] = "你"
     data["default_style"] = "亲近、温暖、活泼、有感情但不过度黏人"
 
@@ -543,6 +646,12 @@ def ensure_private_companion(data: dict[str, Any]) -> None:
             "group_wakeup_context_words": [],
         },
     )
+    # LivingMemory is intentionally disabled in this deployment.  Do not let
+    # its directory presence enable a second memory injection path.
+    data.setdefault("external_memory_config", {})["enable_livingmemory_integration"] = (
+        False
+    )
+    data["enable_livingmemory_integration"] = False
     data.setdefault("humanized_state_config", {})["inject_passive_states"] = False
 
     for section, keys in {
@@ -617,10 +726,16 @@ CONFIG_TASKS = [
     ),
     ("data/config/spectrecore_config.json", ensure_spectrecore),
     ("data/config/astrbot_plugin_qq_tools_config.json", ensure_qqtools),
+    ("data/config/astrbot_plugin_gemini_image_config.json", ensure_gemini_image),
     (
         "data/config/astrbot_plugin_semantic_router_config.json",
         ensure_semantic_router,
     ),
+    (
+        "data/config/astrbot_plugin_office_assistant_config.json",
+        ensure_office_assistant,
+    ),
+    ("data/mcp_server.json", ensure_mcp_servers),
     (
         "data/config/astrbot_plugin_image_processor_config.json",
         ensure_image_processor,

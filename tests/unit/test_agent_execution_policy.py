@@ -17,6 +17,11 @@ def test_policy_parses_valid_mapping():
             "max_steps": 3,
             "tool_timeout_seconds": 25,
             "request_max_retries": 1,
+            "tool_required": True,
+            "selected_tool": "search",
+            "semantic_intent": "search",
+            "semantic_confidence": 0.91,
+            "required_evidence": ["fresh_web"],
             "principal_id": "qq:123",
             "permission_snapshot": {"role": "member"},
         }
@@ -25,6 +30,11 @@ def test_policy_parses_valid_mapping():
     assert policy is not None
     assert policy.allowed_tools == ("search", "memory")
     assert policy.provider_id == "deepseek/pro"
+    assert policy.tool_required is True
+    assert policy.selected_tool == "search"
+    assert policy.semantic_intent == "search"
+    assert policy.semantic_confidence == 0.91
+    assert policy.required_evidence == ("fresh_web",)
     assert policy.permission_snapshot == {"role": "member"}
 
 

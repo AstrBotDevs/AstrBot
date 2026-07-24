@@ -88,6 +88,7 @@ class AstrMessageEvent(abc.ABC):
         """事件级 TraceSpan(别名: span)"""
 
         self._has_send_oper = False
+        self._send_oper_count = 0
         """在此次事件中是否有过至少一次发送消息的操作"""
         self.call_llm = False
         """是否在此消息事件中禁止默认的 LLM 请求"""
@@ -288,6 +289,7 @@ class AstrMessageEvent(abc.ABC):
             Metric.upload(msg_event_tick=1, adapter_name=self.platform_meta.name),
         )
         self._has_send_oper = True
+        self._send_oper_count += 1
 
     async def send_typing(self) -> None:
         """发送输入中状态。
@@ -489,6 +491,7 @@ class AstrMessageEvent(abc.ABC):
             ),
         )
         self._has_send_oper = True
+        self._send_oper_count += 1
 
     async def react(self, emoji: str) -> None:
         """对消息添加表情回应。

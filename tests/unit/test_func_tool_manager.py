@@ -25,6 +25,9 @@ def test_get_builtin_tool_by_class_returns_cached_instance():
 
 def test_builtin_tool_ignores_inactivated_llm_tools():
     manager = FunctionToolManager()
+    previous = sp.get(
+        "inactivated_llm_tools", [], scope="global", scope_id="global"
+    )
     sp.put(
         "inactivated_llm_tools",
         ["send_message_to_user"],
@@ -36,7 +39,7 @@ def test_builtin_tool_ignores_inactivated_llm_tools():
         tool = manager.get_builtin_tool(SendMessageToUserTool)
         assert tool.active is True
     finally:
-        sp.put("inactivated_llm_tools", [], scope="global", scope_id="global")
+        sp.put("inactivated_llm_tools", previous, scope="global", scope_id="global")
 
 
 def test_computer_tools_are_registered_as_builtin_tools():

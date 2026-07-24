@@ -177,7 +177,7 @@ class SendMessageToUserTool(FunctionTool[AstrAgentContext]):
                 name = _remote_basename(path) or os.path.basename(path)
                 local_path = os.path.join(
                     get_astrbot_temp_path(), f"sandbox_{uuid.uuid4().hex[:4]}_{name}"
-                )
+                ).replace("\\", "/")
                 await sb.download_file(path, local_path)
                 logger.info(f"Downloaded file from sandbox: {path} -> {local_path}")
                 return local_path, True

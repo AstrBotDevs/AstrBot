@@ -496,8 +496,9 @@ class TestAstrBotCoreLifecycleInitialize:
         # Verify database initialized
         mock_db.initialize.assert_awaited_once()
 
-        # Verify html renderer initialized
-        mock_html_renderer.initialize.assert_awaited_once()
+        # T2I is disabled in the default test configuration; the renderer is
+        # initialized lazily when the feature is explicitly enabled.
+        mock_html_renderer.initialize.assert_not_awaited()
 
         # Verify UMOP config router initialized
         mock_umop_config_router.initialize.assert_awaited_once()

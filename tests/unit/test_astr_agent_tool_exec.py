@@ -6,7 +6,7 @@ import pytest
 from astrbot.core.agent.agent import Agent
 from astrbot.core.agent.handoff import HandoffTool
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool
+from astrbot.core.agent.tool import FunctionTool, ToolOutcome
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.message.components import Image
 from astrbot.core.provider.func_tool_manager import (
@@ -19,8 +19,12 @@ class _DummyEvent:
     def __init__(self, message_components: list[object] | None = None) -> None:
         self.unified_msg_origin = "webchat:FriendMessage:webchat!user!session"
         self.message_obj = SimpleNamespace(message=message_components or [])
+        self._send_oper_count = 0
 
     def get_extra(self, _key: str):
+        return None
+
+    def get_result(self):
         return None
 
 
@@ -30,10 +34,109 @@ class _DummyTool:
         self.agent = SimpleNamespace(name="subagent")
 
 
+class _McpLikeTool(FunctionTool):
+    """Minimal MCP-compatible tool used to test result normalization."""
+
+    response = None
+
+    async def call(self, context, **kwargs):
+        del context, kwargs
+        return self.response
+
+
 def _build_run_context(message_components: list[object] | None = None):
     event = _DummyEvent(message_components=message_components)
     ctx = SimpleNamespace(event=event, context=SimpleNamespace())
     return ContextWrapper(context=ctx)
+
+
+@pytest.mark.asyncio
+async def test_local_tool_none_is_empty_without_verified_send() -> None:
+    async def empty_tool(event):
+        return None
+
+    run_context = _build_run_context()
+    tool = FunctionTool(
+        name="empty_tool",
+        description="Returns nothing.",
+        parameters={"type": "object", "properties": {}},
+        handler=empty_tool,
+    )
+
+    outcomes = [
+        item async for item in FunctionToolExecutor._execute_local(tool, run_context)
+    ]
+
+    assert len(outcomes) == 1
+    assert isinstance(outcomes[0], ToolOutcome)
+    assert outcomes[0].status == "empty"
+    assert outcomes[0].result is not None
+    assert outcomes[0].result.isError is True
+
+
+@pytest.mark.asyncio
+async def test_local_tool_none_is_direct_sent_only_after_verified_send() -> None:
+    async def direct_tool(event):
+        event._send_oper_count += 1
+        return None
+
+    run_context = _build_run_context()
+    tool = FunctionTool(
+        name="direct_tool",
+        description="Sends directly.",
+        parameters={"type": "object", "properties": {}},
+        handler=direct_tool,
+    )
+
+    outcomes = [
+        item async for item in FunctionToolExecutor._execute_local(tool, run_context)
+    ]
+
+    assert len(outcomes) == 1
+    assert isinstance(outcomes[0], ToolOutcome)
+    assert outcomes[0].status == "direct_sent"
+    assert outcomes[0].terminal is True
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_none_is_reported_as_empty_outcome() -> None:
+    tool = _McpLikeTool(
+        name="mcp_empty",
+        description="Returns no content.",
+        parameters={"type": "object", "properties": {}},
+    )
+    tool.response = None
+
+    outcomes = [
+        item
+        async for item in FunctionToolExecutor._execute_mcp(tool, _build_run_context())
+    ]
+
+    assert len(outcomes) == 1
+    assert outcomes[0].status == "empty"
+    assert outcomes[0].error_code == "empty_result"
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_error_result_is_reported_as_failed_outcome() -> None:
+    tool = _McpLikeTool(
+        name="mcp_error",
+        description="Returns an MCP error.",
+        parameters={"type": "object", "properties": {}},
+    )
+    tool.response = mcp.types.CallToolResult(
+        content=[mcp.types.TextContent(type="text", text="denied")],
+        isError=True,
+    )
+
+    outcomes = [
+        item
+        async for item in FunctionToolExecutor._execute_mcp(tool, _build_run_context())
+    ]
+
+    assert len(outcomes) == 1
+    assert outcomes[0].status == "failed"
+    assert outcomes[0].error_code == "mcp_error"
 
 
 def test_build_handoff_toolset_keeps_permission_guards_for_default_tools():

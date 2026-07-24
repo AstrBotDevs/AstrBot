@@ -164,6 +164,11 @@ class PreProcessStage(Stage):
                             )
 
         # STT
+        audio_components = [
+            component
+            for component in event.get_messages()
+            if isinstance(component, Record)
+        ]
         if self.stt_settings.get("enable", False):
             # TODO: 独立
             ctx = self.plugin_manager.context
@@ -172,7 +177,15 @@ class PreProcessStage(Stage):
                 logger.warning(
                     f"会话 {event.unified_msg_origin} 未配置语音转文本模型。",
                 )
-                return
+                event.set_extra(
+                    "voice_evidence",
+                    {
+                        "status": "unavailable",
+                        "confidence": 0.0,
+                        "uncertainty": "stt_provider_unavailable",
+                    },
+                )
+                stt_provider = None
 
             async def _stt_record(record_comp: Record, is_reply: bool = False):
                 """对单个 Record 组件执行语音转文本，成功返回 Plain，失败返回 None。"""
@@ -183,19 +196,46 @@ class PreProcessStage(Stage):
                     logger.warning(f"获取{prefix}语音路径失败: {e}")
                     return None
 
-                retry = 5
+                if stt_provider is None:
+                    return None
+                retry = 2
                 for i in range(retry):
                     try:
                         result = await stt_provider.get_text(audio_url=path)
+                        confidence = 1.0
+                        uncertainty = ""
+                        if isinstance(result, dict):
+                            confidence = float(result.get("confidence") or 0.0)
+                            uncertainty = str(result.get("uncertainty") or "")
+                            result = (
+                                result.get("transcript") or result.get("text") or ""
+                            )
+                        result = str(result or "").strip()
                         if result:
+                            if confidence < 0.72:
+                                uncertainty = uncertainty or "low_stt_confidence"
                             suffix = "(引用消息)" if is_reply else ""
                             logger.info(f"语音转文本{suffix}结果: " + result)
+                            event.set_extra(
+                                "voice_evidence",
+                                {
+                                    "status": (
+                                        "low_confidence"
+                                        if confidence < 0.72
+                                        else "success"
+                                    ),
+                                    "transcript": result,
+                                    "confidence": confidence,
+                                    "provider": type(stt_provider).__name__,
+                                    "uncertainty": uncertainty,
+                                },
+                            )
                             return Plain(result)
                         break
                     except FileNotFoundError:
                         # napcat workaround: file may not be ready immediately
                         logger.debug(f"文件尚未就绪 ({path})，重试 {i + 1}/{retry}")
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(0.25)
                         continue
                     except BaseException as e:
                         logger.error(traceback.format_exc())
@@ -223,3 +263,12 @@ class PreProcessStage(Stage):
                                 component.chain[idx] = plain_comp
                                 event.message_str += plain_comp.text
                                 event.message_obj.message_str += plain_comp.text
+        elif audio_components:
+            event.set_extra(
+                "voice_evidence",
+                {
+                    "status": "unavailable",
+                    "confidence": 0.0,
+                    "uncertainty": "stt_disabled",
+                },
+            )

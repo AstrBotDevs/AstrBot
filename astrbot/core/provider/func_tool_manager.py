@@ -609,11 +609,16 @@ class FunctionToolManager:
         for (name, cfg, _), result in zip(active_configs, results, strict=False):
             if isinstance(result, Exception):
                 if isinstance(result, MCPInitTimeoutError):
-                    logger.error(
-                        f"Connected to MCP server {name} timeout ({timeout_display} seconds)"
+                    message = (
+                        f"Connected to MCP server {name} timeout "
+                        f"({timeout_display} seconds)"
                     )
                 else:
-                    logger.error(f"Failed to initialize MCP server {name}: {result}")
+                    message = f"Failed to initialize MCP server {name}: {result}"
+                if cfg.get("optional", False):
+                    logger.warning(f"Optional MCP service unavailable: {message}")
+                else:
+                    logger.error(message)
                 self._log_safe_mcp_debug_config(cfg)
                 failed_services.append(name)
                 async with self._runtime_lock:
@@ -638,7 +643,10 @@ class FunctionToolManager:
             msg = "All MCP services failed to initialize, please check the mcp_server.json and server availability."
             if raise_on_all_failed:
                 raise MCPAllServicesFailedError(msg)
-            logger.error(msg)
+            if all(cfg.get("optional", False) for _, cfg, _ in active_configs):
+                logger.warning(f"{msg} All configured services are optional.")
+            else:
+                logger.error(msg)
         return summary
 
     async def _start_mcp_server(
@@ -677,7 +685,14 @@ class FunctionToolManager:
                 f"Connected to MCP server {name} timeout ({timeout:g} seconds)"
             ) from exc
         except Exception:
-            logger.error(f"Failed to initialize MCP client {name}", exc_info=True)
+            # Optional fallbacks must not look like fatal runtime failures in
+            # health monitoring.  Keep the exception details for diagnostics,
+            # but classify the unavailable service as a warning so the primary
+            # plugin/tool path remains healthy and observable.
+            if cfg.get("optional", False):
+                logger.warning("Failed to initialize optional MCP client %s", name)
+            else:
+                logger.error("Failed to initialize MCP client %s", name, exc_info=True)
             raise
         finally:
             if mcp_client is None:
@@ -797,6 +812,7 @@ class FunctionToolManager:
                 mcp_tool=tool,
                 mcp_client=mcp_client,
                 mcp_server_name=name,
+                tool_name_prefix=str(config.get("tool_name_prefix") or ""),
             )
             self.func_list.append(func_tool)
 

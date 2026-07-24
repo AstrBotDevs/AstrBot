@@ -17,7 +17,7 @@ from astrbot.core.agent.hooks import BaseAgentRunHooks
 from astrbot.core.agent.message import ImageURLPart, Message, TextPart
 from astrbot.core.agent.run_context import ContextWrapper
 from astrbot.core.agent.runners.tool_loop_agent_runner import ToolLoopAgentRunner
-from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolOutcome, ToolSet
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse, ProviderRequest, TokenUsage
@@ -95,6 +95,22 @@ class MockToolExecutor:
                 content=[TextContent(type="text", text="工具执行结果")]
             )
             yield result
+
+        return generator()
+
+
+class MockNonRetryableFailureExecutor:
+    """Return a terminal tool failure for runner regression coverage."""
+
+    @classmethod
+    def execute(cls, tool, run_context, **tool_args):
+        async def generator():
+            yield ToolOutcome(
+                status="failed",
+                error_code="tool_failed",
+                diagnostics="simulated terminal failure",
+                retryable=False,
+            )
 
         return generator()
 
@@ -344,9 +360,16 @@ class MockEvent:
     def __init__(self, umo: str, sender_id: str):
         self.unified_msg_origin = umo
         self._sender_id = sender_id
+        self._extras: dict[str, Any] = {}
 
     def get_sender_id(self):
         return self._sender_id
+
+    def get_extra(self, key: str, default=None):
+        return self._extras.get(key, default)
+
+    def set_extra(self, key: str, value):
+        self._extras[key] = value
 
 
 class MockAgentContext:
@@ -961,6 +984,45 @@ async def test_same_tool_streak_resets_after_switching_tools(
 
 
 @pytest.mark.asyncio
+async def test_identical_tool_call_is_hard_limited(
+    runner, mock_tool_executor, mock_hooks
+):
+    provider = MockToolCallProvider("test_tool", {"query": "same"})
+    tool = FunctionTool(
+        name="test_tool",
+        description="重复调用测试工具",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="测试相同参数调用不能循环",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(10):
+        pass
+
+    assert runner.done()
+    assert provider.call_count <= 4
+    tool_messages = [
+        message
+        for message in runner.run_context.messages
+        if getattr(message, "role", None) == "tool"
+    ]
+    assert len(tool_messages) <= 3
+
+
+@pytest.mark.asyncio
 async def test_fallback_provider_used_when_primary_raises(
     runner, provider_request, mock_tool_executor, mock_hooks
 ):
@@ -1281,6 +1343,108 @@ async def test_follow_up_ticket_not_consumed_when_no_next_tool_call(
 
     assert ticket.resolved.is_set() is True
     assert ticket.consumed is False
+
+
+@pytest.mark.asyncio
+async def test_terminal_tool_failure_cannot_be_reported_as_success(
+    runner, provider_request, mock_hooks
+):
+    """A failed required tool must produce an honest terminal response."""
+    provider = SingleToolThenFinalProvider("test_tool", {"query": "test"})
+    event = MockEvent("test:FriendMessage:terminal_failure", "u1")
+    event.set_extra(
+        "agent_execution_policy",
+        {
+            "route": "standard",
+            "allowed_tools": ["test_tool"],
+            "tool_required": True,
+            "selected_tool": "test_tool",
+            "semantic_intent": "test",
+            "semantic_confidence": 1.0,
+            "max_steps": 3,
+            "tool_timeout_seconds": 5,
+        },
+    )
+    event.set_extra(
+        "agent_tool_authorization",
+        {"tool_name": "test_tool", "allowed": True},
+    )
+
+    async def authorize_tool(run_context, tool, tool_args):
+        del tool, tool_args
+        run_context.context.event.set_extra(
+            "agent_tool_authorization",
+            {"tool_name": "test_tool", "allowed": True},
+        )
+
+    mock_hooks.on_tool_start = authorize_tool
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=MockNonRetryableFailureExecutor(),
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [response async for response in runner.step_until_done(3)]
+    response_text = "\n".join(
+        str(response.data) for response in responses if response.type == "llm_result"
+    )
+    assert "没有完成" in response_text
+    assert "我已经完成" not in response_text
+
+
+@pytest.mark.asyncio
+async def test_successful_required_tool_satisfies_route_without_correction_loop(
+    runner, provider_request, mock_tool_executor, mock_hooks
+):
+    """A successful ToolGateway outcome must satisfy a required-tool route."""
+
+    provider = SingleToolThenFinalProvider("test_tool", {"query": "test"})
+    event = MockEvent("test:FriendMessage:required_tool_success", "u1")
+    event.set_extra(
+        "agent_execution_policy",
+        {
+            "route": "standard",
+            "allowed_tools": ["test_tool"],
+            "tool_required": True,
+            "selected_tool": "test_tool",
+            "semantic_intent": "test",
+            "semantic_confidence": 1.0,
+            "max_steps": 3,
+            "tool_timeout_seconds": 5,
+        },
+    )
+    event.set_extra(
+        "agent_tool_authorization",
+        {"tool_name": "test_tool", "allowed": True},
+    )
+
+    async def authorize_tool(run_context, tool, tool_args):
+        del tool, tool_args
+        run_context.context.event.set_extra(
+            "agent_tool_authorization",
+            {"tool_name": "test_tool", "allowed": True},
+        )
+
+    mock_hooks.on_tool_start = authorize_tool
+
+    await runner.reset(
+        provider=provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=MockAgentContext(event)),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    responses = [response async for response in runner.step_until_done(3)]
+
+    assert event.get_extra("agent_control_tool_satisfied") is True
+    assert provider.call_count == 2
+    assert responses
 
 
 @pytest.mark.asyncio

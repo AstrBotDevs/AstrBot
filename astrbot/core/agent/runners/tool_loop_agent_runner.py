@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import json
 import sys
 import time
 import traceback
@@ -9,6 +10,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+import jsonschema
 from mcp.types import (
     BlobResourceContents,
     CallToolResult,
@@ -51,6 +53,7 @@ from ..context.compressor import ContextCompressor
 from ..context.config import ContextConfig
 from ..context.manager import ContextManager
 from ..context.token_counter import EstimateTokenCounter, TokenCounter
+from ..evidence_store import get_agent_evidence_store
 from ..execution_policy import (
     AGENT_TOOL_AUTHORIZATION_EXTRA_KEY,
     get_agent_execution_policy,
@@ -62,10 +65,13 @@ from ..message import (
     ToolCallMessageSegment,
     bind_checkpoint_messages,
 )
+from ..model_gateway import ModelGateway
 from ..response import AgentResponseData, AgentStats
 from ..run_context import ContextWrapper, TContext
+from ..tool import ToolOutcome
 from ..tool_executor import BaseFunctionToolExecutor
-from .base import AgentResponse, AgentState, BaseAgentRunner
+from ..tool_gateway import ToolGateway
+from .base import AgentResponse, AgentState, BaseAgentRunner, RunTerminalStatus
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -113,7 +119,10 @@ ToolExecutorResultT = T.TypeVar("ToolExecutorResultT")
 class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     TOOL_RESULT_MAX_ESTIMATED_TOKENS = 27_500
     TOOL_RESULT_PREVIEW_MAX_ESTIMATED_TOKENS = 7000
-    EMPTY_OUTPUT_RETRY_ATTEMPTS = 3
+    # Empty model output is not a transient condition worth holding a QQ
+    # conversation hostage for several seconds. One bounded attempt keeps the
+    # fallback provider path responsive.
+    EMPTY_OUTPUT_RETRY_ATTEMPTS = 2
     EMPTY_OUTPUT_RETRY_WAIT_MIN_S = 1
     EMPTY_OUTPUT_RETRY_WAIT_MAX_S = 4
     USER_INTERRUPTION_MESSAGE = (
@@ -184,6 +193,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self.final_llm_resp = llm_resp
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
+        self._finish_agent_trace("success")
 
         parts = []
         if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:
@@ -196,7 +206,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.completion_text:
             parts.append(TextPart(text=llm_resp.completion_text))
         if len(parts) == 0:
-            logger.warning("LLM returned empty assistant message with no tool calls.")
+            event = getattr(self.run_context.context, "event", None)
+            terminal_sent = bool(
+                event is not None
+                and hasattr(event, "get_extra")
+                and event.get_extra("agent_control_terminal_sent", False)
+            )
+            if terminal_sent:
+                logger.info(
+                    "LLM returned no text after a verified terminal tool delivery."
+                )
+            else:
+                llm_resp.completion_text = "回复模型没有返回可用内容，请稍后再试。"
+                parts.append(TextPart(text=llm_resp.completion_text))
+                logger.warning(
+                    "LLM returned empty assistant message; using degraded reply."
+                )
         self.run_context.messages.append(Message(role="assistant", content=parts))
 
         try:
@@ -285,6 +310,15 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._follow_up_seq = 0
         self._last_tool_name: str | None = None
         self._same_tool_streak = 0
+        self._last_tool_signature: str | None = None
+        self._same_tool_signature_streak = 0
+        self._force_final_after_tool_guard = False
+        self._tool_guard_triggered = False
+        self._tool_arg_repairs: dict[str, int] = {}
+        self._required_tool_corrections = 0
+        self.terminal_status: RunTerminalStatus | None = None
+        self._run_started_monotonic = time.monotonic()
+        self._run_deadline_monotonic = self._run_started_monotonic + 90.0
 
         # These two are used for tool schema mode handling
         # We now have two modes:
@@ -325,6 +359,81 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         self.stats = AgentStats()
         self.stats.start_time = time.time()
+
+        event = getattr(run_context.context, "event", None)
+        trace_id = ""
+        if event is not None and hasattr(event, "get_extra"):
+            trace_id = str(event.get_extra("agent_trace_id") or "")
+        if not trace_id:
+            trace_id = f"trace-{uuid.uuid4().hex}"
+            if event is not None and hasattr(event, "set_extra"):
+                event.set_extra("agent_trace_id", trace_id)
+        self.trace_id = trace_id
+        policy = (
+            get_agent_execution_policy(event)
+            if event is not None and hasattr(event, "get_extra")
+            else None
+        )
+        self._evidence_store = get_agent_evidence_store()
+        self._evidence_store.start_run(
+            trace_id=trace_id,
+            session_id=str(getattr(event, "unified_msg_origin", "unknown")),
+            principal_id=str(getattr(event, "get_sender_id", lambda: "unknown")()),
+            goal=str(request.prompt or "")[:4000],
+            route=str(getattr(policy, "route", "standard") if policy else "standard"),
+        )
+        self._evidence_store.update_phase(
+            trace_id,
+            "RECEIVED",
+            deadline_at=time.time() + 90.0,
+        )
+        if event is not None and hasattr(event, "set_extra"):
+            event.set_extra("agent_trace_started", True)
+
+    def _finish_agent_trace(self, final_status: str) -> None:
+        """Close the current trace after a terminal Agent response.
+
+        Args:
+            final_status: Sanitized completion status for the audit record.
+        """
+
+        store = getattr(self, "_evidence_store", None)
+        trace_id = getattr(self, "trace_id", "")
+        self.terminal_status = RunTerminalStatus(
+            {
+                "success": "COMPLETED",
+                "direct_sent": "COMPLETED",
+                "aborted": "CANCELLED",
+                "expired": "EXPIRED",
+                "llm_error": "FAILED",
+                "error": "FAILED",
+            }.get(str(final_status), "FAILED")
+        )
+        if store is not None and trace_id:
+            final_response = getattr(self, "final_llm_resp", None)
+            store.finish_run(
+                trace_id,
+                final_status,
+                final_response=(
+                    getattr(final_response, "completion_text", "")
+                    if final_response is not None
+                    else None
+                ),
+            )
+
+    def _mark_run_phase(
+        self, phase: str, *, step: int | None = None, reason: str = ""
+    ) -> None:
+        """Persist a lifecycle phase without exposing model reasoning."""
+
+        store = getattr(self, "_evidence_store", None)
+        trace_id = getattr(self, "trace_id", "")
+        if store is not None and trace_id:
+            store.update_phase(trace_id, phase, step=step, reason=reason)
+            store.save_checkpoint(
+                trace_id,
+                {"phase": phase, "step": step, "reason": reason[:300]},
+            )
 
     def _read_tool_hint(self) -> str:
         if self.read_tool is not None:
@@ -474,12 +583,30 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if include_model:
             # For primary provider we keep explicit model selection if provided.
             payload["model"] = self.req.model
+        timeout = max(
+            1.0, min(float(getattr(self.req, "model_timeout_seconds", 75.0)), 90.0)
+        )
         if self.streaming:
-            stream = self.provider.text_chat_stream(**payload)
-            async for resp in stream:  # type: ignore
-                yield resp
+            async with asyncio.timeout(timeout):
+                stream = self.provider.text_chat_stream(**payload)
+                async for resp in stream:  # type: ignore
+                    yield resp
         else:
-            yield await self.provider.text_chat(**payload)
+            outcome = await ModelGateway.complete(
+                lambda: self.provider.text_chat(**payload),
+                timeout=timeout,
+                provider_id=str(self.provider.provider_config.get("id", "")),
+            )
+            if outcome.status != "success" or outcome.response is None:
+                yield LLMResponse(
+                    role="err",
+                    completion_text=(
+                        f"{outcome.error_code or 'MODEL_EMPTY_OUTPUT'}: "
+                        f"{outcome.diagnostics or 'model returned no usable output'}"
+                    ),
+                )
+            else:
+                yield outcome.response
 
     async def _iter_llm_responses_with_fallback(
         self,
@@ -493,6 +620,26 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         for idx, candidate in enumerate(candidates):
             candidate_id = candidate.provider_config.get("id", "<unknown>")
             is_last_candidate = idx == total_candidates - 1
+            event = getattr(self.run_context.context, "event", None)
+            execution_policy = (
+                get_agent_execution_policy(event)
+                if event is not None and hasattr(event, "get_extra")
+                else None
+            )
+            modalities = candidate.provider_config.get("modalities")
+            if (
+                bool(getattr(execution_policy, "tool_required", False))
+                and self.req.func_tool
+                and isinstance(modalities, list)
+                and modalities
+                and "tool_use" not in modalities
+            ):
+                logger.warning(
+                    "Skipping provider %s because the required tool route is "
+                    "not supported by its declared modalities.",
+                    candidate_id,
+                )
+                continue
             if idx > 0:
                 logger.warning(
                     "Switched from %s to fallback chat provider: %s",
@@ -529,10 +676,39 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     and not has_stream_output
                                     and (not is_last_candidate)
                                 ):
+                                    # Preserve failures from providers that are
+                                    # skipped by a successful fallback.  The
+                                    # final response alone cannot identify that
+                                    # Gemini failed, so without this audit trail
+                                    # the same broken provider is retried for
+                                    # every subsequent message.
+                                    if (
+                                        event is not None
+                                        and hasattr(event, "get_extra")
+                                        and hasattr(event, "set_extra")
+                                    ):
+                                        failures = event.get_extra(
+                                            "agent_provider_failures", []
+                                        )
+                                        if not isinstance(failures, list):
+                                            failures = []
+                                        failures.append(
+                                            {
+                                                "provider_id": str(candidate_id),
+                                                "detail": str(
+                                                    resp.completion_text or ""
+                                                )[:500],
+                                            }
+                                        )
+                                        event.set_extra(
+                                            "agent_provider_failures", failures[-8:]
+                                        )
                                     last_err_response = resp
                                     logger.warning(
-                                        "Chat Model %s returns error response, trying fallback to next provider.",
+                                        "Chat Model %s returns error response (%s), "
+                                        "trying fallback to next provider.",
                                         candidate_id,
+                                        str(resp.completion_text or "")[:500],
                                     )
                                     break
 
@@ -587,16 +763,98 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         contexts: list[Message] | list[dict[str, T.Any]],
     ) -> list[Message] | list[dict[str, T.Any]]:
         modalities = self.provider.provider_config.get("modalities", None)
-        if (
-            not modalities
-        ):  # Unconfigured (None or empty list) defaults to support all modalities
-            return contexts
-        sanitized_contexts, stats = sanitize_contexts_by_modalities(
-            contexts,
-            self.provider.provider_config.get("modalities", None),
-        )
-        log_context_sanitize_stats(stats)
-        return sanitized_contexts
+        if not modalities:
+            # Unconfigured (None or empty list) defaults to support all
+            # modalities, but no-tool history compaction below still applies.
+            sanitized_contexts = contexts
+        else:
+            sanitized_contexts, stats = sanitize_contexts_by_modalities(
+                contexts,
+                self.provider.provider_config.get("modalities", None),
+            )
+            log_context_sanitize_stats(stats)
+        if self.req.func_tool:
+            return sanitized_contexts
+
+        # Fast conversational turns do not declare tools.  Do not replay old
+        # tool-call protocol messages into a no-tool request: providers may
+        # reject a function response whose declaration is not present in the
+        # current request, and Gemini is especially strict about empty thought
+        # parts.  Keep the visible assistant text and user context only.
+        compact_contexts: list[Message | dict[str, T.Any]] = []
+        for message in sanitized_contexts:
+            if isinstance(message, Message):
+                if message.role == "tool":
+                    continue
+                if message.role == "assistant" and message.tool_calls:
+                    if isinstance(message.content, list):
+                        visible_text = "".join(
+                            part.text
+                            for part in message.content
+                            if isinstance(part, TextPart) and part.text
+                        )
+                    else:
+                        visible_text = str(message.content or "")
+                    if not visible_text.strip():
+                        continue
+                    compact_contexts.append(
+                        message.model_copy(
+                            update={"content": visible_text, "tool_calls": None}
+                        )
+                    )
+                    continue
+                if message.role == "assistant" and isinstance(message.content, list):
+                    visible_text = "".join(
+                        part.text
+                        for part in message.content
+                        if isinstance(part, TextPart) and part.text
+                    )
+                    if not visible_text.strip():
+                        continue
+                    compact_contexts.append(
+                        message.model_copy(update={"content": visible_text})
+                    )
+                    continue
+                compact_contexts.append(message)
+                continue
+
+            if not isinstance(message, dict):
+                compact_contexts.append(message)
+                continue
+            role = message.get("role")
+            if role == "tool":
+                continue
+            if role == "assistant" and message.get("tool_calls"):
+                content = message.get("content")
+                if isinstance(content, list):
+                    visible_text = "".join(
+                        str(part.get("text") or "")
+                        for part in content
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    )
+                else:
+                    visible_text = str(content or "")
+                if not visible_text.strip():
+                    continue
+                compact_message = dict(message)
+                compact_message["content"] = visible_text
+                compact_message.pop("tool_calls", None)
+                compact_contexts.append(compact_message)
+                continue
+            if role == "assistant" and isinstance(message.get("content"), list):
+                visible_text = "".join(
+                    str(part.get("text") or "")
+                    for part in message["content"]
+                    if isinstance(part, dict) and part.get("type") == "text"
+                )
+                if not visible_text.strip():
+                    continue
+                compact_message = dict(message)
+                compact_message["content"] = visible_text
+                compact_contexts.append(compact_message)
+                continue
+            compact_contexts.append(message)
+        return compact_contexts
 
     def _func_tool_for_provider(self) -> ToolSet | None:
         if not self.req.func_tool:
@@ -701,6 +959,34 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if not self.req:
             raise ValueError("Request is not set. Please call reset() first.")
 
+        if self._force_final_after_tool_guard:
+            # A repeated tool call is a scheduler/executor concern, not a
+            # prompt-level suggestion. Remove tools for the next provider
+            # request so an uncooperative model cannot repeat the call.
+            self.req.func_tool = None
+            self.run_context.messages.append(
+                Message(
+                    role="user",
+                    content=self.MAX_STEPS_REACHED_PROMPT,
+                )
+            )
+            self._force_final_after_tool_guard = False
+
+        if time.monotonic() >= getattr(self, "_run_deadline_monotonic", float("inf")):
+            self.final_llm_resp = LLMResponse(
+                role="err", completion_text="AI 任务已超过时间限制，请稍后重试。"
+            )
+            self.stats.end_time = time.time()
+            self._transition_state(AgentState.ERROR)
+            self._finish_agent_trace("expired")
+            yield AgentResponse(
+                type="err",
+                data=AgentResponseData(
+                    chain=MessageChain().message(self.final_llm_resp.completion_text)
+                ),
+            )
+            return
+
         if self._state == AgentState.IDLE:
             try:
                 await self.agent_hooks.on_agent_begin(self.run_context)
@@ -709,6 +995,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # 开始处理，转换到运行状态
         self._transition_state(AgentState.RUNNING)
+        self._mark_run_phase("RUNNING_MODEL")
         llm_resp_result = None
 
         # Process request-time context before sending it to the provider.
@@ -767,7 +1054,10 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             if self._is_stop_requested():
                 llm_resp_result = LLMResponse(role="assistant", completion_text="")
             else:
-                return
+                llm_resp_result = LLMResponse(
+                    role="err",
+                    completion_text="模型没有返回有效结果，请稍后重试。",
+                )
 
         if self._is_stop_requested():
             yield await self._finalize_aborted_step(llm_resp_result)
@@ -776,16 +1066,55 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         # 处理 LLM 响应
         llm_resp = llm_resp_result
 
+        if self._tool_guard_triggered and llm_resp.tools_call_name:
+            # Some providers ignore an empty tool schema and keep emitting the
+            # same call. Convert that response into a normal final response so
+            # the guard cannot be bypassed by an uncooperative model.
+            logger.warning(
+                "Suppressing tool calls after the repeated-call guard triggered."
+            )
+            llm_resp.tools_call_name = []
+            llm_resp.tools_call_args = []
+            llm_resp.tools_call_ids = []
+            if not str(llm_resp.completion_text or "").strip():
+                llm_resp.completion_text = (
+                    "同一个工具和参数已经执行两次，我已停止重复调用，避免任务陷入循环。"
+                )
+            self._tool_guard_triggered = False
+
         if llm_resp.role == "err":
             # 如果 LLM 响应错误，转换到错误状态
             self.final_llm_resp = llm_resp
             self.stats.end_time = time.time()
             self._transition_state(AgentState.ERROR)
+            self._finish_agent_trace("llm_error")
             self._resolve_unconsumed_follow_ups()
-            custom_error_message = self._get_persona_custom_error_message()
-            error_text = custom_error_message or (
-                f"LLM 响应错误: {llm_resp.completion_text or '未知错误'}"
+            event = getattr(self.run_context.context, "event", None)
+            provider_failures = (
+                event.get_extra("agent_provider_failures", [])
+                if event is not None and hasattr(event, "get_extra")
+                else []
             )
+            tool_satisfied = bool(
+                event is not None
+                and hasattr(event, "get_extra")
+                and event.get_extra("agent_control_tool_satisfied", False)
+            )
+            # Persona-level text is intentionally bypassed for provider
+            # outages; otherwise a network failure looks like a normal reply.
+            if tool_satisfied:
+                error_text = "工具已经执行完成，但回复模型暂时不可用；我先不编造结果。"
+            elif isinstance(provider_failures, list) and provider_failures:
+                error_text = (
+                    "回复模型通道暂时不可用，刚才这条没有生成有效结果。请稍后再试。"
+                )
+            else:
+                custom_error_message = self._get_persona_custom_error_message()
+                error_text = custom_error_message or (
+                    f"LLM 响应错误: {llm_resp.completion_text or '未知错误'}"
+                )
+            if event is not None and hasattr(event, "set_extra"):
+                event.set_extra("agent_model_failure_message", error_text)
             yield AgentResponse(
                 type="err",
                 data=AgentResponseData(
@@ -795,6 +1124,106 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             return
 
         if not llm_resp.tools_call_name:
+            event = getattr(self.run_context.context, "event", None)
+            execution_policy = (
+                get_agent_execution_policy(event)
+                if event is not None and hasattr(event, "get_extra")
+                else None
+            )
+            # Some OpenAI-compatible providers occasionally emit their native
+            # DSML tool markup as plain text instead of a structured tool call.
+            # Never expose that protocol payload to QQ users. Keep any natural
+            # language prefix, then let the required-tool correction below ask
+            # for a real registered call when the route requires one.
+            completion_text = str(llm_resp.completion_text or "")
+            leaked_markers = (
+                "<｜｜DSML｜｜",
+                "<|DSML|>",
+                "<tool_calls>",
+                "<function=",
+            )
+            marker_positions = [
+                completion_text.find(marker)
+                for marker in leaked_markers
+                if completion_text.find(marker) >= 0
+            ]
+            if marker_positions:
+                llm_resp.completion_text = completion_text[
+                    : min(marker_positions)
+                ].rstrip()
+                logger.warning(
+                    "Provider emitted unstructured tool markup; stripped it before response."
+                )
+            tool_required = bool(execution_policy and execution_policy.tool_required)
+            tool_satisfied = bool(
+                event.get_extra("agent_control_tool_satisfied", False)
+                if event is not None and hasattr(event, "get_extra")
+                else False
+            )
+            terminal_failure = (
+                event.get_extra("agent_control_terminal_tool_failure")
+                if event is not None and hasattr(event, "get_extra")
+                else None
+            )
+            # A non-retryable tool failure is terminal for this request. Do not
+            # let the model turn an error into a fabricated success message.
+            terminal_failure_finalized = False
+            if (
+                tool_required
+                and not tool_satisfied
+                and isinstance(terminal_failure, dict)
+                and not bool(terminal_failure.get("retryable"))
+            ):
+                failed_tool = str(terminal_failure.get("tool_name") or "工具")
+                failure_code = str(terminal_failure.get("error_code") or "tool_failed")
+                failure_reason = {
+                    "tool_timeout": "执行超时",
+                    "tool_cancelled": "执行被取消",
+                    "tool_empty": "没有返回可用结果",
+                }.get(failure_code, "执行失败")
+                llm_resp.completion_text = (
+                    f"这次请求需要调用 {failed_tool}，但{failure_reason}，所以没有完成。"
+                    "我不会把未成功的结果说成已经完成，请稍后重试。"
+                )
+                terminal_failure_finalized = True
+            if tool_required and not tool_satisfied and not terminal_failure_finalized:
+                if self._required_tool_corrections == 0:
+                    self._required_tool_corrections = 1
+                    allowed_tools = execution_policy.allowed_tools
+                    selected_tool = execution_policy.selected_tool
+                    selected_instruction = (
+                        f"Preferred tool selected by the semantic planner: {selected_tool}. "
+                        "Use it unless its schema cannot be satisfied; then use one listed fallback. "
+                        if selected_tool
+                        else ""
+                    )
+                    if llm_resp.completion_text:
+                        self.run_context.messages.append(
+                            Message(
+                                role="assistant",
+                                content=llm_resp.completion_text,
+                            )
+                        )
+                    self.run_context.messages.append(
+                        Message(
+                            role="user",
+                            content=(
+                                "[SYSTEM NOTICE] This request requires a registered tool, "
+                                "but no successful tool result has been observed. Call exactly "
+                                "one best matching allowed tool now. Do not send progress text. "
+                                f"{selected_instruction}"
+                                f"Allowed tools: {', '.join(allowed_tools)}"
+                            ),
+                        )
+                    )
+                    logger.warning(
+                        "Required tool was not satisfied; issuing one internal correction."
+                    )
+                    return
+                llm_resp.completion_text = (
+                    "这次请求需要调用工具，但工具没有成功返回结果。我不能假装已经查到，"
+                    "请稍后再试，或补充更明确的查询条件。"
+                )
             await self._complete_with_assistant_response(llm_resp)
 
         # 返回 LLM 结果
@@ -822,6 +1251,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
 
         # 如果有工具调用，还需处理工具调用
         if llm_resp.tools_call_name:
+            self._mark_run_phase("RUNNING_TOOL")
             if self.tool_schema_mode == "skills_like":
                 requery_resp, _ = await self._resolve_tool_exec(llm_resp)
                 if not requery_resp.tools_call_name:
@@ -1005,6 +1435,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         ):
             tool_result_blocks_start = len(tool_call_result_blocks)
             tool_call_streak = self._track_tool_call_streak(func_tool_name)
+            try:
+                tool_signature = json.dumps(
+                    func_tool_args or {},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    default=str,
+                )
+            except Exception:
+                tool_signature = repr(func_tool_args)
+            tool_signature = f"{func_tool_name}:{tool_signature}"
+            if tool_signature == self._last_tool_signature:
+                self._same_tool_signature_streak += 1
+            else:
+                self._last_tool_signature = tool_signature
+                self._same_tool_signature_streak = 1
             yield _HandleFunctionToolsResult.from_message_chain(
                 MessageChain(
                     type="tool_call",
@@ -1021,6 +1467,32 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                 )
             )
             try:
+                if self._same_tool_signature_streak > 2:
+                    logger.warning(
+                        "Blocking repeated tool call %s after two identical attempts.",
+                        func_tool_name,
+                    )
+                    event = getattr(self.run_context.context, "event", None)
+                    if event is not None and hasattr(event, "set_extra"):
+                        event.set_extra("agent_control_tool_satisfied", False)
+                        event.set_extra(
+                            "agent_control_terminal_tool_failure",
+                            {
+                                "tool_name": func_tool_name,
+                                "status": "failed",
+                                "error_code": "tool_repeated",
+                                "diagnostics": "The same tool and arguments were already executed twice.",
+                                "retryable": False,
+                            },
+                        )
+                    _append_tool_call_result(
+                        func_tool_id,
+                        "error: The same tool with identical arguments was already executed twice. "
+                        "Do not call it again; summarize the available result or explain the limitation.",
+                    )
+                    self._force_final_after_tool_guard = True
+                    self._tool_guard_triggered = True
+                    continue
                 if not req.func_tool:
                     return
 
@@ -1077,6 +1549,36 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     # 如果没有 handler（如 MCP 工具），使用所有参数
                     valid_params = func_tool_args
 
+                schema = func_tool.parameters or {
+                    "type": "object",
+                    "properties": {},
+                }
+                validation_errors = sorted(
+                    jsonschema.Draft202012Validator(schema).iter_errors(valid_params),
+                    key=lambda error: list(error.path),
+                )
+                if validation_errors:
+                    repair_count = self._tool_arg_repairs.get(func_tool_name, 0) + 1
+                    self._tool_arg_repairs[func_tool_name] = repair_count
+                    error_text = "; ".join(
+                        error.message for error in validation_errors[:3]
+                    )
+                    if repair_count == 1:
+                        guidance = (
+                            "Correct the arguments once using only the tool schema and "
+                            "the user's request, then call the same tool again."
+                        )
+                    else:
+                        guidance = (
+                            "Do not call this tool again in this turn. Ask the user for "
+                            "the missing information or explain that the request is incomplete."
+                        )
+                    _append_tool_call_result(
+                        func_tool_id,
+                        f"error: Tool arguments failed schema validation: {error_text}. {guidance}",
+                    )
+                    continue
+
                 try:
                     event = getattr(self.run_context.context, "event", None)
                     if event is not None and hasattr(event, "set_extra"):
@@ -1118,21 +1620,103 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                     continue
 
-                executor = self.tool_executor.execute(
-                    tool=func_tool,
-                    run_context=self.run_context,
-                    **valid_params,  # 只传递有效的参数
+                executor = ToolGateway.invoke(
+                    self.tool_executor.execute,
+                    func_tool,
+                    self.run_context,
+                    **valid_params,
                 )
 
                 _final_resp: CallToolResult | None = None
+                terminal_direct_sent = False
                 async for resp in self._iter_tool_executor_results(executor):  # type: ignore
-                    if isinstance(resp, CallToolResult):
-                        res = resp
-                        _final_resp = resp
-                        if not res.content:
+                    if isinstance(resp, ToolOutcome):
+                        res = resp.result or CallToolResult(
+                            content=[
+                                TextContent(
+                                    type="text",
+                                    text="The tool returned no usable result.",
+                                )
+                            ],
+                            isError=True,
+                        )
+                        _final_resp = res
+                        if resp.status == "direct_sent":
+                            logger.info(
+                                "Tool `%s` sent a verified direct result.",
+                                func_tool_name,
+                            )
                             _append_tool_call_result(
                                 func_tool_id,
-                                "The tool returned no content.",
+                                "The tool sent its result directly to the user.",
+                            )
+                            if resp.terminal:
+                                self._transition_state(AgentState.DONE)
+                                self.stats.end_time = time.time()
+                                self._finish_agent_trace("direct_sent")
+                                terminal_direct_sent = True
+                                break
+                            continue
+                        event = getattr(self.run_context.context, "event", None)
+                        if event is not None and hasattr(event, "set_extra"):
+                            if resp.status in {
+                                "empty",
+                                "failed",
+                                "timeout",
+                                "cancelled",
+                            }:
+                                event.set_extra("agent_control_tool_satisfied", False)
+                                event.set_extra(
+                                    "agent_control_terminal_tool_failure",
+                                    {
+                                        "tool_name": func_tool_name,
+                                        "status": resp.status,
+                                        "error_code": resp.error_code,
+                                        "diagnostics": resp.diagnostics,
+                                        "retryable": bool(resp.retryable),
+                                    },
+                                )
+                            elif resp.status in {"success", "direct_sent"}:
+                                # ToolGateway has already normalized the result,
+                                # recorded evidence, and evaluated the completion
+                                # contract before the generator closes. Persist
+                                # the successful observation on the event so a
+                                # required-tool route does not re-enter the
+                                # correction loop after a real tool call.
+                                event.set_extra("agent_control_tool_satisfied", True)
+                                event.set_extra(
+                                    "agent_control_terminal_tool_failure", None
+                                )
+                        if resp.status in {"empty", "failed", "timeout", "cancelled"}:
+                            logger.warning(
+                                "Tool `%s` outcome=%s code=%s diagnostics=%s",
+                                func_tool_name,
+                                resp.status,
+                                resp.error_code or "unknown",
+                                resp.diagnostics or "none",
+                            )
+                    elif isinstance(resp, CallToolResult):
+                        res = resp
+                        _final_resp = resp
+                    else:
+                        res = None
+
+                    if res is not None:
+                        if not res.content:
+                            if res.structuredContent:
+                                structured = json.dumps(
+                                    res.structuredContent,
+                                    ensure_ascii=False,
+                                    default=str,
+                                )
+                                _append_tool_call_result(
+                                    func_tool_id,
+                                    ("error: " if res.isError else "") + structured,
+                                )
+                                continue
+                            _append_tool_call_result(
+                                func_tool_id,
+                                "error: The tool returned no content. Use an approved fallback or explain the failure.",
                             )
                             continue
 
@@ -1190,6 +1774,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                                     )
                         if result_parts:
                             inline_result = "\n\n".join(result_parts)
+                            if res.isError:
+                                inline_result = f"error: {inline_result}"
                             inline_result = await self._materialize_large_tool_result(
                                 tool_call_id=func_tool_id,
                                 content=inline_result,
@@ -1203,17 +1789,13 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             )
 
                     elif resp is None:
-                        # Tool 直接请求发送消息给用户
-                        # 这里我们将直接结束 Agent Loop
-                        # 发送消息逻辑在 ToolExecutor 中处理了
                         logger.warning(
-                            f"{func_tool_name} 没有返回值，或者已将结果直接发送给用户。"
+                            f"{func_tool_name} 没有返回值，且无法确认已向用户发送结果。"
                         )
-                        self._transition_state(AgentState.DONE)
-                        self.stats.end_time = time.time()
                         _append_tool_call_result(
                             func_tool_id,
-                            "The tool has no return value, or has sent the result directly to the user."
+                            "error: The tool returned nothing and no direct send was verified. "
+                            "Use an approved fallback or explain the failure."
                             + self._build_repeated_tool_call_guidance(
                                 func_tool_name, tool_call_streak
                             ),
@@ -1231,6 +1813,33 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                             ),
                         )
 
+                event = getattr(self.run_context.context, "event", None)
+                if (
+                    event is not None
+                    and hasattr(event, "set_extra")
+                    and _final_resp is not None
+                    and bool(getattr(_final_resp, "isError", False))
+                ):
+                    existing_failure = (
+                        event.get_extra("agent_control_terminal_tool_failure")
+                        if hasattr(event, "get_extra")
+                        else None
+                    )
+                    event.set_extra("agent_control_tool_satisfied", False)
+                    event.set_extra(
+                        "agent_control_terminal_tool_failure",
+                        {
+                            "tool_name": func_tool_name,
+                            "status": "failed",
+                            "error_code": "tool_failed",
+                            "diagnostics": "The tool returned an error result.",
+                            "retryable": bool(
+                                existing_failure.get("retryable")
+                                if isinstance(existing_failure, dict)
+                                else False
+                            ),
+                        },
+                    )
                 try:
                     await self.agent_hooks.on_tool_end(
                         self.run_context,
@@ -1240,6 +1849,8 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     )
                 except Exception as e:
                     logger.error(f"Error in on_tool_end hook: {e}", exc_info=True)
+                if terminal_direct_sent:
+                    return
             except Exception as e:
                 if isinstance(e, _ToolExecutionInterrupted):
                     raise
@@ -1385,6 +1996,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
     def request_stop(self) -> None:
         self._abort_signal.set()
 
+    def force_terminal(self, status: str, message: str) -> None:
+        """Force a terminal state when an outer watchdog owns cancellation."""
+
+        if self.done():
+            return
+        self.final_llm_resp = LLMResponse(role="err", completion_text=message)
+        self.stats.end_time = time.time()
+        self._transition_state(AgentState.ERROR)
+        self._finish_agent_trace(status)
+
     def _is_stop_requested(self) -> bool:
         return self._abort_signal.is_set()
 
@@ -1410,6 +2031,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self._aborted = True
         self._transition_state(AgentState.DONE)
         self.stats.end_time = time.time()
+        self._finish_agent_trace("aborted")
 
         parts = []
         if llm_resp.reasoning_content is not None or llm_resp.reasoning_signature:

@@ -11,11 +11,13 @@ import mcp
 
 from astrbot import logger
 from astrbot.core.agent.handoff import HandoffTool
+from astrbot.core.agent.job_manager import AgentJob, get_agent_job_manager
 from astrbot.core.agent.mcp_client import MCPTool
 from astrbot.core.agent.message import Message
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import FunctionTool, ToolSet
+from astrbot.core.agent.tool import FunctionTool, ToolOutcome, ToolSet
 from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
+from astrbot.core.agent.tool_gateway import ToolGateway
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
@@ -155,26 +157,59 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             return
 
         elif tool.is_background_task:
-            task_id = uuid.uuid4().hex
+            event = run_context.context.event
+            requester_id = (
+                f"{event.get_platform_id() or event.get_platform_name() or 'unknown'}:"
+                f"{event.get_sender_id() or 'unknown'}"
+            )
 
-            async def _run_in_background() -> None:
-                try:
-                    await cls._execute_background(
-                        tool=tool,
-                        run_context=run_context,
-                        task_id=task_id,
-                        **tool_args,
-                    )
-                except Exception as e:  # noqa: BLE001
-                    logger.error(
-                        f"Background task {task_id} failed: {e!s}",
-                        exc_info=True,
-                    )
+            async def _run_in_background() -> ToolOutcome:
+                return await cls._execute_background(
+                    tool=tool,
+                    run_context=run_context,
+                    **tool_args,
+                )
 
-            asyncio.create_task(_run_in_background())
+            async def _notify_completion(
+                completed: AgentJob, outcome: ToolOutcome
+            ) -> None:
+                if not bool(getattr(tool, "background_notify", True)):
+                    return
+                if outcome.status == "direct_sent":
+                    return
+                if completed.status == "succeeded":
+                    result_text = completed.result.strip()
+                    if not result_text:
+                        return
+                    message = (
+                        f"后台任务 {completed.job_id} 已完成：\n{result_text[:4000]}"
+                    )
+                else:
+                    detail = completed.error_summary or completed.error_code
+                    message = (
+                        f"后台任务 {completed.job_id} 未能完成："
+                        f"{detail[:500] or completed.status}"
+                    )
+                await event.send(MessageChain().message(message))
+
+            job = await get_agent_job_manager().submit(
+                tool_name=tool.name,
+                requester_id=requester_id,
+                umo=event.unified_msg_origin,
+                arguments=tool_args,
+                runner=_run_in_background,
+                timeout_seconds=int(
+                    getattr(tool, "background_timeout_seconds", 120) or 120
+                ),
+                cancellable=bool(getattr(tool, "background_cancellable", True)),
+                on_complete=_notify_completion,
+            )
             text_content = mcp.types.TextContent(
                 type="text",
-                text=f"Background task submitted. task_id={task_id}",
+                text=(
+                    f"Background task submitted. job_id={job.job_id}. "
+                    "Use agent_job_status or agent_job_result to inspect it."
+                ),
             )
             yield mcp.types.CallToolResult(content=[text_content])
 
@@ -467,39 +502,77 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         cls,
         tool: FunctionTool,
         run_context: ContextWrapper[AstrAgentContext],
-        task_id: str,
         **tool_args,
-    ) -> None:
-        # run the tool
-        result_text = ""
+    ) -> ToolOutcome:
+        """Execute one background tool without starting a second Agent loop.
+
+        Args:
+            tool: Registered local function tool.
+            run_context: Original authenticated Agent context.
+            **tool_args: Schema-validated tool arguments.
+
+        Returns:
+            Last normalized tool outcome, or an explicit empty outcome.
+        """
+
+        final_outcome: ToolOutcome | None = None
         try:
-            async for r in cls._execute_local(
-                tool, run_context, tool_call_timeout=3600, **tool_args
+
+            async def local_executor(current_tool, current_context, **kwargs):
+                async for item in cls._execute_local(
+                    current_tool,
+                    current_context,
+                    tool_call_timeout=int(
+                        getattr(current_tool, "background_timeout_seconds", 120) or 120
+                    ),
+                    **kwargs,
+                ):
+                    yield item
+
+            async for r in ToolGateway.invoke(
+                local_executor,
+                tool,
+                run_context,
+                **tool_args,
             ):
-                # collect results, currently we just collect the text results
-                if isinstance(r, mcp.types.CallToolResult):
-                    result_text = ""
-                    for content in r.content:
-                        if isinstance(content, mcp.types.TextContent):
-                            result_text += content.text + "\n"
+                if isinstance(r, ToolOutcome):
+                    final_outcome = r
+                elif isinstance(r, mcp.types.CallToolResult):
+                    final_outcome = ToolOutcome(
+                        status=(
+                            "failed"
+                            if r.isError
+                            else "success"
+                            if r.content or r.structuredContent
+                            else "empty"
+                        ),
+                        result=r,
+                        retryable=bool(
+                            r.isError or not (r.content or r.structuredContent)
+                        ),
+                        error_code="tool_error" if r.isError else "",
+                    )
         except Exception as e:
-            result_text = (
-                f"error: Background task execution failed, internal error: {e!s}"
+            return ToolOutcome(
+                status="failed",
+                retryable=True,
+                error_code="background_execution_failed",
+                diagnostics=str(e)[:1000],
+                result=mcp.types.CallToolResult(
+                    content=[
+                        mcp.types.TextContent(
+                            type="text",
+                            text=f"Background task execution failed: {e!s}",
+                        )
+                    ],
+                    isError=True,
+                ),
             )
-
-        event = run_context.context.event
-
-        await cls._wake_main_agent_for_background_result(
-            run_context=run_context,
-            task_id=task_id,
-            tool_name=tool.name,
-            result_text=result_text,
-            tool_args=tool_args,
-            note=(
-                event.get_extra("background_note")
-                or f"Background task {tool.name} finished."
-            ),
-            summary_name=tool.name,
+        return final_outcome or ToolOutcome(
+            status="empty",
+            retryable=True,
+            error_code="empty_result",
+            diagnostics="Background tool produced no normalized result.",
         )
 
     @classmethod
@@ -650,6 +723,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         if awaitable is None:
             raise ValueError("Tool must have a valid handler or override 'run' method.")
 
+        send_count_before = int(getattr(event, "_send_oper_count", 0) or 0)
         wrapper = call_local_llm_tool(
             context=run_context,
             handler=awaitable,
@@ -664,17 +738,54 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                 )
                 if resp is not None:
                     if isinstance(resp, mcp.types.CallToolResult):
-                        yield resp
+                        has_content = bool(resp.content or resp.structuredContent)
+                        yield ToolOutcome(
+                            status=(
+                                "failed"
+                                if resp.isError
+                                else "success"
+                                if has_content
+                                else "empty"
+                            ),
+                            result=resp,
+                            retryable=bool(resp.isError or not has_content),
+                            error_code=(
+                                "tool_error"
+                                if resp.isError
+                                else "empty_result"
+                                if not has_content
+                                else ""
+                            ),
+                        )
                     else:
+                        text = str(resp).strip()
                         text_content = mcp.types.TextContent(
                             type="text",
-                            text=str(resp),
+                            text=text or "The tool returned an empty result.",
                         )
-                        yield mcp.types.CallToolResult(content=[text_content])
+                        yield ToolOutcome(
+                            status="success" if text else "empty",
+                            result=mcp.types.CallToolResult(
+                                content=[text_content], isError=not bool(text)
+                            ),
+                            retryable=not bool(text),
+                            error_code="" if text else "empty_result",
+                        )
                 else:
-                    # NOTE: Tool 在这里直接请求发送消息给用户
-                    # TODO: 是否需要判断 event.get_result() 是否为空?
-                    # 如果为空,则说明没有发送消息给用户,并且返回值为空,将返回一个特殊的 TextContent,其内容如"工具没有返回内容"
+                    direct_sent = (
+                        int(getattr(event, "_send_oper_count", 0) or 0)
+                        > send_count_before
+                    )
+                    if hasattr(event, "get_extra"):
+                        try:
+                            terminal_marker = event.get_extra(
+                                "agent_control_terminal_sent", False
+                            )
+                        except TypeError:
+                            terminal_marker = event.get_extra(
+                                "agent_control_terminal_sent"
+                            )
+                        direct_sent = direct_sent or bool(terminal_marker)
                     if res := run_context.context.event.get_result():
                         if res.chain:
                             try:
@@ -684,12 +795,51 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                                         type="tool_direct_result",
                                     )
                                 )
+                                direct_sent = True
                             except Exception as e:
                                 logger.error(
                                     f"Tool 直接发送消息失败: {e}",
                                     exc_info=True,
                                 )
-                    yield None
+                    if direct_sent:
+                        # Mark the event before the normalized outcome reaches
+                        # the Agent loop. The response stage uses this terminal
+                        # flag to suppress a second plain-text reply after a
+                        # plugin has already delivered a message chain.
+                        if hasattr(event, "set_extra"):
+                            event.set_extra("agent_control_terminal_sent", True)
+                        yield ToolOutcome(
+                            status="direct_sent",
+                            result=mcp.types.CallToolResult(
+                                content=[
+                                    mcp.types.TextContent(
+                                        type="text",
+                                        text="The tool sent its result directly to the user.",
+                                    )
+                                ]
+                            ),
+                            terminal=True,
+                            side_effect_performed=True,
+                        )
+                    else:
+                        yield ToolOutcome(
+                            status="empty",
+                            result=mcp.types.CallToolResult(
+                                content=[
+                                    mcp.types.TextContent(
+                                        type="text",
+                                        text=(
+                                            "Tool execution produced no result and did not "
+                                            "send a message. Use an approved fallback or tell "
+                                            "the user that the capability failed."
+                                        ),
+                                    )
+                                ],
+                                isError=True,
+                            ),
+                            retryable=True,
+                            error_code="empty_result",
+                        )
             except asyncio.TimeoutError:
                 raise Exception(
                     f"tool {tool.name} execution timeout after {tool_call_timeout or run_context.tool_call_timeout} seconds.",
@@ -704,10 +854,93 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         run_context: ContextWrapper[AstrAgentContext],
         **tool_args,
     ):
-        res = await tool.call(run_context, **tool_args)
-        if not res:
+        """Execute an MCP-style tool and always emit a normalized outcome.
+
+        MCP adapters in the wild return ``CallToolResult``, plain text, or
+        ``None``.  Previously ``None`` silently ended the tool stream, which
+        made the Agent treat an unexecuted tool as a completed turn.
+
+        Args:
+            tool: Registered MCP-compatible tool.
+            run_context: Authenticated Agent context.
+            **tool_args: Schema-validated arguments.
+        """
+
+        try:
+            res = await tool.call(run_context, **tool_args)
+        except asyncio.TimeoutError:
+            yield ToolOutcome(
+                status="failed",
+                retryable=True,
+                error_code="timeout",
+                diagnostics=f"MCP tool {tool.name} timed out.",
+                result=mcp.types.CallToolResult(
+                    content=[
+                        mcp.types.TextContent(
+                            type="text", text="error: MCP tool execution timed out."
+                        )
+                    ],
+                    isError=True,
+                ),
+            )
             return
-        yield res
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("MCP tool %s failed", tool.name)
+            message = str(exc)[:1000]
+            yield ToolOutcome(
+                status="failed",
+                retryable=True,
+                error_code="mcp_error",
+                diagnostics=message,
+                result=mcp.types.CallToolResult(
+                    content=[
+                        mcp.types.TextContent(
+                            type="text", text=f"error: MCP tool failed: {message}"
+                        )
+                    ],
+                    isError=True,
+                ),
+            )
+            return
+
+        if isinstance(res, ToolOutcome):
+            yield res
+            return
+        if isinstance(res, mcp.types.CallToolResult):
+            has_content = bool(res.content or res.structuredContent)
+            yield ToolOutcome(
+                status="failed"
+                if res.isError
+                else "success"
+                if has_content
+                else "empty",
+                result=res,
+                retryable=bool(res.isError or not has_content),
+                error_code=(
+                    "mcp_error"
+                    if res.isError
+                    else "empty_result"
+                    if not has_content
+                    else ""
+                ),
+            )
+            return
+
+        text = str(res or "").strip()
+        result = mcp.types.CallToolResult(
+            content=[
+                mcp.types.TextContent(
+                    type="text", text=text or "error: MCP tool returned no content."
+                )
+            ],
+            isError=not bool(text),
+        )
+        yield ToolOutcome(
+            status="success" if text else "empty",
+            result=result,
+            retryable=not bool(text),
+            error_code="" if text else "empty_result",
+        )
 
 
 async def call_local_llm_tool(

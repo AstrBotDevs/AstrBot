@@ -198,6 +198,20 @@ class LogManager:
         if cls._configured:
             return
 
+        # Windows consoles may still expose a GBK stream.  Reconfigure the
+        # process streams before Loguru writes Unicode plugin messages so a
+        # decorative emoji can never turn a normal log event into a logging
+        # exception.  ``backslashreplace`` keeps logging best-effort even when
+        # an embedding host provides a non-reconfigurable stream.
+        for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is None:
+                continue
+            try:
+                reconfigure(encoding="utf-8", errors="backslashreplace")
+            except (AttributeError, OSError, ValueError):
+                pass
+
         _loguru.remove()
         cls._console_sink_id = _loguru.add(
             sys.stdout,

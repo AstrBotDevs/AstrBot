@@ -73,6 +73,24 @@ class _Provider(Provider):
         yield await self.text_chat(**kwargs)
 
 
+class _RepairProvider(_Provider):
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.calls += 1
+        if self.calls == 1:
+            args = {}
+        elif self.calls == 2:
+            args = {"query": "corrected"}
+        else:
+            return LLMResponse(role="assistant", completion_text="done")
+        return LLMResponse(
+            role="assistant",
+            completion_text="",
+            tools_call_name=["test_tool"],
+            tools_call_args=[args],
+            tools_call_ids=[f"call_{self.calls}"],
+        )
+
+
 class _Executor:
     def __init__(self) -> None:
         self.calls = 0
@@ -148,3 +166,38 @@ async def test_controlled_tool_execution_is_fail_closed(
         pass
 
     assert executor.calls == expected_calls
+
+
+@pytest.mark.asyncio
+async def test_invalid_tool_arguments_are_repaired_before_execution() -> None:
+    event = _Event()
+    provider = _RepairProvider()
+    executor = _Executor()
+    tool = FunctionTool(
+        name="test_tool",
+        description="test",
+        parameters={
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
+    )
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=provider,
+        request=ProviderRequest(
+            prompt="test",
+            contexts=[],
+            func_tool=ToolSet(tools=[tool]),
+        ),
+        run_context=ContextWrapper(context=SimpleNamespace(event=event)),
+        tool_executor=executor,
+        agent_hooks=_Hooks(True),
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(4):
+        pass
+
+    assert provider.calls == 3
+    assert executor.calls == 1

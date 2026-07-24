@@ -17,14 +17,69 @@ $ErrorActionPreference = "Stop"
 chcp 65001 | Out-Null
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
+$originalPath = $env:Path
 $proxyUrl = "http://127.0.0.1:7897"
+# PowerShell inherits environment variables from launchers that may differ only
+# by case (for example npm_config_noproxy/NPM_CONFIG_NOPROXY).  Start-Process
+# rejects that dictionary before the child script can normalize it, so collapse
+# every duplicate key at the boundary first and retain the first value.
+$environmentEntries = [Environment]::GetEnvironmentVariables().GetEnumerator()
+$environmentGroups = $environmentEntries | Group-Object {
+    $_.Key.ToString().ToLowerInvariant()
+}
+foreach ($environmentGroup in $environmentGroups | Where-Object Count -gt 1) {
+    $firstEntry = $environmentGroup.Group | Select-Object -First 1
+    $firstName = [string]$firstEntry.Key
+    $firstValue = [string]$firstEntry.Value
+    foreach ($duplicateEntry in $environmentGroup.Group) {
+        [Environment]::SetEnvironmentVariable(
+            [string]$duplicateEntry.Key,
+            $null,
+            [EnvironmentVariableTarget]::Process
+        )
+    }
+    [Environment]::SetEnvironmentVariable(
+        $firstName,
+        $firstValue,
+        [EnvironmentVariableTarget]::Process
+    )
+}
+# Windows environment names are case-insensitive, but inherited process
+# environments can contain both spellings. Normalize them before spawning
+# uv/Python so PowerShell does not reject the child environment as duplicate.
+$proxyEnvironmentNames = @(
+    "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy",
+    "HTTPS_PROXY", "https_proxy", "FTP_PROXY", "ftp_proxy",
+    "WS_PROXY", "ws_proxy", "WSS_PROXY", "wss_proxy",
+    "NO_PROXY", "no_proxy",
+    "PATH", "Path",
+    "npm_config_proxy", "npm_config_http_proxy", "npm_config_https_proxy",
+    "NPM_CONFIG_PROXY", "NPM_CONFIG_HTTP_PROXY", "NPM_CONFIG_HTTPS_PROXY"
+)
+foreach ($proxyEnvironmentName in $proxyEnvironmentNames) {
+    Remove-Item ("Env:{0}" -f $proxyEnvironmentName) -ErrorAction SilentlyContinue
+}
+if ($originalPath) {
+    $env:Path = $originalPath
+}
 $env:HTTP_PROXY = $proxyUrl
 $env:HTTPS_PROXY = $proxyUrl
-$env:http_proxy = $proxyUrl
-$env:https_proxy = $proxyUrl
 $env:QQTOOLS_BROWSER_PROXY = $proxyUrl
-Remove-Item Env:ALL_PROXY -ErrorAction SilentlyContinue
-Remove-Item Env:all_proxy -ErrorAction SilentlyContinue
+# Some Windows launchers provide an incomplete environment.  Python libraries
+# such as ChromaDB and DashScope call Path.home() during import, so make the
+# user-home variables explicit before starting AstrBot.
+if (-not $env:USERPROFILE) {
+    $env:USERPROFILE = [Environment]::GetFolderPath("UserProfile")
+}
+if (-not $env:HOMEDRIVE -and $env:USERPROFILE) {
+    $env:HOMEDRIVE = [IO.Path]::GetPathRoot($env:USERPROFILE).TrimEnd("\\")
+}
+if (-not $env:HOMEPATH -and $env:USERPROFILE -and $env:HOMEDRIVE) {
+    $env:HOMEPATH = $env:USERPROFILE.Substring($env:HOMEDRIVE.Length)
+}
+if (-not $env:HOME) {
+    $env:HOME = $env:USERPROFILE
+}
 $WinGetLinks = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links"
 if ((Test-Path $WinGetLinks) -and ($env:Path -notlike "*$WinGetLinks*")) {
     $env:Path = "$WinGetLinks;$env:Path"
@@ -419,12 +474,19 @@ if (-not (Test-Path $PythonPath)) {
     $ConfigGuardArgs = @("run", "python", ".\scripts\ensure_runtime_config.py")
     $HealthCheckCommand = $UvPath
     $HealthCheckArgs = @("run", "python", ".\scripts\diagnose_runtime_health.py")
+    $RuntimeCommand = $UvPath
+    $RuntimeArgs = @("run", "main.py")
 }
 else {
     $ConfigGuardCommand = $PythonPath
     $ConfigGuardArgs = @(".\scripts\ensure_runtime_config.py")
     $HealthCheckCommand = $PythonPath
     $HealthCheckArgs = @(".\scripts\diagnose_runtime_health.py")
+    # The virtualenv already contains the project runtime. Avoid `uv run`
+    # rebuilding/reinstalling the package on every launch, which can make a
+    # healthy startup look hung to a desktop launcher.
+    $RuntimeCommand = $PythonPath
+    $RuntimeArgs = @(".\main.py")
 }
 
 Write-Host "AstrBot root: $Root"
@@ -487,4 +549,4 @@ Invoke-CheckedCommand -FilePath $ConfigGuardCommand -Arguments $ConfigGuardArgs
 Invoke-CheckedCommand -FilePath $HealthCheckCommand -Arguments ($HealthCheckArgs + @("--skip-logs"))
 Assert-NoStaleAstrBotProcesses
 Assert-StartupPortsFree
-Invoke-CheckedCommand -FilePath $UvPath -Arguments @("run", "main.py")
+Invoke-CheckedCommand -FilePath $RuntimeCommand -Arguments $RuntimeArgs

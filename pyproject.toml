@@ -89,6 +89,9 @@ exclude = ["astrbot/core/utils/t2i/local_strategy.py", "astrbot/api/all.py", "te
 line-length = 88
 target-version = "py310"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.ruff.lint]
 select = [
   "F",     # Pyflakes

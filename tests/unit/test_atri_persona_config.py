@@ -9,12 +9,46 @@ from scripts.ensure_runtime_config import (
     ensure_angel_heart,
     ensure_bilibili,
     ensure_core_config,
+    ensure_image_processor,
     ensure_parser,
     ensure_private_companion,
     ensure_self_learning,
     ensure_semantic_router,
     ensure_wakepro,
 )
+
+
+def test_image_processor_uses_observed_network_timeout_budget() -> None:
+    image_processor: dict = {}
+
+    ensure_image_processor(image_processor)
+
+    assert image_processor["fast_vision_timeout_seconds"] == 6.0
+    assert image_processor["deep_vision_timeout_seconds"] == 12.0
+    assert image_processor["local_fallback_enabled"] is True
+
+
+def test_gemini_vision_source_disables_unmanaged_native_tools() -> None:
+    core: dict = {
+        "provider_sources": [
+            {
+                "id": "google_gemini_bot",
+                "enable": True,
+                "proxy": "http://proxy.invalid:7897",
+                "gm_native_search": True,
+                "gm_native_coderunner": True,
+                "gm_url_context": True,
+            }
+        ]
+    }
+
+    ensure_core_config(core)
+
+    source = core["provider_sources"][0]
+    assert source["proxy"] == ""
+    assert source["gm_native_search"] is False
+    assert source["gm_native_coderunner"] is False
+    assert source["gm_url_context"] is False
 
 
 def test_atri_skill_is_plot_free_and_emotional() -> None:
@@ -49,7 +83,8 @@ def test_persona_configs_share_atri_identity_and_repairer_mapping() -> None:
     assert companion["basic_config"]["bot_name"] == "亚托莉"
     assert companion["basic_config"]["plugin_specific_persona_id"] == "atri"
     assert companion["basic_config"]["target_user_ids"] == [OWNER_QQ]
-    assert companion["basic_config"]["private_user_aliases"] == (f"{OWNER_QQ}=你")
+    assert companion["basic_config"]["private_user_aliases"] == (f"你={OWNER_QQ}")
+    assert companion["external_memory_config"]["enable_livingmemory_integration"] is False
     assert "亚托莉" in wakepro["mention"]["names"]
     assert "萝卜子" in wakepro["mention"]["names"]
     assert wakepro["pipeline"]["steps"] == [
@@ -91,6 +126,12 @@ def test_search_evidence_and_social_habits_use_controlled_background_learning() 
     assert semantic["knowledge_ingestion_enabled"] is True
     assert semantic["knowledge_auto_stage_search_enabled"] is True
     assert semantic["knowledge_auto_stage_notify_owner"] is False
+    assert semantic["adaptive_mailbox_enabled"] is True
+    assert semantic["mailbox_global_capacity"] == 32
+    assert semantic["mailbox_session_capacity"] == 6
+    assert semantic["fragment_quiet_window_seconds"] == 1.2
+    assert semantic["fragment_hard_window_seconds"] == 4.0
+    assert semantic["mailbox_max_merge_count"] == 5
     basic = self_learning["Self_Learning_Basic"]
     assert basic["enable_message_capture"] is True
     assert basic["enable_jargon_learning"] is True
@@ -120,6 +161,11 @@ def test_owner_and_bilibili_capabilities_are_kept_enabled() -> None:
 
     assert OWNER_QQ in core["admins_id"]
     assert core["callback_api_base"] == "http://host.docker.internal:6185"
+    assert core["platform_settings"]["rate_limit"] == {
+        "time": 10,
+        "count": 120,
+        "strategy": "discard",
+    }
     assert bilibili["enable_parse_miniapp"] is True
     assert bilibili["enable_parse_BV"] is True
     assert bilibili["enable_ai_summary"] is True

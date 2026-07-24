@@ -26,6 +26,13 @@ class AgentExecutionPolicy:
         max_steps: Maximum number of model/tool loop steps.
         tool_timeout_seconds: Timeout for each individual tool call.
         request_max_retries: Maximum provider retries within one runner step.
+        tool_required: Whether the request must observe a successful allowed tool.
+        selected_tool: Exact tool selected by the semantic planner, when known.
+        semantic_intent: Normalized semantic intent for observability.
+        semantic_confidence: Deterministic/planner confidence in the intent.
+        required_evidence: Evidence classes required before answering.
+        fallback_tools: Ordered read-only alternatives when the selected tool fails.
+        completion_check: Structured conditions that must be satisfied before reply.
         principal_id: Stable platform-scoped identity used for auditing.
         permission_snapshot: Read-only authorization attributes for auditing.
     """
@@ -37,6 +44,13 @@ class AgentExecutionPolicy:
     max_steps: int = 3
     tool_timeout_seconds: int = 30
     request_max_retries: int = 0
+    tool_required: bool = False
+    selected_tool: str = ""
+    semantic_intent: str = "chat"
+    semantic_confidence: float = 0.0
+    required_evidence: tuple[str, ...] = ()
+    fallback_tools: tuple[str, ...] = ()
+    completion_check: dict[str, Any] = field(default_factory=dict)
     principal_id: str = ""
     permission_snapshot: dict[str, Any] = field(default_factory=dict)
 
@@ -66,6 +80,13 @@ class AgentExecutionPolicy:
         max_steps = value.get("max_steps", 3)
         tool_timeout = value.get("tool_timeout_seconds", 30)
         retries = value.get("request_max_retries", 0)
+        tool_required = value.get("tool_required", False)
+        selected_tool = value.get("selected_tool", "")
+        semantic_intent = value.get("semantic_intent", "chat")
+        semantic_confidence = value.get("semantic_confidence", 0.0)
+        required_evidence = value.get("required_evidence", [])
+        fallback_tools = value.get("fallback_tools", [])
+        completion_check = value.get("completion_check", {})
         if (
             isinstance(max_steps, bool)
             or not isinstance(max_steps, int)
@@ -83,6 +104,26 @@ class AgentExecutionPolicy:
             or not isinstance(retries, int)
             or retries not in {0, 1}
         ):
+            return None
+        if not isinstance(tool_required, bool):
+            return None
+        if not isinstance(selected_tool, str) or not isinstance(semantic_intent, str):
+            return None
+        if (
+            isinstance(semantic_confidence, bool)
+            or not isinstance(semantic_confidence, (int, float))
+            or not 0.0 <= float(semantic_confidence) <= 1.0
+        ):
+            return None
+        if not isinstance(required_evidence, list) or not all(
+            isinstance(item, str) and item.strip() for item in required_evidence
+        ):
+            return None
+        if not isinstance(fallback_tools, list) or not all(
+            isinstance(item, str) and item.strip() for item in fallback_tools
+        ):
+            return None
+        if not isinstance(completion_check, dict):
             return None
 
         provider_id = value.get("provider_id")
@@ -117,6 +158,17 @@ class AgentExecutionPolicy:
             max_steps=max_steps,
             tool_timeout_seconds=tool_timeout,
             request_max_retries=retries,
+            tool_required=tool_required,
+            selected_tool=selected_tool.strip(),
+            semantic_intent=semantic_intent.strip() or "chat",
+            semantic_confidence=float(semantic_confidence),
+            required_evidence=tuple(
+                dict.fromkeys(item.strip() for item in required_evidence)
+            ),
+            fallback_tools=tuple(
+                dict.fromkeys(item.strip() for item in fallback_tools)
+            ),
+            completion_check=completion_check.copy(),
             principal_id=principal_id,
             permission_snapshot=permission_snapshot.copy(),
         )

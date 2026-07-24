@@ -99,7 +99,10 @@ class ProviderGoogleGenAI(Provider):
             async_client_kwargs["proxy"] = proxy
             async_client_kwargs["trust_env"] = False
         else:
-            async_client_kwargs["trust_env"] = True
+            # An empty provider proxy means direct connection.  Do not let a
+            # process-wide HTTP_PROXY (used by browser/search plugins) silently
+            # route Gemini traffic through the proxy.
+            async_client_kwargs["trust_env"] = False
 
         # Track the previous client so it can be closed in terminate() instead
         # of leaking when _init_client is called again (e.g. via set_key).
@@ -325,17 +328,49 @@ class ProviderGoogleGenAI(Provider):
                 logger.warning("Text content is empty, added a space as placeholder.")
             return types.Part.from_text(text=content_a)
 
-        def process_image_url(image_url_dict: dict) -> types.Part:
-            url = image_url_dict["url"]
-            mime_type = url.split(":")[1].split(";")[0]
-            image_bytes = base64.b64decode(url.split(",", 1)[1])
-            return types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+        def process_media_url(
+            media_url_dict: dict, media_type: str
+        ) -> types.Part | None:
+            """Convert a data URL to a Gemini part, rejecting empty payloads.
 
-        def process_audio_url(audio_url_dict: dict) -> types.Part:
-            url = audio_url_dict["url"]
-            mime_type = url.split(":")[1].split(";")[0]
-            audio_bytes = base64.b64decode(url.split(",", 1)[1])
-            return types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+            Args:
+                media_url_dict: OpenAI-compatible media part payload.
+                media_type: Expected media prefix, such as ``image`` or ``audio``.
+
+            Returns:
+                A populated Gemini part, or ``None`` when the payload is unusable.
+            """
+            url = (
+                media_url_dict.get("url") if isinstance(media_url_dict, dict) else None
+            )
+            if not isinstance(url, str) or not url.strip():
+                logger.warning("Gemini %s part has no URL; dropping it.", media_type)
+                return None
+            header, separator, encoded = url.partition(",")
+            if not separator or not encoded.strip() or not header.startswith("data:"):
+                logger.warning(
+                    "Gemini %s part has empty or invalid data; dropping it.", media_type
+                )
+                return None
+            try:
+                mime_type = header.split(":", 1)[1].split(";", 1)[0]
+                if not mime_type.startswith(f"{media_type}/"):
+                    logger.warning(
+                        "Gemini %s part has unexpected MIME type %s; dropping it.",
+                        media_type,
+                        mime_type,
+                    )
+                    return None
+                media_bytes = base64.b64decode(encoded, validate=True)
+            except (ValueError, TypeError, IndexError) as exc:
+                logger.warning("Gemini %s part data is invalid: %s", media_type, exc)
+                return None
+            if not media_bytes:
+                logger.warning(
+                    "Gemini %s part decoded to empty data; dropping it.", media_type
+                )
+                return None
+            return types.Part.from_bytes(data=media_bytes, mime_type=mime_type)
 
         def append_or_extend(
             contents: list[types.Content],
@@ -354,25 +389,32 @@ class ProviderGoogleGenAI(Provider):
 
             if role == "user":
                 if isinstance(content, list):
-                    parts = [
-                        (
-                            types.Part.from_text(text=item["text"] or " ")
-                            if item["type"] == "text"
-                            else (
-                                process_image_url(item["image_url"])
-                                if item["type"] == "image_url"
-                                else process_audio_url(item["audio_url"])
+                    parts = []
+                    for item in content:
+                        if not isinstance(item, dict):
+                            continue
+                        item_type = item.get("type")
+                        if item_type == "text":
+                            parts.append(
+                                types.Part.from_text(text=item.get("text") or " ")
                             )
-                        )
-                        for item in content
-                    ]
+                        elif item_type == "image_url":
+                            part = process_media_url(item.get("image_url", {}), "image")
+                            if part is not None:
+                                parts.append(part)
+                        elif item_type == "audio_url":
+                            part = process_media_url(item.get("audio_url", {}), "audio")
+                            if part is not None:
+                                parts.append(part)
+                    if not parts:
+                        parts = [types.Part.from_text(text="[Media unavailable]")]
                 else:
                     parts = [create_text_part(content)]
                 append_or_extend(gemini_contents, parts, types.UserContent)
 
             elif role == "assistant":
                 parts = []
-                if isinstance(content, str):
+                if isinstance(content, str) and content.strip():
                     parts.append(types.Part.from_text(text=content))
                 elif isinstance(content, list):
                     thinking_signature = None
@@ -381,8 +423,8 @@ class ProviderGoogleGenAI(Provider):
                         # for most cases, assistant content only contains two parts: think and text
                         if part.get("type") == "think":
                             thinking_signature = part.get("encrypted") or None
-                        else:
-                            text += str(part.get("text"))
+                        elif part.get("type") == "text":
+                            text += str(part.get("text") or "")
 
                     if thinking_signature and isinstance(thinking_signature, str):
                         try:
@@ -409,7 +451,7 @@ class ProviderGoogleGenAI(Provider):
                         # If the main content is empty but tool calls have thought signatures,
                         # skip adding an empty text part to deduplicate the thinking signature in the main content and tool calls.
                         pass
-                    else:
+                    elif text:
                         parts.append(
                             types.Part(
                                 text=text,
@@ -437,7 +479,10 @@ class ProviderGoogleGenAI(Provider):
                         parts.append(part)
 
                 if not parts:
-                    parts = [types.Part.from_text(text=" ")]
+                    # Empty assistant records are invalid for Gemini.  They can
+                    # occur after a failed provider response; omit them rather
+                    # than constructing a Part with no initialized field.
+                    continue
 
                 append_or_extend(gemini_contents, parts, types.ModelContent)
 
@@ -646,9 +691,9 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     max_attempts=(
-                        max(1, request_max_retries)
+                        max(1, min(request_max_retries, 2))
                         if request_max_retries is not None
-                        else None
+                        else 1
                     ),
                     retry_rate_limits=False,
                 )
@@ -743,9 +788,9 @@ class ProviderGoogleGenAI(Provider):
                         config=config,
                     ),
                     max_attempts=(
-                        max(1, request_max_retries)
+                        max(1, min(request_max_retries, 2))
                         if request_max_retries is not None
-                        else None
+                        else 1
                     ),
                     retry_rate_limits=False,
                 )
@@ -910,8 +955,13 @@ class ProviderGoogleGenAI(Provider):
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
-        retry = max(1, request_max_retries) if request_max_retries is not None else 10
+        retry = (
+            max(1, min(request_max_retries, 2))
+            if request_max_retries is not None
+            else 1
+        )
         keys = self.api_keys.copy()
+        last_exception: Exception | None = None
 
         for _ in range(retry):
             try:
@@ -921,10 +971,15 @@ class ProviderGoogleGenAI(Provider):
                     request_max_retries=request_max_retries,
                 )
             except APIError as e:
+                last_exception = e
                 if await self._handle_api_error(e, keys):
                     continue
                 break
 
+        if last_exception is not None:
+            # Preserve the provider's status/message so ModelGateway can
+            # classify the failure and the fallback audit can explain it.
+            raise last_exception
         raise Exception("Gemini request failed.")
 
     async def text_chat_stream(
@@ -987,8 +1042,13 @@ class ProviderGoogleGenAI(Provider):
         if func_tool and not func_tool.empty():
             payloads["tool_choice"] = tool_choice
 
-        retry = max(1, request_max_retries) if request_max_retries is not None else 10
+        retry = (
+            max(1, min(request_max_retries, 2))
+            if request_max_retries is not None
+            else 1
+        )
         keys = self.api_keys.copy()
+        last_exception: Exception | None = None
 
         for _ in range(retry):
             try:
@@ -1000,9 +1060,15 @@ class ProviderGoogleGenAI(Provider):
                     yield response
                 break
             except APIError as e:
+                last_exception = e
                 if await self._handle_api_error(e, keys):
                     continue
                 break
+
+        if last_exception is not None:
+            # Streaming callers otherwise observe a silent end-of-stream when
+            # the Gemini endpoint rejects the request.
+            raise last_exception
 
     async def get_models(self):
         try:

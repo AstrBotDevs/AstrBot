@@ -104,6 +104,7 @@ class GroupChatContext:
             session_id=uuid.uuid4().hex,
             image_urls=[image_url],
             persist=False,
+            request_max_retries=1,
         )
         return response.completion_text
 

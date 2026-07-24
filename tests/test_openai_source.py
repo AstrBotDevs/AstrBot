@@ -1591,6 +1591,27 @@ async def test_query_filters_null_content_assistant_message_without_tool_calls(
         await provider.terminate()
 
 
+def test_sanitize_assistant_removes_reasoning_only_message():
+    payloads = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": None,
+                "reasoning_content": "a failed turn",
+            },
+            {"role": "user", "content": "try again"},
+        ]
+    }
+
+    ProviderOpenAIOfficial._sanitize_assistant_messages(payloads)
+
+    assert payloads["messages"] == [
+        {"role": "user", "content": "hello"},
+        {"role": "user", "content": "try again"},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_query_converts_empty_content_to_none_with_tool_calls(monkeypatch):
     """Test that empty content with tool_calls is converted to None (OpenAI spec)."""

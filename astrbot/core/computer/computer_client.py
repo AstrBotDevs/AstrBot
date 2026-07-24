@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import shutil
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass
@@ -489,7 +490,12 @@ async def _sync_skills_to_sandbox(booter: ComputerBooter) -> None:
     sync_skill_dirs = _collect_sync_skill_dirs()
 
     temp_dir = Path(get_astrbot_temp_path())
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # Older plugins may return POSIX /tmp on Windows.
+        temp_dir = Path(tempfile.gettempdir())
+        temp_dir.mkdir(parents=True, exist_ok=True)
     zip_base = temp_dir / "skills_bundle"
     zip_path = zip_base.with_suffix(".zip")
     bundle_root = temp_dir / f"skills_bundle_{uuid.uuid4().hex}"

@@ -395,8 +395,40 @@ class AiocqhttpAdapter(Platform):
                         logger.error(f"获取 @ 用户信息失败: {e}，此消息段将被忽略。")
 
                 message_str += "".join(at_parts)
-            elif t == "mface":
-                continue
+            elif t in {"mface", "marketface"}:
+                for m in m_group:
+                    data = m.get("data", {}) or {}
+                    image_url = ""
+                    for key in (
+                        "url",
+                        "cdnurl",
+                        "cdn_url",
+                        "raw_url",
+                        "origin_url",
+                        "original_url",
+                        "thumb",
+                        "thumb_url",
+                    ):
+                        value = str(data.get(key) or "").strip()
+                        if value.startswith(("http://", "https://")):
+                            image_url = value
+                            break
+                    if not image_url:
+                        for value in data.values():
+                            candidate = str(value or "").strip()
+                            if candidate.startswith(("http://", "https://")):
+                                image_url = candidate
+                                break
+                    if image_url:
+                        abm.message.append(Image(file=image_url, url=image_url))
+                    else:
+                        logger.warning(
+                            "aiocqhttp: received %s without a downloadable image URL; "
+                            "preserving it as text instead of dropping the message",
+                            t,
+                        )
+                        abm.message.append(Plain(text="[QQ表情]"))
+                        message_str += "[QQ表情]"
             elif t == "markdown":
                 for m in m_group:
                     text = m["data"].get("markdown") or m["data"].get("content", "")

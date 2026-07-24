@@ -7,6 +7,7 @@ import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.exceptions import EmptyModelOutputError
 from astrbot.core.provider.entities import LLMResponse
+from astrbot.core.provider.modalities import sanitize_contexts_by_modalities
 from astrbot.core.provider.sources.gemini_source import ProviderGoogleGenAI
 
 
@@ -32,6 +33,99 @@ def test_gemini_reasoning_only_output_is_allowed():
         response_id="resp_reasoning",
         finish_reason="STOP",
     )
+
+
+def test_gemini_drops_empty_media_and_assistant_parts():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = provider._prepare_conversation(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/png;base64,"},
+                        }
+                    ],
+                },
+                {"role": "assistant", "content": ""},
+                {
+                    "role": "assistant",
+                    "content": [{"type": "think", "think": "failed turn"}],
+                },
+                {"role": "user", "content": "continue"},
+            ]
+        }
+    )
+
+    assert len(contents) == 1
+    assert contents[0].role == "user"
+    assert [part.text for part in contents[0].parts] == [
+        "[Media unavailable]",
+        "continue",
+    ]
+
+
+def test_gemini_keeps_non_empty_data_image():
+    provider = ProviderGoogleGenAI.__new__(ProviderGoogleGenAI)
+
+    contents = provider._prepare_conversation(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "data:image/png;base64,AA=="},
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    image_part = contents[0].parts[0]
+    assert image_part.inline_data is not None
+    assert image_part.inline_data.data == b"\x00"
+
+
+def test_provider_context_sanitizer_removes_think_only_assistant():
+    contexts, stats = sanitize_contexts_by_modalities(
+        [
+            {"role": "user", "content": "hello"},
+            {
+                "role": "assistant",
+                "content": [{"type": "think", "think": "failed turn"}],
+                "reasoning_content": "failed turn",
+            },
+            {"role": "user", "content": "try again"},
+        ],
+        ["text", "image", "audio", "tool_use"],
+    )
+
+    assert [message["role"] for message in contexts] == ["user", "user"]
+    assert stats.removed_empty_assistant_messages == 1
+
+
+@pytest.mark.asyncio
+async def test_gemini_empty_proxy_ignores_process_proxy(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:7897")
+    provider = ProviderGoogleGenAI(
+        {
+            "key": ["test-key"],
+            "model": "gemini-3.1-flash-lite",
+            "api_base": "https://api.example.test",
+            "proxy": "",
+        },
+        {},
+    )
+
+    assert provider._http_client is not None
+    assert provider._http_client._trust_env is False
+    await provider.terminate()
 
 
 @pytest.mark.asyncio

@@ -16,7 +16,9 @@ from astrbot.core.utils.network_utils import is_connection_error
 
 T = TypeVar("T")
 
-REQUEST_RETRY_ATTEMPTS = 5  # default value
+# A provider call may have one bounded transient retry. Rate limits and
+# authentication failures are filtered by the retry predicate below.
+REQUEST_RETRY_ATTEMPTS = 2
 REQUEST_RETRY_WAIT_MIN_S = 0.2
 REQUEST_RETRY_WAIT_MAX_S = 30
 REQUEST_RETRY_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504, 529}

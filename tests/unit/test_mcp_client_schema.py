@@ -115,3 +115,20 @@ class TestMCPToolSchemaNormalization:
         assert tool.parameters["required"] == ["stock_code"]
         assert "required" not in tool.parameters["properties"]["stock_code"]
         assert "required" not in tool.parameters["properties"]["market"]
+
+    def test_mcp_tool_applies_independent_name_prefix(self):
+        mcp_tool = SimpleNamespace(
+            name="search",
+            description="Read-only search",
+            inputSchema={"type": "object", "properties": {}},
+        )
+
+        tool = MCPTool(
+            mcp_tool,
+            MagicMock(),
+            "anysearch-fallback",
+            tool_name_prefix="mcp_anysearch_",
+        )
+
+        assert tool.name == "mcp_anysearch_search"
+        assert tool.mcp_tool.name == "search"

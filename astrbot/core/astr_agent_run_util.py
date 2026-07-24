@@ -126,6 +126,7 @@ async def run_agent(
     astr_event = agent_runner.run_context.context.event
     tool_name_by_call_id: dict[str, str] = {}
     buffered_llm_chains: list[MessageChain] = []
+    run_deadline = getattr(agent_runner, "_run_deadline_monotonic", None)
     can_buffer_llm_result = _should_buffer_llm_result(
         buffer_intermediate_messages,
         stream_to_general,
@@ -133,6 +134,15 @@ async def run_agent(
     )
     while step_idx < max_step + 1:
         step_idx += 1
+
+        if run_deadline is not None and time.monotonic() >= run_deadline:
+            message = "AI 任务已超过时间限制，已停止继续调用工具。"
+            force_terminal = getattr(agent_runner, "force_terminal", None)
+            if callable(force_terminal):
+                force_terminal("expired", message)
+            astr_event.set_result(MessageEventResult().message(message))
+            yield MessageChain().message(message)
+            return
 
         if step_idx == max_step + 1:
             logger.warning(
@@ -151,10 +161,24 @@ async def run_agent(
                 )
 
         stop_watcher = asyncio.create_task(
-            _watch_agent_stop_signal(agent_runner, astr_event),
+            _watch_agent_stop_signal(agent_runner, astr_event, run_deadline),
         )
         try:
-            async for resp in agent_runner.step():
+            # Bound the complete step, including provider streaming and tool execution.
+            # The watchdog checks between steps, but this timeout also releases a
+            # stuck async generator that never yields another event.
+            remaining = (
+                max(0.1, run_deadline - time.monotonic())
+                if run_deadline is not None
+                else 90.0
+            )
+
+            async def bounded_step():
+                async with asyncio.timeout(remaining):
+                    async for item in agent_runner.step():
+                        yield item
+
+            async for resp in bounded_step():
                 if _should_stop_agent(astr_event):
                     agent_runner.request_stop()
 
@@ -302,6 +326,13 @@ async def run_agent(
                 break
 
         except Exception as e:
+            timeout_message = None
+            if isinstance(e, TimeoutError):
+                timeout_message = "AI 任务执行超时，已停止当前步骤。"
+                force_terminal = getattr(agent_runner, "force_terminal", None)
+                if callable(force_terminal):
+                    force_terminal("expired", timeout_message)
+                astr_event.set_extra("agent_stop_requested", True)
             if "stop_watcher" in locals() and not stop_watcher.done():
                 stop_watcher.cancel()
                 try:
@@ -313,7 +344,9 @@ async def run_agent(
             custom_error_message = extract_persona_custom_error_message_from_event(
                 astr_event
             )
-            if custom_error_message:
+            if timeout_message:
+                err_msg = timeout_message
+            elif custom_error_message:
                 err_msg = custom_error_message
             else:
                 err_msg = (
@@ -340,9 +373,19 @@ async def run_agent(
             return
 
 
-async def _watch_agent_stop_signal(agent_runner: AgentRunner, astr_event) -> None:
+async def _watch_agent_stop_signal(
+    agent_runner: AgentRunner, astr_event, deadline: float | None = None
+) -> None:
     while not agent_runner.done():
         if _should_stop_agent(astr_event):
+            agent_runner.request_stop()
+            return
+        if deadline is not None and time.monotonic() >= deadline:
+            message = "AI 任务已超过时间限制，已停止继续调用。"
+            astr_event.set_extra("agent_stop_requested", True)
+            force_terminal = getattr(agent_runner, "force_terminal", None)
+            if callable(force_terminal):
+                force_terminal("expired", message)
             agent_runner.request_stop()
             return
         await asyncio.sleep(0.5)

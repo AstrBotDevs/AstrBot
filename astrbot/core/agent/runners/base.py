@@ -1,6 +1,6 @@
 import abc
 import typing as T
-from enum import Enum, auto
+from enum import Enum, StrEnum, auto
 
 from astrbot import logger
 from astrbot.core.provider.entities import LLMResponse
@@ -17,6 +17,19 @@ class AgentState(Enum):
     RUNNING = auto()  # Currently processing
     DONE = auto()  # Completed
     ERROR = auto()  # Error state
+
+
+class RunTerminalStatus(StrEnum):
+    """Stable terminal statuses persisted by the Agent evidence store."""
+
+    COMPLETED = "COMPLETED"
+    DEGRADED = "DEGRADED"
+    PARTIAL = "PARTIAL"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+    INTERRUPTED = "INTERRUPTED"
 
 
 class BaseAgentRunner(T.Generic[TContext]):

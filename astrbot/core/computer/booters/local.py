@@ -80,7 +80,9 @@ def _decode_bytes_with_fallback(
 
 
 def _decode_shell_output(output: bytes | None) -> str:
-    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8")
+    return _decode_bytes_with_fallback(output, preferred_encoding="utf-8").replace(
+        "\r\n", "\n"
+    )
 
 
 @dataclass
@@ -102,12 +104,19 @@ class LocalShellComponent(ShellComponent):
             if env:
                 run_env.update({str(k): str(v) for k, v in env.items()})
             working_dir = os.path.abspath(cwd) if cwd else get_astrbot_root()
+            command_to_run = command
+            if os.name == "nt" and shell and command.startswith("'"):
+                # POSIX shlex.quote wraps an executable in single quotes. CMD
+                # treats those quotes as literal characters on Windows.
+                closing = command.find("'", 1)
+                if closing > 1:
+                    command_to_run = f'"{command[1:closing]}"{command[closing + 1 :]}'
             if background:
                 # `command` is intentionally executed through the current shell so
                 # local computer-use behavior matches existing tool semantics.
                 # Safety relies on `_is_safe_command()` and the allowed-root checks.
                 proc = subprocess.Popen(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                    command,
+                    command_to_run,
                     shell=shell,
                     cwd=working_dir,
                     env=run_env,
@@ -119,7 +128,7 @@ class LocalShellComponent(ShellComponent):
             # local computer-use behavior matches existing tool semantics.
             # Safety relies on `_is_safe_command()` and the allowed-root checks.
             result = subprocess.run(  # noqa: S602  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-                command,
+                command_to_run,
                 shell=shell,
                 cwd=working_dir,
                 env=run_env,
