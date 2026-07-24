@@ -50,6 +50,7 @@ from .command_management import sync_command_configs
 from .context import Context
 from .error_messages import format_plugin_error
 from .filter.permission import PermissionType, PermissionTypeFilter
+from .sdk_plugin_adapter import SDK_PLUGIN_MANIFEST, SDKPluginAdapter
 from .star import star_map, star_registry
 from .star_handler import EventType, star_handlers_registry
 from .updator import PLUGIN_METADATA_FILENAMES, PluginUpdator
@@ -210,6 +211,11 @@ class PluginManager:
         self.conf_schema_fname = "_conf_schema.json"
         self.logo_fname = "logo.png"
         """插件配置 Schema 文件名"""
+        self.sdk_plugin_adapter = SDKPluginAdapter(
+            plugin_store_path=self.plugin_store_path,
+            plugin_config_path=self.plugin_config_path,
+            star_context=self.context,
+        )
         self._pm_lock = asyncio.Lock()
         """StarManager操作互斥锁"""
 
@@ -293,6 +299,8 @@ class PluginManager:
         # 遍历文件夹，找到 main.py 或者和文件夹同名的文件
         for d in dirs:
             if os.path.isdir(os.path.join(path, d)):
+                if os.path.exists(os.path.join(path, d, SDK_PLUGIN_MANIFEST)):
+                    continue
                 if os.path.exists(os.path.join(path, d, "main.py")):
                     module_str = "main"
                 elif os.path.exists(os.path.join(path, d, d + ".py")):
@@ -1088,11 +1096,28 @@ class PluginManager:
         inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
         alter_cmd = await sp.global_get("alter_cmd", {})
 
+        should_load_sdk_plugins = specified_module_path is None
+        specified_sdk_dir_name = specified_dir_name
+        if specified_module_path and specified_module_path.endswith(".__sdk_plugin__"):
+            should_load_sdk_plugins = True
+            parts = specified_module_path.split(".")
+            if len(parts) >= 3:
+                specified_sdk_dir_name = parts[-2]
+            specified_module_path = None
+
         plugin_modules = self._get_plugin_modules()
         if plugin_modules is None:
             return False, "未找到任何插件模块"
 
         has_load_error = False
+        if should_load_sdk_plugins:
+            sdk_success, sdk_failed = await self.sdk_plugin_adapter.load_all(
+                specified_dir_name=specified_sdk_dir_name,
+                inactivated_plugins=inactivated_plugins,
+            )
+            if not sdk_success:
+                has_load_error = True
+                self.failed_plugin_dict.update(sdk_failed)
 
         # 导入插件模块，并尝试实例化插件类
         for plugin_module in plugin_modules:
@@ -1866,6 +1891,10 @@ class PluginManager:
             plugin_module_path: 插件的完整模块路径
 
         """
+        if plugin_module_path.endswith(".__sdk_plugin__"):
+            await self.sdk_plugin_adapter.unload_by_module_path(plugin_module_path)
+            return
+
         plugin = None
         del star_map[plugin_module_path]
         for i, p in enumerate(star_registry):
