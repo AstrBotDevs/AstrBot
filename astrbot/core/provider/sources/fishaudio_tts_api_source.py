@@ -67,7 +67,7 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
-        self.set_model(provider_config.get("model", ""))
+        self.set_model(provider_config.get("model") or "s1")
 
     async def _get_reference_id_by_character(self, character: str) -> str | None:
         """获取角色的reference_id
@@ -144,7 +144,6 @@ class ProviderFishAudioTTSAPI(TTSProvider):
     async def get_audio(self, text: str) -> str:
         temp_dir = get_astrbot_temp_path()
         path = os.path.join(temp_dir, f"fishaudio_tts_api_{uuid.uuid4()}.wav")
-        self.headers["content-type"] = "application/msgpack"
         request = await self._generate_request(text)
         async with AsyncClient(
             base_url=self.api_base,
@@ -153,7 +152,11 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         ).stream(
             "POST",
             "/tts",
-            headers=self.headers,
+            headers={
+                **self.headers,
+                "content-type": "application/msgpack",
+                "model": self.model_name,
+            },
             content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
         ) as response:
             if response.status_code == 200 and response.headers.get(
