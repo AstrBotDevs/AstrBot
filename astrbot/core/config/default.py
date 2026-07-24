@@ -4428,6 +4428,11 @@ CONFIG_METADATA_3_SYSTEM = {
                         "type": "list",
                         "items": {"type": "string"},
                     },
+                    "disable_metrics": {
+                        "description": "禁用匿名使用统计",
+                        "type": "bool",
+                        "hint": "禁用后，AstrBot 将不再上传匿名使用统计数据。",
+                    },
                 },
             },
         },
