@@ -5,7 +5,10 @@ import pytest
 
 from astrbot.core import sp
 from astrbot.core.provider import func_tool_manager as ftm
-from astrbot.core.provider.func_tool_manager import FunctionToolManager
+from astrbot.core.provider.func_tool_manager import (
+    FunctionToolManager,
+    _modelscope_mcp_transport_from_url_info,
+)
 from astrbot.core.tools.computer_tools.shell import ExecuteShellTool
 from astrbot.core.tools.message_tools import SendMessageToUserTool
 from astrbot.core.tools.web_search_tools import (
@@ -295,6 +298,20 @@ def test_is_self_detached_command_handles_quotes_and_comments(command, expected)
     assert _is_self_detached_command(command) is expected
 
 
+@pytest.mark.parametrize(
+    ("url_info", "expected"),
+    [
+        ({"transport": "Streamable HTTP", "url": "https://example.com/mcp"}, "streamable_http"),
+        ({"transport_type": "sse", "url": "https://example.com/mcp"}, "sse"),
+        ({"type": "streamable_http", "url": "https://example.com/mcp"}, "streamable_http"),
+        ({"url": "https://example.com/mcp/sse"}, "sse"),
+        ({"url": "https://example.com/mcp"}, "streamable_http"),
+    ],
+)
+def test_modelscope_mcp_transport_from_url_info(url_info, expected):
+    assert _modelscope_mcp_transport_from_url_info(url_info) == expected
+
+
 @pytest.mark.asyncio
 async def test_execute_shell_reports_blank_exception_type(monkeypatch):
     from astrbot.core.tools.computer_tools import shell as shell_tools
@@ -465,7 +482,7 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
             "mcpServers": {
                 "valid": {
                     "url": "https://example.com/mcp",
-                    "transport": "sse",
+                    "transport": "streamable_http",
                     "active": True,
                     "provider": "modelscope",
                 }
@@ -477,7 +494,7 @@ async def test_modelscope_sync_enables_only_synced_servers(monkeypatch):
             "valid",
             {
                 "url": "https://example.com/mcp",
-                "transport": "sse",
+                "transport": "streamable_http",
                 "active": True,
                 "provider": "modelscope",
             },
