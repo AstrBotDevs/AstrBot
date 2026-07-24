@@ -486,3 +486,30 @@ async def check_ok(self, event: AstrMessageEvent):
 当事件停止传播，后续所有步骤将不会被执行。
 
 假设有一个插件 A，A 终止事件传播之后所有后续操作都不会执行，比如执行其它插件的 handler、请求 LLM。
+
+## QQ 官方按钮回调
+
+QQ 官方机器人的回调按钮（`action.type = 1`）会通过 WebSocket 发送 interaction 事件，不会作为普通消息进入 LLM 或命令管线。插件可使用 `on_qqofficial_interaction` 处理点击事件。
+
+处理器接收 qq-botpy 的 interaction 对象。返回 `QQOfficialInteractionResultCode` 或 `0` 到 `5` 的整数作为 QQ 回执码；返回 `None` 表示当前插件不处理该点击，后续已启用的处理器可以继续匹配。第一个有效返回值会结束处理并回执 QQ；没有插件处理时返回失败码 `FAILED`。
+
+```python
+from typing import Any
+
+from astrbot.api.event import QQOfficialInteractionResultCode, filter
+
+
+@filter.on_qqofficial_interaction()
+async def on_qqofficial_interaction(
+    self, interaction: Any
+) -> QQOfficialInteractionResultCode | None:
+    resolved = getattr(getattr(interaction, "data", None), "resolved", {})
+    button_data = getattr(resolved, "button_data", None)
+    if button_data != "demo:confirm":
+        return None
+
+    # Start or schedule the real operation here. Return promptly so QQ can stop loading.
+    return QQOfficialInteractionResultCode.SUCCESS
+```
+
+回执码使用 `QQOfficialInteractionResultCode`：`SUCCESS`（0）、`FAILED`（1）、`RATE_LIMITED`（2）、`DUPLICATE`（3）、`FORBIDDEN`（4）和 `ADMIN_ONLY`（5）。该功能仅适用于 QQ 官方 WebSocket 适配器；QQ 官方 Webhook 适配器目前不会分发 interaction 事件，暂不支持此功能。
