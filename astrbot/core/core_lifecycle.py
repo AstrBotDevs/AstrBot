@@ -66,6 +66,9 @@ class AstrBotCoreLifecycle:
 
         # 设置代理
         proxy_config = self.astrbot_config.get("http_proxy", "")
+        proxy_config = proxy_config.strip() if proxy_config is not None else ""
+        if proxy_config and "://" not in proxy_config:
+            proxy_config = f"http://{proxy_config}"
         if proxy_config != "":
             os.environ["https_proxy"] = proxy_config
             os.environ["http_proxy"] = proxy_config
