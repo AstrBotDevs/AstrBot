@@ -28,6 +28,7 @@ from astrbot.core.message.message_event_result import (
     MessageEventResult,
 )
 from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.provider import Provider
 from astrbot.core.provider.entites import ProviderRequest
 from astrbot.core.provider.register import llm_tools
 from astrbot.core.tools.computer_tools import (
@@ -354,6 +355,36 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
                     continue
 
         prov_settings: dict = ctx.get_config(umo=umo).get("provider_settings", {})
+        fallback_ids = prov_settings.get("fallback_chat_models", [])
+        fallback_providers: list[Provider] = []
+        if not isinstance(fallback_ids, list):
+            logger.warning(
+                "fallback_chat_models setting is not a list, skip handoff fallback providers."
+            )
+        else:
+            seen_provider_ids = {prov_id} if prov_id else set()
+            for fallback_id in fallback_ids:
+                if not isinstance(fallback_id, str) or not fallback_id:
+                    continue
+                if fallback_id in seen_provider_ids:
+                    continue
+                fallback_provider = ctx.get_provider_by_id(fallback_id)
+                if fallback_provider is None:
+                    logger.warning(
+                        "Handoff fallback chat provider `%s` not found, skip.",
+                        fallback_id,
+                    )
+                    continue
+                if not isinstance(fallback_provider, Provider):
+                    logger.warning(
+                        "Handoff fallback chat provider `%s` is invalid type: %s, skip.",
+                        fallback_id,
+                        type(fallback_provider),
+                    )
+                    continue
+                fallback_providers.append(fallback_provider)
+                seen_provider_ids.add(fallback_id)
+
         agent_max_step = int(prov_settings.get("max_agent_step", 30))
         stream = prov_settings.get("streaming_response", False)
         llm_resp = await ctx.tool_loop_agent(
@@ -367,6 +398,8 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             max_steps=agent_max_step,
             tool_call_timeout=run_context.tool_call_timeout,
             stream=stream,
+            fallback_providers=fallback_providers,
+            request_max_retries=prov_settings.get("request_max_retries", 5),
         )
         yield mcp.types.CallToolResult(
             content=[mcp.types.TextContent(type="text", text=llm_resp.completion_text)]
