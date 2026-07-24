@@ -1,8 +1,9 @@
 import inspect
 import os
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
+from types import ModuleType
 from typing import Any, ClassVar
 
 from astrbot.api.platform import AstrBotMessage, MessageMember, MessageType
@@ -10,9 +11,131 @@ from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.star.context import Context
-from astrbot.core.star.star import star_map
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.star.star import StarMetadata, star_map
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_data_path,
+    get_astrbot_path,
+    get_astrbot_plugin_path,
+)
 from astrbot.core.utils.io import ensure_dir
+
+_PLUGIN_MODULE_FLAGS = {"plugins", "builtin_stars"}
+
+
+def _split_module_path(module_path: str | None) -> list[str]:
+    if not module_path:
+        return []
+    return module_path.split(".")
+
+
+def _plugin_root_from_module_path(module_path: str | None) -> tuple[str, str] | None:
+    parts = _split_module_path(module_path)
+    for index, part in enumerate(parts):
+        if part in _PLUGIN_MODULE_FLAGS and index + 1 < len(parts):
+            return part, parts[index + 1]
+    return None
+
+
+def _metadata_root_dir_name(
+    metadata: StarMetadata,
+    module_path: str | None,
+) -> str | None:
+    if metadata.root_dir_name:
+        return metadata.root_dir_name
+
+    root_info = _plugin_root_from_module_path(metadata.module_path or module_path)
+    return root_info[1] if root_info else None
+
+
+def _iter_star_metadata(
+    stars: Mapping[str, StarMetadata],
+) -> list[tuple[str, StarMetadata]]:
+    seen: set[int] = set()
+    metadata_items: list[tuple[str, StarMetadata]] = []
+    for module_path, metadata in reversed(tuple(stars.items())):
+        metadata_id = id(metadata)
+        if metadata_id in seen:
+            continue
+        seen.add(metadata_id)
+        metadata_items.append((module_path, metadata))
+    return metadata_items
+
+
+def _resolve_plugin_from_root_dir(
+    root_dir_name: str,
+    stars: Mapping[str, StarMetadata],
+    module_flag: str | None = None,
+) -> StarMetadata | None:
+    for module_path, metadata in _iter_star_metadata(stars):
+        registered_module_path = metadata.module_path or module_path
+        registered_root = _plugin_root_from_module_path(registered_module_path)
+        if module_flag and registered_root and registered_root[0] != module_flag:
+            continue
+        if _metadata_root_dir_name(metadata, module_path) == root_dir_name:
+            return metadata
+    return None
+
+
+def _resolve_plugin_from_registered_package(
+    module_path: str,
+    stars: Mapping[str, StarMetadata],
+) -> StarMetadata | None:
+    root_info = _plugin_root_from_module_path(module_path)
+    if not root_info:
+        return None
+
+    module_flag, root_dir_name = root_info
+    return _resolve_plugin_from_root_dir(root_dir_name, stars, module_flag)
+
+
+def _plugin_search_roots() -> tuple[tuple[str, Path], ...]:
+    return (
+        ("plugins", Path(get_astrbot_plugin_path()).resolve()),
+        (
+            "builtin_stars",
+            Path(get_astrbot_path()).resolve() / "astrbot" / "builtin_stars",
+        ),
+    )
+
+
+def _resolve_plugin_from_file_path(
+    module: ModuleType,
+    stars: Mapping[str, StarMetadata],
+) -> StarMetadata | None:
+    module_file = getattr(module, "__file__", None)
+    if not module_file:
+        return None
+
+    try:
+        module_path = Path(module_file).resolve()
+    except Exception:
+        return None
+
+    for module_flag, plugin_root in _plugin_search_roots():
+        try:
+            relative_parts = module_path.relative_to(plugin_root).parts
+        except ValueError:
+            continue
+
+        if relative_parts:
+            return _resolve_plugin_from_root_dir(
+                relative_parts[0],
+                stars,
+                module_flag,
+            )
+
+    return None
+
+
+def _resolve_plugin_metadata(
+    module: ModuleType,
+    stars: Mapping[str, StarMetadata],
+) -> StarMetadata | None:
+    return (
+        stars.get(module.__name__)
+        or _resolve_plugin_from_registered_package(module.__name__, stars)
+        or _resolve_plugin_from_file_path(module, stars)
+    )
 
 
 class StarTools:
@@ -232,7 +355,7 @@ class StarTools:
             if not module:
                 raise RuntimeError("Unable to resolve caller module information")
 
-            metadata = star_map.get(module.__name__, None)
+            metadata = _resolve_plugin_metadata(module, star_map)
 
             if not metadata:
                 raise RuntimeError(
