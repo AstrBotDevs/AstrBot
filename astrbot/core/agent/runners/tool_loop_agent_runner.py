@@ -262,6 +262,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         )
 
         self.provider = provider
+        self._primary_provider = provider
         self.fallback_providers: list[Provider] = []
         seen_provider_ids: set[str] = {str(provider.provider_config.get("id", ""))}
         for fallback_provider in fallback_providers or []:
@@ -485,7 +486,14 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         self,
     ) -> T.AsyncGenerator[LLMResponse, None]:
         """Wrap _iter_llm_responses with provider fallback handling."""
-        candidates = [self.provider, *self.fallback_providers]
+        candidates = [
+            self.provider,
+            *(
+                provider
+                for provider in self.fallback_providers
+                if provider is not self.provider
+            ),
+        ]
         total_candidates = len(candidates)
         last_exception: Exception | None = None
         last_err_response: LLMResponse | None = None
@@ -517,7 +525,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                     with attempt:
                         try:
                             async for resp in self._iter_llm_responses(
-                                include_model=idx == 0
+                                include_model=candidate is self._primary_provider
                             ):
                                 if resp.is_chunk:
                                     has_stream_output = True
@@ -579,6 +587,101 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             return
         yield LLMResponse(
+            role="err",
+            completion_text="All available chat models are unavailable.",
+        )
+
+    async def _text_chat_with_fallback(
+        self,
+        *,
+        contexts: list[Message] | list[dict[str, T.Any]],
+        func_tool: ToolSet | None,
+    ) -> LLMResponse:
+        """Call a non-streaming tool re-query with provider fallback handling.
+
+        Args:
+            contexts: Conversation contexts for the tool re-query.
+            func_tool: Param-only tool schemas selected by the first-stage response.
+
+        Returns:
+            The first successful response, or the last provider error response.
+
+        Raises:
+            Exception: The final provider exception when every candidate raises.
+        """
+        candidates = [
+            self.provider,
+            *(
+                provider
+                for provider in self.fallback_providers
+                if provider is not self.provider
+            ),
+        ]
+        total_candidates = len(candidates)
+        last_exception: Exception | None = None
+        last_err_response: LLMResponse | None = None
+
+        for idx, candidate in enumerate(candidates):
+            candidate_id = candidate.provider_config.get("id", "<unknown>")
+            is_last_candidate = idx == total_candidates - 1
+            if idx > 0:
+                logger.warning(
+                    "Switched from %s to fallback chat provider: %s",
+                    self.provider.provider_config.get("id", "<unknown>"),
+                    candidate_id,
+                )
+            self.provider = candidate
+            candidate_func_tool = func_tool
+            modalities = candidate.provider_config.get("modalities", None)
+            if (
+                isinstance(modalities, list)
+                and modalities
+                and "tool_use" not in modalities
+            ):
+                logger.debug(
+                    "Provider %s does not support tool_use, clearing tools for request.",
+                    candidate_id,
+                )
+                candidate_func_tool = None
+            payload: dict[str, T.Any] = {
+                "contexts": self._sanitize_contexts_for_provider(contexts),
+                "func_tool": candidate_func_tool,
+                "session_id": self.req.session_id,
+                "extra_user_content_parts": self.req.extra_user_content_parts,
+                "abort_signal": self._abort_signal,
+                "request_max_retries": self.request_max_retries,
+            }
+            if candidate is self._primary_provider:
+                payload["model"] = self.req.model
+
+            try:
+                response = await candidate.text_chat(**payload)
+            except Exception as exc:  # noqa: BLE001
+                last_exception = exc
+                logger.warning(
+                    "Chat Model %s request error: %s",
+                    candidate_id,
+                    exc,
+                    exc_info=True,
+                )
+                continue
+
+            if response.role == "err" and not is_last_candidate:
+                last_err_response = response
+                logger.warning(
+                    "Chat Model %s returns error response, trying fallback to next provider.",
+                    candidate_id,
+                )
+                continue
+
+            self._sanitize_malformed_tool_calls(response)
+            return response
+
+        if last_err_response:
+            return last_err_response
+        if last_exception:
+            raise last_exception
+        return LLMResponse(
             role="err",
             completion_text="All available chat models are unavailable.",
         )
@@ -873,6 +976,22 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         if llm_resp.tools_call_name:
             if self.tool_schema_mode == "skills_like":
                 requery_resp, _ = await self._resolve_tool_exec(llm_resp)
+                if requery_resp.role == "err":
+                    self.final_llm_resp = requery_resp
+                    self.stats.end_time = time.time()
+                    self._transition_state(AgentState.ERROR)
+                    self._resolve_unconsumed_follow_ups()
+                    custom_error_message = self._get_persona_custom_error_message()
+                    error_text = custom_error_message or (
+                        f"LLM 响应错误: {requery_resp.completion_text or '未知错误'}"
+                    )
+                    yield AgentResponse(
+                        type="err",
+                        data=AgentResponseData(
+                            chain=MessageChain().message(error_text),
+                        ),
+                    )
+                    return
                 if not requery_resp.tools_call_name:
                     llm_resp = requery_resp
                     logger.warning(
@@ -1356,19 +1475,16 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
             )
             if param_subset.tools and tool_names:
                 contexts = self._build_tool_requery_context(tool_names)
-                requery_resp = await self.provider.text_chat(
-                    contexts=self._sanitize_contexts_for_provider(contexts),
+                requery_resp = await self._text_chat_with_fallback(
+                    contexts=contexts,
                     func_tool=param_subset,
-                    model=self.req.model,
-                    session_id=self.req.session_id,
-                    extra_user_content_parts=self.req.extra_user_content_parts,
-                    # tool_choice="required",
-                    abort_signal=self._abort_signal,
-                    request_max_retries=self.request_max_retries,
                 )
                 if requery_resp:
                     llm_resp = requery_resp
                     self._sanitize_malformed_tool_calls(llm_resp)
+
+                if llm_resp.role == "err":
+                    return llm_resp, subset
 
                 # If the re-query still returns no tool calls, and also does not have a meaningful assistant reply,
                 # we consider it as a failure of the LLM to follow the tool-use instruction,
@@ -1384,15 +1500,9 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
                         tool_names,
                         extra_instruction=self.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION,
                     )
-                    repair_resp = await self.provider.text_chat(
-                        contexts=self._sanitize_contexts_for_provider(repair_contexts),
+                    repair_resp = await self._text_chat_with_fallback(
+                        contexts=repair_contexts,
                         func_tool=param_subset,
-                        model=self.req.model,
-                        session_id=self.req.session_id,
-                        extra_user_content_parts=self.req.extra_user_content_parts,
-                        # tool_choice="required",
-                        abort_signal=self._abort_signal,
-                        request_max_retries=self.request_max_retries,
                     )
                     if repair_resp:
                         llm_resp = repair_resp

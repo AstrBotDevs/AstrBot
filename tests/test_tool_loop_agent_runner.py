@@ -192,6 +192,80 @@ class MockErrProvider(MockProvider):
         )
 
 
+class ScriptedProvider(MockProvider):
+    """Return a fixed response or exception sequence while capturing requests.
+
+    Args:
+        provider_id: Provider ID exposed through the test configuration.
+        responses: Ordered responses or exceptions for successive calls.
+        modalities: Optional modalities advertised by the provider.
+    """
+
+    def __init__(
+        self,
+        provider_id: str,
+        responses: list[LLMResponse | Exception],
+        *,
+        modalities: list[str] | None = None,
+    ) -> None:
+        super().__init__()
+        self.provider_config["id"] = provider_id
+        if modalities is not None:
+            self.provider_config["modalities"] = modalities
+        self.responses = responses
+        self.requests = []
+
+    async def text_chat(self, **kwargs) -> LLMResponse:
+        self.requests.append(kwargs)
+        response = self.responses[self.call_count]
+        self.call_count += 1
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def _tool_call_response(
+    *,
+    completion_text: str = "选择工具",
+    query: str | None = None,
+    call_id: str = "call_select",
+) -> LLMResponse:
+    """Build a successful tool-call response for fallback scenarios.
+
+    Args:
+        completion_text: Assistant text accompanying the tool call.
+        query: Optional query argument included in the tool call.
+        call_id: Tool-call ID for the response.
+
+    Returns:
+        A successful response that selects the test tool.
+    """
+    return LLMResponse(
+        role="assistant",
+        completion_text=completion_text,
+        tools_call_name=["test_tool"],
+        tools_call_args=[{} if query is None else {"query": query}],
+        tools_call_ids=[call_id],
+        usage=TokenUsage(input_other=10, output=5),
+    )
+
+
+def _assistant_response(completion_text: str) -> LLMResponse:
+    """Build a successful assistant response.
+
+    Args:
+        completion_text: Final assistant response text.
+
+    Returns:
+        A successful response without tool calls.
+    """
+    return LLMResponse(
+        role="assistant",
+        completion_text=completion_text,
+        usage=TokenUsage(input_other=10, output=5),
+    )
+
+
 class CapturingProvider(MockProvider):
     def __init__(self, modalities: list[str]):
         super().__init__()
@@ -1563,6 +1637,259 @@ async def test_skills_like_requery_passes_extra_user_content_parts():
     parts = captured_kwargs["extra_user_content_parts"]
     assert len(parts) == 1
     assert parts[0].text == "<image_caption>一张猫的照片</image_caption>"
+
+
+async def _reset_skills_like_runner(
+    provider_request: ProviderRequest,
+    primary_provider: Provider,
+    fallback_provider: Provider,
+    tool_executor: Any,
+    agent_hooks: BaseAgentRunHooks,
+) -> ToolLoopAgentRunner:
+    """Reset a skills-like runner with one fallback provider.
+
+    Args:
+        provider_request: Request containing the test tool set.
+        primary_provider: Primary provider used for the first attempt.
+        fallback_provider: Provider used after a re-query failure.
+        tool_executor: Executor used by the test runner.
+        agent_hooks: Hooks used by the test runner.
+
+    Returns:
+        A reset runner ready for execution.
+    """
+    runner = ToolLoopAgentRunner()
+    await runner.reset(
+        provider=primary_provider,
+        request=provider_request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=tool_executor,
+        agent_hooks=agent_hooks,
+        streaming=False,
+        tool_schema_mode="skills_like",
+        fallback_providers=[fallback_provider],
+    )
+    return runner
+
+
+@pytest.mark.parametrize("failure_kind", ["exception", "error_response"])
+@pytest.mark.asyncio
+async def test_skills_like_requery_uses_fallback_provider(
+    failure_kind,
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    requery_failure: LLMResponse | Exception
+    if failure_kind == "exception":
+        requery_failure = RuntimeError("429 Too Many Requests")
+    else:
+        requery_failure = LLMResponse(
+            role="err",
+            completion_text="429 Too Many Requests",
+        )
+    primary_provider = ScriptedProvider(
+        "primary",
+        [_tool_call_response(), requery_failure],
+    )
+    fallback_provider = ScriptedProvider(
+        "fallback",
+        [
+            _tool_call_response(
+                completion_text="调用工具",
+                query="fallback",
+                call_id="call_fallback",
+            ),
+            _assistant_response("回退模型完成回答"),
+        ],
+    )
+    provider_request.model = "primary-only-model"
+    caption_part = TextPart(text="<image_caption>fallback context</image_caption>")
+    provider_request.extra_user_content_parts = [caption_part]
+    runner = await _reset_skills_like_runner(
+        provider_request,
+        primary_provider,
+        fallback_provider,
+        mock_tool_executor,
+        mock_hooks,
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "回退模型完成回答"
+    assert primary_provider.call_count == 2
+    assert fallback_provider.call_count == 2
+    assert runner.provider is fallback_provider
+    assert [request["model"] for request in primary_provider.requests] == [
+        "primary-only-model",
+        "primary-only-model",
+    ]
+    assert all("model" not in request for request in fallback_provider.requests)
+    assert fallback_provider.requests[0]["extra_user_content_parts"] == [caption_part]
+    requery_tool_set = fallback_provider.requests[0]["func_tool"]
+    assert isinstance(requery_tool_set, ToolSet)
+    requery_tool = requery_tool_set.get_tool("test_tool")
+    assert requery_tool is not None
+    assert "query" in requery_tool.parameters["properties"]
+
+
+@pytest.mark.asyncio
+async def test_skills_like_repair_requery_uses_fallback_provider(
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    primary_provider = ScriptedProvider(
+        "primary",
+        [
+            _tool_call_response(),
+            LLMResponse(role="assistant", completion_text=""),
+            RuntimeError("429 Too Many Requests"),
+        ],
+    )
+    fallback_provider = ScriptedProvider(
+        "fallback",
+        [
+            _tool_call_response(
+                completion_text="调用工具",
+                query="repaired",
+                call_id="call_repaired",
+            ),
+            _assistant_response("修复重查后完成回答"),
+        ],
+    )
+    provider_request.model = "primary-only-model"
+    runner = await _reset_skills_like_runner(
+        provider_request,
+        primary_provider,
+        fallback_provider,
+        mock_tool_executor,
+        mock_hooks,
+    )
+
+    async for _ in runner.step_until_done(5):
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.role == "assistant"
+    assert final_resp.completion_text == "修复重查后完成回答"
+    assert primary_provider.call_count == 3
+    assert fallback_provider.call_count == 2
+    repair_contexts = fallback_provider.requests[0]["contexts"]
+    assert (
+        ToolLoopAgentRunner.SKILLS_LIKE_REQUERY_REPAIR_INSTRUCTION
+        in (repair_contexts[0]["content"])
+    )
+    assert all("model" not in request for request in fallback_provider.requests)
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_error_response_finishes_runner_without_repair(
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    fallback_error = LLMResponse(
+        role="err",
+        completion_text="429 Too Many Requests",
+    )
+    primary_provider = ScriptedProvider(
+        "primary",
+        [_tool_call_response(), LLMResponse(role="err", completion_text="")],
+    )
+    fallback_provider = ScriptedProvider("fallback", [fallback_error])
+    runner = await _reset_skills_like_runner(
+        provider_request,
+        primary_provider,
+        fallback_provider,
+        mock_tool_executor,
+        mock_hooks,
+    )
+    follow_up_ticket = runner.follow_up(message_text="pending follow-up")
+
+    responses = [response async for response in runner.step()]
+
+    assert responses[-1].type == "err"
+    assert (
+        responses[-1].data["chain"].get_plain_text()
+        == "LLM 响应错误: 429 Too Many Requests"
+    )
+    assert runner.done() is True
+    assert runner.get_final_llm_resp() is fallback_error
+    assert primary_provider.call_count == 2
+    assert fallback_provider.call_count == 1
+    assert follow_up_ticket is not None
+    assert follow_up_ticket.resolved.is_set() is True
+    assert follow_up_ticket.consumed is False
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_reraises_final_provider_exception(
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    class FinalProviderError(RuntimeError):
+        pass
+
+    final_exception = FinalProviderError("fallback failed")
+    primary_provider = ScriptedProvider(
+        "primary",
+        [_tool_call_response(), ValueError("primary failed")],
+    )
+    fallback_provider = ScriptedProvider("fallback", [final_exception])
+    runner = await _reset_skills_like_runner(
+        provider_request,
+        primary_provider,
+        fallback_provider,
+        mock_tool_executor,
+        mock_hooks,
+    )
+
+    with pytest.raises(FinalProviderError) as exc_info:
+        async for _ in runner.step():
+            pass
+
+    assert exc_info.value is final_exception
+    assert primary_provider.call_count == 2
+    assert fallback_provider.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_skills_like_requery_clears_tools_for_unsupported_fallback(
+    provider_request,
+    mock_tool_executor,
+    mock_hooks,
+):
+    primary_provider = ScriptedProvider(
+        "primary",
+        [_tool_call_response(), RuntimeError("primary failed")],
+    )
+    fallback_provider = ScriptedProvider(
+        "fallback",
+        [_assistant_response("工具不可用，直接说明")],
+        modalities=["text"],
+    )
+    runner = await _reset_skills_like_runner(
+        provider_request,
+        primary_provider,
+        fallback_provider,
+        mock_tool_executor,
+        mock_hooks,
+    )
+
+    async for _ in runner.step():
+        pass
+
+    final_resp = runner.get_final_llm_resp()
+    assert final_resp is not None
+    assert final_resp.completion_text == "工具不可用，直接说明"
+    assert fallback_provider.requests[0]["func_tool"] is None
 
 
 @pytest.mark.asyncio
