@@ -67,7 +67,10 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
-        self.set_model(provider_config.get("model", ""))
+        # FishAudio API 要求 model 作为 HTTP header 发送，而非请求体字段
+        # 参考: https://github.com/fishaudio/fish-audio-python/blob/main/src/fishaudio/resources/tts.py
+        self.set_model(provider_config.get("model", "s2-pro"))
+        self.headers["model"] = self.get_model()
 
     async def _get_reference_id_by_character(self, character: str) -> str | None:
         """获取角色的reference_id
