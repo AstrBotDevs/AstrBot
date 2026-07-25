@@ -30,6 +30,7 @@ class TEIRerankProvider(RerankProvider):
         ).lower()
         self.raw_scores = provider_config.get("tei_rerank_raw_scores", False)
         self.return_text = provider_config.get("tei_rerank_return_text", False)
+        self.proxy = provider_config.get("proxy", "") or None
 
         h = {}
         if self.api_key:
@@ -75,7 +76,9 @@ class TEIRerankProvider(RerankProvider):
                 f"[TEI Rerank] Request: query='{query[:50]}...', "
                 f"doc_count={len(documents)}"
             )
-            async with self.client.post(rerank_url, json=payload) as response:
+            async with self.client.post(
+                rerank_url, json=payload, proxy=self.proxy
+            ) as response:
                 if response.status != 200:
                     try:
                         error_data = await response.json()
@@ -128,7 +131,7 @@ class TEIRerankProvider(RerankProvider):
 
         health_url = f"{self.base_url}/health"
         try:
-            async with self.client.get(health_url) as response:
+            async with self.client.get(health_url, proxy=self.proxy) as response:
                 if response.status != 200:
                     raise Exception(
                         f"TEI service health check failed at {self.base_url}: "

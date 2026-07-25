@@ -52,6 +52,7 @@ class BailianRerankProvider(RerankProvider):
         self.timeout = provider_config.get("timeout", 30)
         self.return_documents = provider_config.get("return_documents", False)
         self.instruct = provider_config.get("instruct", "")
+        self.proxy = provider_config.get("proxy", "") or None
 
         self.base_url = provider_config.get(
             "rerank_api_base",
@@ -232,7 +233,9 @@ class BailianRerankProvider(RerankProvider):
             )
 
             # 发送请求
-            async with self.client.post(self.base_url, json=payload) as response:
+            async with self.client.post(
+                self.base_url, json=payload, proxy=self.proxy
+            ) as response:
                 response.raise_for_status()
                 response_data = await response.json()
 

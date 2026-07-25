@@ -27,6 +27,7 @@ class VLLMRerankProvider(RerankProvider):
             self.api_suffix = "/" + self.api_suffix
         self.timeout = provider_config.get("timeout", 20)
         self.model = provider_config.get("rerank_model", "BAAI/bge-reranker-base")
+        self.proxy = provider_config.get("proxy", "") or None
 
         h = {}
         if self.auth_key:
@@ -54,6 +55,7 @@ class VLLMRerankProvider(RerankProvider):
         async with self.client.post(
             rerank_url,
             json=payload,
+            proxy=self.proxy,
         ) as response:
             response_data = await response.json()
             results = response_data.get("results", [])
