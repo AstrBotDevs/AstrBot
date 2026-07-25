@@ -11,6 +11,7 @@ from astrbot.dashboard.schemas import (
     PluginConfigFileDeleteRequest,
     PluginConfigPayload,
     PluginGithubInstallRequest,
+    PluginLogLevelPayload,
     PluginSourceBindRequest,
     PluginSourceRequest,
     PluginUninstallRequest,
@@ -21,6 +22,7 @@ from astrbot.dashboard.services.config_service import (
     ConfigDisplayService,
     ConfigFileService,
 )
+from astrbot.dashboard.services.plugin_log_level_service import PluginLogLevelService
 from astrbot.dashboard.services.plugin_service import (
     PLUGIN_OPERATION_FAILED_MESSAGE,
     PluginService,
@@ -47,6 +49,10 @@ def get_config_display_service(request: Request) -> ConfigDisplayService:
 
 def get_config_file_service(request: Request) -> ConfigFileService:
     return request.app.state.services.config_files
+
+
+def get_plugin_log_level_service(request: Request) -> PluginLogLevelService:
+    return request.app.state.services.plugin_log_levels
 
 
 async def require_plugin_id_scope(
@@ -323,8 +329,34 @@ async def get_plugin_config(
     plugin_id: str,
     _auth: AuthContext = Depends(require_plugin_id_scope),
     service: ConfigDisplayService = Depends(get_config_display_service),
+    log_levels: PluginLogLevelService = Depends(get_plugin_log_level_service),
 ):
-    return ok({"plugin_name": plugin_id, **await service.get_configs(plugin_id)})
+    return ok(
+        {
+            "plugin_name": plugin_id,
+            "log_level": log_levels.get_plugin_log_level(plugin_id),
+            **await service.get_configs(plugin_id),
+        }
+    )
+
+
+@router.put("/plugins/{plugin_id:path}/log-level")
+async def update_plugin_log_level(
+    plugin_id: str,
+    payload: PluginLogLevelPayload,
+    _auth: AuthContext = Depends(require_plugin_id_scope),
+    service: PluginLogLevelService = Depends(get_plugin_log_level_service),
+):
+    try:
+        level = service.set_plugin_log_level(plugin_id, payload.level)
+    except KeyError as exc:
+        raise ApiError("Plugin not found", status_code=404) from exc
+    except ValueError as exc:
+        raise ApiError(str(exc)) from exc
+    return ok(
+        {"log_level": level},
+        message=f"Plugin {plugin_id} log level updated.",
+    )
 
 
 @router.put("/plugins/{plugin_id:path}/config")

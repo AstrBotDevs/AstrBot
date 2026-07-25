@@ -518,6 +518,8 @@ import type {
   UpdatePluginConfigData,
   UpdatePluginConfigResponses,
   UpdatePluginData,
+  UpdatePluginLogLevelData,
+  UpdatePluginLogLevelResponses,
   UpdatePluginResponses,
   UpdatePluginsData,
   UpdatePluginsResponses,
@@ -2570,6 +2572,29 @@ export const updatePluginConfig = <ThrowOnError extends boolean = false>(
     responseType: 'json',
     security: [{ name: 'X-API-Key', type: 'apiKey' }],
     url: '/api/v1/plugins/{plugin_id}/config',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Set plugin log level
+ *
+ * Set a live plugin's log level. Pass null to follow the global log level.
+ */
+export const updatePluginLogLevel = <ThrowOnError extends boolean = false>(
+  options: Options<UpdatePluginLogLevelData, ThrowOnError>,
+): RequestResult<UpdatePluginLogLevelResponses, unknown, ThrowOnError> =>
+  (options.client ?? client).put<
+    UpdatePluginLogLevelResponses,
+    unknown,
+    ThrowOnError
+  >({
+    responseType: 'json',
+    security: [{ name: 'X-API-Key', type: 'apiKey' }],
+    url: '/api/v1/plugins/{plugin_id}/log-level',
     ...options,
     headers: {
       'Content-Type': 'application/json',

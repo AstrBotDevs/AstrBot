@@ -26,6 +26,7 @@ from astrbot.core.log import LogBroker
 from astrbot.core.platform.send_result import PlatformSendResult
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.dashboard_extension import DashboardExtensionRegistry
+from astrbot.core.star.plugin_catalog import PluginCatalog
 from astrbot.core.star.plugin_extension_coordinator import PluginExtensionCoordinator
 from astrbot.core.utils.active_event_registry import ActiveEventRegistry
 from astrbot.core.utils.llm_metadata import LLMMetadataCatalog
@@ -154,6 +155,9 @@ class FakeLlmTools:
 
     def load_mcp_config(self) -> dict:
         return copy.deepcopy(self.config)
+
+    def bind_plugin_lookup(self, _plugin_catalog) -> None:
+        return None
 
     def save_mcp_config(self, config: dict) -> bool:
         self.config = copy.deepcopy(config)
@@ -749,10 +753,7 @@ def fake_core_lifecycle():
         return True, f"supported: {version_spec}"
 
     catalogs.plugins.publish(demo_plugin)
-    plugin_catalog = SimpleNamespace(
-        runtime_catalogs=catalogs,
-        refresh_command_catalogs=lambda: None,
-    )
+    plugin_catalog = PluginCatalog(catalogs)
     extension_registry = DashboardExtensionRegistry()
     plugin_extensions = PluginExtensionCoordinator(extension_registry)
 
@@ -2651,6 +2652,46 @@ async def test_v1_plugin_config_file_routes_reach_service_layer(
     assert upload_response.json()["status"] == "error"
     assert delete_response.status_code == 400
     assert delete_response.json()["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_v1_plugin_log_levels_are_scoped_to_the_live_catalog(
+    asgi_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    from astrbot.core.log import LogManager
+
+    monkeypatch.setattr(
+        LogManager,
+        "_plugin_log_levels_path",
+        lambda: tmp_path / "plugin_log_levels.json",
+    )
+    monkeypatch.setattr(LogManager, "_plugin_level_overrides", {})
+    monkeypatch.setattr(LogManager, "_plugin_logger_names", set())
+
+    headers = _jwt_headers()
+    updated = await asgi_client.put(
+        "/api/v1/plugins/astrbot_plugin_demo/log-level",
+        json={"level": "WARNING"},
+        headers=headers,
+    )
+    config = await asgi_client.get(
+        "/api/v1/plugins/astrbot_plugin_demo/config",
+        headers=headers,
+    )
+    missing = await asgi_client.put(
+        "/api/v1/plugins/not-live/log-level",
+        json={"level": "INFO"},
+        headers=headers,
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["data"] == {"log_level": "WARNING"}
+    assert config.status_code == 200
+    assert config.json()["data"]["log_level"] == "WARNING"
+    assert missing.status_code == 404
+    assert missing.json()["message"] == "Plugin not found"
 
 
 @pytest.mark.asyncio

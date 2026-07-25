@@ -1,6 +1,7 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
+from astrbot.core.log import LogManager
 from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 
 from .star import StarDeclaration
@@ -17,9 +18,16 @@ class Star(PluginKVStoreMixin):
     author: str
     name: str
     context: PluginContext
+    logger: logging.Logger
 
     def __init__(self, context: PluginContext, config: dict | None = None) -> None:
         self.context = context
+        plugin_name = getattr(self.__class__, "__astrbot_plugin_logger_name__", None)
+        self.logger = (
+            LogManager.get_plugin_logger(plugin_name)
+            if isinstance(plugin_name, str) and plugin_name
+            else logging.getLogger("astrbot")
+        )
 
     def _get_context_config(self) -> Any:
         try:

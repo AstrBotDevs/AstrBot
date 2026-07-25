@@ -42,18 +42,92 @@ class PluginCatalog:
     descriptors, and command snapshots.
     """
 
-    __slots__ = ("runtime_catalogs", "_command_catalogs", "_command_catalog_scopes")
+    __slots__ = (
+        "runtime_catalogs",
+        "_command_catalogs",
+        "_command_catalog_scopes",
+        "_live_logging",
+    )
 
-    def __init__(self, runtime_catalogs: RuntimeCatalogs) -> None:
+    def __init__(
+        self,
+        runtime_catalogs: RuntimeCatalogs,
+        *,
+        live_logging: bool = True,
+    ) -> None:
         self.runtime_catalogs = runtime_catalogs
         self.runtime_catalogs.tools.bind_plugin_lookup(self.runtime_catalogs.plugins)
         self._command_catalogs: dict[str, CommandCatalogStore] = {}
         self._command_catalog_scopes: dict[str, tuple[str, ...] | None] = {}
+        self._live_logging = live_logging
 
     @property
     def plugins(self):
         """Return the instance-owned plugin registry."""
         return self.runtime_catalogs.plugins
+
+    def publish_plugin(self, metadata: StarMetadata) -> None:
+        """Publish metadata and make its logger discoverable in this runtime."""
+        self.plugins.publish(metadata)
+        self.refresh_plugin_log_modules(metadata)
+
+    def get_plugin_log_level(self, plugin_name: str) -> str | None:
+        """Return a live plugin's override, or ``None`` for the core level.
+
+        Stale persisted preferences must not make an unloaded plugin appear in
+        the Dashboard, so this lookup is intentionally scoped to the catalog.
+        """
+        if self.plugins.get_by_name(plugin_name) is None:
+            return None
+        from astrbot.core.log import LogManager
+
+        return LogManager.get_plugin_log_level(plugin_name)
+
+    def set_plugin_log_level(self, plugin_name: str, level: str | None) -> str | None:
+        """Set one live plugin's log-level override.
+
+        Raises:
+            KeyError: If the plugin is not published by this runtime.
+            ValueError: If ``level`` is not a supported logging level.
+        """
+        if self.plugins.get_by_name(plugin_name) is None:
+            raise KeyError(plugin_name)
+        from astrbot.core.log import LogManager
+
+        LogManager.set_plugin_log_level(plugin_name, level)
+        return LogManager.get_plugin_log_level(plugin_name)
+
+    def refresh_plugin_log_modules(self, metadata: StarMetadata) -> None:
+        """Mark the published package so SDK logging never needs global metadata."""
+        plugin_name = metadata.name
+        if not isinstance(plugin_name, str) or not plugin_name:
+            return
+        if metadata.star_cls_type is not None:
+            setattr(
+                metadata.star_cls_type, "__astrbot_plugin_logger_name__", plugin_name
+            )
+        if not self._live_logging:
+            return
+        module_prefix = self.module_prefix(metadata)
+        for module_name, module in tuple(sys.modules.items()):
+            if isinstance(module, ModuleType) and self.is_plugin_module_path(
+                module_name, module_prefix
+            ):
+                setattr(module, "__astrbot_plugin_logger_name__", plugin_name)
+
+    def _clear_plugin_log_modules(self, metadata: StarMetadata) -> None:
+        if not self._live_logging:
+            return
+        module_prefix = self.module_prefix(metadata)
+        plugin_name = metadata.name
+        for module_name, module in tuple(sys.modules.items()):
+            if (
+                isinstance(module, ModuleType)
+                and self.is_plugin_module_path(module_name, module_prefix)
+                and getattr(module, "__astrbot_plugin_logger_name__", None)
+                == plugin_name
+            ):
+                delattr(module, "__astrbot_plugin_logger_name__")
 
     @staticmethod
     def module_prefix(metadata: StarMetadata) -> str:
@@ -228,6 +302,7 @@ class PluginCatalog:
             else plugin_module_path.rsplit(".", 1)[0]
         )
         if metadata is not None:
+            self._clear_plugin_log_modules(metadata)
             self.runtime_catalogs.plugins.unregister_module(plugin_module_path)
         self.remove_module_declarations(module_prefix)
         return metadata
@@ -355,7 +430,7 @@ class PluginCatalog:
                 module_path=registration.module_path,
             )
 
-        self.runtime_catalogs.plugins.publish(replacement)
+        self.publish_plugin(replacement)
         for handler in staged.runtime_catalogs.handlers:
             self.runtime_catalogs.handlers.append(handler)
         self.runtime_catalogs.tools.func_list.extend(
@@ -412,13 +487,15 @@ class PluginCatalog:
         current = self.plugins.get_by_module(module_path)
         if current is not None:
             self.remove_module_declarations(self.module_prefix(current))
+            self._clear_plugin_log_modules(current)
             self.plugins.replace_module(metadata)
         else:
             # A promotion can theoretically fail after unpublishing the old
             # metadata but before publishing the replacement. Remove any
             # partially copied declarations for the canonical package first.
             self.remove_module_declarations(self.module_prefix(metadata))
-            self.plugins.publish(metadata)
+            self.publish_plugin(metadata)
+        self.refresh_plugin_log_modules(metadata)
 
         for registration in snapshot.providers:
             self.runtime_catalogs.providers.register(
@@ -448,6 +525,7 @@ class PluginCatalog:
                 metadata.root_dir_name == dir_name and metadata.reserved == reserved
             ):
                 if metadata.module_path:
+                    self._clear_plugin_log_modules(metadata)
                     self.runtime_catalogs.plugins.unregister_module(
                         metadata.module_path
                     )

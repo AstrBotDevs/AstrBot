@@ -836,7 +836,7 @@ class PluginRuntimeLoader:
                 self._catalog.register_adapter_descriptors(
                     self._catalog.module_prefix(metadata)
                 )
-                self._catalog.plugins.publish(metadata)
+                self._catalog.publish_plugin(metadata)
                 if metadata.activated:
                     self._instantiate_plugin(
                         metadata,

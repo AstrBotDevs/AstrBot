@@ -324,10 +324,12 @@ class PluginLifecycle:
                         staged.metadata,
                     )
                     self._promote_staged_modules(staged)
+                    self._catalog.refresh_plugin_log_modules(staged.metadata)
                     self._promote_staged_context(staged)
                 except BaseException:
                     self._catalog.restore_package(previous)
                     self._restore_staged_modules(staged)
+                    self._catalog.refresh_plugin_log_modules(previous.metadata)
                     raise
                 promotion_journal.append(
                     _PromotionJournalEntry(staged=staged, previous=previous),
@@ -485,6 +487,7 @@ class PluginLifecycle:
             try:
                 self._catalog.restore_package(entry.previous)
                 self._restore_staged_modules(entry.staged)
+                self._catalog.refresh_plugin_log_modules(entry.previous.metadata)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -583,7 +586,7 @@ class PluginLifecycle:
             staging_execution_context,
         )
         staging_context._bind_plugin_lifecycle_control(self)
-        staging_catalog = PluginCatalog(staging_catalogs)
+        staging_catalog = PluginCatalog(staging_catalogs, live_logging=False)
         staging_loader = PluginRuntimeLoader(
             execution_context=staging_execution_context,
             catalog=staging_catalog,

@@ -182,6 +182,13 @@ class ExamplePlugin(Star):
 例如取消后台任务、关闭 HTTP 客户端和释放文件句柄。不要使用已废弃的析构方法代替
 显式生命周期清理。
 
+## 插件日志
+
+在 `Star` 实例方法中使用 `self.logger`，或在插件模块中使用
+`from astrbot.api import logger`。两种方式都会路由到当前运行中插件的独立日志器。
+在 Dashboard 的插件配置对话框中可选择该插件的日志级别，或选择“跟随全局”。设置会
+立即生效并在重启后保留；选择“跟随全局”会清除插件自己的覆盖设置。
+
 设计带参数、子指令或 option 的入口前，请阅读
 [Orbit 指令设计规范](./guides/listen-message-event#orbit-指令设计规范)。该规范说明
 指令头命名、确定性参数语法、支持的 handler 签名，以及 Telegram/Discord 原生指令

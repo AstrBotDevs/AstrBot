@@ -2,20 +2,28 @@
 
 import asyncio
 import errno
+import json
 import logging
 import os
 import sys
+import tempfile
 import time
 from asyncio import Queue
 from collections import deque
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger as _raw_loguru_logger
 
 from astrbot.core.config.default import VERSION
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+from astrbot.core.utils.astrbot_path import (
+    get_astrbot_config_path,
+    get_astrbot_data_path,
+)
 
 CACHED_SIZE = 500
+PLUGIN_LOGGER_PREFIX = "astrbot.plugin."
+PLUGIN_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 if TYPE_CHECKING:
     from loguru import Record
@@ -25,7 +33,12 @@ class _RecordEnricherFilter(logging.Filter):
     """为 logging.LogRecord 注入 AstrBot 日志字段。"""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.plugin_tag = "[Plug]" if _is_plugin_path(record.pathname) else "[Core]"
+        if record.name.startswith(PLUGIN_LOGGER_PREFIX):
+            record.plugin_tag = f"[{record.name.removeprefix(PLUGIN_LOGGER_PREFIX)}]"
+        else:
+            record.plugin_tag = (
+                "[Plug]" if _is_plugin_path(record.pathname) else "[Core]"
+            )
         record.short_levelname = _get_short_level_name(record.levelname)
         record.astrbot_version_tag = (
             f" [v{VERSION}]" if record.levelno >= logging.WARNING else ""
@@ -222,6 +235,9 @@ class LogManager:
     _console_sink_id: int | None = None
     _file_sink_id: int | None = None
     _trace_sink_id: int | None = None
+    _plugin_logger_names: set[str] = set()
+    _plugin_level_overrides: dict[str, str] | None = None
+    _log_broker: LogBroker | None = None
     _NOISY_LOGGER_LEVELS: dict[str, int] = {
         "aiosqlite": logging.WARNING,
         "filelock": logging.WARNING,
@@ -312,24 +328,114 @@ class LogManager:
         return logger
 
     @classmethod
+    def _plugin_log_levels_path(cls) -> Path:
+        return Path(get_astrbot_config_path()) / "plugin_log_levels.json"
+
+    @classmethod
+    def _load_plugin_level_overrides(cls) -> dict[str, str]:
+        """Load valid persisted plugin log-level overrides once per process."""
+        if cls._plugin_level_overrides is None:
+            cls._plugin_level_overrides = {}
+            try:
+                with cls._plugin_log_levels_path().open(encoding="utf-8") as handle:
+                    data = json.load(handle)
+                if isinstance(data, dict):
+                    cls._plugin_level_overrides = {
+                        str(name): str(level).upper()
+                        for name, level in data.items()
+                        if str(level).upper() in PLUGIN_LOG_LEVELS
+                    }
+            except OSError, ValueError:
+                pass
+        return cls._plugin_level_overrides
+
+    @classmethod
+    def get_plugin_log_level(cls, plugin_name: str) -> str | None:
+        """Return a plugin override, or None when it follows the core level."""
+        return cls._load_plugin_level_overrides().get(plugin_name)
+
+    @classmethod
+    def _effective_plugin_log_level(cls, plugin_name: str) -> int:
+        if override := cls.get_plugin_log_level(plugin_name):
+            return int(logging.getLevelName(override))
+        global_level = logging.getLogger("astrbot").level
+        return global_level if global_level > logging.NOTSET else logging.INFO
+
+    @classmethod
+    def get_plugin_logger(cls, plugin_name: str) -> logging.Logger:
+        """Return the dedicated logger for one catalog-published plugin."""
+        logger = cls.GetLogger(f"{PLUGIN_LOGGER_PREFIX}{plugin_name}")
+        cls._plugin_logger_names.add(plugin_name)
+        logger.setLevel(cls._effective_plugin_log_level(plugin_name))
+        if cls._log_broker is not None:
+            cls.set_queue_handler(logger, cls._log_broker)
+        return logger
+
+    @classmethod
+    def set_plugin_log_level(cls, plugin_name: str, level: str | None) -> None:
+        """Atomically persist and apply one plugin's log-level override."""
+        overrides = dict(cls._load_plugin_level_overrides())
+        if level is None:
+            overrides.pop(plugin_name, None)
+        else:
+            normalized = level.upper()
+            if normalized not in PLUGIN_LOG_LEVELS:
+                raise ValueError(f"Invalid plugin log level: {level}")
+            overrides[plugin_name] = normalized
+
+        config_path = cls._plugin_log_levels_path()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=config_path.parent,
+                prefix=f".{config_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temp_path = Path(handle.name)
+                json.dump(overrides, handle, indent=2, sort_keys=True)
+                handle.flush()
+                os.fsync(handle.fileno())
+            temp_path.replace(config_path)
+        except BaseException:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+            raise
+
+        cls._plugin_level_overrides = overrides
+        if plugin_name in cls._plugin_logger_names:
+            logging.getLogger(f"{PLUGIN_LOGGER_PREFIX}{plugin_name}").setLevel(
+                cls._effective_plugin_log_level(plugin_name)
+            )
+
+    @classmethod
     def set_queue_handler(cls, logger: logging.Logger, log_broker: LogBroker) -> None:
-        cls._ensure_logger_enricher_filter(logger)
+        cls._log_broker = log_broker
+        targets = [logger]
+        if logger.name == "astrbot":
+            targets.extend(
+                logging.getLogger(f"{PLUGIN_LOGGER_PREFIX}{name}")
+                for name in cls._plugin_logger_names
+            )
 
-        for handler in logger.handlers:
-            if isinstance(handler, LogQueueHandler):
-                return
-
-        handler = LogQueueHandler(log_broker)
-        handler.setLevel(logging.DEBUG)
-        handler.addFilter(_QueueAnsiColorFilter())
-        handler.setFormatter(
-            logging.Formatter(
-                "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "
-                "[%(source_file)s:%(source_line)d]: %(message)s%(ansi_reset)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            ),
-        )
-        logger.addHandler(handler)
+        for target in targets:
+            cls._ensure_logger_enricher_filter(target)
+            if any(isinstance(handler, LogQueueHandler) for handler in target.handlers):
+                continue
+            handler = LogQueueHandler(log_broker)
+            handler.setLevel(logging.DEBUG)
+            handler.addFilter(_QueueAnsiColorFilter())
+            handler.setFormatter(
+                logging.Formatter(
+                    "%(ansi_prefix)s[%(asctime)s.%(msecs)03d] %(plugin_tag)s [%(short_levelname)s]%(astrbot_version_tag)s "
+                    "[%(source_file)s:%(source_line)d]: %(message)s%(ansi_reset)s",
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                ),
+            )
+            target.addHandler(handler)
 
     @classmethod
     def _remove_sink(cls, sink_id: int | None) -> None:
@@ -401,6 +507,13 @@ class LogManager:
                 logger.setLevel(level)
             except Exception:
                 logger.setLevel(logging.INFO)
+
+            overrides = cls._load_plugin_level_overrides()
+            for name in cls._plugin_logger_names:
+                if name not in overrides:
+                    logging.getLogger(f"{PLUGIN_LOGGER_PREFIX}{name}").setLevel(
+                        logger.level
+                    )
 
         enable_file = bool(config.get("log_file_enable", False))
         file_path = config.get("log_file_path")

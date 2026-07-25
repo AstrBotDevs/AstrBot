@@ -542,6 +542,10 @@ class PluginConfigPayload(OpenModel):
     config: dict[str, Any] | None = None
 
 
+class PluginLogLevelPayload(OpenModel):
+    level: str | None = None
+
+
 class PluginSourceRequest(OpenModel):
     id: str | None = None
     name: str | None = None

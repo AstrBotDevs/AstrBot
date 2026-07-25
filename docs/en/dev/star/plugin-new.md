@@ -195,6 +195,14 @@ Use `initialize()` to create runtime resources such as clients or tasks.
 clients, and releasing file handles. Do not replace explicit lifecycle cleanup
 with the deprecated destructor path.
 
+## Plugin Logging
+
+Use `self.logger` inside a `Star` instance or `from astrbot.api import logger`
+from plugin modules. AstrBot routes both forms to the live plugin's dedicated
+logger. In the Dashboard's plugin configuration dialog, select a level for the
+plugin or choose **Follow Global**. The setting takes effect immediately and
+survives restarts; it is cleared when **Follow Global** is selected.
+
 Before adding parameters, subcommands, or options, read the
 [Orbit Command Design Specification](./guides/listen-message-event#orbit-command-design-specification).
 It defines command-header naming, deterministic argument syntax, supported

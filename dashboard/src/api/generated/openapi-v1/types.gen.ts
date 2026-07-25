@@ -3033,6 +3033,31 @@ export type UpdatePluginConfigResponses = {
 export type UpdatePluginConfigResponse =
   UpdatePluginConfigResponses[keyof UpdatePluginConfigResponses];
 
+export type UpdatePluginLogLevelData = {
+  body: {
+    /**
+     * Log level name, or null to follow the global level.
+     */
+    level?: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL' | null;
+    [key: string]: unknown;
+  };
+  path: {
+    plugin_id: string;
+  };
+  query?: never;
+  url: '/api/v1/plugins/{plugin_id}/log-level';
+};
+
+export type UpdatePluginLogLevelResponses = {
+  /**
+   * Standard AstrBot success response
+   */
+  200: SuccessEnvelope;
+};
+
+export type UpdatePluginLogLevelResponse =
+  UpdatePluginLogLevelResponses[keyof UpdatePluginLogLevelResponses];
+
 export type GetPluginConfigSchemaData = {
   body?: never;
   path: {
