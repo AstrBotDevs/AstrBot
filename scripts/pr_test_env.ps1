@@ -230,13 +230,11 @@ if ($runSmoke) {
 
 if ($runDashboard) {
     $dashboardDir = Join-Path $repoRoot "dashboard"
-    Invoke-NativeCommand -Description "Building dashboard dependencies" -FilePath "corepack" -ArgumentList @(
-        "pnpm",
+    Invoke-NativeCommand -Description "Building dashboard dependencies" -FilePath "pnpm" -ArgumentList @(
         "install",
         "--frozen-lockfile"
     ) -WorkingDirectory $dashboardDir
-    Invoke-NativeCommand -Description "Building dashboard" -FilePath "corepack" -ArgumentList @(
-        "pnpm",
+    Invoke-NativeCommand -Description "Building dashboard" -FilePath "pnpm" -ArgumentList @(
         "run",
         "build"
     ) -WorkingDirectory $dashboardDir

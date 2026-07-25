@@ -393,8 +393,8 @@ switch ($Action) {
         Start-ManagedProcess `
             -PidFile $dashboardPidFile `
             -WorkingDirectory $dashboardDir `
-            -FilePath "corepack" `
-            -ArgumentList @("pnpm", "dev") `
+            -FilePath "pnpm" `
+            -ArgumentList @("dev") `
             -StdoutPath $dashboardLog `
             -StderrPath $dashboardErrLog `
             -WarmupSeconds 8

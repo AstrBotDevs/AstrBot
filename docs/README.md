@@ -12,20 +12,21 @@ specification, and deployment files in this repository are authoritative.
 
 ## Local preview
 
-The pinned pnpm version is declared in `docs/package.json`. Use Corepack so the
+The pinned pnpm version is declared in `docs/package.json`. Use the globally
+installed pnpm command so the
 same toolchain is used locally and in CI.
 
 ```bash
 cd docs
-corepack pnpm install --frozen-lockfile
-corepack pnpm run docs:dev
+pnpm install --frozen-lockfile
+pnpm run docs:dev
 ```
 
 Build the production site with:
 
 ```bash
 cd docs
-corepack pnpm run docs:build
+pnpm run docs:build
 ```
 
 Do not edit `docs/.vitepress/dist/`; it is generated and ignored. When a
@@ -38,7 +39,7 @@ node node_modules/prettier/bin/prettier.cjs --write docs/public/openapi.json
 ```
 
 The formatting step uses the root repository tooling installed by
-`make bootstrap` or `corepack npm ci`.
+`make bootstrap` or `npm ci`.
 
 User-facing changes should update both language trees when an equivalent page
 exists. Keep internal links extensionless so VitePress validates them during

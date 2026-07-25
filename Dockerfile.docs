@@ -1,13 +1,11 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24.15.0-alpine AS builder
+FROM node:26.5.0-alpine AS builder
 
 WORKDIR /src
 
 # hadolint ignore=DL3018
 RUN apk add --no-cache git \
-    && npm install --global npm@12.0.1 corepack \
-    && corepack enable \
-    && corepack prepare pnpm@11.15.1 --activate
+    && npm install --global npm@12.0.1 pnpm@11.15.1
 
 COPY docs/package.json docs/pnpm-lock.yaml ./
 

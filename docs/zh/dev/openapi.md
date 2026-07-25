@@ -208,7 +208,7 @@ curl -N 'http://localhost:6185/api/v1/chat' \
 
 ```bash
 cd dashboard
-corepack pnpm generate:api
+pnpm generate:api
 cd ..
 node node_modules/prettier/bin/prettier.cjs --write --ignore-path .gitignore "dashboard/src/api/generated/openapi-v1/**/*.ts"
 uv run python docs/scripts/update_openapi_json.py

@@ -20,7 +20,7 @@
 
 AstrBot 是一个开源的一站式 Agentic 个人和群聊助手，可在 QQ、Telegram、企业微信、飞书、钉钉、Slack 等数十款主流即时通讯软件上部署，此外还内置类似 OpenWebUI 的轻量化 ChatUI，为个人、开发者和团队打造可靠、可扩展的对话式智能基础设施。无论是个人 AI 伙伴、智能客服、自动化助手，还是企业知识库，AstrBot 都能在你的即时通讯软件平台的工作流中快速构建 AI 应用。
 
-这个仓库是 AstrBot 的现代化 fork。这里记录的命令、部署文件和兼容性边界均以当前分支为准：Python 3.14+、后端使用 `uv`、前端使用 `corepack pnpm`，并且不再为旧兼容路径背书。
+这个仓库是 AstrBot 的现代化 fork。这里记录的命令、部署文件和兼容性边界均以当前分支为准：Python 3.14+、后端使用 `uv`、前端使用 `pnpm`，并且不再为旧兼容路径背书。
 
 ![landingpage](https://github.com/user-attachments/assets/45fc5699-cddf-4e21-af35-13040706f6c0)
 
@@ -64,14 +64,14 @@ git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 uv sync --locked
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+pnpm install --frozen-lockfile
+pnpm build
 cd ..
 uv run python scripts/sync_dashboard_dist.py
 uv run main.py
 ```
 
-请先安装 [uv](https://docs.astral.sh/uv/)、Node.js 24.15.0 和 Corepack。仓库固定使用 Python 3.14.6 和对应的 pnpm 版本。首次启动后访问 `http://localhost:6185`，默认用户名为 `astrbot`，随机初始密码会打印在日志中。
+请先安装 [uv](https://docs.astral.sh/uv/)、Node.js 26.5.0 和 pnpm 11.15.1。仓库固定使用 Python 3.14.6 和对应的 pnpm 版本。首次启动后访问 `http://localhost:6185`，默认用户名为 `astrbot`，随机初始密码会打印在日志中。
 
 如果启用本地文转图或插件 HTML 渲染，还需执行一次 `uv run astrbot install-browser`。更新、远程访问和安全配置请参阅[从源码部署 AstrBot](docs/zh/deploy/astrbot/cli.md)。
 

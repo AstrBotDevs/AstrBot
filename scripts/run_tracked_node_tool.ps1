@@ -27,7 +27,7 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $toolExecutable = if ($IsWindows) { "$Tool.cmd" } else { $Tool }
 $toolPath = Join-Path $repoRoot "node_modules/.bin/$toolExecutable"
 if (-not (Test-Path -LiteralPath $toolPath -PathType Leaf)) {
-  throw "Node tool '$Tool' is not installed. Run 'corepack npm ci' at the repository root."
+  throw "Node tool '$Tool' is not installed. Run 'npm ci' at the repository root."
 }
 
 for ($index = 0; $index -lt $files.Count; $index += $BatchSize) {

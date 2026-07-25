@@ -1,12 +1,12 @@
 # Linux 开发环境
 
 这是 Linux 下受支持的源码开发流程。项目使用 Python 3.14.6、`uv`、Node.js
-24 和由 Corepack 管理的 pnpm；以下命令不依赖 PowerShell。
+26 和 pnpm；以下命令不依赖 PowerShell。
 
 ## 前置工具
 
 先使用发行版包管理器安装基础工具，再用发行版推荐的方式安装 Python 3.14.6、`uv`
-与 Node.js 24。CI 使用 Node.js 24.15；`make doctor` 接受兼容的 Node 24
+与 Node.js 26。CI 使用 Node.js 26.5.0；`make doctor` 接受兼容的 Node 26
 版本。
 
 Ubuntu/Debian：
@@ -44,7 +44,7 @@ make bootstrap
 依赖；它不会安装系统软件包，应先解决 `make doctor` 报出的缺失工具。
 
 `make format` 在修改文件前也会执行同样的预检。若提示找不到 Node.js，请在当前
-shell 中安装或启用 Node 24，确认 `node --version` 可用后再执行。根目录
+shell 中安装或启用 Node 26，确认 `node --version` 可用后再执行。根目录
 `node_modules/.bin` 中的本地工具使用 `/usr/bin/env node` 启动，因此 `node`
 必须在 `PATH` 中。
 

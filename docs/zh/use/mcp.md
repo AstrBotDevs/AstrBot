@@ -14,7 +14,7 @@ MCP（Model Context Protocol）让 AstrBot Agent 连接独立的工具服务。�
 
 ## 运行时工具
 
-源码部署需要在运行 AstrBot 的同一环境中安装服务器所需的 launcher。仓库 `Dockerfile` 已包含 Node.js 24、npm/npx、Corepack/pnpm 和 uv；使用当前仓库本地构建的镜像时，不要再按旧教程在容器里重复安装 Node。
+源码部署需要在运行 AstrBot 的同一环境中安装服务器所需的 launcher。仓库 `Dockerfile` 已包含 Node.js 26、npm/npx、pnpm 和 uv；使用当前仓库本地构建的镜像时，不要再按旧教程在容器里重复安装 Node。
 
 主机源码部署可按 MCP 服务器自身文档安装依赖。AstrBot 不会通过 shell 解释 `command`，因此不要写 `bash -c`、`env ...`、管道或重定向。
 

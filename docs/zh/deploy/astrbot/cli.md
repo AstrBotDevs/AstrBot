@@ -7,8 +7,8 @@
 
 - Git
 - `uv`
-- Node.js 24.15.0
-- Corepack
+- Node.js 26.5.0
+- pnpm 11.15.1
 
 Python 包要求为 3.14+；仓库的 `.python-version` 固定为 3.14.6，`uv` 可以在本机缺少该版本时按配置自动下载。
 
@@ -33,8 +33,8 @@ uv sync --locked
 
 ```bash
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+pnpm install --frozen-lockfile
+pnpm build
 cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```
@@ -101,8 +101,8 @@ uv run main.py
 git pull --ff-only
 uv sync --locked
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+pnpm install --frozen-lockfile
+pnpm build
 cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```

@@ -170,20 +170,18 @@ RUN touch "${BASH_ENV}" \
     && echo '. "${BASH_ENV}"' >> ~/.bashrc \
     && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh | PROFILE="${BASH_ENV}" bash \
     && source "${BASH_ENV}" \
-    && nvm install 24.15.0 \
-    && nvm alias default 24.15.0 \
-    && npm install -g npm@12.0.1 corepack \
-    && corepack enable \
-    && corepack prepare pnpm@11.15.1 --activate \
+    && nvm install 26.5.0 \
+    && nvm alias default 26.5.0 \
+    && npm install -g npm@12.0.1 pnpm@11.15.1 \
     && current_node_dir="$(dirname "$(dirname "$(nvm which current)")")" \
-    && for tool in node npm npx corepack pnpm; do \
+    && for tool in node npm npx pnpm; do \
         if [[ -x "${current_node_dir}/bin/${tool}" ]]; then \
             ln -sf "${current_node_dir}/bin/${tool}" "/usr/local/bin/${tool}"; \
         fi; \
     done \
     && node --version \
     && npm --version \
-    && corepack --version
+    && pnpm --version
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \

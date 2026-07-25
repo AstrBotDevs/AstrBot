@@ -1,14 +1,14 @@
 # Linux Development
 
 This is the supported source-development workflow for Linux. It uses Python
-3.14.6, `uv`, Node.js 24, and Corepack-managed pnpm. The commands below do
+3.14.6, `uv`, Node.js 26, and pnpm. The commands below do
 not require PowerShell.
 
 ## Prerequisites
 
 Install the base tools with your distribution package manager, then install
-Python 3.14.6, `uv`, and Node.js 24 using the method your distribution
-recommends. CI uses Node.js 24.15; `make doctor` accepts compatible Node 24
+Python 3.14.6, `uv`, and Node.js 26 using the method your distribution
+recommends. CI uses Node.js 26.5.0; `make doctor` accepts compatible Node 26
 releases.
 
 Ubuntu/Debian:
@@ -47,7 +47,7 @@ formatting toolchain, and installs dashboard dependencies. It never installs
 system packages; resolve missing tools reported by `make doctor` first.
 
 `make format` runs the same preflight before changing files. If it reports that
-Node.js is missing, install or activate Node 24 in the current shell, verify
+Node.js is missing, install or activate Node 26 in the current shell, verify
 `node --version`, then rerun the command. Local `node_modules/.bin` tools need
 the `node` executable on `PATH` because their launchers use `/usr/bin/env node`.
 

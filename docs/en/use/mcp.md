@@ -14,7 +14,7 @@ Remote configurations must declare `transport`. A configuration without `url` is
 
 ## Runtime Tools
 
-For source deployments, install the server's launcher in the same environment that runs AstrBot. The repository Dockerfile already includes Node.js 24, npm/npx, Corepack/pnpm, and uv. Do not follow older instructions that reinstall Node inside an image built from this checkout.
+For source deployments, install the server's launcher in the same environment that runs AstrBot. The repository Dockerfile already includes Node.js 26, npm/npx, pnpm, and uv. Do not follow older instructions that reinstall Node inside an image built from this checkout.
 
 Install host-side server dependencies according to that MCP server's documentation. AstrBot does not interpret `command` through a shell, so do not use `bash -c`, `env ...`, pipes, or redirection.
 

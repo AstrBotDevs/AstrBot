@@ -215,15 +215,15 @@ if [[ "$RUN_SMOKE" == true ]]; then
 fi
 
 if [[ "$RUN_DASHBOARD" == true ]]; then
-  if ! command -v corepack >/dev/null 2>&1; then
-    echo "corepack is required for dashboard build. Install a Node.js release that ships corepack." >&2
+  if ! command -v pnpm >/dev/null 2>&1; then
+    echo "pnpm 11.15 is required for dashboard builds." >&2
     exit 1
   fi
   echo "==> Building dashboard"
   (
     cd dashboard
-    corepack pnpm install --frozen-lockfile
-    corepack pnpm run build
+    pnpm install --frozen-lockfile
+    pnpm run build
   )
 fi
 

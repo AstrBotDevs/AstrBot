@@ -42,8 +42,7 @@ def main() -> None:
     required = [
         Check("Python", (sys.executable, "--version"), expected_prefix="Python 3.14."),
         Check("uv", ("uv", "--version")),
-        Check("Node.js", ("node", "--version"), expected_prefix="v24."),
-        Check("Corepack", ("corepack", "--version")),
+        Check("Node.js", ("node", "--version"), expected_prefix="v26."),
     ]
     if sys.platform != "win32":
         required.extend(
@@ -67,7 +66,7 @@ def main() -> None:
         if check.required and not valid:
             failures.append(check.name)
 
-    dashboard_pnpm = version(("corepack", "pnpm", "--version"), root / "dashboard")
+    dashboard_pnpm = version(("pnpm", "--version"), root / "dashboard")
     pnpm_ok = dashboard_pnpm is not None and dashboard_pnpm.startswith("11.15.")
     print(
         f"{'pnpm':12} {'ok' if pnpm_ok else 'missing/unexpected':18} {dashboard_pnpm or ''}"

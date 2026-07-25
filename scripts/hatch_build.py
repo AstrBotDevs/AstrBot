@@ -8,7 +8,7 @@ Usage:
     ASTRBOT_BUILD_DASHBOARD=1 uv build
 
 When enabled, this hook:
-1. Runs `corepack pnpm run build` inside the `dashboard/` directory.
+1. Runs `pnpm run build` inside the `dashboard/` directory.
 2. Copies the resulting `dashboard/dist/` tree into
    `astrbot/dashboard/dist/` so the static assets are shipped
    inside the Python wheel.
@@ -49,15 +49,15 @@ class CustomBuildHook(BuildHookInterface):
         if not (dashboard_src / "node_modules").exists():
             print("[hatch_build] Installing dashboard Node dependencies...")
             subprocess.run(
-                ["corepack", "pnpm", "install", "--frozen-lockfile"],
+                ["pnpm", "install", "--frozen-lockfile"],
                 cwd=dashboard_src,
                 check=True,
             )
 
         # ── Build the Vue/Vite dashboard ──────────────────────────────────────
-        print("[hatch_build] Building Vue dashboard (corepack pnpm run build)...")
+        print("[hatch_build] Building Vue dashboard (pnpm run build)...")
         subprocess.run(
-            ["corepack", "pnpm", "run", "build"],
+            ["pnpm", "run", "build"],
             cwd=dashboard_src,
             check=True,
         )

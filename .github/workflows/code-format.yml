@@ -32,13 +32,17 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: '24.15.0'
+          node-version: '26.5.0'
           package-manager-cache: false
+      - name: Setup pnpm
+        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
+        with:
+          version: 11.15.1
       - name: Install root toolchain
-        run: corepack npm ci
+        run: npm ci
       - name: Install dashboard deps
         working-directory: dashboard
-        run: corepack pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: typecheck + eslint + prettier
         run: make check-web
 
@@ -52,14 +56,14 @@ jobs:
           python-version: '3.14.6'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: '24.15.0'
+          node-version: '26.5.0'
           package-manager-cache: false
       - name: Install uv
         run: pip install uv
       - name: Install dependencies
         run: uv sync --group dev --locked
       - name: Install root toolchain
-        run: corepack npm ci
+        run: npm ci
       - name: Check json/css/html
         run: make check-data
       - name: Check toml

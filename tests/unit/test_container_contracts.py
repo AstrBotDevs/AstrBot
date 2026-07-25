@@ -49,7 +49,7 @@ def test_docs_dockerfile_builds_from_the_locked_docs_workspace() -> None:
     """The docs image must install from the lockfile before building static assets."""
     dockerfile = (REPO_ROOT / "Dockerfile.docs").read_text(encoding="utf-8")
 
-    assert "FROM node:24.15.0-alpine AS builder" in dockerfile
+    assert "FROM node:26.5.0-alpine AS builder" in dockerfile
     assert "COPY docs/package.json docs/pnpm-lock.yaml ./" in dockerfile
     assert "pnpm fetch --frozen-lockfile" in dockerfile
     assert "pnpm install --frozen-lockfile --offline" in dockerfile

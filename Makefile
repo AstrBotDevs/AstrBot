@@ -23,7 +23,7 @@ NAPCAT_NORMALIZED_SCHEMA_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11-all-event.norm
 NAPCAT_MODELS_OUTPUT_PATH ?= $(NAPCAT_SCHEMA_OUTPUT_DIR)/ob11_event_models.py
 NAPCAT_MODELS_SOURCE_PATH ?= astrbot/core/platform/sources/napcat/generated/ob11_events.py
 PS ?= pwsh -NoProfile -NonInteractive -File
-PNPM := corepack pnpm
+PNPM := pnpm
 ROOT_NODE_BIN := ./node_modules/.bin
 PRETTIER := $(ROOT_NODE_BIN)/prettier
 TAPLO := $(ROOT_NODE_BIN)/taplo
@@ -95,8 +95,7 @@ doctor:
 
 bootstrap: doctor
 	uv sync --group dev --locked
-	corepack enable
-	corepack npm ci
+	npm ci
 	cd $(DASHBOARD_DIR) && $(PNPM) install --frozen-lockfile
 
 build: build-all
@@ -237,7 +236,7 @@ quality-report-radon-mi: quality-sync
 #   make format   auto-fix every file type
 #
 # Node tools (prettier, markdownlint-cli2, taplo) come from the root
-# package.json; install once with `corepack npm ci`. yamllint comes from the uv
+# package.json; install once with `npm ci`. yamllint comes from the uv
 # dev group (`uv sync --group dev`). Shell/Dockerfile linters are native
 # binaries: run if present, skipped with a notice otherwise (CI installs them).
 # ---------------------------------------------------------------------------

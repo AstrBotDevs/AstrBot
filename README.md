@@ -22,7 +22,7 @@
 
 AstrBot is an open-source all-in-one Agent chatbot platform that integrates with mainstream instant messaging apps. It provides reliable and scalable conversational AI infrastructure for individuals, developers, and teams. Whether you're building a personal AI companion, intelligent customer service, automation assistant, or enterprise knowledge base, AstrBot enables you to quickly build production-ready AI applications within your IM platform workflows.
 
-This repository is a modernized fork of AstrBot. The code, commands, deployment files, and compatibility expectations documented here describe this fork only: Python 3.14+, `uv` for backend workflows, `corepack pnpm` for the dashboard, and no legacy compatibility shims.
+This repository is a modernized fork of AstrBot. The code, commands, deployment files, and compatibility expectations documented here describe this fork only: Python 3.14+, `uv` for backend workflows, `pnpm` for the dashboard, and no legacy compatibility shims.
 
 ![screenshot_1 5x_postspark_2026-02-27_22-37-45](https://github.com/user-attachments/assets/f17cdb90-52d7-4773-be2e-ff64b566af6b)
 
@@ -66,14 +66,14 @@ git clone https://github.com/Xero-Team/AstrBot.git
 cd AstrBot
 uv sync --locked
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+pnpm install --frozen-lockfile
+pnpm build
 cd ..
 uv run python scripts/sync_dashboard_dist.py
 uv run main.py
 ```
 
-Install [uv](https://docs.astral.sh/uv/), Node.js 24.15.0, and Corepack first. The checkout pins Python 3.14.6 and the required pnpm version. On first startup, open `http://localhost:6185` and use the random password printed in the log; the default username is `astrbot`.
+Install [uv](https://docs.astral.sh/uv/), Node.js 26.5.0, and pnpm 11.15.1 first. The checkout pins Python 3.14.6 and the required pnpm version. On first startup, open `http://localhost:6185` and use the random password printed in the log; the default username is `astrbot`.
 
 If you enable local text-to-image or plugin HTML rendering, also run `uv run astrbot install-browser` once. See [Deploy AstrBot from Source](docs/en/deploy/astrbot/cli.md) for updates, remote access, and security guidance.
 

@@ -39,7 +39,7 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: `corepack pnpm exec vite --host 127.0.0.1 --port ${dashboardPort} --strictPort`,
+      command: `pnpm exec vite --host 127.0.0.1 --port ${dashboardPort} --strictPort`,
       url: `http://127.0.0.1:${dashboardPort}/auth/login`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,

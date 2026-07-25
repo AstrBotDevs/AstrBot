@@ -133,7 +133,7 @@ case "$1" in
     show_dashboard_credentials
     ;;
   run-dashboard)
-    start_managed_process "$dashboard_pid_file" "$dashboard_dir" "$dashboard_log" "$dashboard_err_log" 8 corepack pnpm dev
+    start_managed_process "$dashboard_pid_file" "$dashboard_dir" "$dashboard_log" "$dashboard_err_log" 8 pnpm dev
     ;;
   stop-backend)
     stop_from_pid_file "$backend_pid_file"

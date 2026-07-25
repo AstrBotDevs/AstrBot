@@ -18,7 +18,7 @@
     "test:vitest": "vitest run --config vitest.config.ts",
     "test:node": "node scripts/run-node-tests.mjs",
     "test:e2e": "playwright test --config=playwright.config.ts",
-    "test:smoke": "corepack pnpm test",
+    "test:smoke": "pnpm test",
     "generate:api": "node -e \"const fs=require('node:fs'); fs.rmSync('src/api/generated/openapi-v1', { recursive: true, force: true }); fs.rmSync('src/api/generated/openapi-v1.ts', { force: true });\" && openapi-ts",
     "generate:docs:openapi": "uv run python ../docs/scripts/update_openapi_json.py",
     "typecheck": "tsc -p tsconfig.vite-config.json --noEmit && vue-tsc --noEmit",

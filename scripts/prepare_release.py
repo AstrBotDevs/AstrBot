@@ -78,12 +78,12 @@ def run_dashboard_command(args: list[str]) -> None:
     """Run a dashboard command through the repo-managed pnpm version.
 
     Args:
-        args: Arguments to pass after `corepack pnpm`.
+        args: Arguments to pass after `pnpm`.
 
     Raises:
         ReleaseError: The dashboard command fails.
     """
-    run_command(["corepack", "pnpm", *args], cwd=REPO_ROOT / "dashboard")
+    run_command(["pnpm", *args], cwd=REPO_ROOT / "dashboard")
 
 
 def ensure_clean_worktree() -> None:

@@ -8,7 +8,7 @@
 
 - 以当前分支代码事实为准，不为旧 API、旧插件格式、旧知识库布局继续补兼容。
 - Python 基线是 `3.14+`。
-- 后端开发流程使用 `uv`，Dashboard 前端流程使用 `corepack pnpm`。
+- 后端开发流程使用 `uv`，Dashboard 前端流程使用 `pnpm`。
 - 如果新旧路径并存，优先沿用新路径，不要继续扩展 legacy shim。
 
 ### 报告问题
@@ -43,13 +43,13 @@ ruff check .
 make dev
 make check
 make quality
-cd dashboard && corepack pnpm generate:api
+cd dashboard && pnpm generate:api
 ```
 
 如果你修改了后端 OpenAPI、接口路由或响应结构，请同时刷新：
 
 ```bash
-cd dashboard && corepack pnpm generate:api
+cd dashboard && pnpm generate:api
 uv run python docs/scripts/update_openapi_json.py
 ```
 
@@ -87,7 +87,7 @@ This repository is a modernized AstrBot fork. Please follow these rules:
 - Match the current branch, not upstream historical behavior.
 - Do not add or preserve compatibility shims for deprecated APIs, plugin formats, or old knowledge-base layouts.
 - The Python baseline is `3.14+`.
-- Backend workflows use `uv`; dashboard workflows use `corepack pnpm`.
+- Backend workflows use `uv`; dashboard workflows use `pnpm`.
 
 ### Reporting Issues
 
@@ -121,13 +121,13 @@ ruff check .
 make dev
 make check
 make quality
-cd dashboard && corepack pnpm generate:api
+cd dashboard && pnpm generate:api
 ```
 
 If you change backend OpenAPI routes, request schemas, or response schemas, also refresh:
 
 ```bash
-cd dashboard && corepack pnpm generate:api
+cd dashboard && pnpm generate:api
 uv run python docs/scripts/update_openapi_json.py
 ```
 

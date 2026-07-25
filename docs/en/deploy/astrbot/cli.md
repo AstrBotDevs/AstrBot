@@ -7,8 +7,8 @@
 
 - Git
 - `uv`
-- Node.js 24.15.0
-- Corepack
+- Node.js 26.5.0
+- pnpm 11.15.1
 
 Package metadata requires Python 3.14 or later. The checkout pins Python 3.14.6 in `.python-version`; `uv` can download that version when its managed-Python support is enabled.
 
@@ -33,8 +33,8 @@ uv sync --locked
 
 ```bash
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+pnpm install --frozen-lockfile
+pnpm build
 cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```
@@ -101,8 +101,8 @@ Stop AstrBot, then run:
 git pull --ff-only
 uv sync --locked
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+pnpm install --frozen-lockfile
+pnpm build
 cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```

@@ -26,12 +26,12 @@ The reproducible development/CI baseline is:
 | Tool                | Baseline and source of truth                                                 |
 | ------------------- | ---------------------------------------------------------------------------- |
 | Python              | 3.14.6 in `.python-version`, CI, and `Dockerfile`; project floor is `>=3.14` |
-| Node.js             | 24.15.0 in CI and `Dockerfile`                                               |
+| Node.js             | 26.5.0 in CI and `Dockerfile`                                                |
 | root npm            | 12.0.1 in the root `package.json` `packageManager` field                     |
 | Dashboard/docs pnpm | 11.15.1 in their `package.json` `packageManager` fields                      |
 | Python manager      | `uv` (required, currently not patch-pinned)                                  |
 
-Use Corepack for local npm/pnpm commands. Workflows may instead use a
+Use the globally installed `npm` and `pnpm` commands. Workflows may instead use a
 commit-pinned package-manager setup action and invoke its installed binary
 directly. A toolchain upgrade must update every matching declaration,
 workflow, image build, and lockfile in the same change.
@@ -43,7 +43,7 @@ make doctor
 make bootstrap
 ```
 
-`make doctor` is strict. It checks Python 3.14.x, `uv`, Node 24.x, Corepack, and
+`make doctor` is strict. It checks Python 3.14.x, `uv`, Node 26.x, and
 pnpm 11.15.x; on POSIX it also requires `shellcheck`, `shfmt`, and `hadolint`.
 Docker is optional. Windows additionally needs GNU Make and PowerShell 7, while
 `check-ps` needs PSScriptAnalyzer; `doctor` does not currently validate those
@@ -74,16 +74,16 @@ uv sync --group dev --locked
 uv run main.py
 
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm dev
-corepack pnpm build
-corepack pnpm test
+pnpm install --frozen-lockfile
+pnpm dev
+pnpm build
+pnpm test
 cd ..
 
 cd docs
-corepack pnpm install --frozen-lockfile
-corepack pnpm run docs:dev
-corepack pnpm run docs:build
+pnpm install --frozen-lockfile
+pnpm run docs:dev
+pnpm run docs:build
 cd ..
 ```
 
@@ -97,7 +97,7 @@ Keep each dependency surface with its actual installer:
 | Surface                 | Manifests / policy                                        | Authoritative install input                          |
 | ----------------------- | --------------------------------------------------------- | ---------------------------------------------------- |
 | Python runtime/dev      | `pyproject.toml`, `requirements.txt`                      | `uv.lock`; use `uv sync --locked`                    |
-| root repository tooling | `package.json`                                            | `package-lock.json`; use `corepack npm ci`           |
+| root repository tooling | `package.json`                                            | `package-lock.json`; use `npm ci`                    |
 | Dashboard               | `dashboard/package.json`, `dashboard/pnpm-workspace.yaml` | `dashboard/pnpm-lock.yaml`; use frozen pnpm installs |
 | docs                    | `docs/package.json`, `docs/pnpm-workspace.yaml`           | `docs/pnpm-lock.yaml`; use frozen pnpm installs      |
 
@@ -125,7 +125,7 @@ to the nearest existing coverage (`tests/unit/`, `tests/test_*.py`,
 `dashboard/tests/` as `*.vitest.ts`. Browser-level Dashboard tests live under
 `dashboard/tests/e2e/` and use `dashboard/playwright.config.ts`; the plugin UI
 suite starts its isolated backend through `tests/e2e/plugin_ui_test_server.py`.
-Install the required Playwright browsers before running `corepack pnpm
+Install the required Playwright browsers before running `pnpm
 test:e2e` from `dashboard/`.
 
 The repository gates are deliberately separate:
@@ -329,7 +329,7 @@ When changing Dashboard routes, schemas, or `openspec/openapi-v1.yaml`, run:
 
 ```bash
 cd dashboard
-corepack pnpm generate:api
+pnpm generate:api
 cd ..
 node node_modules/prettier/bin/prettier.cjs --write --ignore-path .gitignore "dashboard/src/api/generated/openapi-v1/**/*.ts"
 uv run python docs/scripts/update_openapi_json.py
@@ -355,8 +355,8 @@ Validate documentation with:
 
 ```bash
 cd docs
-corepack pnpm install --frozen-lockfile
-corepack pnpm run docs:build
+pnpm install --frozen-lockfile
+pnpm run docs:build
 cd ..
 make check-md
 ```

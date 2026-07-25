@@ -10,8 +10,8 @@ outline: deep
 
 - Python 包要求：3.14 及以上
 - 当前开发、Docker 与 CI Python：3.14.6
-- Node.js：24.15.0
-- Dashboard 与文档 pnpm：11.15.1，由 Corepack 管理
+- Node.js：26.5.0
+- Dashboard 与文档 pnpm：11.15.1
 - Python 依赖管理：`uv`
 
 版本来源分别是 `.python-version`、工作流、Dockerfile 和各目录的 `packageManager` 字段。升级工具链时必须同步这些位置及相应锁文件。
@@ -25,7 +25,7 @@ make doctor
 make bootstrap
 ```
 
-`make doctor` 检查 Python 3.14.x、`uv`、Node 24.x、Corepack 和 Dashboard pnpm 11.15.x；在 POSIX 上还检查 `shfmt`、`shellcheck` 和 `hadolint`。`make bootstrap` 使用锁文件同步 Python dev 依赖、根目录 Node 格式化工具和 Dashboard 依赖，但不会安装文档依赖。
+`make doctor` 检查 Python 3.14.x、`uv`、Node 26.x 和 Dashboard pnpm 11.15.x；在 POSIX 上还检查 `shfmt`、`shellcheck` 和 `hadolint`。`make bootstrap` 使用锁文件同步 Python dev 依赖、根目录 Node 格式化工具和 Dashboard 依赖，但不会安装文档依赖。
 
 - Windows：另需 GNU Make、PowerShell 7；PowerShell 检查还需要 PSScriptAnalyzer。`make doctor` 当前不会验证这三项。
 - Linux/macOS：使用 Bash，不要求 PowerShell；严格检查需要 `shfmt`、`shellcheck` 和 `hadolint`。
@@ -34,12 +34,12 @@ make bootstrap
 
 ```bash
 uv sync --group dev --locked
-corepack npm ci
+npm ci
 cd dashboard
-corepack pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile
 cd ..
 cd docs
-corepack pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile
 cd ..
 ```
 
@@ -70,7 +70,7 @@ uv run main.py
 
 ```bash
 cd dashboard
-corepack pnpm dev
+pnpm dev
 ```
 
 运行时数据写入当前 runtime root 的 `data/`。测试和临时验证不要读取或覆盖开发者真实的 `data/` 目录；使用 pytest 的临时目录 fixture 或设置独立的 `ASTRBOT_ROOT`。
@@ -91,7 +91,7 @@ Dashboard 使用 Vitest：
 
 ```bash
 cd dashboard
-corepack pnpm test
+pnpm test
 ```
 
 插件 Dashboard Extension Protocol 使用 Playwright 做浏览器级 E2E。首次运行先安装
@@ -100,8 +100,8 @@ Chromium、Firefox 和 WebKit；`playwright.config.ts` 会自动启动隔离测�
 
 ```bash
 cd dashboard
-corepack pnpm exec playwright install chromium firefox webkit
-corepack pnpm test:e2e
+pnpm exec playwright install chromium firefox webkit
+pnpm test:e2e
 ```
 
 用例位于 `dashboard/tests/e2e/`，隔离后端入口是
@@ -147,7 +147,7 @@ make format-md
 
 ```bash
 cd dashboard
-corepack pnpm generate:api
+pnpm generate:api
 cd ..
 node node_modules/prettier/bin/prettier.cjs --write --ignore-path .gitignore "dashboard/src/api/generated/openapi-v1/**/*.ts"
 uv run python docs/scripts/update_openapi_json.py
@@ -162,9 +162,9 @@ node node_modules/prettier/bin/prettier.cjs --write docs/public/openapi.json
 
 ```bash
 cd docs
-corepack pnpm install --frozen-lockfile
-corepack pnpm run docs:dev
-corepack pnpm run docs:build
+pnpm install --frozen-lockfile
+pnpm run docs:dev
+pnpm run docs:build
 ```
 
 生产构建会检查内部链接。不要编辑 `docs/.vitepress/dist/`；它是生成产物。`make check-md` 只枚举 Git 已跟踪的 Markdown，新建但尚未加入索引的页面还要显式运行 Prettier 和 markdownlint。

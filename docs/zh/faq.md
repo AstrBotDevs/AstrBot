@@ -8,8 +8,8 @@
 
 ```bash
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+pnpm install --frozen-lockfile
+pnpm build
 cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```
@@ -85,8 +85,8 @@ Docker 发布 `6185` 端口也需要这个监听覆盖，详见 [Docker 部署](
 git pull --ff-only
 uv sync --locked
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+pnpm install --frozen-lockfile
+pnpm build
 cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```

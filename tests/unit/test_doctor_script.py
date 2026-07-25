@@ -7,7 +7,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_version_runs_resolved_executable(monkeypatch, tmp_path: Path) -> None:
-    resolved = str(tmp_path / "corepack.cmd")
+    resolved = str(tmp_path / "pnpm.cmd")
     invoked: tuple[str, ...] | None = None
 
     monkeypatch.setattr(doctor.shutil, "which", lambda _command: resolved)
@@ -19,7 +19,7 @@ def test_version_runs_resolved_executable(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(doctor.subprocess, "run", run)
 
-    assert doctor.version(("corepack", "--version"), tmp_path) == "0.34.7"
+    assert doctor.version(("pnpm", "--version"), tmp_path) == "0.34.7"
     assert invoked == (resolved, "--version")
 
 
@@ -33,7 +33,7 @@ def test_version_treats_process_start_failure_as_missing(
 
     monkeypatch.setattr(doctor.subprocess, "run", run)
 
-    assert doctor.version(("corepack", "--version"), tmp_path) is None
+    assert doctor.version(("pnpm", "--version"), tmp_path) is None
 
 
 def test_ci_pytest_runner_does_not_bypass_interpreter_teardown() -> None:

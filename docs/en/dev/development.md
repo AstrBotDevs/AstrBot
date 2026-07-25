@@ -10,8 +10,8 @@ This page covers the general workflow for the current fork. See [Linux Developme
 
 - Python package requirement: 3.14 or later
 - Current development, Docker, and CI Python: 3.14.6
-- Node.js: 24.15.0
-- Dashboard and docs pnpm: 11.15.1 through Corepack
+- Node.js: 26.5.0
+- Dashboard and docs pnpm: 11.15.1
 - Python dependency manager: `uv`
 
 These versions come from `.python-version`, workflows, the Dockerfile, and each package's `packageManager` field. A toolchain upgrade must update all matching declarations and lockfiles.
@@ -25,7 +25,7 @@ make doctor
 make bootstrap
 ```
 
-`make doctor` checks Python 3.14.x, `uv`, Node 24.x, Corepack, and Dashboard pnpm 11.15.x. On POSIX it also checks `shfmt`, `shellcheck`, and `hadolint`. `make bootstrap` uses lockfiles to install Python development dependencies, root Node formatting tools, and Dashboard dependencies, but it does not install docs dependencies.
+`make doctor` checks Python 3.14.x, `uv`, Node 26.x, and Dashboard pnpm 11.15.x. On POSIX it also checks `shfmt`, `shellcheck`, and `hadolint`. `make bootstrap` uses lockfiles to install Python development dependencies, root Node formatting tools, and Dashboard dependencies, but it does not install docs dependencies.
 
 - Windows additionally requires GNU Make and PowerShell 7; PowerShell validation also needs PSScriptAnalyzer. `make doctor` does not currently validate those three requirements.
 - Linux/macOS use Bash and do not require PowerShell. Strict checks require `shfmt`, `shellcheck`, and `hadolint`.
@@ -34,12 +34,12 @@ For component-only work, use the direct commands below without bypassing lockfil
 
 ```bash
 uv sync --group dev --locked
-corepack npm ci
+npm ci
 cd dashboard
-corepack pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile
 cd ..
 cd docs
-corepack pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile
 cd ..
 ```
 
@@ -70,7 +70,7 @@ For Dashboard-only work:
 
 ```bash
 cd dashboard
-corepack pnpm dev
+pnpm dev
 ```
 
 Runtime state is written under `data/` in the current runtime root. Tests and temporary checks must not read from or write to a developer's real `data/`; use pytest temporary fixtures or a separate `ASTRBOT_ROOT`.
@@ -91,7 +91,7 @@ The Dashboard uses Vitest:
 
 ```bash
 cd dashboard
-corepack pnpm test
+pnpm test
 ```
 
 The plugin Dashboard Extension Protocol also has browser-level Playwright E2E
@@ -101,8 +101,8 @@ developer's real `data/` directory:
 
 ```bash
 cd dashboard
-corepack pnpm exec playwright install chromium firefox webkit
-corepack pnpm test:e2e
+pnpm exec playwright install chromium firefox webkit
+pnpm test:e2e
 ```
 
 The specs live in `dashboard/tests/e2e/`, and the isolated backend entry point
@@ -148,7 +148,7 @@ After changing routes, request/response schemas, or OpenAPI, regenerate both the
 
 ```bash
 cd dashboard
-corepack pnpm generate:api
+pnpm generate:api
 cd ..
 node node_modules/prettier/bin/prettier.cjs --write --ignore-path .gitignore "dashboard/src/api/generated/openapi-v1/**/*.ts"
 uv run python docs/scripts/update_openapi_json.py
@@ -163,9 +163,9 @@ When equivalent Chinese and English pages exist, behavior, configuration, and wo
 
 ```bash
 cd docs
-corepack pnpm install --frozen-lockfile
-corepack pnpm run docs:dev
-corepack pnpm run docs:build
+pnpm install --frozen-lockfile
+pnpm run docs:dev
+pnpm run docs:build
 ```
 
 The production build validates internal links. Do not edit `docs/.vitepress/dist/`; it is generated. `make check-md` enumerates only Git-tracked Markdown, so run Prettier and markdownlint explicitly for new pages that have not yet been added to the index.

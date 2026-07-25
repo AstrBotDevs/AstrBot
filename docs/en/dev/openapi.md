@@ -208,7 +208,7 @@ The source specification is `openspec/openapi-v1.yaml` at the repository root. R
 
 ```bash
 cd dashboard
-corepack pnpm generate:api
+pnpm generate:api
 cd ..
 node node_modules/prettier/bin/prettier.cjs --write --ignore-path .gitignore "dashboard/src/api/generated/openapi-v1/**/*.ts"
 uv run python docs/scripts/update_openapi_json.py

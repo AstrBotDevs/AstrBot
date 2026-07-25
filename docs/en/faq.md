@@ -8,8 +8,8 @@ This fork does not publish an independent prebuilt Dashboard asset. A source dep
 
 ```bash
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+pnpm install --frozen-lockfile
+pnpm build
 cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```
@@ -85,8 +85,8 @@ Stop AstrBot and back up `data/`, then run:
 git pull --ff-only
 uv sync --locked
 cd dashboard
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+pnpm install --frozen-lockfile
+pnpm build
 cd ..
 uv run python scripts/sync_dashboard_dist.py
 ```
