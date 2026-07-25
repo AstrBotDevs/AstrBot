@@ -1456,6 +1456,37 @@ async def test_parse_openai_completion_raises_empty_model_output_error():
 
 
 @pytest.mark.asyncio
+async def test_parse_openai_completion_reads_nested_data_choices():
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_construct(
+            id=None,
+            object="chat.completion",
+            created=None,
+            model=None,
+            choices=None,
+            data={
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "PONG",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ]
+            },
+        )
+
+        response = await provider._parse_openai_completion(completion, tools=None)
+
+        assert response.completion_text == "PONG"
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch):
     provider = _make_provider()
     try:
