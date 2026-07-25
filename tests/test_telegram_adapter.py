@@ -101,6 +101,74 @@ def _bind_runtime_registries(adapter) -> tuple[HandlerRegistry, PluginRegistry]:
 
 
 @pytest.mark.asyncio
+async def test_telegram_partial_quote_uses_exact_quote_text():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    reply_update = create_mock_update(
+        message_text="😀 prefix target suffix",
+        message_id=42,
+        user_id=1001,
+        username="original_sender",
+    )
+    update = create_mock_update(
+        message_text="What does this mean?",
+        reply_to_message=reply_update.message,
+        quote=MagicMock(text="target", position=10),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = result.message[0]
+    assert isinstance(reply, Comp.Reply)
+    assert reply.id == "42"
+    assert reply.message_str == "target"
+    assert reply.text == "target"
+    assert reply.chain is not None
+    assert len(reply.chain) == 1
+    assert isinstance(reply.chain[0], Comp.Plain)
+    assert reply.chain[0].text == "target"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("quote_text", [None, ""])
+async def test_telegram_reply_without_quote_text_uses_full_message(quote_text):
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    reply_update = create_mock_update(
+        message_text="Use the complete replied message",
+        message_id=43,
+        user_id=1002,
+        username="original_sender",
+    )
+    update = create_mock_update(
+        message_text="Follow-up question",
+        reply_to_message=reply_update.message,
+        quote=MagicMock(text=quote_text) if quote_text is not None else None,
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = result.message[0]
+    assert isinstance(reply, Comp.Reply)
+    assert reply.message_str == "Use the complete replied message"
+    assert reply.text == "Use the complete replied message"
+    assert reply.chain is not None
+    assert len(reply.chain) == 1
+    assert isinstance(reply.chain[0], Comp.Plain)
+    assert reply.chain[0].text == "Use the complete replied message"
+
+
+@pytest.mark.asyncio
 async def test_telegram_document_caption_populates_message_text_and_plain():
     TelegramPlatformAdapter = _load_telegram_adapter()
     adapter = TelegramPlatformAdapter(

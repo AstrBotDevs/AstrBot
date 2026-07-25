@@ -518,15 +518,21 @@ class TelegramPlatformAdapter(Platform):
             reply_abm = await self.convert_message(reply_update, context, False)
 
             if reply_abm:
+                quote_text = getattr(update.message.quote, "text", None)
+                reply_chain = reply_abm.message
+                reply_message_str = reply_abm.message_str
+                if isinstance(quote_text, str) and quote_text:
+                    reply_chain = [Comp.Plain(quote_text)]
+                    reply_message_str = quote_text
                 message.message.append(
                     Comp.Reply(
                         id=reply_abm.message_id,
-                        chain=reply_abm.message,
+                        chain=reply_chain,
                         sender_id=reply_abm.sender.user_id,
                         sender_nickname=reply_abm.sender.nickname,
                         time=reply_abm.timestamp,
-                        message_str=reply_abm.message_str,
-                        text=reply_abm.message_str,
+                        message_str=reply_message_str,
+                        text=reply_message_str,
                         qq=reply_abm.sender.user_id,
                     ),
                 )
