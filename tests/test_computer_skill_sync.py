@@ -1,4 +1,3 @@
-
 import asyncio
 from pathlib import Path
 from typing import cast
@@ -46,6 +45,16 @@ class _FakeBooter:
         return {"success": True}
 
 
+def _isolate_skill_manager_data(monkeypatch, tmp_path: Path) -> None:
+    """Keep SkillManager's config/cache writes inside this test's temp root."""
+    data_root = tmp_path / "data"
+    data_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(
+        "astrbot.core.skills.skill_manager.get_astrbot_data_path",
+        lambda: str(data_root),
+    )
+
+
 def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
     monkeypatch, tmp_path: Path
 ):
@@ -55,6 +64,7 @@ def test_sync_skills_keeps_builtin_skills_when_local_is_empty(
     skills_root.mkdir(parents=True, exist_ok=True)
     plugins_root.mkdir(parents=True, exist_ok=True)
     temp_root.mkdir(parents=True, exist_ok=True)
+    _isolate_skill_manager_data(monkeypatch, tmp_path)
 
     captured = {"skills": None}
 
@@ -104,6 +114,7 @@ def test_sync_skills_uses_managed_strategy_instead_of_wiping_all(
     skill_dir.mkdir(parents=True, exist_ok=True)
     skill_dir.joinpath("SKILL.md").write_text("# demo", encoding="utf-8")
     temp_root.mkdir(parents=True, exist_ok=True)
+    _isolate_skill_manager_data(monkeypatch, tmp_path)
 
     captured = {"skills": None}
 
@@ -154,6 +165,7 @@ def test_sync_skills_includes_plugin_provided_skills(
     plugin_skill_dir = plugins_root / "astrbot_plugin_demo" / "skills" / "demo-skill"
     plugin_skill_dir.mkdir(parents=True)
     plugin_skill_dir.joinpath("SKILL.md").write_text("# demo", encoding="utf-8")
+    _isolate_skill_manager_data(monkeypatch, tmp_path)
 
     captured = {"skills": None}
 

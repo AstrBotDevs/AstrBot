@@ -23,8 +23,13 @@ from astrbot.core.provider.entities import ProviderType
 from astrbot.core.runtime_catalogs import RuntimeCatalogs
 from astrbot.core.star.filter.command import CommandFilter
 from astrbot.core.star.filter.command_group import CommandGroupFilter
+from astrbot.core.star.register.star_handler import collect_plugin_module_declarations
 from astrbot.core.star.star import StarMetadata
-from astrbot.core.star.star_handler import EventType, StarHandlerMetadata
+from astrbot.core.star.star_handler import (
+    EventType,
+    StarHandlerMetadata,
+    materialize_handler_declarations,
+)
 
 
 class DummyEvent:
@@ -748,24 +753,12 @@ def test_builtin_command_names_follow_grouped_cli_conventions():
 
 
 def test_normalized_builtin_paths_resolve_and_legacy_subcommands_do_not():
-    handlers = []
-    seen_groups: set[int] = set()
-    stack = [
-        Main.plugin.parent_group,
-        Main.provider.parent_group,
-        Main.conversation.parent_group,
-    ]
-    while stack:
-        group = stack.pop()
-        if id(group) in seen_groups:
-            continue
-        seen_groups.add(id(group))
-        handlers.append(SimpleNamespace(event_filters=[group]))
-        for child in group.sub_command_filters:
-            if isinstance(child, CommandGroupFilter):
-                stack.append(child)
-            elif child.handler_md is not None:
-                handlers.append(child.handler_md)
+    # Static declarations intentionally have no live handler metadata. Build the
+    # catalog through the same materialization boundary as the plugin runtime.
+    from astrbot.builtin_stars.builtin_commands import main as builtin_commands_main
+
+    declarations = collect_plugin_module_declarations(builtin_commands_main)
+    handlers = materialize_handler_declarations(list(declarations.handlers))
     engine = CommandEngine(build_command_catalog(handlers))
 
     plugin = engine.resolve("plugin list")
