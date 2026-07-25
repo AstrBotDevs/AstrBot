@@ -6,6 +6,7 @@ import zipfile
 import pytest
 
 from astrbot.core.knowledge_base.parsers.epub_parser import EpubParser
+from astrbot.core.knowledge_base.parsers.markitdown_parser import MarkitdownParser
 from astrbot.core.knowledge_base.parsers.util import select_parser
 
 
@@ -172,6 +173,14 @@ async def test_select_parser_supports_epub():
     parser = await select_parser(".epub")
 
     assert isinstance(parser, EpubParser)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ext", [".rst", ".adoc"])
+async def test_select_parser_supports_text_markup_formats(ext):
+    parser = await select_parser(ext)
+
+    assert isinstance(parser, MarkitdownParser)
 
 
 @pytest.mark.asyncio

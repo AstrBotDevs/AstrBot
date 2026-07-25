@@ -57,8 +57,11 @@
           </v-btn>
           <div class="d-flex flex-column">
             <v-list-item-title class="property-name">{{ templateLabel(entry.__template_key) }}</v-list-item-title>
-            <v-list-item-subtitle class="property-hint" v-if="getTemplate(entry)?.hint || getTemplate(entry)?.description">
-              {{ templateText(entry.__template_key, 'hint', getTemplate(entry)?.hint || getTemplate(entry)?.description) }}
+            <v-list-item-subtitle class="property-hint entry-display-text" v-if="templateDisplayText(entry)">
+              {{ templateDisplayText(entry) }}
+            </v-list-item-subtitle>
+            <v-list-item-subtitle class="property-hint" v-if="templateHintText(entry)">
+              {{ templateHintText(entry) }}
             </v-list-item-subtitle>
           </div>
         </div>
@@ -201,6 +204,7 @@ const defaultValueMap = {
   string: '',
   text: '',
   list: [],
+  file: [],
   object: {},
   template_list: []
 }
@@ -348,6 +352,49 @@ function getTemplate(entry) {
   return props.templates?.[key] || null
 }
 
+function templateHintText(entry) {
+  const template = getTemplate(entry)
+  if (!template || template.hide_hint_in_list) return ''
+  return templateText(entry.__template_key, 'hint', template.hint || template.description || '')
+}
+
+function getItemMetaBySelector(itemsMeta = {}, selector = '') {
+  const keys = selector.split('.').filter(Boolean)
+  let currentItems = itemsMeta
+  let currentMeta = null
+
+  for (let i = 0; i < keys.length; i++) {
+    currentMeta = currentItems?.[keys[i]]
+    if (!currentMeta) return null
+    if (i < keys.length - 1) {
+      if (currentMeta.type !== 'object') return null
+      currentItems = currentMeta.items || {}
+    }
+  }
+
+  return currentMeta
+}
+
+function templateDisplayText(entry) {
+  const template = getTemplate(entry)
+  const displayItem = template?.display_item
+  if (!template || typeof displayItem !== 'string' || !displayItem) return ''
+
+  const displayMeta = getItemMetaBySelector(template.items || {}, displayItem)
+  if (displayMeta?.type !== 'string') return ''
+
+  const value = getValueBySelector(entry, displayItem)
+  if (typeof value !== 'string' || !value.trim()) return ''
+
+  const label = templateItemText(
+    entry.__template_key,
+    displayItem,
+    'description',
+    displayMeta.description || displayItem,
+  )
+  return `${label}: ${value.trim()}`
+}
+
 function getValueBySelector(obj, selector) {
   const keys = selector.split('.')
   let current = obj
@@ -448,6 +495,11 @@ function hasVisibleItemsAfter(entries, currentIndex, entry) {
   font-size: 0.75rem;
   color: var(--v-theme-secondaryText);
   margin-top: 2px;
+}
+
+.entry-display-text {
+  color: var(--v-theme-primary);
+  font-weight: 500;
 }
 
 .property-key {

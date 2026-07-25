@@ -42,7 +42,6 @@ async def check_dashboard(astrbot_root: Path) -> None:
                 if click.confirm(
                     "Install dashboard?",
                     default=True,
-                    abort=True,
                 ):
                     click.echo("Installing dashboard...")
                     await download_dashboard(

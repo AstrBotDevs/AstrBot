@@ -1,18 +1,25 @@
+import asyncio
+import copy
 import enum
 import json
 import logging
 import os
+import tempfile
+import threading
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.core.utils.auth_password import (
     generate_dashboard_password,
     hash_dashboard_password,
-    hash_legacy_dashboard_password,
+    hash_md5_dashboard_password,
+    validate_dashboard_password,
 )
 
 from .default import DEFAULT_CONFIG, DEFAULT_VALUE_MAP
 
 ASTRBOT_CONFIG_PATH = os.path.join(get_astrbot_data_path(), "cmd_config.json")
+DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
+DASHBOARD_RESET_PASSWORD_ENV = "ASTRBOT_RESET_DASHBOARD_PASSWORD"
 logger = logging.getLogger("astrbot")
 
 
@@ -45,15 +52,19 @@ class AstrBotConfig(dict):
         object.__setattr__(self, "config_path", config_path)
         object.__setattr__(self, "default_config", default_config)
         object.__setattr__(self, "schema", schema)
+        object.__setattr__(self, "_save_state_lock", threading.Lock())
+        object.__setattr__(self, "_save_commit_lock", threading.Lock())
+        object.__setattr__(self, "_save_revision", 0)
+        object.__setattr__(self, "_save_committed_revision", 0)
 
         if schema:
             default_config = self._config_schema_to_default_config(schema)
 
         if not self.check_exist():
             """不存在时载入默认配置"""
-            with open(config_path, "w", encoding="utf-8-sig") as f:
-                json.dump(default_config, f, indent=4, ensure_ascii=False)
-                object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
+            self.update(default_config)
+            self.save_config(indent=4)
+            object.__setattr__(self, "first_deploy", True)  # 标记第一次部署
 
         with open(config_path, encoding="utf-8-sig") as f:
             conf_str = f.read()
@@ -62,11 +73,11 @@ class AstrBotConfig(dict):
                 conf_str = conf_str[1:]
             conf = json.loads(conf_str)
         dashboard_conf = conf.get("dashboard")
-        legacy_dashboard_password_change_required = bool(
+        stored_dashboard_password_change_required = bool(
             isinstance(dashboard_conf, dict)
             and dashboard_conf.get("password_change_required", False)
         )
-        if legacy_dashboard_password_change_required:
+        if stored_dashboard_password_change_required:
             object.__setattr__(
                 self,
                 "_dashboard_password_change_required_from_config",
@@ -74,7 +85,11 @@ class AstrBotConfig(dict):
             )
         # 检查配置完整性，并插入
         has_new = self.check_config_integrity(default_config, conf)
-        if (
+        reset_dashboard_password = self._consume_reset_dashboard_password_flag()
+        if reset_dashboard_password and "dashboard" in conf:
+            self._reset_generated_dashboard_password(conf)
+            has_new = True
+        elif (
             "dashboard" in conf
             and isinstance(conf["dashboard"], dict)
             and not conf["dashboard"].get("pbkdf2_password")
@@ -85,7 +100,7 @@ class AstrBotConfig(dict):
         elif (
             "dashboard" in conf
             and isinstance(conf["dashboard"], dict)
-            and legacy_dashboard_password_change_required
+            and stored_dashboard_password_change_required
             and conf["dashboard"].get("pbkdf2_password")
         ):
             self._reset_generated_dashboard_password(conf)
@@ -97,13 +112,11 @@ class AstrBotConfig(dict):
         self.update(conf)
 
     def _reset_generated_dashboard_password(self, conf: dict) -> None:
-        generated_password = generate_dashboard_password()
+        generated_password = self._resolve_initial_dashboard_password()
         conf["dashboard"]["pbkdf2_password"] = hash_dashboard_password(
             generated_password
         )
-        conf["dashboard"]["password"] = hash_legacy_dashboard_password(
-            generated_password
-        )
+        conf["dashboard"]["password"] = hash_md5_dashboard_password(generated_password)
         conf["dashboard"]["password_storage_upgraded"] = True
         conf["dashboard"]["password_change_required"] = True
         object.__setattr__(
@@ -116,6 +129,19 @@ class AstrBotConfig(dict):
             "_generated_dashboard_password_change_required",
             True,
         )
+
+    @staticmethod
+    def _consume_reset_dashboard_password_flag() -> bool:
+        raw_value = os.environ.pop(DASHBOARD_RESET_PASSWORD_ENV, "")
+        return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _resolve_initial_dashboard_password() -> str:
+        env_password = os.environ.get(DASHBOARD_INITIAL_PASSWORD_ENV)
+        if env_password is None:
+            return generate_dashboard_password()
+        validate_dashboard_password(env_password)
+        return env_password
 
     def _config_schema_to_default_config(self, schema: dict) -> dict:
         """将 Schema 转换成 Config"""
@@ -203,15 +229,98 @@ class AstrBotConfig(dict):
 
         return has_new
 
-    def save_config(self, replace_config: dict | None = None) -> None:
-        """将配置写入文件
+    def save_config(
+        self, replace_config: dict | None = None, *, indent: int = 2
+    ) -> None:
+        """Persist the current configuration synchronously.
 
-        如果传入 replace_config，则将配置替换为 replace_config
+        Args:
+            replace_config: Values to merge into the configuration before saving.
+            indent: Number of spaces used to indent the JSON output.
         """
-        if replace_config:
-            self.update(replace_config)
-        with open(self.config_path, "w", encoding="utf-8-sig") as f:
-            json.dump(self, f, indent=2, ensure_ascii=False)
+        snapshot, revision = self._prepare_config_snapshot(replace_config)
+        self._write_config_snapshot(snapshot, revision, indent)
+
+    async def save_config_async(
+        self, replace_config: dict | None = None, *, indent: int = 2
+    ) -> bool:
+        """Persist a stable configuration snapshot without blocking the event loop.
+
+        Args:
+            replace_config: Values to merge into the configuration before saving.
+            indent: Number of spaces used to indent the JSON output.
+
+        Returns:
+            Whether this snapshot was committed. A newer committed snapshot supersedes
+            an older snapshot.
+        """
+        snapshot, revision = self._prepare_config_snapshot(replace_config)
+        return await asyncio.to_thread(
+            self._write_config_snapshot,
+            snapshot,
+            revision,
+            indent,
+        )
+
+    def _prepare_config_snapshot(self, replace_config: dict | None) -> tuple[dict, int]:
+        """Create an isolated snapshot and allocate its save revision.
+
+        Args:
+            replace_config: Values to merge into the configuration before snapshotting.
+
+        Returns:
+            The isolated configuration snapshot and its monotonically increasing
+            revision.
+        """
+        with self._save_state_lock:
+            if replace_config:
+                self.update(replace_config)
+            snapshot = copy.deepcopy(dict(self))
+            revision = self._save_revision + 1
+            object.__setattr__(self, "_save_revision", revision)
+        return snapshot, revision
+
+    def _write_config_snapshot(
+        self, snapshot: dict, revision: int, indent: int
+    ) -> bool:
+        """Write and conditionally commit a prepared configuration snapshot.
+
+        Args:
+            snapshot: Isolated configuration data to serialize.
+            revision: Revision allocated when the snapshot was prepared.
+            indent: Number of spaces used to indent the JSON output.
+
+        Returns:
+            Whether the snapshot replaced the current configuration file.
+        """
+        directory = os.path.dirname(os.path.abspath(self.config_path)) or "."
+        fd, temp_path = tempfile.mkstemp(
+            dir=directory,
+            prefix=f".{os.path.basename(self.config_path)}.",
+            suffix=".tmp",
+        )
+        committed = False
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8-sig") as f:
+                json.dump(snapshot, f, indent=indent, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            with self._save_commit_lock:
+                if revision > self._save_committed_revision:
+                    os.replace(temp_path, self.config_path)
+                    object.__setattr__(
+                        self,
+                        "_save_committed_revision",
+                        revision,
+                    )
+                    committed = True
+        finally:
+            if not committed:
+                try:
+                    os.unlink(temp_path)
+                except FileNotFoundError:
+                    pass
+        return committed
 
     def __getattr__(self, item):
         try:

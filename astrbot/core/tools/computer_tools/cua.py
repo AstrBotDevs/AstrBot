@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import mcp
+from mcp.types import ContentBlock
 
 from astrbot.api import FunctionTool
 from astrbot.core.agent.run_context import ContextWrapper
@@ -88,7 +89,7 @@ class CuaScreenshotTool(FunctionTool):
                 await context.context.event.send(MessageChain().file_image(path))
                 payload["sent_to_user"] = True
             image_data = payload.pop("base64", "")
-            content: list[mcp.types.TextContent | mcp.types.ImageContent] = [
+            content: list[ContentBlock] = [
                 mcp.types.TextContent(type="text", text=_to_json(payload))
             ]
             if return_image_to_llm:

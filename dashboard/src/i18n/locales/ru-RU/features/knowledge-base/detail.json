@@ -49,7 +49,7 @@
         "title": "Добавление контента",
         "selectFile": "Файл",
         "dropzone": "Нажмите или перетащите файл сюда",
-        "supportedFormats": "Форматы: .txt, .md, .pdf, .docx, .epub, .xls, .xlsx",
+        "supportedFormats": "Форматы: .txt, .md, .markdown, .rst, .adoc, .pdf, .docx, .epub, .xls, .xlsx",
         "maxSize": "Максимум: 128MB",
         "chunkSettings": "Фрагментация",
         "batchSettings": "Пакетная обработка",

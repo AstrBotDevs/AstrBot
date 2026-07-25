@@ -1,23 +1,19 @@
 import base64
-import uuid
 from pathlib import Path
-from urllib.parse import urlparse
 
 import httpx
 
 from astrbot import logger
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.io import download_file
-from astrbot.core.utils.tencent_record_helper import (
-    convert_to_pcm_wav,
-    tencent_silk_to_wav,
-)
+from astrbot.core.utils.media_utils import MediaResolver, describe_media_ref
 
 DEFAULT_MIMO_API_BASE = "https://api.xiaomimimo.com/v1"
 DEFAULT_MIMO_TTS_MODEL = "mimo-v2-tts"
 DEFAULT_MIMO_TTS_VOICE = "mimo_default"
 DEFAULT_MIMO_TTS_SEED_TEXT = "Hello, MiMo, have you had lunch?"
-DEFAULT_MIMO_STT_MODEL = "mimo-v2-omni"
+# The MiMo-V2 series went offline on 2026-06-30; mimo-v2.5-asr is the
+# dedicated speech recognition model per the official model lineup.
+DEFAULT_MIMO_STT_MODEL = "mimo-v2.5-asr"
 DEFAULT_MIMO_STT_SYSTEM_PROMPT = (
     "You are a speech transcription assistant. "
     "Transcribe the spoken content from the audio exactly and return only the transcription text."
@@ -53,7 +49,7 @@ def get_temp_dir() -> Path:
 
 
 def create_http_client(timeout: int | None, proxy: str) -> httpx.AsyncClient:
-    client_kwargs: dict[str, object] = {
+    client_kwargs: dict = {
         "timeout": timeout,
         "follow_redirects": True,
     }
@@ -70,55 +66,59 @@ def build_api_url(api_base: str) -> str:
     return normalized_api_base + "/chat/completions"
 
 
-async def _detect_audio_format(file_path: Path) -> str | None:
-    silk_header = b"SILK"
-    amr_header = b"#!AMR"
-
-    try:
-        with file_path.open("rb") as file:
-            file_header = file.read(8)
-    except FileNotFoundError:
-        return None
-
-    if silk_header in file_header:
-        return "silk"
-    if amr_header in file_header:
-        return "amr"
-    return None
-
-
 async def prepare_audio_input(audio_source: str) -> tuple[str, list[Path]]:
-    cleanup_paths: list[Path] = []
-    source_path = Path(audio_source)
-    is_remote = audio_source.startswith(("http://", "https://"))
-    is_tencent = "multimedia.nt.qq.com.cn" in audio_source if is_remote else False
+    audio_data = await MediaResolver(
+        audio_source,
+        media_type="audio",
+        default_suffix=".wav",
+    ).to_base64_data(
+        strict=True,
+        target_format="wav",
+    )
+    if audio_data is None:
+        raise ValueError(f"Invalid audio data: {describe_media_ref(audio_source)}")
+    _validate_wav_payload(audio_data.base64_data, audio_source)
+    return audio_data.to_data_url(), []
 
-    if is_remote:
-        parsed_url = urlparse(audio_source)
-        suffix = Path(parsed_url.path).suffix or ".input"
-        download_path = get_temp_dir() / f"mimo_audio_{uuid.uuid4().hex[:8]}{suffix}"
-        await download_file(audio_source, str(download_path))
-        source_path = download_path
-        cleanup_paths.append(download_path)
 
-    if not source_path.exists():
-        raise FileNotFoundError(f"File does not exist: {source_path}")
+def _decode_base64_header(base64_data: str) -> bytes:
+    chunk = "".join(base64_data[:64].split())
+    padding = len(chunk) % 4
+    if padding:
+        chunk += "=" * (4 - padding)
+    return base64.b64decode(chunk)
 
-    if source_path.suffix.lower() in {".amr", ".silk"} or is_tencent:
-        file_format = await _detect_audio_format(source_path)
-        if file_format in {"silk", "amr"}:
-            converted_path = get_temp_dir() / f"mimo_audio_{uuid.uuid4().hex[:8]}.wav"
-            cleanup_paths.append(converted_path)
-            if file_format == "silk":
-                logger.info("Converting silk file to wav for MiMo STT...")
-                await tencent_silk_to_wav(str(source_path), str(converted_path))
-            else:
-                logger.info("Converting amr file to wav for MiMo STT...")
-                await convert_to_pcm_wav(str(source_path), str(converted_path))
-            source_path = converted_path
 
-    encoded_audio = base64.b64encode(source_path.read_bytes()).decode("utf-8")
-    return encoded_audio, cleanup_paths
+def _validate_wav_payload(base64_data: str, audio_source: str) -> None:
+    """Reject audio payloads whose bytes are not RIFF/WAVE.
+
+    MiMo only accepts wav/mp3 audio. When a platform voice file (e.g. Tencent
+    SILK from QQ) slips through the WAV conversion chain unchanged, the API
+    replies with an opaque HTTP 400, so fail locally with the real reason.
+
+    Args:
+        base64_data: Base64-encoded audio payload about to be sent.
+        audio_source: Original media reference, used in error messages.
+
+    Raises:
+        MiMoAPIError: Raised when the payload is not valid WAV data.
+    """
+    try:
+        header = _decode_base64_header(base64_data)
+    except Exception:
+        header = b""
+    if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE":
+        return
+    if header.startswith((b"#!SILK_V3", b"\x02#!SILK_V3")):
+        raise MiMoAPIError(
+            "Audio for MiMo STT is still Tencent SILK data after WAV conversion; "
+            "check that the silk-python package is installed and working: "
+            f"{describe_media_ref(audio_source)}"
+        )
+    raise MiMoAPIError(
+        "Audio for MiMo STT could not be converted to WAV "
+        f"(unrecognized audio bytes): {describe_media_ref(audio_source)}"
+    )
 
 
 def cleanup_files(paths: list[Path]) -> None:

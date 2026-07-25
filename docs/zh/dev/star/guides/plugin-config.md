@@ -122,8 +122,8 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
       },
       "max_tokens": {
           "name": "Max Tokens",
-          "description": "最大令牌数",
-          "hint": "生成的最大令牌数。",
+          "description": "最大词元（Tokens）数",
+          "hint": "生成的最大词元（Tokens）数。",
           "type": "int",
           "default": 8192,
       },
@@ -146,7 +146,14 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
     "template_1": {
         "name": "Template One",
         "hint":"hint",
+        "display_item": "attr_name",
+        "hide_hint_in_list": true,
         "items": {
+          "attr_name": {
+            "description": "Attribute Name",
+            "type": "string",
+            "default": ""
+          },
           "attr_a": {
             "description": "Attribute A",
             "type": "int",
@@ -187,6 +194,7 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
 "field_id": [
     {
         "__template_key": "template_1",
+        "attr_name": "",
         "attr_a": 10,
         "attr_b": true
     },
@@ -197,6 +205,11 @@ AstrBot 提供了“强大”的配置解析和可视化功能。能够让用户
     }
 ]
 ```
+
+模板本身还支持以下可选字段：
+
+- `display_item`: 指定模板 `items` 中一个 `string` 类型字段的 key。设置后，WebUI 会在已添加模板条目的折叠列表中显示该字段当前值，例如 `Attribute Name: my-adapter`，便于添加多个同类型模板时快速区分。支持用点号选择嵌套 object 中的字段，例如 `meta.name`。
+- `hide_hint_in_list`: 设置为 `true` 时，WebUI 会在已添加模板条目的折叠列表中隐藏该模板的 `hint`。添加模板时的下拉菜单仍会显示 `hint`，展开条目后各配置项自己的 `hint` 也不受影响。
 
 <img width="1000" alt="image" src="https://github.com/user-attachments/assets/74876d30-11a4-491b-a7a0-8ebe8d603782" />
 

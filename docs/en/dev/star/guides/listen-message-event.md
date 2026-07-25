@@ -250,6 +250,22 @@ async def on_astrbot_loaded(self):
 
 ```
 
+#### On Waiting for LLM Request
+
+This hook is triggered when AstrBot is preparing to call the LLM but has not yet acquired the session lock.
+
+It is suitable for sending feedback such as "Waiting for request..." to the user, or for obtaining the LLM request outside the lock without waiting for it to be released.
+
+```python
+from astrbot.api.event import filter, AstrMessageEvent
+
+@filter.on_waiting_llm_request()
+async def on_waiting_llm(self, event: AstrMessageEvent):
+    await event.send(event.plain_result("🤔 Waiting for request..."))
+```
+
+> You cannot use yield to send messages here. If you need to send, please use the `event.send()` method directly.
+
 #### On LLM Request
 
 In AstrBot's default execution flow, the `on_llm_request` hook is triggered before calling the LLM.

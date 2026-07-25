@@ -88,13 +88,15 @@ class ProviderMiMoTTSAPI(TTSProvider):
             }
         )
 
+        audio_params = {"format": self.audio_format}
+        # voice design 模型不支持 audio.voice 参数
+        if "voicedesign" not in self.model_name:
+            audio_params["voice"] = self.voice
+
         return {
             "model": self.model_name,
             "messages": messages,
-            "audio": {
-                "format": self.audio_format,
-                "voice": self.voice,
-            },
+            "audio": audio_params,
         }
 
     async def get_audio(self, text: str) -> str:

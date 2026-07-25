@@ -2,8 +2,8 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.db import BaseDatabase
 from astrbot.core.utils.auth_password import (
     hash_dashboard_password,
-    hash_legacy_dashboard_password,
-    is_legacy_dashboard_password,
+    hash_md5_dashboard_password,
+    is_md5_dashboard_password,
 )
 
 PASSWORD_STORAGE_UPGRADED_KEY = "password_storage_upgraded"
@@ -83,12 +83,12 @@ def get_dashboard_password_hash(config: AstrBotConfig, *, upgraded: bool) -> str
     if upgraded and _has_usable_pbkdf2_password(config):
         return config["dashboard"].get("pbkdf2_password", "")
 
-    legacy_password = config["dashboard"].get("password", "")
-    if upgraded and not is_legacy_dashboard_password(legacy_password):
+    md5_password = config["dashboard"].get("password", "")
+    if upgraded and not is_md5_dashboard_password(md5_password):
         return ""
-    return legacy_password
+    return md5_password
 
 
 def set_dashboard_password_hashes(config: AstrBotConfig, raw_password: str) -> None:
     config["dashboard"]["pbkdf2_password"] = hash_dashboard_password(raw_password)
-    config["dashboard"]["password"] = hash_legacy_dashboard_password(raw_password)
+    config["dashboard"]["password"] = hash_md5_dashboard_password(raw_password)

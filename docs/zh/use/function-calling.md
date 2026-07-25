@@ -30,14 +30,9 @@ outline: deep
 
 等在提供传统的指令调用的基础上，也提供了函数调用的功能。
 
-相关指令:
+相关操作请在 WebUI 中管理工具的开启和关闭。
 
-- `/tool ls` 查看当前具有的工具列表
-- `/tool on` 开启某个工具
-- `/tool off` 关闭某个工具
-- `/tool off_all` 关闭所有工具
-
-某些模型可能不支持函数调用，会返回诸如 `tool call is not supported`, `function calling is not supported`, `tool use is not supported` 等错误。在大多数情况下，AstrBot 能够检测到这种错误并自动帮您去除函数调用工具。如果你发现某个模型不支持函数调用，也可使用 `/tool off_all` 命令关闭所有工具，然后再次尝试。或者更换为支持函数调用的模型。
+某些模型可能不支持函数调用，会返回诸如 `tool call is not supported`, `function calling is not supported`, `tool use is not supported` 等错误。在大多数情况下，AstrBot 能够检测到这种错误并自动帮您去除函数调用工具。如果你发现某个模型不支持函数调用，也可在 WebUI 中关闭所有调用工具，然后再次尝试。或者更换为支持函数调用的模型。
 
 
 下面是一些常见的工具调用 Demo：

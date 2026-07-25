@@ -204,9 +204,9 @@
 
 <script setup lang="ts">
 import type { ApexOptions } from 'apexcharts'
-import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTheme } from 'vuetify'
+import { statsApi } from '@/api/v1'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 
 type TokenRange = 1 | 3 | 7
@@ -391,20 +391,12 @@ function aggregateOverflowSeries(series: ProviderTrendItem[]): ProviderTrendItem
 }
 
 async function fetchBaseStats(): Promise<void> {
-  const response = await axios.get('/api/stat/get', {
-    params: {
-      offset_sec: selectedRange.value * 24 * 60 * 60
-    }
-  })
+  const response = await statsApi.get(selectedRange.value * 24 * 60 * 60)
   baseStats.value = response.data.data
 }
 
 async function fetchProviderStats(): Promise<void> {
-  const response = await axios.get('/api/stat/provider-tokens', {
-    params: {
-      days: selectedRange.value
-    }
-  })
+  const response = await statsApi.providerTokens(selectedRange.value)
   providerStats.value = response.data.data
 }
 

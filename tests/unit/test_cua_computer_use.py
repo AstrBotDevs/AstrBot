@@ -8,6 +8,7 @@ import mcp
 import pytest
 
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
+from astrbot.core.computer.booters.cua import CuaShellComponent
 from astrbot.core.config.default import CONFIG_METADATA_3
 from astrbot.core.provider.func_tool_manager import FunctionToolManager
 
@@ -641,6 +642,35 @@ async def test_cua_write_file_shell_fallback_uses_python_base64_decoder():
 
 
 @pytest.mark.asyncio
+async def test_cua_write_file_shell_fallback_creates_parent_directory():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = FakeSandbox()
+    delattr(sandbox, "filesystem")
+
+    await CuaFileSystemComponent(sandbox).write_file("reports/summary.txt", "hello")
+
+    command = sandbox.shell.commands[0][0]
+    assert "path.parent.mkdir(parents=True, exist_ok=True)" in command
+
+
+@pytest.mark.asyncio
+async def test_cua_write_file_shell_fallback_chunks_large_payloads():
+    from astrbot.core.computer.booters.cua import CuaFileSystemComponent
+
+    sandbox = FakeSandbox()
+    delattr(sandbox, "filesystem")
+
+    await CuaFileSystemComponent(sandbox).write_file("large.txt", "x" * 100_000)
+
+    command = sandbox.shell.commands[0][0]
+    payload = command.split("<<'EOF'\n", 1)[1].rsplit("\nEOF", 1)[0]
+    lines = payload.splitlines()
+    assert len(lines) > 1
+    assert max(len(line) for line in lines) <= 60_000
+
+
+@pytest.mark.asyncio
 async def test_cua_create_file_reports_mode_as_informational():
     from astrbot.core.computer.booters.cua import CuaFileSystemComponent
 
@@ -902,7 +932,6 @@ async def test_cua_upload_file_fallback_rejects_non_posix_os_type(tmp_path):
         CuaFileSystemComponent,
         CuaGUIComponent,
         CuaPythonComponent,
-        CuaShellComponent,
         _CuaRuntime,
     )
 
@@ -933,7 +962,6 @@ async def test_cua_upload_file_prefers_native_files_upload(tmp_path):
         CuaFileSystemComponent,
         CuaGUIComponent,
         CuaPythonComponent,
-        CuaShellComponent,
         _CuaRuntime,
     )
 
@@ -1302,7 +1330,6 @@ async def test_cua_shutdown_clears_cached_components():
         CuaFileSystemComponent,
         CuaGUIComponent,
         CuaPythonComponent,
-        CuaShellComponent,
         _CuaRuntime,
     )
 
@@ -1328,6 +1355,162 @@ async def test_cua_shutdown_clears_cached_components():
     assert closed == [True]
     assert await booter.available() is False
     assert booter._runtime is None
+
+
+@pytest.mark.asyncio
+async def test_cua_available_checks_shell_health():
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    class HealthShell(FakeShell):
+        async def run(self, command: str, **kwargs):
+            self.commands.append((command, kwargs))
+            return {"stdout": "_astrbot_cua_ok_\n", "stderr": "", "exit_code": 0}
+
+    sandbox = FakeSandbox()
+    sandbox.shell = HealthShell()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    assert await booter.available() is True
+    assert sandbox.shell.commands[-1][0] == "echo _astrbot_cua_ok_"
+
+
+@pytest.mark.asyncio
+async def test_cua_available_rejects_unknown_health_exit_code():
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        _CuaRuntime,
+    )
+
+    class UnknownExitCodeRuntimeShell:
+        async def exec(self, command: str, **kwargs):
+            return {"stdout": "_astrbot_cua_ok_\n", "stderr": "", "exit_code": None}
+
+    sandbox = FakeSandbox()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=UnknownExitCodeRuntimeShell(),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    assert await booter.available() is False
+
+
+@pytest.mark.asyncio
+async def test_cua_available_returns_false_when_shell_health_fails():
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    class DisconnectedShell:
+        async def run(self, command: str, **kwargs):
+            raise RuntimeError("server disconnected")
+
+    sandbox = FakeSandbox()
+    sandbox.shell = DisconnectedShell()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    assert await booter.available() is False
+
+
+@pytest.mark.asyncio
+async def test_cua_available_propagates_cancellation():
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    class CancellingShell:
+        async def run(self, command: str, **kwargs):
+            raise asyncio.CancelledError
+
+    sandbox = FakeSandbox()
+    sandbox.shell = CancellingShell()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await booter.available()
+
+
+@pytest.mark.asyncio
+async def test_cua_available_allows_shell_health_warning_on_stderr():
+    from astrbot.core.computer.booters.cua import (
+        CuaBooter,
+        CuaFileSystemComponent,
+        CuaGUIComponent,
+        CuaPythonComponent,
+        CuaShellComponent,
+        _CuaRuntime,
+    )
+
+    class WarningShell(FakeShell):
+        async def run(self, command: str, **kwargs):
+            self.commands.append((command, kwargs))
+            return {
+                "stdout": "_astrbot_cua_ok_\n",
+                "stderr": "profile warning\n",
+                "exit_code": 0,
+            }
+
+    sandbox = FakeSandbox()
+    sandbox.shell = WarningShell()
+    booter = CuaBooter()
+    booter._runtime = _CuaRuntime(
+        sandbox_cm=object(),
+        sandbox=sandbox,
+        shell=CuaShellComponent(sandbox),
+        python=CuaPythonComponent(sandbox),
+        fs=CuaFileSystemComponent(sandbox),
+        gui=CuaGUIComponent(sandbox),
+    )
+
+    assert await booter.available() is True
 
 
 def test_cua_tools_are_registered_as_builtin_tools():

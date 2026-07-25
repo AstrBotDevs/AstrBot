@@ -2,7 +2,8 @@ import re
 from pathlib import Path
 
 import pytest
-import tomllib
+
+from astrbot.core.utils.toml_parser import read_pyproject_project_dependencies
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"
@@ -28,9 +29,7 @@ def _read_requirements() -> list[str]:
 
 
 def _read_pyproject_dependencies() -> list[str]:
-    with PYPROJECT_PATH.open("rb") as file:
-        pyproject = tomllib.load(file)
-    return pyproject["project"]["dependencies"]
+    return read_pyproject_project_dependencies(PYPROJECT_PATH)
 
 
 def test_requirements_include_httpx_socks_dependency() -> None:

@@ -14,11 +14,12 @@ from astrbot.core.agent.message import (
 )
 from astrbot.core.agent.response import AgentStats
 from astrbot.core.astr_main_agent import (
+    LLM_ERROR_MESSAGE_EXTRA_KEY,
     MainAgentBuildConfig,
     MainAgentBuildResult,
     build_main_agent,
 )
-from astrbot.core.message.components import File, Image, Record, Video
+from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.message.message_event_result import (
     MessageChain,
     MessageEventResult,
@@ -96,7 +97,9 @@ class InternalAgentSubStage(Stage):
         self.llm_compress_instruction: str = settings.get(
             "llm_compress_instruction", ""
         )
-        self.llm_compress_keep_recent: int = settings.get("llm_compress_keep_recent", 4)
+        self.llm_compress_keep_recent_ratio: float = settings.get(
+            "llm_compress_keep_recent_ratio", 0.15
+        )
         self.llm_compress_provider_id: str = settings.get(
             "llm_compress_provider_id", ""
         )
@@ -135,7 +138,7 @@ class InternalAgentSubStage(Stage):
             file_extract_msh_api_key=self.file_extract_msh_api_key,
             context_limit_reached_strategy=self.context_limit_reached_strategy,
             llm_compress_instruction=self.llm_compress_instruction,
-            llm_compress_keep_recent=self.llm_compress_keep_recent,
+            llm_compress_keep_recent_ratio=self.llm_compress_keep_recent_ratio,
             llm_compress_provider_id=self.llm_compress_provider_id,
             max_context_length=self.max_context_length,
             dequeue_context_length=self.dequeue_context_length,
@@ -150,6 +153,11 @@ class InternalAgentSubStage(Stage):
             timezone=self.ctx.plugin_manager.context.get_config().get("timezone"),
             max_quoted_fallback_images=settings.get("max_quoted_fallback_images", 20),
         )
+
+    async def _send_llm_error_message(
+        self, event: AstrMessageEvent, message: object
+    ) -> None:
+        await event.send(MessageChain().message(str(message)))
 
     async def process(
         self, event: AstrMessageEvent, provider_wake_prefix: str
@@ -169,11 +177,15 @@ class InternalAgentSubStage(Stage):
                 isinstance(comp, (Image, File, Record, Video))
                 for comp in event.message_obj.message
             )
+            has_reply = any(
+                isinstance(comp, Reply) for comp in event.message_obj.message
+            )
 
             if (
                 not has_provider_request
                 and not has_valid_message
                 and not has_media_content
+                and not has_reply
             ):
                 logger.debug("skip llm request: empty message and no provider_request")
                 return
@@ -186,6 +198,10 @@ class InternalAgentSubStage(Stage):
                     follow_up_activated,
                 ) = await prepare_follow_up_capture(follow_up_capture)
                 if follow_up_consumed_marked:
+                    event.set_extra(
+                        "_follow_up_captured",
+                        {"target_run_id": follow_up_capture.target_run_id},
+                    )
                     logger.info(
                         "Follow-up ticket already consumed, stopping processing. umo=%s, seq=%s",
                         event.unified_msg_origin,
@@ -198,7 +214,8 @@ class InternalAgentSubStage(Stage):
                 await event.send_typing()
             except Exception:
                 logger.warning("send_typing failed", exc_info=True)
-            await call_event_hook(event, EventType.OnWaitingLLMRequestEvent)
+            if await call_event_hook(event, EventType.OnWaitingLLMRequestEvent):
+                return
 
             async with session_lock_manager.acquire_lock(event.unified_msg_origin):
                 logger.debug("acquired session lock for llm request")
@@ -219,6 +236,13 @@ class InternalAgentSubStage(Stage):
                     )
 
                     if build_result is None:
+                        if llm_error_message := event.get_extra(
+                            LLM_ERROR_MESSAGE_EXTRA_KEY
+                        ):
+                            await self._send_llm_error_message(
+                                event,
+                                llm_error_message,
+                            )
                         return
 
                     agent_runner = build_result.agent_runner
@@ -229,10 +253,12 @@ class InternalAgentSubStage(Stage):
                     api_base = provider.provider_config.get("api_base", "")
                     for host in decoded_blocked:
                         if host in api_base:
-                            logger.error(
-                                "Provider API base %s is blocked due to security reasons. Please use another ai provider.",
-                                api_base,
+                            error_message = (
+                                f"LLM 请求失败：Provider API base `{api_base}` "
+                                "因安全原因被拦截，请更换可用的 AI 提供商。"
                             )
+                            logger.error(error_message)
+                            await self._send_llm_error_message(event, error_message)
                             return
 
                     stream_to_general = (
@@ -267,7 +293,9 @@ class InternalAgentSubStage(Stage):
                     # 检测 Live Mode
                     if action_type == "live":
                         # Live Mode: 使用 run_live_agent
-                        logger.info("[Internal Agent] 检测到 Live Mode，启用 TTS 处理")
+                        logger.info(
+                            "[Internal Agent] Live Mode detected; enabling TTS processing."
+                        )
 
                         # 获取 TTS Provider
                         tts_provider = (
@@ -278,7 +306,8 @@ class InternalAgentSubStage(Stage):
 
                         if not tts_provider:
                             logger.warning(
-                                "[Live Mode] TTS Provider 未配置，将使用普通流式模式"
+                                "[Live Mode] No TTS provider is configured; using "
+                                "standard streaming mode."
                             )
 
                         # 使用 run_live_agent，总是使用流式响应
@@ -432,7 +461,33 @@ class InternalAgentSubStage(Stage):
         if not req or not req.conversation:
             return
 
-        if not llm_response and not user_aborted:
+        messages_to_save: list[Message] = []
+        skipped_initial_system = False
+        for message in all_messages:
+            if message.role == "system" and not skipped_initial_system:
+                skipped_initial_system = True
+                continue
+            if message.role in ["assistant", "user"] and message._no_save:
+                continue
+            messages_to_save.append(message)
+
+        checkpoint_id = event.get_extra("llm_checkpoint_id")
+        message_to_save = dump_messages_with_checkpoints(messages_to_save)
+        if not user_aborted and (
+            llm_response is None or llm_response.role != "assistant"
+        ):
+            if isinstance(checkpoint_id, str) and checkpoint_id:
+                message_to_save.append(
+                    CheckpointMessageSegment(
+                        content=CheckpointData(id=checkpoint_id),
+                    ).model_dump()
+                )
+                await self.conv_manager.update_conversation(
+                    event.unified_msg_origin,
+                    req.conversation.cid,
+                    history=message_to_save,
+                    token_usage=None,
+                )
             return
 
         if llm_response and llm_response.role != "assistant":
@@ -450,21 +505,9 @@ class InternalAgentSubStage(Stage):
             and not req.tool_calls_result
             and not user_aborted
         ):
-            logger.debug("LLM 响应为空，不保存记录。")
+            logger.debug("The LLM response is empty; not saving a record.")
             return
 
-        messages_to_save: list[Message] = []
-        skipped_initial_system = False
-        for message in all_messages:
-            if message.role == "system" and not skipped_initial_system:
-                skipped_initial_system = True
-                continue
-            if message.role in ["assistant", "user"] and message._no_save:
-                continue
-            messages_to_save.append(message)
-
-        checkpoint_id = event.get_extra("llm_checkpoint_id")
-        message_to_save = dump_messages_with_checkpoints(messages_to_save)
         if isinstance(checkpoint_id, str) and checkpoint_id:
             message_to_save.append(
                 CheckpointMessageSegment(

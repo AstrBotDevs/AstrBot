@@ -26,6 +26,7 @@ from astrbot.core.db.po import (
     ProviderStat,
     SessionProjectRelation,
     SQLModel,
+    UmoAlias,
     WebChatThread,
 )
 from astrbot.core.db.po import (
@@ -52,6 +53,7 @@ class SQLiteDatabase(BaseDatabase):
         async with self.engine.begin() as conn:
             await conn.run_sync(SQLModel.metadata.create_all)
             await conn.execute(text("PRAGMA journal_mode=WAL"))
+            await conn.execute(text("PRAGMA busy_timeout=30000"))
             await conn.execute(text("PRAGMA synchronous=NORMAL"))
             await conn.execute(text("PRAGMA cache_size=20000"))
             await conn.execute(text("PRAGMA temp_store=MEMORY"))
@@ -62,6 +64,7 @@ class SQLiteDatabase(BaseDatabase):
             await self._ensure_persona_skills_column(conn)
             await self._ensure_persona_custom_error_message_column(conn)
             await self._ensure_platform_message_history_checkpoint_column(conn)
+            await self._ensure_chatui_project_workspace_columns(conn)
             await conn.commit()
 
     async def _ensure_persona_folder_columns(self, conn) -> None:
@@ -124,6 +127,23 @@ class SQLiteDatabase(BaseDatabase):
                     "ix_platform_message_history_llm_checkpoint_id "
                     "ON platform_message_history (llm_checkpoint_id)"
                 )
+            )
+
+    async def _ensure_chatui_project_workspace_columns(self, conn) -> None:
+        """Ensure chatui_projects has workspace configuration columns."""
+        result = await conn.execute(text("PRAGMA table_info(chatui_projects)"))
+        columns = {row[1] for row in result.fetchall()}
+
+        if "workspace_type" not in columns:
+            await conn.execute(
+                text(
+                    "ALTER TABLE chatui_projects "
+                    "ADD COLUMN workspace_type VARCHAR(32) NOT NULL DEFAULT 'session'"
+                )
+            )
+        if "workspace_path" not in columns:
+            await conn.execute(
+                text("ALTER TABLE chatui_projects ADD COLUMN workspace_path VARCHAR")
             )
 
     # ====
@@ -558,7 +578,7 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     update(PlatformMessageHistory)
-                    .where(PlatformMessageHistory.id == message_id)
+                    .where(col(PlatformMessageHistory.id) == message_id)
                     .values(**values)
                 )
 
@@ -569,7 +589,7 @@ class SQLiteDatabase(BaseDatabase):
             async with session.begin():
                 await session.execute(
                     delete(PlatformMessageHistory).where(
-                        PlatformMessageHistory.id == message_id
+                        col(PlatformMessageHistory.id) == message_id
                     )
                 )
 
@@ -676,7 +696,7 @@ class SQLiteDatabase(BaseDatabase):
             )
             if creator is not None:
                 query = query.where(WebChatThread.creator == creator)
-            query = query.order_by(WebChatThread.created_at)
+            query = query.order_by(col(WebChatThread.created_at))
             result = await session.execute(query)
             return list(result.scalars().all())
 
@@ -706,7 +726,9 @@ class SQLiteDatabase(BaseDatabase):
             session: AsyncSession
             async with session.begin():
                 await session.execute(
-                    delete(WebChatThread).where(WebChatThread.thread_id == thread_id)
+                    delete(WebChatThread).where(
+                        col(WebChatThread.thread_id) == thread_id
+                    )
                 )
 
     async def delete_webchat_threads_by_parent_session(
@@ -1806,6 +1828,64 @@ class SQLiteDatabase(BaseDatabase):
                 )
 
     # ====
+    # UMO Alias Management
+    # ====
+
+    async def upsert_umo_alias(
+        self,
+        umo: str,
+        creator_sender_id: str,
+        auto_name: str | None,
+        user_alias: str | None,
+    ) -> UmoAlias:
+        """Create or update alias metadata for a UMO."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            async with session.begin():
+                result = await session.execute(
+                    select(UmoAlias).where(col(UmoAlias.umo) == umo)
+                )
+                alias = result.scalar_one_or_none()
+                if alias:
+                    alias.creator_sender_id = creator_sender_id
+                    alias.auto_name = auto_name
+                    alias.user_alias = user_alias
+                    alias.updated_at = datetime.now(timezone.utc)
+                else:
+                    alias = UmoAlias(
+                        umo=umo,
+                        creator_sender_id=creator_sender_id,
+                        auto_name=auto_name,
+                        user_alias=user_alias,
+                    )
+                    session.add(alias)
+                await session.flush()
+                await session.refresh(alias)
+                return alias
+
+    async def get_umo_alias(self, umo: str) -> UmoAlias | None:
+        """Get alias metadata for one UMO."""
+        async with self.get_db() as session:
+            session: AsyncSession
+            result = await session.execute(
+                select(UmoAlias).where(col(UmoAlias.umo) == umo)
+            )
+            return result.scalar_one_or_none()
+
+    async def get_umo_aliases(self, umos: list[str] | None = None) -> list[UmoAlias]:
+        """Get alias metadata, optionally restricted to a UMO list."""
+        if umos is not None and not umos:
+            return []
+
+        async with self.get_db() as session:
+            session: AsyncSession
+            query = select(UmoAlias)
+            if umos is not None:
+                query = query.where(col(UmoAlias.umo).in_(umos))
+            result = await session.execute(query)
+            return list(result.scalars().all())
+
+    # ====
     # ChatUI Project Management
     # ====
 
@@ -1815,6 +1895,8 @@ class SQLiteDatabase(BaseDatabase):
         title: str,
         emoji: str | None = "📁",
         description: str | None = None,
+        workspace_type: str = "session",
+        workspace_path: str | None = None,
     ) -> ChatUIProject:
         """Create a new ChatUI project."""
         async with self.get_db() as session:
@@ -1825,6 +1907,8 @@ class SQLiteDatabase(BaseDatabase):
                     title=title,
                     emoji=emoji,
                     description=description,
+                    workspace_type=workspace_type,
+                    workspace_path=workspace_path,
                 )
                 session.add(project)
                 await session.flush()
@@ -1867,6 +1951,8 @@ class SQLiteDatabase(BaseDatabase):
         title: str | None = None,
         emoji: str | None = None,
         description: str | None = None,
+        workspace_type: str | None = None,
+        workspace_path: str | None = None,
     ) -> None:
         """Update a ChatUI project."""
         async with self.get_db() as session:
@@ -1879,6 +1965,9 @@ class SQLiteDatabase(BaseDatabase):
                     values["emoji"] = emoji
                 if description is not None:
                     values["description"] = description
+                if workspace_type is not None:
+                    values["workspace_type"] = workspace_type
+                    values["workspace_path"] = workspace_path
 
                 await session.execute(
                     update(ChatUIProject)

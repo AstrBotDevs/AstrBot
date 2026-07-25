@@ -39,6 +39,9 @@
     "description": "功能描述",
     "parameters": "参数列表",
     "noParameters": "此工具没有参数",
+    "filter": {
+      "showBuiltin": "显示内置工具"
+    },
     "table": {
       "paramName": "参数名",
       "type": "类型",
@@ -47,6 +50,11 @@
       "origin": "来源",
       "originName": "来源名称",
       "readonly": "只读",
+      "permission": "权限",
+      "permissionAdmin": "管理员",
+      "permissionMember": "全部用户",
+      "permissionEveryone": "全部用户",
+      "permissionBuiltin": "系统内置",
       "actions": "操作"
     },
     "configTags": {
@@ -57,6 +65,11 @@
         "in": "{key} 命中了 {expected}",
         "fallback": "{key} 当前值为 {actual}"
       }
+    },
+    "summary": {
+      "total": "总数",
+      "active": "已启用",
+      "inactive": "未启用"
     }
   },
   "marketplace": {
@@ -167,6 +180,9 @@
     "toggleToolSuccess": "工具状态切换成功!",
     "toggleToolReadonly": "内置工具为只读，无法进行启用或停用操作。",
     "toggleToolError": "工具状态切换失败: {error}",
+    "updateToolPermissionSuccess": "工具 {name} 权限已更新",
+    "updateToolPermissionFailed": "工具权限更新失败",
+    "updateToolPermissionBuiltin": "内置工具不支持单独配置权限",
     "testError": "测试连接失败: {error}"
   }
 }

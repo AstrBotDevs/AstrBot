@@ -117,7 +117,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import axios from 'axios'
+import { knowledgeApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 
 const { tm: t } = useModuleI18n('features/knowledge-base/detail')
@@ -160,7 +160,7 @@ const performRetrieval = async () => {
   debugVisualize.value = null
 
   try {
-    const response = await axios.post('/api/kb/retrieve', {
+    const response = await knowledgeApi.retrieve(props.kbId, {
       query: query.value,
       kb_names: [props.kbName],
       top_k: topK.value,

@@ -23,6 +23,23 @@ def _extract_job_session(job: Any) -> str | None:
     return str(session) if session is not None else None
 
 
+def _extract_job_sender(job: Any) -> str | None:
+    payload = getattr(job, "payload", None)
+    if not isinstance(payload, dict):
+        return None
+    sender_id = payload.get("sender_id")
+    return str(sender_id) if sender_id is not None else None
+
+
+def _job_belongs_to_current_sender(
+    job: Any, current_umo: str, current_sender_id: str
+) -> bool:
+    return (
+        _extract_job_session(job) == current_umo
+        and _extract_job_sender(job) == current_sender_id
+    )
+
+
 def _parse_run_at(run_at: Any) -> datetime | None:
     if run_at in (None, ""):
         return None
@@ -133,6 +150,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             return f"Scheduled future task {job.job_id} ({job.name}) {suffix}."
 
         current_umo = context.context.event.unified_msg_origin
+        current_sender_id = str(context.context.event.get_sender_id())
         if action == "edit":
             job_id = kwargs.get("job_id")
             if not job_id:
@@ -146,8 +164,8 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             job = await cron_mgr.db.get_cron_job(str(job_id))
             if not job:
                 return f"error: cron job {job_id} not found."
-            if _extract_job_session(job) != current_umo:
-                return "error: you can only edit future tasks in the current umo."
+            if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+                return "error: you can only edit your own future tasks."
 
             payload = dict(job.payload) if isinstance(job.payload, dict) else {}
 
@@ -214,8 +232,8 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             job = await cron_mgr.db.get_cron_job(str(job_id))
             if not job:
                 return f"error: cron job {job_id} not found."
-            if _extract_job_session(job) != current_umo:
-                return "error: you can only delete future tasks in the current umo."
+            if not _job_belongs_to_current_sender(job, current_umo, current_sender_id):
+                return "error: you can only delete your own future tasks."
             await cron_mgr.delete_job(str(job_id))
             return f"Deleted cron job {job_id}."
 
@@ -223,7 +241,7 @@ class FutureTaskTool(FunctionTool[AstrAgentContext]):
             jobs = [
                 job
                 for job in await cron_mgr.list_jobs()
-                if _extract_job_session(job) == current_umo
+                if _job_belongs_to_current_sender(job, current_umo, current_sender_id)
             ]
             if not jobs:
                 return "No cron jobs found."

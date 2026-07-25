@@ -189,7 +189,7 @@ class ConversationCommands:
 
         ret = "✅ Conversation reset successfully."
 
-        message.set_extra("_clean_ltm_session", True)
+        message.set_extra("_clean_group_context_session", True)
 
         message.set_result(MessageEventResult().message(ret))
 
@@ -243,7 +243,7 @@ class ConversationCommands:
             persona_id=cpersona,
         )
 
-        message.set_extra("_clean_ltm_session", True)
+        message.set_extra("_clean_group_context_session", True)
 
         message.set_result(
             MessageEventResult().message(

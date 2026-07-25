@@ -3,7 +3,13 @@ from .basic import (
     check_dashboard,
     get_astrbot_root,
 )
-from .plugin import PluginStatus, build_plug_list, get_git_repo, manage_plugin
+from .plugin import (
+    PluginStatus,
+    build_plug_list,
+    get_git_repo,
+    install_local_plugin,
+    manage_plugin,
+)
 from .version_comparator import VersionComparator
 
 __all__ = [
@@ -14,5 +20,6 @@ __all__ = [
     "check_dashboard",
     "get_astrbot_root",
     "get_git_repo",
+    "install_local_plugin",
     "manage_plugin",
 ]

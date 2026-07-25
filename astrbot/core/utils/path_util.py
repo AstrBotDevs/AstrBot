@@ -1,6 +1,7 @@
 import os
 
 from astrbot.core import logger
+from astrbot.core.utils.media_utils import file_uri_to_path, is_file_uri
 
 
 def path_Mapping(mappings, srcPath: str) -> str:
@@ -43,7 +44,7 @@ def path_Mapping(mappings, srcPath: str) -> str:
         to_ = to_.removesuffix("\\")
         # logger.debug(f"\t路径映射-规则(处理): {from_} -> {to_}")
 
-        url = srcPath.removeprefix("file://")
+        url = file_uri_to_path(srcPath) if is_file_uri(srcPath) else srcPath
         if url.startswith(from_):
             srcPath = url.replace(from_, to_, 1)
             if ":" in srcPath:

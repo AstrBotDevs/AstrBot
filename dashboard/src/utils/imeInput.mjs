@@ -12,7 +12,7 @@ export function isComposingEnter(
   compositionActive,
   lastCompositionEndAt = null,
 ) {
-  const hasLegacyCompositionKeyCode =
+  const hasCompositionKeyCodeFallback =
     typeof event.keyCode === "number" && event.keyCode === 229;
   const isAfterRecentCompositionEnd =
     typeof event.timeStamp === "number" &&
@@ -25,7 +25,7 @@ export function isComposingEnter(
     event.key === "Enter" &&
     (compositionActive ||
       event.isComposing ||
-      hasLegacyCompositionKeyCode ||
+      hasCompositionKeyCodeFallback ||
       isAfterRecentCompositionEnd)
   );
 }

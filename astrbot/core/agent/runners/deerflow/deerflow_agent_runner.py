@@ -26,6 +26,7 @@ from .deerflow_api_client import DeerFlowAPIClient
 from .deerflow_content_mapper import (
     build_chain_from_ai_content,
     build_user_content,
+    build_user_content_resolved,
     image_component_from_url,
 )
 from .deerflow_stream_utils import (
@@ -410,6 +411,34 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         )
         return messages
 
+    async def _build_messages_resolved(
+        self,
+        prompt: str,
+        image_urls: list[str],
+        system_prompt: str | None,
+    ) -> list[dict[str, T.Any]]:
+        """Build DeerFlow messages after materializing image references.
+
+        Args:
+            prompt: User prompt text.
+            image_urls: Image references accepted by MediaResolver.
+            system_prompt: Optional system prompt prepended to the request.
+
+        Returns:
+            Messages payload for DeerFlow.
+        """
+
+        messages: list[dict[str, T.Any]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append(
+            {
+                "role": "user",
+                "content": await build_user_content_resolved(prompt, image_urls),
+            },
+        )
+        return messages
+
     def _build_runtime_configurable(self, thread_id: str) -> dict[str, T.Any]:
         runtime_configurable: dict[str, T.Any] = {
             "thread_id": thread_id,
@@ -441,6 +470,43 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
             "stream_mode": ["values", "messages-tuple", "custom"],
             # DeerFlow 2.0 consumes runtime overrides from config.configurable.
             # Keep the legacy context mirror for older compat paths.
+            "context": dict(runtime_configurable),
+            "config": {
+                "recursion_limit": self.recursion_limit,
+                "configurable": runtime_configurable,
+            },
+        }
+
+    async def _build_payload_resolved(
+        self,
+        thread_id: str,
+        prompt: str,
+        image_urls: list[str],
+        system_prompt: str | None,
+    ) -> dict[str, T.Any]:
+        """Build a DeerFlow request payload with resolved media refs.
+
+        Args:
+            thread_id: DeerFlow thread id.
+            prompt: User prompt text.
+            image_urls: Image references accepted by MediaResolver.
+            system_prompt: Optional system prompt prepended to the request.
+
+        Returns:
+            Complete DeerFlow stream request payload.
+        """
+
+        runtime_configurable = self._build_runtime_configurable(thread_id)
+        return {
+            "assistant_id": self.assistant_id,
+            "input": {
+                "messages": await self._build_messages_resolved(
+                    prompt,
+                    image_urls,
+                    system_prompt,
+                ),
+            },
+            "stream_mode": ["values", "messages-tuple", "custom"],
             "context": dict(runtime_configurable),
             "config": {
                 "recursion_limit": self.recursion_limit,
@@ -632,7 +698,7 @@ class DeerFlowAgentRunner(BaseAgentRunner[TContext]):
         system_prompt = self.req.system_prompt
 
         thread_id = await self._ensure_thread_id(session_id)
-        payload = self._build_payload(
+        payload = await self._build_payload_resolved(
             thread_id=thread_id,
             prompt=prompt,
             image_urls=image_urls,

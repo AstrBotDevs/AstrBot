@@ -2,10 +2,12 @@
 
 import os
 
+from astrbot import __version__
 from astrbot.core.computer.booters.cua_defaults import CUA_DEFAULT_CONFIG
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-VERSION = "4.24.4"
+VERSION = __version__
+
 DB_PATH = os.path.join(get_astrbot_data_path(), "data_v4.db")
 PERSONAL_WECHAT_CONFIG_METADATA = {
     "weixin_oc_base_url": {
@@ -101,6 +103,7 @@ DEFAULT_CONFIG = {
         "enable": True,
         "default_provider_id": "",
         "fallback_chat_models": [],
+        "request_max_retries": 5,
         "default_image_caption_provider_id": "",
         "image_caption_prompt": "Please describe the image using Chinese.",
         "provider_pool": ["*"],  # "*" 表示使用所有可用的提供者
@@ -112,6 +115,7 @@ DEFAULT_CONFIG = {
         "websearch_brave_key": [],
         "websearch_baidu_app_builder_key": "",
         "websearch_firecrawl_key": [],
+        "websearch_exa_key": [],
         "web_search_link": False,
         "display_reasoning_text": False,
         "identifier": False,
@@ -120,17 +124,19 @@ DEFAULT_CONFIG = {
         "default_personality": "default",
         "persona_pool": ["*"],
         "prompt_prefix": "{{prompt}}",
-        "context_limit_reached_strategy": "truncate_by_turns",  # or llm_compress
+        "context_limit_reached_strategy": "llm_compress",  # or truncate_by_turns
         "llm_compress_instruction": (
             "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n"
+            "The primary goal of this summary is to enable seamless continuation of the work that follows.\n"
             "1. Systematically cover all core topics discussed and the final conclusion/outcome for each; clearly highlight the latest primary focus.\n"
             "2. If any tools were used, summarize tool usage (total call count) and extract the most valuable insights from tool outputs.\n"
-            "3. If there was an initial user goal, state it first and describe the current progress/status.\n"
-            "4. Write the summary in the user's language.\n"
+            "3. If any materials (files, documents, code, references) were read during the conversation that may be helpful for subsequent work, list each one with its scope and path.\n"
+            "4. If there was an initial user goal, state it first and describe the current progress/status.\n"
+            "5. Write the summary in the user's language.\n"
         ),
-        "llm_compress_keep_recent": 6,
+        "llm_compress_keep_recent_ratio": 0.15,
         "llm_compress_provider_id": "",
-        "max_context_length": -1,
+        "max_context_length": -1,  # 默认不限制
         "dequeue_context_length": 1,
         "streaming_response": False,
         "show_tool_use_status": False,
@@ -252,6 +258,17 @@ DEFAULT_CONFIG = {
         "host": "0.0.0.0",
         "port": 6185,
         "disable_access_log": True,
+        "trust_proxy_headers": False,
+        "auth_rate_limit": {
+            "enable": True,
+            "average_interval": 1.0,
+            "max_burst": 3,
+        },
+        "totp": {
+            "enable": False,
+            "secret": "",
+            "recovery_code_hash": "",
+        },
         "ssl": {
             "enable": False,
             "cert_file": "",
@@ -315,10 +332,10 @@ CONFIG_METADATA_2 = {
                 "description": "消息平台适配器",
                 "type": "list",
                 "config_template": {
-                    "QQ 官方机器人(WebSocket)": {
+                    "QQ 官方机器人(Websocket, 推荐)": {
                         "id": "default",
                         "type": "qq_official",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "enable_group_c2c": True,
@@ -327,7 +344,7 @@ CONFIG_METADATA_2 = {
                     "QQ 官方机器人(Webhook)": {
                         "id": "default",
                         "type": "qq_official_webhook",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "is_sandbox": False,
@@ -339,7 +356,7 @@ CONFIG_METADATA_2 = {
                     "OneBot v11": {
                         "id": "default",
                         "type": "aiocqhttp",
-                        "enable": False,
+                        "enable": True,
                         "ws_reverse_host": "0.0.0.0",
                         "ws_reverse_port": 6199,
                         "ws_reverse_token": "",
@@ -347,7 +364,7 @@ CONFIG_METADATA_2 = {
                     "微信公众平台": {
                         "id": "weixin_official_account",
                         "type": "weixin_official_account",
-                        "enable": False,
+                        "enable": True,
                         "appid": "",
                         "secret": "",
                         "token": "",
@@ -362,7 +379,7 @@ CONFIG_METADATA_2 = {
                     "企业微信(含微信客服)": {
                         "id": "wecom",
                         "type": "wecom",
-                        "enable": False,
+                        "enable": True,
                         "corpid": "",
                         "secret": "",
                         "token": "",
@@ -399,18 +416,17 @@ CONFIG_METADATA_2 = {
                     "个人微信": {
                         "id": "weixin_personal",
                         "type": "weixin_oc",
-                        "enable": False,
+                        "enable": True,
                         "weixin_oc_base_url": "https://ilinkai.weixin.qq.com",
                         "weixin_oc_bot_type": "3",
                         "weixin_oc_qr_poll_interval": 1,
                         "weixin_oc_long_poll_timeout_ms": 35_000,
-                        "weixin_oc_api_timeout_ms": 15_000,
+                        "weixin_oc_api_timeout_ms": 120_000,
                     },
                     "飞书(Lark)": {
                         "id": "lark",
                         "type": "lark",
-                        "enable": False,
-                        "lark_bot_name": "",
+                        "enable": True,
                         "app_id": "",
                         "app_secret": "",
                         "domain": "https://open.feishu.cn",
@@ -422,7 +438,7 @@ CONFIG_METADATA_2 = {
                     "钉钉(DingTalk)": {
                         "id": "dingtalk",
                         "type": "dingtalk",
-                        "enable": False,
+                        "enable": True,
                         "client_id": "",
                         "client_secret": "",
                         "card_template_id": "",
@@ -430,7 +446,7 @@ CONFIG_METADATA_2 = {
                     "Telegram": {
                         "id": "telegram",
                         "type": "telegram",
-                        "enable": False,
+                        "enable": True,
                         "telegram_token": "your_bot_token",
                         "start_message": "Hello, I'm AstrBot!",
                         "telegram_api_base_url": "https://api.telegram.org/bot",
@@ -443,7 +459,7 @@ CONFIG_METADATA_2 = {
                     "Discord": {
                         "id": "discord",
                         "type": "discord",
-                        "enable": False,
+                        "enable": True,
                         "discord_token": "",
                         "discord_proxy": "",
                         "discord_command_register": True,
@@ -453,7 +469,7 @@ CONFIG_METADATA_2 = {
                     "Misskey": {
                         "id": "misskey",
                         "type": "misskey",
-                        "enable": False,
+                        "enable": True,
                         "misskey_instance_url": "https://misskey.example",
                         "misskey_token": "",
                         "misskey_default_visibility": "public",
@@ -471,7 +487,7 @@ CONFIG_METADATA_2 = {
                     "Slack": {
                         "id": "slack",
                         "type": "slack",
-                        "enable": False,
+                        "enable": True,
                         "bot_token": "",
                         "app_token": "",
                         "signing_secret": "",
@@ -485,7 +501,7 @@ CONFIG_METADATA_2 = {
                     "Line": {
                         "id": "line",
                         "type": "line",
-                        "enable": False,
+                        "enable": True,
                         "channel_access_token": "",
                         "channel_secret": "",
                         "unified_webhook_mode": True,
@@ -494,7 +510,7 @@ CONFIG_METADATA_2 = {
                     "Satori": {
                         "id": "satori",
                         "type": "satori",
-                        "enable": False,
+                        "enable": True,
                         "satori_api_base_url": "http://localhost:5140/satori/v1",
                         "satori_endpoint": "ws://localhost:5140/satori/v1/events",
                         "satori_token": "",
@@ -505,7 +521,7 @@ CONFIG_METADATA_2 = {
                     "KOOK": {
                         "id": "kook",
                         "type": "kook",
-                        "enable": False,
+                        "enable": True,
                         "kook_bot_token": "",
                         "kook_reconnect_delay": 1,
                         "kook_max_reconnect_delay": 60,
@@ -518,7 +534,7 @@ CONFIG_METADATA_2 = {
                     "Mattermost": {
                         "id": "mattermost",
                         "type": "mattermost",
-                        "enable": False,
+                        "enable": True,
                         "mattermost_url": "https://chat.example.com",
                         "mattermost_bot_token": "",
                         "mattermost_reconnect_delay": 5.0,
@@ -889,11 +905,6 @@ CONFIG_METADATA_2 = {
                             "wecom_ai_bot_connection_mode": "long_connection",
                         },
                     },
-                    "lark_bot_name": {
-                        "description": "飞书机器人的名字",
-                        "type": "string",
-                        "hint": "请务必填写正确，否则 @ 机器人将无法唤醒，只能通过前缀唤醒。",
-                    },
                     "discord_token": {
                         "description": "Discord Bot Token",
                         "type": "string",
@@ -1074,7 +1085,7 @@ CONFIG_METADATA_2 = {
                     "id_whitelist": {
                         "type": "list",
                         "items": {"type": "string"},
-                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可使用 /wl 添加白名单",
+                        "hint": "只处理填写的 ID 发来的消息事件，为空时不启用。可使用 /sid 指令获取在平台上的会话 ID(类似 abc:GroupMessage:123)。管理员可在 WebUI 的平台设置中管理白名单",
                     },
                     "id_whitelist_log": {
                         "type": "bool",
@@ -1238,6 +1249,31 @@ CONFIG_METADATA_2 = {
                         "enable": True,
                         "key": [],
                         "api_base": "https://api.minimaxi.com/anthropic",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {"User-Agent": "claude-code/0.1.0"},
+                        "anth_thinking_config": {"type": "", "budget": 0, "effort": ""},
+                    },
+                    "Xiaomi": {
+                        "id": "xiaomi",
+                        "provider": "xiaomi",
+                        "type": "xiaomi_chat_completion",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://api.xiaomimimo.com/v1",
+                        "timeout": 120,
+                        "proxy": "",
+                        "custom_headers": {},
+                    },
+                    "Xiaomi Token Plan": {
+                        "id": "xiaomi-token-plan",
+                        "provider": "xiaomi-token-plan",
+                        "type": "xiaomi_token_plan",
+                        "provider_type": "chat_completion",
+                        "enable": True,
+                        "key": [],
+                        "api_base": "https://token-plan-cn.xiaomimimo.com/anthropic",
                         "timeout": 120,
                         "proxy": "",
                         "custom_headers": {"User-Agent": "claude-code/0.1.0"},
@@ -1557,9 +1593,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "https://api.xiaomimimo.com/v1",
-                        "model": "mimo-v2-omni",
-                        "mimo-stt-system-prompt": "You are a speech transcription assistant. Transcribe the spoken content from the audio exactly and return only the transcription text.",
-                        "mimo-stt-user-prompt": "Please transcribe the content of the audio and return only the transcription text.",
+                        "model": "mimo-v2.5-asr",
                         "timeout": "20",
                         "proxy": "",
                     },
@@ -1775,6 +1809,25 @@ CONFIG_METADATA_2 = {
                         "gemini_tts_voice_name": "Leda",
                         "proxy": "",
                     },
+                    "ElevenLabs TTS(API)": {
+                        "hint": "API Key 从 https://elevenlabs.io/app/settings/api-keys 获取。Voice ID 可在 https://elevenlabs.io/app/voice-library 浏览选择。",
+                        "id": "elevenlabs_tts",
+                        "type": "elevenlabs_tts_api",
+                        "provider": "elevenlabs",
+                        "provider_type": "text_to_speech",
+                        "enable": False,
+                        "api_key": "",
+                        "api_base": "https://api.elevenlabs.io/v1",
+                        "model": "eleven_multilingual_v2",
+                        "elevenlabs-tts-voice-id": "JBFqnCBsd6RMkjVDRZzb",
+                        "elevenlabs-tts-output-format": "mp3_44100_128",
+                        "elevenlabs-tts-stability": "",
+                        "elevenlabs-tts-similarity-boost": "",
+                        "elevenlabs-tts-style": "",
+                        "elevenlabs-tts-use-speaker-boost": True,
+                        "timeout": "20",
+                        "proxy": "",
+                    },
                     "OpenAI Embedding": {
                         "id": "openai_embedding",
                         "type": "openai_embedding",
@@ -1786,6 +1839,7 @@ CONFIG_METADATA_2 = {
                         "embedding_api_base": "",
                         "embedding_model": "",
                         "embedding_dimensions": 1024,
+                        "embedding_dimensions_mode": "auto",
                         "timeout": 20,
                         "proxy": "",
                     },
@@ -1801,6 +1855,34 @@ CONFIG_METADATA_2 = {
                         "embedding_model": "gemini-embedding-exp-03-07",
                         "embedding_dimensions": 768,
                         "timeout": 20,
+                        "proxy": "",
+                    },
+                    "NVIDIA Embedding": {
+                        "id": "nvidia_embedding",
+                        "type": "nvidia_embedding",
+                        "provider": "nvidia",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.nvidia_embedding.hint",
+                        "enable": True,
+                        "embedding_api_key": "",
+                        "embedding_api_base": "https://integrate.api.nvidia.com/v1",
+                        "embedding_model": "nvidia/llama-nemotron-embed-1b-v2",
+                        "input_type": "passage",
+                        "embedding_dimensions": 1024,
+                        "timeout": 20,
+                        "proxy": "",
+                    },
+                    "Ollama Embedding": {
+                        "id": "ollama_embedding",
+                        "type": "ollama_embedding",
+                        "provider": "ollama",
+                        "provider_type": "embedding",
+                        "hint": "provider_group.provider.ollama_embedding.hint",
+                        "enable": True,
+                        "embedding_api_base": "http://localhost:11434",
+                        "embedding_model": "nomic-embed-text",
+                        "embedding_dimensions": 768,
+                        "timeout": 60,
                         "proxy": "",
                     },
                     "vLLM Rerank": {
@@ -1852,6 +1934,20 @@ CONFIG_METADATA_2 = {
                         "nvidia_rerank_model_endpoint": "/reranking",
                         "timeout": 20,
                         "nvidia_rerank_truncate": "",
+                    },
+                    "TEI Rerank": {
+                        "id": "tei_rerank",
+                        "type": "tei_rerank",
+                        "provider": "huggingface",
+                        "provider_type": "rerank",
+                        "enable": True,
+                        "rerank_api_key": "",
+                        "rerank_api_base": "http://127.0.0.1:8080",
+                        "timeout": 20,
+                        "tei_rerank_truncate": False,
+                        "tei_rerank_truncation_direction": "Right",
+                        "tei_rerank_raw_scores": False,
+                        "tei_rerank_return_text": False,
                     },
                     "Xinference STT": {
                         "id": "xinference_stt",
@@ -1949,6 +2045,27 @@ CONFIG_METADATA_2 = {
                             "END",
                         ],
                     },
+                    "tei_rerank_truncate": {
+                        "description": "截断超长文本",
+                        "type": "bool",
+                        "hint": "当输入超过模型最大上下文长度时，是否自动截断。启用后需配合 截断方向 使用。",
+                    },
+                    "tei_rerank_truncation_direction": {
+                        "description": "截断方向",
+                        "type": "string",
+                        "options": ["left", "right"],
+                        "hint": "选择从文本的左侧(left)还是右侧(right)开始截断。仅在 截断超长文本 为 True 时生效。",
+                    },
+                    "tei_rerank_raw_scores": {
+                        "description": "返回原始分数",
+                        "type": "bool",
+                        "hint": "如果为 True，返回模型原始 logit 分数（可能为负值），不经过 sigmoid 归一化。默认 False。",
+                    },
+                    "tei_rerank_return_text": {
+                        "description": "返回排序结果中的文档原文",
+                        "type": "bool",
+                        "hint": "如果为 True，每个排序结果将附带原始文本。默认 False 以减少网络传输。",
+                    },
                     "modalities": {
                         "description": "模型能力",
                         "type": "list",
@@ -1993,8 +2110,8 @@ CONFIG_METADATA_2 = {
                             },
                             "max_tokens": {
                                 "name": "Max Tokens",
-                                "description": "最大令牌数",
-                                "hint": "生成的最大令牌数。",
+                                "description": "最大词元（Tokens）数",
+                                "hint": "生成的最大词元（Tokens）数。",
                                 "type": "int",
                                 "default": 8192,
                             },
@@ -2129,6 +2246,12 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "嵌入向量的维度。根据模型不同，可能需要调整，请参考具体模型的文档。此配置项请务必填写正确，否则将导致向量数据库无法正常工作。",
                         "_special": "get_embedding_dim",
+                    },
+                    "embedding_dimensions_mode": {
+                        "description": "嵌入维度参数发送模式",
+                        "type": "string",
+                        "options": ["auto", "always", "never"],
+                        "hint": "控制是否在 OpenAI 兼容 Embedding 请求中发送 dimensions 参数。auto 会仅对官方 OpenAI embedding-3 模型自动发送；第三方兼容 API 如需该参数可改为 always，报错时改为 never。",
                     },
                     "embedding_model": {
                         "description": "嵌入模型",
@@ -2515,16 +2638,6 @@ CONFIG_METADATA_2 = {
                         "type": "int",
                         "hint": "超时时间，单位为秒。",
                     },
-                    "mimo-stt-system-prompt": {
-                        "description": "系统提示词",
-                        "type": "string",
-                        "hint": "用于指导 MiMo STT 转录行为的 system prompt。",
-                    },
-                    "mimo-stt-user-prompt": {
-                        "description": "用户提示词",
-                        "type": "string",
-                        "hint": "附加给 MiMo STT 的用户提示词，用于约束返回结果格式。",
-                    },
                     "openai-tts-voice": {
                         "description": "voice",
                         "type": "string",
@@ -2728,6 +2841,9 @@ CONFIG_METADATA_2 = {
                     "fallback_chat_models": {
                         "type": "list",
                         "items": {"type": "string"},
+                    },
+                    "request_max_retries": {
+                        "type": "int",
                     },
                     "wake_prefix": {
                         "type": "string",
@@ -2938,6 +3054,10 @@ CONFIG_METADATA_2 = {
                 "options": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             },
             "dashboard.ssl.enable": {"type": "bool"},
+            "dashboard.trust_proxy_headers": {"type": "bool"},
+            "dashboard.auth_rate_limit.enable": {"type": "bool"},
+            "dashboard.auth_rate_limit.average_interval": {"type": "float"},
+            "dashboard.auth_rate_limit.max_burst": {"type": "int"},
             "dashboard.ssl.cert_file": {
                 "type": "string",
                 "condition": {"dashboard.ssl.enable": True},
@@ -3084,6 +3204,11 @@ CONFIG_METADATA_3 = {
                         "_special": "select_providers",
                         "hint": "主聊天模型请求失败时，按顺序切换到这些模型。",
                     },
+                    "provider_settings.request_max_retries": {
+                        "description": "请求最大重试次数",
+                        "type": "int",
+                        "hint": "单次模型请求遇到可重试错误时的最大尝试次数。",
+                    },
                     "provider_settings.default_image_caption_provider_id": {
                         "description": "默认图片转述模型",
                         "type": "string",
@@ -3201,6 +3326,7 @@ CONFIG_METADATA_3 = {
                             "bocha",
                             "brave",
                             "firecrawl",
+                            "exa",
                         ],
                         "condition": {
                             "provider_settings.web_search": True,
@@ -3252,6 +3378,16 @@ CONFIG_METADATA_3 = {
                         "hint": "参考：https://console.bce.baidu.com/iam/#/iam/apikey/list",
                         "condition": {
                             "provider_settings.websearch_provider": "baidu_ai_search",
+                            "provider_settings.web_search": True,
+                        },
+                    },
+                    "provider_settings.websearch_exa_key": {
+                        "description": "Exa API Key",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "hint": "可添加多个 Key 进行轮询。Get a key at https://dashboard.exa.ai",
+                        "condition": {
+                            "provider_settings.websearch_provider": "exa",
                             "provider_settings.web_search": True,
                         },
                     },
@@ -3315,7 +3451,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.sandbox.shipyard_neo_profile": {
                         "description": "Shipyard Neo Profile",
                         "type": "string",
-                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。",
+                        "hint": "Shipyard Neo 沙箱 profile，如 python-default。留空时自动选择能力更完整的 profile。",
                         "condition": {
                             "provider_settings.computer_use_runtime": "sandbox",
                             "provider_settings.sandbox.booter": "shipyard_neo",
@@ -3483,30 +3619,30 @@ CONFIG_METADATA_3 = {
                 "type": "object",
                 "items": {
                     "provider_settings.max_context_length": {
-                        "description": "最多携带对话轮数",
+                        "description": "压缩前最多保留对话轮数",
                         "type": "int",
-                        "hint": "超出这个数量时丢弃最旧的部分，一轮聊天记为 1 条，-1 为不限制",
+                        "hint": "普通会话历史超过该轮数后，才会按下方策略进行持久化截断或 LLM 压缩；请求发送前也会先按该值约束上下文。-1 表示不按轮数限制。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.dequeue_context_length": {
-                        "description": "丢弃对话轮数",
+                        "description": "轮次超限时一次丢弃轮数",
                         "type": "int",
-                        "hint": "超出最多携带对话轮数时, 一次丢弃的聊天轮数",
+                        "hint": "当超过“压缩前最多保留对话轮数”且无法使用 LLM 压缩时，一次丢弃多少轮旧对话；请求期截断也会复用该值。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
                     "provider_settings.context_limit_reached_strategy": {
-                        "description": "超出模型上下文窗口时的处理方式",
+                        "description": "历史超限或上下文接近上限时的处理方式",
                         "type": "string",
                         "options": ["truncate_by_turns", "llm_compress"],
                         "labels": ["按对话轮数截断", "由 LLM 压缩上下文"],
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
-                        "hint": "",
+                        "hint": "普通会话历史仅在超过“压缩前最多保留对话轮数”后执行该策略；请求发送前也会在上下文 token 接近模型窗口时使用同一策略保护本次请求。",
                     },
                     "provider_settings.llm_compress_instruction": {
                         "description": "上下文压缩提示词",
@@ -3517,10 +3653,11 @@ CONFIG_METADATA_3 = {
                             "provider_settings.agent_runner_type": "local",
                         },
                     },
-                    "provider_settings.llm_compress_keep_recent": {
-                        "description": "压缩时保留最近对话轮数",
-                        "type": "int",
-                        "hint": "始终保留的最近 N 轮对话。",
+                    "provider_settings.llm_compress_keep_recent_ratio": {
+                        "description": "压缩时保留最近上下文比例",
+                        "type": "float",
+                        "slider": {"min": 0, "max": 0.3, "step": 0.01},
+                        "hint": "按当前上下文 token 数保留最近内容，范围 0-0.3。0.15 表示保留 15%；比例大于 0 时至少保留最后一轮。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
                             "provider_settings.agent_runner_type": "local",
@@ -3530,7 +3667,7 @@ CONFIG_METADATA_3 = {
                         "description": "用于上下文压缩的模型提供商 ID",
                         "type": "string",
                         "_special": "select_provider",
-                        "hint": "留空时将降级为“按对话轮数截断”的策略。",
+                        "hint": "留空时使用当前聊天模型进行压缩；如果模型不可用或压缩失败，将回退为“按对话轮数截断”的策略。",
                         "condition": {
                             "provider_settings.context_limit_reached_strategy": "llm_compress",
                             "provider_settings.agent_runner_type": "local",
@@ -3810,7 +3947,7 @@ CONFIG_METADATA_3 = {
                     "disable_builtin_commands": {
                         "description": "禁用自带指令",
                         "type": "bool",
-                        "hint": "禁用所有 AstrBot 的自带指令，如 help, provider, model 等。",
+                        "hint": "禁用所有 AstrBot 的自带指令，如 help, sid, new 等。",
                     },
                 },
             },
@@ -4179,6 +4316,34 @@ CONFIG_METADATA_3_SYSTEM = {
                         "description": "启用 WebUI HTTPS",
                         "type": "bool",
                         "hint": "启用后，WebUI 将直接使用 HTTPS 提供服务。",
+                    },
+                    "dashboard.trust_proxy_headers": {
+                        "description": "信任代理请求头获取客户端 IP",
+                        "type": "bool",
+                        "hint": "关闭时忽略 X-Forwarded-For/X-Real-IP，仅使用连接地址。",
+                    },
+                    "dashboard.auth_rate_limit.enable": {
+                        "description": "启用登录验证速率限制",
+                        "type": "bool",
+                        "hint": "关闭后将不对登录、TOTP 等身份验证接口进行速率限制。",
+                    },
+                    "dashboard.auth_rate_limit.average_interval": {
+                        "description": "验证端点速率限制平均间隔(秒)",
+                        "type": "float",
+                        "hint": "两次身份验证请求之间的最小平均间隔时间。例如设置为 1.0 表示每秒最多处理 1 个请求。",
+                        "condition": {"dashboard.auth_rate_limit.enable": True},
+                    },
+                    "dashboard.auth_rate_limit.max_burst": {
+                        "description": "验证端点速率限制最大突发数",
+                        "type": "int",
+                        "hint": "允许的瞬时最大突发请求数。例如设置为 3 表示在短时间内最多连续处理 3 个请求。",
+                        "condition": {"dashboard.auth_rate_limit.enable": True},
+                    },
+                    "dashboard.totp.enable": {
+                        "description": "启用 WebUI TOTP 双因素认证",
+                        "type": "bool",
+                        "hint": "启用后，登录 WebUI 需要额外输入验证码。",
+                        "_special": "dashboard_totp_manager",
                     },
                     "dashboard.ssl.cert_file": {
                         "description": "SSL 证书文件路径",

@@ -138,7 +138,10 @@ class WakingCheckStage(Stage):
                     event.is_at_or_wake_command = True
                     break
             # 检查是否是私聊
-            if event.is_private_chat() and not self.friend_message_needs_wake_prefix:
+            if event.is_private_chat() and (
+                not self.friend_message_needs_wake_prefix
+                or event.get_platform_name() == "webchat"
+            ):
                 is_wake = True
                 event.is_wake = True
                 event.is_at_or_wake_command = True
@@ -205,7 +208,8 @@ class WakingCheckStage(Stage):
                             ),
                         )
                     logger.info(
-                        f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。",
+                        f"User ID {event.get_sender_id()} lacks permission to trigger "
+                        f"{star_map[handler.handler_module_path].name}.",
                     )
                     event.stop_event()
                     return

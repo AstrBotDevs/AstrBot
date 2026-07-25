@@ -26,6 +26,8 @@ SANDBOX_SKILLS_CACHE_FILENAME = "sandbox_skills_cache.json"
 DEFAULT_SKILLS_CONFIG: dict[str, dict] = {"skills": {}}
 SANDBOX_SKILLS_ROOT = "skills"
 SANDBOX_WORKSPACE_ROOT = "/workspace"
+WORKSPACE_SKILLS_ROOT = "skills"
+WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS = 64 * 1024
 _SANDBOX_SKILLS_CACHE_VERSION = 1
 
 _SKILL_NAME_RE = re.compile(r"^[\w.-]+$")
@@ -216,7 +218,7 @@ def build_skills_prompt(skills: list[SkillInfo]) -> str:
         display_name = _sanitize_skill_display_name(skill.name)
 
         description = skill.description or "No description"
-        if skill.source_type == "sandbox_only":
+        if skill.source_type in {"sandbox_only", "workspace"}:
             description = _sanitize_prompt_description(description)
             if not description:
                 description = "Read SKILL.md for details."
@@ -336,6 +338,83 @@ class SkillManager:
             if skill_name == name:
                 return skill_dir
         return None
+
+    def list_workspace_skills(
+        self, workspace_root: str | Path | None
+    ) -> list[SkillInfo]:
+        """List request-scoped skills from a session workspace.
+
+        Args:
+            workspace_root: The current session workspace directory.
+
+        Returns:
+            Skills discovered under ``<workspace_root>/skills``.
+        """
+        if not workspace_root:
+            return []
+
+        raw_workspace_root = Path(workspace_root)
+        skills_root = raw_workspace_root / WORKSPACE_SKILLS_ROOT
+        if not skills_root.is_dir():
+            return []
+
+        try:
+            resolved_workspace_root = raw_workspace_root.resolve(strict=True)
+            resolved_skills_root = skills_root.resolve(strict=True)
+            if not resolved_skills_root.is_relative_to(resolved_workspace_root):
+                return []
+            skill_dirs = sorted(
+                resolved_skills_root.iterdir(), key=lambda item: item.name
+            )
+        except OSError:
+            return []
+
+        skills: list[SkillInfo] = []
+        for skill_dir in skill_dirs:
+            if not skill_dir.is_dir():
+                continue
+            skill_name = skill_dir.name
+            if not _SKILL_NAME_RE.match(skill_name):
+                continue
+            try:
+                entry_names = {entry.name for entry in skill_dir.iterdir()}
+            except OSError:
+                continue
+            if "SKILL.md" not in entry_names:
+                continue
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.is_file():
+                continue
+
+            try:
+                resolved_skill_md = skill_md.resolve(strict=True)
+            except OSError:
+                continue
+            if not resolved_skill_md.is_relative_to(resolved_skills_root):
+                continue
+
+            description = ""
+            try:
+                with resolved_skill_md.open(encoding="utf-8") as f:
+                    content = f.read(WORKSPACE_SKILL_FRONTMATTER_MAX_CHARS)
+                description = _parse_frontmatter_description(content)
+            except (OSError, UnicodeError):
+                description = ""
+
+            skills.append(
+                SkillInfo(
+                    name=skill_name,
+                    description=description,
+                    path=resolved_skill_md.as_posix(),
+                    active=True,
+                    source_type="workspace",
+                    source_label="workspace",
+                    local_exists=True,
+                    readonly=True,
+                )
+            )
+
+        return skills
 
     def _load_config(self) -> dict:
         if not os.path.exists(self.config_path):

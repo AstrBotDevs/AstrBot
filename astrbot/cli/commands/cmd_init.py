@@ -1,10 +1,32 @@
 import asyncio
+import os
 from pathlib import Path
 
 import click
 from filelock import FileLock, Timeout
 
-from ..utils import check_dashboard, get_astrbot_root
+DASHBOARD_INITIAL_PASSWORD_ENV = "ASTRBOT_DASHBOARD_INITIAL_PASSWORD"
+
+
+async def check_dashboard(astrbot_root: Path) -> None:
+    """Check whether dashboard assets are available.
+
+    Args:
+        astrbot_root: AstrBot data directory path.
+    """
+    from ..utils import check_dashboard as _check_dashboard
+
+    await _check_dashboard(astrbot_root)
+
+
+def _initialize_config_from_env(astrbot_root: Path) -> None:
+    if DASHBOARD_INITIAL_PASSWORD_ENV not in os.environ:
+        return
+
+    from astrbot.core.config.astrbot_config import AstrBotConfig
+
+    AstrBotConfig(config_path=str(astrbot_root / "data" / "cmd_config.json"))
+    click.echo("Initialized data/cmd_config.json with dashboard initial password.")
 
 
 async def initialize_astrbot(astrbot_root: Path) -> None:
@@ -31,13 +53,18 @@ async def initialize_astrbot(astrbot_root: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
         click.echo(f"{'Created' if not path.exists() else 'Directory exists'}: {path}")
 
+    _initialize_config_from_env(astrbot_root)
+
     await check_dashboard(astrbot_root / "data")
 
 
 @click.command()
 def init() -> None:
     """Initialize AstrBot"""
+    from ..utils import get_astrbot_root
+
     click.echo("Initializing AstrBot...")
+
     astrbot_root = get_astrbot_root()
     lock_file = astrbot_root / "astrbot.lock"
     lock = FileLock(lock_file, timeout=5)

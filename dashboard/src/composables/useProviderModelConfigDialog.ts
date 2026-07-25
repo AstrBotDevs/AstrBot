@@ -1,5 +1,5 @@
 import { computed, ref, type Ref } from 'vue'
-import axios from 'axios'
+import { providerApi } from '@/api/v1'
 
 interface UseProviderModelConfigDialogOptions {
   selectedProviderSource: Ref<any | null>
@@ -58,7 +58,8 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
   })
 
   function openProviderEdit(provider: any) {
-    providerEditData.value = JSON.parse(JSON.stringify(provider))
+    const editableProvider = JSON.parse(JSON.stringify(provider))
+    providerEditData.value = editableProvider
     providerEditOriginalId.value = provider.id
     providerEditMode.value = 'edit'
     showProviderEditDialog.value = true
@@ -90,15 +91,19 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
     savingProviders.value.push(providerEditData.value.id)
     try {
       const isAdding = providerEditMode.value === 'add'
+      const sourceId = providerEditData.value.provider_source_id || selectedProviderSource.value?.id
+      if (isAdding && !sourceId) {
+        throw new Error(tm('providerSources.selectHint'))
+      }
       const res = isAdding
-        ? await axios.post('/api/config/provider/new', providerEditData.value)
-        : await axios.post('/api/config/provider/update', {
-          id: providerEditOriginalId.value || providerEditData.value.id,
-          config: providerEditData.value
-        })
+        ? await providerApi.createInSource(sourceId, providerEditData.value)
+        : await providerApi.update(
+          providerEditOriginalId.value || providerEditData.value.id,
+          providerEditData.value
+      )
 
       if (res.data.status === 'error') {
-        throw new Error(res.data.message)
+        throw new Error(res.data.message || tm('providerSources.saveError'))
       }
 
       showMessage(

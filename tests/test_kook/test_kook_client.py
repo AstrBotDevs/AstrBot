@@ -1,6 +1,7 @@
 import asyncio
-from dataclasses import dataclass, field
+import base64
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
@@ -29,6 +30,7 @@ from tests.test_kook.shared import (
 TEST_BOT_ID = 1234567891
 TEST_BOT_USERNAME = "test_username"
 TEST_BOT_NICKNAME = "test_nickname"
+TEST_AUDIO_WAV_PATH = "/tmp/kook_audio.wav"
 
 
 def mock_kook_client(config: KookConfig, event_callback):
@@ -55,6 +57,66 @@ def get_json_field(content: dict, json_field_path: list[str | int]) -> Any:
     for key in json_field_path:
         expend_value = expend_value[key]
     return expend_value
+
+
+class FakeMediaResolver:
+    def __init__(self, media_ref: str, **kwargs) -> None:
+        self.media_ref = media_ref
+        self.kwargs = kwargs
+
+    async def to_path(self, **kwargs) -> str:
+        assert self.media_ref.startswith("https://img.kookapp.cn/")
+        assert self.kwargs["media_type"] == "audio"
+        assert kwargs["target_format"] == "wav"
+        return TEST_AUDIO_WAV_PATH
+
+
+@pytest.mark.asyncio
+async def test_kook_upload_asset_resolves_base64_scheme(monkeypatch):
+    captured = {}
+
+    class FakeFormData:
+        def add_field(self, name: str, value: bytes, filename: str) -> None:
+            captured["field_name"] = name
+            captured["value"] = value
+            captured["filename"] = filename
+
+    class FakeResponse:
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def json(self):
+            return {"code": 0, "data": {"url": "https://kook.example/asset.bin"}}
+
+        async def text(self):
+            return "{}"
+
+    class FakeHttpClient:
+        def post(self, url: str, data: FakeFormData):
+            captured["url"] = url
+            captured["data"] = data
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_client.aiohttp.FormData",
+        FakeFormData,
+    )
+
+    client = KookClient.__new__(KookClient)
+    client._http_client = FakeHttpClient()
+    asset_ref = f"base64://{base64.b64encode(b'asset-bytes').decode('ascii')}"
+
+    result = await client.upload_asset(asset_ref)
+
+    assert result == "https://kook.example/asset.bin"
+    assert captured["field_name"] == "file"
+    assert captured["value"] == b"asset-bytes"
+    assert captured["filename"].endswith(".bin")
 
 
 @dataclass
@@ -88,8 +150,8 @@ class JsonFieldPaths:
             [
                 Plain(text="[audio]"),
                 Record(
-                    file="https://img.kookapp.cn/attachments/2026-03/03/69a6841c3125d.wav",
-                    url="",
+                    file=TEST_AUDIO_WAV_PATH,
+                    url=TEST_AUDIO_WAV_PATH,
                     text=None,
                     path=None,
                 ),
@@ -102,8 +164,8 @@ class JsonFieldPaths:
                 Plain(text="(met)"),
                 Plain(text="all(met) #hello \\*\\*world\\*\\*  [audio]\n😆"),
                 Record(
-                    file="https://img.kookapp.cn/attachments/2026-03/03/69a6841c3125d.wav",
-                    url="",
+                    file=TEST_AUDIO_WAV_PATH,
+                    url=TEST_AUDIO_WAV_PATH,
                     text=None,
                     path=None,
                 ),
@@ -128,6 +190,10 @@ async def test_kook_event_warp_message(
     monkeypatch.setattr(
         "astrbot.core.platform.sources.kook.kook_adapter.KookRolesRecord",
         mock_kook_roles_record,
+    )
+    monkeypatch.setattr(
+        "astrbot.core.platform.sources.kook.kook_adapter.MediaResolver",
+        FakeMediaResolver,
     )
 
     from astrbot.core.platform.sources.kook.kook_adapter import KookPlatformAdapter

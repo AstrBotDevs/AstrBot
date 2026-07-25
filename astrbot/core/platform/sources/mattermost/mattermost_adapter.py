@@ -305,15 +305,25 @@ class MattermostPlatformAdapter(Platform):
             return raw_value // 1000 if raw_value > 1_000_000_000_000 else raw_value
         return int(time.time())
 
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        message_event = MattermostMessageEvent(
+    def create_event(self, message: AstrBotMessage) -> MattermostMessageEvent:
+        """Creates a Mattermost message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created Mattermost message event.
+        """
+        return MattermostMessageEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        self.commit_event(self.create_event(message))
 
     async def terminate(self) -> None:
         self._running = False

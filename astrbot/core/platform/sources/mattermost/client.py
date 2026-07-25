@@ -10,6 +10,7 @@ from astrbot.api import logger
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import At, File, Image, Plain, Record, Reply, Video
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.core.utils.media_utils import MediaResolver, detect_image_mime_type_async
 
 
 class MattermostClient:
@@ -167,12 +168,19 @@ class MattermostClient:
                 path = await segment.convert_to_file_path()
                 file_path = Path(path)
                 file_bytes = await asyncio.to_thread(file_path.read_bytes)
+                mime_type = (
+                    await detect_image_mime_type_async(
+                        file_bytes,
+                        default_mime_type=None,
+                    )
+                    or mimetypes.guess_type(file_path.name)[0]
+                )
                 file_ids.append(
                     await self.upload_file(
                         channel_id,
                         file_bytes,
                         file_path.name,
-                        mimetypes.guess_type(file_path.name)[0] or "image/jpeg",
+                        mime_type or "image/jpeg",
                     )
                 )
             elif isinstance(segment, (File, Record, Video)):
@@ -241,7 +249,12 @@ class MattermostClient:
             if mime_type.startswith("image/"):
                 components.append(Image.fromFileSystem(str(file_path)))
             elif mime_type.startswith("audio/"):
-                components.append(Record.fromFileSystem(str(file_path)))
+                path_wav = await MediaResolver(
+                    str(file_path),
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                components.append(Record(file=path_wav, url=path_wav))
             elif mime_type.startswith("video/"):
                 components.append(Video.fromFileSystem(str(file_path)))
             else:

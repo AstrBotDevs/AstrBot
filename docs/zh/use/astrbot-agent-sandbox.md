@@ -434,7 +434,7 @@ docker pull soulter/shipyard-ship:latest
   - 如果是官方联合部署，且 AstrBot 能访问 Bay 的 `credentials.json`，可以留空自动发现
 - `Shipyard Neo Profile`
   - 例如 `python-default`、`browser-python`
-  - 如果未手动指定，AstrBot 会优先尝试选择能力更完整、且优先带有 `browser` capability 的 profile，失败时再回退到 `python-default`
+  - 如果留空，AstrBot 会优先尝试选择能力更完整、且优先带有 `browser` capability 的 profile，失败时再回退到 `python-default`
 - `Shipyard Neo Sandbox TTL`
   - sandbox 生命周期上限，默认值为 3600 秒（1 小时）
 

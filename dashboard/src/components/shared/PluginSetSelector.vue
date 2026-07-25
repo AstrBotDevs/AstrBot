@@ -22,7 +22,7 @@
   <!-- Plugin Set Selection Dialog -->
   <v-dialog v-model="dialog" max-width="700px">
     <v-card>
-      <v-card-title class="text-h3 py-4" style="font-weight: normal;">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{ tm('pluginSetSelector.dialogTitle') }}
       </v-card-title>
       
@@ -93,6 +93,7 @@
         <v-btn variant="text" @click="cancelSelection">{{ tm('pluginSetSelector.cancelSelection') }}</v-btn>
         <v-btn 
           color="primary" 
+          variant="tonal"
           @click="confirmSelection">
           {{ tm('pluginSetSelector.confirmSelection') }}
         </v-btn>
@@ -103,7 +104,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import axios from 'axios'
+import { pluginApi } from '@/api/v1'
 import { useModuleI18n } from '@/i18n/composables'
 import { usePluginI18n } from '@/utils/pluginI18n'
 
@@ -170,7 +171,7 @@ async function openDialog() {
 async function loadPlugins() {
   loading.value = true
   try {
-    const response = await axios.get('/api/plugin/get')
+    const response = await pluginApi.list()
     if (response.data.status === 'ok') {
       // 只显示已激活且非系统的插件，并按名称排序
       pluginList.value = (response.data.data || [])

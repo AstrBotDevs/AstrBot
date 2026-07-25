@@ -15,6 +15,7 @@ from astrbot.api.platform import (
 )
 from astrbot.core.message.components import BaseMessageComponent, File, Record, Video
 from astrbot.core.platform.astr_message_event import MessageSesion
+from astrbot.core.utils.media_utils import MediaResolver
 
 from .kook_client import KookClient
 from .kook_config import KookConfig
@@ -66,13 +67,8 @@ class KookPlatformAdapter(Platform):
         inner_message = AstrBotMessage()
         inner_message.session_id = session.session_id
         inner_message.type = session.message_type
-        message_event = KookEvent(
-            message_str=message_chain.get_plain_text(),
-            message_obj=inner_message,
-            platform_meta=self.meta(),
-            session_id=session.session_id,
-            client=self.client,
-        )
+        inner_message.message_str = message_chain.get_plain_text()
+        message_event = self.create_event(inner_message)
         await message_event.send(message_chain)
 
     def meta(self) -> PlatformMetadata:
@@ -413,7 +409,12 @@ class KookPlatformAdapter(Platform):
             elif file_type == KookModuleType.VIDEO:
                 message.append(Video(file=file_url))
             elif file_type == KookModuleType.AUDIO:
-                message.append(Record(file=file_url))
+                path_wav = await MediaResolver(
+                    file_url,
+                    media_type="audio",
+                    default_suffix=".wav",
+                ).to_path(target_format="wav")
+                message.append(Record(file=path_wav, url=path_wav))
             else:
                 logger.warning(f"[KOOK] 跳过未知文件类型: {file_type.name}")
 
@@ -488,12 +489,22 @@ class KookPlatformAdapter(Platform):
 
         return abm
 
-    async def handle_msg(self, message: AstrBotMessage):
-        message_event = KookEvent(
+    def create_event(self, message: AstrBotMessage) -> KookEvent:
+        """Creates a KOOK message event.
+
+        Args:
+            message: AstrBot message object to wrap.
+
+        Returns:
+            Created KOOK message event.
+        """
+        return KookEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
-        self.commit_event(message_event)
+
+    async def handle_msg(self, message: AstrBotMessage):
+        self.commit_event(self.create_event(message))

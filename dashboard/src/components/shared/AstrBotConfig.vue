@@ -5,8 +5,8 @@ import ConfigItemRenderer from './ConfigItemRenderer.vue'
 import TemplateListEditor from './TemplateListEditor.vue'
 import { useI18n, useModuleI18n } from '@/i18n/composables'
 import { useConfigTextResolver } from '@/composables/useConfigTextResolver'
-import axios from 'axios'
 import { useToast } from '@/utils/toast'
+import { providerApi } from '@/api/v1'
 
 const props = defineProps({
   metadata: {
@@ -109,9 +109,12 @@ async function getEmbeddingDimensions(providerConfig) {
   
   loadingEmbeddingDim.value = true
   try {
-    const response = await axios.post('/api/config/provider/get_embedding_dim', {
-      provider_config: providerConfig
-    })
+    const providerId = String(providerConfig?.id || '')
+    if (!providerId) {
+      useToast().error('缺少提供商 ID')
+      return
+    }
+    const response = await providerApi.embeddingDimension(providerId, providerConfig)
     
     if (response.data.status != "error" && response.data.data?.embedding_dimensions) {
       console.log(response.data.data.embedding_dimensions)

@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 
 from astrbot.core.agent.message import (
@@ -10,9 +13,13 @@ from astrbot.core.agent.message import (
     get_checkpoint_id,
     strip_checkpoint_messages,
 )
-from astrbot.core.provider.entities import ProviderRequest
+from astrbot.core.db.po import Conversation
+from astrbot.core.pipeline.process_stage.method.agent_sub_stages.internal import (
+    InternalAgentSubStage,
+)
+from astrbot.core.provider.entities import LLMResponse, ProviderRequest
 from astrbot.core.provider.provider import Provider
-from astrbot.dashboard.routes.chat import ChatRoute
+from astrbot.dashboard.services.chat_service import find_turn_range
 
 
 def test_checkpoint_message_segment_round_trip():
@@ -151,8 +158,7 @@ def test_provider_ensure_message_to_dicts_skips_checkpoints():
     ]
 
 
-def test_chat_route_find_turn_range():
-    route = ChatRoute.__new__(ChatRoute)
+def test_chat_service_find_turn_range():
     history = [
         {"role": "user", "content": "a"},
         {"role": "assistant", "content": "b"},
@@ -162,5 +168,41 @@ def test_chat_route_find_turn_range():
         {"role": "_checkpoint", "content": {"id": "cp-2"}},
     ]
 
-    assert route._find_turn_range(history, "cp-2") == (3, 5)
-    assert route._find_turn_range(history, "missing") is None
+    assert find_turn_range(history, "cp-2") == (3, 5)
+    assert find_turn_range(history, "missing") is None
+
+
+@pytest.mark.asyncio
+async def test_failed_llm_response_persists_checkpoint_for_retry():
+    conversation_manager = AsyncMock()
+    stage = InternalAgentSubStage()
+    stage.conv_manager = conversation_manager
+    event = SimpleNamespace(
+        unified_msg_origin="webchat:FriendMessage:test",
+        get_extra=lambda key: {"llm_checkpoint_id": "cp-1"}.get(key),
+    )
+    request = ProviderRequest(
+        conversation=Conversation(
+            platform_id="webchat",
+            user_id="webchat:FriendMessage:test",
+            cid="conversation-1",
+        )
+    )
+
+    await stage._save_to_history(
+        event,
+        request,
+        LLMResponse(role="err", completion_text="upstream failed"),
+        [Message(role="user", content="hello")],
+        runner_stats=None,
+    )
+
+    conversation_manager.update_conversation.assert_awaited_once_with(
+        "webchat:FriendMessage:test",
+        "conversation-1",
+        history=[
+            {"role": "user", "content": "hello"},
+            {"role": "_checkpoint", "content": {"id": "cp-1"}},
+        ],
+        token_usage=None,
+    )
