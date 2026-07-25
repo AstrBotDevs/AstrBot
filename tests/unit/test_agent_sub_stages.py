@@ -361,6 +361,33 @@ async def test_internal_save_to_history_skips_non_aborted_non_assistant_response
 
 
 @pytest.mark.asyncio
+async def test_internal_save_to_history_keeps_checkpoint_after_failed_response():
+    stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
+    stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())
+    stage.ctx = _pipeline_context(SimpleNamespace())
+    event = FakeEvent(extras={"llm_checkpoint_id": "ck-failed"})
+    req = ProviderRequest(conversation=SimpleNamespace(cid="conv-failed"))
+
+    await stage._save_to_history(
+        event,
+        req,
+        LLMResponse(role="err", completion_text="upstream failed"),
+        [Message(role="system", content="system"), Message(role="user", content="hello")],
+        runner_stats=None,
+    )
+
+    stage.conv_manager.update_conversation.assert_awaited_once_with(
+        event.unified_msg_origin,
+        "conv-failed",
+        history=[
+            {"role": "user", "content": "hello"},
+            {"role": "_checkpoint", "content": {"id": "ck-failed"}},
+        ],
+        token_usage=None,
+    )
+
+
+@pytest.mark.asyncio
 async def test_internal_save_to_history_saves_empty_placeholder_for_aborted_empty_response():
     stage = internal.InternalAgentSubStage.__new__(internal.InternalAgentSubStage)
     stage.conv_manager = SimpleNamespace(update_conversation=AsyncMock())

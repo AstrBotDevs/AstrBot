@@ -520,7 +520,32 @@ class InternalAgentSubStage:
         if not req or not req.conversation:
             return
 
-        if not llm_response and not user_aborted:
+        checkpoint_id = event.get_extra("llm_checkpoint_id")
+        if not user_aborted and (
+            llm_response is None or llm_response.role != "assistant"
+        ):
+            if isinstance(checkpoint_id, str) and checkpoint_id:
+                messages_to_save: list[Message] = []
+                skipped_initial_system = False
+                for message in all_messages:
+                    if message.role == "system" and not skipped_initial_system:
+                        skipped_initial_system = True
+                        continue
+                    if message.role in ["assistant", "user"] and message._no_save:
+                        continue
+                    messages_to_save.append(message)
+                message_to_save = dump_messages_with_checkpoints(messages_to_save)
+                message_to_save.append(
+                    CheckpointMessageSegment(
+                        content=CheckpointData(id=checkpoint_id),
+                    ).model_dump()
+                )
+                await self.conv_manager.update_conversation(
+                    event.unified_msg_origin,
+                    req.conversation.cid,
+                    history=sanitize_history_for_storage(message_to_save),
+                    token_usage=None,
+                )
             return
 
         if llm_response and llm_response.role != "assistant":
@@ -551,7 +576,6 @@ class InternalAgentSubStage:
                 continue
             messages_to_save.append(message)
 
-        checkpoint_id = event.get_extra("llm_checkpoint_id")
         message_to_save = dump_messages_with_checkpoints(messages_to_save)
         if isinstance(checkpoint_id, str) and checkpoint_id:
             message_to_save.append(

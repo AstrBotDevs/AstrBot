@@ -49,14 +49,15 @@ async def test_stat_service_get_stat_accepts_unix_second_timestamps(
 
     db_helper.get_platform_stats = _get_platform_stats
     monkeypatch.setattr(
-        "astrbot.dashboard.services.stat_service.psutil.cpu_percent",
-        lambda interval=0.5: 12.5,
-    )
-    monkeypatch.setattr(
         "astrbot.dashboard.services.stat_service.psutil.Process",
         lambda: SimpleNamespace(
+            cpu_percent=lambda interval=0.5: 25.0,
             memory_info=lambda: SimpleNamespace(rss=256 << 20),
         ),
+    )
+    monkeypatch.setattr(
+        "astrbot.dashboard.services.stat_service.psutil.cpu_count",
+        lambda: 2,
     )
     monkeypatch.setattr(
         "astrbot.dashboard.services.stat_service.psutil.virtual_memory",
@@ -84,6 +85,7 @@ async def test_stat_service_get_stat_accepts_unix_second_timestamps(
             "timestamp": timestamp,
         }
     ]
+    assert data["cpu_percent"] == 12.5
 
 
 def test_stat_service_get_first_notice_uses_only_supported_locales(

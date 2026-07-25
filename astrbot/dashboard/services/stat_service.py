@@ -264,7 +264,9 @@ class StatService:
 
             stat_dict: dict[str, Any] = {"platform": grouped_platform}
 
-            cpu_percent = psutil.cpu_percent(interval=0.5)
+            process = psutil.Process()
+            process_cpu = await asyncio.to_thread(process.cpu_percent, 0.5)
+            cpu_percent = process_cpu / (psutil.cpu_count() or 1)
             thread_count = threading.active_count()
 
             plugins = self.plugin_catalog.all()
@@ -291,7 +293,7 @@ class StatService:
                     "message_time_series": message_time_based_stats,
                     "running": running_time,
                     "memory": {
-                        "process": psutil.Process().memory_info().rss >> 20,
+                        "process": process.memory_info().rss >> 20,
                         "system": psutil.virtual_memory().total >> 20,
                     },
                     "cpu_percent": round(cpu_percent, 1),
