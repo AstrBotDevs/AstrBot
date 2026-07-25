@@ -11,7 +11,7 @@ import httpx
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._exceptions import NotFoundError
 from openai.lib.streaming.chat._completions import ChatCompletionStreamState
-from openai.types.chat.chat_completion import ChatCompletion, Choice
+from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from openai.types.completion_usage import CompletionUsage
 
@@ -838,16 +838,11 @@ class ProviderOpenAIOfficial(Provider):
 
         if not completion.choices:
             data = getattr(completion, "data", None)
-            nested_choices = data.get("choices") if isinstance(data, dict) else None
-            if isinstance(nested_choices, list):
+            if isinstance(data, dict):
                 try:
-                    choices = [
-                        Choice.model_validate(choice) for choice in nested_choices
-                    ]
+                    completion = ChatCompletion.model_validate(data)
                 except (TypeError, ValueError):
-                    choices = []
-                if choices:
-                    completion.choices = choices
+                    pass
 
         if not completion.choices:
             raise EmptyModelOutputError(

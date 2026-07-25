@@ -1466,6 +1466,10 @@ async def test_parse_openai_completion_reads_nested_data_choices():
             model=None,
             choices=None,
             data={
+                "id": "gen_test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "deepseek/deepseek-v4-flash",
                 "choices": [
                     {
                         "index": 0,
@@ -1475,13 +1479,22 @@ async def test_parse_openai_completion_reads_nested_data_choices():
                         },
                         "finish_reason": "stop",
                     }
-                ]
+                ],
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 38,
+                    "total_tokens": 50,
+                },
             },
         )
 
         response = await provider._parse_openai_completion(completion, tools=None)
 
         assert response.completion_text == "PONG"
+        assert response.id == "gen_test"
+        assert response.usage is not None
+        assert response.usage.input_other == 12
+        assert response.usage.output == 38
     finally:
         await provider.terminate()
 
