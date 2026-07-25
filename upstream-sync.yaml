@@ -5,8 +5,8 @@ upstream:
   branch: master
 
 last_synced:
-  commit: 2035dbd079375046ce7b82171a04b1f9a63d781a
-  synced_at_utc: 2026-07-22T17:02:01.3405546Z
+  commit: f9c6129b9eecdd0a5c4069954baffc27bea02a0a
+  synced_at_utc: 2026-07-25T16:44:02Z
   sync_method: cherry-pick
-  source_pr: '9333, 8323, 9349'
-  note: 'Processed five upstream/master commits through 2035dbd079375046ce7b82171a04b1f9a63d781a. Updated retained README banners; integrated the QQ Official Bot recommendation into the fork’s newer, security-focused OneBot/NapCat documentation while retaining deleted non-English root READMEs. Upgraded actions/setup-python to v7 with a full commit pin across fork workflows while preserving Python 3.14 and Node 24 baselines. Included FAISS Windows non-ASCII path bridge/search fixes and the rate-limit timestamp concurrency regression test. Removed obsolete quoted FAISS annotations for the Python 3.14-only baseline.'
+  source_pr: '9342, 9369, 9367, 9358, 9359, 9350, 9327, 9232, 9238, 9234, 9236'
+  note: 'Processed twelve upstream/master commits through f9c6129b9eecdd0a5c4069954baffc27bea02a0a. Included 10e5ca69 plugin log-level support, redesigned around the runtime PluginCatalog rather than upstream global star_map; 1240156f Ruff pin; fcce0105 CPU stats; 04fb05c5 failed-request checkpoints; 94a74e2e lazy FAISS import; b39d5048 plugin-save progress; d5620d94 quoted content safety; ff3b74d4 persona dialog persistence; fb02c727 Tavily date handling; and f9c6129b Telegram partial reply quotes. Skipped 11a5672e and e8819ac2 because their fixes were already present in the fork. The fork separately adopts its nvm-managed Node 26.5.0 and globally installed pnpm 11.15.1 toolchain without Corepack.'
