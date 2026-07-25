@@ -227,6 +227,7 @@ def _exercise_unzip_file_windows_path_normalization(
         return [".dockerignore"]
 
     monkeypatch.setattr(updater_module.os, "makedirs", lambda path, exist_ok=True: None)
+    monkeypatch.setattr(updater_module, "ensure_dir", lambda path: None)
     monkeypatch.setattr(updater_module.os.path, "join", ntpath.join)
     monkeypatch.setattr(updater_module.os.path, "normpath", ntpath.normpath)
     monkeypatch.setattr(updater_module.os.path, "commonpath", ntpath.commonpath)
@@ -984,6 +985,7 @@ def test_repo_unzip_file_rejects_archive_roots_outside_target_dir(
     monkeypatch.setattr(
         zip_updator_module.os, "makedirs", lambda path, exist_ok=True: None
     )
+    monkeypatch.setattr(zip_updator_module, "ensure_dir", lambda path: None)
     monkeypatch.setattr(zip_updator_module.os.path, "join", ntpath.join)
     monkeypatch.setattr(zip_updator_module.os.path, "normpath", ntpath.normpath)
     monkeypatch.setattr(zip_updator_module.os.path, "commonpath", ntpath.commonpath)
@@ -1020,6 +1022,7 @@ def test_repo_unzip_file_handles_archives_without_explicit_root_dir_entry(
     monkeypatch.setattr(
         zip_updator_module.os, "makedirs", lambda path, exist_ok=True: None
     )
+    monkeypatch.setattr(zip_updator_module, "ensure_dir", lambda path: None)
     monkeypatch.setattr(zip_updator_module.os.path, "join", ntpath.join)
     monkeypatch.setattr(zip_updator_module.os.path, "normpath", ntpath.normpath)
     monkeypatch.setattr(zip_updator_module.os.path, "commonpath", ntpath.commonpath)
