@@ -65,6 +65,10 @@
       "t2iRendering": {
         "title": "Text-to-Image",
         "subtitle": "Rendering strategy, endpoint, and custom templates for text-to-image."
+      },
+      "telemetry": {
+        "title": "Telemetry",
+        "subtitle": "Toggle anonymous usage data collection."
       }
     },
     "messages": {

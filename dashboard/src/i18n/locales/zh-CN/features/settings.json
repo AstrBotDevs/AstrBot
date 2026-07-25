@@ -65,6 +65,10 @@
       "t2iRendering": {
         "title": "文本转图像",
         "subtitle": "文本转图像渲染策略、端点和自定义模板。"
+      },
+      "telemetry": {
+        "title": "使用统计",
+        "subtitle": "匿名使用数据上报开关。"
       }
     },
     "messages": {
