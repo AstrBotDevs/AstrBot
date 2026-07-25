@@ -2,6 +2,7 @@ import base64
 import json
 from collections.abc import AsyncGenerator
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import anthropic
 import httpx
@@ -35,7 +36,44 @@ from .request_retry import retry_provider_request, retry_provider_request_contex
     "Anthropic Claude API 提供商适配器",
 )
 class ProviderAnthropic(Provider):
+    # --- prompt caching 调参区（可直接改这些常量） ------------------------
     _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
+    """cache_control 基础结构，``ttl`` 在运行时按需补上。"""
+
+    _PROMPT_CACHE_MAX_BREAKPOINTS = 4
+    """Anthropic 单次请求允许的 cache_control 断点上限（API 硬限制）。"""
+
+    _PROMPT_CACHE_TRAILING_MESSAGES = 3
+    """在消息列表尾部滚动放置的断点数量。
+
+    每轮请求通常只往历史里追加 2 条消息（assistant + user/tool_result），
+    标记最后 3 条即可保证「上一次请求的断点位置」必然与本次某个断点**完全重合**，
+    从而拿到精确命中，不依赖 API 20 个 block 的回看窗口。
+    """
+
+    _PROMPT_CACHE_MIN_CHARS = 6000
+    """小于该字符规模的请求不打断点。
+
+    prompt 前缀低于模型的最小可缓存长度时缓存会被静默忽略；而刚刚过线的一次性
+    短请求（例如会话标题生成）只会白付 1.25x 的写入费。
+    """
+
+    _PROMPT_CACHE_IMAGE_CHARS = 4000
+    """估算规模时，单个图片 block 折算的字符数。"""
+
+    _PROMPT_CACHE_LONG_TTL_HOSTS = ("api.anthropic.com",)
+    """默认启用 1h TTL 的官方域名。
+
+    IM 闲聊场景相邻两轮常常间隔超过 5 分钟，默认 5 分钟 TTL 会整段失效。
+    第三方 Anthropic 兼容端点不一定支持 ``ttl`` 字段，因此只对官方域名默认开启，
+    其余保持原有的 5 分钟行为。可用 provider 配置 ``anth_prompt_cache_ttl``
+    覆盖（``"1h"`` / ``"5m"`` / ``"off"``）。
+    """
+
+    _PROMPT_CACHE_MARKABLE_BLOCK_TYPES = frozenset(
+        {"text", "image", "tool_use", "tool_result", "document"},
+    )
+    """允许挂 cache_control 的 block 类型（``thinking`` 等不在其列）。"""
 
     @staticmethod
     def _ensure_usable_response(
@@ -436,6 +474,16 @@ class ProviderAnthropic(Provider):
         if usage is None:
             return TokenUsage()
         # https://docs.claude.com/en/docs/build-with-claude/prompt-caching#tracking-cache-performance
+        # cache_creation_input_tokens 在 TokenUsage 里没有对应字段，但它是判断
+        # 断点是否生效的唯一依据，所以至少打到 debug 日志里。
+        logger.debug(
+            "Anthropic prompt cache usage: uncached=%s cache_write=%s "
+            "cache_read=%s output=%s",
+            usage.input_tokens or 0,
+            getattr(usage, "cache_creation_input_tokens", None) or 0,
+            usage.cache_read_input_tokens or 0,
+            usage.output_tokens or 0,
+        )
         return TokenUsage(
             input_other=usage.input_tokens or 0,
             input_cached=usage.cache_read_input_tokens or 0,
@@ -481,15 +529,239 @@ class ProviderAnthropic(Provider):
         logger.warning(f"未知的 tool_choice 值: {tool_choice}，已回退为 'auto'")
         return {"type": "auto"}
 
+    def _prompt_cache_control(self) -> dict | None:
+        """解析本次请求要用的 cache_control，返回 ``None`` 表示禁用 prompt caching。"""
+        configured = (
+            str(self.provider_config.get("anth_prompt_cache_ttl", "") or "")
+            .strip()
+            .lower()
+        )
+        if configured in ("off", "none", "disable", "disabled"):
+            return None
+
+        cache_control = dict(self._PROMPT_CACHE_CONTROL)
+        if configured in ("", "auto"):
+            host = urlparse(getattr(self, "base_url", "") or "").hostname or ""
+            if host in self._PROMPT_CACHE_LONG_TTL_HOSTS:
+                cache_control["ttl"] = "1h"
+        elif configured not in ("5m", "default"):
+            cache_control["ttl"] = configured
+        return cache_control
+
     @classmethod
-    def _apply_explicit_prompt_cache_breakpoints(cls, payloads: dict) -> None:
-        system_blocks = payloads.get("system")
-        if not isinstance(system_blocks, list) or not system_blocks:
+    def _estimate_block_chars(cls, block: Any) -> int:
+        """粗略估算单个 content block 的字符规模（仅用于「值不值得缓存」判断）。"""
+        if isinstance(block, str):
+            return len(block)
+        if not isinstance(block, dict):
+            return 0
+        if block.get("type") == "image":
+            return cls._PROMPT_CACHE_IMAGE_CHARS
+
+        total = 0
+        text = block.get("text")
+        if isinstance(text, str):
+            total += len(text)
+        content = block.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            for sub_block in content:
+                total += cls._estimate_block_chars(sub_block)
+        tool_input = block.get("input")
+        if tool_input is not None:
+            total += len(str(tool_input))
+        return total
+
+    @classmethod
+    def _estimate_cacheable_chars(cls, payloads: dict, *, stop_at: int) -> int:
+        """估算 tools + system + messages 的总字符数，达到 ``stop_at`` 即提前返回。"""
+        total = 0
+        for block in payloads.get("system") or []:
+            total += cls._estimate_block_chars(block)
+            if total >= stop_at:
+                return total
+        for tool in payloads.get("tools") or []:
+            if isinstance(tool, dict):
+                total += len(json.dumps(tool, ensure_ascii=False, default=str))
+            if total >= stop_at:
+                return total
+        for message in payloads.get("messages") or []:
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if isinstance(content, str):
+                total += len(content)
+            elif isinstance(content, list):
+                for block in content:
+                    total += cls._estimate_block_chars(block)
+            if total >= stop_at:
+                return total
+        return total
+
+    @staticmethod
+    def _count_existing_cache_breakpoints(payloads: dict) -> int:
+        """统计调用方（插件等）已经放置的 cache_control 断点数量。"""
+        count = 0
+        for section in ("system", "tools"):
+            for block in payloads.get(section) or []:
+                if isinstance(block, dict) and block.get("cache_control"):
+                    count += 1
+        for message in payloads.get("messages") or []:
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("cache_control"):
+                        count += 1
+        return count
+
+    @staticmethod
+    def _normalize_message_content_blocks(payloads: dict) -> None:
+        """把字符串 content 统一规范化成单个 text block。
+
+        只有 block 才能承载 cache_control。如果只在「需要打断点的那条消息」上做转换，
+        同一条历史消息会因为在不同请求里是否被标记而呈现两种形状，前缀字节随之抖动，
+        缓存必然落空。所以这里对所有消息无条件规范化，保证形状稳定。
+        """
+        messages = payloads.get("messages")
+        if not isinstance(messages, list):
+            return
+        for index, message in enumerate(messages):
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if isinstance(content, str) and content.strip():
+                messages[index] = {
+                    **message,
+                    "content": [{"type": "text", "text": content}],
+                }
+
+    @staticmethod
+    def _with_cache_control(block: dict, cache_control: dict) -> dict:
+        """返回带 cache_control 的 block 副本（不修改调用方持有的历史对象）。"""
+        return {**block, "cache_control": dict(cache_control)}
+
+    @classmethod
+    def _message_with_cache_breakpoint(
+        cls,
+        message: dict,
+        cache_control: dict,
+    ) -> dict | None:
+        """把断点挂到 message 的最后一个 block 上，返回消息副本。
+
+        无法安全挂载时返回 ``None``（调用方应跳过该消息，不消耗断点额度）。
+        纯字符串 content 会被规范化成单个 text block —— 只有 block 才能承载
+        cache_control，且必须对所有请求保持同样的形状，否则前缀字节不一致。
+        """
+        content = message.get("content")
+        if isinstance(content, str):
+            if not content.strip():
+                return None
+            blocks: list[Any] = [{"type": "text", "text": content}]
+        elif isinstance(content, list) and content:
+            blocks = list(content)
+        else:
+            return None
+
+        last_block = blocks[-1]
+        if not isinstance(last_block, dict) or last_block.get("cache_control"):
+            return None
+        if last_block.get("type") not in cls._PROMPT_CACHE_MARKABLE_BLOCK_TYPES:
+            return None
+
+        blocks[-1] = cls._with_cache_control(last_block, cache_control)
+        return {**message, "content": blocks}
+
+    @classmethod
+    def _apply_message_cache_breakpoints(
+        cls,
+        payloads: dict,
+        cache_control: dict,
+        limit: int,
+    ) -> int:
+        """从尾部往前给最多 ``limit`` 条消息打断点，返回实际打上的数量。"""
+        if limit <= 0:
+            return 0
+        messages = payloads.get("messages")
+        if not isinstance(messages, list) or not messages:
+            return 0
+
+        marked = 0
+        for index in range(len(messages) - 1, -1, -1):
+            if marked >= limit:
+                break
+            message = messages[index]
+            if not isinstance(message, dict):
+                continue
+            updated = cls._message_with_cache_breakpoint(message, cache_control)
+            if updated is None:
+                continue
+            messages[index] = updated
+            marked += 1
+        return marked
+
+    def _apply_explicit_prompt_cache_breakpoints(self, payloads: dict) -> None:
+        """放置 prompt cache 断点。
+
+        渲染顺序是 ``tools`` → ``system`` → ``messages``，前缀里任何字节变化都会让
+        其后的缓存失效。因此：
+
+        * system 末尾放一个断点，缓存 ``tools + system``。它跨会话共享，
+          新会话 / 标题生成 / 上下文压缩之后仍然能命中。
+        * 消息尾部滚动放最多 3 个断点，把不断增长的历史也纳入缓存 ——
+          这是 IM 长对话和工具调用循环里真正在涨的那部分。
+
+        断点总数受 API 限制为 4 个，且已经被调用方占用的额度会被扣除。
+        """
+        cache_control = self._prompt_cache_control()
+        if cache_control is None:
             return
 
-        last_block = system_blocks[-1]
-        if isinstance(last_block, dict) and "cache_control" not in last_block:
-            last_block["cache_control"] = dict(cls._PROMPT_CACHE_CONTROL)
+        # 无条件执行，不受下面的规模阈值影响：同一会话在跨过阈值前后必须是同一种形状。
+        self._normalize_message_content_blocks(payloads)
+
+        min_chars = self._PROMPT_CACHE_MIN_CHARS
+        if self._estimate_cacheable_chars(payloads, stop_at=min_chars) < min_chars:
+            return
+
+        budget = self._PROMPT_CACHE_MAX_BREAKPOINTS - (
+            self._count_existing_cache_breakpoints(payloads)
+        )
+        if budget <= 0:
+            return
+
+        # 插件如果自己在 system 里放了断点，说明它想自己控制切分位置，我们不再插手。
+        system_blocks = payloads.get("system")
+        system_markable = (
+            isinstance(system_blocks, list)
+            and bool(system_blocks)
+            and isinstance(system_blocks[-1], dict)
+            and not any(
+                isinstance(block, dict) and block.get("cache_control")
+                for block in system_blocks
+            )
+        )
+        system_slot = 1 if system_markable else 0
+
+        message_slots = max(
+            0,
+            min(budget - system_slot, self._PROMPT_CACHE_TRAILING_MESSAGES),
+        )
+        used = self._apply_message_cache_breakpoints(
+            payloads,
+            cache_control,
+            message_slots,
+        )
+
+        if system_slot and used + system_slot <= budget:
+            new_system_blocks = list(system_blocks)  # type: ignore[arg-type]
+            new_system_blocks[-1] = self._with_cache_control(
+                new_system_blocks[-1],
+                cache_control,
+            )
+            payloads["system"] = new_system_blocks
 
     async def _query(
         self,
@@ -509,9 +781,10 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
-        self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
+        # 必须在 sanitize 之后：那一步会合并/重排消息，断点位置只有在最终消息列表上才有意义。
+        self._apply_explicit_prompt_cache_breakpoints(payloads)
 
         try:
             completion = await retry_provider_request(
@@ -611,9 +884,10 @@ class ProviderAnthropic(Provider):
 
         if "max_tokens" not in payloads:
             payloads["max_tokens"] = 65536
-        self._apply_explicit_prompt_cache_breakpoints(payloads)
         self._apply_thinking_config(payloads)
         self._sanitize_assistant_messages(payloads)
+        # 必须在 sanitize 之后：那一步会合并/重排消息，断点位置只有在最终消息列表上才有意义。
+        self._apply_explicit_prompt_cache_breakpoints(payloads)
 
         async with retry_provider_request_context(
             "Anthropic",

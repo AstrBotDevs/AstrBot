@@ -1,4 +1,6 @@
 import builtins
+import copy
+import json
 from types import SimpleNamespace
 
 import httpx
@@ -864,3 +866,250 @@ async def test_tool_choice_empty_tool_list_skips_tool_choice(monkeypatch):
     kwargs = _capture_payloads_create.last_kwargs
     assert "tools" not in kwargs
     assert "tool_choice" not in kwargs
+
+
+# --------------------------------------------------------------------------- #
+# Prompt caching breakpoints
+# --------------------------------------------------------------------------- #
+
+_BIG_SYSTEM = "You are a helpful assistant. " * 400
+
+
+def _make_cache_provider(
+    base_url: str = "https://api.anthropic.com",
+    **config,
+) -> anthropic_source.ProviderAnthropic:
+    provider = anthropic_source.ProviderAnthropic.__new__(
+        anthropic_source.ProviderAnthropic
+    )
+    provider.provider_config = config
+    provider.base_url = base_url
+    return provider
+
+
+def _breakpoint_positions(payloads: dict) -> list[tuple[int, int]]:
+    positions = []
+    for msg_index, message in enumerate(payloads.get("messages") or []):
+        content = message.get("content")
+        if isinstance(content, list):
+            for block_index, block in enumerate(content):
+                if isinstance(block, dict) and block.get("cache_control"):
+                    positions.append((msg_index, block_index))
+    return positions
+
+
+def _rendered_prefix(payloads: dict, msg_index: int, block_index: int) -> str:
+    """Serialize the prompt prefix up to a breakpoint, ignoring cache metadata."""
+
+    def strip(obj):
+        if isinstance(obj, dict):
+            return {k: strip(v) for k, v in obj.items() if k != "cache_control"}
+        if isinstance(obj, list):
+            return [strip(v) for v in obj]
+        return obj
+
+    parts = [strip(payloads.get("tools")), strip(payloads.get("system"))]
+    for index, message in enumerate(payloads["messages"]):
+        if index > msg_index:
+            break
+        message = strip(message)
+        if index == msg_index:
+            message = {**message, "content": message["content"][: block_index + 1]}
+        parts.append(message)
+    return json.dumps(parts, sort_keys=True, ensure_ascii=False)
+
+
+def _build_cached_payloads(provider, messages: list[dict]) -> dict:
+    payloads = {
+        "model": "claude-test",
+        "system": [{"type": "text", "text": _BIG_SYSTEM}],
+        "messages": copy.deepcopy(messages),
+    }
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+    provider._apply_explicit_prompt_cache_breakpoints(payloads)
+    return payloads
+
+
+_CHAT_TURN_1 = [
+    {"role": "user", "content": "hi <system_reminder>10:00</system_reminder>"},
+    {"role": "assistant", "content": [{"type": "text", "text": "hello"}]},
+    {"role": "user", "content": "how are you <system_reminder>10:05</system_reminder>"},
+]
+_CHAT_TURN_2 = [
+    *_CHAT_TURN_1,
+    {"role": "assistant", "content": [{"type": "text", "text": "fine"}]},
+    {
+        "role": "user",
+        "content": "a joke please <system_reminder>10:12</system_reminder>",
+    },
+]
+
+
+def test_prompt_cache_marks_system_and_trailing_messages():
+    provider = _make_cache_provider()
+
+    payloads = _build_cached_payloads(provider, _CHAT_TURN_1)
+
+    assert payloads["system"][-1]["cache_control"] == {
+        "type": "ephemeral",
+        "ttl": "1h",
+    }
+    assert _breakpoint_positions(payloads) == [(0, 0), (1, 0), (2, 0)]
+
+
+def test_prompt_cache_never_exceeds_api_breakpoint_limit():
+    provider = _make_cache_provider()
+
+    payloads = _build_cached_payloads(provider, _CHAT_TURN_2)
+
+    total = anthropic_source.ProviderAnthropic._count_existing_cache_breakpoints(
+        payloads
+    )
+    assert total <= anthropic_source.ProviderAnthropic._PROMPT_CACHE_MAX_BREAKPOINTS
+
+
+def test_prompt_cache_prefix_is_reused_by_the_next_request():
+    """上一次请求的断点前缀必须在下一次请求里逐字节重现，否则拿不到缓存命中。"""
+    provider = _make_cache_provider()
+
+    first = _build_cached_payloads(provider, _CHAT_TURN_1)
+    second = _build_cached_payloads(provider, _CHAT_TURN_2)
+
+    last_msg, last_block = _breakpoint_positions(first)[-1]
+    previous_prefix = _rendered_prefix(first, last_msg, last_block)
+    current_prefixes = {
+        _rendered_prefix(second, msg_index, block_index)
+        for msg_index, block_index in _breakpoint_positions(second)
+    }
+
+    assert previous_prefix in current_prefixes
+
+
+def test_prompt_cache_prefix_is_reused_across_a_tool_call_round():
+    provider = _make_cache_provider()
+
+    tool_round = [
+        *_CHAT_TURN_2,
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": f"tu{i}", "name": "read", "input": {"i": i}}
+                for i in range(4)
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": f"tu{i}", "content": "R" * 3000}
+                for i in range(4)
+            ],
+        },
+    ]
+
+    before = _build_cached_payloads(provider, _CHAT_TURN_2)
+    after = _build_cached_payloads(provider, tool_round)
+
+    last_msg, last_block = _breakpoint_positions(before)[-1]
+    previous_prefix = _rendered_prefix(before, last_msg, last_block)
+    current_prefixes = {
+        _rendered_prefix(after, msg_index, block_index)
+        for msg_index, block_index in _breakpoint_positions(after)
+    }
+
+    assert previous_prefix in current_prefixes
+
+
+def test_prompt_cache_skips_short_requests():
+    """会话标题生成这类短请求缓存不会生效，不应白付写入成本。"""
+    provider = _make_cache_provider()
+    payloads = {
+        "system": [{"type": "text", "text": "Generate a short title."}],
+        "messages": [{"role": "user", "content": "hello there"}],
+    }
+
+    provider._apply_explicit_prompt_cache_breakpoints(payloads)
+
+    assert (
+        anthropic_source.ProviderAnthropic._count_existing_cache_breakpoints(payloads)
+        == 0
+    )
+
+
+def test_prompt_cache_omits_ttl_for_non_official_endpoints():
+    provider = _make_cache_provider(base_url="https://api.moonshot.cn/anthropic")
+
+    payloads = _build_cached_payloads(provider, _CHAT_TURN_1)
+
+    assert payloads["system"][-1]["cache_control"] == {"type": "ephemeral"}
+
+
+def test_prompt_cache_can_be_disabled_via_provider_config():
+    provider = _make_cache_provider(anth_prompt_cache_ttl="off")
+
+    payloads = _build_cached_payloads(provider, _CHAT_TURN_1)
+
+    assert (
+        anthropic_source.ProviderAnthropic._count_existing_cache_breakpoints(payloads)
+        == 0
+    )
+    assert "cache_control" not in payloads["system"][-1]
+
+
+def test_prompt_cache_does_not_mutate_caller_history():
+    provider = _make_cache_provider()
+    history = copy.deepcopy(_CHAT_TURN_2)
+    snapshot = json.dumps(history, sort_keys=True)
+
+    payloads = {
+        "system": [{"type": "text", "text": _BIG_SYSTEM}],
+        "messages": history,
+    }
+    anthropic_source.ProviderAnthropic._sanitize_assistant_messages(payloads)
+    provider._apply_explicit_prompt_cache_breakpoints(payloads)
+
+    assert json.dumps(history, sort_keys=True) == snapshot
+
+
+def test_prompt_cache_defers_to_plugin_placed_system_breakpoints():
+    provider = _make_cache_provider()
+    payloads = {
+        "system": [
+            {
+                "type": "text",
+                "text": _BIG_SYSTEM,
+                "cache_control": {"type": "ephemeral"},
+            },
+            {"type": "text", "text": "volatile plugin tail"},
+        ],
+        "messages": copy.deepcopy(_CHAT_TURN_1),
+    }
+
+    provider._apply_explicit_prompt_cache_breakpoints(payloads)
+
+    assert "cache_control" not in payloads["system"][-1]
+    assert (
+        anthropic_source.ProviderAnthropic._count_existing_cache_breakpoints(payloads)
+        <= anthropic_source.ProviderAnthropic._PROMPT_CACHE_MAX_BREAKPOINTS
+    )
+
+
+def test_prompt_cache_skips_messages_ending_in_a_thinking_block():
+    provider = _make_cache_provider()
+    payloads = {
+        "system": [{"type": "text", "text": _BIG_SYSTEM}],
+        "messages": [
+            {"role": "user", "content": "question"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "hmm", "signature": "sig"}
+                ],
+            },
+        ],
+    }
+
+    provider._apply_explicit_prompt_cache_breakpoints(payloads)
+
+    assert all(
+        "cache_control" not in block for block in payloads["messages"][1]["content"]
+    )
