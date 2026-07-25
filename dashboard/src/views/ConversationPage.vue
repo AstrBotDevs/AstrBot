@@ -227,20 +227,20 @@
                     </div>
                 </v-card-title>
 
-                <v-card-text>
-                    <div class="mb-4 d-flex align-center">
-                        <v-btn color="secondary" variant="tonal" size="small" class="mr-2"
-                            @click="isEditingHistory = !isEditingHistory">
-                            <v-icon class="mr-1">{{ isEditingHistory ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
-                            {{ isEditingHistory ? tm('dialogs.view.previewMode') : tm('dialogs.view.editMode') }}
-                        </v-btn>
-                        <v-btn v-if="isEditingHistory" color="success" variant="tonal" size="small"
-                            :loading="savingHistory" @click="saveHistoryChanges">
-                            <v-icon class="mr-1">mdi-content-save</v-icon>
-                            {{ tm('dialogs.view.saveChanges') }}
-                        </v-btn>
-                    </div>
+                <div class="pl-6 pr-4 pt-4 pb-2 d-flex align-center">
+                    <v-btn color="secondary" variant="tonal" size="small" class="mr-2"
+                        @click="isEditingHistory = !isEditingHistory">
+                        <v-icon class="mr-1">{{ isEditingHistory ? 'mdi-eye' : 'mdi-pencil' }}</v-icon>
+                        {{ isEditingHistory ? tm('dialogs.view.previewMode') : tm('dialogs.view.editMode') }}
+                    </v-btn>
+                    <v-btn v-if="isEditingHistory" color="success" variant="tonal" size="small"
+                        :loading="savingHistory" @click="saveHistoryChanges">
+                        <v-icon class="mr-1">mdi-content-save</v-icon>
+                        {{ tm('dialogs.view.saveChanges') }}
+                    </v-btn>
+                </div>
 
+                <v-card-text>
                     <!-- 编辑模式 - Monaco编辑器 -->
                     <div v-if="isEditingHistory" class="monaco-editor-container">
                         <VueMonacoEditor v-model:value="editedHistory" theme="vs-dark" language="json" :options="{
@@ -254,9 +254,7 @@
                     </div>
 
                     <!-- 预览模式 - 聊天界面 -->
-                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);"
-                        ref="messagesContainer"
-                        @wheel.prevent="onContainerWheel">
+                    <div v-else class="conversation-messages-container" style="background-color: var(--v-theme-surface);">
                         <!-- 空对话提示 -->
                         <div v-if="conversationHistory.length === 0" class="text-center py-5">
                             <v-icon size="48" color="grey">mdi-chat-remove</v-icon>
@@ -1201,13 +1199,6 @@ export default {
             return parts;
         },
 
-        // Manually handle wheel scrolling inside the dialog preview container.
-        onContainerWheel(event) {
-            const el = this.$refs.messagesContainer;
-            if (!el) return;
-            el.scrollTop += event.deltaY;
-        },
-
         // 从内容中提取文本（保留用于其他用途）
         extractTextFromContent(content) {
             if (typeof content === 'string') {
@@ -1256,8 +1247,6 @@ export default {
 
 /* 聊天消息容器样式 */
 .conversation-messages-container {
-    max-height: 500px;
-    overflow-y: auto;
     padding: 8px;
     border-radius: 8px;
     background-color: #f9f9f9;
