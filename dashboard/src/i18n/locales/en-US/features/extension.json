@@ -205,7 +205,12 @@
     },
     "config": {
       "title": "Extension Configuration",
-      "noConfig": "This extension has no configuration"
+      "noConfig": "This extension has no configuration",
+      "coreSettings": {
+        "logLevel": "Log Level",
+        "logLevelHint": "Only affects this plugin's log output and takes effect immediately.",
+        "followGlobal": "Follow Global"
+      }
     },
     "loading": {
       "title": "Loading...",
@@ -273,6 +278,7 @@
     "refreshSuccess": "Extension list refreshed!",
     "refreshFailed": "Error occurred while refreshing extension list",
     "operationFailed": "Operation failed",
+    "logLevelUpdated": "Plugin log level updated",
     "reloadSuccess": "Reload successful",
     "reloadFailed": "Reload failed",
     "updateSuccess": "Update successful!",

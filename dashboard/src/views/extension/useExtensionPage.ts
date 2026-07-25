@@ -26,6 +26,15 @@ type ExtensionTab = 'installed' | 'market' | 'mcp' | 'skills' | 'components';
 type UploadTab = 'file' | 'url';
 type SortBy = 'default' | 'stars' | 'author' | 'updated';
 type SortOrder = 'desc' | 'asc';
+type PluginLogLevel = 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+
+const PLUGIN_LOG_LEVELS: readonly PluginLogLevel[] = [
+  'DEBUG',
+  'INFO',
+  'WARNING',
+  'ERROR',
+  'CRITICAL',
+];
 
 interface FailedPluginRecord extends Partial<FailedPluginDetail> {
   [key: string]: unknown;
@@ -58,6 +67,7 @@ interface PluginConfigState {
   metadata: Record<string, unknown>;
   config: Record<string, unknown>;
   i18n: Record<string, unknown>;
+  log_level: PluginLogLevel | null;
 }
 
 interface InstallSupportState {
@@ -178,7 +188,9 @@ export const useExtensionPage = () => {
     metadata: {},
     config: {},
     i18n: {},
+    log_level: null,
   });
+  const pluginLogLevelSaving = ref(false);
   const pluginMarketData = ref<PluginMarketItem[]>([]);
   const loadingDialog = reactive<LoadingDialogState>({
     show: false,
@@ -1034,8 +1046,10 @@ export const useExtensionPage = () => {
     curr_namespace.value = extension_name;
     currentConfigPlugin.value = extension_name;
     configDialog.value = true;
+    extension_config.log_level = null;
     try {
       const res = await pluginApi.config(extension_name);
+      if (curr_namespace.value !== extension_name) return;
       extension_config.metadata =
         res.data.data.metadata && typeof res.data.data.metadata === 'object'
           ? (res.data.data.metadata as Record<string, unknown>)
@@ -1048,30 +1062,91 @@ export const useExtensionPage = () => {
         res.data.data.i18n && typeof res.data.data.i18n === 'object'
           ? (res.data.data.i18n as Record<string, unknown>)
           : {};
+      const logLevel = res.data.data.log_level;
+      extension_config.log_level = PLUGIN_LOG_LEVELS.includes(
+        logLevel as PluginLogLevel,
+      )
+        ? (logLevel as PluginLogLevel)
+        : null;
     } catch (err) {
-      toast(err, 'error');
+      toast(resolveErrorMessage(err, tm('messages.operationFailed')), 'error');
+    }
+  };
+
+  const updatePluginLogLevel = async (level: unknown) => {
+    if (pluginLogLevelSaving.value) return;
+    const normalizedLevel = PLUGIN_LOG_LEVELS.includes(level as PluginLogLevel)
+      ? (level as PluginLogLevel)
+      : null;
+    const pluginName = curr_namespace.value;
+    if (!pluginName) return;
+
+    const previousLevel = extension_config.log_level;
+    extension_config.log_level = normalizedLevel;
+    pluginLogLevelSaving.value = true;
+    try {
+      const res = await pluginApi.updateLogLevel(pluginName, normalizedLevel);
+      if (res.data.status !== 'ok') {
+        if (curr_namespace.value === pluginName) {
+          extension_config.log_level = previousLevel;
+        }
+        toast(res.data.message || tm('messages.operationFailed'), 'error');
+        return;
+      }
+      const serverLevel = res.data.data?.log_level;
+      if (curr_namespace.value === pluginName) {
+        extension_config.log_level = PLUGIN_LOG_LEVELS.includes(
+          serverLevel as PluginLogLevel,
+        )
+          ? (serverLevel as PluginLogLevel)
+          : null;
+      }
+      toast(tm('messages.logLevelUpdated'), 'success');
+    } catch (err) {
+      if (curr_namespace.value === pluginName) {
+        extension_config.log_level = previousLevel;
+      }
+      toast(resolveErrorMessage(err, tm('messages.operationFailed')), 'error');
+    } finally {
+      pluginLogLevelSaving.value = false;
     }
   };
 
   const updateConfig = async () => {
+    const pluginName = curr_namespace.value;
+    if (!pluginName) return;
+    loadingDialog.title = tm('status.loading');
+    loadingDialog.statusCode = 0;
+    loadingDialog.result = '';
+    loadingDialog.show = true;
     try {
       const res = await pluginApi.updateConfig(
-        curr_namespace.value,
+        pluginName,
         extension_config.config,
       );
       if (res.data.status === 'ok') {
+        onLoadingDialogResult(
+          1,
+          res.data.message || tm('messages.saveSuccess'),
+        );
         toast(res.data.message, 'success');
-      } else {
-        toast(res.data.message, 'error');
+        if (curr_namespace.value !== pluginName) return;
+        configDialog.value = false;
+        currentConfigPlugin.value = '';
+        extension_config.metadata = {};
+        extension_config.config = {};
+        extension_config.i18n = {};
+        extension_config.log_level = null;
+        void getExtensions();
+        return;
       }
-      configDialog.value = false;
-      currentConfigPlugin.value = '';
-      extension_config.metadata = {};
-      extension_config.config = {};
-      extension_config.i18n = {};
-      void getExtensions();
+      const message = res.data.message || tm('messages.operationFailed');
+      onLoadingDialogResult(2, message, -1);
+      toast(message, 'error');
     } catch (err) {
-      toast(err, 'error');
+      const message = resolveErrorMessage(err, tm('messages.operationFailed'));
+      onLoadingDialogResult(2, message, -1);
+      toast(message, 'error');
     }
   };
 
@@ -2014,6 +2089,8 @@ export const useExtensionPage = () => {
     pluginOff,
     openExtensionConfig,
     updateConfig,
+    updatePluginLogLevel,
+    pluginLogLevelSaving,
     showPluginInfo,
     reloadPlugin,
     viewReadme,
