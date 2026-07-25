@@ -33,6 +33,7 @@ from astrbot.core.star.star_handler import star_handlers_registry
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.io import download_file
 from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.string_utils import normalize_optional_text
 
 from .tg_event import TelegramPlatformEvent
 
@@ -506,6 +507,13 @@ class TelegramPlatformAdapter(Platform):
             reply_abm = await self.convert_message(reply_update, context, False)
 
             if reply_abm:
+                ## 引用的部分消息。is_manual 为假时是 TG 服务端自动截的开头预览，不是用户的关注点
+                tg_quote = update.message.quote
+                selected_excerpt = (
+                    normalize_optional_text(tg_quote.text)
+                    if tg_quote is not None and tg_quote.is_manual is True
+                    else None
+                )
                 message.message.append(
                     Comp.Reply(
                         id=reply_abm.message_id,
@@ -516,6 +524,7 @@ class TelegramPlatformAdapter(Platform):
                         message_str=reply_abm.message_str,
                         text=reply_abm.message_str,
                         qq=reply_abm.sender.user_id,
+                        selected_excerpt=selected_excerpt,
                     ),
                 )
 

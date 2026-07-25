@@ -10,6 +10,7 @@ from astrbot.core.platform.register import unregister_platform_adapters_by_modul
 from tests.fixtures.helpers import (
     NoopAwaitable,
     create_mock_file,
+    create_mock_text_quote,
     create_mock_update,
     make_platform_config,
 )
@@ -80,6 +81,124 @@ def _build_context() -> MagicMock:
     context.bot.username = "test_bot"
     context.bot.id = 12345678
     return context
+
+
+_QUOTED_SOURCE_TEXT = "第一段讲 public-api 仓库。第二段讲别的东西。"
+
+
+def _build_quoted_source_message() -> MagicMock:
+    """构造一条被回复的原消息，供 reply_to_message 使用。"""
+    return create_mock_update(
+        message_text=_QUOTED_SOURCE_TEXT,
+        message_id=42,
+        user_id=555,
+        username="alice",
+    ).message
+
+
+def _find_reply_component(
+    components: list[Comp.BaseMessageComponent],
+) -> Comp.Reply | None:
+    for component in components:
+        if isinstance(component, Comp.Reply):
+            return component
+    return None
+
+
+@pytest.mark.asyncio
+async def test_telegram_manual_quote_populates_reply_selected_excerpt():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        message_text="这个仓库是干嘛的？",
+        reply_to_message=_build_quoted_source_message(),
+        quote=create_mock_text_quote("第一段讲 public-api 仓库。"),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = _find_reply_component(result.message)
+    assert reply is not None
+    assert reply.selected_excerpt == "第一段讲 public-api 仓库。"
+    # 原消息全文必须保留，引用消息里的附件靠 chain 才能进入 LLM 请求
+    assert reply.message_str == _QUOTED_SOURCE_TEXT
+    assert reply.chain is not None
+    assert any(
+        isinstance(component, Comp.Plain) and component.text == _QUOTED_SOURCE_TEXT
+        for component in reply.chain
+    )
+
+
+@pytest.mark.parametrize("is_manual", [False, None])
+@pytest.mark.asyncio
+async def test_telegram_auto_quote_is_ignored(is_manual: bool | None):
+    """只有 is_manual 明确为 True 才算手动选中；服务端自动截取的预览要忽略。"""
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        message_text="这个仓库是干嘛的？",
+        reply_to_message=_build_quoted_source_message(),
+        quote=create_mock_text_quote("第一段讲 public-api", is_manual=is_manual),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = _find_reply_component(result.message)
+    assert reply is not None
+    assert reply.selected_excerpt is None
+
+
+@pytest.mark.asyncio
+async def test_telegram_blank_quote_text_is_ignored():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        message_text="这个仓库是干嘛的？",
+        reply_to_message=_build_quoted_source_message(),
+        quote=create_mock_text_quote("   \n "),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = _find_reply_component(result.message)
+    assert reply is not None
+    assert reply.selected_excerpt is None
+
+
+@pytest.mark.asyncio
+async def test_telegram_reply_without_quote_leaves_excerpt_unset():
+    TelegramPlatformAdapter = _load_telegram_adapter()
+    adapter = TelegramPlatformAdapter(
+        make_platform_config("telegram"),
+        {},
+        asyncio.Queue(),
+    )
+    update = create_mock_update(
+        message_text="这个仓库是干嘛的？",
+        reply_to_message=_build_quoted_source_message(),
+    )
+
+    result = await adapter.convert_message(update, _build_context())
+
+    assert result is not None
+    reply = _find_reply_component(result.message)
+    assert reply is not None
+    assert reply.selected_excerpt is None
 
 
 @pytest.mark.asyncio

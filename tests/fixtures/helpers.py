@@ -100,6 +100,7 @@ def create_mock_update(
     voice: MagicMock | None = None,
     sticker: MagicMock | None = None,
     reply_to_message: MagicMock | None = None,
+    quote: MagicMock | None = None,
     caption: str | None = None,
     entities: list | None = None,
     caption_entities: list | None = None,
@@ -122,6 +123,7 @@ def create_mock_update(
         voice: 语音对象
         sticker: 贴纸对象
         reply_to_message: 回复的消息
+        quote: 部分引用片段（Bot API 7.0 TextQuote），见 create_mock_text_quote
         caption: 说明文字
         entities: 实体列表
         caption_entities: 说明实体列表
@@ -158,6 +160,9 @@ def create_mock_update(
     message.voice = voice
     message.sticker = sticker
     message.reply_to_message = reply_to_message
+    # 显式置空：MagicMock 会为未赋值的属性自动生成 truthy 子 mock，
+    # 会让适配器误以为每条消息都带部分引用。
+    message.quote = quote
     message.caption = caption
     message.entities = entities
     message.caption_entities = caption_entities
@@ -166,6 +171,29 @@ def create_mock_update(
     update.effective_chat = message.chat
 
     return update
+
+
+def create_mock_text_quote(
+    text: str,
+    is_manual: bool | None = True,
+    position: int = 0,
+) -> MagicMock:
+    """创建模拟的 Telegram TextQuote 对象。
+
+    Args:
+        text: 被引用的片段文本
+        is_manual: 是否由发送者手动选中。False / None 表示 Telegram 服务端自动生成的引用
+        position: 片段在原消息中的起始偏移
+
+    Returns:
+        MagicMock: 模拟的 TextQuote 对象
+    """
+    quote = MagicMock()
+    quote.text = text
+    quote.is_manual = is_manual
+    quote.position = position
+    quote.entities = None
+    return quote
 
 
 def create_mock_file(file_path: str = "https://api.telegram.org/file/test.jpg"):

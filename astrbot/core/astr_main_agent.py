@@ -115,7 +115,10 @@ from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_images,
     extract_quoted_message_text,
 )
-from astrbot.core.utils.string_utils import normalize_and_dedupe_strings
+from astrbot.core.utils.string_utils import (
+    normalize_and_dedupe_strings,
+    normalize_optional_text,
+)
 from astrbot.core.workspace import (
     normalize_umo_for_workspace,
     resolve_workspace_root_for_umo,
@@ -850,15 +853,20 @@ async def _process_quote_message(
 
     content_parts = []
     sender_info = f"({quote.sender_nickname}): " if quote.sender_nickname else ""
-    message_str = (
-        await extract_quoted_message_text(
-            event,
-            quote,
-            settings=quoted_message_settings,
+    excerpt = normalize_optional_text(quote.selected_excerpt)
+    if excerpt is not None:
+        # 发送者手动圈出了原消息的一段，只把这段交给模型
+        message_str = f"<selected_excerpt>{excerpt}</selected_excerpt>"
+    else:
+        message_str = (
+            await extract_quoted_message_text(
+                event,
+                quote,
+                settings=quoted_message_settings,
+            )
+            or quote.message_str
+            or "[Empty Text]"
         )
-        or quote.message_str
-        or "[Empty Text]"
-    )
     content_parts.append(f"{sender_info}{message_str}")
 
     image_seg = None

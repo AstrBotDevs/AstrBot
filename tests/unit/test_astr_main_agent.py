@@ -801,9 +801,7 @@ class TestEnsurePersonaAndSkills:
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=("conv-persona", persona, None, False)
         )
-        mock_event.get_extra.side_effect = (
-            lambda key: key == "enable_inline_genui"
-        )
+        mock_event.get_extra.side_effect = lambda key: key == "enable_inline_genui"
         req = ProviderRequest()
         req.conversation = MagicMock(persona_id="conv-persona")
 
@@ -818,9 +816,7 @@ class TestEnsurePersonaAndSkills:
     ):
         """Test inline GenUI instructions are added before conversation setup."""
         module = ama
-        mock_event.get_extra.side_effect = (
-            lambda key: key == "enable_inline_genui"
-        )
+        mock_event.get_extra.side_effect = lambda key: key == "enable_inline_genui"
         req = ProviderRequest()
 
         await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
@@ -1285,6 +1281,122 @@ class TestDecorateLlmRequest:
             await module._decorate_llm_request(mock_event, req, mock_context, config)
 
         assert req.prompt == "Hello"
+
+
+class TestProcessQuoteMessage:
+    """Tests for _process_quote_message function."""
+
+    FULL_TEXT = "第一段讲 public-api 仓库。第二段讲别的东西。"
+
+    def _build_reply(self, selected_excerpt: str | None = None) -> Reply:
+        return Reply(
+            id="42",
+            chain=[Plain(text=self.FULL_TEXT)],
+            sender_id="555",
+            sender_nickname="alice",
+            message_str=self.FULL_TEXT,
+            selected_excerpt=selected_excerpt,
+        )
+
+    @pytest.mark.asyncio
+    async def test_quote_without_selection_uses_full_message(self, mock_event):
+        module = ama
+        mock_event.message_obj.message = [self._build_reply()]
+        req = ProviderRequest(prompt="这个仓库是干嘛的？")
+
+        await module._process_quote_message(mock_event, req, "", MagicMock())
+
+        assert len(req.extra_user_content_parts) == 1
+        assert (
+            req.extra_user_content_parts[0].text
+            == f"<Quoted Message>\n(alice): {self.FULL_TEXT}\n</Quoted Message>"
+        )
+
+    @pytest.mark.asyncio
+    async def test_manual_quote_uses_selected_fragment_only(self, mock_event):
+        module = ama
+        selected = "第一段讲 public-api 仓库。"
+        mock_event.message_obj.message = [self._build_reply(selected_excerpt=selected)]
+        req = ProviderRequest(prompt="这个仓库是干嘛的？")
+
+        await module._process_quote_message(mock_event, req, "", MagicMock())
+
+        quoted_part = req.extra_user_content_parts[0].text
+        assert quoted_part == (
+            "<Quoted Message>\n"
+            f"(alice): <selected_excerpt>{selected}</selected_excerpt>\n"
+            "</Quoted Message>"
+        )
+        assert "第二段讲别的东西" not in quoted_part
+
+    @pytest.mark.asyncio
+    async def test_blank_excerpt_falls_back_to_full_message(self, mock_event):
+        """纯空白的片段等同于没有片段，不能产出空的 <selected_excerpt> 标签。"""
+        module = ama
+        mock_event.message_obj.message = [self._build_reply(selected_excerpt="   \n ")]
+        req = ProviderRequest(prompt="这个仓库是干嘛的？")
+
+        await module._process_quote_message(mock_event, req, "", MagicMock())
+
+        assert (
+            req.extra_user_content_parts[0].text
+            == f"<Quoted Message>\n(alice): {self.FULL_TEXT}\n</Quoted Message>"
+        )
+
+    @pytest.mark.asyncio
+    async def test_manual_quote_without_sender_nickname(self, mock_event):
+        module = ama
+        reply = self._build_reply(selected_excerpt="第一段讲 public-api 仓库。")
+        reply.sender_nickname = ""
+        mock_event.message_obj.message = [reply]
+        req = ProviderRequest(prompt="这个仓库是干嘛的？")
+
+        await module._process_quote_message(mock_event, req, "", MagicMock())
+
+        assert req.extra_user_content_parts[0].text == (
+            "<Quoted Message>\n"
+            "<selected_excerpt>第一段讲 public-api 仓库。</selected_excerpt>\n"
+            "</Quoted Message>"
+        )
+
+    @pytest.mark.asyncio
+    async def test_manual_quote_still_captions_quoted_image(self, mock_event):
+        """片段引用不应影响引用消息里图片的 caption 流程。"""
+        module = ama
+        reply = self._build_reply(selected_excerpt="第一段讲 public-api 仓库。")
+        reply.chain = [Plain(text=self.FULL_TEXT), Image(file="pic.jpg")]
+        mock_event.message_obj.message = [reply]
+        req = ProviderRequest(prompt="这个仓库是干嘛的？")
+
+        provider = MagicMock(spec=Provider)
+        provider.text_chat = AsyncMock(
+            return_value=MagicMock(completion_text="a screenshot")
+        )
+        plugin_context = MagicMock()
+        plugin_context.get_provider_by_id.return_value = provider
+
+        with (
+            patch.object(
+                Image,
+                "convert_to_file_path",
+                AsyncMock(return_value="/tmp/pic.jpg"),
+            ),
+            patch.object(
+                module,
+                "_compress_image_for_provider",
+                AsyncMock(return_value="/tmp/pic.jpg"),
+            ),
+        ):
+            await module._process_quote_message(
+                mock_event, req, "cap-provider", plugin_context
+            )
+
+        quoted_part = req.extra_user_content_parts[0].text
+        assert (
+            "(alice): <selected_excerpt>第一段讲 public-api 仓库。</selected_excerpt>"
+            in quoted_part
+        )
+        assert "[Image Caption in quoted message]: a screenshot" in quoted_part
 
 
 class TestPluginToolFix:

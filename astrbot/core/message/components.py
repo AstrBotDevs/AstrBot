@@ -593,6 +593,8 @@ class Reply(BaseMessageComponent):
     """被引用的消息发送时间"""
     message_str: str | None = ""
     """被引用的消息解析后的纯文本消息字符串"""
+    selected_excerpt: str | None = None
+    """发送者在客户端手动选中的原消息片段, 如 `完整消息中的<部分消息>`"""
 
     text: str | None = ""
     """deprecated"""
