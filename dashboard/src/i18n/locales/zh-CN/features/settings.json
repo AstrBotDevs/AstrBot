@@ -67,8 +67,8 @@
         "subtitle": "文本转图像渲染策略、端点和自定义模板。"
       },
       "telemetry": {
-        "title": "使用统计",
-        "subtitle": "匿名使用数据上报开关。"
+        "title": "匿名使用统计",
+        "subtitle": "启用后将上报匿名使用数据以帮助改进 AstrBot。"
       }
     },
     "messages": {

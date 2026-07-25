@@ -67,8 +67,8 @@
         "subtitle": "Rendering strategy, endpoint, and custom templates for text-to-image."
       },
       "telemetry": {
-        "title": "Telemetry",
-        "subtitle": "Toggle anonymous usage data collection."
+        "title": "Anonymous Usage Statistics",
+        "subtitle": "When enabled, anonymous usage data is collected to help improve AstrBot."
       }
     },
     "messages": {
