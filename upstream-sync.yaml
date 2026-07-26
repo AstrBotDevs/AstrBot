@@ -5,8 +5,21 @@ upstream:
   branch: master
 
 last_synced:
-  commit: f9c6129b9eecdd0a5c4069954baffc27bea02a0a
-  synced_at_utc: 2026-07-25T16:44:02Z
-  sync_method: cherry-pick
-  source_pr: '9342, 9369, 9367, 9358, 9359, 9350, 9327, 9232, 9238, 9234, 9236'
-  note: 'Processed twelve upstream/master commits through f9c6129b9eecdd0a5c4069954baffc27bea02a0a. Included 10e5ca69 plugin log-level support, redesigned around the runtime PluginCatalog rather than upstream global star_map; 1240156f Ruff pin; fcce0105 CPU stats; 04fb05c5 failed-request checkpoints; 94a74e2e lazy FAISS import; b39d5048 plugin-save progress; d5620d94 quoted content safety; ff3b74d4 persona dialog persistence; fb02c727 Tavily date handling; and f9c6129b Telegram partial reply quotes. Skipped 11a5672e and e8819ac2 because their fixes were already present in the fork. The fork separately adopts its nvm-managed Node 26.5.0 and globally installed pnpm 11.15.1 toolchain without Corepack.'
+  commit: 9e3497e6b49f39d62e6105a8beb9df6131435b1e
+  synced_at_utc: 2026-07-26T10:45:12Z
+  sync_method: manual-adaptation
+  source_pr: '9389, 9385, 9236, 9394, 9390, 9381, 9339, 9319, 9386, 9382'
+  note: >-
+    Processed nine upstream/master commits through
+    9e3497e6b49f39d62e6105a8beb9df6131435b1e by manual adaptation. Included
+    fresh-index FAISS dimension validation; zero-valued quoted-message limits;
+    message-outline whitespace; FishAudio model headers/default; correct
+    WebChat image MIME types while retaining the fork's BMP/TIFF/AVIF support;
+    nested OpenAI chat-completion choices; and Dashboard scroll fixes adapted
+    to the current FullLayout and script-setup UI. b4459953 was partially
+    absorbed: DingTalk rich-text self-mention handling and explicit plain-text
+    sends were retained, while the fork kept its command-catalog architecture
+    and generic redacted filter errors rather than restoring upstream
+    star_map/legacy inspection. Skipped e732e956 because its Windows Docker
+    guidance relies on upstream prebuilt images, which conflicts with this
+    fork's source-build astrbot:local contract.
