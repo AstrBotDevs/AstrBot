@@ -124,6 +124,31 @@ async def test_at_bot_then_command_still_wakes(stage):
 
 
 @pytest.mark.asyncio
+async def test_face_text_then_at_bot_still_wakes(stage):
+    """`[表情] 你好 @bot`: the prefix path skips the face text, yet the At
+    branch must still wake the bot."""
+    event = make_event(
+        [Face(id=475), Plain("/干饭 你好"), At(qq=SELF_ID)],
+        "/干饭 你好",
+    )
+    await stage.process(event)
+    assert event.is_wake
+    assert event.is_at_or_wake_command
+
+
+@pytest.mark.asyncio
+async def test_face_text_then_at_other_does_not_wake(stage):
+    """`[表情] 你好 @someone-else`: face-attached text is not a command and
+    the At targets another member, so the bot must stay asleep."""
+    event = make_event(
+        [Face(id=475), Plain("/干饭 你好"), At(qq="99999")],
+        "/干饭 你好",
+    )
+    await stage.process(event)
+    assert not event.is_wake
+
+
+@pytest.mark.asyncio
 async def test_face_after_command_text_still_wakes(stage):
     """A trailing face emoji after a real command must not block waking."""
     event = make_event([Plain("/help"), Face(id=475)], "/help")
