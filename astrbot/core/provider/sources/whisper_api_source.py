@@ -1,6 +1,10 @@
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.network_utils import (
+    create_proxy_client,
+    resolve_openai_httpx_module,
+)
 
 from ..entities import ProviderType
 from ..provider import STTProvider
@@ -25,6 +29,11 @@ class ProviderOpenAIWhisperAPI(STTProvider):
             api_key=self.chosen_api_key,
             base_url=provider_config.get("api_base"),
             timeout=provider_config.get("timeout", NOT_GIVEN),
+            http_client=create_proxy_client(
+                "OpenAI Whisper",
+                provider_config.get("proxy", ""),
+                httpx_module=resolve_openai_httpx_module(),
+            ),
         )
 
         self.set_model(provider_config["model"])
