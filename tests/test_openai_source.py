@@ -9,6 +9,7 @@ from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 from PIL import Image as PILImage
 
+import astrbot.core.provider.sources.atlascloud_source as atlascloud_source_module
 import astrbot.core.provider.sources.openai_source as openai_source_module
 import astrbot.core.provider.sources.request_retry as request_retry
 from astrbot.core.exceptions import EmptyModelOutputError
@@ -154,6 +155,54 @@ def test_atlascloud_provider_keeps_custom_endpoint_and_model():
 
     assert str(provider.client.base_url).rstrip("/") == "https://proxy.example.com/v1"
     assert provider.get_model() == "deepseek-ai/deepseek-v4-pro"
+
+
+@pytest.mark.parametrize("value", ["", None])
+def test_atlascloud_provider_replaces_falsy_endpoint_and_model(value):
+    provider = _make_atlascloud_provider({"api_base": value, "model": value})
+
+    assert str(provider.client.base_url).rstrip("/") == "https://api.atlascloud.ai/v1"
+    assert provider.get_model() == "qwen/qwen3.5-flash"
+
+
+def test_atlascloud_provider_does_not_mutate_input_config():
+    provider_config = {
+        "id": "test-atlascloud",
+        "type": "atlascloud_chat_completion",
+        "key": ["test-key"],
+    }
+
+    ProviderAtlasCloud(provider_config=provider_config, provider_settings={})
+
+    assert "api_base" not in provider_config
+    assert "model" not in provider_config
+
+
+@pytest.mark.asyncio
+async def test_atlascloud_get_models_logs_failure_before_static_fallback(
+    monkeypatch,
+):
+    error = RuntimeError("model endpoint unavailable")
+
+    async def fail_get_models(_self):
+        raise error
+
+    warnings: list[tuple[str, dict]] = []
+    monkeypatch.setattr(ProviderOpenAIOfficial, "get_models", fail_get_models)
+    monkeypatch.setattr(
+        atlascloud_source_module.logger,
+        "warning",
+        lambda message, **kwargs: warnings.append((message, kwargs)),
+    )
+    provider = _make_atlascloud_provider()
+
+    assert await provider.get_models() == atlascloud_source_module.ATLASCLOUD_MODELS
+    assert warnings == [
+        (
+            "Failed to fetch Atlas Cloud models; using the static model list.",
+            {"exc_info": error},
+        ),
+    ]
 
 
 @pytest.mark.asyncio
