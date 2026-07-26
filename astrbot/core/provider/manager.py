@@ -596,6 +596,12 @@ class ProviderManager:
         if provider_config.get("provider_type", "") == "agent_runner":
             return
 
+        if not provider_config.get("type"):
+            raise ValueError(
+                f"Provider {provider_config['id']} is missing the 'type' field; "
+                "its provider source may be invalid or incomplete."
+            )
+
         logger.info(
             "Loading model %s(%s) ...",
             provider_config["type"],
@@ -889,11 +895,11 @@ class ProviderManager:
             for provider in config["provider"]:
                 if provider.get("id", None) == npid:
                     raise ValueError(f"Provider ID {npid} already exists")
-            # add to config
+            # load instance first so an invalid config is not persisted
+            await self.load_provider(new_config)
+            # add to config and save only after a successful load
             config["provider"].append(new_config)
             config.save_config()
-            # load instance
-            await self.load_provider(new_config)
             # sync in-memory config for API queries (e.g., embedding provider list)
             self.providers_config = astrbot_config["provider"]
 
