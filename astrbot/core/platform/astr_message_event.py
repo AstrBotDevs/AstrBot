@@ -251,7 +251,7 @@ class AstrMessageEvent(abc.ABC):
         if not chain:
             return ""
 
-        parts = []
+        parts: list[str] = []
         for i in chain:
             if isinstance(i, Plain):
                 parts.append(i.text)
@@ -310,8 +310,7 @@ class AstrMessageEvent(abc.ABC):
                     parts.append("[引用消息]")
             else:
                 parts.append(f"[{i.type}]")
-            parts.append(" ")
-        return "".join(parts)
+        return " ".join(parts)
 
     def get_message_outline(self) -> str:
         """获取消息概要。

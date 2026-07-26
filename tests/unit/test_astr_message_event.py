@@ -243,6 +243,36 @@ class TestGetMessageInfo:
 class TestGetMessageOutline:
     """Tests for get_message_outline method."""
 
+    def test_outline_joins_components_without_trailing_separator(
+        self,
+        platform_meta,
+        astrbot_message,
+    ):
+        astrbot_message.message = [Plain(text="Hello"), Plain(text="world")]
+        event = ConcreteAstrMessageEvent(
+            message_str="Hello world",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+
+        assert event.get_message_outline() == "Hello world"
+
+    def test_outline_preserves_component_owned_trailing_whitespace(
+        self,
+        platform_meta,
+        astrbot_message,
+    ):
+        astrbot_message.message = [Plain(text="Hello ")]
+        event = ConcreteAstrMessageEvent(
+            message_str="Hello ",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+
+        assert event.get_message_outline() == "Hello "
+
     def test_outline_plain_text(self, astr_message_event):
         """Test outline with plain text message."""
         outline = astr_message_event.get_message_outline()

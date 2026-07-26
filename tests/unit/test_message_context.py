@@ -322,6 +322,20 @@ async def test_message_context_honors_forward_fetch_limit():
 
 
 @pytest.mark.asyncio
+async def test_message_context_zero_forward_fetch_skips_remote_requests():
+    client = _NapCatContextClient()
+    event = _make_event([Forward(id="mock-forward")], client)
+
+    rendered = await MessageContextRenderer(
+        event,
+        settings=QuotedMessageParserSettings(max_forward_fetch=0),
+    ).render_event_components()
+
+    assert "[Forward fetch limit reached]" in (rendered.text or "")
+    assert client.forward_requests == []
+
+
+@pytest.mark.asyncio
 async def test_append_message_component_context_makes_forward_only_request_valid():
     image_url = "https://img.example.com/mock-agent-forward.jpg"
     client = _NapCatContextClient(

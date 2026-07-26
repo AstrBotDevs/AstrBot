@@ -316,15 +316,15 @@
         "quoted_message_parser": {
           "max_component_chain_depth": {
             "description": "转发消息富文本解析深度",
-            "hint": "解析转发消息中的富文本组件链时允许的最大递归深度。"
+            "hint": "解析转发消息中的富文本组件链时允许的最大递归深度。0 仅保留根层，不再解析子层。"
           },
           "max_forward_node_depth": {
             "description": "转发消息嵌套解析深度",
-            "hint": "解析嵌套转发节点时允许的最大递归深度。"
+            "hint": "解析嵌套转发节点时允许的最大递归深度。0 仅保留根层，不再解析子层。"
           },
           "max_forward_fetch": {
             "description": "转发消息递归拉取上限",
-            "hint": "递归调用 get_forward_msg 拉取转发内容的最大次数。"
+            "hint": "递归调用 get_forward_msg 拉取转发内容的最大次数。0 禁止递归拉取转发内容。"
           },
           "warn_on_action_failure": {
             "description": "转发消息解析失败告警",

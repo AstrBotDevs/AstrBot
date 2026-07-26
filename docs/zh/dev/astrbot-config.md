@@ -145,7 +145,7 @@ Persona 的选择优先级和权限语义见 [Persona 人格设定](../use/perso
 
 `web_search`、`websearch_provider` 及各 Provider Key 控制内置网页搜索；`web_search_link` 控制是否附加链接。密钥应在 WebUI 中填写。
 
-`image_compress_enabled` 和 `image_compress_options.max_size/quality` 控制送入模型前的图片压缩。`max_quoted_fallback_images` 与 `quoted_message_parser` 限制引用消息和转发消息展开深度，避免无限抓取。
+`image_compress_enabled` 和 `image_compress_options.max_size/quality` 控制送入模型前的图片压缩。`max_quoted_fallback_images` 与 `quoted_message_parser` 限制引用消息和转发消息展开深度，避免无限抓取。对 `quoted_message_parser` 而言，`0` 是有效边界：深度限制会保留根层并停止子层递归，`max_forward_fetch=0` 会禁止递归调用 `get_forward_msg`。负数或无效值会回退为默认值；该设置不会全局禁止引用消息回退路径中的直接 `get_msg` 调用。
 
 ## 子代理、语音与知识库
 

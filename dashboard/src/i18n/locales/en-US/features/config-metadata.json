@@ -320,15 +320,15 @@
         "quoted_message_parser": {
           "max_component_chain_depth": {
             "description": "Forwarded Rich-Text Parse Depth",
-            "hint": "Maximum recursive depth when parsing rich-text component chains inside forwarded messages."
+            "hint": "Maximum recursive depth when parsing rich-text component chains inside forwarded messages. 0 keeps only the root level and stops child recursion."
           },
           "max_forward_node_depth": {
             "description": "Forward Nesting Parse Depth",
-            "hint": "Maximum recursive depth when parsing nested forwarded nodes."
+            "hint": "Maximum recursive depth when parsing nested forwarded nodes. 0 keeps only the root level and stops child recursion."
           },
           "max_forward_fetch": {
             "description": "Forward Recursive Fetch Limit",
-            "hint": "Maximum number of recursive get_forward_msg fetch operations."
+            "hint": "Maximum number of recursive get_forward_msg fetch operations. 0 disables recursive forwarded-message fetches."
           },
           "warn_on_action_failure": {
             "description": "Warn on Forward Parse Failure",

@@ -104,6 +104,24 @@ def _patch_client(
     )
 
 
+@pytest.mark.parametrize(
+    ("configured_model", "expected_model"),
+    [(None, "s2-pro"), ("", "s2-pro"), ("custom-model", "custom-model")],
+)
+def test_fishaudio_tts_sets_a_model_header(
+    configured_model: str | None,
+    expected_model: str,
+) -> None:
+    provider_config = {"type": "fishaudio_tts_api"}
+    if configured_model is not None:
+        provider_config["model"] = configured_model
+
+    provider = ProviderFishAudioTTSAPI(provider_config, {})
+
+    assert provider.get_model() == expected_model
+    assert provider.headers["model"] == expected_model
+
+
 def test_fishaudio_tts_does_not_log_proxy_credentials(caplog) -> None:
     with caplog.at_level(logging.INFO, logger="astrbot"):
         ProviderFishAudioTTSAPI(

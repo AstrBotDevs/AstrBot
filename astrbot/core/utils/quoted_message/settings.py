@@ -19,7 +19,7 @@ def _read_int_mapping(
         value = int(raw)
     except TypeError, ValueError:
         return default
-    if value <= 0:
+    if value < 0:
         return default
     return value
 

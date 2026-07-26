@@ -1757,6 +1757,7 @@ CONFIG_METADATA_2 = {
                         "enable": False,
                         "api_key": "",
                         "api_base": "https://api.fish.audio/v1",
+                        "model": "s2-pro",
                         "fishaudio-tts-character": "可莉",
                         "fishaudio-tts-reference-id": "",
                         "timeout": "20",
@@ -3872,7 +3873,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.quoted_message_parser.max_component_chain_depth": {
                         "description": "引用解析组件链深度",
                         "type": "int",
-                        "hint": "解析 Reply 组件链时允许的最大递归深度。",
+                        "hint": "解析 Reply 组件链时允许的最大递归深度。0 仅保留根层，不再解析子层。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
@@ -3881,7 +3882,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.quoted_message_parser.max_forward_node_depth": {
                         "description": "引用解析转发节点深度",
                         "type": "int",
-                        "hint": "解析合并转发节点时允许的最大递归深度。",
+                        "hint": "解析合并转发节点时允许的最大递归深度。0 仅保留根层，不再解析子层。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
@@ -3890,7 +3891,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.quoted_message_parser.max_forward_fetch": {
                         "description": "引用解析转发拉取上限",
                         "type": "int",
-                        "hint": "递归拉取 get_forward_msg 的最大次数。",
+                        "hint": "递归拉取 get_forward_msg 的最大次数。0 禁止递归拉取转发内容。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },

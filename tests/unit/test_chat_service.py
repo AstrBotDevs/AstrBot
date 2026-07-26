@@ -13,6 +13,7 @@ from astrbot.core.webchat.queue_manager import WebChatQueueManager
 from astrbot.core.webchat.result_reducer import BotMessageAccumulator
 from astrbot.core.webchat.run_coordinator import WebChatRun, WebChatRunCoordinator
 from astrbot.dashboard.services.chat_service import (
+    WEBCHAT_IMAGE_MIME_TYPES,
     ChatRunState,
     ChatService,
     ChatServiceError,
@@ -30,7 +31,6 @@ def _service() -> ChatService:
     service.platform_history_mgr = MagicMock()
     service.chat_run_states = {}
     service.delete_threads_by_ids = AsyncMock()
-    service.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
     service.preferences = SimpleNamespace(temporary_cache={})
     service.webchat_run_coordinator = WebChatRunCoordinator(WebChatQueueManager())
     return service
@@ -284,7 +284,36 @@ async def test_resolve_webchat_file_prefers_webchat_image_dir_and_reports_mime(
     resolved_path, mime_type = await service.resolve_webchat_file("photo.png")
 
     assert resolved_path == str(image_path.resolve())
-    assert mime_type == "image/jpeg"
+    assert mime_type == "image/png"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("suffix", "expected_mime_type"),
+    WEBCHAT_IMAGE_MIME_TYPES.items(),
+)
+@pytest.mark.parametrize("use_webchat_image_dir", [False, True])
+async def test_resolve_webchat_file_uses_the_image_suffix_mime_type(
+    tmp_path,
+    suffix: str,
+    expected_mime_type: str,
+    use_webchat_image_dir: bool,
+) -> None:
+    service = _service()
+    attachments_dir = tmp_path / "attachments"
+    webchat_img_dir = tmp_path / "imgs"
+    attachments_dir.mkdir()
+    webchat_img_dir.mkdir()
+    service.attachments_dir = str(attachments_dir)
+    service.webchat_img_dir = str(webchat_img_dir)
+    file_dir = webchat_img_dir if use_webchat_image_dir else attachments_dir
+    image_path = file_dir / f"photo{suffix}"
+    image_path.write_bytes(b"image")
+
+    resolved_path, mime_type = await service.resolve_webchat_file(image_path.name)
+
+    assert resolved_path == str(image_path.resolve())
+    assert mime_type == expected_mime_type
 
 
 @pytest.mark.asyncio

@@ -71,7 +71,8 @@ class ProviderFishAudioTTSAPI(TTSProvider):
         self.headers = {
             "Authorization": f"Bearer {self.chosen_api_key}",
         }
-        self.set_model(provider_config.get("model", ""))
+        self.set_model(provider_config.get("model") or "s2-pro")
+        self.headers["model"] = self.get_model()
 
     async def _get_reference_id_by_character(self, character: str) -> str | None:
         """获取角色的reference_id

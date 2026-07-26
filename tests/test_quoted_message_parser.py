@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from astrbot.core.message.components import Image, Plain, Reply
+from astrbot.core.utils.quoted_message.settings import QuotedMessageParserSettings
 from astrbot.core.utils.quoted_message_parser import (
     extract_quoted_message_images,
     extract_quoted_message_text,
@@ -18,8 +19,10 @@ class _DummyAPI:
     ):
         self._responses = responses
         self._param_responses = param_responses or {}
+        self.calls: list[str] = []
 
     async def call_action(self, action: str, **params):
+        self.calls.append(action)
         param_key = (action, tuple(sorted((k, str(v)) for k, v in params.items())))
         if param_key in self._param_responses:
             return self._param_responses[param_key]
@@ -136,6 +139,26 @@ def _make_napcat_event(
     )
 
 
+def test_quoted_message_parser_settings_preserve_zero_limit_overrides() -> None:
+    defaults = QuotedMessageParserSettings()
+
+    settings = defaults.with_overrides(
+        {
+            "max_component_chain_depth": 0,
+            "max_forward_node_depth": 0,
+            "max_forward_fetch": 0,
+        }
+    )
+
+    assert settings.max_component_chain_depth == 0
+    assert settings.max_forward_node_depth == 0
+    assert settings.max_forward_fetch == 0
+    assert (
+        defaults.with_overrides({"max_forward_fetch": -1}).max_forward_fetch
+        == defaults.max_forward_fetch
+    )
+
+
 @pytest.mark.asyncio
 async def test_extract_quoted_message_text_from_reply_chain():
     reply = Reply(id="1", chain=[Plain(text="quoted content")], message_str="")
@@ -232,6 +255,35 @@ async def test_extract_quoted_message_text_fallback_get_msg_and_forward():
     assert "parent" in text
     assert "Alice: hello" in text
     assert "Bob: [Image]world" in text
+
+
+@pytest.mark.asyncio
+async def test_zero_forward_fetch_skips_forward_requests_without_a_limit_warning(
+    caplog,
+):
+    reply = Reply(id="zero-fetch", chain=None, message_str="")
+    event = _make_event(
+        reply,
+        responses={
+            ("get_msg", "zero-fetch"): {
+                "data": {
+                    "message": [
+                        {"type": "text", "data": {"text": "parent"}},
+                        {"type": "forward", "data": {"id": "forward-1"}},
+                    ]
+                }
+            }
+        },
+    )
+
+    text = await extract_quoted_message_text(
+        event,
+        settings=QuotedMessageParserSettings(max_forward_fetch=0),
+    )
+
+    assert text == "parent"
+    assert event.bot.api.calls == ["get_msg"]
+    assert "stop fetching nested forward messages after 0 hops" not in caplog.text
 
 
 @pytest.mark.parametrize(

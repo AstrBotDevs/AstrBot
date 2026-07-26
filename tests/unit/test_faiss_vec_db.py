@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from astrbot.core.db.vec_db.faiss_impl.embedding_storage import EmbeddingStorage
 from astrbot.core.db.vec_db.faiss_impl.vec_db import FaissVecDB
 from astrbot.core.exceptions import KnowledgeBaseUploadError
 
@@ -44,6 +45,21 @@ async def test_insert_batch_raises_friendly_error_for_embedding_count_mismatch()
     assert "期望 2，实际 1" in str(exc_info.value)
     vec_db.document_storage.insert_documents_batch.assert_not_awaited()
     vec_db.embedding_storage.insert_batch.assert_not_awaited()
+
+
+@pytest.mark.parametrize("dimension", [0, -1])
+def test_embedding_storage_rejects_non_positive_dimension_for_fresh_index(
+    tmp_path,
+    dimension: int,
+) -> None:
+    with pytest.raises(ValueError, match="无效的嵌入向量维度"):
+        EmbeddingStorage(dimension, str(tmp_path / "index.faiss"))
+
+
+def test_embedding_storage_accepts_valid_dimension_for_fresh_index() -> None:
+    storage = EmbeddingStorage(4)
+
+    assert storage.index.d == 4
 
 
 @pytest.mark.asyncio

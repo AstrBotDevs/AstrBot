@@ -73,6 +73,12 @@ class EmbeddingStorage:
         if path and os.path.exists(path):
             self.index = self._read_index(path)
         else:
+            if dimension <= 0:
+                raise ValueError(
+                    "无效的嵌入向量维度: "
+                    f"{dimension}。请检查该知识库使用的 Embedding Provider "
+                    "是否正确配置了 embedding_dimensions。",
+                )
             base_index = faiss.IndexFlatL2(dimension)
             self.index = faiss.IndexIDMap(base_index)
 

@@ -49,6 +49,14 @@ if TYPE_CHECKING:
 
 SSE_HEARTBEAT = ": heartbeat\n\n"
 CHAT_RUN_SUBSCRIBER_QUEUE_SIZE = 256
+WEBCHAT_IMAGE_MIME_TYPES = {
+    **{
+        suffix: mime_type
+        for mime_type, suffix in MEDIA_MIME_EXTENSIONS.items()
+        if mime_type.startswith("image/")
+    },
+    ".jpeg": "image/jpeg",
+}
 
 
 def sanitize_upload_filename(filename: str | None) -> str:
@@ -355,7 +363,6 @@ class ChatService:
         self.webchat_img_dir = os.path.join(get_astrbot_data_path(), "webchat", "imgs")
         os.makedirs(self.attachments_dir, exist_ok=True)
 
-        self.supported_imgs = ["jpg", "jpeg", "png", "gif", "webp"]
         self.conv_mgr = conversation_manager
         self.platform_history_mgr = platform_message_history_manager
         self.umop_config_router = umop_config_router
@@ -406,8 +413,8 @@ class ChatService:
         filename_ext = file_path.suffix.lower()
         if filename_ext == ".wav":
             return str(file_path), "audio/wav"
-        if filename_ext[1:] in self.supported_imgs:
-            return str(file_path), "image/jpeg"
+        if mime_type := WEBCHAT_IMAGE_MIME_TYPES.get(filename_ext):
+            return str(file_path), mime_type
         return str(file_path), None
 
     async def resolve_webchat_file_from_dashboard_query(

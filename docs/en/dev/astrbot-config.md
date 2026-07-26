@@ -143,7 +143,7 @@ Local mode operates directly on the AstrBot host and belongs only in a trusted e
 
 `web_search`, `websearch_provider`, and provider-specific keys configure built-in web search; `web_search_link` controls link output. Enter keys through the WebUI.
 
-`image_compress_enabled` and `image_compress_options.max_size/quality` control image compression before model requests. `max_quoted_fallback_images` and `quoted_message_parser` limit quoted and forwarded-message expansion to prevent unbounded fetching.
+`image_compress_enabled` and `image_compress_options.max_size/quality` control image compression before model requests. `max_quoted_fallback_images` and `quoted_message_parser` limit quoted and forwarded-message expansion to prevent unbounded fetching. For `quoted_message_parser`, `0` is a valid boundary: depth limits keep the root level but stop child recursion, and `max_forward_fetch=0` disables recursive `get_forward_msg` calls. Negative or invalid values fall back to defaults; this setting does not globally disable a direct quoted-message `get_msg` fallback.
 
 ## SubAgents, speech, and knowledge base
 
