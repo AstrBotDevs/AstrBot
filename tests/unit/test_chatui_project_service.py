@@ -60,9 +60,7 @@ def test_custom_workspace_rejects_file_path(tmp_path, monkeypatch):
         )
 
 
-def test_custom_workspace_relative_path_uses_astrbot_workspaces(
-    tmp_path, monkeypatch
-):
+def test_custom_workspace_relative_path_uses_astrbot_workspaces(tmp_path, monkeypatch):
     """Relative custom workspace paths should resolve under AstrBot workspaces."""
     relative_workspace = tmp_path / "relative-workspace"
     relative_workspace.mkdir()
@@ -118,10 +116,34 @@ def test_custom_workspace_rejects_workspaces_root(tmp_path, monkeypatch):
         )
 
 
-def test_custom_workspace_accepts_absolute_path_outside_workspaces(
+def test_custom_workspace_accepts_absolute_path_inside_workspaces(
     tmp_path, monkeypatch
 ):
-    """Absolute custom workspace paths may point outside AstrBot workspaces."""
+    """Absolute custom workspace paths may point inside AstrBot workspaces."""
+    workspaces_root = tmp_path / "workspaces"
+    workspaces_root.mkdir()
+    custom_workspace = workspaces_root / "custom"
+    custom_workspace.mkdir()
+    monkeypatch.setattr(
+        "astrbot.core.workspace.get_astrbot_workspaces_path",
+        lambda: str(workspaces_root),
+    )
+
+    workspace_type, workspace_path = ChatUIProjectService._normalize_workspace_config(
+        {
+            "workspace_type": "custom",
+            "workspace_path": str(custom_workspace),
+        }
+    )
+
+    assert workspace_type == "custom"
+    assert workspace_path == str(custom_workspace)
+
+
+def test_custom_workspace_rejects_absolute_path_outside_workspaces(
+    tmp_path, monkeypatch
+):
+    """Absolute custom workspace paths must not escape AstrBot workspaces."""
     outside_workspace = tmp_path / "outside"
     workspaces_root = tmp_path / "workspaces"
     outside_workspace.mkdir()
@@ -131,12 +153,10 @@ def test_custom_workspace_accepts_absolute_path_outside_workspaces(
         lambda: str(workspaces_root),
     )
 
-    workspace_type, workspace_path = ChatUIProjectService._normalize_workspace_config(
-        {
-            "workspace_type": "custom",
-            "workspace_path": str(outside_workspace),
-        }
-    )
-
-    assert workspace_type == "custom"
-    assert workspace_path == str(outside_workspace)
+    with pytest.raises(ChatUIProjectServiceError, match="must stay within"):
+        ChatUIProjectService._normalize_workspace_config(
+            {
+                "workspace_type": "custom",
+                "workspace_path": str(outside_workspace),
+            }
+        )
