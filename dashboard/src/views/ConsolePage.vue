@@ -108,7 +108,9 @@ export default {
 
 <style scoped>
 .console-page {
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 67px);
   margin: 0 auto;
   max-width: 1400px;
   padding: 24px;
@@ -118,12 +120,14 @@ export default {
 .console-header {
   align-items: flex-start;
   display: flex;
+  flex-shrink: 0;
   justify-content: space-between;
   margin-bottom: 24px;
 }
 
 .console-display {
-  height: calc(100vh - 190px);
+  flex: 1;
+  min-height: 0;
   width: 100%;
 }
 
