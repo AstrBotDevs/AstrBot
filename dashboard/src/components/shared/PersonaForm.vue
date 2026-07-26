@@ -3,6 +3,7 @@
     v-model="showDialog"
     :max-width="$vuetify.display.smAndDown ? undefined : '1200px'"
     scrollable
+    persistent
   >
     <v-card
       class="persona-form-card"

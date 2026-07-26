@@ -1322,7 +1322,13 @@ async function saveMessageEdit() {
 async function handleRegenerateMessage(message: ChatRecord, selection?: RegenerateModelSelection) {
   if (!currSessionId.value || isUserMessage(message)) return;
   message.threads = [];
-  await regenerateMessage(currSessionId.value, message, selection?.providerId || "", selection?.modelName || "");
+  await regenerateMessage(
+    currSessionId.value,
+    message,
+    selection?.providerId || "",
+    selection?.modelName || "",
+    enableStreaming.value,
+  );
 }
 
 function handleBotTextSelection(event: MouseEvent, message: ChatRecord) {

@@ -56,21 +56,24 @@ def ensure_dir(dir_path: str | Path) -> None:
     """确保目录存在。如果路径处存在非目录的文件或损坏的符号链接，则先将其删除。"""
     p = Path(dir_path)
     if (p.exists() or p.is_symlink()) and not p.is_dir():
-        logger.warning(f"路径 {p} 已存在但不是目录，正在清理以创建目录。")
+        logger.warning(
+            f"Path {p} exists but is not a directory; removing it before creating "
+            "the directory."
+        )
         try:
             if p.is_dir():
                 shutil.rmtree(p, onerror=on_error)
             else:
                 p.unlink()
         except Exception as e:
-            logger.error(f"清理冲突路径 {p} 失败: {e!s}")
-            raise RuntimeError(f"无法清理冲突路径 {p}：{e!s}") from e
+            logger.error(f"Failed to remove conflicting path {p}: {e!s}")
+            raise RuntimeError(f"Could not remove conflicting path {p}: {e!s}") from e
 
     try:
         p.mkdir(parents=True, exist_ok=True)
     except Exception as e:
-        logger.error(f"创建目录 {p} 失败: {e!s}")
-        raise RuntimeError(f"无法创建目录 {p}：{e!s}") from e
+        logger.error(f"Failed to create directory {p}: {e!s}")
+        raise RuntimeError(f"Could not create directory {p}: {e!s}") from e
 
 
 def port_checker(port: int, host: str = "localhost") -> bool:
@@ -423,6 +426,51 @@ def _normalize_dashboard_version(version: str) -> str:
     ):
         raise ValueError(f"invalid dashboard version: {version!r}")
     return version
+
+
+def is_dashboard_version_compatible(
+    dashboard_version: str | None, current_version: str
+) -> bool:
+    """Check whether a WebUI version matches the current core version.
+
+    Args:
+        dashboard_version: Version read from the WebUI assets/version file.
+        current_version: Current AstrBot core version.
+
+    Returns:
+        True when both versions are valid SemVer values and compare equal.
+    """
+
+    if dashboard_version is None:
+        return False
+    try:
+        return (
+            VersionComparator.compare_version(
+                _normalize_dashboard_version(dashboard_version),
+                _normalize_dashboard_version(current_version),
+            )
+            == 0
+        )
+    except (TypeError, ValueError):
+        return False
+
+
+def is_dashboard_dist_compatible(dist_dir: str | Path, current_version: str) -> bool:
+    """Check whether a WebUI dist is complete and matches the core version.
+
+    Args:
+        dist_dir: Dashboard dist directory path.
+        current_version: Current AstrBot core version.
+
+    Returns:
+        True when the dist has an index file and a compatible assets/version.
+    """
+
+    dist_path = Path(dist_dir)
+    return (dist_path / "index.html").is_file() and is_dashboard_version_compatible(
+        get_dashboard_dist_version(dist_path),
+        current_version,
+    )
 
 
 def should_use_bundled_dashboard_dist(

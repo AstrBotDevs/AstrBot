@@ -371,9 +371,7 @@
 </template>
 
 <script setup lang="ts">
-import { setCustomComponents } from "markstream-vue";
 import { computed, nextTick, reactive, ref } from "vue";
-import "markstream-vue/index.css";
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
@@ -387,6 +385,10 @@ import RegenerateMenu, { type RegenerateModelSelection } from "@/components/chat
 import ThreadedMarkdownMessagePart from "@/components/chat/ThreadedMarkdownMessagePart.vue";
 import StyledMenu from "@/components/shared/StyledMenu.vue";
 import ThemeAwareMarkdownCodeBlock from "@/components/shared/ThemeAwareMarkdownCodeBlock.vue";
+import {
+  CHAT_MARKDOWN_CUSTOM_TAGS,
+  registerChatMarkdownComponents,
+} from "@/components/chat/chatMarkdownComponents";
 import {
   attachmentName,
   attachmentPresentation,
@@ -442,15 +444,11 @@ const emit = defineEmits<{
   openRefs: [refs: unknown];
 }>();
 
-setCustomComponents("chat-message", {
-  ref: RefNode,
-  thread: ThreadNode,
-  code_block: ThemeAwareMarkdownCodeBlock,
-});
+registerChatMarkdownComponents();
 
 const { t } = useI18n();
 const { tm } = useModuleI18n("features/chat");
-const customMarkdownTags = ["ref"];
+const customMarkdownTags = CHAT_MARKDOWN_CUSTOM_TAGS;
 const downloadingFiles = ref(new Set<string>());
 const imagePreview = reactive({ visible: false, url: "" });
 const refsSidebarOpen = ref(false);
@@ -799,6 +797,12 @@ function formatDuration(seconds: number) {
   max-width: min(760px, 82%);
 }
 
+.from-bot .message-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 760px;
+}
+
 .from-user .message-stack {
   align-items: flex-end;
   max-width: 60%;
@@ -1026,11 +1030,14 @@ function formatDuration(seconds: number) {
 
 .image-part {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   border: 0;
   padding: 0;
   margin-top: 8px;
   background: transparent;
   cursor: zoom-in;
+  text-align: left;
 }
 
 .image-part img {

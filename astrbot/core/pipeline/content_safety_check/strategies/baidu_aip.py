@@ -42,11 +42,11 @@ class BaiduAipStrategy(ContentSafetyStrategy):
         if not _is_violation_list(data) or not isinstance(conclusion, str):
             return (False, "")
         count = len(data)
-        parts = [f"百度审核服务发现 {count} 处违规:\n"]
+        parts = [f"Baidu content moderation found {count} violations:\n"]
         for item in data:
             message = item.get("msg")
             if message:
                 parts.append(f"{message};\n")
-        parts.append("\n判断结果:" + conclusion)
+        parts.append("\nEvaluation: " + conclusion)
         info = "".join(parts)
         return (False, info)

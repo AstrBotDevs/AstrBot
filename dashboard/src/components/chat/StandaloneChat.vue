@@ -72,6 +72,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { configRouteApi } from "@/api/v1";
 // biome-ignore lint/style/useImportType: Vue template components require runtime imports.
 import ChatInput from "@/components/chat/ChatInput.vue";
 // biome-ignore lint/style/useImportType: Vue template components require runtime imports.
@@ -112,10 +113,7 @@ async function bindConfigToSession(sessionId: string) {
 
   const umoDetails = buildWebchatUmoDetails(sessionId, false);
 
-  await axios.post("/api/config/umo_abconf_route/update", {
-    umo: umoDetails.umo,
-    conf_id: confId,
-  });
+  await configRouteApi.upsert(umoDetails.umo, { config_id: confId });
 }
 
 async function newSession() {

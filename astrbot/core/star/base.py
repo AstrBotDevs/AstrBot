@@ -5,6 +5,7 @@ from asyncio import Queue
 from typing import TYPE_CHECKING, Any, Protocol
 
 from astrbot.core import html_renderer
+from astrbot.core.log import LogManager
 from astrbot.core.utils.command_parser import CommandParserMixin
 from astrbot.core.utils.plugin_kv_store import PluginKVStoreMixin
 
@@ -23,6 +24,9 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
 
     author: str
     name: str
+    context: _ContextLike
+    logger: logging.Logger
+    """The plugin's dedicated logger, isolated from the global ``astrbot`` logger."""
 
     class _ContextLike(Protocol):
         def get_config(self, umo: str | None = None) -> Any: ...
@@ -41,6 +45,29 @@ class Star(CommandParserMixin, PluginKVStoreMixin):
 
     def __init__(self, context: _ContextLike, config: dict | None = None) -> None:
         self.context = context
+        # Resolve the plugin name from the metadata registered for this module
+        # first (it matches the name the dashboard uses); the loader also
+        # injects a sanitized ``name`` class attribute as a fallback. When both
+        # are absent (e.g. direct instantiation in tests), fall back to the
+        # global logger.
+        metadata = star_map.get(self.__class__.__module__)
+        plugin_name = (metadata.name if metadata else None) or getattr(
+            self, "name", None
+        )
+        try:
+            self.logger = (
+                LogManager.get_plugin_logger(plugin_name)
+                if plugin_name
+                else logging.getLogger("astrbot")
+            )
+            logger.info(
+                "Plugin %s log level: %s.",
+                plugin_name or self.__class__.__name__,
+                logging.getLevelName(self.logger.getEffectiveLevel()),
+            )
+        except AttributeError:
+            # The plugin defines ``logger`` as a read-only property; keep its own.
+            pass
 
     def _get_context_config(self) -> Any:
         get_config = getattr(self.context, "get_config", None)

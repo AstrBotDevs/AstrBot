@@ -9,6 +9,9 @@ import sys
 from dataclasses import dataclass
 from typing import Any
 
+if sys.version_info < (3, 14):
+    from python_ripgrep import search
+
 from astrbot.api import logger
 from astrbot.core.computer.olayer import (
     FileSystemComponent,
@@ -25,6 +28,7 @@ from astrbot.core.utils.astrbot_path import (
 
 from .base import ComputerBooter
 from .bwrap import _decode_shell_output
+from .shipyard_search_file_util import _truncate_long_lines
 
 _BLOCKED_COMMAND_PATTERNS = [
     " rm -rf ",
@@ -270,33 +274,80 @@ class LocalFileSystemComponent(FileSystemComponent):
         """Search file contents using grep-like pattern matching."""
 
         def _run() -> dict[str, Any]:
-            search_path = _ensure_safe_path(path) if path else "."
-            cmd = ["grep", "-rn", pattern, search_path]
-            if after_context is not None:
-                cmd.extend(["-A", str(after_context)])
-            if before_context is not None:
-                cmd.extend(["-B", str(before_context)])
-            if glob:
-                cmd.extend(["--include", glob])
-            try:
-                result = subprocess.run(
-                    cmd,
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
+            if sys.version_info < (3, 14):
+                results = search(
+                    patterns=[pattern],
+                    paths=[path] if path else None,
+                    globs=[glob] if glob else None,
+                    after_context=after_context,
+                    before_context=before_context,
+                    line_number=True,
                 )
                 return {
                     "success": True,
-                    "content": result.stdout,
-                    "error": result.stderr if result.returncode != 0 else "",
+                    "content": _truncate_long_lines("".join(results)),
                 }
+
+            rg_path = shutil.which("rg")
+            if not rg_path:
+                return {
+                    "success": False,
+                    "content": "",
+                    "error": (
+                        "The ripgrep (rg) executable is required for file search on "
+                        "Python 3.14 or later because python-ripgrep 0.0.8 is "
+                        "incompatible."
+                    ),
+                }
+
+            command = [rg_path, "--color=never", "-n", "-e", pattern]
+            if glob:
+                command.extend(["-g", glob])
+            if after_context is not None:
+                command.extend(["-A", str(after_context)])
+            if before_context is not None:
+                command.extend(["-B", str(before_context)])
+            command.extend(["--", path or "."])
+
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    timeout=30,
+                )
             except subprocess.TimeoutExpired:
                 return {
                     "success": False,
-                    "output": "",
-                    "error": "Search timed out.",
+                    "content": "",
+                    "error": "File search timed out after 30 seconds.",
                 }
+            except OSError as exc:
+                return {
+                    "success": False,
+                    "content": "",
+                    "error": f"Unable to start ripgrep: {exc}",
+                }
+
+            stdout = _decode_bytes_with_fallback(
+                result.stdout, preferred_encoding="utf-8"
+            )
+            if result.returncode == 0:
+                return {
+                    "success": True,
+                    "content": _truncate_long_lines(stdout),
+                }
+            if result.returncode == 1:
+                return {"success": True, "content": ""}
+
+            stderr = _decode_bytes_with_fallback(
+                result.stderr, preferred_encoding="utf-8"
+            ).strip()
+            return {
+                "success": False,
+                "content": "",
+                "error": stderr or f"ripgrep exited with code {result.returncode}",
+                "exit_code": result.returncode,
+            }
 
         return await asyncio.to_thread(_run)
 

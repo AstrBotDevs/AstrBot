@@ -227,6 +227,7 @@ def _exercise_unzip_file_windows_path_normalization(
         return [".dockerignore"]
 
     monkeypatch.setattr(updater_module.os, "makedirs", lambda path, exist_ok=True: None)
+    monkeypatch.setattr(updater_module, "ensure_dir", lambda path: None)
     monkeypatch.setattr(updater_module.os.path, "join", ntpath.join)
     monkeypatch.setattr(updater_module.os.path, "normpath", ntpath.normpath)
     monkeypatch.setattr(updater_module.os.path, "commonpath", ntpath.commonpath)
@@ -841,11 +842,11 @@ async def test_fetch_release_info_logs_status_code_and_truncated_body_on_http_er
         lambda message: log_messages.append(message),
     )
 
-    with pytest.raises(Exception, match="解析版本信息失败"):
+    with pytest.raises(Exception, match="Failed to parse release information"):
         await RepoZipUpdator().fetch_release_info(url)
 
-    assert any("状态码: 502" in message for message in log_messages)
-    assert any("内容: " in message for message in log_messages)
+    assert any("status 502" in message for message in log_messages)
+    assert any("response: " in message for message in log_messages)
     assert any("...[truncated]" in message for message in log_messages)
 
 
@@ -984,6 +985,7 @@ def test_repo_unzip_file_rejects_archive_roots_outside_target_dir(
     monkeypatch.setattr(
         zip_updator_module.os, "makedirs", lambda path, exist_ok=True: None
     )
+    monkeypatch.setattr(zip_updator_module, "ensure_dir", lambda path: None)
     monkeypatch.setattr(zip_updator_module.os.path, "join", ntpath.join)
     monkeypatch.setattr(zip_updator_module.os.path, "normpath", ntpath.normpath)
     monkeypatch.setattr(zip_updator_module.os.path, "commonpath", ntpath.commonpath)
@@ -1020,6 +1022,7 @@ def test_repo_unzip_file_handles_archives_without_explicit_root_dir_entry(
     monkeypatch.setattr(
         zip_updator_module.os, "makedirs", lambda path, exist_ok=True: None
     )
+    monkeypatch.setattr(zip_updator_module, "ensure_dir", lambda path: None)
     monkeypatch.setattr(zip_updator_module.os.path, "join", ntpath.join)
     monkeypatch.setattr(zip_updator_module.os.path, "normpath", ntpath.normpath)
     monkeypatch.setattr(zip_updator_module.os.path, "commonpath", ntpath.commonpath)

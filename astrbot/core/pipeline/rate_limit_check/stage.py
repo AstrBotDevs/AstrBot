@@ -53,10 +53,10 @@ class RateLimitStage(Stage):
 
         """
         session_id = event.session_id
-        now = datetime.now()
 
         async with self.locks[session_id]:  # 确保同一会话不会并发修改队列
-            # 检查并处理限流,可能需要多次检查直到满足条件
+            now = datetime.now()
+            # 检查并处理限流，可能需要多次检查直到满足条件
             while True:
                 timestamps = self.event_timestamps[session_id]
                 self._remove_expired_timestamps(timestamps, now)
@@ -72,13 +72,17 @@ class RateLimitStage(Stage):
                 match self.rl_strategy:
                     case RateLimitStrategy.STALL.value:
                         logger.info(
-                            f"会话 {session_id} 被限流｡根据限流策略,此会话处理将被暂停 {stall_duration:.2f} 秒｡",
+                            f"Session {session_id} was rate-limited. Processing will "
+                            f"pause for {stall_duration:.2f} seconds according to the "
+                            "rate-limit policy.",
                         )
                         await asyncio.sleep(stall_duration)
                         now = datetime.now()
                     case RateLimitStrategy.DISCARD.value:
                         logger.info(
-                            f"会话 {session_id} 被限流｡根据限流策略,此请求已被丢弃,直到限额于 {stall_duration:.2f} 秒后重置｡",
+                            f"Session {session_id} was rate-limited. This request was "
+                            "discarded according to the rate-limit policy; the limit "
+                            f"resets in {stall_duration:.2f} seconds.",
                         )
                         event.stop_event()
                         return

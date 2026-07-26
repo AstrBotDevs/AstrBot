@@ -1,6 +1,7 @@
 """Tests for AstrBotCoreLifecycle."""
 
 import asyncio
+import logging
 import os
 from contextlib import ExitStack
 from types import SimpleNamespace
@@ -1286,6 +1287,7 @@ class TestAstrBotCoreLifecycleLoad:
                 new_callable=AsyncMock,
             ),
         ):
+            mock_logger.level = logging.INFO
             # Should not raise, just log the error
             await lifecycle.initialize()
 

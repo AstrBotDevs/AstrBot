@@ -118,7 +118,8 @@ class SessionPluginManager:
                 continue
             if plugin.name in disabled_plugins:
                 logger.debug(
-                    f"插件 {plugin.name} 在会话 {session_id} 中被禁用,跳过处理器 {handler.handler_name}",
+                    f"Plugin {plugin.name} is disabled in session {session_id}; "
+                    f"skipping handler {handler.handler_name}.",
                 )
             else:
                 filtered_handlers.append(handler)

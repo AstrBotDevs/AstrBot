@@ -114,6 +114,7 @@ class WeixinOCAdapter(Platform):
         self._qr_expired_count = 0
         self._context_tokens: dict[str, str] = {}
         self._context_tokens_dirty = False
+        self._context_tokens_revision = 0
         self._typing_states: dict[str, TypingSessionState] = {}
         self._last_inbound_error = ""
         self._typing_keepalive_interval_s = max(
@@ -469,6 +470,7 @@ class WeixinOCAdapter(Platform):
 
     async def _save_account_state(self) -> None:
         normalized_context_tokens = self._normalize_context_tokens(self._context_tokens)
+        context_tokens_revision = self._context_tokens_revision
         self.config["weixin_oc_token"] = self.token or ""
         self.config["weixin_oc_account_id"] = self.account_id or ""
         self.config["weixin_oc_sync_buf"] = self._sync_buf
@@ -489,8 +491,9 @@ class WeixinOCAdapter(Platform):
             platform["weixin_oc_context_tokens"] = normalized_context_tokens
             break
         self._sync_client_state()
-        astrbot_config.save_config()
-        self._context_tokens_dirty = False
+        committed = await astrbot_config.save_config_async()
+        if committed and context_tokens_revision == self._context_tokens_revision:
+            self._context_tokens_dirty = False
 
     def _is_login_session_valid(
         self,
@@ -824,6 +827,7 @@ class WeixinOCAdapter(Platform):
         self.account_id = None
         self._sync_buf = ""
         self._context_tokens = {}
+        self._context_tokens_revision += 1
         self._context_tokens_dirty = False
         self._login_session = None
         await self._save_account_state()
@@ -1056,7 +1060,11 @@ class WeixinOCAdapter(Platform):
             return
         context_token = str(msg.get("context_token", "")).strip()
         if context_token:
-            self._context_tokens[from_user_id] = context_token
+            previous_context_token = self._context_tokens.get(from_user_id)
+            if previous_context_token != context_token:
+                self._context_tokens[from_user_id] = context_token
+                self._context_tokens_revision += 1
+                self._context_tokens_dirty = True
         item_list = msg.get("item_list", [])
         components = await self._item_list_to_components(item_list)
         text = self._message_text_from_item_list(item_list)

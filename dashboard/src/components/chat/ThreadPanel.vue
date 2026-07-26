@@ -56,10 +56,26 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
+import { chatApi } from "@/api/v1";
+import { fetchWithAuth } from "@/api/http";
 import ChatMessageList from "@/components/chat/ChatMessageList.vue";
-import type { ChatRecord, ChatThread, MessagePart } from "@/composables/useMessages";
+import {
+  appendPlain,
+  appendReasoningPart,
+  buildChatRequestFlags,
+  extractReasoningText,
+  finishToolCall,
+  hasPlainText,
+  markMessageStarted,
+  normalizeMessageParts,
+  parseJsonSafe,
+  payloadText,
+  upsertToolCall,
+  type ChatRecord,
+  type MessagePart,
+  type ChatThread,
+} from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
 
 const props = defineProps<{
   modelValue: boolean;
@@ -97,9 +113,7 @@ function close() {
 
 async function loadThread(threadId: string) {
   try {
-    const response = await axios.get("/api/chat/thread/get", {
-      params: { thread_id: threadId },
-    });
+    const response = await chatApi.getThread(threadId);
     const history = response.data?.data?.history || [];
     messages.value = history.map(normalizeRecord);
     scrollToBottom();
@@ -127,7 +141,7 @@ async function send() {
     created_at: new Date().toISOString(),
     content: {
       type: "bot",
-      message: [{ type: "plain", text: "" }],
+      message: [],
       reasoning: "",
       isLoading: true,
     },
@@ -140,16 +154,14 @@ async function send() {
   const abort = new AbortController();
   sending.value = true;
   try {
-    const response = await fetch("/api/chat/thread/send", {
+    const response = await fetchWithAuth(chatApi.sendThreadMessageUrl(props.thread.thread_id), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
       },
       body: JSON.stringify({
-        thread_id: props.thread.thread_id,
         message: [{ type: "plain", text }],
-        enable_streaming: true,
+        flags: buildChatRequestFlags(),
       }),
       signal: abort.signal,
     });
@@ -170,29 +182,20 @@ async function send() {
 
 function normalizeRecord(record: any): ChatRecord {
   const content = record.content || {};
+  const normalizedMessage = normalizeMessageParts(
+    content.message || [],
+    content.reasoning || "",
+  );
   return {
     ...record,
     content: {
       type: content.type || (record.sender_id === "bot" ? "bot" : "user"),
-      message: normalizeParts(content.message || []),
-      reasoning: content.reasoning || "",
+      message: normalizedMessage,
+      reasoning: extractReasoningText(normalizedMessage, content.reasoning || ""),
       agentStats: content.agentStats || content.agent_stats,
       refs: content.refs,
     },
   };
-}
-
-function normalizeParts(parts: unknown): MessagePart[] {
-  if (typeof parts === "string") {
-    return parts ? [{ type: "plain", text: parts }] : [];
-  }
-  if (!Array.isArray(parts)) return [];
-  return parts.map((part: any) => {
-    if (!part || typeof part !== "object") {
-      return { type: "plain", text: String(part ?? "") };
-    }
-    return part;
-  });
 }
 
 async function readSseStream(stream: ReadableStream<Uint8Array>, onPayload: (payload: any) => void) {
@@ -276,7 +279,7 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
   if (type === "plain") {
     markMessageStarted(botRecord);
     if (chainType === "reasoning") {
-      botRecord.content.reasoning = `${botRecord.content.reasoning || ""}${payloadText(data)}`;
+      appendReasoningPart(botRecord, payloadText(data));
       return;
     }
     if (chainType === "tool_call") {
@@ -309,66 +312,6 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
       mediaPart.stored_filename = storedFilename;
     }
     botRecord.content.message.push(mediaPart);
-  }
-}
-
-function appendPlain(record: ChatRecord, text: string, append = true) {
-  markMessageStarted(record);
-  let last = record.content.message[record.content.message.length - 1];
-  if (!last || last.type !== "plain") {
-    last = { type: "plain", text: "" };
-    record.content.message.push(last);
-  }
-  last.text = append ? `${last.text || ""}${text}` : text;
-}
-
-function upsertToolCall(record: ChatRecord, toolCall: any) {
-  markMessageStarted(record);
-  if (!toolCall || typeof toolCall !== "object") return;
-  record.content.message.push({ type: "tool_call", tool_calls: [toolCall] });
-}
-
-function finishToolCall(record: ChatRecord, result: any) {
-  markMessageStarted(record);
-  if (!result || typeof result !== "object") return;
-  const targetId = result.id;
-  for (const part of record.content.message) {
-    if (part.type !== "tool_call" || !Array.isArray(part.tool_calls)) continue;
-    const tool = part.tool_calls.find((item) => item.id === targetId);
-    if (tool) {
-      tool.result = result.result;
-      tool.finished_ts = result.ts || Date.now() / 1000;
-      return;
-    }
-  }
-}
-
-function markMessageStarted(record: ChatRecord) {
-  record.content.isLoading = false;
-}
-
-function hasPlainText(record: ChatRecord) {
-  return record.content.message.some((part) => part.type === "plain" && typeof part.text === "string" && part.text);
-}
-
-function payloadText(value: unknown) {
-  if (typeof value === "string") return value;
-  if (value == null) return "";
-  if (typeof value === "object") {
-    const payload = value as Record<string, unknown>;
-    if (typeof payload.text === "string") return payload.text;
-    if (typeof payload.content === "string") return payload.content;
-    if (typeof payload.message === "string") return payload.message;
-  }
-  return String(value);
-}
-
-function parseJsonSafe(value: unknown) {
-  if (typeof value !== "string") return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
   }
 }
 
