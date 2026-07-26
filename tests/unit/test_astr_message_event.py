@@ -338,6 +338,46 @@ class TestGetMessageOutline:
         outline = event.get_message_outline()
         assert outline == ""
 
+    def test_outline_has_no_trailing_separator(self, platform_meta, astrbot_message):
+        """Test outline joins components without a trailing separator."""
+        astrbot_message.message = [Plain(text="Hello"), Plain(text="world")]
+        event = ConcreteAstrMessageEvent(
+            message_str="Hello world",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        outline = event.get_message_outline()
+        assert outline == "Hello world"
+
+    def test_outline_single_component_has_no_separator(
+        self, platform_meta, astrbot_message
+    ):
+        """Test outline of a single component adds no separator at all."""
+        astrbot_message.message = [Image(file="http://example.com/img.jpg")]
+        event = ConcreteAstrMessageEvent(
+            message_str="",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        outline = event.get_message_outline()
+        assert outline == "[图片]"
+
+    def test_outline_preserves_whitespace_inside_plain_text(
+        self, platform_meta, astrbot_message
+    ):
+        """Test outline keeps whitespace that belongs to the message itself."""
+        astrbot_message.message = [Plain(text="Hello ")]
+        event = ConcreteAstrMessageEvent(
+            message_str="Hello ",
+            message_obj=astrbot_message,
+            platform_meta=platform_meta,
+            session_id="session123",
+        )
+        outline = event.get_message_outline()
+        assert outline == "Hello "
+
     def test_outline_very_long_plain_text(self, platform_meta, astrbot_message):
         """Test outline generation for very long plain text content."""
         long_text = "A" * 20000
