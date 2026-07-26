@@ -836,6 +836,7 @@ class ProviderOpenAIOfficial(Provider):
         """Parse OpenAI ChatCompletion into LLMResponse"""
         llm_response = LLMResponse("assistant")
 
+        # workaround for #9374
         if not completion.choices:
             data = getattr(completion, "data", None)
             if isinstance(data, dict):
