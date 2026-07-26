@@ -1,8 +1,11 @@
 import asyncio
 import threading
 
+import dingtalk_stream
 import pytest
 
+from astrbot.api.message_components import At, Plain
+from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.dingtalk import dingtalk_adapter
 from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
     DINGTALK_RECONNECT_INITIAL_DELAY,
@@ -10,6 +13,29 @@ from astrbot.core.platform.sources.dingtalk.dingtalk_adapter import (
     DingtalkPlatformAdapter,
     _dingtalk_reconnect_delay,
 )
+
+
+def _dingtalk_group_message(**payload) -> dingtalk_stream.ChatbotMessage:
+    """Build a DingTalk group callback message for adapter tests.
+
+    Args:
+        **payload: Callback fields that vary between test cases.
+
+    Returns:
+        A parsed DingTalk chatbot message.
+    """
+    return dingtalk_stream.ChatbotMessage.from_dict(
+        {
+            "conversationId": "conversation",
+            "conversationType": "2",
+            "createAt": 1_700_000_000_000,
+            "msgId": "message",
+            "senderId": "sender",
+            "senderNick": "sender",
+            "chatbotUserId": "bot",
+            **payload,
+        }
+    )
 
 
 def test_dingtalk_reconnect_delay_uses_exponential_backoff():
@@ -76,3 +102,120 @@ async def test_dingtalk_reconnect_delay_wakes_on_terminate(monkeypatch):
             await adapter.terminate()
             run_task.cancel()
             await asyncio.gather(run_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("use_markdown", "expected_key", "expected_param"),
+    [
+        (None, "sampleMarkdown", {"title": "AstrBot", "text": "first\nsecond"}),
+        (False, "sampleText", {"content": "first\nsecond"}),
+    ],
+)
+async def test_dingtalk_text_respects_markdown_mode(
+    use_markdown,
+    expected_key,
+    expected_param,
+):
+    sent = []
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+
+    async def capture_message(open_conversation_id, robot_code, msg_key, msg_param):
+        sent.append((open_conversation_id, robot_code, msg_key, msg_param))
+
+    adapter._send_group_message = capture_message
+    chain = MessageChain().message("first\nsecond").use_markdown(use_markdown)
+
+    await adapter._send_message_chain("group", "conversation", "robot", chain)
+
+    assert sent == [("conversation", "robot", expected_key, expected_param)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "atUsers": [{"dingtalkId": "bot"}],
+            "isInAtList": True,
+            "msgtype": "text",
+            "text": {"content": " /server"},
+        },
+        {
+            "atUsers": [{"dingtalkId": "bot"}],
+            "isInAtList": True,
+            "msgtype": "richText",
+            "content": {
+                "richText": [
+                    {"text": "@ExampleBot"},
+                    {"text": "/server"},
+                ]
+            },
+        },
+    ],
+)
+async def test_dingtalk_self_mention_produces_consistent_command_text(payload):
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+
+    result = await adapter.convert_msg(_dingtalk_group_message(**payload))
+
+    assert result.message_str == "/server"
+    assert len(result.message) == 2
+    assert isinstance(result.message[0], At)
+    assert result.message[0].qq == "bot"
+    assert isinstance(result.message[1], Plain)
+    assert result.message[1].text == "/server"
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_rich_text_preserves_non_self_mention_text():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    message = _dingtalk_group_message(
+        atUsers=[{"dingtalkId": "another-user"}],
+        isInAtList=False,
+        msgtype="richText",
+        content={
+            "richText": [
+                {"text": "@AnotherUser"},
+                {"text": "/server"},
+            ]
+        },
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert result.message_str == "@AnotherUser/server"
+    assert len(result.message) == 3
+    assert isinstance(result.message[0], At)
+    assert result.message[0].qq == "another-user"
+    assert isinstance(result.message[1], Plain)
+    assert result.message[1].text == "@AnotherUser"
+    assert isinstance(result.message[2], Plain)
+    assert result.message[2].text == "/server"
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_rich_text_preserves_other_leading_mention():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    message = _dingtalk_group_message(
+        atUsers=[{"dingtalkId": "another-user"}, {"dingtalkId": "bot"}],
+        isInAtList=True,
+        msgtype="richText",
+        content={
+            "richText": [
+                {"text": "@AnotherUser"},
+                {"text": "@ExampleBot"},
+                {"text": "/server"},
+            ]
+        },
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert result.message_str == "@AnotherUser@ExampleBot/server"
+    assert isinstance(result.message[0], At)
+    assert result.message[0].qq == "another-user"
+    assert isinstance(result.message[1], At)
+    assert result.message[1].qq == "bot"
+    assert isinstance(result.message[2], Plain)
+    assert result.message[2].text == "@AnotherUser"
