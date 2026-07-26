@@ -19,6 +19,8 @@ from astrbot.core.agent.tool_executor import BaseFunctionToolExecutor
 from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.astr_main_agent_resources import (
     BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT,
+    BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT,
+    CONVERSATION_HISTORY_USER_PROMPT,
 )
 from astrbot.core.cron.events import CronMessageEvent
 from astrbot.core.message.components import Image
@@ -555,20 +557,26 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
         conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
         req.conversation = conv
         context = json.loads(conv.history)
+        context_dump = ""
         if context:
             req.contexts = context
             context_dump = req._print_friendly_context()
             req.contexts = []
-            req.system_prompt += (
-                "\n\nBellow is you and user previous conversation history:\n"
-                f"{context_dump}"
-            )
 
+        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT
+        # The task result and the conversation history differ on every wakeup, so
+        # they go in the user turn. Putting them in the system prompt would place
+        # them ahead of the persona and tool blocks that build_main_agent appends,
+        # invalidating the provider's prefix cache on every run.
         bg = json.dumps(extras["background_task_result"], ensure_ascii=False)
-        req.system_prompt += BACKGROUND_TASK_RESULT_WOKE_SYSTEM_PROMPT.format(
-            background_task_result=bg
-        )
-        req.prompt = (
+        prompt_parts = [
+            BACKGROUND_TASK_RESULT_WOKE_USER_PROMPT.format(background_task_result=bg)
+        ]
+        if context_dump:
+            prompt_parts.append(
+                CONVERSATION_HISTORY_USER_PROMPT.format(history=context_dump)
+            )
+        prompt_parts.append(
             "Proceed according to your system instructions. "
             "Output using same language as previous conversation. "
             "If you need to deliver the result to the user immediately, "
@@ -576,6 +584,7 @@ class FunctionToolExecutor(BaseFunctionToolExecutor[AstrAgentContext]):
             "otherwise the user will not see the result. "
             "After completing your task, summarize and output your actions and results. "
         )
+        req.prompt = "\n\n".join(prompt_parts)
         if not req.func_tool:
             req.func_tool = ToolSet()
         req.func_tool.add_tool(

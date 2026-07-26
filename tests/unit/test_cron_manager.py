@@ -1,5 +1,6 @@
 """Tests for CronJobManager."""
 
+import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
@@ -623,3 +624,125 @@ class TestGetNextRunTime:
         next_run = cron_manager._get_next_run_time("non-existent")
 
         assert next_run is None
+
+
+class TestWokeMainAgentPromptCaching:
+    """Tests that a cron wakeup keeps per-run content out of the system prompt.
+
+    Anything that changes between two wakeups must live in the user turn. If it
+    sits in the system prompt it precedes the persona and tool blocks that
+    build_main_agent appends, which invalidates the provider's prefix cache.
+    """
+
+    async def _capture_request(self, cron_manager, mock_context, *, history, cron_job):
+        """Run a wakeup and return the ProviderRequest handed to build_main_agent."""
+        cron_manager.ctx = mock_context
+        captured = {}
+
+        async def fake_build_main_agent(*, event, plugin_context, config, req):
+            captured["req"] = req
+            return None
+
+        conv = MagicMock()
+        conv.history = json.dumps(history)
+        conv.persona_id = None
+
+        with (
+            patch(
+                "astrbot.core.astr_main_agent.build_main_agent",
+                side_effect=fake_build_main_agent,
+            ),
+            patch(
+                "astrbot.core.astr_main_agent._get_session_conv",
+                new=AsyncMock(return_value=conv),
+            ),
+        ):
+            await cron_manager._woke_main_agent(
+                message="scheduled",
+                session_str="cron:FriendMessage:session123",
+                extras={"cron_job": cron_job},
+            )
+
+        assert "req" in captured, "build_main_agent was never reached"
+        return captured["req"]
+
+    @pytest.mark.asyncio
+    async def test_history_goes_to_user_prompt_not_system_prompt(
+        self, cron_manager, mock_context
+    ):
+        """Test conversation history is carried by the user turn."""
+        req = await self._capture_request(
+            cron_manager,
+            mock_context,
+            history=[{"role": "user", "content": "remember my cat Mimi"}],
+            cron_job={"id": "job-1"},
+        )
+
+        assert "Mimi" not in req.system_prompt
+        assert "Mimi" in req.prompt
+
+    @pytest.mark.asyncio
+    async def test_cron_job_payload_goes_to_user_prompt_not_system_prompt(
+        self, cron_manager, mock_context
+    ):
+        """Test the triggering job payload is carried by the user turn."""
+        req = await self._capture_request(
+            cron_manager,
+            mock_context,
+            history=[],
+            cron_job={"id": "job-1", "name": "water-the-plants"},
+        )
+
+        assert "water-the-plants" not in req.system_prompt
+        assert "water-the-plants" in req.prompt
+
+    @pytest.mark.asyncio
+    async def test_system_prompt_identical_across_wakeups(
+        self, cron_manager, mock_context
+    ):
+        """Test two wakeups that differ in history and payload share a system prompt."""
+        first = await self._capture_request(
+            cron_manager,
+            mock_context,
+            history=[{"role": "user", "content": "first conversation"}],
+            cron_job={"id": "job-1", "name": "morning"},
+        )
+        second = await self._capture_request(
+            cron_manager,
+            mock_context,
+            history=[{"role": "user", "content": "a totally different chat"}],
+            cron_job={"id": "job-2", "name": "evening"},
+        )
+
+        assert first.system_prompt == second.system_prompt
+        assert first.prompt != second.prompt
+
+    @pytest.mark.asyncio
+    async def test_system_prompt_keeps_static_wake_rules(
+        self, cron_manager, mock_context
+    ):
+        """Test the static wake instructions still reach the system prompt."""
+        req = await self._capture_request(
+            cron_manager,
+            mock_context,
+            history=[],
+            cron_job={"id": "job-1"},
+        )
+
+        assert "You are an autonomous proactive agent." in req.system_prompt
+        assert "This is NOT a chat turn." in req.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_no_history_block_when_conversation_is_empty(
+        self, cron_manager, mock_context
+    ):
+        """Test the history section is omitted entirely for a fresh conversation."""
+        req = await self._capture_request(
+            cron_manager,
+            mock_context,
+            history=[],
+            cron_job={"id": "job-1"},
+        )
+
+        assert "previous conversation history" not in req.prompt
+        assert "previous conversation history" not in req.system_prompt
