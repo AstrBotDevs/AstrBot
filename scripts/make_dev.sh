@@ -108,18 +108,22 @@ start_managed_process() {
 show_dashboard_credentials() {
   local deadline=$((SECONDS + 30))
   local pattern='Initial username:|Initial password:|Change it after logging in|Username:'
+  local log_path
+  local -a log_paths=("$backend_log" "$backend_err_log")
   while ((SECONDS < deadline)); do
-    if [[ -f "$backend_log" ]] && grep -E "$pattern" "$backend_log" >/dev/null 2>&1; then
-      echo
-      echo "Dashboard credentials (from $(basename "$backend_log")):"
-      grep -E "$pattern" "$backend_log" | sed 's/^/  /'
-      echo
-      return
-    fi
+    for log_path in "${log_paths[@]}"; do
+      if [[ -f "$log_path" ]] && grep -E "$pattern" "$log_path" >/dev/null 2>&1; then
+        echo
+        echo "Dashboard credentials (from $(basename "$log_path")):"
+        grep -E "$pattern" "$log_path" | sed 's/^/  /'
+        echo
+        return
+      fi
+    done
     sleep 0.5
   done
-  echo "Dashboard credentials not found in $(basename "$backend_log") yet."
-  echo "Check the log directly: $backend_log"
+  echo "Dashboard credentials not found in $(basename "$backend_log") or $(basename "$backend_err_log") yet."
+  echo "Check the logs directly: $backend_log and $backend_err_log"
 }
 
 url_is_available() {

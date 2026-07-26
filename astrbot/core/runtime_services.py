@@ -8,7 +8,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from astrbot import logger
 from astrbot.core.agent.follow_up import FollowUpCoordinator
 from astrbot.core.agent.tool_image_cache import ToolImageCache
 from astrbot.core.computer.computer_client import ComputerRuntime
@@ -54,7 +53,9 @@ class RuntimeServices:
 def create_runtime_services() -> RuntimeServices:
     """Create runtime services after the process environment has been prepared."""
     config = AstrBotConfig()
-    LogManager.configure_logger(logger, config)
+    # configure_logger adjusts settings; GetLogger installs the output bridge.
+    runtime_logger = LogManager.GetLogger("astrbot")
+    LogManager.configure_logger(runtime_logger, config)
     LogManager.configure_trace_logger(config)
     db = SQLiteDatabase(DB_PATH)
     webchat_queue_manager = WebChatQueueManager()

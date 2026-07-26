@@ -346,35 +346,38 @@ function Test-Url {
 
 function Show-DashboardCredentials {
     param(
-        [string]$LogPath,
+        [string[]]$LogPaths,
         [int]$TimeoutSeconds = 30
     )
 
     # The backend runs hidden with stdout redirected to the log, so the
     # initial username/password printed at startup never reaches this console.
-    # Poll the log until the credentials banner shows up, then surface it.
+    # Poll both backend logs until the credentials banner shows up, then surface it.
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $pattern = "Initial username:|Initial password:|Change it after logging in|Username:"
 
     while ((Get-Date) -lt $deadline) {
-        if (Test-Path $LogPath) {
-            $lines = Get-Content -LiteralPath $LogPath -ErrorAction SilentlyContinue |
-                Select-String -Pattern $pattern
-            if ($lines) {
-                Write-Host ""
-                Write-Host "Dashboard credentials (from $(Split-Path -Leaf $LogPath)):"
-                foreach ($line in $lines) {
-                    Write-Host "  $($line.Line.Trim())"
+        foreach ($logPath in $LogPaths) {
+            if (Test-Path -LiteralPath $logPath) {
+                $lines = Get-Content -LiteralPath $logPath -ErrorAction SilentlyContinue |
+                    Select-String -Pattern $pattern
+                if ($lines) {
+                    Write-Host ""
+                    Write-Host "Dashboard credentials (from $(Split-Path -Leaf $logPath)):"
+                    foreach ($line in $lines) {
+                        Write-Host "  $($line.Line.Trim())"
+                    }
+                    Write-Host ""
+                    return
                 }
-                Write-Host ""
-                return
             }
         }
         Start-Sleep -Milliseconds 500
     }
 
-    Write-Host "Dashboard credentials not found in $(Split-Path -Leaf $LogPath) yet."
-    Write-Host "Check the log directly: $LogPath"
+    $logNames = ($LogPaths | ForEach-Object { Split-Path -Leaf $_ }) -join " or "
+    Write-Host "Dashboard credentials not found in $logNames yet."
+    Write-Host "Check the logs directly: $($LogPaths -join ' and ')"
 }
 
 switch ($Action) {
@@ -387,7 +390,7 @@ switch ($Action) {
             -StdoutPath $backendLog `
             -StderrPath $backendErrLog `
             -WarmupSeconds 6
-        Show-DashboardCredentials -LogPath $backendLog
+        Show-DashboardCredentials -LogPaths @($backendLog, $backendErrLog)
     }
     "run-dashboard" {
         Start-ManagedProcess `
