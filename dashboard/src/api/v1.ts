@@ -56,7 +56,7 @@ import {
   type UpdateAccountRequest,
   type UpdateRequest,
 } from './generated/openapi-v1';
-import { apiV1Client, httpClient } from './http';
+import { apiV1Client, fetchWithAuth, httpClient } from './http';
 
 openApiV1Client.setConfig({
   axios: httpClient,
@@ -1322,12 +1322,18 @@ export const pluginApi = {
       openApiV1.replacePluginSources({ body: { sources: sources as any } }),
     );
   },
-  installUpload(formData: FormData) {
-    return typed<OpenConfig>(
-      openApiV1.installPluginFromUpload({
-        body: generatedFormData(formData),
-      }),
-    );
+  async installUpload(formData: FormData) {
+    const response = await fetchWithAuth('/api/v1/plugins/install/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(
+        data?.message || `Plugin upload failed (${response.status})`,
+      );
+    }
+    return { data } as AxiosResponse<ApiEnvelope<OpenConfig>>;
   },
   installGithub(body: OpenConfig) {
     return typed<OpenConfig>(
