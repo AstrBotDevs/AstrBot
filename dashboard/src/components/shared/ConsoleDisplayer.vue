@@ -371,9 +371,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .console-displayer-wrapper {
-  height: 100%;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 .console-displayer-wrapper:fullscreen {
@@ -392,7 +393,8 @@ onBeforeUnmount(() => {
 .console-term {
   background-color: #1e1e1e;
   border-radius: 8px;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: auto;
   padding: 16px;

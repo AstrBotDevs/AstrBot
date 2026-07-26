@@ -194,6 +194,7 @@ type ConversationPageVm = {
   dialogEdit: boolean;
   dialogDelete: boolean;
   dialogBatchDelete: boolean;
+  dialogView: boolean;
 };
 
 describe('view dialog layouts', () => {
@@ -422,6 +423,41 @@ describe('view dialog layouts', () => {
     expect(document.body.querySelector('.conversation-modal-body')).not.toBeNull();
     expect(hasCriticalRuntimeWarning(warnSpy.mock.calls)).toBe(false);
     expect(hasCriticalRuntimeWarning(errorSpy.mock.calls)).toBe(false);
+
+    wrapper.unmount();
+  });
+
+  it('lets the conversation card text own preview scrolling', async () => {
+    const wrapper = mountWithVuetify(ConversationPage);
+    const vm = wrapper.vm as unknown as ConversationPageVm;
+
+    await flushPromises();
+
+    vm.dialogView = true;
+    await flushPromises();
+
+    const detailCard = document.body.querySelector('.conversation-detail-card');
+    const actionBar = detailCard?.querySelector(
+      '.conversation-history-actions',
+    );
+    const cardText = detailCard?.querySelector('.v-card-text');
+    const preview = cardText?.querySelector('.conversation-messages-container');
+
+    expect(detailCard).not.toBeNull();
+    expect(actionBar).not.toBeNull();
+    expect(cardText).not.toBeNull();
+    expect(preview).not.toBeNull();
+    expect(actionBar?.parentElement).toBe(detailCard);
+    expect(cardText?.contains(actionBar ?? null)).toBe(false);
+
+    const wheelEvent = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaY: 24,
+    });
+    preview?.dispatchEvent(wheelEvent);
+
+    expect(wheelEvent.defaultPrevented).toBe(false);
 
     wrapper.unmount();
   });

@@ -359,37 +359,37 @@
           </div>
         </v-card-title>
 
-        <v-card-text>
-          <div class="mb-4 d-flex align-center">
-            <v-btn
-              color="secondary"
-              variant="tonal"
-              size="small"
-              class="mr-2"
-              @click="isEditingHistory = !isEditingHistory"
-            >
-              <v-icon class="mr-1">{{
-                isEditingHistory ? 'mdi-eye' : 'mdi-pencil'
-              }}</v-icon>
-              {{
-                isEditingHistory
-                  ? tm('dialogs.view.previewMode')
-                  : tm('dialogs.view.editMode')
-              }}
-            </v-btn>
-            <v-btn
-              v-if="isEditingHistory"
-              color="success"
-              variant="tonal"
-              size="small"
-              :loading="savingHistory"
-              @click="saveHistoryChanges"
-            >
-              <v-icon class="mr-1">mdi-content-save</v-icon>
-              {{ tm('dialogs.view.saveChanges') }}
-            </v-btn>
-          </div>
+        <div class="conversation-history-actions d-flex align-center">
+          <v-btn
+            color="secondary"
+            variant="tonal"
+            size="small"
+            class="mr-2"
+            @click="isEditingHistory = !isEditingHistory"
+          >
+            <v-icon class="mr-1">{{
+              isEditingHistory ? 'mdi-eye' : 'mdi-pencil'
+            }}</v-icon>
+            {{
+              isEditingHistory
+                ? tm('dialogs.view.previewMode')
+                : tm('dialogs.view.editMode')
+            }}
+          </v-btn>
+          <v-btn
+            v-if="isEditingHistory"
+            color="success"
+            variant="tonal"
+            size="small"
+            :loading="savingHistory"
+            @click="saveHistoryChanges"
+          >
+            <v-icon class="mr-1">mdi-content-save</v-icon>
+            {{ tm('dialogs.view.saveChanges') }}
+          </v-btn>
+        </div>
 
+        <v-card-text>
           <!-- 编辑模式 - Monaco编辑器 -->
           <div v-if="isEditingHistory" class="monaco-editor-container">
             <VueMonacoEditor
@@ -411,10 +411,8 @@
           <!-- 预览模式 - 聊天界面 -->
           <div
             v-else
-            ref="messagesContainer"
             class="conversation-messages-container"
             style="background-color: var(--v-theme-surface)"
-            @wheel.prevent="onContainerWheel"
           >
             <!-- 空对话提示 -->
             <div
@@ -733,7 +731,6 @@ const commonStore = useCommonStore();
 const confirmDialog = useConfirmDialog();
 
 const form = ref<FormController | null>(null);
-const messagesContainer = ref<HTMLElement | null>(null);
 
 const conversations = ref<ConversationRecord[]>([]);
 const search = ref('');
@@ -1623,13 +1620,6 @@ function convertContentToMessageParts(content: unknown): MessagePart[] {
   return parts;
 }
 
-function onContainerWheel(event: WheelEvent) {
-  if (!messagesContainer.value) {
-    return;
-  }
-  messagesContainer.value.scrollTop += event.deltaY;
-}
-
 function onMonacoMounted(editor: MonacoEditorLike) {
   editor.onDidChangeModelContent(() => {
     try {
@@ -1674,18 +1664,14 @@ function handleTableOptions(options: TableOptionsLike) {
 
 /* 聊天消息容器样式 */
 .conversation-messages-container {
-  max-height: 500px;
-  overflow-y: auto;
   padding: 8px;
   border-radius: 8px;
   background-color: #f9f9f9;
 }
 
-/* 让 ToolCallCard 内部的 args/result 自然展开，由外层容器统一滚动，避免双滚动条 */
-.conversation-messages-container .detail-json,
-.conversation-messages-container .detail-result {
-  max-height: none;
-  overflow: visible;
+.conversation-history-actions {
+  flex: 0 0 auto;
+  padding: 16px 16px 8px 24px;
 }
 
 /* 历史回放无真实状态数据，隐藏 IPython 工具的"已完成"标签，与其它工具卡片保持一致 */

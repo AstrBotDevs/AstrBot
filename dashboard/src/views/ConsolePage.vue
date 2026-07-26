@@ -112,9 +112,12 @@ async function pipInstall(): Promise<void> {
 
 <style scoped>
 .console-page {
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 67px);
   margin: 0 auto;
   max-width: 1400px;
+  min-height: 0;
   padding: 24px;
   width: 100%;
 }
@@ -122,12 +125,14 @@ async function pipInstall(): Promise<void> {
 .console-header {
   align-items: flex-start;
   display: flex;
+  flex-shrink: 0;
   justify-content: space-between;
   margin-bottom: 24px;
 }
 
 .console-display {
-  height: calc(100vh - 190px);
+  flex: 1;
+  min-height: 0;
   width: 100%;
 }
 
