@@ -322,9 +322,9 @@ class WakingCheckStage(Stage):
         except CommandError as exc:
             logger.info("Command input rejected: %s", exc.diagnostic.code.value)
             await event.send(
-                MessageEventResult().message(
-                    render_diagnostic(exc.diagnostic, event.message_str, "zh-CN")
-                )
+                MessageEventResult()
+                .message(render_diagnostic(exc.diagnostic, event.message_str, "zh-CN"))
+                .use_markdown(False)
             )
             event.stop_event()
             return activated_handlers, handlers_parsed_params, True
@@ -395,11 +395,13 @@ class WakingCheckStage(Stage):
                 except CommandError as exc:
                     logger.info("Command input rejected: %s", exc.diagnostic.code.value)
                     await event.send(
-                        MessageEventResult().message(
+                        MessageEventResult()
+                        .message(
                             render_diagnostic(
                                 exc.diagnostic, event.message_str, "zh-CN"
                             )
                         )
+                        .use_markdown(False)
                     )
                     event.stop_event()
                     return activated_handlers, handlers_parsed_params, True
@@ -408,7 +410,9 @@ class WakingCheckStage(Stage):
                         "Command handler filter failed: %s", safe_error("", exc)
                     )
                     await event.send(
-                        MessageEventResult().message("指令处理失败，请稍后重试。"),
+                        MessageEventResult()
+                        .message("指令处理失败，请稍后重试。")
+                        .use_markdown(False),
                     )
                     event.stop_event()
                     passed = False
@@ -591,10 +595,16 @@ class WakingCheckStage(Stage):
             if handler
             else None
         )
+        plugin_name = plugin.name if plugin else "unknown plugin"
+        logger.error(
+            "Command group filter failed for %s: %s",
+            plugin_name,
+            safe_error("", exc),
+        )
         await event.send(
-            MessageEventResult().message(
-                f"插件 {plugin.name if plugin else 'unknown plugin'}: {exc}",
-            ),
+            MessageEventResult()
+            .message("指令处理失败，请稍后重试。")
+            .use_markdown(False),
         )
         event.stop_event()
 

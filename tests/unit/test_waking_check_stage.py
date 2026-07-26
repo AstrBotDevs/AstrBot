@@ -495,6 +495,7 @@ async def test_command_filter_internal_error_is_redacted_from_response_and_logs(
 
     assert event.stopped is True
     assert event.sent[0].get_plain_text() == "指令处理失败，请稍后重试。"
+    assert event.sent[0].use_markdown_ is False
     assert secret not in event.sent[0].get_plain_text()
     assert fake_logger.error.call_count == 1
     logged = " ".join(
@@ -504,6 +505,40 @@ async def test_command_filter_internal_error_is_redacted_from_response_and_logs(
     )
     assert "super-secret" not in logged
     assert "provider-token" not in logged
+    assert "internal.example" not in logged
+    assert "[REDACTED]" in logged
+    assert "[REDACTED_URL]" in logged
+
+
+@pytest.mark.asyncio
+async def test_command_group_filter_error_is_redacted_and_plain_text(monkeypatch):
+    stage = await make_stage()
+    secret = "api_key=group-secret https://internal.example/group"
+    handler = StarHandlerMetadata(
+        EventType.AdapterMessageEvent,
+        "test.plugin_group",
+        "group",
+        "test.plugin",
+        lambda *_args: None,
+        [],
+    )
+    install_handlers(stage, monkeypatch, [handler])
+    fake_logger = Mock()
+    monkeypatch.setattr(waking, "logger", fake_logger)
+    event = FakeEvent([Plain("/group")], message_text="/group")
+
+    await stage._send_filter_error(event, handler, RuntimeError(secret))
+
+    assert event.stopped is True
+    assert event.sent[0].get_plain_text() == "指令处理失败，请稍后重试。"
+    assert event.sent[0].use_markdown_ is False
+    assert secret not in event.sent[0].get_plain_text()
+    logged = " ".join(
+        str(argument)
+        for call in fake_logger.error.call_args_list
+        for argument in call.args
+    )
+    assert "group-secret" not in logged
     assert "internal.example" not in logged
     assert "[REDACTED]" in logged
     assert "[REDACTED_URL]" in logged

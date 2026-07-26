@@ -279,6 +279,180 @@ async def test_dingtalk_convert_msg_rich_text_group_parses_mentions_and_images()
 
 
 @pytest.mark.asyncio
+async def test_dingtalk_rich_text_strips_a_duplicate_leading_self_mention():
+    adapter = _build_adapter()
+    adapter._remember_sender_binding = AsyncMock()
+    message = SimpleNamespace(
+        create_at=1_700_000_000_000,
+        conversation_type="2",
+        sender_id="user",
+        sender_nick="Alice",
+        chatbot_user_id="bot",
+        message_id="message",
+        at_users=[SimpleNamespace(dingtalk_id="bot")],
+        is_in_at_list=True,
+        conversation_id="conversation",
+        message_type="richText",
+        robot_code="robot",
+        extensions={"content": {}},
+        rich_text_content=SimpleNamespace(
+            rich_text_list=[{"text": "@ExampleBot"}, {"text": "/server"}]
+        ),
+        sender_staff_id="",
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert result.message_str == "/server"
+    assert len(result.message) == 2
+    assert isinstance(result.message[0], At)
+    assert result.message[0].qq == "bot"
+    assert isinstance(result.message[1], Plain)
+    assert result.message[1].text == "/server"
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_rich_text_preserves_text_in_a_leading_self_mention_segment():
+    adapter = _build_adapter()
+    adapter._remember_sender_binding = AsyncMock()
+    message = SimpleNamespace(
+        create_at=1_700_000_000_000,
+        conversation_type="2",
+        sender_id="user",
+        sender_nick="Alice",
+        chatbot_user_id="bot",
+        message_id="message",
+        at_users=[SimpleNamespace(dingtalk_id="bot")],
+        is_in_at_list=True,
+        conversation_id="conversation",
+        message_type="richText",
+        robot_code="robot",
+        extensions={"content": {}},
+        rich_text_content=SimpleNamespace(
+            rich_text_list=[{"text": "@ExampleBot /server"}]
+        ),
+        sender_staff_id="",
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert result.message_str == "/server"
+    assert [
+        component.text for component in result.message if isinstance(component, Plain)
+    ] == ["/server"]
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_rich_text_does_not_treat_missing_ids_as_self_mention():
+    adapter = _build_adapter()
+    adapter._remember_sender_binding = AsyncMock()
+    message = SimpleNamespace(
+        create_at=1_700_000_000_000,
+        conversation_type="2",
+        sender_id="user",
+        sender_nick="Alice",
+        chatbot_user_id=None,
+        message_id="message",
+        at_users=[SimpleNamespace(dingtalk_id=None)],
+        is_in_at_list=True,
+        conversation_id="conversation",
+        message_type="richText",
+        robot_code="robot",
+        extensions={"content": {}},
+        rich_text_content=SimpleNamespace(
+            rich_text_list=[{"text": "@ExampleBot"}, {"text": "/server"}]
+        ),
+        sender_staff_id="",
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert result.message_str == "@ExampleBot/server"
+
+
+@pytest.mark.asyncio
+async def test_dingtalk_rich_text_preserves_a_non_self_leading_mention():
+    adapter = _build_adapter()
+    adapter._remember_sender_binding = AsyncMock()
+    message = SimpleNamespace(
+        create_at=1_700_000_000_000,
+        conversation_type="2",
+        sender_id="user",
+        sender_nick="Alice",
+        chatbot_user_id="bot",
+        message_id="message",
+        at_users=[
+            SimpleNamespace(dingtalk_id="other-user"),
+            SimpleNamespace(dingtalk_id="bot"),
+        ],
+        is_in_at_list=True,
+        conversation_id="conversation",
+        message_type="richText",
+        robot_code="robot",
+        extensions={"content": {}},
+        rich_text_content=SimpleNamespace(
+            rich_text_list=[
+                {"text": "@AnotherUser"},
+                {"text": "@ExampleBot"},
+                {"text": "/server"},
+            ]
+        ),
+        sender_staff_id="",
+    )
+
+    result = await adapter.convert_msg(message)
+
+    assert result.message_str == "@AnotherUser@ExampleBot/server"
+    assert [
+        component.text for component in result.message if isinstance(component, Plain)
+    ] == [
+        "@AnotherUser",
+        "@ExampleBot",
+        "/server",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("use_markdown", "expected_key", "expected_param"),
+    [
+        (None, "sampleMarkdown", {"title": "AstrBot", "text": "first\nsecond"}),
+        (True, "sampleMarkdown", {"title": "AstrBot", "text": "first\nsecond"}),
+        (False, "sampleText", {"content": "first\nsecond"}),
+    ],
+)
+async def test_dingtalk_text_respects_markdown_mode(
+    use_markdown,
+    expected_key,
+    expected_param,
+):
+    adapter = _build_adapter()
+    sent: list[dict] = []
+
+    async def capture_group_message(**kwargs) -> None:
+        sent.append(kwargs)
+
+    adapter._send_group_message = capture_group_message
+    message_chain = MessageChain().message("first\nsecond").use_markdown(use_markdown)
+
+    await adapter._send_message_chain(
+        "group",
+        "conversation",
+        "robot",
+        message_chain,
+    )
+
+    assert sent == [
+        {
+            "open_conversation_id": "conversation",
+            "robot_code": "robot",
+            "msg_key": expected_key,
+            "msg_param": expected_param,
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_dingtalk_convert_msg_private_text_persists_staff_binding():
     adapter = _build_adapter()
 
