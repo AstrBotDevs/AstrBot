@@ -836,6 +836,15 @@ class ProviderOpenAIOfficial(Provider):
         """Parse OpenAI ChatCompletion into LLMResponse"""
         llm_response = LLMResponse("assistant")
 
+        # workaround for #9374
+        if not completion.choices:
+            data = getattr(completion, "data", None)
+            if isinstance(data, dict):
+                try:
+                    completion = ChatCompletion.model_validate(data)
+                except (TypeError, ValueError):
+                    pass
+
         if not completion.choices:
             raise EmptyModelOutputError(
                 f"OpenAI completion has no choices. response_id={completion.id}"

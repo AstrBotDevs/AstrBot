@@ -1456,6 +1456,50 @@ async def test_parse_openai_completion_raises_empty_model_output_error():
 
 
 @pytest.mark.asyncio
+async def test_parse_openai_completion_reads_nested_data_choices():
+    provider = _make_provider()
+    try:
+        completion = ChatCompletion.model_construct(
+            id=None,
+            object="chat.completion",
+            created=None,
+            model=None,
+            choices=None,
+            data={
+                "id": "gen_test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "deepseek/deepseek-v4-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "PONG",
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 38,
+                    "total_tokens": 50,
+                },
+            },
+        )
+
+        response = await provider._parse_openai_completion(completion, tools=None)
+
+        assert response.completion_text == "PONG"
+        assert response.id == "gen_test"
+        assert response.usage is not None
+        assert response.usage.input_other == 12
+        assert response.usage.output == 38
+    finally:
+        await provider.terminate()
+
+
+@pytest.mark.asyncio
 async def test_query_stream_extracts_usage_from_empty_choices_chunk(monkeypatch):
     provider = _make_provider()
     try:
