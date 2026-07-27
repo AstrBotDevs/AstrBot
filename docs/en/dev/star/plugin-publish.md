@@ -4,7 +4,7 @@ After completing your plugin development, you can choose to publish it to the As
 
 AstrBot uses GitHub to host plugins, so you'll need to push your plugin code to the GitHub plugin repository you created earlier.
 
-You can publish your plugin by visiting the [AstrBot Plugin Publish Page](https://cloud.astrbot.app/publish). Once on the website, click the `Sign in with GitHub` button to authorize your GitHub account. After signing in, select your GitHub account and the corresponding plugin repository. The system will automatically parse the plugin metadata (including name, description, author, version, etc.) from the repository. Verify the information is correct, click the `Parse` button, and follow the prompts to complete the publication.
+You can publish your plugin by visiting the [AstrBot Plugin Publish Page](https://cloud.astrbot.app/publish), You need to register an AstrBot Cloud account to publish plugins.
 
 <!-- ![fill out the form](https://files.astrbot.app/docs/source/images/plugin-publish/image.png) -->
 

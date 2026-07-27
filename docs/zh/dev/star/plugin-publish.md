@@ -4,7 +4,7 @@
 
 AstrBot 使用 GitHub 托管插件，因此你需要先将插件代码推送到之前创建的 GitHub 插件仓库中。
 
-你可以前往 [AstrBot 插件发布页面](https://cloud.astrbot.app/publish) 发布你的插件。进入该网站后，点击 `使用 GitHub 登录` 按钮授权 GitHub 账户。登录成功后，选择你的 GitHub 账号和对应的插件仓库，系统会自动解析仓库中的插件元数据。确认信息无误后点击 `解析` 按钮，按照提示完成发布即可。
+你可以前往 [AstrBot 插件发布页面](https://cloud.astrbot.app/publish) 发布你的插件，发布插件需要注册 AstrBot Cloud 账号。
 
 <!-- ![fill out the form](https://files.astrbot.app/docs/source/images/plugin-publish/image.png) -->
 
