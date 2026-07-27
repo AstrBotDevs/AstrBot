@@ -40,7 +40,10 @@ class ProviderCommands:
             err_code = "TEST_FAILED"
             err_reason = safe_error("", e)
             self._log_reachability_failure(
-                provider, provider_capability_type, err_code, err_reason
+                provider,
+                provider_capability_type,
+                err_code,
+                err_reason,
             )
             return False, err_code, err_reason
 
@@ -62,7 +65,7 @@ class ProviderCommands:
             check_results = [None for _ in providers]
 
         display_data = []
-        for provider, reachable in zip(providers, check_results):
+        for provider, reachable in zip(providers, check_results, strict=False):
             meta = provider.meta()
             id_ = meta.id
             error_code = None
@@ -103,7 +106,7 @@ class ProviderCommands:
                     "info": info,
                     "mark": mark,
                     "provider": provider,
-                }
+                },
             )
 
         return display_data
@@ -128,7 +131,7 @@ class ProviderCommands:
 
             if reachability_check_enabled and (llms or ttss or stts):
                 await event.send(
-                    MessageEventResult().message("👀 Testing provider reachability...")
+                    MessageEventResult().message("👀 Testing provider reachability..."),
                 )
 
             llm_data, tts_data, stt_data = await asyncio.gather(
@@ -189,12 +192,12 @@ class ProviderCommands:
         elif idx == "tts":
             if idx2 is None:
                 event.set_result(
-                    MessageEventResult().message("Please enter the index.")
+                    MessageEventResult().message("Please enter the index."),
                 )
                 return
             if idx2 > len(self.context.get_all_tts_providers()) or idx2 < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message("❌ Invalid provider index."),
                 )
                 return
             provider = self.context.get_all_tts_providers()[idx2 - 1]
@@ -205,17 +208,17 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(f"✅ Successfully switched to {id_}."),
             )
         elif idx == "stt":
             if idx2 is None:
                 event.set_result(
-                    MessageEventResult().message("Please enter the index.")
+                    MessageEventResult().message("Please enter the index."),
                 )
                 return
             if idx2 > len(self.context.get_all_stt_providers()) or idx2 < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message("❌ Invalid provider index."),
                 )
                 return
             provider = self.context.get_all_stt_providers()[idx2 - 1]
@@ -226,12 +229,12 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(f"✅ Successfully switched to {id_}."),
             )
         elif isinstance(idx, int):
             if idx > len(self.context.get_all_providers()) or idx < 1:
                 event.set_result(
-                    MessageEventResult().message("❌ Invalid provider index.")
+                    MessageEventResult().message("❌ Invalid provider index."),
                 )
                 return
             provider = self.context.get_all_providers()[idx - 1]
@@ -242,7 +245,86 @@ class ProviderCommands:
                 umo=umo,
             )
             event.set_result(
-                MessageEventResult().message(f"✅ Successfully switched to {id_}.")
+                MessageEventResult().message(f"✅ Successfully switched to {id_}."),
             )
         else:
             event.set_result(MessageEventResult().message("❌ Invalid parameter."))
+
+    async def model_ls(
+        self,
+        event: AstrMessageEvent,
+        idx_or_name: int | str | None = None,
+    ) -> None:
+        """查看或者切换当前 Provider 的模型。"""
+        umo = event.unified_msg_origin
+        provider = self.context.get_using_provider(umo=umo)
+        if provider is None:
+            event.set_result(
+                MessageEventResult().message("未找到任何 LLM 提供商｡请先配置｡"),
+            )
+            return
+
+        try:
+            models = await provider.get_models()
+        except Exception as e:
+            event.set_result(
+                MessageEventResult().message(
+                    f"获取模型列表失败: {safe_error('', e)}",
+                ),
+            )
+            return
+
+        current_model = provider.get_model()
+        if idx_or_name is None:
+            if not models:
+                event.set_result(
+                    MessageEventResult().message(
+                        f"当前模型: {current_model}\n此提供商未返回可切换模型列表｡",
+                    ),
+                )
+                return
+
+            parts = [f"当前模型: {current_model}\n\n可用模型:\n"]
+            for index, model_name in enumerate(models, start=1):
+                suffix = " 👈" if model_name == current_model else ""
+                parts.append(f"{index}. {model_name}{suffix}\n")
+            parts.append("\n使用 /model <序号> 或 /model <模型名> 切换模型｡")
+            event.set_result(MessageEventResult().message("".join(parts)))
+            return
+
+        selected_model: str | None = None
+        if isinstance(idx_or_name, int):
+            if 1 <= idx_or_name <= len(models):
+                selected_model = models[idx_or_name - 1]
+        else:
+            text = idx_or_name.strip()
+            if text.isdigit():
+                model_index = int(text)
+                if 1 <= model_index <= len(models):
+                    selected_model = models[model_index - 1]
+            elif text:
+                selected_model = text
+
+        if not selected_model:
+            event.set_result(MessageEventResult().message("❌ Invalid model index."))
+            return
+
+        provider.set_model(selected_model)
+        provider.provider_config["model"] = selected_model
+
+        cfg = self.context.get_config(umo)
+        providers_config = cfg.get("provider", [])
+        if isinstance(providers_config, list):
+            for provider_config in providers_config:
+                if not isinstance(provider_config, dict):
+                    continue
+                if provider_config.get("id") == provider.meta().id:
+                    provider_config["model"] = selected_model
+                    break
+            cfg.save_config()
+
+        event.set_result(
+            MessageEventResult().message(
+                f"✅ Successfully switched model to {selected_model}.",
+            ),
+        )

@@ -3,6 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from unittest.mock import MagicMock
+
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 
 
@@ -63,7 +65,7 @@ class FallbackStorage:
 async def test_sparse_retriever_uses_fts5_when_available():
     storage = FTSStorage()
     vec_db = SimpleNamespace(document_storage=storage)
-    retriever = SparseRetriever(kb_db=None)
+    retriever = SparseRetriever(kb_db=MagicMock())
 
     results = await retriever.retrieve(
         query="apple",
@@ -80,7 +82,7 @@ async def test_sparse_retriever_uses_fts5_when_available():
 async def test_sparse_retriever_falls_back_to_bm25_when_fts5_is_unavailable():
     storage = FallbackStorage()
     vec_db = SimpleNamespace(document_storage=storage)
-    retriever = SparseRetriever(kb_db=None)
+    retriever = SparseRetriever(kb_db=MagicMock())
 
     results = await retriever.retrieve(
         query="apple",

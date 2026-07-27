@@ -85,10 +85,7 @@ export const LIMITED_SHIKI_LANGUAGE_ALIASES = {
 
 export const LIMITED_SHIKI_SUPPORTED_LANGUAGES = new Set([
   ...BUILT_IN_LANGUAGES,
-  ...LIMITED_SHIKI_LANGUAGES.flatMap((language) => [
-    language.name,
-    ...(language.aliases || []),
-  ]),
+  ...LIMITED_SHIKI_LANGUAGES.flatMap((language) => [language.name, ...(language.aliases || [])]),
 ]);
 
 function getThemeName(theme) {
@@ -167,7 +164,9 @@ function wrapLimitedHighlighter(highlighter) {
     loadLanguage() {
       return Promise.resolve();
     },
-    loadLanguageSync() {},
+    loadLanguageSync() {
+      return undefined;
+    },
     async loadTheme(...themes) {
       const resolved = uniqueThemes(themes.flat());
       if (resolved.length && loadTheme) await loadTheme(...resolved);

@@ -11,13 +11,7 @@
         },
         "agent_runner_type": {
           "description": "Runner",
-          "labels": [
-            "Built-in Agent",
-            "Dify",
-            "Coze",
-            "Alibaba Cloud Bailian Application",
-            "DeerFlow"
-          ]
+          "labels": ["Built-in Agent", "Dify", "Coze", "Alibaba Cloud Bailian Application", "DeerFlow"]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent Runner Provider ID"
@@ -178,6 +172,10 @@
           "booter": {
             "description": "Sandbox Environment Driver"
           },
+          "bwrap_ro_binds": {
+            "description": "Bubblewrap Read Only Binds",
+            "hint": "Additional read-only mount directories for the Bubblewrap sandbox (press Enter to add, multiple can be added. Host system directories /usr, /etc, /opt are mounted read-only at the same location by default)."
+          },
           "shipyard_neo_endpoint": {
             "description": "Shipyard Neo API Endpoint",
             "hint": "Bay API address, default http://127.0.0.1:8114."
@@ -233,6 +231,10 @@
           "shipyard_max_sessions": {
             "description": "Shipyard Max Sessions",
             "hint": "Maximum number of Shipyard sessions an instance can handle."
+          },
+          "bwrap_rw_binds": {
+            "description": "Bubblewrap RW Binds",
+            "hint": "Extra read-write mount directories for Bubblewrap sandbox (press Enter to add, multiple allowed. /tmp and /var/tmp are RW by default, and the entire host system is mounted RO in the same location by default)."
           }
         }
       }
@@ -263,10 +265,7 @@
         },
         "context_limit_reached_strategy": {
           "description": "Handling for History Limits or Context Window Pressure",
-          "labels": [
-            "Truncate by Turns",
-            "Compress by LLM"
-          ],
+          "labels": ["Truncate by Turns", "Compress by LLM"],
           "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
         },
         "llm_compress_instruction": {
@@ -358,11 +357,8 @@
         },
         "tool_schema_mode": {
           "description": "Tool Schema Mode",
-          "hint": "Skills-like sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
-          "labels": [
-            "Skills-like (two-stage)",
-            "Full schema"
-          ]
+          "hint": "Lazy-tool-load sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
+          "labels": ["Lazy-tool-load (two-stage)", "Full schema"]
         },
         "streaming_response": {
           "description": "Streaming Output"
@@ -370,10 +366,7 @@
         "unsupported_streaming_strategy": {
           "description": "Platforms Without Streaming Support",
           "hint": "Select the handling method for platforms that don't support streaming responses. Real-time segmented reply sends content immediately when the system detects segment points like punctuation during streaming reception",
-          "labels": [
-            "Real-time Segmented Reply",
-            "Disable Streaming Response"
-          ]
+          "labels": ["Real-time Segmented Reply", "Disable Streaming Response"]
         },
         "wake_prefix": {
           "description": "Additional LLM Chat Wake Prefix",
@@ -420,7 +413,7 @@
       },
       "appid": {
         "description": "App ID",
-        "hint": "Required. App ID for the current messaging platform. See the platform integration docs for how to obtain it."
+        "hint": "Required. App ID for the QQ Official Bot platform. See the docs for how to obtain it."
       },
       "callback_server_host": {
         "description": "Callback Server Host",
@@ -475,10 +468,7 @@
       },
       "lark_connection_mode": {
         "description": "Subscription Mode",
-        "labels": [
-          "Long Connection Mode",
-          "Webhook Server Mode"
-        ]
+        "labels": ["Long Connection Mode", "Webhook Server Mode"]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
@@ -967,10 +957,7 @@
           "split_mode": {
             "description": "Split Mode",
             "hint": "Used to segment a message. By default, it will be separated by punctuation marks like period, question mark, etc. For example, filling `[。？！]` will remove all periods, question marks, and exclamation marks. re.findall(r'<regex>', text)",
-            "labels": [
-              "Regex",
-              "Words List"
-            ]
+            "labels": ["Regex", "Words List"]
           },
           "regex": {
             "description": "Segmentation Regular Expression",
@@ -1265,12 +1252,7 @@
       "modalities": {
         "description": "Model capabilities",
         "hint": "Modalities supported by the model. If the model does not support images, uncheck image.",
-        "labels": [
-          "Text",
-          "Image",
-          "Audio",
-          "Tool use"
-        ]
+        "labels": ["Text", "Image", "Audio", "Tool use"]
       },
       "custom_headers": {
         "description": "Custom request headers",

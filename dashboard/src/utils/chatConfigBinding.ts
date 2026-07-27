@@ -1,6 +1,6 @@
-export const CHAT_SELECTED_CONFIG_STORAGE_KEY = 'chat.selectedConfigId';
+export const CHAT_SELECTED_CONFIG_STORAGE_KEY = "chat.selectedConfigId";
 
-export type ChatMessageType = 'FriendMessage' | 'GroupMessage';
+export type ChatMessageType = "FriendMessage" | "GroupMessage";
 
 export interface WebchatUmoDetails {
   platformId: string;
@@ -12,7 +12,7 @@ export interface WebchatUmoDetails {
 
 function getFromLocalStorage(key: string, fallback: string): string {
   try {
-    if (typeof localStorage === 'undefined') {
+    if (typeof localStorage === "undefined") {
       return fallback;
     }
     const value = localStorage.getItem(key);
@@ -24,7 +24,7 @@ function getFromLocalStorage(key: string, fallback: string): string {
 
 function setToLocalStorage(key: string, value: string): void {
   try {
-    if (typeof localStorage === 'undefined') {
+    if (typeof localStorage === "undefined") {
       return;
     }
     localStorage.setItem(key, value);
@@ -34,11 +34,11 @@ function setToLocalStorage(key: string, value: string): void {
 }
 
 export function getStoredDashboardUsername(): string {
-  return getFromLocalStorage('user', '').trim() || 'guest';
+  return getFromLocalStorage("user", "").trim() || "guest";
 }
 
 export function getStoredSelectedChatConfigId(): string {
-  return getFromLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, '').trim() || 'default';
+  return getFromLocalStorage(CHAT_SELECTED_CONFIG_STORAGE_KEY, "").trim() || "default";
 }
 
 export function setStoredSelectedChatConfigId(configId: string): void {
@@ -46,15 +46,15 @@ export function setStoredSelectedChatConfigId(configId: string): void {
 }
 
 export function buildWebchatUmoDetails(sessionId: string, isGroup = false): WebchatUmoDetails {
-  const platformId = 'webchat';
+  const platformId = "webchat";
   const username = getStoredDashboardUsername();
-  const messageType: ChatMessageType = isGroup ? 'GroupMessage' : 'FriendMessage';
+  const messageType: ChatMessageType = isGroup ? "GroupMessage" : "FriendMessage";
   const sessionKey = `${platformId}!${username}!${sessionId}`;
   return {
     platformId,
     messageType,
     username,
     sessionKey,
-    umo: `${platformId}:${messageType}:${sessionKey}`
+    umo: `${platformId}:${messageType}:${sessionKey}`,
   };
 }

@@ -1,0 +1,23 @@
+/* MDI Icons Font - served from public/fonts/ */
+@font-face {
+  font-family: "Material Design Icons";
+  src: url("../fonts/materialdesignicons-webfont.eot?v=7.4.47");
+  src: url("../fonts/materialdesignicons-webfont.eot?#iefix&v=7.4.47") format("embedded-opentype"),
+       url("../fonts/materialdesignicons-webfont.woff2?v=7.4.47") format("woff2"),
+       url("../fonts/materialdesignicons-webfont.woff?v=7.4.47") format("woff"),
+       url("../fonts/materialdesignicons-webfont.ttf?v=7.4.47") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+.mdi:before,
+.mdi-set {
+  display: inline-block;
+  font: normal normal normal 24px/1 "Material Design Icons";
+  font-size: inherit;
+  text-rendering: auto;
+  line-height: inherit;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

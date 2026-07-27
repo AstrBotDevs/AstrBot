@@ -1,14 +1,13 @@
 import asyncio
 import os
-import sys
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, override
 from urllib.parse import unquote
 
-from fastapi.responses import Response as FastAPIResponse
+import quart
 from requests import Response
 from wechatpy.enterprise import WeChatClient, parse_message
 from wechatpy.enterprise.crypto import WeChatCrypto
@@ -28,11 +27,10 @@ from astrbot.api.platform import (
 )
 from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
-from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.media_utils import (
     MEDIA_MIME_EXTENSIONS,
-    MediaResolver,
+    convert_audio_to_wav,
     detect_image_mime_type_async,
 )
 from astrbot.core.utils.webhook_utils import log_webhook_info
@@ -40,11 +38,6 @@ from astrbot.core.utils.webhook_utils import log_webhook_info
 from .wecom_event import WecomPlatformEvent
 from .wecom_kf import WeChatKF
 from .wecom_kf_message import WeChatKFMessage
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 
 def _extract_wecom_media_filename(disposition: str | None) -> str | None:
@@ -70,8 +63,8 @@ def _extract_wecom_media_filename(disposition: str | None) -> str | None:
 
 class WecomServer:
     def __init__(self, event_queue: asyncio.Queue, config: dict) -> None:
-        self.server = FastAPIWebhookServer("wecom-webhook")
-        self.port = int(cast(str, config.get("port")))
+        self.server = quart.Quart(__name__)
+        self.port = int(cast("str", config.get("port")))
         self.callback_server_host = config.get("callback_server_host", "0.0.0.0")
         self.server.add_url_rule(
             "/callback/command",
@@ -94,18 +87,19 @@ class WecomServer:
         self.callback: Callable[[BaseMessage], Awaitable[None]] | None = None
         self.shutdown_event = asyncio.Event()
 
-    async def verify(self, request):
+    async def verify(self):
         """内部服务器的 GET 验证入口"""
-        return await self.handle_verify(request)
+        return await self.handle_verify(quart.request)
 
-    async def handle_verify(self, request) -> FastAPIResponse:
+    async def handle_verify(self, request) -> quart.Response:
         """处理验证请求，可被统一 webhook 入口复用
 
         Args:
-            request: FastAPI webhook request 对象
+            request: Quart 请求对象
 
         Returns:
             验证响应
+
         """
         logger.info(f"验证请求有效性: {request.args}")
         args = request.args
@@ -117,23 +111,24 @@ class WecomServer:
                 args.get("echostr"),
             )
             logger.info("验证请求有效性成功。")
-            return FastAPIResponse(content=echo_str, media_type="text/plain")
+            return quart.Response(echo_str, content_type="text/plain")
         except InvalidSignatureException:
             logger.error("验证请求有效性失败，签名异常，请检查配置。")
             raise
 
-    async def callback_command(self, request):
+    async def callback_command(self):
         """内部服务器的 POST 回调入口"""
-        return await self.handle_callback(request)
+        return await self.handle_callback(quart.request)
 
     async def handle_callback(self, request) -> str:
         """处理回调请求，可被统一 webhook 入口复用
 
         Args:
-            request: FastAPI webhook request 对象
+            request: Quart 请求对象
 
         Returns:
             响应内容
+
         """
         data = await request.get_data()
         msg_signature = request.args.get("msg_signature")
@@ -145,7 +140,7 @@ class WecomServer:
             logger.error("解密失败，签名异常，请检查配置。")
             raise
         else:
-            msg = cast(BaseMessage, parse_message(xml))
+            msg = cast("BaseMessage", parse_message(xml))
             logger.info(f"解析成功: {msg}")
 
             if self.callback:
@@ -290,7 +285,13 @@ class WecomPlatformAdapter(Platform):
         message_obj.message_id = uuid.uuid4().hex
         message_obj.raw_message = {"_proactive_send": True}
 
-        event = self.create_event(message_obj)
+        event = WecomPlatformEvent(
+            message_str=message_obj.message_str,
+            message_obj=message_obj,
+            platform_meta=self.meta(),
+            session_id=message_obj.session_id,
+            client=self.client,
+        )
         await event.send(message_chain)
         await super().send_by_session(session, message_chain)
 
@@ -352,8 +353,7 @@ class WecomPlatformAdapter(Platform):
         # 根据请求方法分发到不同的处理函数
         if request.method == "GET":
             return await self.server.handle_verify(request)
-        else:
-            return await self.server.handle_callback(request)
+        return await self.server.handle_callback(request)
 
     async def convert_message(self, msg: BaseMessage) -> AstrBotMessage | None:
         abm = AstrBotMessage()
@@ -363,11 +363,11 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Plain(msg.content)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                cast("str", msg.source),
+                cast("str", msg.source),
             )
             abm.message_id = str(msg.id)
-            abm.timestamp = int(cast(int | str, msg.time))
+            abm.timestamp = int(cast("int | str", msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         elif isinstance(msg, ImageMessage):
@@ -376,11 +376,11 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Image(file=msg.image, url=msg.image)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                cast("str", msg.source),
+                cast("str", msg.source),
             )
             abm.message_id = str(msg.id)
-            abm.timestamp = int(cast(int | str, msg.time))
+            abm.timestamp = int(cast("int | str", msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         elif isinstance(msg, VoiceMessage):
@@ -394,11 +394,8 @@ class WecomPlatformAdapter(Platform):
             await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
-                path_wav = await MediaResolver(
-                    path,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
+                path_wav = os.path.join(temp_dir, f"wecom_{msg.media_id}.wav")
+                path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
                 logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
@@ -409,11 +406,11 @@ class WecomPlatformAdapter(Platform):
             abm.message = [Record(file=path_wav, url=path_wav)]
             abm.type = MessageType.FRIEND_MESSAGE
             abm.sender = MessageMember(
-                cast(str, msg.source),
-                cast(str, msg.source),
+                cast("str", msg.source),
+                cast("str", msg.source),
             )
             abm.message_id = str(msg.id)
-            abm.timestamp = int(cast(int | str, msg.time))
+            abm.timestamp = int(cast("int | str", msg.time))
             abm.session_id = abm.sender.user_id
             abm.raw_message = msg
         else:
@@ -426,7 +423,7 @@ class WecomPlatformAdapter(Platform):
 
     async def convert_wechat_kf_message(self, msg: dict) -> AstrBotMessage | None:
         msgtype = msg.get("msgtype")
-        external_userid = cast(str, msg.get("external_userid"))
+        external_userid = cast("str", msg.get("external_userid"))
         abm = AstrBotMessage()
         abm.raw_message = msg
         abm.raw_message["_wechat_kf_flag"] = None  # 方便处理
@@ -476,11 +473,8 @@ class WecomPlatformAdapter(Platform):
             await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
-                path_wav = await MediaResolver(
-                    path,
-                    media_type="audio",
-                    default_suffix=".wav",
-                ).to_path(target_format="wav")
+                path_wav = os.path.join(temp_dir, f"weixinkefu_{media_id}.wav")
+                path_wav = await convert_audio_to_wav(path, path_wav)
             except Exception as e:
                 logger.error(f"转换音频失败: {e}。如果没有安装 ffmpeg 请先安装。")
                 path_wav = path
@@ -515,25 +509,15 @@ class WecomPlatformAdapter(Platform):
             return
         await self.handle_msg(abm)
 
-    def create_event(self, message: AstrBotMessage) -> WecomPlatformEvent:
-        """Creates a WeCom message event.
-
-        Args:
-            message: AstrBot message object to wrap.
-
-        Returns:
-            Created WeCom message event.
-        """
-        return WecomPlatformEvent(
+    async def handle_msg(self, message: AstrBotMessage) -> None:
+        message_event = WecomPlatformEvent(
             message_str=message.message_str,
             message_obj=message,
             platform_meta=self.meta(),
             session_id=message.session_id,
             client=self.client,
         )
-
-    async def handle_msg(self, message: AstrBotMessage) -> None:
-        self.commit_event(self.create_event(message))
+        self.commit_event(message_event)
 
     def get_client(self) -> WeChatClient:
         return self.client

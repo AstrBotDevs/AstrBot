@@ -4,6 +4,7 @@ import uuid
 from enum import Enum
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 from zipfile import ZipFile
 
 import click
@@ -62,7 +63,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
         release_url = f"https://api.github.com/repos/{author}/{repo}/releases"
         try:
             with httpx.Client(
-                proxy=proxy if proxy else None,
+                proxy=proxy or None,
                 follow_redirects=True,
             ) as client:
                 resp = client.get(release_url)
@@ -86,7 +87,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
 
         # Download and extract
         with httpx.Client(
-            proxy=proxy if proxy else None,
+            proxy=proxy or None,
             follow_redirects=True,
         ) as client:
             resp = client.get(download_url)
@@ -113,7 +114,7 @@ def get_git_repo(url: str, target_path: Path, proxy: str | None = None) -> None:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def load_yaml_metadata(plugin_dir: Path) -> dict:
+def load_yaml_metadata(plugin_dir: Path) -> dict[str, Any]:
     """Load plugin metadata from metadata.yaml file
 
     Args:
@@ -126,7 +127,10 @@ def load_yaml_metadata(plugin_dir: Path) -> dict:
     yaml_path = plugin_dir / "metadata.yaml"
     if yaml_path.exists():
         try:
-            return yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return dict[str, Any](data)
+            return {}
         except Exception as e:
             click.echo(f"Failed to read {yaml_path}: {e}", err=True)
     return {}
@@ -144,10 +148,9 @@ def build_plug_list(plugins_dir: Path) -> list:
     """
     # Get local plugin info
     result = []
-    if plugins_dir.is_dir():
-        for plugin_dir in plugins_dir.iterdir():
-            if not plugin_dir.is_dir():
-                continue
+    if plugins_dir.exists():
+        for plugin_name in [d.name for d in plugins_dir.glob("*") if d.is_dir()]:
+            plugin_dir = plugins_dir / plugin_name
 
             # Load metadata from metadata.yaml
             metadata = load_yaml_metadata(plugin_dir)
@@ -172,44 +175,54 @@ def build_plug_list(plugins_dir: Path) -> list:
                 )
 
     # Get online plugin list
-    online_plugins_dict = {}
+    online_plugins = []
     try:
         with httpx.Client() as client:
             resp = client.get("https://api.soulter.top/astrbot/plugins")
             resp.raise_for_status()
             data = resp.json()
             for plugin_id, plugin_info in data.items():
-                online_plugins_dict[str(plugin_id)] = {
-                    "name": str(plugin_id),
-                    "desc": str(plugin_info.get("desc", "")),
-                    "version": str(plugin_info.get("version", "")),
-                    "author": str(plugin_info.get("author", "")),
-                    "repo": str(plugin_info.get("repo", "")),
-                    "status": PluginStatus.NOT_INSTALLED,
-                    "local_path": None,
-                }
+                online_plugins.append(
+                    {
+                        "name": str(plugin_id),
+                        "desc": str(plugin_info.get("desc", "")),
+                        "version": str(plugin_info.get("version", "")),
+                        "author": str(plugin_info.get("author", "")),
+                        "repo": str(plugin_info.get("repo", "")),
+                        "status": PluginStatus.NOT_INSTALLED,
+                        "local_path": None,
+                    },
+                )
     except Exception as e:
         click.echo(f"Failed to get online plugin list: {e}", err=True)
 
     # Compare with online plugins and update status
+    online_plugin_names = {plugin["name"] for plugin in online_plugins}
     for local_plugin in result:
-        online_plugin = online_plugins_dict.pop(local_plugin["name"], None)
-        if online_plugin is None:
+        if local_plugin["name"] in online_plugin_names:
+            # Find the corresponding online plugin
+            online_plugin = next(
+                p for p in online_plugins if p["name"] == local_plugin["name"]
+            )
+            if (
+                VersionComparator.compare_version(
+                    local_plugin["version"] or "",
+                    online_plugin["version"] or "",
+                )
+                < 0
+            ):
+                local_plugin["status"] = PluginStatus.NEED_UPDATE
+        else:
             # Local plugin is not published online
             local_plugin["status"] = PluginStatus.NOT_PUBLISHED
-            continue
-
-        if (
-            VersionComparator.compare_version(
-                local_plugin["version"],
-                online_plugin["version"],
-            )
-            < 0
-        ):
-            local_plugin["status"] = PluginStatus.NEED_UPDATE
 
     # Add uninstalled online plugins
-    result.extend(online_plugins_dict.values())
+    for online_plugin in online_plugins:
+        if not any(plugin["name"] == online_plugin["name"] for plugin in result):
+            clean: dict[str, str] = {
+                k: v for k, v in online_plugin.items() if v is not None
+            }
+            result.append(clean)
 
     return result
 
@@ -315,7 +328,7 @@ def manage_plugin(
     # Check if plugin exists
     if is_update and not target_path.exists():
         raise click.ClickException(
-            f"Plugin {plugin_name} is not installed and cannot be updated"
+            f"Plugin {plugin_name} is not installed and cannot be updated",
         )
 
     # Backup existing plugin
@@ -334,7 +347,7 @@ def manage_plugin(
         if is_update and backup_path is not None and backup_path.exists():
             shutil.rmtree(backup_path)
         click.echo(
-            f"Plugin {plugin_name} {'updated' if is_update else 'installed'} successfully"
+            f"Plugin {plugin_name} {'updated' if is_update else 'installed'} successfully",
         )
     except Exception as e:
         if target_path.exists():
@@ -343,4 +356,4 @@ def manage_plugin(
             shutil.move(backup_path, target_path)
         raise click.ClickException(
             f"Error {'updating' if is_update else 'installing'} plugin {plugin_name}: {e}",
-        )
+        ) from e

@@ -19,20 +19,14 @@
     </div>
 </template>
 
-<script>
-import { useI18n, useModuleI18n } from '@/i18n/composables';
-import { PersonaManager } from '@/views/persona';
+<script lang="ts">
+import { PersonaManager } from "@/views/persona";
 
 export default {
-    name: 'PersonaPage',
-    components: {
-        PersonaManager
-    },
-    setup() {
-        const { t } = useI18n();
-        const { tm } = useModuleI18n('features/persona');
-        return { t, tm };
-    }
+  name: "PersonaPage",
+  components: {
+    PersonaManager,
+  },
 };
 </script>
 

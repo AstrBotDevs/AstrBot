@@ -8,7 +8,7 @@
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ja.md">日本語</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_fr.md">Français</a> ｜
 <a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_es.md">Español</a> ｜
-<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a> 
+<a href="https://github.com/AstrBotDevs/AstrBot/blob/master/README_ru.md">Русский</a>
 
 <br>
 
@@ -252,7 +252,7 @@ Special thanks to all Contributors and plugin developers for their contributions
 Open Source Friends ❤️
 
 - [NapNeko/NapCatQQ](https://github.com/NapNeko/NapCatQQ) - The amazing cat framework
-- [Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot) - The powerful "digital life" in your QQ! 
+- [Mai-with-u/MaiBot](https://github.com/Mai-with-u/MaiBot) - The powerful "digital life" in your QQ!
 
 ## ⭐ Star History
 

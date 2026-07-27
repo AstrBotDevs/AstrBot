@@ -71,7 +71,7 @@
   },
   "factDialog": {
     "title": "Memory Fact",
-    "id": "ID", 
+    "id": "ID",
     "docId": "Document ID",
     "createdAt": "Created At",
     "updatedAt": "Updated At",
@@ -94,4 +94,4 @@
     "metadataParseError": "Unable to parse metadata",
     "relationNoMemoryData": "This relation has no associated memory data"
   }
-} 
+}

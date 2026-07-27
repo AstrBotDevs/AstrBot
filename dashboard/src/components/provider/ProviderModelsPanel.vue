@@ -1,661 +1,508 @@
 <template>
   <div class="provider-models-panel">
-    <div class="provider-models-toolbar">
+    <div class="provider-models-head">
       <div class="provider-models-title-wrap">
-        <h3 class="provider-models-title">{{ tm('models.title') }}</h3>
-        <small class="provider-models-subtitle">{{ tm('models.available') }} {{ availableCount }}</small>
+        <h3 class="provider-models-title">{{ tm("models.configured") }}</h3>
+        <small v-if="availableCount" class="provider-models-subtitle"
+          >{{ tm("models.available") }} {{ availableCount }}</small
+        >
       </div>
-
-      <div class="provider-models-toolbar__actions">
-        <v-text-field
-          v-model="modelSearchProxy"
-          density="compact"
-          prepend-inner-icon="mdi-magnify"
-          clearable
-          hide-details
-          variant="solo-filled"
-          flat
-          class="provider-models-search"
-          :placeholder="tm('models.searchPlaceholder')"
-        />
-
+      <v-text-field
+        v-model="modelSearchProxy"
+        density="compact"
+        prepend-inner-icon="mdi-magnify"
+        clearable
+        hide-details
+        variant="solo-filled"
+        flat
+        class="provider-models-search"
+        :placeholder="tm('models.searchPlaceholder')"
+      />
+      <div class="provider-models-actions">
         <v-btn
           color="primary"
           prepend-icon="mdi-download"
           :loading="loadingModels"
-          variant="tonal"
-          rounded="xl"
           @click="emit('fetch-models')"
+          variant="tonal"
+          size="small"
         >
-          {{ isSourceModified ? tm('providerSources.saveAndFetchModels') : tm('providerSources.fetchModels') }}
+          {{
+            isSourceModified
+              ? tm("providerSources.saveAndFetchModels")
+              : tm("providerSources.fetchModels")
+          }}
         </v-btn>
-
         <v-btn
           color="primary"
           prepend-icon="mdi-pencil-plus"
           variant="text"
-          rounded="xl"
+          size="small"
           @click="emit('open-manual-model')"
         >
-          {{ tm('models.manualAddButton') }}
+          {{ tm("models.manualAddButton") }}
         </v-btn>
       </div>
     </div>
 
-    <div class="provider-models-sections">
-      <section class="provider-models-section">
-        <div class="provider-models-section__head">
-          <div class="provider-models-section__title">{{ tm('models.configured') }}</div>
-          <v-chip size="x-small" variant="tonal" label>{{ configuredEntries.length }}</v-chip>
-        </div>
-
-        <div v-if="configuredEntries.length" class="provider-models-list">
+    <v-list density="compact" class="provider-models-list">
+      <template v-if="entries.length > 0">
+        <template
+          v-for="entry in entries"
+          :key="
+            entry.type === 'configured'
+              ? `provider-${entry.provider.id}`
+              : `model-${entry.model}`
+          "
+        >
           <v-tooltip
-            v-for="entry in configuredEntries"
-            :key="entry.provider.id"
             location="top"
             max-width="400"
+            v-if="entry.type === 'configured'"
           >
-            <template #activator="{ props: tooltipProps }">
-              <div v-bind="tooltipProps" class="provider-model-row">
-                <button
-                  type="button"
-                  class="provider-model-row__main"
-                  @click="emit('open-provider-edit', entry.provider)"
+            <template #activator="{ props }">
+              <v-list-item
+                v-bind="props"
+                class="provider-compact-item"
+                @click="emit('open-provider-edit', entry.provider)"
+              >
+                <v-list-item-title class="font-weight-medium text-truncate">
+                  {{ entry.provider.id }}
+                </v-list-item-title>
+                <v-list-item-subtitle
+                  class="provider-model-subtitle d-flex align-center ga-1"
                 >
-                  <div class="provider-model-row__title">{{ entry.provider.id }}</div>
-                  <div class="provider-model-row__subtitle">{{ entry.provider.model }}</div>
-                  <div class="provider-model-row__meta">
-                    <v-tooltip
-                      v-for="item in capabilityBadges(entry)"
-                      :key="item.key"
-                      location="top"
-                      max-width="320"
-                    >
-                      <template #activator="{ props: badgeTooltipProps }">
-                        <span
-                          v-bind="badgeTooltipProps"
-                          class="provider-model-row__badge"
-                          :class="{
-                            'provider-model-row__badge--enabled': item.enabled,
-                            'provider-model-row__badge--disabled': !item.enabled
-                          }"
-                          @click.stop
-                        >
-                          <v-icon size="14">{{ item.icon }}</v-icon>
-                        </span>
-                      </template>
-                      <span>{{ item.tooltip }}</span>
-                    </v-tooltip>
-                    <v-tooltip
-                      v-if="formatContextLimit(entry.metadata)"
-                      location="top"
-                      max-width="320"
-                    >
-                      <template #activator="{ props: contextTooltipProps }">
-                        <span
-                          v-bind="contextTooltipProps"
-                          class="provider-model-row__badge provider-model-row__badge--text provider-model-row__badge--enabled"
-                          @click.stop
-                        >
-                          {{ formatContextLimit(entry.metadata) }}
-                        </span>
-                      </template>
-                      <span>{{
-                        tm('models.metadata.context', {
-                          tokens: formatContextLimit(entry.metadata)
-                        })
-                      }}</span>
-                    </v-tooltip>
-                  </div>
-                </button>
-
-                <div class="provider-model-row__actions" @click.stop>
-                  <v-switch
-                    :model-value="entry.provider.enable"
-                    density="compact"
-                    inset
-                    hide-details
-                    color="primary"
-                    class="provider-model-row__switch"
-                    :disabled="isProviderSaving(entry.provider.id)"
-                    @update:modelValue="emit('toggle-provider-enable', entry.provider, $event)"
-                  ></v-switch>
-
-                  <v-tooltip location="top">
-                    <template #activator="{ props: testTooltipProps }">
-                      <v-btn
-                        v-bind="testTooltipProps"
-                        icon="mdi-connection"
-                        size="small"
-                        variant="text"
-                        :disabled="!entry.provider.enable || isProviderSaving(entry.provider.id)"
-                        :loading="isProviderTesting(entry.provider.id)"
-                        @click.stop="emit('test-provider', entry.provider)"
-                      ></v-btn>
+                  <span>{{ entry.provider.model }}</span>
+                  <v-tooltip
+                    v-for="item in capabilityBadges(entry)"
+                    :key="item.key"
+                    location="top"
+                    max-width="320"
+                  >
+                    <template #activator="{ props: badgeTooltipProps }">
+                      <span
+                        v-bind="badgeTooltipProps"
+                        class="provider-model-badge"
+                        :class="{
+                          'provider-model-badge--disabled': !item.enabled,
+                        }"
+                        @click.stop
+                      >
+                        <v-icon size="14">{{ item.icon }}</v-icon>
+                      </span>
                     </template>
-                    <span>{{ tm('models.testButton') }}</span>
+                    <span>{{ item.tooltip }}</span>
                   </v-tooltip>
-                  <v-btn
-                    icon="mdi-cog-outline"
-                    size="small"
-                    variant="text"
-                    @click.stop="emit('open-provider-edit', entry.provider)"
-                  ></v-btn>
-                  <v-btn
-                    icon="mdi-delete-outline"
-                    size="small"
-                    variant="text"
-                    @click.stop="emit('delete-provider', entry.provider)"
-                  ></v-btn>
-                </div>
-              </div>
+                  <v-tooltip
+                    v-if="formatContextLimit(entry.metadata)"
+                    location="top"
+                    max-width="320"
+                  >
+                    <template #activator="{ props: contextTooltipProps }">
+                      <span
+                        v-bind="contextTooltipProps"
+                        class="provider-model-context-badge"
+                        @click.stop
+                      >
+                        {{ formatContextLimit(entry.metadata) }}
+                      </span>
+                    </template>
+                    <span>
+                      {{
+                        tm("models.metadata.context", {
+                          tokens: formatContextLimit(entry.metadata),
+                        })
+                      }}
+                    </span>
+                  </v-tooltip>
+                </v-list-item-subtitle>
+                <template #append>
+                  <div class="d-flex align-center ga-1" @click.stop>
+                    <v-switch
+                      :model-value="entry.provider.enable"
+                      density="compact"
+                      inset
+                      hide-details
+                      color="primary"
+                      class="mr-1"
+                      :disabled="isProviderSaving(entry.provider.id)"
+                      @update:modelValue="
+                        emit('toggle-provider-enable', entry.provider, $event)
+                      "
+                    ></v-switch>
+                    <v-tooltip location="top" max-width="300">
+                      {{ tm("availability.test") }}
+                      <template #activator="{ props }">
+                        <v-btn
+                          icon="mdi-connection"
+                          size="small"
+                          variant="text"
+                          :disabled="
+                            !entry.provider.enable ||
+                            isProviderSaving(entry.provider.id)
+                          "
+                          :loading="isProviderTesting(entry.provider.id)"
+                          v-bind="props"
+                          @click.stop="emit('test-provider', entry.provider)"
+                        ></v-btn>
+                      </template>
+                    </v-tooltip>
+
+                    <v-tooltip location="top" max-width="300">
+                      {{ tm("models.configure") }}
+                      <template #activator="{ props }">
+                        <v-btn
+                          icon="mdi-cog"
+                          size="small"
+                          variant="text"
+                          v-bind="props"
+                          @click.stop="
+                            emit('open-provider-edit', entry.provider)
+                          "
+                        ></v-btn>
+                      </template>
+                    </v-tooltip>
+
+                    <v-btn
+                      icon="mdi-delete"
+                      size="small"
+                      variant="text"
+                      color="error"
+                      @click.stop="emit('delete-provider', entry.provider)"
+                    ></v-btn>
+                  </div>
+                </template>
+              </v-list-item>
             </template>
             <div>
-              <strong>{{ tm('models.tooltips.providerId') }}:</strong>
-              {{ entry.provider.id }}
-            </div>
-            <div>
-              <strong>{{ tm('models.tooltips.modelId') }}:</strong>
-              {{ entry.provider.model }}
+              <div>
+                <strong>{{ tm("models.tooltips.providerId") }}:</strong>
+                {{ entry.provider.id }}
+              </div>
+              <div>
+                <strong>{{ tm("models.tooltips.modelId") }}:</strong>
+                {{ entry.provider.model }}
+              </div>
             </div>
           </v-tooltip>
-        </div>
 
-        <div v-else class="provider-models-empty">
-          <v-icon size="36" color="grey-lighten-1">mdi-package-variant-closed</v-icon>
-          <p>{{ tm('models.empty') }}</p>
-        </div>
-      </section>
+          <v-tooltip location="top" max-width="400" v-else>
+            <template #activator="{ props }">
+              <v-list-item
+                v-bind="props"
+                class="cursor-pointer"
+                @click="emit('add-model-provider', entry.model)"
+              >
+                <v-list-item-title>{{ entry.model }}</v-list-item-title>
+                <v-list-item-subtitle
+                  class="provider-model-subtitle d-flex align-center ga-1"
 
-      <v-divider></v-divider>
-
-      <section class="provider-models-section provider-models-section--available">
-        <div class="provider-models-section__head">
-          <div class="provider-models-section__title">{{ tm('models.available') }}</div>
-          <v-chip size="x-small" variant="tonal" label>{{ availableEntries.length }}</v-chip>
-        </div>
-
-        <div v-if="availableEntries.length" class="provider-models-list provider-models-list--available">
-          <v-tooltip
-            v-for="entry in availableEntries"
-            :key="entry.model"
-            location="top"
-            max-width="400"
-          >
-            <template #activator="{ props: tooltipProps }">
-              <div v-bind="tooltipProps" class="provider-model-row">
-                <button
-                  type="button"
-                  class="provider-model-row__main"
-                  @click="emit('add-model-provider', entry.model)"
                 >
-                  <div class="provider-model-row__title provider-model-row__title--mono">{{ entry.model }}</div>
-                  <div class="provider-model-row__meta">
-                    <v-tooltip
-                      v-for="item in capabilityBadges(entry)"
-                      :key="item.key"
-                      location="top"
-                      max-width="320"
-                    >
-                      <template #activator="{ props: badgeTooltipProps }">
-                        <span
-                          v-bind="badgeTooltipProps"
-                          class="provider-model-row__badge"
-                          :class="{
-                            'provider-model-row__badge--enabled': item.enabled,
-                            'provider-model-row__badge--disabled': !item.enabled
-                          }"
-                          @click.stop
-                        >
-                          <v-icon size="14">{{ item.icon }}</v-icon>
-                        </span>
-                      </template>
-                      <span>{{ item.tooltip }}</span>
-                    </v-tooltip>
-                    <v-tooltip
-                      v-if="formatContextLimit(entry.metadata)"
-                      location="top"
-                      max-width="320"
-                    >
-                      <template #activator="{ props: contextTooltipProps }">
-                        <span
-                          v-bind="contextTooltipProps"
-                          class="provider-model-row__badge provider-model-row__badge--text provider-model-row__badge--enabled"
-                          @click.stop
-                        >
-                          {{ formatContextLimit(entry.metadata) }}
-                        </span>
-                      </template>
-                      <span>{{
-                        tm('models.metadata.context', {
-                          tokens: formatContextLimit(entry.metadata)
+                  <span>{{ entry.model }}</span>
+                  <v-tooltip
+                    v-for="item in capabilityBadges(entry)"
+                    :key="item.key"
+                    location="top"
+                    max-width="320"
+                  >
+                    <template #activator="{ props: badgeTooltipProps }">
+                      <span
+                        v-bind="badgeTooltipProps"
+                        class="provider-model-badge"
+                        @click.stop
+                      >
+                        <v-icon size="14">{{ item.icon }}</v-icon>
+                      </span>
+                    </template>
+                    <span>{{ item.tooltip }}</span>
+                  </v-tooltip>
+                  <v-tooltip
+                    v-if="formatContextLimit(entry.metadata)"
+                    location="top"
+                    max-width="320"
+                  >
+                    <template #activator="{ props: contextTooltipProps }">
+                      <span
+                        v-bind="contextTooltipProps"
+                        class="provider-model-context-badge"
+                        @click.stop
+                      >
+                        {{ formatContextLimit(entry.metadata) }}
+                      </span>
+                    </template>
+                    <span>
+                      {{
+                        tm("models.metadata.context", {
+                          tokens: formatContextLimit(entry.metadata),
                         })
-                      }}</span>
-                    </v-tooltip>
-                  </div>
-                </button>
-
-                <div class="provider-model-row__actions">
+                      }}
+                    </span>
+                  </v-tooltip>
+                </v-list-item-subtitle>
+                <template #append>
                   <v-btn
                     icon="mdi-plus"
                     size="small"
                     variant="text"
                     color="primary"
-                    @click.stop="emit('add-model-provider', entry.model)"
                   ></v-btn>
-                </div>
-              </div>
+                </template>
+              </v-list-item>
             </template>
             <div>
-              <strong>{{ tm('models.tooltips.modelId') }}:</strong>
-              {{ entry.model }}
+              <div>
+                <strong>{{ tm("models.tooltips.modelId") }}:</strong>
+                {{ entry.model }}
+              </div>
             </div>
           </v-tooltip>
+        </template>
+      </template>
+      <template v-else>
+        <div class="text-center pa-4 text-medium-emphasis">
+          <v-icon size="48" color="grey-lighten-1">mdi-package-variant</v-icon>
+          <p class="text-grey mt-2">{{ tm("models.empty") }}</p>
         </div>
-
-        <div v-else class="provider-models-empty provider-models-empty--small">
-          <v-icon size="36" color="grey-lighten-1">mdi-database-search-outline</v-icon>
-          <p>{{ tm('models.noModelsFound') }}</p>
-        </div>
-      </section>
-    </div>
+      </template>
+    </v-list>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { normalizeTextInput } from '@/utils/inputValue'
+import { computed } from "vue";
+import { normalizeTextInput } from "@/utils/inputValue";
+import { providerCapabilityBadges } from "@/utils/providerMetadata";
 
 const props = defineProps({
   entries: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   availableCount: {
     type: Number,
-    default: 0
+    default: 0,
   },
   modelSearch: {
     type: String,
-    default: ''
+    default: "",
   },
   loadingModels: {
     type: Boolean,
-    default: false
+    default: false,
   },
   isSourceModified: {
     type: Boolean,
-    default: false
+    default: false,
   },
   supportsImageInput: {
     type: Function,
-    required: true
+    required: true,
   },
   supportsAudioInput: {
     type: Function,
-    required: true
+    required: true,
   },
   supportsToolCall: {
     type: Function,
-    required: true
+    required: true,
   },
   supportsReasoning: {
     type: Function,
-    required: true
+    required: true,
   },
   formatContextLimit: {
     type: Function,
-    required: true
+    required: true,
   },
   testingProviders: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   savingProviders: {
     type: Array,
-    default: () => []
+    default: () => [],
   },
   tm: {
     type: Function,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 
 const emit = defineEmits([
-  'update:modelSearch',
-  'fetch-models',
-  'open-manual-model',
-  'open-provider-edit',
-  'toggle-provider-enable',
-  'test-provider',
-  'delete-provider',
-  'add-model-provider'
-])
+  "update:modelSearch",
+  "fetch-models",
+  "open-manual-model",
+  "open-provider-edit",
+  "toggle-provider-enable",
+  "test-provider",
+  "delete-provider",
+  "add-model-provider",
+]);
 
 const modelSearchProxy = computed({
   get: () => props.modelSearch,
-  set: (val) => emit('update:modelSearch', normalizeTextInput(val))
-})
+  set: (val) => emit("update:modelSearch", normalizeTextInput(val)),
+});
 
-const configuredEntries = computed(() =>
-  (props.entries || []).filter((entry) => entry.type === 'configured')
-)
-
-const availableEntries = computed(() =>
-  (props.entries || []).filter((entry) => entry.type === 'available')
-)
+const capabilityLabels = {
+  image: () => props.tm("models.metadata.image"),
+  audio: () => props.tm("models.metadata.audio"),
+  tool_use: () => props.tm("models.metadata.toolUse"),
+  reasoning: () => props.tm("models.metadata.reasoning"),
+};
 
 const capabilityBadges = (entry) => {
-  const metadata = entry?.metadata
-  const provider = entry?.provider
-  const modalities = Array.isArray(provider?.modalities) ? provider.modalities : []
-  const isConfigured = entry?.type === 'configured'
-  const hasModelMetadata = Boolean(entry?.hasModelMetadata)
-  const definitions = [
-    {
-      key: 'image',
-      icon: 'mdi-image-outline',
-      supported: props.supportsImageInput(metadata),
-      enabled: !isConfigured || modalities.includes('image'),
-      label: props.tm('models.metadata.image')
-    },
-    {
-      key: 'audio',
-      icon: 'mdi-music-note-outline',
-      supported: props.supportsAudioInput(metadata),
-      enabled: !isConfigured || modalities.includes('audio'),
-      label: props.tm('models.metadata.audio')
-    },
-    {
-      key: 'tool_use',
-      icon: 'mdi-wrench-outline',
-      supported: props.supportsToolCall(metadata),
-      enabled: !isConfigured || modalities.includes('tool_use'),
-      label: props.tm('models.metadata.toolUse')
-    },
-    {
-      key: 'reasoning',
-      icon: 'mdi-brain',
-      supported: props.supportsReasoning(metadata),
-      enabled: !isConfigured || Boolean(provider?.reasoning),
-      label: props.tm('models.metadata.reasoning')
-    }
-  ]
+  const isConfigured = entry?.type === "configured";
+  const metadata = entry?.hasModelMetadata ? entry.metadata : null;
+  const provider = isConfigured
+    ? entry.provider
+    : {
+        modalities: [
+          props.supportsImageInput(metadata) && "image",
+          props.supportsAudioInput(metadata) && "audio",
+          props.supportsToolCall(metadata) && "tool_use",
+        ].filter(Boolean),
+        reasoning: props.supportsReasoning(metadata),
+      };
+  const badges = providerCapabilityBadges(provider, metadata, props.tm);
 
-  return definitions
-    .filter((item) => item.supported || (isConfigured && item.enabled))
-    .map((item) => {
-      const enabled = !isConfigured || !hasModelMetadata || item.enabled
-      let tooltip = props.tm('models.metadata.available', {
-        capability: item.label
-      })
-      if (isConfigured) {
-        tooltip = enabled
-          ? props.tm('models.metadata.enabled', { capability: item.label })
-          : props.tm('models.metadata.supportedDisabled', {
-              capability: item.label
-            })
-      }
-      return {
-        key: item.key,
-        icon: item.icon,
-        enabled,
-        tooltip
-      }
-    })
-}
+  if (isConfigured) {
+    return badges;
+  }
 
-const isProviderTesting = (providerId) => props.testingProviders.includes(providerId)
-const isProviderSaving = (providerId) => props.savingProviders.includes(providerId)
+  return badges.map((item) => ({
+    ...item,
+    tooltip: props.tm("models.metadata.available", {
+      capability: capabilityLabels[item.key]?.() || item.key,
+    }),
+  }));
+};
+
+const isProviderTesting = (providerId) =>
+  props.testingProviders.includes(providerId);
+const isProviderSaving = (providerId) =>
+  props.savingProviders.includes(providerId);
 </script>
 
 <style scoped>
 .provider-models-panel {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
-.provider-models-toolbar {
+.provider-models-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: nowrap;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.provider-models-title-wrap {
+  min-width: 0;
 }
 
 .provider-models-title {
   margin: 0;
   font-size: 18px;
-  font-weight: 650;
   line-height: 1.3;
-}
-
-.provider-models-title-wrap {
-  min-width: 0;
-  flex-shrink: 0;
+  font-weight: 650;
 }
 
 .provider-models-subtitle {
   display: block;
   margin-top: 6px;
-  color: rgba(var(--v-theme-on-surface), 0.56);
+  color: rgba(var(--v-theme-on-surface), 0.6);
   font-size: 12px;
-}
-
-.provider-models-toolbar__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-  justify-content: flex-end;
-  flex-wrap: nowrap;
 }
 
 .provider-models-search {
-  flex: 0 1 240px;
-  min-width: 180px;
-  max-width: 260px;
+  max-width: 240px;
 }
 
-.provider-models-sections {
-  display: flex;
-  flex-direction: column;
-}
+.provider-models-actions {
+  margin-left: auto;
 
-.provider-models-section {
-  padding: 4px 0;
-}
-
-.provider-models-section--available {
-  padding-top: 22px;
-}
-
-.provider-models-section__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.provider-models-section__title {
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.provider-models-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.provider-models-list--available {
-  max-height: min(420px, 52vh);
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.provider-model-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
-}
-
-.provider-model-row:last-child {
-  border-bottom: 0;
-}
-
-.provider-model-row__main {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-}
-
-.provider-model-row__title {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.provider-model-row__title--mono {
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace;
-}
-
-.provider-model-row__subtitle {
-  margin-top: 4px;
-  color: rgba(var(--v-theme-on-surface), 0.56);
-  font-size: 12px;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.provider-model-row__meta {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 8px;
 }
 
-.provider-model-row__badge {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
+.provider-models-list {
+  max-height: 520px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 14px;
+  background: rgb(var(--v-theme-surface));
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    "Open Sans",
+    "Helvetica Neue",
+    sans-serif;
+}
+
+.provider-compact-item {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.provider-models-list :deep(.v-list-item:last-child) {
+  border-bottom: 0;
+}
+
+.provider-model-subtitle {
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+}
+
+.provider-model-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-}
-
-.provider-model-row__badge--enabled {
-  background: rgba(var(--v-theme-on-surface), 0.06);
   color: rgba(var(--v-theme-on-surface), 0.72);
 }
 
-.provider-model-row__badge--disabled {
-  background: rgba(var(--v-theme-on-surface), 0.04);
+.provider-model-badge--disabled {
   color: rgba(var(--v-theme-on-surface), 0.34);
 }
 
-.provider-model-row__badge--text {
-  width: auto;
-  padding: 0 8px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.provider-model-row__actions {
-  display: flex;
+.provider-model-context-badge {
+  display: inline-flex;
   align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  color: rgba(var(--v-theme-on-surface), 0.72);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 16px;
 }
 
-.provider-model-row__switch {
-  margin-right: 2px;
+.cursor-pointer {
+  cursor: pointer;
 }
 
-.provider-models-empty {
-  min-height: 160px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.56);
-  text-align: center;
-  font-size: 13px;
-}
-
-.provider-models-empty--small {
-  min-height: 120px;
-}
-
-@media (max-width: 760px) {
-  .provider-models-toolbar {
+@media (max-width: 900px) {
+  .provider-models-head {
     align-items: stretch;
-    flex-direction: column;
-  }
-
-  .provider-models-title-wrap {
-    flex-shrink: 1;
-  }
-
-  .provider-models-toolbar__actions {
-    align-items: stretch;
-    justify-content: stretch;
-    flex-wrap: wrap;
   }
 
   .provider-models-search {
-    flex: 1 1 100%;
-    min-width: 0;
     max-width: none;
+    width: 100%;
   }
 
-  .provider-models-toolbar__actions :deep(.v-btn) {
-    flex: 1 1 160px;
-    min-width: 0;
-  }
-
-  .provider-models-toolbar__actions :deep(.v-btn__content) {
-    white-space: normal;
-  }
-}
-
-@media (max-width: 600px) {
-  .provider-models-panel {
-    gap: 14px;
-  }
-
-  .provider-model-row {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 10px;
-    padding: 14px 0;
-  }
-
-  .provider-model-row__actions {
-    align-self: flex-end;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+  .provider-models-actions {
+    margin-left: 0;
+    width: 100%;
   }
 }
 </style>

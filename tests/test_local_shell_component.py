@@ -6,50 +6,20 @@ import subprocess
 import pytest
 
 from astrbot.core.computer.booters import local as local_booter
-from astrbot.core.computer.booters.local import LocalShellComponent
+from astrbot.core.computer.booters.local import (
+    LocalShellComponent,
+    _decode_bytes_with_fallback,
+)
 
 
-class _FakePopen:
-    def __init__(self, stdout: bytes, stderr: bytes = b"", returncode: int = 0):
-        self._stdout = stdout
-        self._stderr = stderr
-        self.returncode = returncode
-        self.pid = 12345
-
-    def communicate(self, timeout=None):
-        return self._stdout, self._stderr
-
-    def wait(self, timeout=None):
-        pass
-
-
-class _FakeTaskkillResult:
-    def __init__(self, returncode: int):
-        self.returncode = returncode
-
-
-def test_local_shell_component_decodes_utf8_output(monkeypatch):
-    def fake_run(*args, **kwargs):
-        _ = args, kwargs
-        return _FakePopen(stdout="技能内容".encode())
-
-    monkeypatch.setattr(subprocess, "Popen", fake_run)
-
-    result = asyncio.run(LocalShellComponent().exec("dummy"))
-
-    assert result["stdout"] == "技能内容"
-    assert result["stderr"] == ""
-    assert result["exit_code"] == 0
+def test_local_shell_component_decodes_utf8_output() -> None:
+    result = _decode_bytes_with_fallback("技能内容".encode())
+    assert result == "技能内容"
 
 
 def test_local_shell_component_prefers_utf8_before_windows_locale(
     monkeypatch,
-):
-    def fake_run(*args, **kwargs):
-        _ = args, kwargs
-        return _FakePopen(stdout="技能内容".encode())
-
-    monkeypatch.setattr(subprocess, "Popen", fake_run)
+) -> None:
     monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
     monkeypatch.setattr(
         local_booter.locale,
@@ -57,19 +27,14 @@ def test_local_shell_component_prefers_utf8_before_windows_locale(
         lambda _do_setlocale=False: "cp936",
     )
 
-    result = asyncio.run(LocalShellComponent().exec("dummy"))
+    result = _decode_bytes_with_fallback(
+        "技能内容".encode(),
+        preferred_encoding="utf-8",
+    )
+    assert result == "技能内容"
 
-    assert result["stdout"] == "技能内容"
-    assert result["stderr"] == ""
-    assert result["exit_code"] == 0
 
-
-def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
-    def fake_run(*args, **kwargs):
-        _ = args, kwargs
-        return _FakePopen(stdout="微博热搜".encode("gbk"))
-
-    monkeypatch.setattr(subprocess, "Popen", fake_run)
+def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch) -> None:
     monkeypatch.setattr(local_booter.os, "name", "nt", raising=False)
     monkeypatch.setattr(
         local_booter.locale,
@@ -77,19 +42,11 @@ def test_local_shell_component_falls_back_to_gbk_on_windows(monkeypatch):
         lambda _do_setlocale=False: "cp1252",
     )
 
-    result = asyncio.run(LocalShellComponent().exec("dummy"))
-
-    assert result["stdout"] == "微博热搜"
-    assert result["stderr"] == ""
-    assert result["exit_code"] == 0
+    result = _decode_bytes_with_fallback("微博热搜".encode("gbk"))
+    assert result == "微博热搜"
 
 
-def test_local_shell_component_falls_back_to_utf8_replace(monkeypatch):
-    def fake_run(*args, **kwargs):
-        _ = args, kwargs
-        return _FakePopen(stdout=b"\xffabc")
-
-    monkeypatch.setattr(subprocess, "Popen", fake_run)
+def test_local_shell_component_falls_back_to_utf8_replace(monkeypatch) -> None:
     monkeypatch.setattr(local_booter.os, "name", "posix", raising=False)
     monkeypatch.setattr(
         local_booter.locale,
@@ -97,40 +54,63 @@ def test_local_shell_component_falls_back_to_utf8_replace(monkeypatch):
         lambda _do_setlocale=False: "utf-8",
     )
 
-    result = asyncio.run(LocalShellComponent().exec("dummy"))
+    result = _decode_bytes_with_fallback(b"\xffabc")
+    assert result == "�abc"
 
-    assert result["stdout"] == "\ufffdabc"
 
-
-def test_local_shell_component_falls_back_when_windows_taskkill_fails(monkeypatch):
-    class TimeoutPopen:
+def test_local_shell_component_falls_back_when_windows_taskkill_fails(
+    monkeypatch,
+) -> None:
+    class TimeoutProcess:
         pid = 12345
+        returncode = None
 
         def __init__(self):
             self.killed = False
-            self.wait_timeout = None
 
-        def communicate(self, timeout=None):
-            raise subprocess.TimeoutExpired(cmd="dummy", timeout=timeout)
-
-        def kill(self):
+        def kill(self) -> None:
             self.killed = True
 
-        def wait(self, timeout=None):
-            self.wait_timeout = timeout
+        async def wait(self) -> int:
+            return 0
 
-    proc = TimeoutPopen()
+    class TimeoutSession:
+        def __init__(self) -> None:
+            self._proc = TimeoutProcess()
 
-    monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: proc)
+        async def exec(self, *args, **kwargs):
+            _ = args, kwargs
+            await asyncio.Event().wait()
+
+    class TaskkillResult:
+        returncode = 1
+
+    session = TimeoutSession()
+    cleaned_up: list[str] = []
+
+    monkeypatch.setattr(
+        local_booter.PersistentShellSession,
+        "get_or_create",
+        lambda _key: session,
+    )
+    monkeypatch.setattr(
+        local_booter.PersistentShellSession,
+        "cleanup",
+        lambda key: _record_cleanup(cleaned_up, key),
+    )
     monkeypatch.setattr(
         subprocess,
         "run",
-        lambda *_args, **_kwargs: _FakeTaskkillResult(returncode=1),
+        lambda *_args, **_kwargs: TaskkillResult(),
     )
     monkeypatch.setattr(local_booter.sys, "platform", "win32")
 
-    with pytest.raises(subprocess.TimeoutExpired):
-        asyncio.run(LocalShellComponent().exec("dummy", timeout=1))
+    with pytest.raises(TimeoutError):
+        asyncio.run(LocalShellComponent().exec("dummy", timeout=0.001))
 
-    assert proc.killed
-    assert proc.wait_timeout == 5
+    assert session._proc.killed
+    assert cleaned_up == ["default"]
+
+
+async def _record_cleanup(cleaned_up: list[str], key: str) -> None:
+    cleaned_up.append(key)

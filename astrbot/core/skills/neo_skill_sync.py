@@ -224,7 +224,7 @@ class NeoSkillSyncManager:
         items = page_json.get("items", [])
         if not isinstance(items, list) or not items:
             raise ValueError(
-                f"No active stable release found for skill_key: {skill_key}"
+                f"No active stable release found for skill_key: {skill_key}",
             )
         if not isinstance(items[0], dict):
             raise ValueError("Unexpected release payload format.")
@@ -242,7 +242,8 @@ class NeoSkillSyncManager:
             release = await self._find_release(client, release_id=release_id)
         elif skill_key:
             release = await self._find_active_stable_release(
-                client, skill_key=skill_key
+                client,
+                skill_key=skill_key,
             )
         else:
             raise ValueError("release_id or skill_key is required for sync.")
@@ -259,7 +260,7 @@ class NeoSkillSyncManager:
         if require_stable and release_stage != "stable":
             raise ValueError(
                 "Only stable releases can be synced to local SKILL.md "
-                f"(got: {release_stage_raw})."
+                f"(got: {release_stage_raw}).",
             )
 
         candidate = await client.skills.get_candidate(candidate_id)
@@ -277,7 +278,7 @@ class NeoSkillSyncManager:
         skill_markdown = payload.get("skill_markdown")
         if not isinstance(skill_markdown, str) or not skill_markdown.strip():
             raise ValueError(
-                "payload.skill_markdown is required for stable sync to local skill."
+                "payload.skill_markdown is required for stable sync to local skill.",
             )
 
         mapping = self._load_map()
@@ -348,7 +349,7 @@ class NeoSkillSyncManager:
                 sync_error = str(err)
                 try:
                     rollback = await client.skills.rollback_release(
-                        str(release_json.get("id", ""))
+                        str(release_json.get("id", "")),
                     )
                     rollback_json = _to_jsonable(rollback)
                 except Exception as rollback_err:
@@ -361,7 +362,7 @@ class NeoSkillSyncManager:
                     else:
                         raise RuntimeError(
                             "stable release synced failed and auto rollback also failed; "
-                            f"sync_error={sync_error}; rollback_error={rollback_err}"
+                            f"sync_error={sync_error}; rollback_error={rollback_err}",
                         ) from rollback_err
 
         return {

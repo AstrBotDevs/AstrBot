@@ -8,11 +8,10 @@
     "update": "Update",
     "account": "Account",
     "theme": {
-      "title": "Theme",
       "light": "Light Mode",
-      "dark": "Dark Mode",
-      "system": "Follow System"
-    }
+      "dark": "Dark Mode"
+    },
+    "logout": "Logout"
   },
   "updateDialog": {
     "title": "Update AstrBot",
@@ -26,9 +25,7 @@
       "release": "😊 Release"
     },
     "advancedSettings": "Advanced settings",
-    "releases": "Releases",
     "updateToLatest": "Update to Latest Version",
-    "showPreReleases": "Show pre-release versions",
     "preRelease": "Pre-release",
     "preReleaseWarning": {
       "title": "Pre-release Version Notice",
@@ -62,9 +59,6 @@
       "restart": "Preparing restart...",
       "restarting": "Restarting AstrBot",
       "completed": "Update complete",
-      "successReady": "Update successful",
-      "autoReloadIn": "Refreshing automatically in {seconds}s",
-      "reloadNow": "Refresh now",
       "failed": "Update failed"
     },
     "redirectConfirm": {
@@ -102,26 +96,30 @@
   "accountDialog": {
     "title": "Modify Account",
     "securityWarning": "Security Reminder: Please change your password to secure your account",
-    "securityWarningMd5": "The new AstrBot version has improved security. Please change your password.",
-    "securityWarningUpgrade": "MD5 password storage detected. Please change your password to complete the security upgrade.",
+    "securityWarningLegacy": "The new AstrBot version has improved security. Please change your password.",
+    "securityWarningUpgrade": "Legacy password storage detected. Please change your password to complete the security upgrade.",
     "form": {
       "currentPassword": "Current Password",
       "newPassword": "New Password",
       "confirmPassword": "Confirm New Password",
       "newUsername": "New Username (Optional)",
-      "passwordHint": "At least 8 characters, including uppercase, lowercase letters, and digits",
+      "passwordHint": "At least 12 characters, including uppercase, lowercase letters, and digits",
       "confirmPasswordHint": "Please enter new password again to confirm",
       "usernameHint": "Leave blank to keep current username",
       "defaultCredentials": "The default username is astrbot. An initial password is generated on first startup and shown in the console."
     },
     "validation": {
       "passwordRequired": "Please enter password",
-      "passwordMinLength": "Password must be at least 8 characters",
+      "passwordMinLength": "Password must be at least 12 characters",
       "passwordUppercase": "Password must include at least one uppercase letter",
       "passwordLowercase": "Password must include at least one lowercase letter",
       "passwordDigit": "Password must include at least one digit",
       "passwordMatch": "Passwords do not match",
-      "usernameMinLength": "Username must be at least 3 characters"
+      "usernameMinLength": "Username must be at least 3 characters",
+      "strengthWeak": "Weak",
+      "strengthFair": "Fair",
+      "strengthGood": "Good",
+      "strengthStrong": "Strong"
     },
     "actions": {
       "save": "Save Changes",

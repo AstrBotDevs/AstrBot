@@ -400,8 +400,7 @@ class AuthService:
     def generate_jwt(self, username: str):
         payload = {
             "username": username,
-            "exp": datetime.datetime.now(datetime.timezone.utc)
-            + datetime.timedelta(days=7),
+            "exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=7),
         }
         jwt_token = self.config["dashboard"].get("jwt_secret", None)
         if not jwt_token:

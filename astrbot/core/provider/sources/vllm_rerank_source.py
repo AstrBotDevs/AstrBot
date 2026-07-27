@@ -1,10 +1,9 @@
 import aiohttp
 
 from astrbot import logger
-
-from ..entities import ProviderType, RerankResult
-from ..provider import RerankProvider
-from ..register import register_provider_adapter
+from astrbot.core.provider.entities import ProviderType, RerankResult
+from astrbot.core.provider.provider import RerankProvider
+from astrbot.core.provider.register import register_provider_adapter
 
 
 @register_provider_adapter(
@@ -31,7 +30,7 @@ class VLLMRerankProvider(RerankProvider):
         h = {}
         if self.auth_key:
             h["Authorization"] = f"Bearer {self.auth_key}"
-        self.client = aiohttp.ClientSession(
+        self.client: aiohttp.ClientSession | None = aiohttp.ClientSession(
             headers=h,
             timeout=aiohttp.ClientTimeout(total=self.timeout),
         )
@@ -60,7 +59,7 @@ class VLLMRerankProvider(RerankProvider):
 
             if not results:
                 logger.warning(
-                    f"Rerank API 返回了空的列表数据。原始响应: {response_data}",
+                    f"Rerank API 返回了空的列表数据｡原始响应: {response_data}",
                 )
 
             return [

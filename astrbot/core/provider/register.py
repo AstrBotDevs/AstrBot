@@ -23,7 +23,7 @@ def register_provider_adapter(
     def decorator(cls):
         if provider_type_name in provider_cls_map:
             raise ValueError(
-                f"检测到大模型提供商适配器 {provider_type_name} 已经注册，可能发生了大模型提供商适配器类型命名冲突。",
+                f"检测到大模型提供商适配器 {provider_type_name} 已经注册,可能发生了大模型提供商适配器类型命名冲突｡",
             )
 
         # 添加必备选项

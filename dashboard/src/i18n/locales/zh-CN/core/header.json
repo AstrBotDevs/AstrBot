@@ -2,17 +2,16 @@
   "logoTitle": "AstrBot WebUI",
   "version": {
     "hasNewVersion": "AstrBot 有新版本！",
-    "dashboardHasNewVersion": "WebUI 有新版本！"
+    "dashboardHasNewVersion": "AstrBot 面板有新版本！"
   },
   "buttons": {
     "update": "更新",
     "account": "账户",
     "theme": {
-      "title": "主题",
       "light": "浅色模式",
-      "dark": "深色模式",
-      "system": "跟随系统"
-    }
+      "dark": "深色模式"
+    },
+    "logout": "退出登录"
   },
   "updateDialog": {
     "title": "更新 AstrBot",
@@ -26,9 +25,7 @@
       "release": "😊 正式版"
     },
     "advancedSettings": "高级设置",
-    "releases": "版本列表",
     "updateToLatest": "更新到最新版本",
-    "showPreReleases": "显示预发布版本",
     "preRelease": "预发布",
     "preReleaseWarning": {
       "title": "预发布版本提醒",
@@ -36,7 +33,7 @@
       "issueLink": "GitHub Issues"
     },
     "tip": "💡 TIP: ",
-    "tipContinue": "默认在切换版本时会下载对应版本的 WebUI 文件。WebUI 代码位于项目的 dashboard 目录，您可使用 npm 自行构建。",
+    "tipContinue": "默认在切换版本时会下载对应版本的面板文件。面板代码位于项目的 dashboard 目录，您可使用 npm 自行构建。",
     "dockerTip": "切换版本时，会同时尝试更新机器人主程序和管理面板。如果您正在使用 Docker 部署，也可以重新拉取镜像或者使用",
     "dockerTipLink": "watchtower",
     "dockerTipContinue": "来自动监控拉取。",
@@ -62,9 +59,6 @@
       "restart": "正在准备重启...",
       "restarting": "正在重启 AstrBot",
       "completed": "更新完成",
-      "successReady": "更新成功",
-      "autoReloadIn": "{seconds} 秒后自动刷新",
-      "reloadNow": "立即刷新",
       "failed": "更新失败"
     },
     "redirectConfirm": {
@@ -102,26 +96,30 @@
   "accountDialog": {
     "title": "修改账户",
     "securityWarning": "安全提醒: 请修改密码以确保账户安全",
-    "securityWarningMd5": "新的 AstrBot 版本强化了安全策略，请重新修改密码",
+    "securityWarningLegacy": "新的 AstrBot 版本强化了安全策略，请重新修改密码",
     "securityWarningUpgrade": "检测到旧版本密码存储方式，请修改密码以完成安全升级",
     "form": {
       "currentPassword": "当前密码",
       "newPassword": "新密码",
       "confirmPassword": "确认新密码",
       "newUsername": "新用户名 (可选)",
-      "passwordHint": "长度至少 8 位，且包含大写字母、小写字母和数字",
+      "passwordHint": "长度至少 12 位，且包含大写字母、小写字母和数字",
       "confirmPasswordHint": "请再次输入新密码以确认",
       "usernameHint": "留空表示不修改用户名",
       "defaultCredentials": "默认用户名为 astrbot，初始密码会在首次启动时自动生成并显示在控制台中。"
     },
     "validation": {
       "passwordRequired": "请输入密码",
-      "passwordMinLength": "密码长度至少 8 位",
+      "passwordMinLength": "密码长度至少 12 位",
       "passwordUppercase": "密码必须包含至少一个大写字母",
       "passwordLowercase": "密码必须包含至少一个小写字母",
       "passwordDigit": "密码必须包含至少一个数字",
       "passwordMatch": "两次输入的密码不一致",
-      "usernameMinLength": "用户名长度至少3位"
+      "usernameMinLength": "用户名长度至少3位",
+      "strengthWeak": "弱",
+      "strengthFair": "一般",
+      "strengthGood": "好",
+      "strengthStrong": "强"
     },
     "actions": {
       "save": "保存修改",

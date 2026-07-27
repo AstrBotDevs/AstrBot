@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import base64
 import enum
 import json
 from dataclasses import dataclass, field
 from typing import Any
 
+import aiofiles
 from anthropic.types import Message as AnthropicMessage
 from google.genai.types import GenerateContentResponse
 from openai.types.chat.chat_completion import ChatCompletion
@@ -206,10 +208,14 @@ class ProviderRequest:
         # 3. 图片内容
         if self.image_urls:
             for image_url in self.image_urls:
-                image_data = await MediaResolver(
-                    image_url,
-                    media_type="image",
-                ).to_base64_data()
+                try:
+                    image_data = await MediaResolver(
+                        image_url,
+                        media_type="image",
+                    ).to_base64_data(strict=True)
+                except Exception as exc:
+                    logger.warning("图片预处理失败，将忽略。错误: %s", exc)
+                    continue
                 if not image_data:
                     logger.warning("图片预处理结果为空，将忽略。")
                     continue
@@ -257,6 +263,29 @@ class ProviderRequest:
 
         # 否则返回多模态格式
         return {"role": "user", "content": content_blocks}
+
+    async def _encode_image_bs64(self, image_url: str) -> str:
+        """将图片转换为 base64"""
+        if image_url.startswith("base64://"):
+            return image_url.replace("base64://", "data:image/jpeg;base64,")
+        async with aiofiles.open(image_url, "rb") as f:
+            image_bs64 = base64.b64encode(await f.read()).decode("utf-8")
+            return "data:image/jpeg;base64," + image_bs64
+
+    async def _encode_audio_bs64(
+        self,
+        audio_path: str,
+        source_ref: str | None = None,
+    ) -> str:
+        """将音频转换为 base64"""
+        mime_type = "audio/wav"
+
+        if audio_path.startswith("base64://"):
+            return audio_path.replace("base64://", f"data:{mime_type};base64,", 1)
+
+        async with aiofiles.open(audio_path, "rb") as f:
+            audio_bs64 = base64.b64encode(await f.read()).decode("utf-8")
+            return f"data:{mime_type};base64," + audio_bs64
 
 
 @dataclass
@@ -432,7 +461,7 @@ class LLMResponse:
                     ),
                     # the extra_content will not serialize if it's None when calling ToolCall.model_dump()
                     extra_content=self.tools_call_extra_content.get(
-                        self.tools_call_ids[idx]
+                        self.tools_call_ids[idx],
                     ),
                 ),
             )

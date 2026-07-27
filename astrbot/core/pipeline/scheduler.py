@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from astrbot.core import logger
 from astrbot.core.platform import AstrMessageEvent
@@ -15,7 +16,7 @@ from .stage_order import STAGES_ORDER
 
 
 class PipelineScheduler:
-    """管道调度器，负责调度各个阶段的执行"""
+    """管道调度器,负责调度各个阶段的执行"""
 
     def __init__(self, context: PipelineContext) -> None:
         ensure_builtin_stages_registered()
@@ -23,7 +24,7 @@ class PipelineScheduler:
             key=lambda x: STAGES_ORDER.index(x.__name__),
         )  # 按照顺序排序
         self.ctx = context  # 上下文对象
-        self.stages = []  # 存储阶段实例
+        self.stages: list[Any] = []  # 存储阶段实例
 
     async def initialize(self) -> None:
         """初始化管道调度器时, 初始化所有阶段"""
@@ -66,6 +67,9 @@ class PipelineScheduler:
                             f"Stage {stage.__class__.__name__} stopped event propagation.",
                         )
                         break
+
+                if event.is_stopped():
+                    break
             else:
                 # 如果返回的是普通协程(不含yield的async函数), 则不进入下一层(基线条件)
                 # 简单地等待它执行完成, 然后继续执行下一个阶段
@@ -92,7 +96,13 @@ class PipelineScheduler:
             if isinstance(event, WebChatMessageEvent | WecomAIBotMessageEvent):
                 await event.send(None)
 
-            logger.debug("pipeline execution completed.")
+            logger.debug("pipeline 执行完毕｡")
         finally:
-            event.cleanup_temporary_local_files()
+            sdk_plugin_bridge = getattr(
+                self.ctx.plugin_manager.context,
+                "sdk_plugin_bridge",
+                None,
+            )
+            if sdk_plugin_bridge is not None:
+                sdk_plugin_bridge.close_request_overlay_for_event(event)
             active_event_registry.unregister(event)

@@ -20,9 +20,9 @@ from .zip_updator import ReleaseInfo, RepoZipUpdator
 
 
 class AstrBotUpdator(RepoZipUpdator):
-    """AstrBot 更新器，继承自 RepoZipUpdator 类
+    """AstrBot 更新器,继承自 RepoZipUpdator 类
     该类用于处理 AstrBot 的更新操作
-    功能包括检查更新、下载更新文件、解压缩更新文件等
+    功能包括检查更新､下载更新文件､解压缩更新文件等
     """
 
     def __init__(self, repo_mirror: str = "", verify: str | bool | None = None) -> None:
@@ -34,18 +34,8 @@ class AstrBotUpdator(RepoZipUpdator):
         )
 
     def _build_core_package_url(self, version: str | None) -> str | None:
-        """Build the hosted core package URL for a release tag.
-
-        Args:
-            version: Release tag, such as ``v4.26.0``.
-
-        Returns:
-            Public package URL, or None when hosted package download is disabled.
-        """
-
         if not version or not str(version).startswith("v"):
             return None
-
         base_url = os.environ.get(
             "ASTRBOT_CORE_PACKAGE_BASE_URL",
             self.CORE_PACKAGE_BASE_URL,
@@ -56,7 +46,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
     def terminate_child_processes(self) -> None:
         """终止当前进程的所有子进程
-        使用 psutil 库获取当前进程的所有子进程，并尝试终止它们
+        使用 psutil 库获取当前进程的所有子进程,并尝试终止它们
         """
         try:
             parent = psutil.Process(os.getpid())
@@ -152,7 +142,7 @@ class AstrBotUpdator(RepoZipUpdator):
 
     def _reboot(self, delay: int = 3) -> None:
         """重启当前程序
-        在指定的延迟后，终止所有子进程并重新启动程序
+        在指定的延迟后,终止所有子进程并重新启动程序
         这里只能使用 os.exec* 来重启程序
         """
         if is_desktop_managed_backend():
@@ -216,28 +206,12 @@ class AstrBotUpdator(RepoZipUpdator):
         path: str | Path = "temp.zip",
         progress_callback=None,
     ) -> Path:
-        """Download an AstrBot core update package without applying it.
-
-        Args:
-            latest: Whether to download the latest release.
-            version: Specific release tag or commit hash to download.
-            proxy: Optional GitHub proxy prefix.
-            path: Destination zip path.
-            progress_callback: Optional callback for download progress payloads.
-
-        Returns:
-            Path to the downloaded update package.
-
-        Raises:
-            Exception: If update metadata cannot resolve a package URL.
-        """
-
         update_data = await self.fetch_release_info(self.ASTRBOT_RELEASE_API, latest)
         file_url = None
 
         if os.environ.get("ASTRBOT_CLI") or os.environ.get("ASTRBOT_LAUNCHER"):
             raise Exception(
-                "Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot."
+                "Error: You are running AstrBot via CLI, please use `pip` or `uv tool upgrade` to update AstrBot.",
             )  # 避免版本管理混乱
 
         target_version = None
