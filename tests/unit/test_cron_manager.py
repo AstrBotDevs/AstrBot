@@ -69,6 +69,7 @@ class TestCronJobManagerInit:
         assert manager.db == mock_db
         assert manager._basic_handlers == {}
         assert manager._started is False
+        assert manager._db_synced is False
 
 
 class TestCronJobManagerStart:
@@ -94,6 +95,27 @@ class TestCronJobManagerStart:
 
         # Should only sync once
         assert mock_db.list_cron_jobs.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_start_resyncs_after_shutdown(
+        self, cron_manager, mock_db, mock_context
+    ):
+        """Test that restarting the manager resyncs the database."""
+        mock_db.list_cron_jobs.return_value = []
+
+        await cron_manager.start(mock_context)
+        await cron_manager.shutdown()
+
+        assert cron_manager._started is False
+        assert cron_manager._db_synced is False
+
+        await cron_manager.start(mock_context)
+
+        assert mock_db.list_cron_jobs.call_count == 2
+        assert cron_manager._started is True
+        assert cron_manager._db_synced is True
+
+        await cron_manager.shutdown()
 
     @pytest.mark.asyncio
     async def test_start_syncs_after_scheduler_started_early(
