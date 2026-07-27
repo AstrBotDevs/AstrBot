@@ -31,7 +31,10 @@ class ReleaseInfo:
         self.body = body
 
     def __str__(self) -> str:
-        return f"\n{self.body}\n\n版本: {self.version} | 发布于: {self.published_at}"
+        return (
+            f"\n{self.body}\n\nVersion: {self.version} | "
+            f"Published at: {self.published_at}"
+        )
 
 
 class RepoZipUpdator:
@@ -71,7 +74,12 @@ class RepoZipUpdator:
                 response.raise_for_status()
                 repo_info = response.json()
         except Exception as exc:
-            logger.debug("获取 GitHub 默认分支失败 %s/%s: %s", author, repo, exc)
+            logger.debug(
+                "Failed to get the default GitHub branch for %s/%s: %s",
+                author,
+                repo,
+                exc,
+            )
             return None
 
         default_branch = str(repo_info.get("default_branch") or "").strip()
@@ -100,7 +108,11 @@ class RepoZipUpdator:
         if default_branch:
             return author, repo, default_branch
 
-        logger.info("未能获取 %s/%s 的默认分支，将尝试 main 分支", author, repo)
+        logger.info(
+            "Could not get the default branch for %s/%s; trying the main branch.",
+            author,
+            repo,
+        )
         return author, repo, "main"
 
     async def _download_file(
@@ -163,7 +175,7 @@ class RepoZipUpdator:
                         },
                     )
         except Exception as e:
-            logger.error(f"下载文件失败: {url} -> {target_path}, 错误: {e}")
+            logger.error(f"Failed to download file: {url} -> {target_path}: {e}")
             if self.rm_on_error and target_path.exists():
                 target_path.unlink()
             raise
@@ -199,12 +211,13 @@ class RepoZipUpdator:
             if e.response is not None:
                 response_body = self._truncate_response_body(e.response.text)
                 logger.error(
-                    f"请求 {url} 失败，状态码: {e.response.status_code}, 内容: {response_body}",
+                    f"Request to {url} failed with status "
+                    f"{e.response.status_code}; response: {response_body}",
                 )
-            raise Exception("解析版本信息失败") from e
+            raise Exception("Failed to parse release information.") from e
         except Exception as e:
-            logger.error(f"解析版本信息时发生异常: {e}")
-            raise Exception("解析版本信息失败") from e
+            logger.error(f"An error occurred while parsing release information: {e}")
+            raise Exception("Failed to parse release information.") from e
         return ret
 
     def github_api_release_parser(self, releases: list) -> list:
@@ -260,7 +273,7 @@ class RepoZipUpdator:
                 break
 
         if not sel_release_data or not tag_name:
-            logger.error("未找到合适的发布版本")
+            logger.error("No suitable release was found.")
             return None
 
         if self.compare_version(current_version, tag_name) >= 0:
@@ -276,8 +289,8 @@ class RepoZipUpdator:
     ) -> None:
         author, repo, branch = await self.resolve_github_source_branch(repo_url)
 
-        logger.info(f"正在下载更新 {repo} ...")
-        logger.info(f"正在从分支 {branch} 下载 {author}/{repo}")
+        logger.info(f"Downloading update for {repo} ...")
+        logger.info(f"Downloading {author}/{repo} from branch {branch}")
         release_url = (
             f"https://github.com/{author}/{repo}/archive/refs/heads/{branch}.zip"
         )
@@ -286,7 +299,8 @@ class RepoZipUpdator:
             proxy = proxy.rstrip("/")
             release_url = f"{proxy}/{release_url}"
             logger.info(
-                f"检查到设置了镜像站，将使用镜像站下载 {author}/{repo} 仓库源码: {release_url}",
+                f"A mirror is configured; downloading the {author}/{repo} source "
+                f"from the mirror: {release_url}",
             )
 
         await self._download_file(release_url, target_path + ".zip")
@@ -307,7 +321,7 @@ class RepoZipUpdator:
             repo = match.group(2)
             branch = match.group(4)
             return author, repo, branch
-        raise ValueError("无效的 GitHub URL")
+        raise ValueError("Invalid GitHub URL")
 
     def unzip_file(self, zip_path: str, target_dir: str) -> None:
         """解压缩文件, 并将压缩包内**第一个**文件夹内的文件移动到 target_dir"""
@@ -315,7 +329,7 @@ class RepoZipUpdator:
         with zipfile.ZipFile(zip_path, "r") as z:
             update_dir = self._resolve_archive_root_dir(z.namelist())
             z.extractall(target_dir)
-        logger.debug(f"解压文件完成: {zip_path}")
+        logger.debug(f"Finished extracting archive: {zip_path}")
 
         self._finalize_extracted_archive(zip_path, target_dir, update_dir)
 
@@ -370,7 +384,9 @@ class RepoZipUpdator:
             try:
                 os.remove(zip_path)
             except Exception:
-                logger.warning(f"删除更新文件失败，可以手动删除 {zip_path}")
+                logger.warning(
+                    f"Failed to delete the update file; delete it manually: {zip_path}"
+                )
             return
 
         update_root_path = _join_under_root(target_root_path, update_dir)
@@ -387,12 +403,15 @@ class RepoZipUpdator:
             shutil.move(update_item_path, target_root_path)
 
         try:
-            logger.debug(f"删除临时更新文件: {zip_path} 和 {update_root_path}")
+            logger.debug(
+                f"Deleting temporary update files: {zip_path} and {update_root_path}"
+            )
             shutil.rmtree(update_root_path, onerror=on_error)
             os.remove(zip_path)
         except Exception:
             logger.warning(
-                f"删除更新文件失败，可以手动删除 {zip_path} 和 {update_root_path}"
+                "Failed to delete the update files; delete them manually: "
+                f"{zip_path} and {update_root_path}"
             )
 
     def format_name(self, name: str) -> str:

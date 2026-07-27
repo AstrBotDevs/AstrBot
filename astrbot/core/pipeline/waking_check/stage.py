@@ -189,9 +189,11 @@ class WakingCheckStage(Stage):
                         break
                 except Exception as e:
                     await event.send(
-                        MessageEventResult().message(
+                        MessageEventResult()
+                        .message(
                             f"插件 {star_map[handler.handler_module_path].name}: {e}",
-                        ),
+                        )
+                        .use_markdown(False),
                     )
                     event.stop_event()
                     passed = False
@@ -208,7 +210,8 @@ class WakingCheckStage(Stage):
                             ),
                         )
                     logger.info(
-                        f"触发 {star_map[handler.handler_module_path].name} 时, 用户(ID={event.get_sender_id()}) 权限不足。",
+                        f"User ID {event.get_sender_id()} lacks permission to trigger "
+                        f"{star_map[handler.handler_module_path].name}.",
                     )
                     event.stop_event()
                     return

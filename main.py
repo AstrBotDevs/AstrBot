@@ -71,7 +71,7 @@ logo_tmpl = r"""
 
 def check_env() -> None:
     if not (sys.version_info.major == 3 and sys.version_info.minor >= 10):
-        logger.error("请使用 Python3.10+ 运行本项目。")
+        logger.error("Please run this project with Python 3.10 or later.")
         exit()
 
     astrbot_root = get_astrbot_root()
@@ -159,7 +159,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
                 allow_insecure_ssl_fallback=False,
             )
         except Exception as e:
-            logger.critical(f"下载管理面板文件失败: {e}。")
+            logger.critical(f"Failed to download dashboard files: {e}.")
             if (data_dist_path / "index.html").is_file():
                 logger.warning(
                     "Falling back to existing data/dist WebUI %s even though core expects v%s. "
@@ -169,7 +169,7 @@ async def check_dashboard_files(webui_dir: str | None = None):
                 )
                 return str(data_dist_path)
             return None
-        logger.info("管理面板下载完成。")
+        logger.info("Dashboard download completed.")
         return str(data_dist_path)
 
     if is_dashboard_dist_compatible(bundled_dist, VERSION):
@@ -189,10 +189,10 @@ async def check_dashboard_files(webui_dir: str | None = None):
             allow_insecure_ssl_fallback=False,
         )
     except Exception as e:
-        logger.critical(f"下载管理面板文件失败: {e}。")
+        logger.critical(f"Failed to download dashboard files: {e}.")
         return None
 
-    logger.info("管理面板下载完成。")
+    logger.info("Dashboard download completed.")
     return str(data_dist_path)
 
 
@@ -202,8 +202,8 @@ async def main_async(webui_dir_arg: str | None) -> None:
     webui_dir = await check_dashboard_files(webui_dir_arg)
     if webui_dir is None:
         logger.warning(
-            "管理面板文件检查失败，WebUI 功能将不可用。"
-            "请检查网络连接或手动指定 --webui-dir 参数。"
+            "Dashboard file validation failed, so WebUI features will be unavailable. "
+            "Check the network connection or specify the --webui-dir argument manually."
         )
 
     db = db_helper

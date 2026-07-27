@@ -2843,6 +2843,11 @@ async def test_v1_safe_plugin_routes_accept_slash_ids(
         params={"plugin_id": plugin_id},
         headers=headers,
     )
+    config_response = await asgi_client.get(
+        "/api/v1/plugins/config",
+        params={"plugin_id": plugin_id},
+        headers=headers,
+    )
     config_files_response = await asgi_client.get(
         "/api/v1/plugins/config-files",
         params={"plugin_id": plugin_id, "config_key": "assets/path"},
@@ -2863,6 +2868,12 @@ async def test_v1_safe_plugin_routes_accept_slash_ids(
     }
     assert readme_response.status_code == 200
     assert readme_response.json()["data"]["name"] == plugin_id
+    assert config_response.status_code == 200
+    assert config_response.json()["data"] == {
+        "plugin_name": plugin_id,
+        "log_level": None,
+        "schema": {"name": plugin_id},
+    }
     assert schema_response.status_code == 200
     assert schema_response.json()["data"]["plugin_name"] == plugin_id
     assert config_files_response.status_code == 200

@@ -164,8 +164,34 @@ class WebChatMessageEvent(AstrMessageEvent):
 
     async def send(self, message: MessageChain | None) -> None:
         message_id = self.message_obj.message_id
+        follow_up_capture = self.get_extra("_follow_up_captured")
+        if message is None and isinstance(follow_up_capture, dict):
+            request_id = str(message_id)
+            await webchat_queue_mgr.put_back_queue(
+                request_id,
+                {
+                    "type": "follow_up_captured",
+                    "data": follow_up_capture,
+                    "streaming": False,
+                    "message_id": message_id,
+                },
+            )
         await WebChatMessageEvent._send(message_id, message, session_id=self.session_id)
         await super().send(MessageChain([]))
+
+    async def send_typing(self) -> None:
+        """Emit a run-start signal before an independent LLM request."""
+        message_id = self.message_obj.message_id
+        request_id = str(message_id)
+        await webchat_queue_mgr.put_back_queue(
+            request_id,
+            {
+                "type": "run_started",
+                "data": {"run_id": request_id},
+                "streaming": False,
+                "message_id": message_id,
+            },
+        )
 
     async def send_streaming(self, generator, use_fallback: bool = False) -> None:
         final_data = ""

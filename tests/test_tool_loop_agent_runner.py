@@ -323,9 +323,14 @@ class CapturingToolLoopProvider(MockProvider):
 
 
 class SequentialToolProvider(MockProvider):
-    def __init__(self, tool_sequence: list[str]):
+    def __init__(
+        self,
+        tool_sequence: list[str],
+        tool_args_sequence: list[dict[str, Any]] | None = None,
+    ):
         super().__init__()
         self.tool_sequence = tool_sequence
+        self.tool_args_sequence = tool_args_sequence
 
     async def text_chat(self, **kwargs) -> LLMResponse:
         self.call_count += 1
@@ -338,11 +343,16 @@ class SequentialToolProvider(MockProvider):
             )
 
         tool_name = self.tool_sequence[self.call_count - 1]
+        tool_args = (
+            self.tool_args_sequence[self.call_count - 1]
+            if self.tool_args_sequence is not None
+            else {"query": f"step-{self.call_count}"}
+        )
         return LLMResponse(
             role="assistant",
             completion_text="",
             tools_call_name=[tool_name],
-            tools_call_args=[{"query": f"step-{self.call_count}"}],
+            tools_call_args=[tool_args],
             tools_call_ids=[f"call_{self.call_count}"],
             usage=TokenUsage(input_other=10, output=5),
         )
@@ -968,7 +978,10 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
 ):
     runner_cls = type(runner)
     total_calls = runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD
-    provider = SequentialToolProvider(["test_tool"] * total_calls)
+    provider = SequentialToolProvider(
+        ["test_tool"] * total_calls,
+        [{"query": "same"}] * total_calls,
+    )
     tool = FunctionTool(
         name="test_tool",
         description="测试工具",
@@ -1032,13 +1045,54 @@ async def test_same_tool_consecutive_results_include_escalating_guidance(
 
 
 @pytest.mark.asyncio
+async def test_same_tool_with_different_args_does_not_include_repeated_guidance(
+    runner, mock_tool_executor, mock_hooks
+):
+    runner_cls = type(runner)
+    total_calls = runner_cls.REPEATED_TOOL_NOTICE_L3_THRESHOLD
+    provider = SequentialToolProvider(["test_tool"] * total_calls)
+    tool = FunctionTool(
+        name="test_tool",
+        description="测试工具",
+        parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+        handler=AsyncMock(),
+    )
+    request = ProviderRequest(
+        prompt="使用不同参数连续执行工具",
+        func_tool=ToolSet(tools=[tool]),
+        contexts=[],
+    )
+
+    await runner.reset(
+        provider=provider,
+        request=request,
+        run_context=ContextWrapper(context=None),
+        tool_executor=mock_tool_executor,
+        agent_hooks=mock_hooks,
+        streaming=False,
+    )
+
+    async for _ in runner.step_until_done(total_calls + 1):
+        pass
+
+    tool_messages = [
+        m for m in runner.run_context.messages if getattr(m, "role", None) == "tool"
+    ]
+    assert len(tool_messages) == total_calls
+    assert all(
+        "[SYSTEM NOTICE]" not in str(message.content) for message in tool_messages
+    )
+
+
+@pytest.mark.asyncio
 async def test_same_tool_streak_resets_after_switching_tools(
     runner, mock_tool_executor, mock_hooks
 ):
     runner_cls = type(runner)
     repeated_after_reset = runner_cls.REPEATED_TOOL_NOTICE_L1_THRESHOLD
     provider = SequentialToolProvider(
-        ["test_tool", "other_tool", *(["test_tool"] * repeated_after_reset)]
+        ["test_tool", "other_tool", *(["test_tool"] * repeated_after_reset)],
+        [{"query": "same"}] * (repeated_after_reset + 2),
     )
     tool_a = FunctionTool(
         name="test_tool",

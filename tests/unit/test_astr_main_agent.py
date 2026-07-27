@@ -792,6 +792,63 @@ class TestEnsurePersonaAndSkills:
         assert "Custom persona." in req.system_prompt
 
     @pytest.mark.asyncio
+    async def test_inline_genui_prompt_is_added_with_custom_persona(
+        self, mock_event, mock_context
+    ):
+        """Test inline GenUI instructions are independent of persona selection."""
+        module = ama
+        persona = {"name": "conv-persona", "prompt": "Custom persona."}
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("conv-persona", persona, None, False)
+        )
+        mock_event.get_extra.side_effect = (
+            lambda key: key == "enable_inline_genui"
+        )
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id="conv-persona")
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert "Custom persona." in req.system_prompt
+        assert module.CHATUI_INLINE_GENUI_SYSTEM_PROMPT in req.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_inline_genui_prompt_does_not_require_conversation(
+        self, mock_event, mock_context
+    ):
+        """Test inline GenUI instructions are added before conversation setup."""
+        module = ama
+        mock_event.get_extra.side_effect = (
+            lambda key: key == "enable_inline_genui"
+        )
+        req = ProviderRequest()
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert module.CHATUI_INLINE_GENUI_SYSTEM_PROMPT in req.system_prompt
+        mock_context.persona_manager.resolve_selected_persona.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_default_system_prompt_can_be_disabled(
+        self, mock_event, mock_context
+    ):
+        """Test the default ChatUI persona prompt honors its request flag."""
+        module = ama
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("_chatui_default_", None, None, True)
+        )
+        mock_event.get_extra.side_effect = lambda key: {
+            "enable_inline_genui": False,
+            "enable_default_system_prompt": False,
+        }.get(key)
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert module.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT not in req.system_prompt
+
+    @pytest.mark.asyncio
     async def test_ensure_persona_none_explicit(self, mock_event, mock_context):
         """Test that [%None] persona is explicitly set to no persona."""
         module = ama
