@@ -3,7 +3,7 @@ import json
 import ntpath
 import threading
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -1876,3 +1876,100 @@ async def test_install_adds_aliyun_trusted_host_only_for_aliyun_index(monkeypatc
     assert "https://mirrors.aliyun.com/simple" in recorded_args
     trusted_host_index = recorded_args.index("--trusted-host")
     assert recorded_args[trusted_host_index + 1] == "mirrors.aliyun.com"
+
+
+# ---------------------------------------------------------------------------
+# _has_loaded_c_extension 回归测试
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_module(filepath):
+    """构造一个具有 __file__ 属性的假模块对象。"""
+    mod = MagicMock()
+    mod.__file__ = filepath
+    return mod
+
+
+def _set_modules(monkeypatch, modules: dict):
+    """用 dict 替换 pip_installer 所见到的 sys.modules。"""
+    monkeypatch.setattr(pip_installer_module, "sys", MagicMock(modules=dict(modules)))
+
+
+class TestHasLoadedCExtension:
+    """覆盖 _has_loaded_c_extension 的核心场景。"""
+
+    # ── C 扩展检测 ──
+
+    def test_detects_pyd_extension(self, monkeypatch):
+        """已加载子模块的 __file__ 为 .pyd 时应返回 True。"""
+        _set_modules(monkeypatch, {
+            "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
+            "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.pyd"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("pikepdf") is True
+
+    def test_detects_so_extension(self, monkeypatch):
+        """已加载子模块的 __file__ 为 .so 时应返回 True。"""
+        _set_modules(monkeypatch, {
+            "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
+            "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.cpython-311-x86_64-linux-gnu.so"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("pikepdf") is True
+
+    def test_detects_extension_case_insensitive(self, monkeypatch):
+        """后缀比较应忽略大小写（.PYD / .SO 也视为 C 扩展）。"""
+        _set_modules(monkeypatch, {
+            "pikepdf": _make_fake_module("/site-packages/pikepdf/__init__.py"),
+            "pikepdf._core": _make_fake_module("/site-packages/pikepdf/_core.PYD"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("pikepdf") is True
+
+    # ── 纯 Python 不受影响 ──
+
+    def test_returns_false_for_pure_python(self, monkeypatch):
+        """不含任何 C 扩展时应返回 False，保留原重载路径。"""
+        _set_modules(monkeypatch, {
+            "img2pdf": _make_fake_module("/site-packages/img2pdf/__init__.py"),
+            "img2pdf.core": _make_fake_module("/site-packages/img2pdf/core.py"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("img2pdf") is False
+
+    def test_module_not_in_sys_modules(self, monkeypatch):
+        """目标模块未加载时返回 False。"""
+        _set_modules(monkeypatch, {"unrelated": _make_fake_module("/.../something.py")})
+        assert pip_installer_module._has_loaded_c_extension("not_loaded") is False
+
+    # ── 边界情况 ──
+
+    def test_file_is_none(self, monkeypatch):
+        """__file__ 为 None 时应安全返回 False。"""
+        mod = MagicMock()
+        mod.__file__ = None
+        _set_modules(monkeypatch, {"foo": mod})
+        assert pip_installer_module._has_loaded_c_extension("foo") is False
+
+    def test_file_attribute_missing(self, monkeypatch):
+        """模块没有 __file__ 属性时应安全返回 False。"""
+        mod = MagicMock(spec=[])
+        _set_modules(monkeypatch, {"foo": mod})
+        assert pip_installer_module._has_loaded_c_extension("foo") is False
+
+    def test_no_matching_keys(self, monkeypatch):
+        """sys.modules 键名完全不匹配时返回 False。"""
+        _set_modules(monkeypatch, {
+            "other": _make_fake_module("/.../other.pyd"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("target") is False
+
+    def test_extension_in_parent_not_submodule(self, monkeypatch):
+        """C 扩展不在 target 的子树下时不触发。"""
+        _set_modules(monkeypatch, {
+            "other.core": _make_fake_module("/.../core.pyd"),
+            "target": _make_fake_module("/.../target/__init__.py"),
+        })
+        assert pip_installer_module._has_loaded_c_extension("target") is False
+
+    def test_empty_sys_modules(self, monkeypatch):
+        """sys.modules 为空时安全返回 False。"""
+        _set_modules(monkeypatch, {})
+        assert pip_installer_module._has_loaded_c_extension("anything") is False
