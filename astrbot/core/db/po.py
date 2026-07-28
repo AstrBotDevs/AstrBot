@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TypedDict
 
+from sqlalchemy import Index, desc
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
@@ -89,6 +90,17 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
     """
 
     __table_args__ = (
+        Index(
+            "ix_conversations_created_at_inner_id",
+            desc("created_at"),
+            desc("inner_conversation_id"),
+        ),
+        Index(
+            "ix_conversations_platform_created_at_inner_id",
+            "platform_id",
+            desc("created_at"),
+            desc("inner_conversation_id"),
+        ),
         UniqueConstraint(
             "conversation_id",
             name="uix_conversation_id",
