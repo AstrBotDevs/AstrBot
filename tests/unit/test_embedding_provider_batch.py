@@ -98,28 +98,6 @@ async def test_get_embedding_with_retry_uses_batch_retry_path(no_sleep) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_embeddings_batch_without_rpm_has_no_launch_delay(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    provider = RecordingEmbeddingProvider()
-    sleep_delays: list[float] = []
-
-    async def _record_sleep(delay: float = 0, *_args, **_kwargs) -> None:
-        sleep_delays.append(delay)
-
-    monkeypatch.setattr(asyncio, "sleep", _record_sleep)
-
-    embeddings = await provider.get_embeddings_batch(
-        ["chunk-0", "chunk-1"],
-        batch_size=1,
-        tasks_limit=2,
-    )
-
-    assert embeddings == [[0.0], [1.0]]
-    assert sleep_delays == []
-
-
-@pytest.mark.asyncio
 async def test_get_embeddings_batch_respects_retry_after_cooldown_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -198,6 +176,37 @@ async def test_get_embeddings_batch_uses_provider_level_request_pacing(
     )
 
     assert sleep_delays == [1.0]
+    assert provider.calls == [["chunk-0"], ["chunk-1"]]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_batches_honor_cooldown_without_rpm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = RecordingEmbeddingProvider(
+        {"embedding_max_requests_per_minute": 0},
+    )
+    now = 100.0
+    sleep_delays: list[float] = []
+
+    def _monotonic() -> float:
+        return now
+
+    async def _advance_sleep(delay: float = 0, *_args, **_kwargs) -> None:
+        nonlocal now
+        sleep_delays.append(delay)
+        now += delay
+
+    monkeypatch.setattr("astrbot.core.provider.provider.time.monotonic", _monotonic)
+    monkeypatch.setattr(asyncio, "sleep", _advance_sleep)
+    provider._delay_embedding_requests(10.0)
+
+    await asyncio.gather(
+        provider.get_embeddings_batch(["chunk-0"], batch_size=1, tasks_limit=1),
+        provider.get_embeddings_batch(["chunk-1"], batch_size=1, tasks_limit=1),
+    )
+
+    assert sleep_delays == [10.0]
     assert provider.calls == [["chunk-0"], ["chunk-1"]]
 
 

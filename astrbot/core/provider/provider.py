@@ -421,11 +421,8 @@ class EmbeddingProvider(AbstractProvider):
 
         This limiter is shared by all knowledge-base upload tasks using the same
         provider instance, so separate large imports cannot bypass per-provider
-        pacing by running concurrently.
+        pacing or a dynamic rate-limit cooldown by running concurrently.
         """
-        if self._embedding_min_request_interval_s <= 0:
-            return
-
         async with self._embedding_request_lock:
             while True:
                 now = time.monotonic()
@@ -433,9 +430,10 @@ class EmbeddingProvider(AbstractProvider):
                 if wait_s <= 0:
                     break
                 await asyncio.sleep(wait_s)
-            self._embedding_next_request_at = (
-                time.monotonic() + self._embedding_min_request_interval_s
-            )
+            if self._embedding_min_request_interval_s > 0:
+                self._embedding_next_request_at = (
+                    time.monotonic() + self._embedding_min_request_interval_s
+                )
 
     def _delay_embedding_requests(self, delay_s: float) -> None:
         """Delay future embedding requests for this provider instance.
