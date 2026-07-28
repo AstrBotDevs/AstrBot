@@ -111,7 +111,22 @@ def _is_unsupported_image_mime(mime: str | None) -> bool:
 def sanitize_contexts_by_modalities(
     contexts: Sequence[dict[str, Any] | Message],
     modalities: list[str] | None,
+    supported_image_mimes: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], ContextSanitizeStats]:
+    """Sanitize message contexts based on provider capabilities.
+
+    Args:
+        contexts: The message contexts to sanitize.
+        modalities: List of modalities the provider supports (e.g. ["text", "image"]).
+        supported_image_mimes: Whitelist of image MIME types the provider accepts.
+            When None or empty, a fallback blocklist (_UNSUPPORTED_IMAGE_MIMES) is used
+            to filter known-problematic formats (e.g. image/gif for some Gemini gateways).
+            When provided, images with MIME types not in this list are replaced with
+            "[Image]" placeholders.
+
+    Returns:
+        Tuple of (sanitized contexts, statistics).
+    """
     if not contexts:
         return [], ContextSanitizeStats()
     if not modalities or not isinstance(modalities, list):
@@ -125,10 +140,12 @@ def sanitize_contexts_by_modalities(
     supports_image = "image" in modalities
     supports_audio = "audio" in modalities
     supports_tool_use = "tool_use" in modalities
-    # Even when the provider declares all modalities, we may still need to walk
-    # the contexts to drop specific image MIME types (e.g. image/gif) that some
-    # OpenAI-compatible gateways reject. See issue #9295.
-    needs_mime_pass = supports_image and bool(_UNSUPPORTED_IMAGE_MIMES)
+    # Determine whether we need a MIME-filtering pass. When a whitelist is
+    # provided, we always filter; otherwise we fall back to the hardcoded
+    # blocklist for known-problematic MIME types (e.g. image/gif).
+    needs_mime_pass = supports_image and (
+        bool(supported_image_mimes) or bool(_UNSUPPORTED_IMAGE_MIMES)
+    )
     if supports_image and supports_audio and supports_tool_use and not needs_mime_pass:
         copied_contexts = []
         for msg in contexts:
@@ -169,18 +186,28 @@ def sanitize_contexts_by_modalities(
                 for part in content:
                     if isinstance(part, dict):
                         part_type = str(part.get("type", "")).lower()
-                        if part_type in {"image_url", "image"} and (
-                            not supports_image
-                            or _is_unsupported_image_mime(_extract_image_mime(part))
-                        ):
-                            # Either the model has no image modality at all, or it
-                            # declares image support but the specific MIME (e.g.
-                            # image/gif) is rejected by some OpenAI-compatible
-                            # gateways (notably certain Gemini endpoints that only
-                            # accept JPEG/PNG/WebP). Replacing the block with a
-                            # placeholder prevents the unsupported bytes from being
-                            # persisted into the session history and poisoning all
-                            # subsequent requests. See issue #9295.
+                        # Determine whether this image part should be dropped.
+                        should_drop_image = False
+                        if part_type in {"image_url", "image"}:
+                            if not supports_image:
+                                # Provider declares no image support at all.
+                                should_drop_image = True
+                            else:
+                                # Provider supports image, but may have MIME restrictions.
+                                mime = _extract_image_mime(part)
+                                if supported_image_mimes:
+                                    # Whitelist mode: drop if MIME not in the list.
+                                    if mime not in supported_image_mimes:
+                                        should_drop_image = True
+                                else:
+                                    # Fallback blocklist mode: drop if MIME is known
+                                    # to be rejected by some gateways (e.g. image/gif).
+                                    if _is_unsupported_image_mime(mime):
+                                        should_drop_image = True
+                        if should_drop_image:
+                            # Replacing the block with a placeholder prevents unsupported
+                            # bytes from being persisted into the session history and
+                            # poisoning all subsequent requests. See issue #9295.
                             removed_any_multimodal = True
                             stats.fixed_image_blocks += 1
                             filtered_parts.append({"type": "text", "text": "[Image]"})

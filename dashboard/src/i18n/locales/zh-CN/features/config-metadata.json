@@ -1274,6 +1274,16 @@
           "工具使用"
         ]
       },
+      "supported_image_mimes": {
+        "description": "支持的图片 MIME 类型",
+        "hint": "模型支持的图片格式。不勾选时保留全部（仅过滤已知不安全格式如 GIF）。勾选后仅保留勾选的格式。",
+        "labels": [
+          "JPEG",
+          "PNG",
+          "WebP",
+          "GIF"
+        ]
+      },
       "custom_headers": {
         "description": "自定义请求头",
         "hint": "此处添加的键值对将被合并到 OpenAI SDK 的 default_headers 中，用于自定义 HTTP 请求头。值必须为字符串。"

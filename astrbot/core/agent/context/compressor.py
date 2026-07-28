@@ -268,6 +268,7 @@ class LLMSummaryCompressor:
         sanitized_summary_contexts, sanitize_stats = sanitize_contexts_by_modalities(
             summary_contexts,
             self.provider.provider_config.get("modalities", None),
+            self.provider.provider_config.get("supported_image_mimes", None),
         )
         log_context_sanitize_stats(sanitize_stats)
 

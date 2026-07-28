@@ -1272,6 +1272,16 @@
           "Tool use"
         ]
       },
+      "supported_image_mimes": {
+        "description": "Supported image MIME types",
+        "hint": "Image formats the model accepts. When unchecked, all formats are kept (only known-unsafe formats like GIF are filtered on some gateways). When checked, only selected formats are preserved.",
+        "labels": [
+          "JPEG",
+          "PNG",
+          "WebP",
+          "GIF"
+        ]
+      },
       "custom_headers": {
         "description": "Custom request headers",
         "hint": "Key/value pairs added here are merged into the OpenAI SDK default_headers for custom HTTP headers. Values must be strings."
