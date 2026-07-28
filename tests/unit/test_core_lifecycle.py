@@ -98,6 +98,8 @@ class TestAstrBotCoreLifecycleInit:
             # Verify proxy environment variables are cleared
             assert "http_proxy" not in os.environ
             assert "https_proxy" not in os.environ
+            # Verify local APIs always bypass proxies after clearing the environment.
+            assert os.environ.get("no_proxy") == "localhost,127.0.0.1,::1"
 
 
 class TestAstrBotCoreLifecycleStop:
