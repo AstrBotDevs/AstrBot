@@ -86,7 +86,7 @@ async def generate_tsne_visualization(
         # 获取查询向量
         vec_db: FaissVecDB = kb_helper.vec_db  # type: ignore
         embedding_provider = vec_db.embedding_provider
-        query_embedding = await embedding_provider.get_embedding(query)
+        query_embedding = await embedding_provider.get_embedding_with_retry(query)
         query_vector = np.array([query_embedding], dtype=np.float32)
 
         # 合并所有向量和查询向量

@@ -1407,6 +1407,14 @@
       "embedding_api_base": {
         "description": "API Base URL"
       },
+      "embedding_max_requests_per_minute": {
+        "description": "Max embedding requests per minute",
+        "hint": "Limits batch embedding request rate for the same Embedding Provider. Set to 0 to disable; for remote APIs, use the provider's documented quota."
+      },
+      "embedding_rate_limit_cooldown": {
+        "description": "Embedding rate-limit cooldown cap (seconds)",
+        "hint": "Maximum seconds to delay later requests for the same Provider when the Embedding API returns Retry-After or a rate-limit error."
+      },
       "openai_embedding": {
         "hint": "If testing fails, try adding /v1 at the end for some OpenAI API versions."
       },

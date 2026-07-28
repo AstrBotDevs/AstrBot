@@ -325,7 +325,7 @@ class KnowledgeBaseService:
                 f"嵌入模型不存在或类型错误({type(provider)})"
             )
         try:
-            vec = await provider.get_embedding("astrbot")
+            vec = await provider.get_embedding_with_retry("astrbot")
             if len(vec) != provider.get_dim():
                 raise ValueError(
                     f"嵌入向量维度不匹配，实际是 {len(vec)}，然而配置是 {provider.get_dim()}",

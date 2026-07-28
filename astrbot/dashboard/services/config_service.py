@@ -1527,7 +1527,7 @@ class ProviderConfigService:
             if not isinstance(inst, EmbeddingProvider):
                 raise ValueError("提供商不是 EmbeddingProvider 类型")
 
-            vec = await inst.get_embedding("echo")
+            vec = await inst.get_embedding_with_retry("echo")
             dim = len(vec)
             logger.info(
                 f"检测到 {provider_config.get('id', 'unknown')} 的嵌入向量维度为 {dim}",
