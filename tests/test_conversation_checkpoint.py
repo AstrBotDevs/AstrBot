@@ -234,6 +234,7 @@ async def test_terminal_tool_result_persists_history_without_checkpoint():
             platform_id="qq",
             user_id="qq:GroupMessage:test",
             cid="conversation-1",
+            token_usage=1234,
         ),
         tool_calls_result=ToolCallsResult(
             tool_calls_info=assistant_message,
@@ -278,7 +279,7 @@ async def test_terminal_tool_result_persists_history_without_checkpoint():
                 "tool_call_id": "call-1",
             },
         ],
-        token_usage=None,
+        token_usage=1234,
     )
 
 

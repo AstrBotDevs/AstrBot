@@ -484,11 +484,12 @@ class InternalAgentSubStage(Stage):
                     ).model_dump()
                 )
             if has_checkpoint or (llm_response is None and req.tool_calls_result):
+                token_usage = None if has_checkpoint else req.conversation.token_usage
                 await self.conv_manager.update_conversation(
                     event.unified_msg_origin,
                     req.conversation.cid,
                     history=message_to_save,
-                    token_usage=None,
+                    token_usage=token_usage,
                 )
             return
 
