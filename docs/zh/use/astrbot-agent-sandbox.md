@@ -15,7 +15,7 @@
 - `Shipyard`（旧方案，仍可继续使用）
 - `CUA`（本地或云端电脑使用沙盒，适合需要桌面操作的场景）
 
-在当前版本的 AstrBot 控制台中，可在 `配置文件 → AI → 使用电脑能力` 中选择：
+在当前版本的 AstrBot 控制台中，可在 `配置文件 → AI配置 → 使用电脑能力` 中选择：
 
 - `Computer Use Runtime` = `sandbox`
 - `沙箱环境驱动器` = `Shipyard Neo`、`Shipyard` 或 `CUA`
