@@ -5,6 +5,12 @@ from astrbot.core.provider.sources.anthropic_source import ProviderAnthropic
 
 from ..register import register_provider_adapter
 
+# Current MiniMax Token Plan model IDs. Returned as a fallback when the
+# dynamic /v1/models fetch is unavailable (no API key configured yet or a
+# transient network error) so the model picker can still surface the current
+# models. The dynamic list remains authoritative whenever it succeeds.
+_MINIMAX_TOKEN_PLAN_FALLBACK_MODELS = ["MiniMax-M3", "MiniMax-M2.7"]
+
 
 @register_provider_adapter(
     "minimax_token_plan",
@@ -16,6 +22,8 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
     The model list is fetched dynamically from the MiniMax API's /v1/models
     endpoint, so newly released models are automatically discovered without
     a code change. The default model is MiniMax-M3, the current flagship.
+    When the dynamic fetch is unavailable, a small fallback list of current
+    model IDs is returned so the dashboard is never empty.
     """
 
     def __init__(
@@ -41,11 +49,16 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
         self.set_model(configured_model)
 
     async def get_models(self) -> list[str]:
-        """Dynamically fetch available models from the MiniMax API."""
+        """Fetch available models from the MiniMax API.
+
+        Returns the current fallback model IDs when the dynamic fetch is
+        unavailable (no API key or a network/API error) so the model picker
+        is never empty. The dynamic list is authoritative when it succeeds.
+        """
         key = self.chosen_api_key
         if not key:
             logger.warning("No API key configured for MiniMax Token Plan.")
-            return []
+            return _MINIMAX_TOKEN_PLAN_FALLBACK_MODELS.copy()
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(
@@ -55,7 +68,11 @@ class ProviderMiniMaxTokenPlan(ProviderAnthropic):
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                return [m["id"] for m in data.get("data", [])]
+                models = [m["id"] for m in data.get("data", [])]
+                if models:
+                    return models
+                logger.warning("MiniMax /v1/models returned an empty list.")
+                return _MINIMAX_TOKEN_PLAN_FALLBACK_MODELS.copy()
         except Exception as e:
             logger.error(f"Failed to fetch MiniMax model list: {e}")
-            return []
+            return _MINIMAX_TOKEN_PLAN_FALLBACK_MODELS.copy()
