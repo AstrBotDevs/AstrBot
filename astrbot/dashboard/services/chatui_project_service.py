@@ -165,18 +165,30 @@ class ChatUIProjectService:
         """
         project = await self._get_owned_project(username, project_id)
         fallback_umo = f"webchat:FriendMessage:webchat!{project.creator}!default"
-        workspace_root = resolve_project_workspace_root(
-            project,
-            fallback_umo=fallback_umo,
-        ).resolve(strict=False)
+        workspace_root_path = os.path.normcase(
+            os.path.realpath(
+                resolve_project_workspace_root(
+                    project,
+                    fallback_umo=fallback_umo,
+                )
+            )
+        )
+        workspace_root = Path(workspace_root_path)
         raw_path = str(relative_path or "").strip()
         normalized_path = Path(raw_path.replace("\\", "/") or ".")
         if normalized_path.is_absolute() or ".." in normalized_path.parts:
             raise ChatUIProjectServiceError("Invalid workspace path")
 
-        target_dir = (workspace_root / normalized_path).resolve(strict=False)
-        if not target_dir.is_relative_to(workspace_root):
+        target_dir_path = os.path.normcase(
+            os.path.realpath(os.path.join(workspace_root_path, normalized_path))
+        )
+        # Keep the separator to reject sibling paths with the same name prefix.
+        workspace_root_prefix = os.path.join(workspace_root_path, "")
+        if target_dir_path != workspace_root_path and not target_dir_path.startswith(
+            workspace_root_prefix
+        ):
             raise ChatUIProjectServiceError("Workspace path escapes project directory")
+        target_dir = Path(target_dir_path)
         if not workspace_root.exists() and normalized_path == Path("."):
             return {"path": "", "entries": []}
         if not target_dir.is_dir():
@@ -287,10 +299,14 @@ class ChatUIProjectService:
         """
         project = await self._get_owned_project(username, project_id)
         fallback_umo = f"webchat:FriendMessage:webchat!{project.creator}!default"
-        workspace_root = resolve_project_workspace_root(
-            project,
-            fallback_umo=fallback_umo,
-        ).resolve(strict=False)
+        workspace_root_path = os.path.normcase(
+            os.path.realpath(
+                resolve_project_workspace_root(
+                    project,
+                    fallback_umo=fallback_umo,
+                )
+            )
+        )
         raw_path = str(relative_path or "").strip()
         normalized_path = Path(raw_path.replace("\\", "/"))
         if (
@@ -300,9 +316,16 @@ class ChatUIProjectService:
         ):
             raise ChatUIProjectServiceError("Invalid workspace path")
 
-        target_file = (workspace_root / normalized_path).resolve(strict=False)
-        if not target_file.is_relative_to(workspace_root):
+        target_file_path = os.path.normcase(
+            os.path.realpath(os.path.join(workspace_root_path, normalized_path))
+        )
+        # Keep the separator to reject sibling paths with the same name prefix.
+        workspace_root_prefix = os.path.join(workspace_root_path, "")
+        if target_file_path != workspace_root_path and not target_file_path.startswith(
+            workspace_root_prefix
+        ):
             raise ChatUIProjectServiceError("Workspace path escapes project directory")
+        target_file = Path(target_file_path)
         if target_file.is_symlink() or not target_file.is_file():
             raise ChatUIProjectServiceError("Workspace file not found")
 

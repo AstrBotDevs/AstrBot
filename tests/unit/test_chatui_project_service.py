@@ -212,6 +212,24 @@ async def test_get_workspace_file_reads_utf8_text(tmp_path, workspace_service):
 
 
 @pytest.mark.asyncio
+async def test_get_workspace_file_allows_nested_path(tmp_path, workspace_service):
+    """Workspace reads should preserve legitimate nested file access."""
+    nested_dir = tmp_path / "docs"
+    nested_dir.mkdir()
+    target = nested_dir / "notes.md"
+    target.write_text("nested", encoding="utf-8")
+
+    result = await workspace_service.get_workspace_file(
+        "alice",
+        "project-1",
+        "docs/notes.md",
+    )
+
+    assert result["path"] == "docs/notes.md"
+    assert result["content"] == "nested"
+
+
+@pytest.mark.asyncio
 async def test_get_workspace_file_path_supports_binary_download(
     tmp_path,
     workspace_service,
