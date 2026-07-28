@@ -1534,6 +1534,45 @@ export type ListChatProjectSessionsResponse = (SuccessEnvelope);
 
 export type ListChatProjectSessionsError = unknown;
 
+export type ListChatProjectWorkspaceFilesData = {
+    path: {
+        project_id: string;
+    };
+    query?: {
+        path?: string;
+    };
+};
+
+export type ListChatProjectWorkspaceFilesResponse = (SuccessEnvelope);
+
+export type ListChatProjectWorkspaceFilesError = unknown;
+
+export type GetChatProjectWorkspaceFileData = {
+    path: {
+        project_id: string;
+    };
+    query: {
+        path: string;
+    };
+};
+
+export type GetChatProjectWorkspaceFileResponse = (SuccessEnvelope);
+
+export type GetChatProjectWorkspaceFileError = unknown;
+
+export type DownloadChatProjectWorkspaceFileData = {
+    path: {
+        project_id: string;
+    };
+    query: {
+        path: string;
+    };
+};
+
+export type DownloadChatProjectWorkspaceFileResponse = ((Blob | File));
+
+export type DownloadChatProjectWorkspaceFileError = unknown;
+
 export type AddChatProjectSessionData = {
     path: {
         project_id: string;

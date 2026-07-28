@@ -924,6 +924,29 @@ export const chatApi = {
       openApiV1.listChatProjectSessions({ path: { project_id: projectId } }),
     );
   },
+  listProjectWorkspaceFiles(projectId: string, path = '') {
+    return typed<any>(
+      openApiV1.listChatProjectWorkspaceFiles({
+        path: { project_id: projectId },
+        query: path ? { path } : undefined,
+      }),
+    );
+  },
+  getProjectWorkspaceFile(projectId: string, path: string) {
+    return typed<any>(
+      openApiV1.getChatProjectWorkspaceFile({
+        path: { project_id: projectId },
+        query: { path },
+      }),
+    );
+  },
+  downloadProjectWorkspaceFile(projectId: string, path: string) {
+    return openApiV1.downloadChatProjectWorkspaceFile({
+      path: { project_id: projectId },
+      query: { path },
+      responseType: 'blob',
+    }) as Promise<AxiosResponse<Blob>>;
+  },
   addProjectSession(projectId: string, sessionId: string) {
     return typed<any>(
       openApiV1.addChatProjectSession({

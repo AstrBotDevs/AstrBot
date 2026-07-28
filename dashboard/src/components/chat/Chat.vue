@@ -532,6 +532,12 @@
       :is-dark="isDark"
     />
     <RefsSidebar v-model="refsSidebarOpen" :refs="selectedRefs" />
+    <WorkspaceFilesPanel
+      :model-value="chatHeader.workspaceFilesOpen"
+      :project-id="activeProject?.project_id || ''"
+      :project-title="activeProject?.title || ''"
+      @update:model-value="chatHeader.SET_WORKSPACE_FILES_OPEN"
+    />
   </div>
 </template>
 
@@ -576,6 +582,7 @@ import ChatUILogo from "@/components/chat/ChatUILogo.vue";
 import type { RegenerateModelSelection } from "@/components/chat/RegenerateMenu.vue";
 import ReasoningSidebar from "@/components/chat/ReasoningSidebar.vue";
 import ThreadPanel from "@/components/chat/ThreadPanel.vue";
+import WorkspaceFilesPanel from "@/components/chat/WorkspaceFilesPanel.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import { useSessions, type Session } from "@/composables/useSessions";
 import {
@@ -834,6 +841,14 @@ const selectedProject = computed(
       (project) => project.project_id === selectedProjectId.value,
     ) || null,
 );
+const activeProject = computed(() => {
+  if (isProviderWorkspace.value) return null;
+  if (selectedProject.value) return selectedProject.value;
+  const projectId = sessionProject.value?.project_id;
+  return (
+    projects.value.find((project) => project.project_id === projectId) || null
+  );
+});
 const isEmptyChat = computed(
   () =>
     !isProviderWorkspace.value &&
@@ -923,11 +938,29 @@ function getSelectedProviderSelection() {
 provide("isDark", isDark);
 
 watch(
-  [chatHeaderTitle, chatHeaderSubtitle],
-  ([title, subtitle]) => {
-    chatHeader.SET_CONTEXT({ title, subtitle });
+  [chatHeaderTitle, chatHeaderSubtitle, activeProject],
+  ([title, subtitle, project]) => {
+    chatHeader.SET_CONTEXT({
+      title,
+      subtitle,
+      projectId: project?.project_id,
+    });
   },
   { immediate: true },
+);
+
+watch(
+  () => chatHeader.workspaceFilesOpen,
+  (open) => {
+    if (!open) return;
+    threadSelection.visible = false;
+    threadPanelOpen.value = false;
+    activeThread.value = null;
+    reasoningPanelOpen.value = false;
+    activeReasoningTarget.value = null;
+    refsSidebarOpen.value = false;
+    selectedRefs.value = null;
+  },
 );
 
 onMounted(async () => {
@@ -998,6 +1031,7 @@ function closeSecondaryPanels() {
   activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
   selectedRefs.value = null;
+  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
 }
 
 function showChatWorkspace() {
@@ -1537,6 +1571,7 @@ async function createThreadFromSelection() {
 }
 
 function openThreadPanel(thread: ChatThread) {
+  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   reasoningPanelOpen.value = false;
   activeReasoningTarget.value = null;
   refsSidebarOpen.value = false;
@@ -1545,6 +1580,7 @@ function openThreadPanel(thread: ChatThread) {
 }
 
 function openRefsSidebar(refs: unknown) {
+  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
   reasoningPanelOpen.value = false;
@@ -1558,6 +1594,7 @@ function openReasoningPanel(payload: {
   message: ChatRecord;
   blockIndex: number;
 }) {
+  chatHeader.SET_WORKSPACE_FILES_OPEN(false);
   threadPanelOpen.value = false;
   activeThread.value = null;
   refsSidebarOpen.value = false;

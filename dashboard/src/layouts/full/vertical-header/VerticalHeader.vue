@@ -10,7 +10,7 @@ import { MarkdownRender, enableKatex, enableMermaid } from "markstream-vue";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
-import { useI18n } from "@/i18n/composables";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { router } from "@/router";
 import { useRoute } from "vue-router";
 import { useDisplay, useTheme } from "vuetify";
@@ -31,6 +31,7 @@ const chatHeader = useChatHeaderStore();
 const theme = useTheme();
 const { lgAndUp } = useDisplay();
 const { t } = useI18n();
+const { tm } = useModuleI18n("features/chat");
 const route = useRoute();
 const LAST_BOT_ROUTE_KEY = "astrbot:last_bot_route";
 const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
@@ -1141,6 +1142,28 @@ onMounted(async () => {
     </div>
 
     <div class="header-actions" :class="{ 'chat-header-actions': isChatPath }">
+      <v-btn
+        v-if="isChatPath && chatHeader.projectId"
+        class="chat-action-btn workspace-files-trigger"
+        :class="{
+          'workspace-files-trigger--active': chatHeader.workspaceFilesOpen,
+        }"
+        variant="text"
+        size="small"
+        rounded="sm"
+        icon
+        :title="tm('workspaceFiles.open')"
+        @click="chatHeader.TOGGLE_WORKSPACE_FILES"
+      >
+        <v-icon size="20">
+          {{
+            chatHeader.workspaceFilesOpen
+              ? "mdi-folder-open-outline"
+              : "mdi-folder-outline"
+          }}
+        </v-icon>
+      </v-btn>
+
       <!-- Bot/Chat mode switch - single button, hidden in chat mobile menu -->
       <v-btn
         v-if="!isChatPath || !$vuetify.display.smAndDown"
@@ -2120,6 +2143,14 @@ onMounted(async () => {
 .chat-header-actions {
   gap: 4px;
   margin-right: 0;
+}
+
+.workspace-files-trigger {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.workspace-files-trigger--active {
+  background: rgba(var(--v-theme-on-surface), 0.08) !important;
 }
 
 .mode-switch-btn {
