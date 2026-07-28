@@ -252,7 +252,7 @@ class ChatUIProjectService:
         Raises:
             ChatUIProjectServiceError: If the file is invalid or cannot be previewed.
         """
-        target_file = await self.get_workspace_file_path(
+        _, target_file = await self.get_workspace_file_location(
             username,
             project_id,
             relative_path,
@@ -278,12 +278,12 @@ class ChatUIProjectService:
             "size": len(content_bytes),
         }
 
-    async def get_workspace_file_path(
+    async def get_workspace_file_location(
         self,
         username: str,
         project_id: str,
         relative_path: str,
-    ) -> Path:
+    ) -> tuple[Path, Path]:
         """Resolve a file inside an owned project's workspace.
 
         Args:
@@ -292,7 +292,7 @@ class ChatUIProjectService:
             relative_path: File path relative to the workspace root.
 
         Returns:
-            Validated absolute path to the workspace file.
+            Validated workspace root and absolute path to the workspace file.
 
         Raises:
             ChatUIProjectServiceError: If the file path is invalid or missing.
@@ -325,11 +325,10 @@ class ChatUIProjectService:
             workspace_root_prefix
         ):
             raise ChatUIProjectServiceError("Workspace path escapes project directory")
-        target_file = Path(target_file_path)
-        if target_file.is_symlink() or not target_file.is_file():
+        if not os.path.isfile(target_file_path):
             raise ChatUIProjectServiceError("Workspace file not found")
 
-        return target_file
+        return Path(workspace_root_path), Path(target_file_path)
 
     async def _get_owned_project(self, username: str, project_id: str):
         project = await self.db.get_chatui_project_by_id(project_id)

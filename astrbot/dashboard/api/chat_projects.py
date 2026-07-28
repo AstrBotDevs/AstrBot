@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 
@@ -188,14 +190,21 @@ async def download_chat_project_workspace_file(
     service: ChatUIProjectService = Depends(get_service),
 ):
     try:
-        file_path = await service.get_workspace_file_path(
+        workspace_root, file_path = await service.get_workspace_file_location(
             auth.username,
             project_id,
             path,
         )
     except ChatUIProjectServiceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return FileResponse(file_path, filename=file_path.name)
+    workspace_root_path = os.path.normcase(os.path.realpath(workspace_root))
+    download_path = os.path.normcase(os.path.realpath(file_path))
+    workspace_root_prefix = os.path.join(workspace_root_path, "")
+    if download_path != workspace_root_path and not download_path.startswith(
+        workspace_root_prefix
+    ):
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+    return FileResponse(download_path, filename=os.path.basename(download_path))
 
 
 @legacy_router.get("/get_sessions")

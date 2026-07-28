@@ -230,7 +230,7 @@ async def test_get_workspace_file_allows_nested_path(tmp_path, workspace_service
 
 
 @pytest.mark.asyncio
-async def test_get_workspace_file_path_supports_binary_download(
+async def test_get_workspace_file_location_supports_binary_download(
     tmp_path,
     workspace_service,
 ):
@@ -238,12 +238,13 @@ async def test_get_workspace_file_path_supports_binary_download(
     target = tmp_path / "archive.bin"
     target.write_bytes(b"\xff\xfe\x00")
 
-    result = await workspace_service.get_workspace_file_path(
+    workspace_root, result = await workspace_service.get_workspace_file_location(
         "alice",
         "project-1",
         "archive.bin",
     )
 
+    assert workspace_root == tmp_path
     assert result == target
     assert result.read_bytes() == b"\xff\xfe\x00"
 
