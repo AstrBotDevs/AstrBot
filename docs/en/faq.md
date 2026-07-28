@@ -89,8 +89,8 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 ### How to Let AstrBot Control My Mac / Windows / Linux Computer?
 
-1. In AstrBot WebUI's `Config` page, find `Agent Computer Use`, and select `local` for the runtime environment.
-2. In the `Config` page, find `Admin ID List`, and add your user ID (you can get it through the `/sid` command).
+1. In AstrBot WebUI's `Config → AI`, find `Agent Computer Use`, and select `local` for the runtime environment.
+2. In `Config → Platform`, find `Administrator IDs`, and add your user ID (you can get it through the `/sid` command).
 
 > [!TIP]
 > For security reasons, when runtime environment is set to `local`, AstrBot only allows AstrBot administrators to use computer capabilities by default.
@@ -102,7 +102,7 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 ### No Permission to Execute Admin Commands
 
-1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` are the default admin commands. You can use the `/sid` command to get a user's ID, then add it to the admin ID list in the `Config` page.
+1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` are the default admin commands. You can use the `/sid` command to get a user's ID, then add it to `Administrator IDs` in `Config → Platform`.
 
 ### Chinese Characters Garbled When Locally Rendering Markdown Images (t2i)
 
