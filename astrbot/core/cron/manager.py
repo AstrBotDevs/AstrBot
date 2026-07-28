@@ -103,22 +103,28 @@ class CronJobManager:
         self._basic_handlers: dict[str, Callable[..., Any]] = {}
         self._lock = asyncio.Lock()
         self._started = False
+        # The scheduler may start early via _schedule_job; track DB sync separately.
+        self._db_synced = False
 
     async def start(self, ctx: "Context") -> None:
         self.ctx: Context = ctx  # star context
         async with self._lock:
-            if self._started:
+            if self._db_synced:
                 return
-            self.scheduler.start()
-            self._started = True
+            if not self._started:
+                self.scheduler.start()
+                self._started = True
             await self.sync_from_db()
+            self._db_synced = True
 
     async def shutdown(self) -> None:
         async with self._lock:
             if not self._started:
                 return
             self.scheduler.shutdown(wait=False)
+            await asyncio.sleep(0)
             self._started = False
+            self._db_synced = False
 
     async def sync_from_db(self) -> None:
         jobs = await self.db.list_cron_jobs()
