@@ -1459,11 +1459,12 @@ async function handleRegenerateMessage(
 ) {
   if (!currSessionId.value || isUserMessage(message)) return;
   message.threads = [];
+  const effectiveSelection = selection ?? getSelectedProviderSelection();
   await regenerateMessage(
     currSessionId.value,
     message,
-    selection?.providerId || "",
-    selection?.modelName || "",
+    effectiveSelection?.providerId || "",
+    effectiveSelection?.modelName || "",
     enableStreaming.value,
   );
 }
