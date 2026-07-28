@@ -5,8 +5,8 @@ AstrBot supports WeChat Official Account integration (version >= v3.5.8). After 
 ## Before You Start
 
 1. Open AstrBot Dashboard.
-2. Click `Bots` in the left sidebar.
-3. Click `+ Create Bot`.
+2. Click `Platforms` in the left sidebar.
+3. Click `+ Add Adapter`.
 4. Select `weixin_official_account`.
 
 A configuration dialog will appear. Keep it open and continue.

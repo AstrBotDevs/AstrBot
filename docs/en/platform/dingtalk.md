@@ -22,7 +22,7 @@ DingTalk supports two setup methods: one-click QR creation in AstrBot, or manual
 
 AstrBot version requirement: >= v4.25.0.
 
-Open AstrBot Dashboard -> `Bots` -> `+ Create Bot`, then select `DingTalk`.
+Open AstrBot Dashboard -> `Platforms` -> `+ Add Adapter`, then select `DingTalk`.
 
 Under `Creation Method`, select `One-click QR setup`, scan the QR code with the DingTalk mobile app, then create or bind a bot on the DingTalk authorization page. After creation succeeds, AstrBot automatically fills in `ClientID` and `ClientSecret`. Click `Save` to finish.
 

@@ -48,7 +48,7 @@ We need to record the `bot_id` for later use.
 
 After completing all the preparation work, we can now configure Coze in AstrBot.
 
-Go to AstrBot Admin Panel -> Service Provider -> Add Service Provider -> Coze to enter the configuration page.
+Go to AstrBot Admin Panel -> Providers -> Add Provider -> Coze to enter the configuration page.
 
 ![Coze Provider](https://files.astrbot.app/docs/source/images/coze/image_8.png)
 
@@ -61,5 +61,5 @@ Fill in the API Key and bot_id you just created, then click Save.
 
 ## Select Agent Runner
 
-Go to the Configuration page in the left sidebar, click "Agent Execution Method", select "Coze", then select the ID of the Coze Agent Runner you just created in the new configuration options that appear below, and click "Save" in the bottom right corner to complete the configuration.
+Go to the Config page in the left sidebar, click "Agent Execution Method", select "Coze", then select the ID of the Coze Agent Runner you just created in the new configuration options that appear below, and click "Save" in the bottom right corner to complete the configuration.
 

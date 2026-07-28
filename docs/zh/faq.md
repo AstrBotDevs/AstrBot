@@ -90,8 +90,8 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 如何让 AstrBot 控制我的 Mac / Windows / Linux 电脑？
 
-1. 在 AstrBot WebUI 的 `配置 -> 普通配置` 中，找到 `使用电脑能力`，运行环境选择 `local`。
-2. 在 `配置 -> 其他配置` 中，找到 `管理员 ID 列表`，添加你的用户 ID（可以通过 `/sid` 指令获取）。
+1. 在 AstrBot WebUI 的 `配置文件 -> 普通` 中，找到 `使用电脑能力`，运行环境选择 `local`。
+2. 在 `配置文件 -> 其他配置` 中，找到 `管理员 ID 列表`，添加你的用户 ID（可以通过 `/sid` 指令获取）。
 3. 右下角保存配置
 
 > [!TIP]
@@ -120,7 +120,7 @@ Set dashboard.host in data/cmd_config.json to enable remote access.
 
 ### 没有权限操作管理员指令
 
-1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` 等是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置` -> `其他配置` 中添加到管理员 ID 名单中。
+1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` 等是默认的管理员指令。可以通过 `/sid` 指令得到用户的 ID，然后在 `配置文件` -> `其他配置` 中添加到管理员 ID 名单中。
 
 ### 本地渲染 Markdown 图片（t2i）时中文乱码
 

@@ -17,8 +17,8 @@ Please refer to the deployment documentation of the chosen implementation projec
 ## 2. Configure Satori protocol in AstrBot
 
 1. Open AstrBot WebUI.
-2. Click `Bots` in the left sidebar.
-3. In the right panel, click `+ Create Bot`.
+2. Click `Platforms` in the left sidebar.
+3. In the right panel, click `+ Add Adapter`.
 4. Select `satori`.
 
 Fill in the form:

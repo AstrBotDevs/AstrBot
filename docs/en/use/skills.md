@@ -12,7 +12,7 @@ Support for Anthropic Skills was introduced in AstrBot starting from v4.13.0, al
 
 ## Uploading Skills to AstrBot
 
-Open the AstrBot admin panel, navigate to the `Plugins` page, and find `Skills`.
+Open the AstrBot admin panel, navigate to the `Extensions` page, and find `Skills`.
 
 ![Skills](https://files.astrbot.app/docs/source/images/skills/image.png)
 

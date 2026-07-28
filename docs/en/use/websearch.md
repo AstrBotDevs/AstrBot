@@ -18,7 +18,7 @@ AstrBot currently supports 6 web search providers: `Tavily`, `BoCha`, `Baidu AI 
 
 ![image](https://files.astrbot.app/docs/source/images/websearch/image.png)
 
-Go to `Configuration`, scroll down to find Web Search, where you can select `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`, or `Exa`.
+Go to `Config`, scroll down to find Web Search, where you can select `Tavily`, `BoCha`, `Baidu AI Search`, `Brave`, `Firecrawl`, or `Exa`.
 
 ### Tavily
 

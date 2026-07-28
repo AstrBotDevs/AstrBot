@@ -30,8 +30,8 @@ Message receiving mode: WebSocket
 ## Configure in AstrBot
 
 1. Access the AstrBot management panel.
-2. Click **Bots** in the left sidebar.
-3. Click `+ Create Bot` on the right side of the interface.
+2. Click **Platforms** in the left sidebar.
+3. Click `+ Add Adapter` on the right side of the interface.
 4. Select the `kook` adapter.
 5. Fill in the configuration fields:
    - ID (id): Any name to identify this specific instance.

@@ -43,10 +43,10 @@ If you need to use the capabilities of platforms like Dify, Coze, Bailian Applic
 
 ![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image-1.png)
 
-In the WebUI, click "Model Provider" -> "Add Provider", select "Agent Runner", choose the platform or runner type you want to connect to, and fill in the relevant information.
+In the WebUI, click "Providers" -> "Add Provider", select "Agent Runner", choose the platform or runner type you want to connect to, and fill in the relevant information.
 
 ## Changing the Default Agent Runner
 
 ![image](https://files.astrbot.app/docs/source/images/use/agent-runner/image.png)
 
-In the WebUI, click "Configuration" -> "Agent Execution Method", change the runner type to the Agent Runner type you just created, then select `XX Agent Runner Provider ID` as the ID of the Agent Runner provider you just created, and click save.
+In the WebUI, click "Config" -> "Agent Execution Method", change the runner type to the Agent Runner type you just created, then select `XX Agent Runner Provider ID` as the ID of the Agent Runner provider you just created, and click save.

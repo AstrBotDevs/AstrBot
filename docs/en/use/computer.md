@@ -6,7 +6,7 @@ Computer Use controls whether an Agent can execute code, access files, run Shell
 
 In WebUI, open:
 
-- `Config -> General Config -> Use Computer Capabilities`
+- `Config -> Basic -> Use Computer Capabilities`
 
 The key option is `Computer Use Runtime`:
 

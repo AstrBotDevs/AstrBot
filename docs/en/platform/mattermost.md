@@ -4,7 +4,7 @@ The Mattermost adapter connects to your Mattermost server through a Bot Token an
 
 ## Create the AstrBot Mattermost Platform Adapter
 
-Go to the `Bots` page, click `+ Create Bot`, and choose `Mattermost`.
+Go to the `Platforms` page, click `+ Add Adapter`, and choose `Mattermost`.
 
 On the configuration page, enable it first, then fill in:
 

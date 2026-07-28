@@ -89,8 +89,8 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 ### How to Let AstrBot Control My Mac / Windows / Linux Computer?
 
-1. In AstrBot WebUI's `Config -> General Config`, find `Use Computer Capabilities`, and select `local` for the runtime environment.
-2. In `Config -> Other Config`, find `Admin ID List`, and add your user ID (you can get it through the `/sid` command).
+1. In AstrBot WebUI's `Config -> Basic`, find `Use Computer Capabilities`, and select `local` for the runtime environment.
+2. In the `Config` page, find `Admin ID List`, and add your user ID (you can get it through the `/sid` command).
 
 > [!TIP]
 > For security reasons, when runtime environment is set to `local`, AstrBot only allows AstrBot administrators to use computer capabilities by default.
@@ -102,7 +102,7 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 ### No Permission to Execute Admin Commands
 
-1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` are the default admin commands. You can use the `/sid` command to get a user's ID, then add it to the admin ID list in Settings -> Other Settings.
+1. `/name, /provider, /dashboard_update, /op, /deop, /persona, /llm, /plugin, /model, /groupnew` are the default admin commands. You can use the `/sid` command to get a user's ID, then add it to the admin ID list in the `Config` page.
 
 ### Chinese Characters Garbled When Locally Rendering Markdown Images (t2i)
 
@@ -125,7 +125,7 @@ This is because the provider's API returned empty text. Try the following steps:
 
 ### Cannot Install Plugin
 
-1. Plugins are installed via GitHub. Access to GitHub from mainland China can indeed be unstable. You can use a proxy, then go to Other Settings -> HTTP Proxy to configure it. Alternatively, download the plugin archive directly and upload it.
+1. Plugins are installed via GitHub. Access to GitHub from mainland China can indeed be unstable. You can use a proxy, then go to `Settings -> Network -> HTTP Proxy` to configure it. Alternatively, download the plugin archive directly and upload it.
 
 ### Error `No module named 'xxx'` After Installing Plugin
 

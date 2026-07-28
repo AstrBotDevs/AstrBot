@@ -26,7 +26,7 @@ SubAgent 编排是 AstrBot 提供的一种高级 Agent 组织方式。它允许�
 
 ## 配置方法
 
-在 AstrBot WebUI 中，点击左侧导航栏的 **SubAgent 编排**。
+在 AstrBot WebUI 中，点击左侧导航栏的 **子代理编排**。
 
 ### 1. 启用 SubAgent 模式
 

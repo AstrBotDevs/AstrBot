@@ -18,7 +18,7 @@ In AstrBot Dashboard Plugin Market, search for `astrbot_plugin_vocechat` and ins
 
 ![image](https://files.astrbot.app/docs/source/images/vocechat/image.png)
 
-After installation, go to `Bots` -> `+ Create Bot` -> `VoceChat`.
+After installation, go to `Platforms` -> `+ Add Adapter` -> `VoceChat`.
 If VoceChat is missing, restart AstrBot or verify plugin installation.
 
 Enable the adapter in the configuration dialog.

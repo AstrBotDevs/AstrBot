@@ -2,7 +2,7 @@
 
 ## Create AstrBot Slack Platform Adapter
 
-Navigate to the `Bots` page, click `+ Create Bot`, find Slack and click to enter the Slack configuration page.
+Navigate to the `Platforms` page, click `+ Add Adapter`, find Slack and click to enter the Slack configuration page.
 
 ![image](https://files.astrbot.app/docs/source/images/slack/image-1.png)
 
