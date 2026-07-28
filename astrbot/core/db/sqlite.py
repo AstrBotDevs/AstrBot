@@ -326,7 +326,7 @@ class SQLiteDatabase(BaseDatabase):
         page_size=20,
         platform_ids=None,
         search_query="",
-        include_content=True,
+        include_history=True,
         **kwargs,
     ):
         async with self.get_db() as session:
@@ -393,7 +393,7 @@ class SQLiteDatabase(BaseDatabase):
                 .offset(offset)
                 .limit(page_size)
             )
-            if not include_content:
+            if not include_history:
                 result_query = result_query.options(defer(ConversationV2.content))
             if len(platforms) > 1 or len(platform_ids or []) > 1:
                 # SQLite may choose the narrow platform index for IN queries and
@@ -412,12 +412,12 @@ class SQLiteDatabase(BaseDatabase):
                 conversation_columns = [
                     column
                     for column in ConversationV2.__table__.columns
-                    if include_content or column.name != "content"
+                    if include_history or column.name != "content"
                 ]
                 result_query = select(ConversationV2).from_statement(
                     text(indexed_sql).columns(*conversation_columns),
                 )
-                if not include_content:
+                if not include_history:
                     result_query = result_query.options(
                         defer(ConversationV2.content),
                     )

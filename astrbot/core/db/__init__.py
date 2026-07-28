@@ -157,7 +157,7 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
-        include_content: bool = True,
+        include_history: bool = True,
         **kwargs,
     ) -> tuple[list[ConversationV2], int]:
         """Filter conversations by platform IDs and search text.
@@ -167,7 +167,7 @@ class BaseDatabase(abc.ABC):
             page_size: Number of items per page.
             platform_ids: Platform IDs to include, if any.
             search_query: Search text, if any.
-            include_content: Whether to load the full history for returned rows.
+            include_history: Whether to load the full history for returned rows.
             **kwargs: Additional filters supported by the database backend.
         """
         ...

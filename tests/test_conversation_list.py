@@ -63,7 +63,7 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
     summary, total = await db.get_filtered_conversations(
         page=1,
         page_size=10,
-        include_content=False,
+        include_history=False,
         message_types=["GroupMessage", "FriendMessage"],
         exclude_ids=["astrbot"],
         exclude_platforms=["webchat"],
@@ -93,11 +93,11 @@ async def test_filtered_conversations_summary_skips_content_and_applies_filters(
 
     title_matches, _ = await db.get_filtered_conversations(
         search_query="中文标题",
-        include_content=False,
+        include_history=False,
     )
     content_matches, _ = await db.get_filtered_conversations(
         search_query="中文正文",
-        include_content=False,
+        include_history=False,
     )
     assert [item.conversation_id for item in title_matches] == ["friend"]
     assert [item.conversation_id for item in content_matches] == ["friend"]
@@ -175,7 +175,7 @@ async def test_multi_platform_summary_uses_global_order_index(
             page=1,
             page_size=5,
             platforms=["qq", "telegram"],
-            include_content=False,
+            include_history=False,
         )
     finally:
         event.remove(

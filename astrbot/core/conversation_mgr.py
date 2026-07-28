@@ -261,10 +261,9 @@ class ConversationManager:
             "page_size": page_size,
             "platform_ids": platform_ids,
             "search_query": search_query,
+            "include_history": include_history,
             **kwargs,
         }
-        if not include_history:
-            query_kwargs["include_content"] = False
         convs, cnt = await self.db.get_filtered_conversations(**query_kwargs)
         convs_res = []
         for conv in convs:
