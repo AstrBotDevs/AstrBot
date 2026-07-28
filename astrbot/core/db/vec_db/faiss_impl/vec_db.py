@@ -46,7 +46,7 @@ class FaissVecDB(BaseVecDB):
         metadata = metadata or {}
         str_id = id or str(uuid.uuid4())  # 使用 UUID 作为原始 ID
 
-        vector = await self.embedding_provider.get_embedding(content)
+        vector = await self.embedding_provider.get_embedding_with_retry(content)
         vector = np.array(vector, dtype=np.float32)
 
         # 使用 DocumentStorage 的方法插入文档
@@ -109,13 +109,26 @@ class FaissVecDB(BaseVecDB):
 
         start = time.time()
         logger.debug(f"Generating embeddings for {len(contents)} contents...")
-        vectors = await self.embedding_provider.get_embeddings_batch(
-            contents,
-            batch_size=batch_size,
-            tasks_limit=tasks_limit,
-            max_retries=max_retries,
-            progress_callback=progress_callback,
-        )
+        try:
+            vectors = await self.embedding_provider.get_embeddings_batch(
+                contents,
+                batch_size=batch_size,
+                tasks_limit=tasks_limit,
+                max_retries=max_retries,
+                progress_callback=progress_callback,
+            )
+        except KnowledgeBaseUploadError:
+            raise
+        except Exception as exc:
+            raise KnowledgeBaseUploadError(
+                stage="embedding",
+                user_message=(
+                    "向量化失败：调用 Embedding API 生成向量时出错。"
+                    "请检查 Embedding 服务是否可用、是否触发限流，"
+                    "并尝试降低批量大小或并发数后重试。"
+                ),
+                details={"cause": str(exc)},
+            ) from exc
         end = time.time()
         logger.debug(
             f"Generated embeddings for {len(contents)} contents in {end - start:.2f} seconds.",
@@ -217,7 +230,7 @@ class FaissVecDB(BaseVecDB):
             List[Result]: 查询结果
 
         """
-        embedding = await self.embedding_provider.get_embedding(query)
+        embedding = await self.embedding_provider.get_embedding_with_retry(query)
         scores, indices = await self.embedding_storage.search(
             vector=np.array(embedding).astype("float32"),
             k=fetch_k if metadata_filters else k,
