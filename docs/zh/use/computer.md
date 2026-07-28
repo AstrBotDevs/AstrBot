@@ -98,7 +98,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 在沙盒中，Agent 仍然可以使用 Shell、Python、文件系统工具；如果所选沙盒 profile 支持 `browser` capability，还会挂载浏览器自动化工具。
 
-沙盒环境驱动器可在 `配置文件 -> 普通 -> 使用电脑能力` 的沙箱配置中选择。当前常用选项包括：
+沙盒环境驱动器可在 `配置文件 → AI → 使用电脑能力` 的沙箱配置中选择。当前常用选项包括：
 
 - `Shipyard Neo`：AstrBot 推荐的远程/独立部署沙盒服务，适合长期运行和多人使用。
 - `CUA`：基于 [CUA](https://github.com/trycua/cua) 的本地或云端电脑使用沙盒，可提供桌面截图、鼠标、键盘、Shell、Python 和文件系统能力。
