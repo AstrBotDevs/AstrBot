@@ -13,6 +13,7 @@ from astrbot.core.utils.session_waiter import (
     FILTERS,
     USER_SESSIONS,
     SessionController,
+    SessionFilter,
     SessionWaiter,
     session_waiter,
 )
@@ -109,6 +110,10 @@ class Main(star.Star):
                     logger.error(f"LLM response failed: {e!s}")
                     yield event.plain_result("想要问什么呢？😄")
 
+            class _SenderSessionFilter(SessionFilter):
+                def filter(self, ev: AstrMessageEvent) -> str:
+                    return f"{ev.unified_msg_origin}:{ev.get_sender_id()}"
+
             @session_waiter(60)
             async def empty_mention_waiter(
                 controller: SessionController,
@@ -126,7 +131,7 @@ class Main(star.Star):
                 controller.stop()
 
             try:
-                await empty_mention_waiter(event)
+                await empty_mention_waiter(event, session_filter=_SenderSessionFilter())
             except TimeoutError:
                 pass
             except Exception as e:
