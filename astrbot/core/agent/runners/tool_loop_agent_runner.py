@@ -661,6 +661,7 @@ class ToolLoopAgentRunner(BaseAgentRunner[TContext]):
         sanitized_contexts, stats = sanitize_contexts_by_modalities(
             contexts,
             self.provider.provider_config.get("modalities", None),
+            self.provider.provider_config.get("supported_image_mimes", None),
         )
         log_context_sanitize_stats(stats)
         return sanitized_contexts

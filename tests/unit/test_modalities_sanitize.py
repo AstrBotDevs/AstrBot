@@ -281,3 +281,74 @@ def test_empty_contexts_returns_empty() -> None:
     assert sanitized == []
     assert isinstance(stats, ContextSanitizeStats)
     assert not stats.changed
+
+
+# ---------------------------------------------------------------------------
+# Whitelist mode: supported_image_mimes parameter
+# ---------------------------------------------------------------------------
+
+
+def test_whitelist_filters_gif_but_preserves_jpeg_and_png() -> None:
+    """When whitelist excludes GIF, GIF is replaced but JPEG/PNG are kept."""
+    contexts = [
+        _user(
+            _image_url_part(GIF_DATA_URL),
+            _image_url_part(JPEG_DATA_URL),
+            _image_url_part(PNG_DATA_URL),
+        ),
+    ]
+    sanitized, stats = sanitize_contexts_by_modalities(
+        contexts,
+        ["text", "image"],
+        supported_image_mimes=["image/jpeg", "image/png"],
+    )
+
+    assert sanitized[0]["content"] == [
+        {"type": "text", "text": "[Image]"},  # GIF replaced
+        _image_url_part(JPEG_DATA_URL),  # JPEG preserved
+        _image_url_part(PNG_DATA_URL),  # PNG preserved
+    ]
+    assert stats.fixed_image_blocks == 1
+
+
+def test_whitelist_includes_gif_preserves_gif() -> None:
+    """When whitelist includes GIF, GIF is preserved."""
+    contexts = [_user(_image_url_part(GIF_DATA_URL))]
+    sanitized, stats = sanitize_contexts_by_modalities(
+        contexts,
+        ["text", "image"],
+        supported_image_mimes=["image/jpeg", "image/png", "image/gif"],
+    )
+
+    assert sanitized[0]["content"] == [_image_url_part(GIF_DATA_URL)]
+    assert not stats.changed
+
+
+def test_whitelist_none_falls_back_to_blocklist_gif_replaced() -> None:
+    """When whitelist is None, fallback blocklist applies (GIF replaced).
+
+    This ensures backward compatibility: users who don't configure
+    supported_image_mimes still get the #9295 GIF fix.
+    """
+    contexts = [_user(_image_url_part(GIF_DATA_URL))]
+    sanitized, stats = sanitize_contexts_by_modalities(
+        contexts,
+        ["text", "image"],
+        supported_image_mimes=None,
+    )
+
+    assert sanitized[0]["content"] == [{"type": "text", "text": "[Image]"}]
+    assert stats.fixed_image_blocks == 1
+
+
+def test_whitelist_empty_list_same_as_none() -> None:
+    """Empty list for whitelist behaves the same as None (blocklist fallback)."""
+    contexts = [_user(_image_url_part(GIF_DATA_URL))]
+    sanitized, stats = sanitize_contexts_by_modalities(
+        contexts,
+        ["text", "image"],
+        supported_image_mimes=[],
+    )
+
+    assert sanitized[0]["content"] == [{"type": "text", "text": "[Image]"}]
+    assert stats.fixed_image_blocks == 1

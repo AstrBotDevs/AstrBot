@@ -2207,6 +2207,23 @@ CONFIG_METADATA_2 = {
                         "render_type": "checkbox",
                         "hint": "模型支持的模态及能力。",
                     },
+                    "supported_image_mimes": {
+                        "description": "支持的图片 MIME 类型",
+                        "type": "list",
+                        "items": {"type": "string"},
+                        "options": [
+                            "image/jpeg",
+                            "image/png",
+                            "image/webp",
+                            "image/gif",
+                        ],
+                        "labels": ["JPEG", "PNG", "WebP", "GIF"],
+                        "render_type": "checkbox",
+                        "hint": (
+                            "模型支持的图片格式。不勾选时保留全部（仅过滤已知不安全格式如 GIF）。"
+                            "勾选后仅保留勾选的格式。"
+                        ),
+                    },
                     "custom_headers": {
                         "description": "自定义请求头",
                         "type": "dict",
