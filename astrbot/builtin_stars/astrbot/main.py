@@ -28,6 +28,22 @@ def _iter_message_components(event: AstrMessageEvent):
     return tuple(messages)
 
 
+class _SenderSessionFilter(SessionFilter):
+    """Session filter scoped to a specific (conversation, sender) pair.
+
+    Used by the empty-mention waiter so that only the user who initiated the
+    empty mention (not every member of the group) can satisfy the waiter.
+    """
+
+    def filter(self, ev: AstrMessageEvent) -> str:
+        sender_id = ev.get_sender_id() or ""
+        if not sender_id:
+            # Fall back to a value that will not accidentally collide with a
+            # legitimate session key from another member.
+            sender_id = "__unknown_sender__"
+        return f"{ev.unified_msg_origin}:{sender_id}"
+
+
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
@@ -109,10 +125,6 @@ class Main(star.Star):
                 except Exception as e:
                     logger.error(f"LLM response failed: {e!s}")
                     yield event.plain_result("想要问什么呢？😄")
-
-            class _SenderSessionFilter(SessionFilter):
-                def filter(self, ev: AstrMessageEvent) -> str:
-                    return f"{ev.unified_msg_origin}:{ev.get_sender_id()}"
 
             @session_waiter(60)
             async def empty_mention_waiter(
