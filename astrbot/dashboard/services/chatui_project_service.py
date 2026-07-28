@@ -316,19 +316,34 @@ class ChatUIProjectService:
         ):
             raise ChatUIProjectServiceError("Invalid workspace path")
 
-        target_file_path = os.path.normcase(
-            os.path.realpath(os.path.join(workspace_root_path, normalized_path))
-        )
-        # Keep the separator to reject sibling paths with the same name prefix.
-        workspace_root_prefix = os.path.join(workspace_root_path, "")
-        if target_file_path != workspace_root_path and not target_file_path.startswith(
-            workspace_root_prefix
-        ):
-            raise ChatUIProjectServiceError("Workspace path escapes project directory")
-        if not os.path.isfile(target_file_path):
+        # Match server-enumerated entries so request values never form a file path.
+        target_file = Path(workspace_root_path)
+        path_parts = normalized_path.parts
+        for index, part in enumerate(path_parts):
+            try:
+                children = {entry.name: entry for entry in target_file.iterdir()}
+            except OSError as exc:
+                raise ChatUIProjectServiceError(
+                    "Workspace file cannot be read"
+                ) from exc
+            child = children.get(part)
+            if child is None:
+                raise ChatUIProjectServiceError("Workspace file not found")
+            if child.is_symlink():
+                if not child.resolve(strict=False).is_relative_to(
+                    Path(workspace_root_path)
+                ):
+                    raise ChatUIProjectServiceError(
+                        "Workspace path escapes project directory"
+                    )
+                raise ChatUIProjectServiceError("Workspace file not found")
+            if index < len(path_parts) - 1 and not child.is_dir():
+                raise ChatUIProjectServiceError("Workspace file not found")
+            target_file = child
+        if not path_parts or not target_file.is_file():
             raise ChatUIProjectServiceError("Workspace file not found")
 
-        return Path(workspace_root_path), Path(target_file_path)
+        return Path(workspace_root_path), target_file
 
     async def _get_owned_project(self, username: str, project_id: str):
         project = await self.db.get_chatui_project_by_id(project_id)

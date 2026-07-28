@@ -299,3 +299,25 @@ async def test_workspace_file_rejects_symlink_escape(
             "project-1",
             "outside-link.txt",
         )
+
+
+@pytest.mark.asyncio
+async def test_workspace_file_rejects_symlink_directory_escape(
+    tmp_path,
+    workspace_service,
+):
+    """Workspace reads should reject an escaping symlink in any path segment."""
+    outside_dir = tmp_path.parent / f"{tmp_path.name}-outside-dir"
+    outside_dir.mkdir()
+    (outside_dir / "secret.txt").write_text("outside", encoding="utf-8")
+    (tmp_path / "outside-link").symlink_to(outside_dir, target_is_directory=True)
+
+    with pytest.raises(
+        ChatUIProjectServiceError,
+        match="escapes project directory",
+    ):
+        await workspace_service.get_workspace_file(
+            "alice",
+            "project-1",
+            "outside-link/secret.txt",
+        )
