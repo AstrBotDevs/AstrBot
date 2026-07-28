@@ -255,7 +255,7 @@ DEFAULT_CONFIG = {
         "password_storage_upgraded": False,
         "password_change_required": False,
         "jwt_secret": "",
-        "host": "0.0.0.0",
+        "host": ["0.0.0.0", "::"],
         "port": 6185,
         "disable_access_log": True,
         "trust_proxy_headers": False,
