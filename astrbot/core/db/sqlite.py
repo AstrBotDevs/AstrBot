@@ -72,7 +72,11 @@ class SQLiteDatabase(BaseDatabase):
             await conn.commit()
 
     async def _ensure_conversation_indexes(self, conn) -> None:
-        """Create indexes used by the dashboard conversation list."""
+        """Create indexes used by the dashboard conversation list.
+
+        Args:
+            conn: Active SQLAlchemy connection used during SQLite initialization.
+        """
         await conn.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS "
@@ -85,13 +89,6 @@ class SQLiteDatabase(BaseDatabase):
                 "CREATE INDEX IF NOT EXISTS "
                 "ix_conversations_platform_created_at_inner_id "
                 "ON conversations (platform_id, created_at DESC, inner_conversation_id DESC)"
-            )
-        )
-        await conn.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS "
-                "ix_conversations_platform_user_id "
-                "ON conversations (platform_id, user_id)"
             )
         )
 

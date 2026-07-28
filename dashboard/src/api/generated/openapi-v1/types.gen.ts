@@ -3035,6 +3035,10 @@ export type ListConversationsData = {
          */
         exclude_platforms?: string;
         /**
+         * Include full message history in each conversation.
+         */
+        include_history?: boolean;
+        /**
          * Comma-separated message types.
          */
         message_types?: string;

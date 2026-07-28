@@ -298,6 +298,7 @@ class FakeConversationManager:
     def __init__(self) -> None:
         user_id = "webchat:FriendMessage:webchat!user!session-1"
         self.last_filter_args: dict[str, list[str]] = {}
+        self.last_include_history = True
         self.conversations: dict[tuple[str, str], FakeConversation] = {
             (user_id, "conversation/with/slash"): FakeConversation(
                 cid="conversation/with/slash",
@@ -317,6 +318,7 @@ class FakeConversationManager:
         exclude_platforms: list[str],
         include_history: bool = True,
     ):
+        self.last_include_history = include_history
         self.last_filter_args = {
             "platforms": platforms,
             "message_types": message_types,
@@ -1243,8 +1245,9 @@ async def test_v1_conversation_path_id_allows_slash(asgi_client: httpx.AsyncClie
 
 
 @pytest.mark.asyncio
-async def test_v1_conversation_list_returns_summary_without_history(
+async def test_v1_conversation_list_preserves_history_by_default(
     asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
 ):
     response = await asgi_client.get(
         "/api/v1/conversations",
@@ -1256,7 +1259,43 @@ async def test_v1_conversation_list_returns_summary_without_history(
     assert payload["status"] == "ok"
     conversation = payload["data"]["conversations"][0]
     assert conversation["cid"] == "conversation/with/slash"
+    assert conversation["history"] == "[]"
+    assert fake_core_lifecycle.conversation_manager.last_include_history is True
+
+
+@pytest.mark.asyncio
+async def test_v1_conversation_list_returns_summary_without_history(
+    asgi_client: httpx.AsyncClient,
+    fake_core_lifecycle,
+):
+    response = await asgi_client.get(
+        "/api/v1/conversations",
+        params={"include_history": "false"},
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    conversation = payload["data"]["conversations"][0]
+    assert conversation["cid"] == "conversation/with/slash"
     assert "history" not in conversation
+    assert fake_core_lifecycle.conversation_manager.last_include_history is False
+
+
+@pytest.mark.asyncio
+async def test_legacy_conversation_list_preserves_history_by_default(
+    asgi_client: httpx.AsyncClient,
+):
+    response = await asgi_client.get(
+        "/api/conversation/list",
+        headers=_jwt_headers(),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["data"]["conversations"][0]["history"] == "[]"
 
 
 @pytest.mark.asyncio
@@ -1265,6 +1304,7 @@ async def test_legacy_conversation_list_returns_summary_without_history(
 ):
     response = await asgi_client.get(
         "/api/conversation/list",
+        params={"include_history": "false"},
         headers=_jwt_headers(),
     )
 

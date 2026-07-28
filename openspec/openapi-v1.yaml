@@ -4021,6 +4021,12 @@ paths:
           schema:
             type: string
           description: Comma-separated platforms to exclude.
+        - name: include_history
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Include full message history in each conversation.
       responses:
         "200":
           $ref: "#/components/responses/Ok"

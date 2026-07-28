@@ -130,11 +130,15 @@ async def test_conversation_indexes_are_idempotent_and_support_ordered_list(
             )
         ).all()
 
-    assert {
+    expected_indexes = {
         "ix_conversations_created_at_inner_id",
         "ix_conversations_platform_created_at_inner_id",
-        "ix_conversations_platform_user_id",
-    }.issubset(index_names)
+    }
+    assert expected_indexes.issubset(index_names)
+    assert expected_indexes.issubset(
+        {index.name for index in ConversationV2.__table__.indexes}
+    )
+    assert "ix_conversations_platform_user_id" not in index_names
     assert not any("TEMP B-TREE" in str(row) for row in plan)
 
 

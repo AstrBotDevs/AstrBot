@@ -42,6 +42,7 @@ class ConversationService:
         search_query: str,
         exclude_ids: str,
         exclude_platforms: str,
+        include_history: bool = True,
     ) -> dict:
         platform_list = [item.strip() for item in platforms.split(",") if item.strip()]
         message_type_list = [
@@ -68,7 +69,7 @@ class ConversationService:
                 search_query=search_query,
                 exclude_ids=exclude_id_list,
                 exclude_platforms=exclude_platform_list,
-                include_history=False,
+                include_history=include_history,
             )
         except Exception as exc:
             logger.error(f"数据库查询出错: {exc!s}\n{traceback.format_exc()}")
@@ -82,7 +83,11 @@ class ConversationService:
 
         return {
             "conversations": [
-                self._serialize_conversation_summary(conversation, alias_map)
+                self._serialize_conversation(
+                    conversation,
+                    alias_map,
+                    include_history=include_history,
+                )
                 for conversation in conversations
             ],
             "pagination": {
@@ -275,8 +280,24 @@ class ConversationService:
             "failed_items": failed_items,
         }
 
-    def _serialize_conversation_summary(self, conversation, alias_map: dict) -> dict:
-        return {
+    def _serialize_conversation(
+        self,
+        conversation,
+        alias_map: dict,
+        *,
+        include_history: bool,
+    ) -> dict:
+        """Serialize a conversation for a list response.
+
+        Args:
+            conversation: Conversation object returned by the manager.
+            alias_map: UMO aliases keyed by unified message origin.
+            include_history: Whether to include the serialized message history.
+
+        Returns:
+            Conversation data suitable for a dashboard API response.
+        """
+        result = {
             "platform_id": conversation.platform_id,
             "user_id": conversation.user_id,
             "cid": conversation.cid,
@@ -287,6 +308,9 @@ class ConversationService:
             "updated_at": conversation.updated_at,
             "umo_info": self._build_umo_info(conversation.user_id, alias_map),
         }
+        if include_history:
+            result["history"] = conversation.history
+        return result
 
     @staticmethod
     def _build_umo_info(umo: str | None, alias_map: dict) -> dict:
