@@ -89,7 +89,7 @@ After restart, AstrBot will reload or download WebUI files that match the curren
 
 ### How to Let AstrBot Control My Mac / Windows / Linux Computer?
 
-1. In AstrBot WebUI's `Config -> Basic`, find `Use Computer Capabilities`, and select `local` for the runtime environment.
+1. In AstrBot WebUI's `Config` page, find `Agent Computer Use`, and select `local` for the runtime environment.
 2. In the `Config` page, find `Admin ID List`, and add your user ID (you can get it through the `/sid` command).
 
 > [!TIP]

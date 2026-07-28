@@ -88,7 +88,7 @@ data/workspaces/{normalized_umo}/notes/todo.txt
 
 管理员 ID 可在：
 
-- `配置文件 -> 其他配置 -> 管理员 ID`
+- `配置文件 -> 平台配置 -> 管理员 ID`
 
 中配置。用户可通过 `/sid` 获取自己的 ID。
 
