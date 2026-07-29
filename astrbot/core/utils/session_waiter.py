@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import astrbot.core.message.components as Comp
+from astrbot.core import logger
 from astrbot.core.platform import AstrMessageEvent
 
 USER_SESSIONS: dict[str, "SessionWaiter"] = {}  # 存储 SessionWaiter 实例
@@ -87,18 +88,40 @@ class SessionController:
         return self.history_chains
 
 
-class SessionFilter:
-    """如何界定一个会话"""
+class SessionFilter(abc.ABC):
+    """How to identify a session scope."""
 
     @abc.abstractmethod
     def filter(self, event: AstrMessageEvent) -> str:
-        """根据事件返回一个会话标识符"""
+        """Return a session identifier derived from the event."""
 
 
 class DefaultSessionFilter(SessionFilter):
     def filter(self, event: AstrMessageEvent) -> str:
-        """默认实现，返回统一消息来源字符串作为会话标识符"""
-        return event.unified_msg_origin
+        """Return a composite session key from both conversation and sender.
+
+        The key format is ``"{unified_msg_origin}:{sender_id}"`` so that two
+        distinct senders in the same group chat produce different keys.  When
+        the sender id cannot be determined (empty string), the key uses the
+        placeholder ``"<unknown>"`` as the sender component
+        (``f"{umo}:<unknown>"``) to avoid cross-user key collision, and a
+        warning is logged.
+
+        Args:
+            event: The incoming message event.
+
+        Returns:
+            A session identifier scoped to both the conversation and the sender.
+        """
+        sender_id = event.get_sender_id()
+        if sender_id:
+            return f"{event.unified_msg_origin}:{sender_id}"
+        logger.warning(
+            "session_waiter: sender_id is empty for event from %s, "
+            "using '<unknown>' placeholder to avoid cross-user key collision",
+            event.unified_msg_origin,
+        )
+        return f"{event.unified_msg_origin}:<unknown>"
 
 
 class SessionWaiter:
@@ -128,6 +151,12 @@ class SessionWaiter:
     ) -> Any:
         """等待外部输入并处理"""
         self.handler = handler
+        existing = USER_SESSIONS.get(self.session_id)
+        if existing is not None and existing is not self:
+            logger.warning(
+                "session_waiter: overwriting existing waiter for session %s",
+                self.session_id,
+            )
         USER_SESSIONS[self.session_id] = self
 
         # 开始一个会话保持事件
@@ -142,12 +171,26 @@ class SessionWaiter:
             self._cleanup()
 
     def _cleanup(self, error: Exception | None = None) -> None:
-        """清理会话"""
-        USER_SESSIONS.pop(self.session_id, None)
-        try:
-            FILTERS.remove(self.session_filter)
-        except ValueError:
-            pass
+        """清理会话。
+
+        Only removes this waiter from ``USER_SESSIONS`` if the stored instance
+        is *self* — a newer waiter registered under the same key must not be
+        evicted by a stale cleanup.
+        """
+        stored = USER_SESSIONS.get(self.session_id)
+        if stored is self:
+            USER_SESSIONS.pop(self.session_id, None)
+        elif stored is not None:
+            logger.warning(
+                "session_waiter: skipping _cleanup for session %s — "
+                "a newer waiter is already registered",
+                self.session_id,
+            )
+        # Use identity check to avoid removing a newer waiter's filter.
+        for i, f in enumerate(FILTERS):
+            if f is self.session_filter:
+                FILTERS.pop(i)
+                break
         self.session_controller.stop(error)
 
     @classmethod
