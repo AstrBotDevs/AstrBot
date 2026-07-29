@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import copy
 import logging
 import os
 import random
@@ -180,10 +181,11 @@ class QQOfficialMessageEvent(AstrMessageEvent):
         return None
 
     def _append_stream_delta(self, chain: MessageChain) -> None:
-        """Append stream delta into an owned buffer (copy Plain text).
+        """Append stream delta into an owned buffer (copy components).
 
         Holding the yielded MessageChain by reference drops leading characters
-        when upstream reuses/mutates the same chain between yields.
+        when upstream reuses/mutates the same chain between yields. Non-Plain
+        components are deep-copied for the same reason.
         """
         if not self.send_buffer:
             self.send_buffer = MessageChain(
@@ -193,9 +195,10 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             )
         for comp in chain.chain:
             if isinstance(comp, Plain):
-                self.send_buffer.chain.append(Plain(text=comp.text or ""))
+                # Preserve original text value (do not coerce falsy with `or ""`).
+                self.send_buffer.chain.append(Plain(text=comp.text))
             else:
-                self.send_buffer.chain.append(comp)
+                self.send_buffer.chain.append(copy.deepcopy(comp))
 
     @staticmethod
     def _extract_response_message_id(ret) -> str | None:
