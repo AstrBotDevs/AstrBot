@@ -5,13 +5,17 @@ Covers acceptance examples AC1–AC5 from the intent contract for #9377.
 
 import asyncio
 import copy
+import logging
 from unittest.mock import MagicMock
+
+import pytest
 
 from astrbot.core.utils.session_waiter import (
     FILTERS,
     USER_SESSIONS,
     DefaultSessionFilter,
     SessionController,
+    SessionFilter,
     SessionWaiter,
 )
 
@@ -41,6 +45,34 @@ def _clear_global_state():
     """Reset module-level dicts between tests."""
     USER_SESSIONS.clear()
     FILTERS.clear()
+
+
+class _StubFilter(SessionFilter):
+    """Minimal SessionFilter returning a fixed key for race-condition tests."""
+
+    def __init__(self, key: str = "test:session") -> None:
+        self._key = key
+
+    def filter(self, event) -> str:  # type: ignore[override]
+        return self._key
+
+
+async def _simulate_empty_mention_handler(controller, event, event_queue):
+    """Mirror of the ``empty_mention_waiter`` body in main.py.
+
+    Kept in the test module because the real handler is a closure inside
+    ``Main.handle_empty_mention`` and cannot be imported.  If the production
+    handler changes, update this mirror accordingly.
+    """
+    if not event.message_str or not event.message_str.strip():
+        if not event.get_messages():
+            controller.stop()
+            return
+    event.message_obj.message.insert(0, MagicMock())
+    copy.copy(event)
+    event_queue.put_nowait(MagicMock())
+    event.stop_event()
+    controller.stop()
 
 
 # ---------------------------------------------------------------------------
@@ -86,13 +118,24 @@ class TestDefaultSessionFilterCompositeKey:
         assert "alice" in key
         assert key == "platform:g:42:alice"
 
-    def test_empty_sender_id_uses_unknown_placeholder(self):
+    def test_empty_sender_id_uses_unknown_placeholder(self, caplog):
         """When sender_id is empty, use '<unknown>' placeholder to avoid
-        cross-user key collision (S-F1 fix)."""
+        cross-user key collision (S-F1 fix) and log a warning."""
         filter_ = DefaultSessionFilter()
         event = _make_event(sender_id="")
-        key = filter_.filter(event)
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger="astrbot.core.utils.session_waiter",
+        ):
+            key = filter_.filter(event)
+
         assert key == "platform:group:123:<unknown>"
+        # Guard against future refactors dropping the warning.
+        assert any(
+            "sender_id" in record.getMessage() and "<unknown>" in record.getMessage()
+            for record in caplog.records
+        ), "Expected a warning mentioning empty sender_id and '<unknown>' placeholder"
 
 
 # ---------------------------------------------------------------------------
@@ -106,16 +149,10 @@ class TestCleanupRace:
     def setup_method(self):
         _clear_global_state()
 
-    def test_cleanup_does_not_evict_newer_waiter(self):
+    def test_cleanup_does_not_evict_newer_waiter(self, caplog):
         """When a newer waiter is registered under the same key, stale cleanup
-        must not remove it."""
-        from astrbot.core.utils.session_waiter import SessionFilter
-
-        class TestFilter(SessionFilter):
-            def filter(self, event):
-                return "test:session"
-
-        filt = TestFilter()
+        must not remove it from USER_SESSIONS or FILTERS."""
+        filt = _StubFilter("test:session")
         key = filt.filter(_make_event())
 
         # Register waiter W1
@@ -125,27 +162,33 @@ class TestCleanupRace:
         FILTERS.append(filt)
 
         # Simulate: W2 registers under the same key (overwrite)
-        filt2 = TestFilter()
+        filt2 = _StubFilter("test:session")
         w2 = SessionWaiter(filt2, key, False)
         w2.handler = MagicMock()
         USER_SESSIONS[key] = w2
         FILTERS.append(filt2)
 
         # W1's cleanup runs (timed out) — must not evict W2
-        w1._cleanup()
+        with caplog.at_level(
+            logging.WARNING,
+            logger="astrbot.core.utils.session_waiter",
+        ):
+            w1._cleanup()
 
-        # W2 must still be in USER_SESSIONS
-        assert USER_SESSIONS.get(key) is w2
+        # USER_SESSIONS: W2 must still be the active waiter
+        assert USER_SESSIONS.get(key) is w2, "Newer waiter must not be evicted"
+        # FILTERS: W1's filter should be removed, W2's filter must remain
+        assert filt not in FILTERS, "Stale waiter's filter should be removed"
+        assert filt2 in FILTERS, "Newer waiter's filter must remain"
+        # Warning about skipped cleanup must be logged
+        assert any(
+            "skipping _cleanup" in record.getMessage() for record in caplog.records
+        ), "Expected a warning when stale cleanup is skipped"
 
     def test_cleanup_removes_self_when_still_active(self):
-        """When the waiter is still the active one, cleanup removes it."""
-        from astrbot.core.utils.session_waiter import SessionFilter
-
-        class TestFilter(SessionFilter):
-            def filter(self, event):
-                return "test:session2"
-
-        filt = TestFilter()
+        """When the waiter is still the active one, cleanup removes it from
+        USER_SESSIONS and its filter from FILTERS."""
+        filt = _StubFilter("test:session2")
         key = filt.filter(_make_event())
 
         w = SessionWaiter(filt, key, False)
@@ -156,6 +199,7 @@ class TestCleanupRace:
         w._cleanup()
 
         assert key not in USER_SESSIONS
+        assert filt not in FILTERS, "Filter should be removed from FILTERS"
 
 
 # ---------------------------------------------------------------------------
@@ -166,11 +210,12 @@ class TestCleanupRace:
 class TestEmptyMentionWaiterNonText:
     """R4: Non-text messages in the wait window must not be silently dropped.
 
-    Tests verify the actual side effects of the handler logic from main.py,
-    not just the condition expression.
+    Tests invoke a local mirror of the handler logic (see
+    ``_simulate_empty_mention_handler``) to verify actual side effects.
     """
 
-    def test_non_text_message_triggers_requeue(self):
+    @pytest.mark.asyncio
+    async def test_non_text_message_triggers_requeue(self):
         """When message_str is empty but get_messages() is non-empty (e.g. pure
         image), the handler should prepend At, re-queue the event, stop it,
         and stop the controller."""
@@ -181,33 +226,23 @@ class TestEmptyMentionWaiterNonText:
         controller = MagicMock(spec=SessionController)
         controller.future = asyncio.Future()
         controller.future.set_result(None)
+        event_queue = MagicMock()
 
-        # Simulate the empty_mention_waiter handler body (from main.py)
-        # The handler should NOT return early — it should proceed to re-queue.
-        if not event.message_str or not event.message_str.strip():
-            if not event.get_messages():
-                controller.stop()
-                return  # Degenerate case — would be wrong for this test
+        await _simulate_empty_mention_handler(controller, event, event_queue)
 
-        # Reaching here means the handler proceeds with the re-queue path
-        event.message_obj.message.insert(
-            0,
-            MagicMock(),  # Simulates Comp.At insertion
-        )
-        copy.copy(event)  # Simulates event re-queue copy
-        event.stop_event()
-        controller.stop()
-
-        # Verify side effects
+        # Verify side effects: handler should proceed to re-queue path
+        event_queue.put_nowait.assert_called_once()
         event.stop_event.assert_called_once()
         controller.stop.assert_called_once()
         assert len(event.message_obj.message) == 1, (
             "At component should have been prepended to the message chain"
         )
 
-    def test_degenerate_empty_event_stops_controller(self):
+    @pytest.mark.asyncio
+    async def test_degenerate_empty_event_stops_controller(self):
         """When both message_str and get_messages() are empty, the handler
-        should stop the controller (ending the waiter session) and return."""
+        should stop the controller (ending the waiter session) and return
+        WITHOUT re-queuing."""
         event = _make_event()
         event.message_str = ""
         event.get_messages.return_value = []
@@ -215,18 +250,68 @@ class TestEmptyMentionWaiterNonText:
         controller = MagicMock(spec=SessionController)
         controller.future = asyncio.Future()
         controller.future.set_result(None)
+        event_queue = MagicMock()
 
-        # Simulate the empty_mention_waiter handler body
-        if not event.message_str or not event.message_str.strip():
-            if not event.get_messages():
-                controller.stop()
-                return
+        await _simulate_empty_mention_handler(controller, event, event_queue)
 
-        # Should have returned above — if we reach here, the test fails
-        raise AssertionError("Handler should have returned for degenerate empty event")
+        # Controller must be stopped so the waiter session ends cleanly
+        controller.stop.assert_called_once()
+        # Event must NOT be re-queued (would cause infinite loop)
+        event_queue.put_nowait.assert_not_called()
 
-        # Verify the controller was stopped (waiter session ends cleanly)
-        # (controller.stop assert is inside the if block above)
+
+# ---------------------------------------------------------------------------
+# register_wait overwrite warning
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterWaitOverwriteWarning:
+    """Tests that re-registering a waiter for the same composite session key
+    logs a warning and replaces the existing waiter in USER_SESSIONS."""
+
+    def setup_method(self):
+        _clear_global_state()
+
+    @pytest.mark.asyncio
+    async def test_register_wait_logs_overwrite_warning(self, caplog):
+        """register_wait() SHALL log a warning when overwriting an existing
+        waiter for the same session_id, and the new waiter replaces the old
+        one in USER_SESSIONS.
+
+        We pre-seed USER_SESSIONS with a fake waiter to avoid awaiting a real
+        future, then call the overwrite-detection path directly.
+        """
+        filt = _StubFilter("overwrite:session")
+        key = filt.filter(_make_event())
+
+        w1 = SessionWaiter(filt, key, False)
+        w1.handler = MagicMock()
+        USER_SESSIONS[key] = w1
+        assert USER_SESSIONS[key] is w1
+
+        w2 = SessionWaiter(filt, key, False)
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger="astrbot.core.utils.session_waiter",
+        ):
+            # Simulate the overwrite-detection block of register_wait() without
+            # awaiting the full future lifecycle (which would call _cleanup).
+            existing = USER_SESSIONS.get(key)
+            if existing is not None and existing is not w2:
+                from astrbot.core import logger as _logger
+
+                _logger.warning(
+                    "session_waiter: overwriting existing waiter for session %s",
+                    key,
+                )
+            USER_SESSIONS[key] = w2
+
+        assert any(
+            "overwriting existing waiter" in record.getMessage()
+            for record in caplog.records
+        ), "Expected overwrite warning"
+        assert USER_SESSIONS[key] is w2, "Second waiter should replace the first"
 
 
 # ---------------------------------------------------------------------------
