@@ -167,7 +167,9 @@ class ContextManager:
         try:
             result = messages
 
-            current_tokens = self.token_counter.count_tokens(result, trusted_token_usage)
+            current_tokens = self.token_counter.count_tokens(
+                result, trusted_token_usage
+            )
             total_turns = self._count_turns(result)
 
             # Resolve token guard: validate config and precompute guard window.
@@ -193,7 +195,9 @@ class ContextManager:
 
             # Double-check halving — only when token guard is active
             tokens_after = self.token_counter.count_tokens(result, trusted_token_usage)
-            if guard_max_tokens and self._token_guard_exceeded(tokens_after, guard_max_tokens):
+            if guard_max_tokens and self._token_guard_exceeded(
+                tokens_after, guard_max_tokens
+            ):
                 logger.info(
                     "Context still exceeds token guard threshold after disposal, "
                     "applying halving truncation (unconstrained by retention).",
