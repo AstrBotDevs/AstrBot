@@ -119,3 +119,6 @@ ChatUI 支持以下常用能力：
 ## 忘记密码
 
 修改 data/cmd_config.json 文件内 `dashboard` 配置中的 `password`，将 password 整个键值对删除。
+
+> [!TIP]
+> 详细说明请参阅 [FAQ - 管理面板的密码忘记了](/faq.md#管理面板的密码忘记了)。

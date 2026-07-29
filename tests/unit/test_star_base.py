@@ -1,5 +1,6 @@
 """Tests for astrbot.core.star.base module."""
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -30,6 +31,33 @@ class TestStarBase:
         star = TestStar(context=mock_context)
 
         assert star.context is mock_context
+
+    def test_star_init_logs_plugin_level(self):
+        """Test that Star initialization reports the effective plugin level."""
+        from astrbot.core.star import Star
+
+        mock_context = MagicMock()
+        plugin_logger = MagicMock(spec=logging.Logger)
+        plugin_logger.getEffectiveLevel.return_value = logging.WARNING
+
+        class TestLevelStar(Star):
+            name = "test_level_star"
+            author = "test_author"
+
+        with (
+            patch(
+                "astrbot.core.star.base.LogManager.get_plugin_logger",
+                return_value=plugin_logger,
+            ),
+            patch("astrbot.core.star.base.logger") as core_logger,
+        ):
+            TestLevelStar(context=mock_context)
+
+        core_logger.info.assert_called_once_with(
+            "Plugin %s log level: %s.",
+            "test_level_star",
+            "WARNING",
+        )
 
     @pytest.mark.asyncio
     async def test_text_to_image_with_config(self):
@@ -160,6 +188,60 @@ class TestStarBase:
         # Note: This test verifies the __init_subclass__ mechanism
         # The actual registration happens when a class inherits from Star
         assert len(star_registry) >= initial_count
+
+
+class TestStarMetadataPluginId:
+    """Tests for StarMetadata.plugin_id derived view.
+
+    Regression: previously `plugin_id` was set in `__post_init__`, which only
+    fires at dataclass construction. The plugin load flow constructs
+    StarMetadata empty (no name/author) and fills them via attribute
+    assignment later, so `plugin_id` stayed None and crashed the downstream
+    `plugin_id.split("/")`. Now it's a property recomputed on every access.
+    """
+
+    def test_plugin_id_defaults_to_unknown_when_empty(self):
+        from astrbot.core.star.star import StarMetadata
+
+        assert StarMetadata().plugin_id == "unknown/unknown"
+
+    def test_plugin_id_uses_name_and_author(self):
+        from astrbot.core.star.star import StarMetadata
+
+        metadata = StarMetadata(name="Hello", author="AstrBot")
+        assert metadata.plugin_id == "astrbot/hello"
+
+    def test_plugin_id_recomputes_after_attribute_assignment(self):
+        from astrbot.core.star.star import StarMetadata
+
+        metadata = StarMetadata()
+        metadata.name = "A"
+        metadata.author = "B"
+        assert metadata.plugin_id == "b/a"
+
+    def test_plugin_id_lowercases_and_escapes_slash(self):
+        from astrbot.core.star.star import StarMetadata
+
+        metadata = StarMetadata(name="A/B", author="C")
+        assert metadata.plugin_id == "c/a_b"
+
+    def test_plugin_id_reflects_latest_name_after_change(self):
+        from astrbot.core.star.star import StarMetadata
+
+        metadata = StarMetadata(name="old", author="author")
+        assert metadata.plugin_id == "author/old"
+        metadata.name = "new"
+        assert metadata.plugin_id == "author/new"
+
+    def test_plugin_id_only_name_set(self):
+        from astrbot.core.star.star import StarMetadata
+
+        assert StarMetadata(name="OnlyName").plugin_id == "unknown/onlyname"
+
+    def test_plugin_id_only_author_set(self):
+        from astrbot.core.star.star import StarMetadata
+
+        assert StarMetadata(author="OnlyAuthor").plugin_id == "onlyauthor/unknown"
 
 
 class TestNoCircularImports:

@@ -10,6 +10,7 @@ from ..utils import (
     check_astrbot_root,
     get_astrbot_root,
     get_git_repo,
+    install_local_plugin,
     manage_plugin,
 )
 
@@ -143,12 +144,32 @@ def list(all: bool) -> None:
 
 
 @plug.command()
-@click.argument("name")
+@click.argument("name", required=False)
+@click.option(
+    "--editable",
+    "-e",
+    "local_path",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Install a plugin from a local directory as a symlink",
+)
 @click.option("--proxy", help="Proxy server address")
-def install(name: str, proxy: str | None) -> None:
+def install(name: str | None, local_path: Path | None, proxy: str | None) -> None:
     """Install a plugin"""
     base_path = _get_data_path()
     plug_path = base_path / "plugins"
+
+    if local_path is not None:
+        install_local_plugin(local_path, plug_path, editable=True)
+        return
+
+    if name is None:
+        raise click.ClickException("Missing plugin name or local plugin path")
+
+    local_name_path = Path(name).expanduser()
+    if local_name_path.exists() and local_name_path.is_dir():
+        install_local_plugin(local_name_path, plug_path, editable=False)
+        return
+
     plugins = build_plug_list(base_path / "plugins")
 
     plugin = next(

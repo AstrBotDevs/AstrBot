@@ -166,8 +166,7 @@ class AstrMessageEvent(abc.ABC):
                     parts.append("[引用消息]")
             else:
                 parts.append(f"[{i.type}]")
-            parts.append(" ")
-        return "".join(parts)
+        return " ".join(parts)
 
     def get_message_outline(self) -> str:
         """获取消息概要。
@@ -269,10 +268,11 @@ class AstrMessageEvent(abc.ABC):
             match = re.search(pattern, buffer)
             if not match:
                 break
-            matched_text = match.group()
-            await self.send(MessageChain([Plain(matched_text)]))
+            matched_text = match.group().strip()
+            if matched_text:
+                await self.send(MessageChain([Plain(matched_text)]))
+                await asyncio.sleep(1.5)  # 限速
             buffer = buffer[match.end() :]
-            await asyncio.sleep(1.5)  # 限速
         return buffer
 
     async def send_streaming(

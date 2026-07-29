@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import unquote
 
+from fastapi.responses import Response as FastAPIResponse
 from requests import Response
 from wechatpy.enterprise import WeChatClient, parse_message
 from wechatpy.enterprise.crypto import WeChatCrypto
@@ -29,7 +30,11 @@ from astrbot.core import logger
 from astrbot.core.platform.astr_message_event import MessageSesion
 from astrbot.core.platform.webhook_server import FastAPIWebhookServer
 from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
-from astrbot.core.utils.media_utils import MediaResolver
+from astrbot.core.utils.media_utils import (
+    MEDIA_MIME_EXTENSIONS,
+    MediaResolver,
+    detect_image_mime_type_async,
+)
 from astrbot.core.utils.webhook_utils import log_webhook_info
 
 from .wecom_event import WecomPlatformEvent
@@ -93,7 +98,7 @@ class WecomServer:
         """内部服务器的 GET 验证入口"""
         return await self.handle_verify(request)
 
-    async def handle_verify(self, request) -> str:
+    async def handle_verify(self, request) -> FastAPIResponse:
         """处理验证请求，可被统一 webhook 入口复用
 
         Args:
@@ -112,7 +117,7 @@ class WecomServer:
                 args.get("echostr"),
             )
             logger.info("验证请求有效性成功。")
-            return echo_str
+            return FastAPIResponse(content=echo_str, media_type="text/plain")
         except InvalidSignatureException:
             logger.error("验证请求有效性失败，签名异常，请检查配置。")
             raise
@@ -267,15 +272,13 @@ class WecomPlatformAdapter(Platform):
     ) -> None:
         # 企业微信客服不支持主动发送
         if hasattr(self.client, "kf_message"):
-            logger.warning("企业微信客服模式不支持 send_by_session 主动发送。")
             await super().send_by_session(session, message_chain)
-            return
+            raise Exception("企业微信客服模式不支持 send_by_session 主动发送。")
         if not self.agent_id:
-            logger.warning(
+            await super().send_by_session(session, message_chain)
+            raise Exception(
                 f"send_by_session 失败：无法为会话 {session.session_id} 推断 agent_id。",
             )
-            await super().send_by_session(session, message_chain)
-            return
 
         message_obj = AstrBotMessage()
         message_obj.self_id = self.agent_id
@@ -298,7 +301,7 @@ class WecomPlatformAdapter(Platform):
             "wecom 适配器",
             id=self.config.get("id", "wecom"),
             support_streaming_message=False,
-            support_proactive_message=False,
+            support_proactive_message=True,
         )
 
     @override
@@ -388,8 +391,7 @@ class WecomPlatformAdapter(Platform):
             )
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"wecom_{msg.media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
                 path_wav = await MediaResolver(
@@ -453,9 +455,13 @@ class WecomPlatformAdapter(Platform):
                 media_id,
             )
             temp_dir = get_astrbot_temp_path()
-            path = os.path.join(temp_dir, f"weixinkefu_{media_id}.jpg")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            mime_type = await detect_image_mime_type_async(
+                resp.content,
+                default_mime_type=None,
+            )
+            suffix = MEDIA_MIME_EXTENSIONS.get(mime_type or "", ".jpg")
+            path = os.path.join(temp_dir, f"weixinkefu_{media_id}{suffix}")
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
             abm.message = [Image(file=path, url=path)]
         elif msgtype == "voice":
             media_id = msg.get("voice", {}).get("media_id", "")
@@ -467,8 +473,7 @@ class WecomPlatformAdapter(Platform):
 
             temp_dir = get_astrbot_temp_path()
             path = os.path.join(temp_dir, f"weixinkefu_{media_id}.amr")
-            with open(path, "wb") as f:
-                f.write(resp.content)
+            await asyncio.to_thread(Path(path).write_bytes, resp.content)
 
             try:
                 path_wav = await MediaResolver(

@@ -35,6 +35,9 @@ from astrbot.core.star.star_manager import PluginManager
 from astrbot.core.subagent_orchestrator import SubAgentOrchestrator
 from astrbot.core.umop_config_router import UmopConfigRouter
 from astrbot.core.updator import AstrBotUpdator
+from astrbot.core.utils.event_loop_diagnostics import (
+    create_event_loop_diagnostic_tasks,
+)
 from astrbot.core.utils.llm_metadata import update_llm_metadata
 from astrbot.core.utils.migra_helper import migra
 from astrbot.core.utils.temp_dir_cleaner import TempDirCleaner
@@ -71,14 +74,25 @@ class AstrBotCoreLifecycle:
             no_proxy_list = self.astrbot_config.get("no_proxy", [])
             os.environ["no_proxy"] = ",".join(no_proxy_list)
         else:
-            # 清空代理环境变量
+            # Clear system proxy variables to avoid interfering with localhost requests.
+            has_system_proxy = "https_proxy" in os.environ or "http_proxy" in os.environ
+            if has_system_proxy:
+                logger.warning(
+                    "System http_proxy/https_proxy environment variables were detected, "
+                    "but AstrBot has no proxy configured. Clearing the proxy variables "
+                    "and setting no_proxy to localhost,127.0.0.1,::1 so local API "
+                    "requests bypass the proxy. Configure http_proxy in AstrBot if a "
+                    "proxy is required."
+                )
             if "https_proxy" in os.environ:
                 del os.environ["https_proxy"]
             if "http_proxy" in os.environ:
                 del os.environ["http_proxy"]
             if "no_proxy" in os.environ:
                 del os.environ["no_proxy"]
-            logger.debug("HTTP proxy cleared")
+            # Always bypass proxies for loopback addresses used by local APIs.
+            os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
+            logger.debug("HTTP proxy cleared, no_proxy set to localhost")
 
     async def _init_or_reload_subagent_orchestrator(self) -> None:
         """Create (if needed) and reload the subagent orchestrator from config.
@@ -296,13 +310,18 @@ class AstrBotCoreLifecycle:
                 self.temp_dir_cleaner.run(),
                 name="temp_dir_cleaner",
             )
+        diagnostic_tasks = create_event_loop_diagnostic_tasks()
 
         # 把插件中注册的所有协程函数注册到事件总线中并执行
         extra_tasks = []
         for task in self.star_context._register_tasks:
             extra_tasks.append(asyncio.create_task(task, name=task.__name__))  # type: ignore
 
-        tasks_ = [event_bus_task, *(extra_tasks if extra_tasks else [])]
+        tasks_ = [
+            event_bus_task,
+            *diagnostic_tasks,
+            *(extra_tasks if extra_tasks else []),
+        ]
         if cron_task:
             tasks_.append(cron_task)
         if temp_dir_cleaner_task:

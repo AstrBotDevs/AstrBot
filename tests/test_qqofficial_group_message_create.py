@@ -10,7 +10,7 @@ import pytest
 from botpy import ConnectionSession
 
 from astrbot.api.event import MessageChain
-from astrbot.api.message_components import At, Plain
+from astrbot.api.message_components import At, Image, Plain, Reply
 from astrbot.core.message.message_event_result import (
     MessageEventResult,
     ResultContentType,
@@ -38,8 +38,11 @@ def _make_group_payload(
     mentions: list[dict] | None = None,
     member_openid: str = "member-1",
     group_openid: str = "group-1",
+    message_type: int | None = None,
+    msg_elements: list[dict] | None = None,
+    message_reference: dict | None = None,
 ) -> dict:
-    return {
+    data = {
         "id": f"event-{message_id}",
         "d": {
             "id": message_id,
@@ -50,6 +53,13 @@ def _make_group_payload(
             "attachments": [],
         },
     }
+    if message_type is not None:
+        data["d"]["message_type"] = message_type
+    if msg_elements is not None:
+        data["d"]["msg_elements"] = msg_elements
+    if message_reference is not None:
+        data["d"]["message_reference"] = message_reference
+    return data
 
 
 def _dispatch_group_message(payload: dict) -> tuple[str, botpy.message.GroupMessage]:
@@ -106,6 +116,49 @@ async def test_parse_group_message_create_plain_message_has_no_at_component():
     assert [
         component.text for component in abm.message if isinstance(component, Plain)
     ] == ["plain group message"]
+
+
+@pytest.mark.asyncio
+async def test_parse_group_message_create_quoted_context():
+    _, message = _dispatch_group_message(
+        _make_group_payload(
+            content="answer",
+            message_type=103,
+            message_reference={"message_id": "quoted-1"},
+            msg_elements=[
+                {
+                    "content": "quoted text",
+                    "attachments": [
+                        {
+                            "content_type": "image/png",
+                            "filename": "quoted.png",
+                            "url": "img.example.com/quoted.png",
+                        }
+                    ],
+                }
+            ],
+        )
+    )
+
+    abm = await QQOfficialPlatformAdapter._parse_from_qqofficial(
+        message,
+        MessageType.GROUP_MESSAGE,
+    )
+
+    assert getattr(message, "message_type") == 103
+    assert getattr(message, "msg_elements")[0]["content"] == "quoted text"
+    reply = abm.message[0]
+    assert isinstance(reply, Reply)
+    assert reply.id == "quoted-1"
+    assert reply.message_str == "quoted text"
+    assert isinstance(reply.chain[0], Plain)
+    assert reply.chain[0].text == "quoted text"
+    assert isinstance(reply.chain[1], Image)
+    assert reply.chain[1].file == "https://img.example.com/quoted.png"
+    assert abm.message_str == "answer"
+    assert [
+        component.text for component in abm.message if isinstance(component, Plain)
+    ][-1] == "answer"
 
 
 @pytest.mark.asyncio

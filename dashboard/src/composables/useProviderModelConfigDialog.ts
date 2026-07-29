@@ -58,7 +58,8 @@ export function useProviderModelConfigDialog(options: UseProviderModelConfigDial
   })
 
   function openProviderEdit(provider: any) {
-    providerEditData.value = JSON.parse(JSON.stringify(provider))
+    const editableProvider = JSON.parse(JSON.stringify(provider))
+    providerEditData.value = editableProvider
     providerEditOriginalId.value = provider.id
     providerEditMode.value = 'edit'
     showProviderEditDialog.value = true

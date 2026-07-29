@@ -67,6 +67,24 @@ export type BotRegistrationRequest = {
 
 export type action = 'start' | 'poll';
 
+/**
+ * Per-request ChatUI feature flags. A value here takes priority over its legacy top-level field, followed by the documented default.
+ */
+export type ChatFlags = {
+    /**
+     * Inject the inline HTML GenUI system prompt for this request.
+     */
+    enable_inline_genui?: boolean;
+    /**
+     * Allow the ChatUI default system prompt when no persona overrides it.
+     */
+    enable_default_system_prompt?: boolean;
+    /**
+     * Enable streaming model output for this request. This value takes priority over the legacy top-level enable_streaming field.
+     */
+    enable_streaming?: boolean;
+};
+
 export type ChatMessagePatchRequest = {
     content: {
         [key: string]: unknown;
@@ -76,16 +94,28 @@ export type ChatMessagePatchRequest = {
 export type ChatMessageRegenerateRequest = {
     selected_provider?: string;
     selected_model?: string;
+    /**
+     * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
+     * @deprecated
+     */
     enable_streaming?: boolean;
+    flags?: ChatFlags;
 };
 
 export type ChatProjectRequest = {
     title?: string;
     emoji?: string;
     description?: string;
+    workspace_type?: 'session' | 'project' | 'custom';
+    workspace_path?: string;
 };
 
+export type workspace_type = 'session' | 'project' | 'custom';
+
 export type ChatRequest = {
+    /**
+     * Caller-declared WebChat sender/session owner. This value is used as the message sender identity and may participate in sender-ID-based command permission checks. Treat chat-scoped API keys as trusted backend credentials and map or validate usernames before accepting end-user input.
+     */
     username?: string;
     session_id?: string;
     /**
@@ -97,7 +127,12 @@ export type ChatRequest = {
     config_name?: string;
     selected_provider?: string;
     selected_model?: string;
+    /**
+     * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
+     * @deprecated
+     */
     enable_streaming?: boolean;
+    flags?: ChatFlags;
     /**
      * Internal WebUI flag for edit/regenerate flows.
      */
@@ -134,7 +169,12 @@ export type ChatThreadMessageRequest = {
     message: (string | Array<MessagePart>);
     selected_provider?: string;
     selected_model?: string;
+    /**
+     * Deprecated compatibility field. It is used only when flags.enable_streaming is absent; otherwise flags.enable_streaming takes priority.
+     * @deprecated
+     */
     enable_streaming?: boolean;
+    flags?: ChatFlags;
 };
 
 export type CommandPatchRequest = {
@@ -191,7 +231,7 @@ export type ConversationRef = {
 
 export type CreateApiKeyRequest = {
     name: string;
-    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'file' | 'plugin' | 'mcp' | 'skill')>;
+    scopes?: Array<('bot' | 'provider' | 'persona' | 'im' | 'config' | 'chat' | 'data' | 'file' | 'plugin' | 'mcp' | 'skill')>;
     expires_at?: string;
     expires_in_days?: number;
 };
@@ -252,13 +292,22 @@ export type JsonSchema = {
     [key: string]: unknown;
 };
 
+export type KnowledgeBaseCreateRequest = KnowledgeBaseRequest & {
+    kb_name: string;
+    embedding_provider_id: string;
+};
+
 export type KnowledgeBaseRequest = {
-    name: string;
+    kb_name?: string;
     description?: string;
-    embedding_provider_id?: string;
-    rerank_provider_id?: string;
-    chunking?: DynamicConfig;
-    metadata?: DynamicConfig;
+    emoji?: string;
+    embedding_provider_id?: (string) | null;
+    rerank_provider_id?: (string) | null;
+    chunk_size?: number;
+    chunk_overlap?: number;
+    top_k_dense?: number;
+    top_k_sparse?: number;
+    top_m_final?: number;
 };
 
 export type KnowledgeDocumentImportRequest = {
@@ -268,7 +317,6 @@ export type KnowledgeDocumentImportRequest = {
 
 export type KnowledgeDocumentUploadRequest = {
     file: (Blob | File);
-    parser?: string;
 };
 
 export type KnowledgeDocumentUrlImportRequest = {
@@ -314,6 +362,7 @@ export type MessagePart = {
     attachment_id?: string;
     url?: string;
     filename?: string;
+    stored_filename?: string;
     mime_type?: string;
     [key: string]: unknown | string;
 };
@@ -459,6 +508,15 @@ export type PluginGithubInstallRequest = {
     download_url?: string;
     proxy?: string;
     ignore_version_check?: boolean;
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
+};
+
+export type PluginSourceBindRequest = {
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
 };
 
 export type PluginSourceRequest = {
@@ -483,6 +541,15 @@ export type PluginUrlInstallRequest = {
     download_url?: string;
     proxy?: string;
     ignore_version_check?: boolean;
+    install_method?: string;
+    registry_url?: (string) | null;
+    market_plugin_id?: string;
+};
+
+export type PluginValidateRepoRequest = {
+    repository?: string;
+    url?: string;
+    proxy?: string;
 };
 
 export type PluginVersionSupportRequest = {
@@ -1337,6 +1404,16 @@ export type StopChatSessionResponse = (SuccessEnvelope);
 
 export type StopChatSessionError = unknown;
 
+export type ResumeChatRunData = {
+    path: {
+        run_id: string;
+    };
+};
+
+export type ResumeChatRunResponse = (unknown);
+
+export type ResumeChatRunError = unknown;
+
 export type UpdateChatMessageData = {
     body: ChatMessagePatchRequest;
     path: {
@@ -1456,6 +1533,45 @@ export type ListChatProjectSessionsData = {
 export type ListChatProjectSessionsResponse = (SuccessEnvelope);
 
 export type ListChatProjectSessionsError = unknown;
+
+export type ListChatProjectWorkspaceFilesData = {
+    path: {
+        project_id: string;
+    };
+    query?: {
+        path?: string;
+    };
+};
+
+export type ListChatProjectWorkspaceFilesResponse = (SuccessEnvelope);
+
+export type ListChatProjectWorkspaceFilesError = unknown;
+
+export type GetChatProjectWorkspaceFileData = {
+    path: {
+        project_id: string;
+    };
+    query: {
+        path: string;
+    };
+};
+
+export type GetChatProjectWorkspaceFileResponse = (SuccessEnvelope);
+
+export type GetChatProjectWorkspaceFileError = unknown;
+
+export type DownloadChatProjectWorkspaceFileData = {
+    path: {
+        project_id: string;
+    };
+    query: {
+        path: string;
+    };
+};
+
+export type DownloadChatProjectWorkspaceFileResponse = ((Blob | File));
+
+export type DownloadChatProjectWorkspaceFileError = unknown;
 
 export type AddChatProjectSessionData = {
     path: {
@@ -1794,6 +1910,23 @@ export type UpdatePluginConfigResponse = (SuccessEnvelope);
 
 export type UpdatePluginConfigError = unknown;
 
+export type UpdatePluginLogLevelData = {
+    body: {
+        /**
+         * Log level name, or null to follow the global level.
+         */
+        level?: ('DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL') | null;
+        [key: string]: unknown | string;
+    };
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type UpdatePluginLogLevelResponse = (SuccessEnvelope);
+
+export type UpdatePluginLogLevelError = unknown;
+
 export type GetPluginConfigSchemaData = {
     path: {
         plugin_id: string;
@@ -1876,6 +2009,17 @@ export type ReloadPluginResponse = (SuccessEnvelope);
 
 export type ReloadPluginError = unknown;
 
+export type BindPluginSourceData = {
+    body: PluginSourceBindRequest;
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type BindPluginSourceResponse = (SuccessEnvelope);
+
+export type BindPluginSourceError = unknown;
+
 export type SetPluginEnabledData = {
     body: EnabledPatch;
     path: {
@@ -1913,6 +2057,14 @@ export type CheckPluginVersionSupportData = {
 export type CheckPluginVersionSupportResponse = (SuccessEnvelope);
 
 export type CheckPluginVersionSupportError = unknown;
+
+export type ValidatePluginRepoData = {
+    body: PluginValidateRepoRequest;
+};
+
+export type ValidatePluginRepoResponse = (SuccessEnvelope);
+
+export type ValidatePluginRepoError = unknown;
 
 export type ListFailedPluginsResponse = (SuccessEnvelope);
 
@@ -2566,7 +2718,7 @@ export type ListKnowledgeBasesResponse = (SuccessEnvelope);
 export type ListKnowledgeBasesError = unknown;
 
 export type CreateKnowledgeBaseData = {
-    body: KnowledgeBaseRequest;
+    body: KnowledgeBaseCreateRequest;
 };
 
 export type CreateKnowledgeBaseResponse = (SuccessEnvelope);
@@ -2621,6 +2773,10 @@ export type ListKnowledgeDocumentsData = {
     query?: {
         page?: number;
         page_size?: number;
+        /**
+         * Filter documents by name (case-insensitive partial match).
+         */
+        search?: string;
     };
 };
 
@@ -2978,6 +3134,10 @@ export type ListConversationsData = {
          */
         exclude_platforms?: string;
         /**
+         * Include full message history in each conversation.
+         */
+        include_history?: boolean;
+        /**
          * Comma-separated message types.
          */
         message_types?: string;
@@ -3090,6 +3250,10 @@ export type GetProviderTokenStatsError = unknown;
 export type GetVersionResponse = (SuccessEnvelope);
 
 export type GetVersionError = unknown;
+
+export type GetPublicVersionsResponse = (SuccessEnvelope);
+
+export type GetPublicVersionsError = unknown;
 
 export type GetFirstNoticeData = {
     query?: {

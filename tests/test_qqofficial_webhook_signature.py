@@ -63,7 +63,7 @@ async def test_qq_webhook_callback_rejects_missing_signature():
 
 
 @pytest.mark.asyncio
-async def test_qq_webhook_callback_accepts_signed_validation():
+async def test_qq_webhook_callback_accepts_unsigned_validation():
     secret = "test-secret"
     event_ts = "1710000000"
     plain_token = "plain-token"
@@ -71,19 +71,10 @@ async def test_qq_webhook_callback_accepts_signed_validation():
         {"op": 13, "d": {"event_ts": event_ts, "plain_token": plain_token}},
         separators=(",", ":"),
     ).encode("utf-8")
-    signature = _sign_qq_webhook_payload(secret, event_ts, body)
     webhook = object.__new__(QQOfficialWebhook)
     webhook.secret = secret
 
-    result = await webhook.handle_callback(
-        FakeRequest(
-            body,
-            {
-                _SIGNATURE_TIMESTAMP_HEADER: event_ts,
-                _SIGNATURE_HEADER: signature,
-            },
-        )
-    )
+    result = await webhook.handle_callback(FakeRequest(body))
 
     assert result == {
         "plain_token": plain_token,

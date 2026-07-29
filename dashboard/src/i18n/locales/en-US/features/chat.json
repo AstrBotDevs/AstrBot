@@ -2,7 +2,7 @@
   "title": "Let's Chat!",
   "subtitle": "Chat with AI Assistant",
   "input": {
-    "placeholder": "Start typing...",
+    "placeholder": "Ask anything...",
     "send": "Send",
     "clear": "Clear",
     "upload": "Upload File",
@@ -31,7 +31,7 @@
     "liveMode": "Live Mode"
   },
   "welcome": {
-    "title": "Welcome to AstrBot",
+    "title": "Anything on your mind today?",
     "subtitle": "Your Intelligent Chat Assistant",
     "quickActions": "Quick Actions",
     "examples": "Example Questions"
@@ -73,6 +73,7 @@
     "placeholder": "Ask about this excerpt..."
   },
   "conversation": {
+    "title": "Conversations",
     "newConversation": "New Conversation",
     "noHistory": "No conversation history",
     "systemStatus": "System Status",
@@ -131,8 +132,35 @@
     "name": "Project Name",
     "emoji": "Icon (Emoji)",
     "description": "Description (Optional)",
+    "workspace": {
+      "type": "Workspace",
+      "session": "Per-session workspace",
+      "project": "Shared project workspace",
+      "custom": "Custom path",
+      "path": "Workspace path"
+    },
+    "loadingSessions": "Loading conversations...",
     "noSessions": "No conversations in this project",
+    "noProjects": "No projects",
     "confirmDelete": "Are you sure you want to delete project \"{title}\"? Conversations in this project will not be deleted."
+  },
+  "workspaceFiles": {
+    "title": "Workspace Files",
+    "open": "Open workspace files",
+    "close": "Close workspace files",
+    "refresh": "Refresh file tree",
+    "filter": "Filter files...",
+    "clearFilter": "Clear file filter",
+    "empty": "This workspace is empty",
+    "noMatches": "No matching files",
+    "loadFailed": "Failed to load workspace files",
+    "previewFailed": "Failed to read this file",
+    "tooLarge": "This file is too large to preview",
+    "download": "Download file",
+    "downloadFailed": "Failed to download this file",
+    "dialogPreview": "Open larger preview",
+    "closePreview": "Close file preview",
+    "closeDialogPreview": "Close larger preview"
   },
   "time": {
     "today": "Today",
@@ -145,6 +173,9 @@
     "cachedTokens": "Input (cached)",
     "duration": "Duration",
     "ttft": "Time to First Token"
+  },
+  "tokenUsage": {
+    "tooltip": "{used} / {limit} tokens ({percent}%)"
   },
   "refs": {
     "title": "References",

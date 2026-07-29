@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TypedDict
 
+from sqlalchemy import Index, desc
 from sqlmodel import JSON, Field, SQLModel, Text, UniqueConstraint
 
 
@@ -89,6 +90,17 @@ class ConversationV2(TimestampMixin, SQLModel, table=True):
     """
 
     __table_args__ = (
+        Index(
+            "ix_conversations_created_at_inner_id",
+            desc("created_at"),
+            desc("inner_conversation_id"),
+        ),
+        Index(
+            "ix_conversations_platform_created_at_inner_id",
+            "platform_id",
+            desc("created_at"),
+            desc("inner_conversation_id"),
+        ),
         UniqueConstraint(
             "conversation_id",
             name="uix_conversation_id",
@@ -447,6 +459,10 @@ class ChatUIProject(TimestampMixin, SQLModel, table=True):
     """Title of the project"""
     description: str | None = Field(default=None, max_length=1000)
     """Description of the project"""
+    workspace_type: str = Field(default="session", nullable=False, max_length=32)
+    """Workspace mode: session, project, or custom"""
+    workspace_path: str | None = Field(default=None, max_length=1024)
+    """Custom workspace path"""
 
     __table_args__ = (
         UniqueConstraint(

@@ -61,6 +61,7 @@ import { fetchWithAuth } from "@/api/http";
 import {
   appendPlain,
   appendReasoningPart,
+  buildChatRequestFlags,
   extractReasoningText,
   finishToolCall,
   hasPlainText,
@@ -70,6 +71,7 @@ import {
   payloadText,
   upsertToolCall,
   type ChatRecord,
+  type MessagePart,
   type ChatThread,
 } from "@/composables/useMessages";
 import { useModuleI18n } from "@/i18n/composables";
@@ -159,7 +161,7 @@ async function send() {
       },
       body: JSON.stringify({
         message: [{ type: "plain", text }],
-        enable_streaming: true,
+        flags: buildChatRequestFlags(),
       }),
       signal: abort.signal,
     });
@@ -305,13 +307,22 @@ function processPayload(botRecord: ChatRecord, userRecord: ChatRecord, payload: 
 
   if (["image", "record", "file", "video"].includes(type)) {
     markMessageStarted(botRecord);
-    const filename = String(data)
+    const rawFilename = String(data)
       .replace("[IMAGE]", "")
       .replace("[RECORD]", "")
       .replace("[FILE]", "")
-      .replace("[VIDEO]", "")
-      .split("|", 1)[0];
-    botRecord.content.message.push({ type, filename });
+      .replace("[VIDEO]", "");
+    const separatorIndex = rawFilename.indexOf("|");
+    const storedFilename =
+      separatorIndex >= 0 ? rawFilename.slice(0, separatorIndex) : rawFilename;
+    const displayFilename =
+      separatorIndex >= 0 ? rawFilename.slice(separatorIndex + 1) : storedFilename;
+    const filename = displayFilename || storedFilename;
+    const mediaPart: MessagePart = { type, filename };
+    if (storedFilename && storedFilename !== filename) {
+      mediaPart.stored_filename = storedFilename;
+    }
+    botRecord.content.message.push(mediaPart);
   }
 }
 
@@ -327,9 +338,10 @@ function scrollToBottom() {
 <style scoped>
 .thread-panel {
   width: 380px;
-  height: 100%;
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  background: rgb(var(--v-theme-surface));
+  height: calc(100% - var(--chat-panel-top-offset, 0px));
+  margin-top: var(--chat-panel-top-offset, 0px);
+  border-left: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+  background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
@@ -440,13 +452,14 @@ function scrollToBottom() {
     z-index: 1300;
     width: 100vw;
     height: 100dvh;
+    margin-top: 0;
     border-left: 0;
   }
 
   .thread-panel-header {
     min-height: 52px;
     padding: calc(10px + env(safe-area-inset-top)) 12px 8px;
-    border-bottom: 1px solid rgba(var(--v-border-color), 0.12);
+    border-bottom: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.12));
   }
 
   .thread-selected-text {
@@ -464,7 +477,7 @@ function scrollToBottom() {
   .thread-composer {
     gap: 8px;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-    background: rgb(var(--v-theme-surface));
+    background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   }
 
   .thread-input {

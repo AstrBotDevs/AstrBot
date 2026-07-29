@@ -26,7 +26,9 @@
       "release": "😊 正式版"
     },
     "advancedSettings": "高级设置",
+    "releases": "版本列表",
     "updateToLatest": "更新到最新版本",
+    "showPreReleases": "显示预发布版本",
     "preRelease": "预发布",
     "preReleaseWarning": {
       "title": "预发布版本提醒",

@@ -1,7 +1,7 @@
 <template>
   <v-dialog v-model="visible" max-width="520" :persistent="blockingRecovery || restarting">
     <v-card>
-      <v-card-title class="upgrade-recovery-title">
+      <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         <span>{{ t('core.common.upgradeRecovery.title') }}</span>
       </v-card-title>
 
@@ -35,7 +35,7 @@
         </v-btn>
         <v-btn
           color="primary"
-          variant="flat"
+          variant="tonal"
           prepend-icon="mdi-restart"
           :loading="restarting"
           @click="restartCore"
@@ -156,6 +156,12 @@ function dismiss() {
   visible.value = false;
 }
 
+function reloadWithCacheBuster() {
+  const url = new URL(window.location.href);
+  url.searchParams.set('_r', Date.now().toString());
+  window.location.replace(url.toString());
+}
+
 function waitForRestart() {
   clearRestartTimer();
   let attempts = 0;
@@ -169,7 +175,7 @@ function waitForRestart() {
       ) {
         clearRestartTimer();
         sessionStorage.removeItem(UPGRADE_RECOVERY_TOKEN_KEY);
-        window.location.reload();
+        reloadWithCacheBuster();
       }
     } catch (_error) {
       // The backend may be temporarily unavailable during restart.

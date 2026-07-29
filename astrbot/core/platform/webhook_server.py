@@ -33,7 +33,15 @@ class WebhookRequest:
             raise
 
 
-def _response_from_result(result: Any):
+def webhook_response_from_result(result: Any):
+    """Convert adapter callback results into raw webhook HTTP responses.
+
+    Args:
+        result: Adapter callback return value.
+
+    Returns:
+        A FastAPI-compatible raw response value.
+    """
     if isinstance(result, Response):
         return result
 
@@ -54,6 +62,9 @@ def _response_from_result(result: Any):
 
     if isinstance(result, dict | list):
         return JSONResponse(result)
+
+    if isinstance(result, str | bytes):
+        return Response(content=result)
 
     return result
 
@@ -77,7 +88,7 @@ class FastAPIWebhookServer:
                 result = view_func()
             if inspect.isawaitable(result):
                 result = await result
-            return _response_from_result(result)
+            return webhook_response_from_result(result)
 
         self.app.add_api_route(
             path,

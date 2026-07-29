@@ -10,12 +10,13 @@ from fastapi.responses import PlainTextResponse, Response
 
 from astrbot.api.web import PluginRequest, bind_request_context
 from astrbot.core import logger
+from astrbot.core.log import LogManager
 from astrbot.dashboard.asgi_runtime import (
     DashboardRequestState,
     call_request_view,
 )
 from astrbot.dashboard.async_utils import run_maybe_async
-from astrbot.dashboard.responses import ok
+from astrbot.dashboard.responses import error, ok
 from astrbot.dashboard.schemas import (
     EnabledPatch,
     PluginByIdRequest,
@@ -24,9 +25,12 @@ from astrbot.dashboard.schemas import (
     PluginConfigUpdateRequest,
     PluginEnabledRequest,
     PluginInstallRequest,
+    PluginLogLevelPayload,
+    PluginSourceBindRequest,
     PluginSourceRequest,
     PluginUninstallRequest,
     PluginUpdateRequest,
+    PluginValidateRepoRequest,
     PluginVersionSupportRequest,
 )
 from astrbot.dashboard.services.config_service import (
@@ -484,6 +488,18 @@ async def check_plugin_version_support(
     return await _check_plugin_version_support_payload(_model_dict(payload), service)
 
 
+@router.post("/plugins/validate/repo")
+async def validate_plugin_repo(
+    payload: PluginValidateRepoRequest,
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    return await _run_service(
+        service.validate_plugin_repo(_model_dict(payload)),
+        log_label="/api/plugin/validate-repo",
+    )
+
+
 @router.post("/plugins/install/github")
 async def install_plugin_from_github(
     payload: PluginInstallRequest,
@@ -498,6 +514,15 @@ async def install_plugin_from_github(
         "url": repository,
         "proxy": body.get("proxy"),
         "ignore_version_check": body.get("ignore_version_check", False),
+        **{
+            key: body[key]
+            for key in (
+                "install_method",
+                "registry_url",
+                "market_plugin_id",
+            )
+            if key in body
+        },
     }
     if body.get("download_url"):
         install_payload["download_url"] = body["download_url"]
@@ -523,6 +548,15 @@ async def install_plugin_from_url(
                 "download_url": download_url,
                 "proxy": body.get("proxy"),
                 "ignore_version_check": body.get("ignore_version_check", False),
+                **{
+                    key: body[key]
+                    for key in (
+                        "install_method",
+                        "registry_url",
+                        "market_plugin_id",
+                    )
+                    if key in body
+                },
             }
         ),
         log_label="/api/plugin/install",
@@ -680,7 +714,13 @@ async def get_plugin_config_by_id(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigDisplayService = Depends(get_config_display_service),
 ):
-    return ok({"plugin_name": plugin_id, **await service.get_configs(plugin_id)})
+    return ok(
+        {
+            "plugin_name": plugin_id,
+            "log_level": LogManager.get_plugin_log_level(plugin_id),
+            **await service.get_configs(plugin_id),
+        }
+    )
 
 
 @router.put("/plugins/config")
@@ -924,7 +964,30 @@ async def get_plugin_config(
     _auth: AuthContext = Depends(require_plugin_scope),
     service: ConfigDisplayService = Depends(get_config_display_service),
 ):
-    return ok({"plugin_name": plugin_id, **await service.get_configs(plugin_id)})
+    return ok(
+        {
+            "plugin_name": plugin_id,
+            "log_level": LogManager.get_plugin_log_level(plugin_id),
+            **await service.get_configs(plugin_id),
+        }
+    )
+
+
+@router.put("/plugins/{plugin_id}/log-level")
+async def update_plugin_log_level(
+    plugin_id: str,
+    payload: PluginLogLevelPayload,
+    _auth: AuthContext = Depends(require_plugin_scope),
+):
+    try:
+        LogManager.set_plugin_log_level(plugin_id, payload.level)
+    except ValueError as e:
+        return error(str(e))
+    level_desc = payload.level.upper() if payload.level else "global"
+    return ok(
+        message=f"Log level of plugin {plugin_id} set to {level_desc}.",
+        data={"log_level": LogManager.get_plugin_log_level(plugin_id)},
+    )
 
 
 @router.put("/plugins/{plugin_id}/config")
@@ -1038,6 +1101,20 @@ async def reload_plugin(
     return await _run_service(
         service.reload_plugin({"name": plugin_id}),
         log_label="/api/plugin/reload",
+    )
+
+
+@router.post("/plugins/{plugin_id}/source")
+async def bind_plugin_source(
+    plugin_id: str,
+    payload: PluginSourceBindRequest,
+    _auth: AuthContext = Depends(require_plugin_scope),
+    service: PluginService = Depends(get_service),
+):
+    body = _model_dict(payload)
+    return await _run_service(
+        service.bind_plugin_market_source({"name": plugin_id, **body}),
+        log_label="/api/plugin/source",
     )
 
 

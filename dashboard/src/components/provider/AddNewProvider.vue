@@ -1,6 +1,7 @@
 <template>
     <v-dialog v-model="showDialog" max-width="1000px" >
-        <v-card :title="tm('dialogs.addProvider.title')">
+        <v-card>
+            <v-card-title class="text-h3 pa-4 pb-0 pl-6">{{ tm('dialogs.addProvider.title') }}</v-card-title>
             <v-card-text style="overflow-y: auto;">
                 <v-tabs v-model="activeProviderTab" grow>
                     <v-tab value="agent_runner" class="font-weight-medium px-3">
@@ -63,7 +64,7 @@
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
-                <v-btn text @click="closeDialog">{{ tm('dialogs.config.cancel') }}</v-btn>
+                <v-btn variant="text" @click="closeDialog">{{ tm('dialogs.config.cancel') }}</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>

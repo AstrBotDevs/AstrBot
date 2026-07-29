@@ -157,9 +157,19 @@ class BaseDatabase(abc.ABC):
         page_size: int = 20,
         platform_ids: list[str] | None = None,
         search_query: str = "",
+        include_history: bool = True,
         **kwargs,
     ) -> tuple[list[ConversationV2], int]:
-        """Get conversations filtered by platform IDs and search query."""
+        """Filter conversations by platform IDs and search text.
+
+        Args:
+            page: Page number.
+            page_size: Number of items per page.
+            platform_ids: Platform IDs to include, if any.
+            search_query: Search text, if any.
+            include_history: Whether to load the full history for returned rows.
+            **kwargs: Additional filters supported by the database backend.
+        """
         ...
 
     @abc.abstractmethod
@@ -851,6 +861,8 @@ class BaseDatabase(abc.ABC):
         title: str,
         emoji: str | None = "📁",
         description: str | None = None,
+        workspace_type: str = "session",
+        workspace_path: str | None = None,
     ) -> ChatUIProject:
         """Create a new ChatUI project."""
         ...
@@ -877,6 +889,8 @@ class BaseDatabase(abc.ABC):
         title: str | None = None,
         emoji: str | None = None,
         description: str | None = None,
+        workspace_type: str | None = None,
+        workspace_path: str | None = None,
     ) -> None:
         """Update a ChatUI project."""
         ...

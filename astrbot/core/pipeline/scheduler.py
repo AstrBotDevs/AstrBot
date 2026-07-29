@@ -53,7 +53,7 @@ class PipelineScheduler:
                     # 此处是前置处理完成后的暂停点(yield), 下面开始执行后续阶段
                     if event.is_stopped():
                         logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
+                            f"Stage {stage.__class__.__name__} stopped event propagation.",
                         )
                         break
 
@@ -63,7 +63,7 @@ class PipelineScheduler:
                     # 此处是后续所有阶段处理完毕后返回的点, 执行后置处理
                     if event.is_stopped():
                         logger.debug(
-                            f"阶段 {stage.__class__.__name__} 已终止事件传播。",
+                            f"Stage {stage.__class__.__name__} stopped event propagation.",
                         )
                         break
             else:
@@ -72,7 +72,9 @@ class PipelineScheduler:
                 await coroutine
 
                 if event.is_stopped():
-                    logger.debug(f"阶段 {stage.__class__.__name__} 已终止事件传播。")
+                    logger.debug(
+                        f"Stage {stage.__class__.__name__} stopped event propagation."
+                    )
                     break
 
     async def execute(self, event: AstrMessageEvent) -> None:

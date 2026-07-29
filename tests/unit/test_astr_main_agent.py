@@ -8,6 +8,7 @@ import pytest
 
 from astrbot.core import astr_main_agent as ama
 from astrbot.core.agent.mcp_client import MCPTool
+from astrbot.core.agent.message import Message, dump_messages_with_checkpoints
 from astrbot.core.agent.tool import FunctionTool, ToolSet
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.message.components import File, Image, Plain, Reply, Video
@@ -377,8 +378,18 @@ class TestApplyKb:
         ):
             await module._apply_kb(mock_event, req, mock_context, config)
 
-        assert "[Related Knowledge Base Results]:" in req.system_prompt
-        assert "KB result" in req.system_prompt
+        assert req.system_prompt == "System prompt"
+        assert len(req.extra_user_content_parts) == 1
+        kb_part = req.extra_user_content_parts[0]
+        assert kb_part.text == "[Related Knowledge Base Results]:\nKB result"
+
+        message = Message.model_validate(await req.assemble_context())
+        assert isinstance(message.content, list)
+        assert message.content[0].text == "test question"
+        assert message.content[1].text == "[Related Knowledge Base Results]:\nKB result"
+        assert dump_messages_with_checkpoints([message]) == [
+            {"role": "user", "content": [{"type": "text", "text": "test question"}]}
+        ]
 
     @pytest.mark.asyncio
     async def test_apply_kb_with_agentic_mode(self, mock_event, mock_context):
@@ -781,6 +792,63 @@ class TestEnsurePersonaAndSkills:
         assert "Custom persona." in req.system_prompt
 
     @pytest.mark.asyncio
+    async def test_inline_genui_prompt_is_added_with_custom_persona(
+        self, mock_event, mock_context
+    ):
+        """Test inline GenUI instructions are independent of persona selection."""
+        module = ama
+        persona = {"name": "conv-persona", "prompt": "Custom persona."}
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("conv-persona", persona, None, False)
+        )
+        mock_event.get_extra.side_effect = (
+            lambda key: key == "enable_inline_genui"
+        )
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id="conv-persona")
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert "Custom persona." in req.system_prompt
+        assert module.CHATUI_INLINE_GENUI_SYSTEM_PROMPT in req.system_prompt
+
+    @pytest.mark.asyncio
+    async def test_inline_genui_prompt_does_not_require_conversation(
+        self, mock_event, mock_context
+    ):
+        """Test inline GenUI instructions are added before conversation setup."""
+        module = ama
+        mock_event.get_extra.side_effect = (
+            lambda key: key == "enable_inline_genui"
+        )
+        req = ProviderRequest()
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert module.CHATUI_INLINE_GENUI_SYSTEM_PROMPT in req.system_prompt
+        mock_context.persona_manager.resolve_selected_persona.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_default_system_prompt_can_be_disabled(
+        self, mock_event, mock_context
+    ):
+        """Test the default ChatUI persona prompt honors its request flag."""
+        module = ama
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("_chatui_default_", None, None, True)
+        )
+        mock_event.get_extra.side_effect = lambda key: {
+            "enable_inline_genui": False,
+            "enable_default_system_prompt": False,
+        }.get(key)
+        req = ProviderRequest()
+        req.conversation = MagicMock(persona_id=None)
+
+        await module._ensure_persona_and_skills(req, {}, mock_context, mock_event)
+
+        assert module.CHATUI_SPECIAL_DEFAULT_PERSONA_PROMPT not in req.system_prompt
+
+    @pytest.mark.asyncio
     async def test_ensure_persona_none_explicit(self, mock_event, mock_context):
         """Test that [%None] persona is explicitly set to no persona."""
         module = ama
@@ -998,7 +1066,7 @@ class TestEnsurePersonaAndSkills:
         assert req.func_tool is not None
 
     @pytest.mark.asyncio
-    async def test_persona_empty_tools_filters_late_builtin_tools(
+    async def test_persona_empty_tools_keeps_late_builtin_tools(
         self, mock_event, mock_context, mock_provider
     ):
         module = ama
@@ -1006,6 +1074,7 @@ class TestEnsurePersonaAndSkills:
         mock_context.persona_manager.resolve_selected_persona = AsyncMock(
             return_value=("locked", persona, None, False)
         )
+        mock_event.platform_meta.support_proactive_message = False
         mock_context.get_config.return_value = {
             "provider_settings": {
                 "web_search": True,
@@ -1019,6 +1088,7 @@ class TestEnsurePersonaAndSkills:
                 "websearch_provider": "baidu_ai_search",
             },
             computer_use_runtime="none",
+            add_cron_tools=False,
         )
         req = ProviderRequest(prompt="hello")
         req.conversation = MagicMock(persona_id="locked", history="[]")
@@ -1041,9 +1111,52 @@ class TestEnsurePersonaAndSkills:
             )
         assert result is not None
         try:
-            assert result.provider_request.func_tool is None or (
-                result.provider_request.func_tool.empty()
+            assert result.provider_request.func_tool is not None
+            assert result.provider_request.func_tool.names() == ["web_search_baidu"]
+        finally:
+            if result.reset_coro:
+                result.reset_coro.close()
+
+    @pytest.mark.asyncio
+    async def test_persona_empty_tools_keeps_local_runtime_builtin_tools(
+        self, mock_event, mock_context, mock_provider
+    ):
+        module = ama
+        persona = {"name": "locked", "prompt": "No tools.", "tools": []}
+        mock_context.persona_manager.resolve_selected_persona = AsyncMock(
+            return_value=("locked", persona, None, False)
+        )
+        mock_event.platform_meta.support_proactive_message = False
+        config = module.MainAgentBuildConfig(
+            tool_call_timeout=60,
+            computer_use_runtime="local",
+            add_cron_tools=False,
+        )
+        req = ProviderRequest(prompt="hello")
+        req.conversation = MagicMock(persona_id="locked", history="[]")
+
+        with (
+            patch("astrbot.core.astr_main_agent.AgentRunner") as mock_runner_cls,
+            patch("astrbot.core.astr_main_agent.AstrAgentContext"),
+        ):
+            mock_runner = MagicMock()
+            mock_runner.reset = AsyncMock()
+            mock_runner_cls.return_value = mock_runner
+
+            result = await module.build_main_agent(
+                event=mock_event,
+                plugin_context=mock_context,
+                config=config,
+                provider=mock_provider,
+                req=req,
+                apply_reset=False,
             )
+        assert result is not None
+        try:
+            assert result.provider_request.func_tool is not None
+            tool_names = result.provider_request.func_tool.names()
+            assert "astrbot_execute_shell" in tool_names
+            assert "astrbot_execute_python" in tool_names
         finally:
             if result.reset_coro:
                 result.reset_coro.close()

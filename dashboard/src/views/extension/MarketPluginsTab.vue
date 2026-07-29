@@ -129,7 +129,6 @@ const {
   addCustomSource,
   openSourceManagerDialog,
   selectPluginSource,
-  sourceSelectItems,
   editCustomSource,
   removeCustomSource,
   confirmRemoveSource,

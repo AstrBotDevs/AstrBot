@@ -16,10 +16,6 @@ Welcome to submit Issues or Pull Requests:
 
 ### Tencent QQ Groups
 
-- Group 12: 916228568 (New)
-- Group 9: 1076659624 (Full)
-- Group 10: 1078079676 (Full)
-- Group 11: 704659519 (Full)
 - Group 1: 322154837 (Full)
 - Group 3: 630166526 (Full)
 - Group 4: 1077826412 (Full)
@@ -27,6 +23,12 @@ Welcome to submit Issues or Pull Requests:
 - Group 6: 753075035 (Full)
 - Group 7: 743746109 (Full)
 - Group 8: 1030353265 (Full)
+- Group 9: 1076659624 (Full)
+- Group 10: 1078079676 (Full)
+- Group 11: 704659519 (Full)
+- Group 12: 916228568 (Full)
+- Group 13: 1092185289
+- Group 14: 1103419483
 - **AstrBot Core Development Group: 975206796** (AstrBot development members are usually active here. Welcome to anyone interested in programming/AI technology~)
 
 ## Become an AstrBot Organization Member
