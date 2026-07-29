@@ -234,11 +234,7 @@ class TestValidateContextConfig:
         with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
             _call_validate(ps_base)
 
-        # Should have at least one warning call
-        assert any(
-            "warn" in str(call).lower() or "warning" in str(call).lower()
-            for call in mock_log.method_calls
-        ) or True  # lenient check; at minimum doesn't crash
+        mock_log.warning.assert_called()
 
     def test_token_guard_threshold_above_max(self):
         """token_guard_threshold > 0.99 should warn."""
@@ -246,8 +242,10 @@ class TestValidateContextConfig:
             "enable_token_guard": True,
             "token_guard_threshold": 1.5,
         }
-        # Should not crash
-        _call_validate(ps)
+        with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
+            _call_validate(ps)
+
+        mock_log.warning.assert_called()
 
     def test_max_turns_too_low(self):
         """max_turns < 2 should warn."""
@@ -255,7 +253,10 @@ class TestValidateContextConfig:
             "enable_turn_limit": True,
             "max_turns": 1,
         }
-        _call_validate(ps)
+        with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
+            _call_validate(ps)
+
+        mock_log.warning.assert_called()
 
     def test_discard_turns_zero(self):
         """discard_turns < 1 should warn."""
@@ -263,7 +264,10 @@ class TestValidateContextConfig:
             "enable_discard": True,
             "discard_turns": 0,
         }
-        _call_validate(ps)
+        with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
+            _call_validate(ps)
+
+        mock_log.warning.assert_called()
 
     def test_retain_turns_zero(self):
         """retain_turns < 1 with retention_method='turns' should warn."""
@@ -271,7 +275,10 @@ class TestValidateContextConfig:
             "retention_method": "turns",
             "retain_turns": 0,
         }
-        _call_validate(ps)
+        with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
+            _call_validate(ps)
+
+        mock_log.warning.assert_called()
 
     def test_retain_percentage_out_of_range(self):
         """retain_percentage outside 0.1-0.9 with retention_method='percentage' should warn."""
@@ -279,20 +286,29 @@ class TestValidateContextConfig:
             "retention_method": "percentage",
             "retain_percentage": 0.05,
         }
-        _call_validate(ps)
+        with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
+            _call_validate(ps)
+
+        mock_log.warning.assert_called()
 
         ps2 = {
             "retention_method": "percentage",
             "retain_percentage": 0.95,
         }
-        _call_validate(ps2)
+        with patch("astrbot.core.utils.migra_helper.logger") as mock_log2:
+            _call_validate(ps2)
+
+        mock_log2.warning.assert_called()
 
     def test_invalid_retention_method(self):
         """Unknown retention_method should warn."""
         ps = {
             "retention_method": "invalid_method",
         }
-        _call_validate(ps)
+        with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
+            _call_validate(ps)
+
+        mock_log.warning.assert_called()
 
     def test_both_disposal_disabled_warns(self):
         """Both enable_summary and enable_discard False → warn."""
@@ -302,6 +318,8 @@ class TestValidateContextConfig:
         }
         with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
             _call_validate(ps)
+
+        mock_log.warning.assert_called()
 
     def test_implicit_retain_turns_exceeds_max_turns_warns(self):
         """retain_turns > max_turns when enable_turn_limit → warn."""
@@ -313,6 +331,8 @@ class TestValidateContextConfig:
         }
         with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
             _call_validate(ps)
+
+        mock_log.warning.assert_called()
 
 
 # ====================== Helper names (aliases, since the module may not exist yet) ======================

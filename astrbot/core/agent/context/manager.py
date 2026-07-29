@@ -3,7 +3,7 @@ import math
 from astrbot import logger
 
 from ..message import Message
-from .compressor import LLMSummaryCompressor, TruncateByTurnsCompressor
+from .compressor import LLMSummaryCompressor
 from .config import ContextConfig
 from .round_utils import split_into_rounds
 from .token_counter import EstimateTokenCounter
@@ -22,7 +22,7 @@ class ContextManager:
         self.truncator = ContextTruncator()
 
         # Build compressors on demand. Summary compressor only when a provider is
-        # available; discard compressor is always available (no external dep).
+        # available; discard is handled directly via truncator, not a compressor.
         self._summary_compressor = None
         self._unity_compressor = None
         if config.custom_compressor:
@@ -36,10 +36,6 @@ class ContextManager:
                     compression_threshold=config.token_guard_threshold,
                     token_counter=self.token_counter,
                 )
-            self._discard_compressor = TruncateByTurnsCompressor(
-                truncate_turns=config.discard_turns,
-                compression_threshold=config.token_guard_threshold,
-            )
 
     # -- helpers ----------------------------------------------------------
 

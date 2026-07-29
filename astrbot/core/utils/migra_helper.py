@@ -210,6 +210,7 @@ def _migra_context_config(ps: dict) -> bool:
             ps["max_turns"] = int(old_val)
         else:
             ps["enable_turn_limit"] = False
+            ps["max_turns"] = 50
 
     # 2. dequeue_context_length → discard_turns
     if "dequeue_context_length" in ps:
