@@ -93,27 +93,8 @@ class ContextManager:
         )
 
     def _token_guard_exceeded(self, tokens: int, max_context_tokens: int) -> bool:
-        """Return True if token guard is enabled and the ratio exceeds the threshold."""
-        if not self.config.enable_token_guard:
-            return False
-        if max_context_tokens <= 0:
-            # Avoid flooding logs: warn once per instance, debug thereafter.
-            if not getattr(self, "_token_guard_warning_emitted", False):
-                logger.warning(
-                    "Token guard is enabled but max_context_tokens is %s. "
-                    "Token guarding is effectively disabled. "
-                    "Set max_context_tokens in the provider config to enable it.",
-                    max_context_tokens,
-                )
-                self._token_guard_warning_emitted = True
-            else:
-                logger.debug(
-                    "Token guard is enabled but max_context_tokens is %s; "
-                    "token guarding remains effectively disabled.",
-                    max_context_tokens,
-                )
-            return False
-        if tokens <= 0:
+        """Pure predicate: return True if tokens exceed the configured threshold."""
+        if tokens <= 0 or max_context_tokens <= 0:
             return False
         return (tokens / max_context_tokens) > self.config.token_guard_threshold
 
@@ -121,13 +102,23 @@ class ContextManager:
         self,
         total_turns: int,
         current_tokens: int,
-        max_context_tokens: int,
+        guard_max_tokens: int,
     ) -> bool:
-        """Return True if any trigger condition is met."""
+        """Return True if any trigger condition is met.
+
+        Args:
+            total_turns: Current conversation turn count.
+            current_tokens: Current token count.
+            guard_max_tokens: Resolved guard window (0 = token guard disabled).
+        """
         if self.config.enable_turn_limit and total_turns > self.config.max_turns:
             return True
 
-        if self._token_guard_exceeded(current_tokens, max_context_tokens):
+        if (
+            self.config.enable_token_guard
+            and guard_max_tokens
+            and self._token_guard_exceeded(current_tokens, guard_max_tokens)
+        ):
             return True
 
         return False
@@ -176,24 +167,33 @@ class ContextManager:
         try:
             result = messages
 
-            # 1. 独立检查前置条件
-            current_tokens = self.token_counter.count_tokens(
-                result,
-                trusted_token_usage,
-            )
+            current_tokens = self.token_counter.count_tokens(result, trusted_token_usage)
             total_turns = self._count_turns(result)
 
-            if not self._triggers_fired(
-                total_turns, current_tokens, max_context_tokens
-            ):
+            # Resolve token guard: validate config and precompute guard window.
+            guard_max_tokens = 0
+            if self.config.enable_token_guard:
+                if max_context_tokens <= 0:
+                    if not getattr(self, "_token_guard_warning_emitted", False):
+                        logger.warning(
+                            "Token guard is enabled but max_context_tokens is %s. "
+                            "Token guarding is effectively disabled. "
+                            "Set max_context_tokens in the provider config to enable it.",
+                            max_context_tokens,
+                        )
+                        self._token_guard_warning_emitted = True
+                else:
+                    guard_max_tokens = max_context_tokens
+
+            if not self._triggers_fired(total_turns, current_tokens, guard_max_tokens):
                 return result
 
-            # 2. 处置入口：_select_disposal 封装 custom > summary > discard
+            # Disposal entry: custom > summary > discard (fallthrough)
             result = await self._select_disposal(result, total_turns)
 
-            # 3. double-check（仅 enable_token_guard）
+            # Double-check halving — only when token guard is active
             tokens_after = self.token_counter.count_tokens(result, trusted_token_usage)
-            if self._token_guard_exceeded(tokens_after, max_context_tokens):
+            if guard_max_tokens and self._token_guard_exceeded(tokens_after, guard_max_tokens):
                 logger.info(
                     "Context still exceeds token guard threshold after disposal, "
                     "applying halving truncation (unconstrained by retention).",
