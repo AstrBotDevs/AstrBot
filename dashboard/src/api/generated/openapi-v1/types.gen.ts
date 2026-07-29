@@ -1534,6 +1534,45 @@ export type ListChatProjectSessionsResponse = (SuccessEnvelope);
 
 export type ListChatProjectSessionsError = unknown;
 
+export type ListChatProjectWorkspaceFilesData = {
+    path: {
+        project_id: string;
+    };
+    query?: {
+        path?: string;
+    };
+};
+
+export type ListChatProjectWorkspaceFilesResponse = (SuccessEnvelope);
+
+export type ListChatProjectWorkspaceFilesError = unknown;
+
+export type GetChatProjectWorkspaceFileData = {
+    path: {
+        project_id: string;
+    };
+    query: {
+        path: string;
+    };
+};
+
+export type GetChatProjectWorkspaceFileResponse = (SuccessEnvelope);
+
+export type GetChatProjectWorkspaceFileError = unknown;
+
+export type DownloadChatProjectWorkspaceFileData = {
+    path: {
+        project_id: string;
+    };
+    query: {
+        path: string;
+    };
+};
+
+export type DownloadChatProjectWorkspaceFileResponse = ((Blob | File));
+
+export type DownloadChatProjectWorkspaceFileError = unknown;
+
 export type AddChatProjectSessionData = {
     path: {
         project_id: string;
@@ -1870,6 +1909,23 @@ export type UpdatePluginConfigData = {
 export type UpdatePluginConfigResponse = (SuccessEnvelope);
 
 export type UpdatePluginConfigError = unknown;
+
+export type UpdatePluginLogLevelData = {
+    body: {
+        /**
+         * Log level name, or null to follow the global level.
+         */
+        level?: ('DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL') | null;
+        [key: string]: unknown | string;
+    };
+    path: {
+        plugin_id: string;
+    };
+};
+
+export type UpdatePluginLogLevelResponse = (SuccessEnvelope);
+
+export type UpdatePluginLogLevelError = unknown;
 
 export type GetPluginConfigSchemaData = {
     path: {
@@ -3077,6 +3133,10 @@ export type ListConversationsData = {
          * Comma-separated platforms to exclude.
          */
         exclude_platforms?: string;
+        /**
+         * Include full message history in each conversation.
+         */
+        include_history?: boolean;
         /**
          * Comma-separated message types.
          */

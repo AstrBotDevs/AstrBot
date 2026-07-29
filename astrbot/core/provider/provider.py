@@ -392,7 +392,7 @@ class EmbeddingProvider(AbstractProvider):
             batch_size = self.max_batch_size
 
         semaphore = asyncio.Semaphore(tasks_limit)
-        all_embeddings: list[list[float]] = []
+        batch_results: dict[int, list[list[float]]] = {}
         failed_batches: list[tuple[int, list[str]]] = []
         completed_count = 0
         total_count = len(texts)
@@ -403,7 +403,7 @@ class EmbeddingProvider(AbstractProvider):
                 for attempt in range(max_retries):
                     try:
                         batch_embeddings = await self.get_embeddings(batch_texts)
-                        all_embeddings.extend(batch_embeddings)
+                        batch_results[batch_idx] = batch_embeddings
                         completed_count += len(batch_texts)
                         if progress_callback:
                             await progress_callback(completed_count, total_count)
@@ -435,6 +435,9 @@ class EmbeddingProvider(AbstractProvider):
             )
             raise Exception(error_msg)
 
+        all_embeddings: list[list[float]] = []
+        for batch_idx in range(len(tasks)):
+            all_embeddings.extend(batch_results[batch_idx])
         return all_embeddings
 
 

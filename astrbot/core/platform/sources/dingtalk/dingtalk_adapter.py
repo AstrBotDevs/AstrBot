@@ -182,12 +182,15 @@ class DingtalkPlatformAdapter(Platform):
         abm.message_id = cast(str, message.message_id)
         abm.raw_message = message
 
+        leading_at_is_self = False
         if abm.type == MessageType.GROUP_MESSAGE:
             # 处理所有被 @ 的用户（包括机器人自己，因 at_users 已包含）
             if message.at_users:
-                for user in message.at_users:
+                for index, user in enumerate(message.at_users):
                     if id := self._id_to_sid(user.dingtalk_id):
                         abm.message.append(At(qq=id))
+                        if index == 0 and id == abm.self_id:
+                            leading_at_is_self = True
             abm.group_id = message.conversation_id
             abm.session_id = abm.group_id
         else:
@@ -232,10 +235,18 @@ class DingtalkPlatformAdapter(Platform):
                 )
                 contents: list[dict] = cast(list[dict], rtc.rich_text_list)
                 plain_parts: list[str] = []
-                for content in contents:
+                for index, content in enumerate(contents):
                     if "text" in content:
                         plain_text = cast(str, content.get("text") or "")
                         if plain_text:
+                            # HarmonyOS repeats the leading bot mention as a text
+                            # segment even though atUsers already represents it.
+                            if (
+                                index == 0
+                                and leading_at_is_self
+                                and plain_text.lstrip().startswith("@")
+                            ):
+                                continue
                             plain_parts.append(plain_text)
                             abm.message.append(Plain(plain_text))
                     elif "type" in content and content["type"] == "picture":
@@ -577,13 +588,17 @@ class DingtalkPlatformAdapter(Platform):
                 text = segment.text.strip()
                 if not text and not at_str:
                     continue
-                await send_message(
-                    msg_key="sampleMarkdown",
-                    msg_param={
-                        "title": "AstrBot",
-                        "text": f"{at_str} {text}".strip(),
-                    },
-                )
+                text = f"{at_str} {text}".strip()
+                if message_chain.use_markdown_ is False:
+                    await send_message(
+                        msg_key="sampleText",
+                        msg_param={"content": text},
+                    )
+                else:
+                    await send_message(
+                        msg_key="sampleMarkdown",
+                        msg_param={"title": "AstrBot", "text": text},
+                    )
             elif isinstance(segment, Image):
                 photo_url = segment.file or segment.url or ""
                 if photo_url.startswith(("http://", "https://")):

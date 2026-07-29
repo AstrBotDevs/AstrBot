@@ -74,14 +74,25 @@ class AstrBotCoreLifecycle:
             no_proxy_list = self.astrbot_config.get("no_proxy", [])
             os.environ["no_proxy"] = ",".join(no_proxy_list)
         else:
-            # 清空代理环境变量
+            # Clear system proxy variables to avoid interfering with localhost requests.
+            has_system_proxy = "https_proxy" in os.environ or "http_proxy" in os.environ
+            if has_system_proxy:
+                logger.warning(
+                    "System http_proxy/https_proxy environment variables were detected, "
+                    "but AstrBot has no proxy configured. Clearing the proxy variables "
+                    "and setting no_proxy to localhost,127.0.0.1,::1 so local API "
+                    "requests bypass the proxy. Configure http_proxy in AstrBot if a "
+                    "proxy is required."
+                )
             if "https_proxy" in os.environ:
                 del os.environ["https_proxy"]
             if "http_proxy" in os.environ:
                 del os.environ["http_proxy"]
             if "no_proxy" in os.environ:
                 del os.environ["no_proxy"]
-            logger.debug("HTTP proxy cleared")
+            # Always bypass proxies for loopback addresses used by local APIs.
+            os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
+            logger.debug("HTTP proxy cleared, no_proxy set to localhost")
 
     async def _init_or_reload_subagent_orchestrator(self) -> None:
         """Create (if needed) and reload the subagent orchestrator from config.

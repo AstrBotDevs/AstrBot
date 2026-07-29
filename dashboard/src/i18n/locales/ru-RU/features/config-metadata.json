@@ -1410,6 +1410,9 @@
             "gemini_embedding": {
                 "hint": "Gemini Embedding не требует ручного добавления /v1beta."
             },
+            "dashscope_embedding": {
+                "hint": "Embedding Aliyun DashScope. URL по умолчанию: https://dashscope.aliyuncs.com/api/v1."
+            },
             "volcengine_cluster": {
                 "description": "Кластер Volcengine",
                 "hint": "Для моделей клонирования голоса выберите volcano_icl или volcano_icl_concurr; по умолчанию volcano_tts."
