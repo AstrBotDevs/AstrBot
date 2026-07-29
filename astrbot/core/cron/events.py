@@ -60,8 +60,18 @@ class CronMessageEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False) -> None:
+        await super().send_streaming(generator, use_fallback)
+
+        buffer = None
         async for chain in generator:
-            await self.send(chain)
+            if not buffer:
+                buffer = chain
+            else:
+                buffer.chain.extend(chain.chain)
+        if not buffer:
+            return
+        buffer.squash_plain()
+        await self.send(buffer)
 
 
 __all__ = ["CronMessageEvent"]
