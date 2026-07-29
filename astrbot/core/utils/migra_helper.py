@@ -209,6 +209,10 @@ def _migra_context_config(ps: dict) -> bool:
             ps["enable_turn_limit"] = True
             ps["max_turns"] = int(old_val)
         else:
+            # max_context_length <= 0 meant "unlimited" in the old model.
+            # enable_turn_limit=False preserves that semantics; max_turns is
+            # set to the default as a fallback and is never consulted when
+            # enable_turn_limit is False.
             ps["enable_turn_limit"] = False
             ps["max_turns"] = 50
 

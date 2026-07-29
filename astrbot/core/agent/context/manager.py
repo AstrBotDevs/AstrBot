@@ -1,3 +1,4 @@
+import asyncio
 import math
 
 from astrbot import logger
@@ -71,6 +72,8 @@ class ContextManager:
             if len(result) >= len(messages):
                 return None  # no effective reduction
             return result
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.warning(
                 "LLM summary compression failed, falling back.", exc_info=True
@@ -205,6 +208,8 @@ class ContextManager:
                 result = self.truncator.truncate_by_halving(result)
 
             return result
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.error("Error during context processing.", exc_info=True)
             return messages

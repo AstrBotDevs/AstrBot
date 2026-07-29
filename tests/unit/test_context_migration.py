@@ -247,6 +247,37 @@ class TestValidateContextConfig:
 
         mock_log.warning.assert_called()
 
+    def test_token_guard_threshold_non_numeric_warns(self):
+        """Non-numeric token_guard_threshold should warn."""
+        ps = {
+            "enable_turn_limit": False,
+            "enable_token_guard": True,
+            "token_guard_threshold": "0.8",  # string instead of number
+            "enable_summary": False,
+            "enable_discard": False,
+            "retention_method": "null",
+        }
+        with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
+            _call_validate(ps)
+
+        mock_log.warning.assert_called()
+
+    def test_retain_percentage_non_numeric_warns(self):
+        """Non-numeric retain_percentage with percentage retention_method should warn."""
+        ps = {
+            "enable_turn_limit": False,
+            "enable_token_guard": False,
+            "enable_summary": False,
+            "enable_discard": True,
+            "discard_turns": 1,
+            "retention_method": "percentage",
+            "retain_percentage": "0.3",  # string instead of number
+        }
+        with patch("astrbot.core.utils.migra_helper.logger") as mock_log:
+            _call_validate(ps)
+
+        mock_log.warning.assert_called()
+
     def test_max_turns_too_low(self):
         """max_turns < 2 should warn."""
         ps = {
