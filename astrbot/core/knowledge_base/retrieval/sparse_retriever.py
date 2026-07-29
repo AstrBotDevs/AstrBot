@@ -8,8 +8,6 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from rank_bm25 import BM25Okapi
-
 from astrbot.core.knowledge_base.kb_db_sqlite import KBSQLiteDatabase
 from astrbot.core.knowledge_base.retrieval.tokenizer import (
     load_stopwords,
@@ -154,6 +152,8 @@ class SparseRetriever:
         tokenized_corpus = [tokenize_text(doc, self.hit_stopwords) for doc in corpus]
 
         # 3. 构建 BM25 索引
+        from rank_bm25 import BM25Okapi
+
         bm25 = BM25Okapi(tokenized_corpus)
 
         # 4. 执行检索
