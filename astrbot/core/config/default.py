@@ -440,6 +440,7 @@ CONFIG_METADATA_2 = {
                         "card_template_id": "",
                         "card_content_key": "content",
                         "card_update_interval": 0.35,
+                        "send_plain_text_as_card": False,
                     },
                     "Telegram": {
                         "id": "telegram",
@@ -761,6 +762,11 @@ CONFIG_METADATA_2 = {
                         "description": "卡片更新间隔",
                         "type": "float",
                         "hint": "可选。钉钉互动卡片流式更新的最小间隔，单位秒，默认 0.35。",
+                    },
+                    "send_plain_text_as_card": {
+                        "description": "普通文本使用互动卡片",
+                        "type": "bool",
+                        "hint": "启用后，非流式纯文本回复也会优先使用钉钉互动卡片，适用于未来任务、定时任务、插件主动发送等场景。",
                     },
                     "telegram_command_register": {
                         "description": "Telegram 命令注册",

@@ -24,6 +24,20 @@ class DingtalkMessageEvent(AstrMessageEvent):
         if not self.adapter:
             logger.error("钉钉消息发送失败: 缺少 adapter")
             return
+        plain_text = self.adapter._message_chain_plain_text(message)
+        incoming_message = getattr(self.message_obj, "raw_message", None)
+        if (
+            getattr(self.adapter, "send_plain_text_as_card", False)
+            and plain_text
+            and incoming_message is not None
+        ):
+            if await self.adapter.send_text_card_with_incoming(
+                incoming_message=incoming_message,
+                message_id=getattr(self.message_obj, "message_id", ""),
+                content=plain_text,
+            ):
+                await super().send(message)
+                return
         await self.adapter.send_message_chain_with_incoming(
             incoming_message=self.message_obj.raw_message,
             message_chain=message,
@@ -31,6 +45,8 @@ class DingtalkMessageEvent(AstrMessageEvent):
         await super().send(message)
 
     async def send_streaming(self, generator, use_fallback: bool = False):
+        await super().send_streaming(generator, use_fallback)
+
         if not self.adapter:
             logger.error("钉钉流式消息发送失败: 缺少 adapter")
             return await self._send_streaming_as_plain_text(generator)
@@ -68,6 +84,9 @@ class DingtalkMessageEvent(AstrMessageEvent):
 
                 now = time.monotonic()
                 if full_content and now - last_update_at >= update_interval:
+                    # DingTalk's AI card streaming API expects each full repaint
+                    # with append=False; sending only the delta would replace the
+                    # visible content with that delta in this card template.
                     await self.adapter.send_card_message(
                         card_token=card_token,
                         content=full_content,
