@@ -123,11 +123,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                 source = self.message_obj.raw_message
 
                 if not isinstance(source, botpy.message.C2CMessage):
-                    # 非 C2C 场景：直接累积，最后统一发
-                    if not self.send_buffer:
-                        self.send_buffer = chain
-                    else:
-                        self.send_buffer.chain.extend(chain.chain)
+                    # 非 C2C 场景：直接累积，最后统一发（拷贝 delta，避免引用丢首字）
+                    self._append_stream_delta(chain)
                     continue
 
                 # ---- C2C 流式场景 ----
@@ -150,11 +147,8 @@ class QQOfficialMessageEvent(AstrMessageEvent):
                     last_edit_time = 0
                     continue
 
-                # 累积内容
-                if not self.send_buffer:
-                    self.send_buffer = chain
-                else:
-                    self.send_buffer.chain.extend(chain.chain)
+                # 累积内容（拷贝，避免上游复用 MessageChain 改写 buffer）
+                self._append_stream_delta(chain)
 
                 # 节流：按时间间隔发送中间分片
                 current_time = asyncio.get_running_loop().time()
@@ -184,6 +178,24 @@ class QQOfficialMessageEvent(AstrMessageEvent):
             self.send_buffer = None
 
         return None
+
+    def _append_stream_delta(self, chain: MessageChain) -> None:
+        """Append stream delta into an owned buffer (copy Plain text).
+
+        Holding the yielded MessageChain by reference drops leading characters
+        when upstream reuses/mutates the same chain between yields.
+        """
+        if not self.send_buffer:
+            self.send_buffer = MessageChain(
+                use_t2i_=chain.use_t2i_,
+                use_markdown_=chain.use_markdown_,
+                type=chain.type,
+            )
+        for comp in chain.chain:
+            if isinstance(comp, Plain):
+                self.send_buffer.chain.append(Plain(text=comp.text or ""))
+            else:
+                self.send_buffer.chain.append(comp)
 
     @staticmethod
     def _extract_response_message_id(ret) -> str | None:
