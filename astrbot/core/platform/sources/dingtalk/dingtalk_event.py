@@ -56,7 +56,6 @@ class DingtalkMessageEvent(AstrMessageEvent):
 
         incoming_message = getattr(self.message_obj, "raw_message", None)
         if incoming_message is None:
-            logger.warning("钉钉流式卡片发送失败: 缺少原始消息，回退普通消息")
             return await self._send_streaming_as_plain_text(generator)
 
         card_token = await self.adapter.create_message_card(

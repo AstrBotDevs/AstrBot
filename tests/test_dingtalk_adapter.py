@@ -1,6 +1,6 @@
 import asyncio
 import threading
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -166,6 +166,145 @@ async def test_send_by_session_keeps_mixed_messages_on_normal_path(monkeypatch):
         message_chain=message,
     )
     assert base_send_calls == [(adapter, session, message)]
+
+
+@pytest.mark.asyncio
+async def test_proactive_card_is_created_then_finalized(monkeypatch):
+    class FakeResponse:
+        status = 200
+
+        async def text(self):
+            return "{}"
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class FakeSession:
+        def __init__(self):
+            self.post_calls = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        def post(self, url, **kwargs):
+            self.post_calls.append((url, kwargs))
+            return FakeResponse()
+
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.card_template_id = "template-id"
+    adapter.card_content_key = "content"
+    adapter.client_id = "robot-code"
+    adapter.get_access_token = AsyncMock(return_value="access-token")
+    adapter._finalize_proactive_card = AsyncMock(return_value=True)
+    http_session = FakeSession()
+    monkeypatch.setattr(
+        dingtalk_adapter.aiohttp,
+        "ClientSession",
+        lambda: http_session,
+    )
+
+    session = MessageSession("dingtalk", MessageType.GROUP_MESSAGE, "conversation-id")
+    result = await adapter.send_text_card_by_session(session, "future task result")
+
+    assert result is True
+    _, post_kwargs = http_session.post_calls[0]
+    assert post_kwargs["json"]["cardData"]["cardParamMap"] == {"content": ""}
+    out_track_id = post_kwargs["json"]["outTrackId"]
+    adapter._finalize_proactive_card.assert_awaited_once_with(
+        http_session=http_session,
+        access_token="access-token",
+        out_track_id=out_track_id,
+        content="future task result",
+    )
+
+
+@pytest.mark.asyncio
+async def test_proactive_card_animation_streams_full_content_in_steps(monkeypatch):
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.animate_proactive_card = True
+    adapter.card_update_interval = 0.35
+    adapter._put_proactive_card_content = AsyncMock(return_value=True)
+    sleep = AsyncMock()
+    monkeypatch.setattr(dingtalk_adapter.asyncio, "sleep", sleep)
+    http_session = object()
+    content = "abcdefghijklmnopqrstuvwxyz1234"
+
+    result = await adapter._finalize_proactive_card(
+        http_session=http_session,
+        access_token="access-token",
+        out_track_id="out-track-id",
+        content=content,
+    )
+
+    assert result is True
+    assert adapter._put_proactive_card_content.await_args_list == [
+        call(
+            http_session=http_session,
+            access_token="access-token",
+            out_track_id="out-track-id",
+            content="",
+            is_final=False,
+        ),
+        call(
+            http_session=http_session,
+            access_token="access-token",
+            out_track_id="out-track-id",
+            content=content[:8],
+            is_final=False,
+        ),
+        call(
+            http_session=http_session,
+            access_token="access-token",
+            out_track_id="out-track-id",
+            content=content[:16],
+            is_final=False,
+        ),
+        call(
+            http_session=http_session,
+            access_token="access-token",
+            out_track_id="out-track-id",
+            content=content[:24],
+            is_final=False,
+        ),
+        call(
+            http_session=http_session,
+            access_token="access-token",
+            out_track_id="out-track-id",
+            content=content,
+            is_final=True,
+        ),
+    ]
+    assert sleep.await_count == 4
+
+
+@pytest.mark.asyncio
+async def test_proactive_card_animation_can_be_disabled():
+    adapter = DingtalkPlatformAdapter.__new__(DingtalkPlatformAdapter)
+    adapter.animate_proactive_card = False
+    adapter._put_proactive_card_content = AsyncMock(return_value=True)
+    http_session = object()
+
+    result = await adapter._finalize_proactive_card(
+        http_session=http_session,
+        access_token="access-token",
+        out_track_id="out-track-id",
+        content="complete result",
+    )
+
+    assert result is True
+    adapter._put_proactive_card_content.assert_awaited_once_with(
+        http_session=http_session,
+        access_token="access-token",
+        out_track_id="out-track-id",
+        content="complete result",
+        is_final=True,
+    )
 
 
 @pytest.mark.asyncio

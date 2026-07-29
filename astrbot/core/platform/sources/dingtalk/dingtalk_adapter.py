@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import threading
 import time
 import uuid
@@ -39,6 +40,7 @@ from .dingtalk_event import DingtalkMessageEvent
 DINGTALK_RECONNECT_INITIAL_DELAY = 10
 DINGTALK_RECONNECT_MAX_DELAY = 300
 DINGTALK_RECONNECT_STABLE_SECONDS = 300
+DINGTALK_PROACTIVE_CARD_MAX_UPDATES = 20
 
 
 def _dingtalk_reconnect_delay(retry_count: int) -> int:
@@ -110,6 +112,10 @@ class DingtalkPlatformAdapter(Platform):
         self.send_plain_text_as_card = _safe_bool(
             platform_config.get("send_plain_text_as_card", False),
             False,
+        )
+        self.animate_proactive_card = _safe_bool(
+            platform_config.get("animate_proactive_card", True),
+            True,
         )
         self._card_sessions: dict[str, tuple[object, str]] = {}
 
@@ -488,7 +494,7 @@ class DingtalkPlatformAdapter(Platform):
             "cardTemplateId": self.card_template_id,
             "outTrackId": out_track_id,
             "cardData": {
-                "cardParamMap": self._build_card_param_map(content, flow_status=3),
+                "cardParamMap": self._build_card_param_map(""),
             },
             "callbackType": "STREAM",
             "imGroupOpenSpaceModel": {"supportForward": False},
@@ -502,9 +508,6 @@ class DingtalkPlatformAdapter(Platform):
         else:
             staff_id = await self._get_sender_staff_id(session)
             if not staff_id:
-                logger.warning(
-                    "钉钉互动卡片发送失败: 私聊会话缺少 staff_id 映射，回退普通消息",
-                )
                 return False
             payload["openSpaceId"] = f"dtv1.card//IM_ROBOT.{staff_id}"
             payload["imRobotOpenDeliverModel"] = {"spaceType": "IM_ROBOT"}
@@ -513,28 +516,152 @@ class DingtalkPlatformAdapter(Platform):
             "Content-Type": "application/json",
             "x-acs-dingtalk-access-token": access_token,
         }
-        async with aiohttp.ClientSession() as http_session:
-            async with http_session.post(
-                "https://api.dingtalk.com/v1.0/card/instances/createAndDeliver",
+        try:
+            async with aiohttp.ClientSession() as http_session:
+                async with http_session.post(
+                    "https://api.dingtalk.com/v1.0/card/instances/createAndDeliver",
+                    headers=headers,
+                    json=payload,
+                ) as resp:
+                    resp_text = await resp.text()
+                    if resp.status != 200:
+                        logger.error(
+                            "钉钉互动卡片发送失败: %s, %s",
+                            resp.status,
+                            resp_text,
+                        )
+                        return False
+                    try:
+                        resp_data = json.loads(resp_text) if resp_text else {}
+                    except json.JSONDecodeError:
+                        logger.error(
+                            "钉钉互动卡片发送失败: 响应无法解析为 JSON, %s",
+                            resp_text,
+                        )
+                        return False
+                    if (
+                        isinstance(resp_data, dict)
+                        and resp_data.get("success") is False
+                    ):
+                        logger.error("钉钉互动卡片发送失败: %s", resp_data)
+                        return False
+
+                return await self._finalize_proactive_card(
+                    http_session=http_session,
+                    access_token=access_token,
+                    out_track_id=out_track_id,
+                    content=content,
+                )
+        except Exception as e:
+            logger.error("钉钉互动卡片主动发送异常: %s", e)
+            return False
+
+    async def _finalize_proactive_card(
+        self,
+        http_session: aiohttp.ClientSession,
+        access_token: str,
+        out_track_id: str,
+        content: str,
+    ) -> bool:
+        if not self.animate_proactive_card:
+            return await self._put_proactive_card_content(
+                http_session=http_session,
+                access_token=access_token,
+                out_track_id=out_track_id,
+                content=content,
+                is_final=True,
+            )
+
+        update_interval = max(0.1, self.card_update_interval)
+        target_updates = min(
+            DINGTALK_PROACTIVE_CARD_MAX_UPDATES,
+            max(4, math.ceil(len(content) / 12)),
+        )
+        chunk_size = max(1, math.ceil(len(content) / target_updates))
+
+        if not await self._put_proactive_card_content(
+            http_session=http_session,
+            access_token=access_token,
+            out_track_id=out_track_id,
+            content="",
+            is_final=False,
+        ):
+            return False
+        await asyncio.sleep(update_interval)
+
+        for end in range(chunk_size, len(content), chunk_size):
+            if not await self._put_proactive_card_content(
+                http_session=http_session,
+                access_token=access_token,
+                out_track_id=out_track_id,
+                content=content[:end],
+                is_final=False,
+            ):
+                return False
+            await asyncio.sleep(update_interval)
+
+        return await self._put_proactive_card_content(
+            http_session=http_session,
+            access_token=access_token,
+            out_track_id=out_track_id,
+            content=content,
+            is_final=True,
+        )
+
+    async def _put_proactive_card_content(
+        self,
+        http_session: aiohttp.ClientSession,
+        access_token: str,
+        out_track_id: str,
+        content: str,
+        is_final: bool,
+    ) -> bool:
+        payload = {
+            "outTrackId": out_track_id,
+            "guid": str(uuid.uuid4()),
+            "key": self.card_content_key,
+            "content": content,
+            "isFull": True,
+            "isFinalize": is_final,
+            "isError": False,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "x-acs-dingtalk-access-token": access_token,
+        }
+        try:
+            async with http_session.put(
+                "https://api.dingtalk.com/v1.0/card/streaming",
                 headers=headers,
                 json=payload,
             ) as resp:
                 resp_text = await resp.text()
                 if resp.status != 200:
                     logger.error(
-                        "钉钉互动卡片发送失败: %s, %s",
+                        "钉钉互动卡片流式更新失败: final=%s, %s, %s",
+                        is_final,
                         resp.status,
                         resp_text,
                     )
                     return False
-                try:
-                    resp_data = json.loads(resp_text) if resp_text else {}
-                except json.JSONDecodeError:
-                    logger.error("钉钉互动卡片发送失败: 响应无法解析为 JSON, %s", resp_text)
-                    return False
-                if resp_data.get("success") is False:
-                    logger.error("钉钉互动卡片发送失败: %s", resp_data)
-                    return False
+                if resp_text:
+                    try:
+                        resp_data = json.loads(resp_text)
+                    except json.JSONDecodeError:
+                        logger.error(
+                            "钉钉互动卡片流式更新失败: 响应无法解析为 JSON, %s",
+                            resp_text,
+                        )
+                        return False
+                    if (
+                        isinstance(resp_data, dict)
+                        and resp_data.get("success") is False
+                    ):
+                        logger.error("钉钉互动卡片流式更新失败: %s", resp_data)
+                        return False
+        except Exception as e:
+            logger.error("钉钉互动卡片流式更新异常: %s", e)
+            return False
         return True
 
     async def send_text_card_with_incoming(
@@ -927,7 +1054,6 @@ class DingtalkPlatformAdapter(Platform):
     ) -> bool:
         card_session = self._card_sessions.get(card_token)
         if not card_session:
-            logger.warning("钉钉流式卡片更新跳过: 找不到卡片会话")
             return False
 
         card_replier, card_instance_id = card_session
