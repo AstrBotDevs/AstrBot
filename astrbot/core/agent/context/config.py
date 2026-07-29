@@ -20,9 +20,11 @@ class ContextConfig:
         1. summary (if enabled and provider available)
         2. discard (fallback if summary fails or is disabled)
 
-    Retention constraint — lower bound on how many turns discard may remove.
-    Double-check halving — unconditional truncation when still over threshold
-    after disposal (only when enable_token_guard is True).
+    Retention constraint — lower bound on how many turns remain after discard:
+        retain_turns / retain_percentage. Discard will not remove turns below
+        this floor.
+    Double-check halving — unconditional truncation when still over token
+    threshold after disposal (only fired when enable_token_guard is True).
     """
 
     # -- Trigger dimension --
