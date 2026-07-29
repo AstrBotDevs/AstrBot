@@ -538,7 +538,8 @@ async def test_max_step_final_request_includes_limit_prompt(
         streaming=False,
     )
 
-    async def snapshot_context_manager(messages, trusted_token_usage=0):
+    async def snapshot_context_manager(messages, trusted_token_usage=0, max_context_tokens=0):
+        _ = max_context_tokens
         return list(messages)
 
     runner.request_context_manager.process = snapshot_context_manager
@@ -568,7 +569,8 @@ async def test_tool_loop_next_request_includes_tool_result(
         streaming=False,
     )
 
-    async def snapshot_context_manager(messages, trusted_token_usage=0):
+    async def snapshot_context_manager(messages, trusted_token_usage=0, max_context_tokens=0):
+        _ = max_context_tokens
         return list(messages)
 
     runner.request_context_manager.process = snapshot_context_manager
