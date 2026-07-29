@@ -1,8 +1,11 @@
+import importlib
 import json
+import sys
 from types import SimpleNamespace
 
 import pytest
 
+from astrbot.core.knowledge_base.retrieval import sparse_retriever
 from astrbot.core.knowledge_base.retrieval.sparse_retriever import SparseRetriever
 
 
@@ -73,10 +76,11 @@ class StaticFTSStorage:
 
 
 @pytest.mark.asyncio
-async def test_sparse_retriever_uses_fts5_when_available():
+async def test_sparse_retriever_uses_fts5_without_importing_bm25(monkeypatch):
     storage = FTSStorage()
     vec_db = SimpleNamespace(document_storage=storage)
     retriever = SparseRetriever(kb_db=None)
+    monkeypatch.setitem(sys.modules, "rank_bm25", None)
 
     results = await retriever.retrieve(
         query="apple",
@@ -87,6 +91,12 @@ async def test_sparse_retriever_uses_fts5_when_available():
     assert [result.chunk_id for result in results] == ["chunk-1"]
     assert storage.search_sparse_calls == 1
     assert storage.get_documents_calls == 0
+
+
+def test_sparse_retriever_module_import_does_not_load_bm25(monkeypatch):
+    monkeypatch.setitem(sys.modules, "rank_bm25", None)
+
+    importlib.reload(sparse_retriever)
 
 
 @pytest.mark.asyncio
