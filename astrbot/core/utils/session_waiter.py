@@ -139,21 +139,22 @@ class SessionWaiter:
         try:
             return await self.session_controller.future
         except Exception as e:
-            self._cleanup(e)
+            await self._cleanup(e)
             raise e
         finally:
-            self._cleanup()
+            await self._cleanup()
 
-    def _cleanup(self, error: Exception | None = None) -> None:
+    async def _cleanup(self, error: Exception | None = None) -> None:
         """清理会话"""
         USER_SESSIONS.pop(self.session_id, None)
         try:
             FILTERS.remove(self.session_filter)
         except ValueError:
             pass
-        # 取消正在运行的 handler 任务
-        if self._handler_task and not self._handler_task.done():
-            self._handler_task.cancel()
+        # 使用锁保护任务取消操作，防止与 trigger 方法竞态
+        async with self._lock:
+            if self._handler_task and not self._handler_task.done():
+                self._handler_task.cancel()
         self.session_controller.stop(error)
 
     @classmethod
@@ -163,6 +164,7 @@ class SessionWaiter:
         if not session or session.session_controller.future.done():
             return
 
+        task_to_await = None
         async with session._lock:
             if not session.session_controller.future.done():
                 if session.record_history_chains:
@@ -176,6 +178,8 @@ class SessionWaiter:
                     async def _run_handler():
                         try:
                             await session.handler(session.session_controller, event)
+                        except asyncio.CancelledError:
+                            raise  # 重新抛出，让外层的 except asyncio.CancelledError 处理
                         except Exception as e:
                             session.session_controller.stop(e)
 
@@ -184,12 +188,18 @@ class SessionWaiter:
                         session._handler_task.cancel()
 
                     session._handler_task = asyncio.create_task(_run_handler())
-                    await session._handler_task
-                except asyncio.CancelledError:
-                    # 任务被取消时不需要处理
-                    pass
+                    task_to_await = session._handler_task
                 except Exception as e:
                     session.session_controller.stop(e)
+                    return
+
+        # 在锁外等待任务完成，避免死锁
+        if task_to_await:
+            try:
+                await task_to_await
+            except asyncio.CancelledError:
+                # 任务被取消时不需要处理
+                pass
 
 
 def session_waiter(timeout: int = 30, record_history_chains: bool = False):
